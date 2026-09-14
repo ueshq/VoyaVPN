@@ -102,7 +102,8 @@
     "globalModeChip": "全局代理",
     "modePendingReason": "正在切换模式，请稍候",
     "checkIpNeedsConnection": "连接后可检测出口 IP",
-    "checkIpRetry": "检测失败，点击重试"
+    "checkIpRetry": "检测失败，点击重试",
+    "shortcutHint": "快捷键：{{shortcut}}"
   },
   "logCodes": {
     "connected": "内核守护进程已启动",
@@ -928,7 +929,8 @@
     "collapse": "收起侧栏",
     "traffic": "实时流量",
     "upload": "上传",
-    "download": "下载"
+    "download": "下载",
+    "shortcutTitle": "{{label}}（{{shortcut}}）"
   },
   "activity": {
     "liveConnections": "实时连接",
@@ -1049,5 +1051,11 @@
     "confirmMessage": "当前的节点、订阅和自定义规则将不再显示，原数据库会备份在同一文件夹中。",
     "confirmReset": "确定重置",
     "moveFailed": "无法移动数据库：{{error}}\n\n如需手动重置，请运行：\n{{command}}"
+  },
+  "shortcuts": {
+    "page": "Ctrl+{{number}}",
+    "pageMac": "⌘{{number}}",
+    "connect": "Ctrl+Shift+C",
+    "connectMac": "⌘⇧C"
   }
 }

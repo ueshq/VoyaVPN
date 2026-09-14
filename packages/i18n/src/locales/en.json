@@ -102,7 +102,8 @@
     "globalModeChip": "Global proxy",
     "modePendingReason": "Switching modes, please wait",
     "checkIpNeedsConnection": "Connect to check the exit IP",
-    "checkIpRetry": "Check failed, try again"
+    "checkIpRetry": "Check failed, try again",
+    "shortcutHint": "Shortcut: {{shortcut}}"
   },
   "logCodes": {
     "connected": "Core supervisor started",
@@ -928,7 +929,8 @@
     "collapse": "Collapse sidebar",
     "traffic": "Live traffic",
     "upload": "Up",
-    "download": "Down"
+    "download": "Down",
+    "shortcutTitle": "{{label}} ({{shortcut}})"
   },
   "activity": {
     "liveConnections": "Live connections",
@@ -1049,5 +1051,11 @@
     "confirmMessage": "Your nodes, subscriptions and custom rules will no longer appear. The current database is kept as a backup in the same folder.",
     "confirmReset": "Reset",
     "moveFailed": "Could not move the database aside: {{error}}\n\nTo reset it by hand, run:\n{{command}}"
+  },
+  "shortcuts": {
+    "page": "Ctrl+{{number}}",
+    "pageMac": "⌘{{number}}",
+    "connect": "Ctrl+Shift+C",
+    "connectMac": "⌘⇧C"
   }
 }

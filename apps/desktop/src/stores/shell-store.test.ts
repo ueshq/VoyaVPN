@@ -32,4 +32,36 @@ describe("shell navigation", () => {
       activeTab: "profiles", profilesAddMenuOpen: false, focusPageTitle: true,
     });
   });
+
+  it("keeps the Network activity search while switching pages", () => {
+    useShellStore.getState().setConnectionSearch("example.com");
+    useShellStore.getState().setActiveTab("home");
+    useShellStore.getState().setActiveTab("connections");
+    expect(useShellStore.getState().connectionSearch).toBe("example.com");
+    useShellStore.getState().setConnectionSearch("");
+  });
+
+  it("remembers the page and sidebar width across launches, but not the search", async () => {
+    window.localStorage.clear();
+    useShellStore.setState({ activeTab: "rules", connectionSearch: "example", sidebarCollapsed: true });
+    const stored = JSON.parse(window.localStorage.getItem("voyavpn.shell") ?? "{}") as { state?: unknown };
+    expect(stored.state).toEqual({ activeTab: "rules", sidebarCollapsed: true });
+
+    // A value this build does not know falls back to the default.
+    useShellStore.setState({ activeTab: "home", connectionSearch: "", sidebarCollapsed: false });
+    window.localStorage.setItem(
+      "voyavpn.shell",
+      JSON.stringify({ state: { activeTab: "nowhere", sidebarCollapsed: "yes" }, version: 0 }),
+    );
+    await useShellStore.persist.rehydrate();
+    expect(useShellStore.getState()).toMatchObject({ activeTab: "home", sidebarCollapsed: false });
+
+    window.localStorage.setItem(
+      "voyavpn.shell",
+      JSON.stringify({ state: { activeTab: "settings", sidebarCollapsed: true }, version: 0 }),
+    );
+    await useShellStore.persist.rehydrate();
+    expect(useShellStore.getState()).toMatchObject({ activeTab: "settings", sidebarCollapsed: true });
+    window.localStorage.clear();
+  });
 });

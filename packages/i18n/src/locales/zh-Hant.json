@@ -102,7 +102,8 @@
     "globalModeChip": "全局代理",
     "modePendingReason": "正在切換模式，請稍候",
     "checkIpNeedsConnection": "連線後可檢測出口 IP",
-    "checkIpRetry": "檢測失敗，點擊重試"
+    "checkIpRetry": "檢測失敗，點擊重試",
+    "shortcutHint": "快速鍵：{{shortcut}}"
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -928,7 +929,8 @@
     "collapse": "收合側欄",
     "traffic": "即時流量",
     "upload": "上傳",
-    "download": "下載"
+    "download": "下載",
+    "shortcutTitle": "{{label}}（{{shortcut}}）"
   },
   "activity": {
     "liveConnections": "即時連線",
@@ -1049,5 +1051,11 @@
     "confirmMessage": "目前的節點、訂閱與自訂規則將不再顯示，原資料庫會備份在同一資料夾中。",
     "confirmReset": "確定重設",
     "moveFailed": "無法移動資料庫：{{error}}\n\n如需手動重設，請執行：\n{{command}}"
+  },
+  "shortcuts": {
+    "page": "Ctrl+{{number}}",
+    "pageMac": "⌘{{number}}",
+    "connect": "Ctrl+Shift+C",
+    "connectMac": "⌘⇧C"
   }
 }

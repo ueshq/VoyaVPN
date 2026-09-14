@@ -361,6 +361,7 @@ describe("App", () => {
     runtimeStoreMock.reset();
     useShellStore.setState({
       activeTab: "profiles",
+      connectionSearch: "",
       connectionsView: "connections",
       sidebarCollapsed: false,
     });
@@ -769,7 +770,7 @@ describe("App", () => {
     expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("failed");
   });
 
-  it("keeps the connection search between sub-tabs and resets it after leaving the page", async () => {
+  it("keeps the connection search between sub-tabs and after leaving the page", async () => {
     const user = userEvent.setup();
     runtimeStoreMock.getState().coreState = connectedCore();
     runtimeStoreMock.getState().setProxyMonitorRunning();
@@ -796,7 +797,8 @@ describe("App", () => {
       ).getByRole("tab", { name: "Policy groups" }),
     ).toHaveAttribute("data-state", "active");
     await user.click(screen.getByRole("tab", { name: "Live connections" }));
-    expect(screen.getByRole("searchbox")).toHaveValue("");
+    // A visit to another page no longer throws the search away.
+    expect(screen.getByRole("searchbox")).toHaveValue("bulk-1");
   });
 });
 

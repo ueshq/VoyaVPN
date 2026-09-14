@@ -10,6 +10,8 @@ import type { CoreState, TitleBarLayout } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@voya/utils/formatting";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 
+import { pageShortcutAria, pageShortcutLabel } from "./use-shell-shortcuts";
+
 // `id` of the content `tabpanel` the nav controls. Exported so the shell can tag
 // the panel element with a matching id for `aria-controls` / `aria-labelledby`.
 export const SHELL_PANEL_ID = "shell-tabpanel";
@@ -89,16 +91,20 @@ export function AppSidebar({ titleBarLayout }: { titleBarLayout: TitleBarLayout 
         onKeyDown={handleNavKeyDown}
         role="tablist"
       >
-        {navItems.map((item) => (
+        {navItems.map((item, index) => (
           <SidebarNavItem
             key={item.value}
             active={activeTab === item.value}
-            collapsed={collapsed}
             icon={item.icon}
             id={`shell-tab-${item.value}`}
             label={t(item.titleKey)}
             onSelect={() => setActiveTab(item.value)}
             panelId={SHELL_PANEL_ID}
+            shortcut={pageShortcutAria(index)}
+            title={t("sidebar.shortcutTitle", {
+              label: t(item.titleKey),
+              shortcut: pageShortcutLabel(index, t),
+            })}
           />
         ))}
       </nav>
@@ -158,27 +164,32 @@ function SidebarFooter() {
 // ARIA tab with roving tabIndex; keyboard navigation is owned by AppSidebar.
 function SidebarNavItem({
   active,
-  collapsed = false,
   icon: Icon,
   id,
   label,
   onSelect,
   panelId,
+  shortcut,
+  title,
 }: {
   active: boolean;
-  collapsed?: boolean;
   icon: LucideIcon;
   id: string;
   label: string;
   onSelect: () => void;
   panelId: string;
+  /** In `aria-keyshortcuts` form. */
+  shortcut: string;
+  /** The label with its shortcut, shown on hover in both sidebar widths. */
+  title: string;
 }) {
   return (
     <button
       aria-controls={panelId}
+      aria-keyshortcuts={shortcut}
       aria-selected={active}
       aria-label={label}
-      title={collapsed ? label : undefined}
+      title={title}
       className={cn("sidebar-nav-item", active && "sidebar-nav-item-active")}
       id={id}
       onClick={onSelect}

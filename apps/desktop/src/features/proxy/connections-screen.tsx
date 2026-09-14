@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { PageContent, PageSection, PageSurface, PageTitle } from "@/components/app-shell/page-section";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@voya/ui/components/tabs";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -18,7 +17,9 @@ export function ConnectionsScreen() {
   const { t } = useI18n();
   const view = useShellStore((state) => state.connectionsView);
   const setView = useShellStore((state) => state.setConnectionsView);
-  const [connectionSearch, setConnectionSearch] = useState("");
+  // Kept in the shell store so the search survives a visit to another page.
+  const connectionSearch = useShellStore((state) => state.connectionSearch);
+  const setConnectionSearch = useShellStore((state) => state.setConnectionSearch);
 
   return (
     <PageSection aria-label={t("tabs.connections")}>

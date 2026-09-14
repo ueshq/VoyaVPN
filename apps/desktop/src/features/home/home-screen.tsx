@@ -9,6 +9,7 @@ import { getErrorMessage } from "@voya/utils/error";
 import worldMap from "@/assets/world-map.svg";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { DisabledReason } from "@/components/disabled-reason";
+import { connectionShortcutLabel } from "@/components/app-shell/use-shell-shortcuts";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { profileNameWithoutFlag } from "@/features/profiles/profile-display";
@@ -284,6 +285,8 @@ function ConnectButton({
       data-testid="home-connect-button"
       disabled={busy}
       onClick={onPrimaryAction}
+      // Only the connect and disconnect states answer to the shortcut.
+      title={label ? undefined : t("home.shortcutHint", { shortcut: connectionShortcutLabel(t) })}
       type="button"
     >
       {inProgress || busy ? (
