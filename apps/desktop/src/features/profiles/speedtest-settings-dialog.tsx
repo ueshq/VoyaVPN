@@ -1,8 +1,10 @@
+import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@voya/ui/components/dialog";
@@ -47,6 +49,19 @@ export function SpeedtestSettingsDialog({
             )}
           </SettingsFields>
         </DialogBody>
+        {/* The fields save themselves; the footer says so and gives a way out. */}
+        <DialogFooter className="items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground" role="status">
+            {controller.saving
+              ? t("panes.profiles.speedtest.saving")
+              : controller.saved
+                ? t("panes.profiles.speedtest.saved")
+                : null}
+          </p>
+          <Button onClick={() => onOpenChange(false)} type="button">
+            {t("actions.done")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

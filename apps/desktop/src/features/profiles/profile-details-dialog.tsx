@@ -1,10 +1,13 @@
 import { Fragment } from "react";
+import { Zap } from "lucide-react";
 import type { TranslationKey } from "@voya/i18n";
+import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogBody,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@voya/ui/components/dialog";
@@ -24,11 +27,20 @@ export function ProfileDetailsDialog({
   controller: NodeDetailsController;
   item: ProfileListEntry;
 }) {
-  const { t, setDetailsId, restoreDetailsFocus, subscriptionName } = controller;
+  const {
+    activation,
+    handleSpeedtest,
+    restoreDetailsFocus,
+    setDetailsId,
+    speedtestRunning,
+    subscriptionName,
+    t,
+  } = controller;
   const stat = useRuntimeEventStore(
     (state) => state.serverStatsByProfileId[item.profile.id],
   );
   const { profile, traffic } = item;
+  const running = activation.runningId === profile.id;
   const rows: [TranslationKey, string | number][] = [
     [
       "panes.profiles.cardFields.remarks",
@@ -73,7 +85,7 @@ export function ProfileDetailsDialog({
       }}
     >
       <DialogContent
-        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)]"
+        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
         closeLabel={t("actions.close")}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -96,6 +108,30 @@ export function ProfileDetailsDialog({
             ))}
           </dl>
         </DialogBody>
+        {/* Details should not be a dead end: the two things done with a node are here too. */}
+        <DialogFooter>
+          <Button
+            disabled={speedtestRunning}
+            onClick={() =>
+              void handleSpeedtest(
+                { profileIds: [profile.id], scope: "profiles" },
+                `node:${profile.id}`,
+              )
+            }
+            type="button"
+            variant="outline"
+          >
+            <Zap aria-hidden="true" className="size-4" />
+            {t("panes.profiles.menu.speedtest")}
+          </Button>
+          <Button
+            disabled={activation.busy || running}
+            onClick={() => void activation.activateProfile(profile.id)}
+            type="button"
+          >
+            {running ? t("panes.profiles.card.using") : t("panes.profiles.card.use")}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

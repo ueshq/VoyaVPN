@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Layers, LoaderCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, Layers, LoaderCircle } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "@voya/ui/components/button";
@@ -85,6 +85,16 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
     setForm((current) => {
       const rest = current.memberIds.filter((item) => item !== id);
       return { ...current, memberIds: selected ? [...rest, id] : rest };
+    });
+  }
+
+  function moveMember(index: number, step: -1 | 1) {
+    setForm((current) => {
+      const target = index + step;
+      if (target < 0 || target >= current.memberIds.length) return current;
+      const ids = [...current.memberIds];
+      [ids[index], ids[target]] = [ids[target]!, ids[index]!];
+      return { ...current, memberIds: ids };
     });
   }
 
@@ -191,6 +201,47 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
               </p>
             ) : null}
           </div>
+          {/* Pick order is failover priority; show it and let it change. */}
+          {form.strategy === "fallback" && form.memberIds.length > 1 ? (
+            <div className="grid gap-1">
+              <span className="text-sm font-medium">{t("policyGroups.order")}</span>
+              <span className="text-xs text-muted-foreground">{t("policyGroups.orderHint")}</span>
+              <ol aria-label={t("policyGroups.order")} className="grid gap-1 rounded-md border p-2">
+                {form.memberIds.map((id, index) => {
+                  const remarks = nodes.find((entry) => entry.profile.id === id)?.profile.remarks ?? "";
+                  const name = profileNameWithoutFlag(remarks) || id;
+                  return (
+                    <li className="flex items-center gap-2 text-sm" key={id}>
+                      <span className="w-5 text-end text-xs tabular-nums text-muted-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{name}</span>
+                      <Button
+                        aria-label={t("policyGroups.moveUp", { name })}
+                        disabled={index === 0}
+                        onClick={() => moveMember(index, -1)}
+                        size="icon-xs"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <ArrowUp aria-hidden="true" className="size-3.5" />
+                      </Button>
+                      <Button
+                        aria-label={t("policyGroups.moveDown", { name })}
+                        disabled={index === form.memberIds.length - 1}
+                        onClick={() => moveMember(index, 1)}
+                        size="icon-xs"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <ArrowDown aria-hidden="true" className="size-3.5" />
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          ) : null}
           {form.strategy === "selector" ? null : (
             <Disclosure
               invalid={Boolean(

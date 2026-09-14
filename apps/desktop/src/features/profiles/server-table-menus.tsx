@@ -3,6 +3,7 @@ import {
   ArrowUp,
   ChevronsDown,
   ChevronsUp,
+  Info,
   Link,
   MoreHorizontal,
   Pencil,
@@ -16,6 +17,7 @@ import type { ComponentType, ReactElement, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
+import { DisabledReason } from "@/components/disabled-reason";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -59,6 +61,7 @@ const EXPORT_MENU_ENTRIES: readonly ExportMenuEntry[] = [
 ];
 
 export function SpeedtestButton({
+  busyElsewhere = false,
   disabled,
   label,
   onCancel,
@@ -66,6 +69,8 @@ export function SpeedtestButton({
   progress = null,
   running,
 }: {
+  /** Another entry point started the running test; only that one can stop it. */
+  busyElsewhere?: boolean;
   disabled: boolean;
   label: string;
   onCancel: () => Promise<void>;
@@ -76,8 +81,11 @@ export function SpeedtestButton({
   const { t } = useI18n();
 
   return (
+    <DisabledReason
+      reason={!running && busyElsewhere ? t("panes.profiles.speedtest.runningElsewhere") : undefined}
+    >
     <Button
-      disabled={!running && disabled}
+      disabled={!running && (disabled || busyElsewhere)}
       onClick={() => void (running ? onCancel() : onRun())}
       size="sm"
       title={running ? t("panes.profiles.speedtest.cancelTitle") : label}
@@ -95,6 +103,7 @@ export function SpeedtestButton({
           : t("panes.profiles.speedtest.stop")
         : label}
     </Button>
+    </DisabledReason>
   );
 }
 
@@ -109,10 +118,7 @@ export function ProfileRowContextMenu({
 }) {
   return (
     <ContextMenu modal={false}>
-      <ContextMenuTrigger
-        asChild
-        onContextMenu={() => controller.setSelectedId(item.profile.id)}
-      >
+      <ContextMenuTrigger asChild>
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent
@@ -164,7 +170,6 @@ export function ProfileCardMenu({
         <MenubarTrigger asChild>
           <Button
             aria-label={label}
-            onClick={() => controller.setSelectedId(item.profile.id)}
             size="icon"
             variant="ghost"
           >
@@ -216,10 +221,19 @@ function ProfileMenuItems({
           </Item>
           <Separator />
         </>
-      ) : null}
+      ) : (
+        <>
+          {/* Say why edit, move and delete are missing instead of hiding them silently. */}
+          <Item disabled>
+            <Info className="size-4" aria-hidden="true" />
+            {t("panes.profiles.menu.subscriptionReadOnly")}
+          </Item>
+          <Separator />
+        </>
+      )}
       <Item
         disabled={speedtestRunning}
-        onSelect={() => void handleSpeedtest(target)}
+        onSelect={() => void handleSpeedtest(target, `node:${indexId}`)}
       >
         <Zap className="size-4" aria-hidden="true" />
         {t("panes.profiles.menu.speedtest")}
@@ -302,6 +316,7 @@ function ProfileMenuItems({
 }
 
 export function ExportMenuItems({
+  disabled = false,
   onExport,
   onShowQr,
   // The group card renders inside a Menubar; the row menu passes its own item
@@ -313,11 +328,13 @@ export function ExportMenuItems({
   onShowQr: () => void;
   primitives?: Pick<MenuPrimitives, "Item">;
   t: TranslateFn;
+  /** Nothing to export, such as a group without nodes. */
+  disabled?: boolean;
 }) {
   return (
     <>
       {EXPORT_MENU_ENTRIES.map(({ icon: Icon, labelKey, mode }) => (
-        <Item key={labelKey} onSelect={mode === "qr" ? onShowQr : onExport}>
+        <Item disabled={disabled} key={labelKey} onSelect={mode === "qr" ? onShowQr : onExport}>
           <Icon className="size-4" aria-hidden="true" />
           {t(labelKey)}
         </Item>

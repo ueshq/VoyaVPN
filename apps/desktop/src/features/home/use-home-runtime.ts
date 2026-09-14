@@ -20,8 +20,8 @@ import { tunProviderLabel, tunProviderPathMismatchDescription } from "./tun-prov
  * elevation + missing-core handling, node selection/switching, and the seeded
  * TUN live state. How traffic is captured is chosen in Settings, never here.
  */
-/** How often the running group's current member is read again. */
-const GROUP_RUNTIME_REFRESH_MS = 5_000;
+/** How often the running group's current member is read again, as on the Nodes page. */
+const GROUP_RUNTIME_REFRESH_MS = 3_000;
 
 export function useHomeRuntime(t: TranslationFunction) {
   const coreState = useRuntimeEventStore((state) => state.coreState);

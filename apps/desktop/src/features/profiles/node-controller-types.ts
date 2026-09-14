@@ -19,13 +19,14 @@ type PolicyGroups = ReturnType<typeof usePolicyGroups>;
 type NodeShared = { t: TranslationFunction; nodeGroups: ReturnType<typeof useNodeGroups> };
 
 export type NodeMenuController = Pick<NodeOperation, "runOperation"> &
-  Pick<NodeEditor, "requestDelete" | "setDialogState" | "setSelectedId"> &
+  Pick<NodeEditor, "requestDelete" | "setDialogState"> &
   Pick<NodeExport, "handleExport"> &
   Pick<NodeSpeedtest, "handleSpeedtest" | "speedtestRunning"> &
   Pick<NodeShared, "t">;
 
 export type NodeDetailsController = Pick<NodeListData, "subscriptionName"> &
-  Pick<NodeEditor, "restoreDetailsFocus" | "setDetailsId"> &
+  Pick<NodeEditor, "activation" | "restoreDetailsFocus" | "setDetailsId"> &
+  Pick<NodeSpeedtest, "handleSpeedtest" | "speedtestRunning"> &
   Pick<NodeShared, "t">;
 
 export type NodeGroupCardController = Pick<NodeListData, "subscriptionMetadata"> &
@@ -37,13 +38,14 @@ export type NodeGroupCardController = Pick<NodeListData, "subscriptionMetadata">
     | "updatingSubscriptions"
   > &
   Pick<NodeExport, "handleGroupExport"> &
-  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning"> &
+  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning" | "speedtestSource"> &
   Pick<NodeShared, "nodeGroups" | "t">;
 
 export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
   Pick<NodeListData, "profiles" | "subscriptionName" | "viewportRef"> &
   Pick<
     NodeEditor,
+    | "activation"
     | "confirmDelete"
     | "detailsId"
     | "dialogState"
@@ -71,6 +73,7 @@ export type NodeDialogsController = Pick<NodeOperation, "operationError"> &
     | "subscriptionsOpen"
   > &
   Pick<NodeExport, "setShareQrContent" | "shareQrContent"> &
+  Pick<NodeSpeedtest, "handleSpeedtest" | "speedtestRunning"> &
   Pick<NodeShared, "t"> & {
     /** Refreshes the list, then updates any subscriptions the import created. */
     handleImported: (result: ImportProfilesResult, isActive?: () => boolean) => Promise<void>;
@@ -86,7 +89,7 @@ export type NodeToolbarController = Pick<ReturnType<typeof useNodeImport>, "hand
   Pick<NodeSubscriptions, "openSubscription" | "updateAllSubscriptions" | "updatingAllSubscriptions"> &
   Pick<PolicyGroups, "openGroupEditor"> &
   Pick<NodeListData, "profiles"> &
-  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning"> &
+  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning" | "speedtestSource"> &
   Pick<NodeShared, "nodeGroups" | "t">;
 
 export type NodeListController = Pick<NodeOperation, "runOperation"> &
@@ -104,9 +107,7 @@ export type NodeListController = Pick<NodeOperation, "runOperation"> &
     | "activation"
     | "openDetails"
     | "requestDelete"
-    | "selectedId"
     | "setDialogState"
-    | "setSelectedId"
   > &
   Pick<
     NodeSubscriptions,
@@ -116,10 +117,11 @@ export type NodeListController = Pick<NodeOperation, "runOperation"> &
     | "updatingSubscriptions"
   > &
   Pick<NodeExport, "handleExport" | "handleGroupExport"> &
-  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning"> &
+  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning" | "speedtestSource"> &
   Pick<NodeShared, "nodeGroups" | "t">;
 
 export type PolicyGroupsController = PolicyGroups &
   Pick<NodeListData, "profiles"> &
+  Pick<NodeSpeedtest, "handleCancelSpeedtest" | "handleSpeedtest" | "speedtestProgress" | "speedtestRunning" | "speedtestSource"> &
   Pick<NodeOperation, "operationError"> &
   Pick<NodeShared, "t">;

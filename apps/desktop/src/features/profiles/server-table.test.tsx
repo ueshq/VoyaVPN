@@ -373,11 +373,9 @@ describe("ProfilesScreen", () => {
       screen.queryByRole("button", { name: "Dedupe" }),
     ).not.toBeInTheDocument();
 
+    // Rows carry no hidden selection: clicking one changes nothing it shows.
     await userEvent.click(rows[0]!);
-    fireEvent.click(rows[1]!, { ctrlKey: true });
-    expect(rows[0]).toHaveAttribute("data-selected", "false");
-    expect(rows[1]).toHaveAttribute("data-selected", "true");
-    expect(rows[2]).toHaveAttribute("data-selected", "false");
+    expect(rows[0]).not.toHaveAttribute("data-selected");
     expect(
       screen.queryByRole("button", { name: /Activate/ }),
     ).not.toBeInTheDocument();
@@ -566,11 +564,14 @@ describe("ProfilesScreen", () => {
     expect(screen.getByText("42 ms")).toBeInTheDocument();
     expect(screen.queryByText("Tokyo IP")).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
-    const selection = screen.getByRole("button", { name: "Select 🇯🇵 Tokyo" });
-    selection.focus();
+    // The name opens the node's details from the keyboard, without using the node.
+    const name = screen.getByRole("button", { name: "Details for 🇯🇵 Tokyo" });
+    name.focus();
     await userEvent.keyboard(" ");
-    expect(selection).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByRole("dialog", { name: "Node details" })).toBeInTheDocument();
     expect(ipcMocks.setActiveProfile).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(name).toHaveFocus());
     const details = screen.getByRole("button", { name: "Details" });
     await userEvent.click(details);
     const dialog = screen.getByRole("dialog", { name: "Node details" });
@@ -656,7 +657,8 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.setActiveProfile.mock.invocationCallOrder[0]).toBeLessThan(
       ipcMocks.connectActiveProfile.mock.invocationCallOrder[0]!,
     );
-    expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
+    // The first card is the chosen node, so while disconnected it offers to connect.
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     await act(async () =>
       finish({
         activeProfileId: "profile-1",
@@ -714,16 +716,16 @@ describe("ProfilesScreen", () => {
     );
     renderProfiles();
     await screen.findByText("Server 0");
-    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled(),
     );
     expect(
       useToastStore
         .getState()
         .toasts.some((toast) => toast.description === "Connection failed"),
     ).toBe(true);
-    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "In use" })).toBeDisabled(),
     );
@@ -738,7 +740,7 @@ describe("ProfilesScreen", () => {
       rejectStatus = reject;
     }));
     const view = renderProfiles();
-    await userEvent.click(await screen.findByRole("button", { name: "Use node" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Connect" }));
     await waitFor(() => expect(ipcMocks.systemProxyStatus).toHaveBeenCalledOnce());
     expect(useRuntimeActionStore.getState().switchingId).toBe("profile-0");
 
@@ -747,11 +749,11 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByRole("button", { name: "Switching…" })).toBeDisabled();
     await act(async () => rejectStatus(new Error("Proxy status unavailable")));
     await waitFor(() => expect(useRuntimeActionStore.getState().switchingId).toBeNull());
-    expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
     expect(useToastStore.getState().toasts.map((toast) => toast.description)).toEqual([
       "Connection failed", "Proxy status unavailable",
     ]);
-    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() => expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(2));
   });
 
@@ -772,7 +774,7 @@ describe("ProfilesScreen", () => {
       });
       renderProfiles();
       await screen.findByText("Server 0");
-      expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     },
   );
 
@@ -793,7 +795,7 @@ describe("ProfilesScreen", () => {
     );
     renderProfiles();
     await screen.findByText("Server 0");
-    await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() =>
       expect(useModalStore.getState().stack[0]).toMatchObject({
         kind: "missingCore",
@@ -801,7 +803,7 @@ describe("ProfilesScreen", () => {
     );
     expect(useToastStore.getState().toasts).toHaveLength(0);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled(),
     );
   });
 
@@ -821,7 +823,7 @@ describe("ProfilesScreen", () => {
       });
       renderProfiles();
       await screen.findByText("Server 0");
-      await userEvent.click(screen.getByRole("button", { name: "Use node" }));
+      await userEvent.click(screen.getByRole("button", { name: "Connect" }));
       await waitFor(() =>
         expect(useRuntimeActionStore.getState().switchingId).toBeNull(),
       );
@@ -830,7 +832,7 @@ describe("ProfilesScreen", () => {
         granted ? 2 : 1,
       );
       if (!granted)
-        expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled();
+        expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
     },
   );
 
@@ -839,9 +841,9 @@ describe("ProfilesScreen", () => {
     mockProfileList([makeProfile(0)]);
     renderProfiles();
     await screen.findByText("Server 0");
-    expect(screen.getByRole("button", { name: "Use node" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
     act(() => useRuntimeActionStore.setState({ pendingAction: null }));
-    expect(screen.getByRole("button", { name: "Use node" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeEnabled();
     expect(ipcMocks.setActiveProfile).not.toHaveBeenCalled();
   });
 
@@ -902,7 +904,8 @@ describe("ProfilesScreen", () => {
       "Paste links or subscription URLs",
       "Import from clipboard",
       "Scan screen",
-      "Add subscription",
+      // The item carries a short hint under its name.
+      "Add subscriptionName it and set auto-update and filters",
       "Enter a node manually",
       "New policy group",
     ]);
@@ -1054,9 +1057,6 @@ describe("ProfilesScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     expect(await screen.findByText("Imported node")).toBeInTheDocument();
-    const rows = screen.getAllByTestId("server-row");
-    expect(rows[0]).toHaveAttribute("data-selected", "true");
-    expect(rows[1]).toHaveAttribute("data-selected", "false");
     expect(screen.getByText("Imported 2 node(s).")).toBeInTheDocument();
   });
 
@@ -1090,10 +1090,7 @@ describe("ProfilesScreen", () => {
     expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith("vless://uuid@example.test:443#Scanned", null);
 
     expect(await screen.findByText("Scanned node")).toBeInTheDocument();
-    expect(screen.getByTestId("server-row")).toHaveAttribute(
-      "data-selected",
-      "true",
-    );
+    expect(screen.getByTestId("server-row")).toBeInTheDocument();
     expect(screen.getByText("Imported 1 node(s).")).toBeInTheDocument();
   });
 
@@ -1155,10 +1152,7 @@ describe("ProfilesScreen", () => {
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(screen.getByTestId("server-row")).toHaveAttribute(
-      "data-selected",
-      "true",
-    );
+    expect(screen.getByTestId("server-row")).toBeInTheDocument();
     expect(
       screen.getByText(
         "Imported 1 node(s). 1 existing node(s) refreshed. 2 duplicate(s) removed.",

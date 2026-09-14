@@ -73,7 +73,7 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
         const boxes = elements.map((element) => element.getBoundingClientRect());
         return boxes.every((box, index) => index === 0 || Math.abs(box.top - boxes[index - 1]!.bottom) < 1);
       })).toBe(true);
-      await expect(cards.first().getByRole("button", { name: "使用节点", exact: true })).toBeInViewport({ ratio: 1 });
+      await expect(cards.first().getByRole("button", { name: "连接", exact: true })).toBeInViewport({ ratio: 1 });
       await page.screenshot({ path: testInfo.outputPath(`cards-${colorScheme}-${width}.png`) });
     }
   }

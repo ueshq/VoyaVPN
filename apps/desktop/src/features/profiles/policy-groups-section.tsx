@@ -20,6 +20,7 @@ import type { PolicyGroupsController } from "./node-controller-types";
 import { PolicyGroupDialog } from "./policy-group-dialog";
 import { POLICY_GROUP_STRATEGY_KEYS } from "./policy-group-labels";
 import { profileNameWithoutFlag } from "./profile-display";
+import { SpeedtestButton } from "./server-table-menus";
 
 /**
  * Policy groups above the node list. The editor and the delete confirmation
@@ -108,10 +109,16 @@ function PolicyGroupCard({
     activatePolicyGroup,
     choosePolicyGroupMember,
     coreConnected,
+    handleCancelSpeedtest,
+    handleSpeedtest,
     openGroupEditor,
     policyGroupRuntimeState,
     policyGroupSubscriptions,
+    profiles,
     setDeletingPolicyGroup,
+    speedtestProgress,
+    speedtestRunning,
+    speedtestSource,
     switchingPolicyGroupId,
     t,
     testRunningPolicyGroup,
@@ -125,7 +132,16 @@ function PolicyGroupCard({
     (group.strategy === "selector"
       ? (group.selectedProfileId ?? members[0]?.profileId ?? null)
       : null);
-  const delays = new Map(live?.members.map((member) => [member.profileId, member.delayMs]) ?? []);
+  // A running group reports its members' delays; otherwise the last speed test does.
+  const delays = new Map(
+    live
+      ? live.members.map((member) => [member.profileId, member.delayMs])
+      : members.map((member) => [
+          member.profileId,
+          profiles.find((item) => item.profile.id === member.profileId)?.metrics.delayMs || null,
+        ]),
+  );
+  const speedtestKey = `policy:${group.id}`;
   const inUse = isActive && coreConnected;
   const source = group.autoCreated
     ? policyGroupSubscriptions.find((item) => item.id === group.sourceSubscriptionId)
@@ -178,7 +194,23 @@ function PolicyGroupCard({
               )}
               {t("nodeGroups.test")}
             </Button>
-          ) : null}
+          ) : (
+            // Before the group runs, its test measures the member nodes directly.
+            <SpeedtestButton
+              busyElsewhere={speedtestRunning && speedtestSource !== speedtestKey}
+              disabled={members.length === 0}
+              label={t("nodeGroups.test")}
+              onCancel={handleCancelSpeedtest}
+              onRun={() =>
+                handleSpeedtest(
+                  { profileIds: members.map((member) => member.profileId), scope: "profiles" },
+                  speedtestKey,
+                )
+              }
+              progress={speedtestProgress}
+              running={speedtestRunning && speedtestSource === speedtestKey}
+            />
+          )}
           <span title={members.length === 0 ? t("nodeGroups.empty") : undefined}>
           <Button
             disabled={inUse || switchingPolicyGroupId !== null || members.length === 0}

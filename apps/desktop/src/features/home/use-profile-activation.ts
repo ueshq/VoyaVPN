@@ -11,10 +11,7 @@ import { useToastStore } from "@/stores/toast-store";
 
 import { executeRuntimeAction, isRuntimeTransitioning, reportRuntimeActionError } from "./runtime-action";
 
-export function useProfileActivation(
-  t: TranslationFunction,
-  { onSelect }: { onSelect?: (id: string) => void } = {},
-) {
+export function useProfileActivation(t: TranslationFunction) {
   const queryClient = useQueryClient();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
@@ -29,7 +26,6 @@ export function useProfileActivation(
       return false;
     }
     useRuntimeActionStore.setState({ switchingId: id });
-    onSelect?.(id);
     const action = currentState === "connected" ? "restart" : "connect";
     try {
       // A node replaces the policy group in use; say which one it set aside.

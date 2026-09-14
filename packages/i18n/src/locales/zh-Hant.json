@@ -18,7 +18,8 @@
     "restart": "重新連線",
     "retry": "重試",
     "save": "保存",
-    "settings": "設定"
+    "settings": "設定",
+    "done": "完成"
   },
   "app": {
     "name": "VoyaVPN"
@@ -67,7 +68,8 @@
       "remainingTraffic": "剩餘 {{amount}}",
       "update": "更新訂閱",
       "updateFailed": "訂閱更新失敗",
-      "updated": "訂閱已更新"
+      "updated": "訂閱已更新",
+      "addHint": "設定名稱、自動更新與篩選"
     },
     "cleanupPending": "通道尚未清理",
     "retryDisconnect": "重試中斷連線",
@@ -99,7 +101,8 @@
     "authorizationDeclined": "未取得系統授權，無法連線。請重試，並在系統彈窗中允許。",
     "globalModeChip": "全局代理",
     "modePendingReason": "正在切換模式，請稍候",
-    "checkIpNeedsConnection": "連線後可檢測出口 IP"
+    "checkIpNeedsConnection": "連線後可檢測出口 IP",
+    "checkIpRetry": "檢測失敗，點擊重試"
   },
   "logCodes": {
     "connected": "核心守護程序已啟動",
@@ -360,7 +363,8 @@
         "moveDown": "下移",
         "moveTop": "移至頂部",
         "moveUp": "上移",
-        "speedtest": "測速"
+        "speedtest": "測速",
+        "subscriptionReadOnly": "訂閱節點由訂閱維護，不能編輯、移動或刪除"
       },
       "panels": {
         "profile": "節點",
@@ -388,7 +392,10 @@
         "stopProgress": "停止（{{done}}/{{total}}）",
         "settings": "測速設定",
         "settingsDescription": "對所有延遲測試生效。",
-        "nothingToTest": "暫無節點可測試"
+        "nothingToTest": "暫無節點可測試",
+        "runningElsewhere": "正在進行其他測速",
+        "saving": "正在儲存…",
+        "saved": "已儲存，下次測速生效。"
       },
       "title": "節點",
       "toolbar": {
@@ -417,7 +424,8 @@
         "switching": "切換中…",
         "details": "詳情",
         "detailsTitle": "節點詳情",
-        "select": "選擇 {{name}}"
+        "openDetails": "查看「{{name}}」詳情",
+        "connect": "連線"
       },
       "cardFields": {
         "address": "位址",
@@ -558,25 +566,12 @@
       "autoUpdateHint": "0 或留空表示關閉自動更新。",
       "autoUpdateInterval": "自動更新間隔（小時）",
       "convertTarget": "轉換目標",
-      "deleted": "訂閱已刪除",
-      "description": "管理訂閱來源及更新。",
-      "details": "訂閱詳情",
-      "disabled": "已停用",
-      "empty": "尚無訂閱",
-      "emptyDescription": "新增訂閱來源以自動匯入節點。",
       "enabled": "啟用自動更新",
       "filter": "節點篩選條件",
-      "loading": "正在載入訂閱",
-      "new": "添加訂閱",
       "remarks": "訂閱名稱",
-      "saved": "訂閱已保存",
-      "sources": "訂閱來源",
-      "title": "訂閱",
       "untitled": "未命名訂閱",
-      "updateAll": "更新全部訂閱",
       "updateNothingImported": "沒有匯入或更新任何內容。",
       "updateResult": "已更新 {{updated}} 個訂閱，匯入 {{imported}} 個節點",
-      "updateSelected": "更新所選訂閱",
       "url": "訂閱地址",
       "userAgent": "客戶端標識（User-Agent）",
       "updateResultWithRemoved": "已更新 {{updated}} 個訂閱，匯入 {{imported}} 個節點，移除 {{removed}} 個已下架節點"
@@ -971,7 +966,9 @@
     "membersCount": "{{count}} 個節點",
     "test": "測試本組",
     "exportFor": "匯出「{{name}}」",
-    "empty": "此分組暫無節點。"
+    "empty": "此分組暫無節點。",
+    "moreFor": "「{{name}}」的更多操作",
+    "autoUpdateOff": "自動更新已關閉"
   },
   "common": {
     "advanced": "更多參數",
@@ -988,7 +985,8 @@
     "manualImportHint": "匯入內容將儲存為手動節點，不會自動連線。",
     "deleteTitle": "刪除訂閱「{{name}}」？",
     "deleteHint": "同時刪除所屬的 {{count}} 個節點。如其中有正在使用的節點，將中斷連線並清除選擇。",
-    "empty": "暫無節點。更新此訂閱以取得節點。"
+    "empty": "暫無節點。更新此訂閱以取得節點。",
+    "delete": "刪除訂閱"
   },
   "closePrompt": {
     "title": "關閉 VoyaVPN？",
@@ -1036,7 +1034,11 @@
     "switchedTitle": "已切換",
     "replacedByNode": "已停用策略組「{{group}}」，改為使用這個節點。",
     "replacedNode": "不再單獨使用節點「{{node}}」，改為透過這個策略組連線。",
-    "deleteActiveHint": "這個策略群組正在使用，刪除後連線會中斷。"
+    "deleteActiveHint": "這個策略群組正在使用，刪除後連線會中斷。",
+    "order": "嘗試順序",
+    "orderHint": "故障轉移依此順序使用第一個可用的節點。",
+    "moveUp": "上移「{{name}}」",
+    "moveDown": "下移「{{name}}」"
   },
   "startupFailure": {
     "title": "VoyaVPN 無法啟動",

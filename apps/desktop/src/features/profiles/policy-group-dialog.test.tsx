@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,6 +31,35 @@ describe("PolicyGroupDialog", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     await changeLocale("en", { persist: false });
+  });
+
+  it("shows the failover try order and saves the changed order", async () => {
+    const user = userEvent.setup();
+    ipc.savePolicyGroup.mockResolvedValue(null);
+    renderDialog({
+      autoCreated: false,
+      id: "g1",
+      intervalSeconds: null,
+      memberIds: ["a", "b"],
+      name: "Backup",
+      selectedProfileId: null,
+      sourceSubscriptionId: null,
+      strategy: "fallback",
+      testUrl: null,
+      toleranceMs: null,
+    });
+    const order = screen.getByRole("list", { name: "Try order" });
+    const names = () => within(order).getAllByRole("listitem").map((item) => item.textContent);
+
+    expect(names()).toEqual(["1Tokyo", "2Osaka"]);
+    expect(screen.getByRole("button", { name: "Move Tokyo up" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Move Osaka up" }));
+    expect(names()).toEqual(["1Osaka", "2Tokyo"]);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(ipc.savePolicyGroup).toHaveBeenCalledWith(expect.objectContaining({ memberIds: ["b", "a"] })),
+    );
   });
 
   it("saves a new group with members in the order they were picked", async () => {

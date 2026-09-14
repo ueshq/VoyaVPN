@@ -238,7 +238,7 @@ test("node menus defer actions until a method is chosen and restore keyboard foc
     "Paste links or subscription URLs",
     "Import from clipboard",
     "Scan screen",
-    "Add subscription",
+    "Add subscriptionName it and set auto-update and filters",
     "Enter a node manually",
     "New policy group",
   ]);

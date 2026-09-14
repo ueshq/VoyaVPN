@@ -36,14 +36,15 @@ test("source groups retain subscription settings and only Use connects", async (
   await expect(page.getByText("Edit group", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Work", exact: true }).click();
   await expect(page.getByTestId("server-row")).toHaveCount(1);
-  await page.getByRole("article", { name: "Work", exact: true }).getByRole("button", { name: "Subscription settings", exact: true }).click();
+  await page.getByRole("article", { name: "Work", exact: true }).getByRole("menuitem", { name: "More actions for Work", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Subscription settings", exact: true }).click();
   const settings = page.getByRole("dialog");
   await settings.getByLabel("Remarks", { exact: true }).fill("Office");
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect(settings).not.toBeVisible();
   await expect(page.getByRole("button", { name: "Office", exact: true })).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("article", { name: "Office", exact: true }).getByRole("button", { name: "Test group", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Export Office", exact: true }).click();
+  await page.getByRole("menuitem", { name: "More actions for Office", exact: true }).click();
   await page.getByRole("menuitem", { name: "Share links", exact: true }).click();
   await expect.poll(() => page.evaluate(() => (window.__VOYA_SMOKE__.state as State).calls.filter((c) => c.command === "export_profile_share_links").at(-1)?.args.indexIds)).toEqual(["node-0", "node-1", "node-2"]);
   const calls = await page.evaluate(() => (window.__VOYA_SMOKE__.state as State).calls);
@@ -62,7 +63,8 @@ test("source groups retain subscription settings and only Use connects", async (
   await expect(page.getByRole("button", { name: "Local nodes", exact: true })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window.__VOYA_SMOKE__.state as { runtime: { state: string } }).runtime.state)).toBe("disconnected");
   expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as State).profiles.some((p) => p.isActive))).toBe(false);
-  await page.getByRole("article", { name: "Office", exact: true }).getByRole("button", { name: /Delete subscription/ }).click();
+  await page.getByRole("article", { name: "Office", exact: true }).getByRole("menuitem", { name: "More actions for Office", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Delete subscription", exact: true }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page.getByRole("article", { name: "Office", exact: true })).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Travel", exact: true })).toBeVisible();
@@ -116,7 +118,7 @@ test("long groups and 5000 nodes retain keyboard focus, continuous group layout 
     }
   }
   await toggle.focus(); await page.keyboard.press("End");
-  await expect(page.getByRole("button", { name: "Select Node 5000", exact: true })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Details for Node 5000", exact: true })).toBeFocused();
   await page.keyboard.press("Home"); await expect(toggle).toBeFocused();
   await page.getByRole("tab", { name: "Home", exact: true }).click(); await page.getByRole("tab", { name: "Nodes", exact: true }).click();
   await expect(toggle).toHaveAttribute("aria-expanded", "true");
@@ -130,9 +132,8 @@ test("empty subscriptions retain update and settings actions in a small window",
     await page.emulateMedia({ colorScheme });
     const group = page.getByRole("article", { name: "Travel", exact: true });
     await expect(group.getByRole("button", { name: "Update subscription", exact: true })).toBeVisible();
-    await expect(group.getByRole("button", { name: "Subscription settings", exact: true })).toBeVisible();
+    await expect(group.getByRole("menuitem", { name: "More actions for Travel", exact: true })).toBeVisible();
     await expect(group.getByRole("button", { name: "Test group", exact: true })).toBeDisabled();
-    await expect(page.getByRole("menuitem", { name: "Export Travel", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Local nodes", exact: true })).toHaveCount(0);
     await expect.poll(() => group.evaluate((element) => element.scrollWidth - element.clientWidth)).toBe(0);
     await page.screenshot({ path: testInfo.outputPath(`source-panels-${colorScheme}.png`), animations: "disabled" });

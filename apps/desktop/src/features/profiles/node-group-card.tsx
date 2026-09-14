@@ -1,12 +1,13 @@
+import { useRef } from "react";
 import {
   ChevronDown,
   ChevronRight,
   Folder,
-  Rss,
+  MoreHorizontal,
   RefreshCw,
+  Rss,
   Settings,
   Trash2,
-  Share2,
 } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { SubscriptionMetaLine } from "@/features/subscriptions/subscription-card";
@@ -14,7 +15,9 @@ import { Button } from "@voya/ui/components/button";
 import {
   Menubar,
   MenubarContent,
+  MenubarItem,
   MenubarMenu,
+  MenubarSeparator,
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
@@ -36,12 +39,20 @@ export function NodeGroupCard({
     handleCancelSpeedtest,
     speedtestProgress,
     speedtestRunning,
+    speedtestSource,
   } = controller;
   const subscription = row.subscription;
   const { language } = useI18n();
+  const moreRef = useRef<HTMLButtonElement>(null);
+  // A dialog opened from the menu keeps its focus instead of the menu's trigger.
+  const openingDialogRef = useRef(false);
   const metadata = subscription
     ? controller.subscriptionMetadata.get(subscription.id)
     : null;
+  const source = `group:${row.groupKey}`;
+  const moreLabel = t("nodeGroups.moreFor", { name: row.name });
+  const returnFocusTo = () => moreRef.current ?? document.body;
+
   return (
     <article
       className="node-group-surface node-group-header"
@@ -79,88 +90,109 @@ export function NodeGroupCard({
             </span>
             <span className="text-xs text-muted-foreground">
               {t("nodeGroups.membersCount", { count: row.members.length })}
+              {subscription && !subscription.enabled
+                ? ` · ${t("nodeGroups.autoUpdateOff")}`
+                : null}
             </span>
           </span>
         </button>
+        {/* The everyday actions stay on the header; the rest sits behind the menu. */}
         <div className="node-group-actions">
           {subscription ? (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={controller.updatingSubscriptions.has(subscription.id)}
-                onClick={() =>
-                  void controller.updateSubscription(subscription.id)
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={controller.updatingSubscriptions.has(subscription.id)}
+              onClick={() => void controller.updateSubscription(subscription.id)}
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={
+                  controller.updatingSubscriptions.has(subscription.id)
+                    ? "size-4 animate-spin"
+                    : "size-4"
                 }
-              >
-                <RefreshCw
-                  aria-hidden="true"
-                  className={
-                    controller.updatingSubscriptions.has(subscription.id)
-                      ? "size-4 animate-spin"
-                      : "size-4"
-                  }
-                />
-                {t("home.subscriptionCard.update")}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={(event) =>
-                  controller.openSubscription(subscription, event.currentTarget)
-                }
-              >
-                <Settings aria-hidden="true" className="size-4" />
-                {t("subscriptions.edit")}
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                aria-label={t("subscriptions.deleteTitle", { name: row.name })}
-                onClick={(event) => {
-                  controller.confirmSubscriptionDeletion(
-                    subscription,
-                    event.currentTarget,
-                  );
-                }}
-              >
-                <Trash2 aria-hidden="true" className="size-4" />
-              </Button>
-            </>
+              />
+              {t("home.subscriptionCard.update")}
+            </Button>
           ) : null}
           <SpeedtestButton
+            busyElsewhere={speedtestRunning && speedtestSource !== source}
             disabled={!row.allMembers.length}
             label={t("nodeGroups.test")}
             onCancel={handleCancelSpeedtest}
             onRun={() =>
-              handleSpeedtest({
-                scope: "profiles",
-                profileIds: row.allMembers.map((p) => p.profile.id),
-              })
+              handleSpeedtest(
+                {
+                  scope: "profiles",
+                  profileIds: row.allMembers.map((p) => p.profile.id),
+                },
+                source,
+              )
             }
             progress={speedtestProgress}
-            running={speedtestRunning}
+            running={speedtestRunning && speedtestSource === source}
           />
           <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
             <MenubarMenu>
               <MenubarTrigger asChild>
                 <Button
-                  aria-label={t("nodeGroups.exportFor", { name: row.name })}
-                  disabled={!row.members.length}
-                  size="sm"
-                  variant="outline"
+                  aria-label={moreLabel}
+                  ref={moreRef}
+                  size="icon"
+                  title={moreLabel}
+                  type="button"
+                  variant="ghost"
                 >
-                  <Share2 aria-hidden="true" className="size-4" />
-                  {t("panes.profiles.export.export")}
-                  <ChevronDown aria-hidden="true" className="size-3" />
+                  <MoreHorizontal aria-hidden="true" className="size-4" />
                 </Button>
               </MenubarTrigger>
-              <MenubarContent align="end">
+              <MenubarContent
+                align="end"
+                aria-label={moreLabel}
+                onCloseAutoFocus={(event) => {
+                  if (openingDialogRef.current) {
+                    event.preventDefault();
+                    openingDialogRef.current = false;
+                  }
+                }}
+              >
+                {subscription ? (
+                  <>
+                    <MenubarItem
+                      onSelect={() => {
+                        openingDialogRef.current = true;
+                        controller.openSubscription(subscription, returnFocusTo());
+                      }}
+                    >
+                      <Settings aria-hidden="true" className="size-4" />
+                      {t("subscriptions.edit")}
+                    </MenubarItem>
+                    <MenubarSeparator />
+                  </>
+                ) : null}
+                {/* Hidden unreachable nodes still export, so only an empty group cannot. */}
                 <ExportMenuItems
-                  t={t}
+                  disabled={!row.allMembers.length}
                   onExport={() => void handleGroupExport(row.groupKey)}
                   onShowQr={() => void handleGroupExport(row.groupKey, "qr")}
+                  t={t}
                 />
+                {subscription ? (
+                  <>
+                    <MenubarSeparator />
+                    <MenubarItem
+                      onSelect={() => {
+                        openingDialogRef.current = true;
+                        controller.confirmSubscriptionDeletion(subscription, returnFocusTo());
+                      }}
+                      variant="destructive"
+                    >
+                      <Trash2 aria-hidden="true" className="size-4" />
+                      {t("subscriptions.delete")}
+                    </MenubarItem>
+                  </>
+                ) : null}
               </MenubarContent>
             </MenubarMenu>
           </Menubar>

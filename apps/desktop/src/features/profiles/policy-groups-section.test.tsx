@@ -42,6 +42,8 @@ function controller(overrides: Partial<PolicyGroupsController>): PolicyGroupsCon
     coreConnected: false,
     deletingPolicyGroup: null,
     editingPolicyGroup: null,
+    handleCancelSpeedtest: vi.fn(),
+    handleSpeedtest: vi.fn(),
     openGroupEditor: vi.fn(),
     operationError: null,
     policyGroupEditorOpen: false,
@@ -52,6 +54,9 @@ function controller(overrides: Partial<PolicyGroupsController>): PolicyGroupsCon
     removePolicyGroup: vi.fn(),
     setDeletingPolicyGroup: vi.fn(),
     setPolicyGroupEditorOpen: vi.fn(),
+    speedtestProgress: null,
+    speedtestRunning: false,
+    speedtestSource: null,
     switchingPolicyGroupId: null,
     t: i18next.t.bind(i18next),
     testRunningPolicyGroup: vi.fn(),
@@ -100,7 +105,12 @@ describe("PolicyGroupsSection", () => {
     });
     render(<PolicyGroupsSection controller={idle} />);
 
-    expect(screen.queryByRole("button", { name: "Test group" })).toBeNull();
+    // Before it runs, a group's test measures its member nodes directly.
+    await user.click(screen.getByRole("button", { name: "Test group" }));
+    expect(idle.handleSpeedtest).toHaveBeenCalledWith(
+      { profileIds: ["a", "b"], scope: "profiles" },
+      "policy:g2",
+    );
     await user.click(screen.getByRole("button", { name: "Use this group" }));
     await user.click(screen.getByRole("button", { name: "Edit Europe" }));
     await user.click(screen.getByRole("button", { name: "Delete Europe" }));

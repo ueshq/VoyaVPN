@@ -50,7 +50,7 @@ test("switch-node navigation transfers keyboard focus without starting a connect
       ),
     ),
   ).toEqual([]);
-  await page.getByRole("button", { name: "Use node", exact: true }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "In use", exact: true }),
   ).toBeVisible();
@@ -132,18 +132,23 @@ test("deleting the connected subscription stops it and retains manual nodes", as
   );
   await page.goto("/");
   await page.locator("#shell-tab-profiles").click();
-  const remove = page
+  // Deleting a subscription sits in its group's "more actions" menu.
+  const more = page
     .getByTestId("node-group-card")
     .filter({ hasText: "Travel" })
-    .getByRole("button", { name: /Delete/ });
-  await remove.click();
+    .getByRole("menuitem", { name: "More actions for Travel", exact: true });
+  const remove = async () => {
+    await more.click();
+    await page.getByRole("menuitem", { name: "Delete subscription", exact: true }).click();
+  };
+  await remove();
   const confirmation = page.getByRole("alertdialog");
   await expect(confirmation).toContainText("1");
   await confirmation
     .getByRole("button", { name: "Cancel", exact: true })
     .click();
-  await expect(remove).toBeFocused();
-  await remove.click();
+  await expect(more).toBeFocused();
+  await remove();
   await confirmation
     .getByRole("button", { name: "Delete", exact: true })
     .click();
@@ -290,10 +295,12 @@ for (const viewport of [
             await expect(
               page.getByTestId("node-group-card").first(),
             ).toContainText("Travel");
+            // The group's only menu trigger is "more actions"; its settings item
+            // carries the settings icon in every language.
+            await page.getByTestId("node-group-card").first().getByRole("menuitem").click();
             await page
-              .getByTestId("node-group-card")
-              .first()
-              .getByRole("button")
+              .getByRole("menu")
+              .getByRole("menuitem")
               .filter({ has: page.locator("svg.lucide-settings") })
               .click();
             const body = page.locator('[data-slot="dialog-body"]');

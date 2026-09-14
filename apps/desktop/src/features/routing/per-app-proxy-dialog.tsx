@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AppWindow, Info, Plus, X } from "lucide-react";
+import { AppWindow, Info, LoaderCircle, Plus, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { TranslationKey } from "@voya/i18n";
@@ -245,24 +245,13 @@ export function PerAppProxyDialog({
                 {t(MODE_HINT_KEYS[mode])}
               </p>
 
-              <Alert
-                className={
-                  vpnHintProminent
-                    ? undefined
-                    : "border-transparent p-0 [&>svg]:hidden"
-                }
-              >
-                {vpnHintProminent ? (
+              {/* Only worth saying when the running mode cannot apply app rules. */}
+              {vpnHintProminent ? (
+                <Alert>
                   <Info aria-hidden="true" className="size-4" />
-                ) : null}
-                <AlertDescription
-                  className={
-                    vpnHintProminent ? undefined : "text-xs text-subtlest"
-                  }
-                >
-                  {t("panes.routing.perAppTunOnlyHint")}
-                </AlertDescription>
-              </Alert>
+                  <AlertDescription>{t("panes.routing.perAppTunOnlyHint")}</AlertDescription>
+                </Alert>
+              ) : null}
 
               {mode !== "off" ? (
                 <>
@@ -424,6 +413,7 @@ export function PerAppProxyDialog({
             onClick={() => void handleSave()}
             type="button"
           >
+            {saving ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
             {t("actions.save")}
           </Button>
         </DialogFooter>

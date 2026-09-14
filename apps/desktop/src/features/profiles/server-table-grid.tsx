@@ -1,5 +1,7 @@
 import { navigateVirtualList } from "./virtual-list-keyboard";
-import { ChevronRight, Inbox, LoaderCircle } from "lucide-react";
+import { ChevronRight, Inbox, LoaderCircle, Plus } from "lucide-react";
+import { Button } from "@voya/ui/components/button";
+import { useShellStore } from "@/stores/shell-store";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { PageSurface } from "@/components/app-shell/page-section";
 
@@ -27,8 +29,6 @@ export function ProfileCardList({
     rows,
     renderedRows,
     rowVirtualizer,
-    setSelectedId,
-    selectedId,
     t,
     viewportRef,
   } = controller;
@@ -73,7 +73,19 @@ export function ProfileCardList({
           <PageSurface className="h-full">
             <EmptyState
               className="h-full content-center"
-              description={t("panes.profiles.emptyDescription")}
+              description={
+                <span className="grid justify-items-center gap-3">
+                  <span>{t("panes.profiles.emptyDescription")}</span>
+                  <Button
+                    onClick={() => useShellStore.getState().openProfilesAddMenu()}
+                    size="sm"
+                    type="button"
+                  >
+                    <Plus aria-hidden="true" className="size-4" />
+                    {t("panes.profiles.toolbar.addNode")}
+                  </Button>
+                </span>
+              }
               icon={Inbox}
               title={t("panes.profiles.empty")}
             />
@@ -109,7 +121,6 @@ export function ProfileCardList({
               const item = row.item;
               const { profile } = item;
               const id = profile.id;
-              const selected = selectedId === id;
               const running = activation.runningId === id;
               const switching = activation.switchingId === id;
               const rawName = profile.remarks || t("panes.profiles.untitled");
@@ -125,8 +136,6 @@ export function ProfileCardList({
                         item.isActive && "profile-node-card-selected",
                       )}
                       data-testid="server-row"
-                      data-selected={selected}
-                      onClick={() => setSelectedId(id)}
                     >
                       <div aria-hidden="true" className="node-card-icon">
                         <NodeCountryIcon
@@ -134,14 +143,14 @@ export function ProfileCardList({
                         />
                       </div>
                       <div className="node-card-content">
+                        {/* The name opens the node's details, where it can also be used or tested. */}
                         <button
-                          aria-label={t("panes.profiles.card.select", {
+                          aria-label={t("panes.profiles.card.openDetails", {
                             name: rawName,
                           })}
-                          aria-pressed={selected}
                           data-row-focus
                           className="node-card-select"
-                          onClick={() => setSelectedId(id)}
+                          onClick={(event) => openDetails(id, event.currentTarget)}
                           type="button"
                         >
                           <span className="node-card-label">
@@ -207,7 +216,10 @@ export function ProfileCardList({
                             ? t("panes.profiles.card.switching")
                             : running
                               ? t("panes.profiles.card.using")
-                              : t("panes.profiles.card.use")}
+                              : item.isActive && !activation.runningId
+                                ? // The chosen node while disconnected: this button connects.
+                                  t("panes.profiles.card.connect")
+                                : t("panes.profiles.card.use")}
                         </button>
                         <ProfileCardMenu controller={controller} item={item} />
                       </div>

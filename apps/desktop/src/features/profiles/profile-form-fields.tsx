@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { profileValidationMessage } from "./profile-form-utils";
 import { createContext, useContext, useId } from "react";
@@ -27,7 +28,7 @@ import {
   SelectValue,
 } from "@voya/ui/components/select";
 import { cn } from "@voya/ui/lib/utils";
-import { ShieldCheck } from "lucide-react";
+import { ChevronDown, ShieldCheck } from "lucide-react";
 
 import type {
   ParsedProfileFormValues,
@@ -55,11 +56,23 @@ export type ProfileFormControl = Control<
 
 export function Panel({
   children,
+  collapsible = false,
+  defaultOpen = true,
   title,
 }: {
   children: React.ReactNode;
+  /** A collapsible panel can start closed while it has nothing worth showing. */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
   title: string;
 }) {
+  if (collapsible) {
+    return (
+      <CollapsiblePanel defaultOpen={defaultOpen} title={title}>
+        {children}
+      </CollapsiblePanel>
+    );
+  }
   return (
     <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
       <CardHeader className="p-0">
@@ -72,6 +85,36 @@ export function Panel({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">{children}</CardContent>
+    </Card>
+  );
+}
+
+// A native <details>, so the form's error handler that opens every section
+// also reaches this one.
+function CollapsiblePanel({
+  children,
+  defaultOpen,
+  title,
+}: {
+  children: React.ReactNode;
+  defaultOpen: boolean;
+  title: string;
+}) {
+  // Only the first render decides; filling the panel in never snaps it shut.
+  const [initiallyOpen] = useState(defaultOpen);
+  return (
+    <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
+      <details className="group/panel" open={initiallyOpen}>
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-section font-semibold text-foreground [&::-webkit-details-marker]:hidden">
+          <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
+          {title}
+          <ChevronDown
+            aria-hidden="true"
+            className="ms-auto size-4 text-muted-foreground transition-transform group-open/panel:rotate-180"
+          />
+        </summary>
+        <div className="pt-3">{children}</div>
+      </details>
     </Card>
   );
 }

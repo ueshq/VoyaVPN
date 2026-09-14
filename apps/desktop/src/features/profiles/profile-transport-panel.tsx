@@ -21,9 +21,16 @@ export function TransportPanel({ control, register }: TransportPanelProps) {
   // Only the selected network's options are rendered, so no two inputs ever
   // fight over one react-hook-form ref.
   const network = useWatch({ control, name: "network" }) || "tcp";
+  const options = useWatch({ control, name: "transportOptions" });
+  // Plain TCP with nothing filled in has nothing to show, so it starts closed.
+  const hasSettings =
+    network !== "tcp" ||
+    Object.values(options ?? {}).some((value) =>
+      typeof value === "string" ? value.trim() !== "" && value !== "none" : Boolean(value),
+    );
 
   return (
-    <Panel title={t("panes.profiles.panels.transport")}>
+    <Panel collapsible defaultOpen={hasSettings} title={t("panes.profiles.panels.transport")}>
       <div className="grid gap-3 lg:grid-cols-4">
         <SelectField
           control={control}

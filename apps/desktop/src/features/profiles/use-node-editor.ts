@@ -24,10 +24,9 @@ export function useNodeEditor(
   const addTriggerRef = useRef<HTMLButtonElement>(null);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const detailsTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const activation = useProfileActivation(t, { onSelect: setSelectedId });
+  const activation = useProfileActivation(t);
   const queryClient = useQueryClient();
   function openDetails(id: string, trigger: HTMLButtonElement) {
     detailsTriggerRef.current = trigger;
@@ -64,9 +63,6 @@ export function useNodeEditor(
     const indexIds = pendingDelete;
     setPendingDelete(null);
     if (indexIds && indexIds.length > 0) {
-      if (selectedId && indexIds.includes(selectedId)) {
-        setSelectedId(null);
-      }
       void runOperation(() => deleteProfiles(indexIds));
     }
   }
@@ -86,7 +82,6 @@ export function useNodeEditor(
     setOperationMessage(formatImportSummary(result, t));
     const importedIndexIds = result.importedProfileIds;
     if (importedIndexIds.length > 0) {
-      setSelectedId(importedIndexIds[0] ?? null);
       // Refresh the complete list after import. `import_profiles_from_text` still emits profiles +
       // subscriptions + subscriptionMetadata for every other cache.
       const refreshedProfiles = await listProfiles(null, null);
@@ -109,8 +104,6 @@ export function useNodeEditor(
     pendingDelete,
     setPendingDelete,
     saveError,
-    selectedId,
-    setSelectedId,
     activation,
     detailsId,
     setDetailsId,

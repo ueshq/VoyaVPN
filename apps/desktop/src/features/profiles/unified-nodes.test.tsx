@@ -173,7 +173,10 @@ describe("source-derived node groups", () => {
     await screen.findByRole("button", { name: "Asia" });
     expect(screen.queryByRole("button", { name: "Local nodes" })).not.toBeInTheDocument();
     expect(screen.getAllByTestId("node-group-card")).toHaveLength(2);
-    expect(screen.getByRole("menuitem", { name: "Export Asia" })).toBeDisabled();
+    // An empty group has nothing to share; the menu says so by disabling it.
+    await userEvent.click(within(card("Asia")).getByRole("menuitem", { name: "More actions for Asia" }));
+    expect(screen.getByRole("menuitem", { name: "Share links" })).toHaveAttribute("aria-disabled", "true");
+    await userEvent.keyboard("{Escape}");
     expect(within(card("Asia")).getByRole("button", { name: "Test group" })).toBeDisabled();
     expect(nodeListRows([], new Set(), "Local nodes", [], "Unknown")).toEqual([]);
   });
@@ -219,7 +222,7 @@ describe("source-derived node groups", () => {
     expect(screen.queryByText("Edit group")).not.toBeInTheDocument();
     expect(screen.queryByText("Delete group")).not.toBeInTheDocument();
     for (const name of ["Asia", "Backup"])
-      expect(within(card(name)).getByRole("button", { name: "Subscription settings" })).toBeVisible();
+      expect(within(card(name)).getByRole("menuitem", { name: `More actions for ${name}` })).toBeVisible();
     const row = screen.getAllByTestId("server-row").find((r) => within(r).queryByText("Paris"))!;
     for (const context of [false, true]) {
       if (context) fireEvent.contextMenu(row);
@@ -255,7 +258,8 @@ describe("source-derived node groups", () => {
 describe("group panels and scoped export", () => {
   async function exportGroup(name: string, action: string) {
     await userEvent.click(
-      screen.getByRole("menuitem", { name: `Export ${name}` }),
+      // Sharing lives in the group's "more actions" menu.
+      screen.getByRole("menuitem", { name: `More actions for ${name}` }),
     );
     await userEvent.click(screen.getByRole("menuitem", { name: action }));
   }
@@ -282,7 +286,7 @@ describe("group panels and scoped export", () => {
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
     await userEvent.click(
-      screen.getByRole("menuitem", { name: "Export Local nodes" }),
+      screen.getByRole("menuitem", { name: "More actions for Local nodes" }),
     );
     expect(
       within(screen.getByRole("menu"))

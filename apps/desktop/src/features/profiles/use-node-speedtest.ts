@@ -5,7 +5,8 @@ import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { SpeedtestResult, SpeedtestTarget } from "@/ipc/bindings";
 import type { NodeOperation } from "./use-node-operation";
 
-type SpeedtestRun = { ids: string[]; before: Record<string, SpeedtestResult> };
+/** `source` names the button that started the run, so only it offers Stop. */
+type SpeedtestRun = { ids: string[]; before: Record<string, SpeedtestResult>; source: string };
 
 // A result still in one of these states has not finished for its node.
 const PENDING_OUTCOMES: ReadonlySet<string> = new Set(["waiting", "testing"]);
@@ -20,7 +21,7 @@ export function useNodeSpeedtest({ runOperation }: NodeOperation) {
   const results = useRuntimeEventStore((state) => state.speedtestResultsByProfileId);
   const [run, setRun] = useState<SpeedtestRun | null>(null);
 
-  async function handleSpeedtest(target: SpeedtestTarget) {
+  async function handleSpeedtest(target: SpeedtestTarget, source = "all") {
     if (useRuntimeEventStore.getState().speedtestRunning) return;
     setSpeedtestRunning(true);
     // Results replace their entries as they arrive, so a node counts as done
@@ -28,6 +29,7 @@ export function useNodeSpeedtest({ runOperation }: NodeOperation) {
     setRun({
       before: useRuntimeEventStore.getState().speedtestResultsByProfileId,
       ids: target.profileIds,
+      source,
     });
     try {
       await runOperation(() =>
@@ -58,5 +60,11 @@ export function useNodeSpeedtest({ runOperation }: NodeOperation) {
       }
     : null;
 
-  return { speedtestProgress, speedtestRunning, handleSpeedtest, handleCancelSpeedtest };
+  return {
+    handleCancelSpeedtest,
+    handleSpeedtest,
+    speedtestProgress,
+    speedtestRunning,
+    speedtestSource: run?.source ?? null,
+  };
 }

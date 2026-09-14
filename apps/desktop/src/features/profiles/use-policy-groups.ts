@@ -2,7 +2,13 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
-import type { PolicyGroup, PolicyGroupEntry, ProfileListing } from "@/ipc/bindings";
+import type {
+  PolicyGroup,
+  PolicyGroupEntry,
+  PolicyGroupListing,
+  PolicyGroupRuntime,
+  ProfileListing,
+} from "@/ipc/bindings";
 import {
   deletePolicyGroups,
   listPolicyGroups,
@@ -26,8 +32,8 @@ import {
 import { profileNameWithoutFlag } from "./profile-display";
 import type { NodeOperation } from "./use-node-operation";
 
-/** How often a running group's live member and delays are read again. */
-const RUNTIME_REFRESH_MS = 5_000;
+/** How often a running group's live member and delays are read again; the same everywhere a group shows. */
+const RUNTIME_REFRESH_MS = 3_000;
 /** Marks a group switch in the shared runtime-action guard, apart from node ids. */
 const GROUP_SWITCH_PREFIX = "group:";
 
@@ -108,8 +114,34 @@ export function usePolicyGroups(
     }
   }
 
-  function choosePolicyGroupMember(groupId: string, profileId: string) {
-    return operation.runOperation(() => selectPolicyGroupMember(groupId, profileId));
+  /** The chip moves at once; the next runtime read confirms it and a failure puts it back. */
+  async function choosePolicyGroupMember(groupId: string, profileId: string) {
+    const previousRuntime = queryClient.getQueryData<PolicyGroupRuntime | null>(
+      queryKeys.policyGroupRuntime,
+    );
+    const previousGroups = queryClient.getQueryData<PolicyGroupListing>(queryKeys.policyGroups);
+    if (previousRuntime?.groupId === groupId) {
+      queryClient.setQueryData(queryKeys.policyGroupRuntime, {
+        ...previousRuntime,
+        nowProfileId: profileId,
+      });
+    }
+    if (previousGroups) {
+      queryClient.setQueryData<PolicyGroupListing>(queryKeys.policyGroups, {
+        ...previousGroups,
+        entries: previousGroups.entries.map((entry) =>
+          entry.group.id === groupId
+            ? { ...entry, group: { ...entry.group, selectedProfileId: profileId } }
+            : entry,
+        ),
+      });
+    }
+    const saved = await operation.runOperation(() => selectPolicyGroupMember(groupId, profileId));
+    if (!saved) {
+      queryClient.setQueryData(queryKeys.policyGroupRuntime, previousRuntime);
+      queryClient.setQueryData(queryKeys.policyGroups, previousGroups);
+    }
+    return saved;
   }
 
   async function testRunningPolicyGroup() {

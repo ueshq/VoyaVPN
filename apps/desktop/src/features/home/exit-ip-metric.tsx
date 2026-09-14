@@ -52,7 +52,18 @@ export function ExitIpMetric({ t }: { t: TranslationFunction }) {
     <div>
       <dt>{t("home.exitIp")}</dt>
       <dd className="flex items-center gap-1" data-testid="home-exit-ip">
-        <span className="truncate">{value}</span>
+        {ipQuery.isError && !checking ? (
+          // A failed check is a dead end unless the words themselves retry.
+          <button
+            className="truncate text-start underline-offset-2 hover:underline"
+            onClick={() => void ipQuery.refetch()}
+            type="button"
+          >
+            {t("home.checkIpRetry")}
+          </button>
+        ) : (
+          <span className="truncate">{value}</span>
+        )}
         <DisabledReason
           reason={connectionKey === null ? t("home.checkIpNeedsConnection") : undefined}
         >

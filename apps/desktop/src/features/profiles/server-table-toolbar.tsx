@@ -44,6 +44,7 @@ export function ServerTableToolbar({
     profiles,
     speedtestProgress,
     speedtestRunning,
+    speedtestSource,
     addTriggerRef,
     setDialogState,
     setImportMethod,
@@ -70,18 +71,23 @@ export function ServerTableToolbar({
       <DisabledReason
         reason={profiles.length ? undefined : t("panes.profiles.speedtest.nothingToTest")}
       >
+        {/* A run restored from an earlier launch has no known owner, so Test all can stop it. */}
         <SpeedtestButton
+          busyElsewhere={speedtestRunning && speedtestSource !== null && speedtestSource !== "all"}
           disabled={!profiles.length}
           label={t("panes.profiles.speedtest.testAll")}
           onCancel={handleCancelSpeedtest}
           onRun={() =>
-            handleSpeedtest({
-              profileIds: profiles.map((item) => item.profile.id),
-              scope: "profiles",
-            })
+            handleSpeedtest(
+              {
+                profileIds: profiles.map((item) => item.profile.id),
+                scope: "profiles",
+              },
+              "all",
+            )
           }
           progress={speedtestProgress}
-          running={speedtestRunning}
+          running={speedtestRunning && (speedtestSource === null || speedtestSource === "all")}
         />
       </DisabledReason>
       <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
@@ -192,7 +198,13 @@ export function ServerTableToolbar({
               openSubscription(null, addTriggerRef.current ?? undefined);
             }}>
               <Rss aria-hidden="true" />
-              {t("home.subscriptionCard.add")}
+              <span className="grid">
+                <span>{t("home.subscriptionCard.add")}</span>
+                {/* Sets it apart from pasting a subscription link above. */}
+                <span aria-hidden="true" className="text-xs text-muted-foreground">
+                  {t("home.subscriptionCard.addHint")}
+                </span>
+              </span>
             </MenubarItem>
             <MenubarItem onSelect={() => {
               openingDialogRef.current = true;

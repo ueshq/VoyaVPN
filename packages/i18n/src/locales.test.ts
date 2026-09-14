@@ -79,7 +79,7 @@ describe("i18n locales", () => {
       "panes.profiles.title",
       "panes.profiles.fields.flow",
       "panes.profiles.fields.host",
-      "panes.subscriptions.empty",
+      "subscriptions.empty",
       "status.connected",
       "tabs.profiles",
       "updates.title",

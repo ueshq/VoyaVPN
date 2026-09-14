@@ -92,9 +92,15 @@ export function ProxyGroupsPanel() {
   }
 
   async function choose(profileId: string) {
+    // The member switches at once; a failure puts the previous one back.
+    const previous = queryClient.getQueryData(queryKeys.policyGroupRuntime);
+    if (runtime) {
+      queryClient.setQueryData(queryKeys.policyGroupRuntime, { ...runtime, nowProfileId: profileId });
+    }
     try {
       await selectPolicyGroupMember(group.id, profileId);
     } catch (error) {
+      queryClient.setQueryData(queryKeys.policyGroupRuntime, previous);
       reportFailure(error);
     }
   }

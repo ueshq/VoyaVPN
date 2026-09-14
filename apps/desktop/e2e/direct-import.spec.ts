@@ -26,12 +26,12 @@ test("clipboard and screen imports execute without an app dialog or browser scre
   const trigger = page.getByRole("menuitem", { name: "Add", exact: true });
   await trigger.click();
   await page.getByRole("menuitem", { name: "Import from clipboard", exact: true }).click();
-  await expect(page.getByTestId("server-row").filter({ hasText: "Clipboard direct" })).toHaveAttribute("data-selected", "true");
+  await expect(page.getByTestId("server-row").filter({ hasText: "Clipboard direct" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByRole("status").filter({ hasText: "Imported 1 node(s)." })).toBeVisible();
   await trigger.click();
   await page.getByRole("menuitem", { name: "Scan screen", exact: true }).click();
-  await expect(page.getByTestId("server-row").filter({ hasText: "Screen node" })).toHaveAttribute("data-selected", "true");
+  await expect(page.getByTestId("server-row").filter({ hasText: "Screen node" })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const evidence = await page.evaluate(() => ({
     observed: (window as unknown as { directImportObserved: { dialogOpened: boolean } }).directImportObserved,
