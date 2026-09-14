@@ -36,7 +36,7 @@ describe("RoutingRuleDialog", () => {
     await user.type(screen.getByLabelText("IP"), "1.1.1.1");
     await user.click(screen.getByRole("checkbox", { name: "UDP" }));
     await user.type(screen.getByLabelText("Process"), "curl\nwget");
-    await user.click(screen.getByText("Advanced"));
+    await user.click(screen.getByText("More options"));
     await chooseOption(user, "Applies to", "DNS only");
     await user.type(screen.getByLabelText("Protocol"), "dns");
     await user.click(screen.getByRole("button", { name: "Save" }));

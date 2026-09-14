@@ -162,7 +162,7 @@ test("populated pages keep scrolling inside panels and errors inside the page in
   await settings.getByRole("tab", { name: "Advanced", exact: true }).click();
   // Opening the advanced TUN options keeps this tab taller than the minimum
   // window no matter how many settings groups it currently has.
-  await settings.getByRole("tabpanel").locator("summary", { hasText: "Advanced" }).first().click();
+  await settings.getByRole("tabpanel").locator("summary", { hasText: "More settings" }).first().click();
   await expectInnerScroll(settings.getByRole("tabpanel"));
   await page.evaluate(() => {
     (window.__VOYA_SMOKE__.state as { failNextCommand: string | null }).failNextCommand = "save_dns_settings";

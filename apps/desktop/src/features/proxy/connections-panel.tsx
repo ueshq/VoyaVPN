@@ -28,10 +28,11 @@ import {
   MenubarContent,
   MenubarItem,
   MenubarMenu,
-  MenubarSeparator,
   MenubarTrigger,
 } from "@voya/ui/components/menubar";
+import { Badge } from "@voya/ui/components/badge";
 import { Skeleton } from "@voya/ui/components/skeleton";
+import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { proxyCloseConnection, proxyListConnections } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
@@ -171,6 +172,17 @@ export function ConnectionsPanel({
     { column: "process", label: t("activity.application") },
     { column: "traffic", label: t("activity.traffic") },
   ];
+  // Whether the table is live: the stream can stop or fall behind while connected.
+  const monitorBadge: { key: TranslationKey; live: boolean } =
+    monitor.state === "running" && !stale
+      ? { key: "proxy.monitorLive", live: true }
+      : monitor.state === "starting"
+        ? { key: "proxy.monitorStarting", live: false }
+        : monitor.state === "failed"
+          ? { key: "proxy.monitorFailed", live: false }
+          : stale
+            ? { key: "proxy.monitorStale", live: false }
+            : { key: "proxy.monitorStopped", live: false };
   const disconnected = coreState?.state === "disconnected";
   const waitingLabel = !coreState
     ? t("activity.statusLoading")
@@ -212,7 +224,26 @@ export function ConnectionsPanel({
                 onChange={(event) => onFilterChange(event.target.value)}
               />
             </div>
-            <Menubar className="ms-auto h-auto border-0 bg-transparent p-0 shadow-none">
+            <Badge className="ms-auto" variant={monitorBadge.live ? "secondary" : "outline"}>
+              {t(monitorBadge.key)}
+            </Badge>
+            <Button
+              aria-label={t("activity.refreshNow")}
+              disabled={connectionsQuery.isFetching}
+              onClick={() => {
+                void refresh();
+              }}
+              size="icon-sm"
+              title={t("activity.refreshNow")}
+              type="button"
+              variant="ghost"
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={cn("size-4", connectionsQuery.isFetching && "animate-spin")}
+              />
+            </Button>
+            <Menubar className="h-auto border-0 bg-transparent p-0 shadow-none">
               <MenubarMenu>
                 <MenubarTrigger asChild>
                   <Button size="sm" type="button" variant="ghost">
@@ -221,16 +252,6 @@ export function ConnectionsPanel({
                   </Button>
                 </MenubarTrigger>
                 <MenubarContent align="end">
-                  <MenubarItem
-                    disabled={connectionsQuery.isFetching}
-                    onSelect={() => {
-                      void refresh();
-                    }}
-                  >
-                    <RefreshCw className="size-4" aria-hidden="true" />
-                    {t("activity.refresh")}
-                  </MenubarItem>
-                  <MenubarSeparator />
                   <MenubarItem
                     variant="destructive"
                     disabled={!snapshot.connections.length || closeMutation.isPending}
@@ -270,9 +291,14 @@ export function ConnectionsPanel({
             <div className={cn("sticky top-0 z-10 flex items-center gap-2 pe-2", dataTableHeader)}>
               <div className={cn(GRID, "min-w-0 flex-1 px-4 py-2")}>
               {headings.map(({ column, label }) => (
-                <button
+                <div
+                  aria-sort={sort?.column === column ? (sort.ascending ? "ascending" : "descending") : "none"}
+                  className="min-w-0"
                   key={column}
-                  className="flex min-w-0 items-center gap-1 text-start"
+                  role="columnheader"
+                >
+                <button
+                  className="flex min-w-0 max-w-full items-center gap-1 text-start"
                   type="button"
                   onClick={() => setSort({ column, ascending: sort?.column === column ? !sort.ascending : true })}
                 >
@@ -285,6 +311,7 @@ export function ConnectionsPanel({
                     )
                   ) : null}
                 </button>
+                </div>
               ))}
               </div>
               <span aria-hidden="true" className={ACTION_SLOT} />

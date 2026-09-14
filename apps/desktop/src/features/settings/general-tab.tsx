@@ -158,7 +158,7 @@ export function GeneralTab({
         />
       </SettingsGroup>
 
-      <SettingsGroup title={t("settings.sections.connection")}>
+      <SettingsGroup title={t("settings.sections.behavior")}>
         <SettingsCheckbox
           field="behavior.autoCheckIp"
           checked={settings.behavior.autoCheckIp}

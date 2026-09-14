@@ -4,10 +4,14 @@ import { createJSONStorage, persist } from "zustand/middleware";
 export type ThemeMode = "system" | "light" | "dark";
 
 type PersistedPreferences = {
+  /** When the rule library was last updated from this device; the backend keeps no date. */
+  ruleLibraryUpdatedAt: number | null;
   themeMode: ThemeMode;
 };
 
 type PreferencesState = {
+  ruleLibraryUpdatedAt: number | null;
+  setRuleLibraryUpdatedAt: (time: number) => void;
   setThemeMode: (themeMode: ThemeMode) => void;
   setThemePreview: (themePreview: ThemeMode | null) => void;
   themeMode: ThemeMode;
@@ -23,6 +27,8 @@ export const usePreferencesStore = create<PreferencesState>()(
   persist(
     (set) => ({
       // Committing a theme also ends any preview of it.
+      ruleLibraryUpdatedAt: null,
+      setRuleLibraryUpdatedAt: (ruleLibraryUpdatedAt) => set({ ruleLibraryUpdatedAt }),
       setThemeMode: (themeMode) => set({ themeMode, themePreview: null }),
       setThemePreview: (themePreview) => set({ themePreview }),
       themeMode: "system",
@@ -31,6 +37,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     {
       name: "voyavpn.preferences",
       partialize: (state): PersistedPreferences => ({
+        ruleLibraryUpdatedAt: state.ruleLibraryUpdatedAt,
         themeMode: state.themeMode,
       }),
       merge: (persistedState, currentState) => mergePersistedPreferences(persistedState, currentState),
@@ -62,6 +69,11 @@ function mergePersistedPreferences(persistedState: unknown, currentState: Prefer
 
   return {
     ...currentState,
+    ruleLibraryUpdatedAt:
+      typeof persistedState.ruleLibraryUpdatedAt === "number"
+      && Number.isFinite(persistedState.ruleLibraryUpdatedAt)
+        ? persistedState.ruleLibraryUpdatedAt
+        : null,
     themeMode: isThemeMode(persistedState.themeMode) ? persistedState.themeMode : "system",
   };
 }

@@ -15,6 +15,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import type { CloseRequestAction } from "@/ipc/bindings";
 import { resolveCloseRequest } from "@/ipc/commands";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 
 /**
@@ -25,6 +26,8 @@ export function CloseRequestDialog() {
   const { t } = useI18n();
   const open = useShellStore((state) => state.closeRequestOpen);
   const setOpen = useShellStore((state) => state.setCloseRequestOpen);
+  // Staying in the tray keeps the connection; quitting ends it.
+  const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const [remember, setRemember] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +56,14 @@ export function CloseRequestDialog() {
       <DialogContent closeLabel={t("actions.close")}>
         <DialogHeader>
           <DialogTitle>{t("closePrompt.title")}</DialogTitle>
-          <DialogDescription>{t("closePrompt.message")}</DialogDescription>
+          <DialogDescription>
+            {t("closePrompt.message")}
+            {connected ? (
+              <span className="mt-1 block font-medium text-warning">
+                {t("closePrompt.quitDisconnects")}
+              </span>
+            ) : null}
+          </DialogDescription>
         </DialogHeader>
         <DialogBody>
           <label className="flex items-center gap-2 text-sm">

@@ -38,6 +38,7 @@ pub mod subscriptions;
 pub mod supervisor;
 pub mod sysproxy;
 pub mod tray;
+pub mod tray_icon;
 pub mod tun;
 pub mod updates;
 

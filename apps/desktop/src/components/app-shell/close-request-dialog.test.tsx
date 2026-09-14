@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { CloseRequestDialog } from "./close-request-dialog";
@@ -15,6 +16,24 @@ describe("CloseRequestDialog", () => {
     vi.resetAllMocks();
     await changeLocale("en", { persist: false });
     useShellStore.setState({ closeRequestOpen: true });
+    useRuntimeEventStore.setState({ coreState: null });
+  });
+
+  it("warns that quitting ends a live connection", () => {
+    useRuntimeEventStore.setState({
+      coreState: {
+        activeProfileId: "node",
+        activeTunBackend: null,
+        connectedDurationMs: null,
+        mainPid: 1,
+        prePid: null,
+        runningCoreType: "singBox",
+        state: "connected",
+      },
+    });
+    render(<CloseRequestDialog />);
+
+    expect(screen.getByText("Quitting ends the current connection.")).toBeInTheDocument();
   });
 
   it("stays hidden until the shell asks", () => {
@@ -25,6 +44,7 @@ describe("CloseRequestDialog", () => {
   });
 
   it("keeps running in the tray and remembers the choice on request", async () => {
+    expect(screen.queryByText("Quitting ends the current connection.")).toBeNull();
     const user = userEvent.setup();
     ipc.resolveCloseRequest.mockResolvedValue(null);
     render(<CloseRequestDialog />);

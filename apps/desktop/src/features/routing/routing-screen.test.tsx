@@ -237,6 +237,14 @@ describe("RoutingScreen", () => {
     );
   });
 
+  it("shows placeholder rows while the rules load", async () => {
+    ipc.listRoutings.mockReturnValue(new Promise(() => {}));
+    renderScreen();
+
+    expect(await screen.findByRole("status", { name: "Loading rules" })).toBeInTheDocument();
+    expect(screen.queryByText("No rule set is active.")).not.toBeInTheDocument();
+  });
+
   it("explains an empty rule set", async () => {
     ipc.listRoutings.mockResolvedValue([{ ...activeRouting(), rules: [] }]);
     renderScreen();

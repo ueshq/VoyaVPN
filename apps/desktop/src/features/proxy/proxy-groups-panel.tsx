@@ -68,7 +68,11 @@ export function ProxyGroupsPanel() {
           >
             {t("proxy.groups.openNodes")}
           </Button>
-        ) : null}
+        ) : (
+          <Button onClick={() => setActiveTab("home")} size="sm" type="button" variant="outline">
+            {t("activity.goHome")}
+          </Button>
+        )}
       </div>
     );
   }

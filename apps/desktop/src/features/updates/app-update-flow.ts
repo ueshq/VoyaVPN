@@ -21,6 +21,17 @@ export type AppUpdateInstallResult = {
   restartRequired: boolean;
 };
 
+/** How far an install's download has got; `total` is null when the server sends no size. */
+export type AppUpdateProgress = {
+  downloaded: number;
+  finished: boolean;
+  total: number | null;
+};
+
+type DownloadEvent = Parameters<
+  NonNullable<Parameters<TauriUpdate["downloadAndInstall"]>[0]>
+>[0];
+
 export type AppUpdateFlowDeps = {
   appUpdateStatus: typeof appUpdateStatus;
   checkForAppUpdate: typeof checkForTauriUpdate;
@@ -47,6 +58,7 @@ export async function checkAppUpdate(
 
 export async function installCheckedAppUpdate(
   deps: AppUpdateFlowDeps = defaultAppUpdateFlowDeps,
+  onProgress?: (progress: AppUpdateProgress) => void,
 ): Promise<AppUpdateInstallResult> {
   let update: TauriUpdate | null = null;
 
@@ -64,7 +76,16 @@ export async function installCheckedAppUpdate(
     }
 
     const installedVersion = update.version;
-    await update.downloadAndInstall();
+    let downloaded = 0;
+    let total: number | null = null;
+    await update.downloadAndInstall((event: DownloadEvent) => {
+      if (event.event === "Started") {
+        total = event.data.contentLength ?? null;
+      } else if (event.event === "Progress") {
+        downloaded += event.data.chunkLength;
+      }
+      onProgress?.({ downloaded, finished: event.event === "Finished", total });
+    });
 
     return {
       currentVersion,

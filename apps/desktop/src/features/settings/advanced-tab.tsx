@@ -175,16 +175,26 @@ export function AdvancedTab({
       ) : null}
 
       <CoreTab controller={controller} />
-      <RuntimeLogGroup coreLogEnabled={settings.core.logEnabled} />
+      <RuntimeLogGroup
+        coreLogEnabled={settings.core.logEnabled}
+        logLevel={settings.core.logLevel}
+      />
     </div>
   );
 }
 
 /** The runtime log, kept with the other diagnostics rather than a main page. */
-function RuntimeLogGroup({ coreLogEnabled }: { coreLogEnabled: boolean }) {
+function RuntimeLogGroup({
+  coreLogEnabled,
+  logLevel,
+}: {
+  coreLogEnabled: boolean;
+  logLevel: string;
+}) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<LogFilter>("standard");
+  const levelHint = coreLogEnabled ? logLevelHint(logLevel, filter) : null;
 
   return (
     <SettingsGroup title={t("tabs.logs")}>
@@ -193,6 +203,11 @@ function RuntimeLogGroup({ coreLogEnabled }: { coreLogEnabled: boolean }) {
           {t("settings.logs.coreLogOff")}
         </p>
       )}
+      {levelHint ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          {t(levelHint)}
+        </p>
+      ) : null}
       <div className="h-[28rem] min-h-0 overflow-hidden rounded-md border">
         <LogsPanel
           filter={filter}
@@ -203,4 +218,18 @@ function RuntimeLogGroup({ coreLogEnabled }: { coreLogEnabled: boolean }) {
       </div>
     </SettingsGroup>
   );
+}
+
+/**
+ * The level decides what the connection records and the filter what is shown.
+ * When they disagree, the hint names the control to change.
+ */
+function logLevelHint(level: string, filter: LogFilter): TranslationKey | null {
+  if ((level === "debug" || level === "trace") && filter !== "all") {
+    return "panes.logs.debugHidden";
+  }
+  if ((level === "warn" || level === "error") && filter !== "issues") {
+    return "panes.logs.infoNotRecorded";
+  }
+  return null;
 }

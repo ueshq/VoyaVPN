@@ -30,6 +30,7 @@ pub(crate) fn show_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Err(error) = window.set_focus() {
         tracing::warn!(?error, "failed to focus the main window");
     }
+    refresh_tray(app);
 }
 
 pub(crate) fn hide_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
@@ -38,6 +39,21 @@ pub(crate) fn hide_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     };
     if let Err(error) = window.hide() {
         tracing::warn!(?error, "failed to hide the main window");
+    }
+    refresh_tray(app);
+}
+
+/// Whether the main window is on screen; the tray offers Show or Hide by it.
+pub(crate) fn main_window_visible<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    app.get_webview_window(MAIN_WINDOW)
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false)
+}
+
+/// The tray's Show/Hide entry follows the window.
+fn refresh_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Err(error) = crate::refresh_tray_menu(app) {
+        tracing::warn!(?error, "failed to refresh the tray after a window change");
     }
 }
 
@@ -55,11 +71,7 @@ pub(crate) fn hide_into_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 }
 
 pub(crate) fn toggle_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    let visible = app
-        .get_webview_window(MAIN_WINDOW)
-        .and_then(|window| window.is_visible().ok())
-        .unwrap_or(false);
-    if visible {
+    if main_window_visible(app) {
         hide_main_window(app);
     } else {
         show_main_window(app);

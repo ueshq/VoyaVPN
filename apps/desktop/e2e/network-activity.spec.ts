@@ -23,7 +23,7 @@ const english = {
   disconnect: "Disconnect this connection",
   more: "More",
   clear: "Clear display",
-  issues: "Warnings & errors",
+  issues: "Warnings and errors",
 };
 const chinese: typeof english = {
   page: "网络活动",
@@ -42,7 +42,7 @@ const chinese: typeof english = {
   disconnect: "断开此连接",
   more: "更多",
   clear: "清空显示",
-  issues: "仅异常",
+  issues: "警告及以上",
 };
 const longPath = `/Applications/${"application-directory/".repeat(12)}Browser`;
 const longMessage = `connection diagnostic: ${"handshake-details ".repeat(150)}\nEND-OF-LOG`;
@@ -167,7 +167,7 @@ for (const viewport of [
         await expect(
           dialog.getByRole("heading", { name: labels.details }),
         ).toBeFocused();
-        await expect(dialog.getByText(longPath)).toBeAttached();
+        await expect(dialog.getByTitle(longPath)).toBeAttached();
         expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(560);
         await noHorizontalScroll(dialog);
         await noHorizontalScroll(dialog.locator("dl"));
@@ -302,7 +302,7 @@ test("disconnected state, in-place connection, ended details and explicit stale 
   await expect(
     dialog.getByRole("button", { name: english.disconnect }),
   ).toBeDisabled();
-  await expect(dialog.getByText(longPath)).toBeAttached();
+  await expect(dialog.getByTitle(longPath)).toBeAttached();
   await page.keyboard.press("Escape");
   await emit(page, {
     kind: "proxyMonitorStatus",

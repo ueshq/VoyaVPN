@@ -243,6 +243,8 @@ pub struct TrayMenuInput<'input> {
     pub active_node_id: Option<&'input str>,
     pub groups: &'input [TrayGroup],
     pub active_group_id: Option<&'input str>,
+    /// Whether the main window is on screen, which decides Show or Hide.
+    pub window_visible: bool,
 }
 
 /// The tray menu for the current app state, top to bottom.
@@ -285,10 +287,16 @@ pub fn tray_menu(input: &TrayMenuInput<'_>) -> Vec<TrayEntry> {
             entries: group_entries(input),
         });
     }
+    // One entry that does what the window needs, instead of two where one of
+    // them always does nothing.
+    let window = if input.window_visible {
+        item(TrayItemId::Hide, labels.hide, true)
+    } else {
+        item(TrayItemId::Show, labels.show, true)
+    };
     entries.extend([
         TrayEntry::Separator,
-        item(TrayItemId::Show, labels.show, true),
-        item(TrayItemId::Hide, labels.hide, true),
+        window,
         TrayEntry::Separator,
         item(TrayItemId::Quit, labels.quit, true),
     ]);
@@ -314,13 +322,27 @@ fn group_entries(input: &TrayMenuInput<'_>) -> Vec<TrayEntry> {
 
 /// The tray tooltip: the app name, and the node while connected.
 #[must_use]
-pub fn tray_tooltip(connected_node: Option<&str>) -> String {
-    match connected_node
+pub fn tray_tooltip(connected_node: Option<&str>, traffic_mode: Option<&str>) -> String {
+    let Some(remarks) = connected_node
         .map(str::trim)
         .filter(|remarks| !remarks.is_empty())
-    {
-        Some(remarks) => format!("VoyaVPN · {}", node_label(remarks)),
-        None => "VoyaVPN".to_string(),
+    else {
+        return "VoyaVPN".to_string();
+    };
+    match traffic_mode {
+        Some(mode) => format!("VoyaVPN · {} · {mode}", node_label(remarks)),
+        None => format!("VoyaVPN · {}", node_label(remarks)),
+    }
+}
+
+/// The traffic mode as the tray's Traffic Mode submenu names it.
+#[must_use]
+pub fn traffic_mode_label(language: &str, mode: TrafficMode) -> Option<&'static str> {
+    let labels = tray_labels(language);
+    match mode {
+        TrafficMode::Rule => Some(labels.mode_rule),
+        TrafficMode::Global => Some(labels.mode_global),
+        TrafficMode::Unchanged => None,
     }
 }
 
@@ -431,6 +453,7 @@ mod tests {
             active_node_id: active,
             groups: &[],
             active_group_id: None,
+            window_visible: false,
         }
     }
 
@@ -598,9 +621,44 @@ mod tests {
         ));
         let long = "x".repeat(80);
         assert_eq!(node_label(&long).chars().count(), NODE_LABEL_MAX_CHARS);
-        assert_eq!(tray_tooltip(None), "VoyaVPN");
-        assert_eq!(tray_tooltip(Some("  ")), "VoyaVPN");
-        assert_eq!(tray_tooltip(Some("Tokyo")), "VoyaVPN · Tokyo");
+        assert_eq!(tray_tooltip(None, Some("Global")), "VoyaVPN");
+        assert_eq!(tray_tooltip(Some("  "), None), "VoyaVPN");
+        assert_eq!(tray_tooltip(Some("Tokyo"), None), "VoyaVPN · Tokyo");
+        assert_eq!(
+            tray_tooltip(Some("Tokyo"), Some("Global")),
+            "VoyaVPN · Tokyo · Global"
+        );
+    }
+
+    #[test]
+    fn one_window_entry_follows_whether_the_window_is_shown() {
+        let nodes = nodes(1);
+        let hidden = tray_menu(&input(&nodes, None));
+        assert!(hidden.contains(&item(TrayItemId::Show, "Show VoyaVPN", true)));
+        assert!(!hidden.iter().any(|entry| matches!(
+            entry,
+            TrayEntry::Item {
+                id: TrayItemId::Hide,
+                ..
+            }
+        )));
+        let shown = tray_menu(&TrayMenuInput {
+            window_visible: true,
+            ..input(&nodes, None)
+        });
+        assert!(shown.contains(&item(TrayItemId::Hide, "Hide Window", true)));
+        assert!(!shown.iter().any(|entry| matches!(
+            entry,
+            TrayEntry::Item {
+                id: TrayItemId::Show,
+                ..
+            }
+        )));
+        assert_eq!(
+            traffic_mode_label("zh-Hans", TrafficMode::Global),
+            Some("全局")
+        );
+        assert_eq!(traffic_mode_label("en", TrafficMode::Unchanged), None);
     }
 
     #[test]

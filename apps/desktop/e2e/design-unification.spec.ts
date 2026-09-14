@@ -187,7 +187,7 @@ test("saving during a connection waits for apply and failed apply remains retrya
   await page.locator("#shell-tab-settings").click();
   await page.getByRole("tab", { name: "Advanced", exact: true }).click();
   await page.getByLabel("Log level").click();
-  await page.getByRole("option", { name: "Debug", exact: true }).click();
+  await page.getByRole("option", { name: "Everything, including debug", exact: true }).click();
   const apply = page.getByRole("button", { name: "Apply and reconnect" });
   await expect(apply).toBeVisible();
   expect(

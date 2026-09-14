@@ -19,6 +19,8 @@ import type {
 } from "@/ipc/bindings";
 import { profilesQueryKey, queryKeys } from "@/ipc/query-keys";
 import { useShellStore } from "@/stores/shell-store";
+import { useToastStore } from "@/stores/toast-store";
+import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { nodeOutboundNames, type RuleGroupOutbound } from "./rule-outbound";
@@ -62,6 +64,7 @@ function setPerAppOpen(open: boolean) {
  * with, and the page does not offer other rule sets to choose from.
  */
 export function useRoutingScreen() {
+  const { t } = useI18n();
   const client = useQueryClient();
   const [operationError, setOperationError] = useState<string | null>(null);
   const [ruleDialog, setRuleDialog] = useState<RuleDialogState>(null);
@@ -183,7 +186,17 @@ export function useRoutingScreen() {
     // `position` is an insertion slot in the list as it was before the move.
     const position = target > source ? target + 1 : target;
 
-    return runOperation((routingId) => moveRoutingRule(routingId, ruleId, "position", position));
+    // The dragged row snaps back on failure. A toast says why, since the page's
+    // error strip may be out of view above a long list.
+    return runOperation(
+      (routingId) => moveRoutingRule(routingId, ruleId, "position", position),
+      (error) =>
+        useToastStore.getState().pushToast({
+          description: getErrorMessage(error),
+          severity: "error",
+          title: t("panes.routing.reorderFailed"),
+        }),
+    );
   }
 
   function editRule(rule: RoutingRule) {

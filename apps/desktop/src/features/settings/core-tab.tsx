@@ -21,15 +21,21 @@ const TLS_FRAGMENT_LABELS: Record<TlsFragmentMode, TranslationKey> = {
   record: "settings.core.tlsFragmentRecord",
   tlsHello: "settings.core.tlsFragmentHello",
 };
-const LOG_LEVELS = ["none", "trace", "debug", "info", "warn", "error"] as const;
-const LOG_LEVEL_LABELS: Record<(typeof LOG_LEVELS)[number], TranslationKey> = {
+// The three levels worth choosing, named like the log panel's filter. Any
+// other stored level stays selectable under its plain name.
+const LOG_LEVELS = ["warn", "info", "debug"] as const;
+const LOG_LEVEL_LABELS: Record<string, TranslationKey> = {
+  debug: "settings.core.logLevelOptions.debug",
+  error: "panes.logs.levels.error",
+  info: "settings.core.logLevelOptions.info",
   none: "common.none",
   trace: "panes.logs.levels.trace",
-  debug: "panes.logs.levels.debug",
-  info: "panes.logs.levels.info",
-  warn: "panes.logs.levels.warn",
-  error: "panes.logs.levels.error",
+  warn: "settings.core.logLevelOptions.warn",
 };
+
+function logLevelOptions(current: string): readonly string[] {
+  return (LOG_LEVELS as readonly string[]).includes(current) ? LOG_LEVELS : [...LOG_LEVELS, current];
+}
 // sing-box accepts exactly these, and the node's server must use the same one.
 const MUX_PROTOCOLS = ["h2mux", "smux", "yamux"] as const;
 // The contract's default, shown for a stored empty value.
@@ -120,10 +126,11 @@ export function CoreTab({
           id="rt-loglevel"
           label={t("settings.core.logLevel")}
           onChange={(logLevel) => patchCore({ logLevel })}
-          optionLabel={(level) =>
-            t(LOG_LEVEL_LABELS[level as (typeof LOG_LEVELS)[number]])
-          }
-          options={LOG_LEVELS}
+          optionLabel={(level) => {
+            const key = LOG_LEVEL_LABELS[level];
+            return key ? t(key) : level;
+          }}
+          options={logLevelOptions(settings.core.logLevel)}
           value={settings.core.logLevel}
         />
         <SelectField

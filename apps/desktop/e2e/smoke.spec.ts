@@ -165,7 +165,7 @@ test("commits settings input on Enter and flushes numeric input on imperative na
   const settings = page.getByRole("region", { name: "Settings", exact: true });
   await settings.getByRole("tab", { name: "Advanced", exact: true }).click();
   // The tunnel's collapsed options come first; the core's are second.
-  await settings.getByText("Advanced options", { exact: true }).nth(1).click();
+  await settings.getByText("More settings", { exact: true }).nth(1).click();
   const agent = settings.getByLabel("User-Agent");
   await agent.fill("browser-autosave-agent");
   expect(
@@ -191,7 +191,7 @@ test("commits settings input on Enter and flushes numeric input on imperative na
     ),
   ).toHaveLength(1);
 
-  await settings.getByRole("tabpanel").getByText("Advanced options", { exact: true }).first().click();
+  await settings.getByRole("tabpanel").getByText("More settings", { exact: true }).first().click();
   const mtu = settings.getByLabel("MTU", { exact: true });
   // A cleared MTU restores its default, so a malformed one is what stays unsaved.
   await mtu.fill("abc");

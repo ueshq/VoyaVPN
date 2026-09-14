@@ -1,4 +1,4 @@
-import { SettingsGroup } from "@/features/settings/settings-form";
+import { useState } from "react";
 import {
   Database,
   Download,
@@ -6,13 +6,29 @@ import {
   PackageCheck,
   RefreshCw,
 } from "lucide-react";
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@voya/ui/components/alert-dialog";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
-import { DisabledReason } from "@/components/disabled-reason";
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
+import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
+
+import { DisabledReason } from "@/components/disabled-reason";
+import { SettingsGroup } from "@/features/settings/settings-form";
 import type { AppUpdaterState } from "@/ipc/bindings";
+
+import type { AppUpdateProgress } from "./app-update-flow";
 import {
   useCheckUpdateDialog,
   type CheckUpdateDialogController,
@@ -33,7 +49,7 @@ export function UpdatesPanel() {
         controller.appUpdaterStatus.state !== "unconfigured") ? (
         <AppUpdatePanel controller={controller} />
       ) : null}
-      <ResourceUpdatePanel controller={controller} />
+      <RuleLibraryPanel controller={controller} />
     </div>
   );
 }
@@ -56,12 +72,20 @@ function AppUpdatePanel({
     appUpdaterError,
     appUpdaterStatus,
     installAppUpdate: onInstall,
+    installProgress,
     restartApp: onRestart,
     runAppUpdaterCheck: onCheck,
     t,
     working,
   } = controller;
+  // An install downloads a whole release and ends in a restart, so it waits
+  // for a second click that names the version.
+  const [confirmingInstall, setConfirmingInstall] = useState(false);
   const update = appUpdaterCheck?.update ?? null;
+  const restartRequired = appInstallResult?.restartRequired ?? false;
+  const currentVersion =
+    appUpdaterCheck?.currentVersion || appUpdaterStatus?.currentVersion || null;
+  const busyReason = working !== null ? t("updates.busyReason") : undefined;
   const statusMessage = appUpdaterStatus?.message
     ? redactUpdateMessage(appUpdaterStatus.message, t)
     : appUpdaterStatus
@@ -71,7 +95,7 @@ function AppUpdatePanel({
   return (
     <SettingsGroup title={t("updates.appUpdater")}>
       <div className="flex flex-wrap items-start gap-3">
-        <div className="grid gap-1">
+        <div className="grid min-w-0 flex-1 gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant={
@@ -82,6 +106,11 @@ function AppUpdatePanel({
                 ? t(APP_UPDATER_STATE_TRANSLATION_KEYS[appUpdaterStatus.state])
                 : t("updates.waiting")}
             </Badge>
+            {currentVersion ? (
+              <span className="text-xs text-muted-foreground">
+                {t("updates.currentVersion", { version: currentVersion })}
+              </span>
+            ) : null}
           </div>
           <p className="text-xs text-muted-foreground">
             {update
@@ -90,79 +119,81 @@ function AppUpdatePanel({
                 ? t("updates.noAppUpdate")
                 : statusMessage}
           </p>
+          {working === "app-install" ? (
+            <InstallProgress progress={installProgress} t={t} />
+          ) : null}
           {appInstallResult ? (
             <p className="text-xs text-muted-foreground">
-              {appInstallResult.state === "installed" &&
-              appInstallResult.installedVersion
+              {appInstallResult.installedVersion
                 ? t("updates.appInstalled", {
                     version: appInstallResult.installedVersion,
                   })
                 : t("updates.noAppUpdate")}
             </p>
           ) : null}
-          {appInstallResult?.restartRequired ? (
+          {restartRequired ? (
             <p className="text-xs text-muted-foreground">
               {t("updates.restartRequired")}
             </p>
           ) : null}
         </div>
         <div className="ms-auto flex flex-wrap items-center gap-2">
-          {!appInstallResult?.restartRequired ? (
-            <DisabledReason reason={working !== null ? t("updates.busyReason") : undefined}>
-            <Button
-              disabled={working !== null}
-              onClick={() => void onCheck()}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              <RefreshCw
-                className={cn(
-                  "size-4",
-                  working === "app-check" && "animate-spin",
-                )}
-                aria-hidden="true"
-              />
-              {t("updates.checkApp")}
-            </Button>
+          {!restartRequired ? (
+            <DisabledReason reason={busyReason}>
+              <Button
+                disabled={working !== null}
+                onClick={() => void onCheck()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                <RefreshCw
+                  className={cn(
+                    "size-4",
+                    working === "app-check" && "animate-spin",
+                  )}
+                  aria-hidden="true"
+                />
+                {t("updates.checkApp")}
+              </Button>
             </DisabledReason>
           ) : null}
-          {update && !appInstallResult?.restartRequired ? (
-            <DisabledReason reason={working !== null ? t("updates.busyReason") : undefined}>
-            <Button
-              disabled={working !== null || !update}
-              onClick={() => void onInstall()}
-              size="sm"
-              type="button"
-            >
-              <PackageCheck
-                className={cn(
-                  "size-4",
-                  working === "app-install" && "animate-pulse",
-                )}
-                aria-hidden="true"
-              />
-              {t("updates.installApp")}
-            </Button>
+          {update && !restartRequired ? (
+            <DisabledReason reason={busyReason}>
+              <Button
+                disabled={working !== null}
+                onClick={() => setConfirmingInstall(true)}
+                size="sm"
+                type="button"
+              >
+                <PackageCheck
+                  className={cn(
+                    "size-4",
+                    working === "app-install" && "animate-pulse",
+                  )}
+                  aria-hidden="true"
+                />
+                {t("updates.installApp")}
+              </Button>
             </DisabledReason>
           ) : null}
-          {appInstallResult?.restartRequired ? (
-            <DisabledReason reason={working !== null ? t("updates.busyReason") : undefined}>
-            <Button
-              disabled={working !== null}
-              onClick={() => void onRestart()}
-              size="sm"
-              type="button"
-            >
-              <RefreshCw
-                className={cn(
-                  "size-4",
-                  working === "app-restart" && "animate-spin",
-                )}
-                aria-hidden="true"
-              />
-              {t("updates.restartApp")}
-            </Button>
+          {restartRequired ? (
+            <DisabledReason reason={busyReason}>
+              <Button
+                disabled={working !== null}
+                onClick={() => void onRestart()}
+                size="sm"
+                type="button"
+              >
+                <RefreshCw
+                  className={cn(
+                    "size-4",
+                    working === "app-restart" && "animate-spin",
+                  )}
+                  aria-hidden="true"
+                />
+                {t("updates.restartApp")}
+              </Button>
             </DisabledReason>
           ) : null}
         </div>
@@ -173,89 +204,145 @@ function AppUpdatePanel({
           {redactUpdateMessage(appUpdaterError, t)}
         </p>
       ) : null}
+
+      <AlertDialog onOpenChange={setConfirmingInstall} open={confirmingInstall}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t("updates.confirmInstallTitle", { version: update?.version ?? "" })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("updates.confirmInstallDescription")}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void onInstall()}>
+              {t("updates.confirmInstall")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SettingsGroup>
   );
 }
 
-function ResourceUpdatePanel({
-  controller,
+/** A download without a known size shows a pulsing bar instead of a percentage. */
+function InstallProgress({
+  progress,
+  t,
 }: {
-  controller: CheckUpdateDialogController;
+  progress: AppUpdateProgress | null;
+  t: TranslationFunction;
 }) {
-  return (
-    <SettingsGroup title={controller.t("settings.sections.resources")}>
-      <div className="grid">
-        <ResourceRow controller={controller} kind="geo" />
-        <ResourceRow controller={controller} kind="srs" />
-      </div>
-    </SettingsGroup>
-  );
-}
-
-function ResourceRow({
-  controller,
-  kind,
-}: {
-  controller: CheckUpdateDialogController;
-  kind: "geo" | "srs";
-}) {
-  const { resourceErrors, resourceResults, t, updateResource, working } =
-    controller;
-  const result = resourceResults[kind];
-  const error = resourceErrors[kind];
-  const busy = working === kind;
-  const title = kind === "geo" ? t("updates.geoTitle") : t("updates.srsTitle");
-  const description =
-    kind === "geo" ? t("updates.geoDescription") : t("updates.srsDescription");
-  const Icon = kind === "geo" ? Database : Download;
+  const finished = progress?.finished ?? false;
+  const percent =
+    progress?.total
+      ? Math.min(100, Math.round((progress.downloaded / progress.total) * 100))
+      : null;
+  const label = finished
+    ? t("updates.installing")
+    : percent === null
+      ? t("updates.downloadingUnknown")
+      : t("updates.downloading", { percent });
+  const width = finished ? 100 : percent;
 
   return (
-    <section
-      className="flex flex-wrap items-start gap-3 p-3"
-      aria-label={title}
-    >
-      <Icon
-        className="mt-0.5 size-4 text-muted-foreground"
+    <div className="grid gap-1" role="status">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <div
         aria-hidden="true"
-      />
-      <div className="grid min-w-0 flex-1 gap-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-medium">{title}</span>
-          {result ? (
-            <Badge variant="secondary">
-              {t("updates.resourceUpdated", { count: result.length })}
-            </Badge>
+        className="h-1.5 w-full max-w-64 overflow-hidden rounded-full bg-muted"
+      >
+        <div
+          className={cn(
+            "h-full rounded-full bg-primary transition-[width]",
+            width === null && "w-1/3 animate-pulse",
+          )}
+          style={width === null ? undefined : { width: `${width}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RuleLibraryPanel({
+  controller,
+}: {
+  controller: CheckUpdateDialogController;
+}) {
+  const {
+    ruleLibraryError: error,
+    ruleLibraryFiles: files,
+    ruleLibraryUpdatedAt: updatedAt,
+    t,
+    updateRuleLibrary,
+    working,
+  } = controller;
+  const { language } = useI18n();
+  const busy = working === "rule-library";
+  const title = t("updates.ruleLibraryTitle");
+
+  return (
+    <SettingsGroup title={t("settings.sections.resources")}>
+      <section
+        className="flex flex-wrap items-start gap-3 p-3"
+        aria-label={title}
+      >
+        <Database
+          className="mt-0.5 size-4 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <div className="grid min-w-0 flex-1 gap-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium">{title}</span>
+            {files?.length ? (
+              <Badge variant="secondary">
+                {t("updates.resourceUpdated", { count: files.length })}
+              </Badge>
+            ) : null}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t("updates.ruleLibraryDescription")}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {updatedAt === null
+              ? t("updates.neverUpdated")
+              : t("updates.lastUpdated", {
+                  time: new Date(updatedAt).toLocaleString(language),
+                })}
+          </p>
+          {files?.length ? (
+            <p className="break-words text-xs text-muted-foreground">
+              {files.map((file) => file.name).join(", ")}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="break-words text-xs text-danger">
+              {redactUpdateMessage(error, t)}
+            </p>
           ) : null}
         </div>
-        <p className="text-xs text-muted-foreground">{description}</p>
-        {result?.length ? (
-          <p className="break-words text-xs text-muted-foreground">
-            {result.map((file) => file.name).join(", ")}
-          </p>
-        ) : null}
-        {error ? (
-          <p className="break-words text-xs text-danger">
-            {redactUpdateMessage(error, t)}
-          </p>
-        ) : null}
-      </div>
-      <DisabledReason reason={working !== null ? t("updates.busyReason") : undefined}>
-      <Button
-        disabled={working !== null}
-        onClick={() => void updateResource(kind)}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
-        {busy ? (
-          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-        ) : (
-          <Download className="size-4" aria-hidden="true" />
-        )}
-        {error ? t("settings.autosave.retry") : t("updates.updateNow")}
-      </Button>
-      </DisabledReason>
-    </section>
+        <DisabledReason
+          reason={working !== null ? t("updates.busyReason") : undefined}
+        >
+          <Button
+            disabled={working !== null}
+            onClick={() => void updateRuleLibrary()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            {busy ? (
+              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <Download className="size-4" aria-hidden="true" />
+            )}
+            {error ? t("settings.autosave.retry") : t("updates.updateNow")}
+          </Button>
+        </DisabledReason>
+      </section>
+    </SettingsGroup>
   );
 }
 

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProfileListEntry, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { useShellStore } from "@/stores/shell-store";
+import { useToastStore } from "@/stores/toast-store";
 
 import { useRoutingScreen } from "./use-routing-screen";
 
@@ -195,7 +196,11 @@ describe("useRoutingScreen", () => {
       committed = await result.current.reorderRule("rule-b", 1, 0);
     });
     expect(committed).toBe(false);
-    expect(result.current.operationError).toBe("move failed");
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+      description: "move failed",
+      severity: "error",
+      title: "Could not reorder the rules",
+    });
   });
 
   it("saves a rule and closes the editor only when the backend accepts it", async () => {

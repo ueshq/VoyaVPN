@@ -131,7 +131,7 @@ describe("ConnectionsPanel", () => {
     row.focus();
     await userEvent.keyboard("{Enter}");
     const dialog = screen.getByRole("dialog", { name: "Connection details" });
-    for (const text of ["/usr/bin/app-0", "10.0.0.0", "93.184.216.0", "tcp / HTTPS", "proxy"])
+    for (const text of ["/usr/bin/app-0", "10.0.0.0", "93.184.216.0", "tcp / HTTPS", "Proxy"])
       expect(within(dialog).getByText(text)).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(row).toHaveFocus());
@@ -349,7 +349,7 @@ describe("ConnectionsPanel", () => {
     expect(screen.getByText("host-2.example.test")).toBeInTheDocument();
     expect(screen.queryByText("host-1.example.test")).not.toBeInTheDocument();
     ipc.proxyListConnections.mockResolvedValueOnce(snapshot([connection(3)]));
-    await more("Refresh list");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh now" }));
     expect(await screen.findByText("host-3.example.test")).toBeInTheDocument();
   });
 

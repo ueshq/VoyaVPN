@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@voya/ui/components/dialog";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { listRoutings } from "@/ipc/commands";
 import type { ProxyConnectionItem } from "@/ipc/bindings";
@@ -54,7 +55,7 @@ export function ConnectionDetails({
     ? [
         [t("activity.target"), connection.host],
         [t("activity.application"), connection.process],
-        [t("activity.processPath"), connection.processPath],
+        [t("activity.processPath"), middleEllipsis(connection.processPath), connection.processPath],
         [t("activity.sourceAddress"), connection.source],
         [t("activity.destinationAddress"), connection.destination],
         [
@@ -65,7 +66,7 @@ export function ConnectionDetails({
         ],
         [t("activity.startedAt"), startedAt],
         [t("activity.rule"), connectionRuleText(connection, activeRules, t)],
-        [t("activity.proxyChain"), connection.chains.join(" → ")],
+        [t("activity.proxyChain"), chainText(connection.chains, t)],
         [t("sidebar.upload"), connectionBytes(connection.upload)],
         [t("sidebar.download"), connectionBytes(connection.download)],
       ]
@@ -104,13 +105,13 @@ export function ConnectionDetails({
         </DialogHeader>
         <DialogBody>
           <dl className="select-text space-y-4 text-sm">
-            {fields.map(([label, value]) => (
+            {fields.map(([label, value, fullText]) => (
               <div
                 className="grid grid-cols-[7rem_minmax(0,1fr)] gap-4"
                 key={label}
               >
                 <dt className="text-muted-foreground">{label}</dt>
-                <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">
+                <dd className="whitespace-pre-wrap [overflow-wrap:anywhere]" title={fullText ?? undefined}>
                   {value?.trim() || "—"}
                 </dd>
               </div>
@@ -130,4 +131,27 @@ export function ConnectionDetails({
       </DialogContent>
     </Dialog>
   );
+}
+
+// The core names its built-in outbounds by tag; the Rules page has words for them.
+const OUTBOUND_KEYS: Record<string, TranslationKey> = {
+  block: "panes.routing.outboundBlock",
+  direct: "panes.routing.outboundDirect",
+  proxy: "panes.routing.outboundProxy",
+};
+
+function chainText(chains: readonly string[], t: TranslationFunction) {
+  return chains
+    .map((tag) => {
+      const key = OUTBOUND_KEYS[tag.toLowerCase()];
+      return key ? t(key) : tag;
+    })
+    .join(" → ");
+}
+
+/** A long path keeps its start and its file name; the full path is on hover. */
+function middleEllipsis(text: string | null | undefined, max = 64) {
+  if (!text || text.length <= max) return text;
+  const keep = Math.floor((max - 1) / 2);
+  return `${text.slice(0, keep)}…${text.slice(-keep)}`;
 }

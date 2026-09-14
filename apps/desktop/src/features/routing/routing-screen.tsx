@@ -17,6 +17,7 @@ import { Button } from "@voya/ui/components/button";
 import { buttonVariants } from "@voya/ui/components/button-variants";
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { ScrollArea } from "@voya/ui/components/scroll-area";
+import { Skeleton } from "@voya/ui/components/skeleton";
 import { cn } from "@voya/ui/lib/utils";
 
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
@@ -164,8 +165,18 @@ function RulesBody({
   processRulesSupported: boolean;
 }) {
   const { t } = useI18n();
+  if (controller.loading) {
+    // Placeholder rows keep the panel from looking empty while rules load.
+    return (
+      <div aria-label={t("panes.routing.loadingRules")} className="grid gap-2 p-4" role="status">
+        {[0, 1, 2, 3].map((row) => (
+          <Skeleton className="h-10 w-full" key={row} />
+        ))}
+      </div>
+    );
+  }
   if (!controller.activeRouting) {
-    return controller.loading || controller.loadError ? null : (
+    return controller.loadError ? null : (
       <EmptyState
         className="h-full content-center"
         icon={Route}

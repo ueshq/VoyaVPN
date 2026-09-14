@@ -44,21 +44,28 @@ export function DnsPane({ controller }: { controller: ReturnType<typeof useDnsSe
   const { fieldErrors, form, issueCount, updateSimple } = controller;
   return (
     <section aria-label={t("panes.dns.title")} className="grid gap-4">
-      <div className="flex items-center gap-2">
-        <Badge variant="outline">{form?.fakeIp ? t("panes.dns.fakeIp") : t("panes.dns.standard")}</Badge>
-        {issueCount ? <Badge variant="destructive">{t("panes.dns.errorCount", { count: issueCount })}</Badge> : null}
-      </div>
-      {form ? <SimpleDnsForm errors={fieldErrors} settings={form} updateSimple={updateSimple} /> : <p className="text-sm text-muted-foreground">{t("panes.dns.loading")}</p>}
+      {form ? (
+        <SimpleDnsForm
+          errors={fieldErrors}
+          issueCount={issueCount}
+          settings={form}
+          updateSimple={updateSimple}
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">{t("panes.dns.loading")}</p>
+      )}
     </section>
   );
 }
 
 function SimpleDnsForm({
   errors,
+  issueCount,
   settings,
   updateSimple,
 }: {
   errors: Record<string, string>;
+  issueCount: number;
   settings: DnsSettings;
   updateSimple: (patch: Partial<DnsSettings>) => void;
 }) {
@@ -70,7 +77,15 @@ function SimpleDnsForm({
   const strategies = STRATEGY_OPTIONS.map((value) => ({ value, label: strategyLabels[value] ?? value }));
   return (
     <>
-      <SettingsGroup title={t("settings.sections.dnsServers")}>
+      {/* The FakeIP checkbox below already shows the mode, so only errors get a badge. */}
+      <SettingsGroup
+        actions={
+          issueCount ? (
+            <Badge variant="destructive">{t("panes.dns.errorCount", { count: issueCount })}</Badge>
+          ) : undefined
+        }
+        title={t("settings.sections.dnsServers")}
+      >
         <TextField
           commitOnBlur
           error={errors.direct}
@@ -201,8 +216,9 @@ function DnsPresetRow({
 }) {
   const { t } = useI18n();
   return (
-    <SettingsRow label={label}>
-      <div className="flex flex-wrap gap-2">
+    // Presets sit right under their field, whose label already names them.
+    <SettingsRow>
+      <div aria-label={label} className="flex flex-wrap gap-2" role="group">
         {presets.map((preset) => {
           const selected = current?.trim() === preset.value;
           return (

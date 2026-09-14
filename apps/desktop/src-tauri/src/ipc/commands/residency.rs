@@ -50,7 +50,7 @@ pub(crate) struct TraySnapshot {
 }
 
 impl TraySnapshot {
-    pub(crate) fn input(&self) -> TrayMenuInput<'_> {
+    pub(crate) fn input(&self, window_visible: bool) -> TrayMenuInput<'_> {
         TrayMenuInput {
             language: &self.language,
             connected: self.connected,
@@ -59,7 +59,19 @@ impl TraySnapshot {
             active_node_id: self.active_node_id.as_deref(),
             groups: &self.groups,
             active_group_id: self.active_group_id.as_deref(),
+            window_visible,
         }
+    }
+
+    pub(crate) fn connected(&self) -> bool {
+        self.connected
+    }
+
+    /// The traffic mode's tray label while connected, for the tooltip.
+    pub(crate) fn traffic_mode_label(&self) -> Option<&'static str> {
+        self.connected
+            .then(|| voya_app::tray::traffic_mode_label(&self.language, self.traffic_mode))
+            .flatten()
     }
 
     /// The active group's or node's name while a connection is up.

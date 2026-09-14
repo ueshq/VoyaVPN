@@ -8,10 +8,12 @@ import {
   loadAppUpdaterStatus,
   type AppUpdateCheckResult,
   type AppUpdateInstallResult,
+  type AppUpdateProgress,
 } from "@/features/updates/app-update-flow";
 import { updateGeoAssets, updateSrsAssets } from "@/ipc/commands";
 import type { AppUpdaterStatus, ResourceUpdateFile } from "@/ipc/bindings";
 import { relaunch } from "@/ipc/process";
+import { usePreferencesStore } from "@/stores/preferences-store";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
@@ -20,8 +22,7 @@ export type UpdateWorkingState =
   | "app-check"
   | "app-install"
   | "app-restart"
-  | "geo"
-  | "srs";
+  | "rule-library";
 
 export function useCheckUpdateDialog() {
   const { t } = useI18n();
@@ -30,14 +31,10 @@ export function useCheckUpdateDialog() {
   const [appUpdaterCheck, setAppUpdaterCheck] = useState<AppUpdateCheckResult | null>(null);
   const [appUpdaterError, setAppUpdaterError] = useState<string | null>(null);
   const [appInstallResult, setAppInstallResult] = useState<AppUpdateInstallResult | null>(null);
-  const [resourceResults, setResourceResults] = useState<Record<"geo" | "srs", ResourceUpdateFile[] | null>>({
-    geo: null,
-    srs: null,
-  });
-  const [resourceErrors, setResourceErrors] = useState<Record<"geo" | "srs", string | null>>({
-    geo: null,
-    srs: null,
-  });
+  const [installProgress, setInstallProgress] = useState<AppUpdateProgress | null>(null);
+  const [ruleLibraryFiles, setRuleLibraryFiles] = useState<ResourceUpdateFile[] | null>(null);
+  const [ruleLibraryError, setRuleLibraryError] = useState<string | null>(null);
+  const ruleLibraryUpdatedAt = usePreferencesStore((state) => state.ruleLibraryUpdatedAt);
   const [working, setWorking] = useState<UpdateWorkingState | null>(null);
   const statusGenerationRef = useRef(0);
   const mountedRef = useMountedRef();
@@ -81,12 +78,18 @@ export function useCheckUpdateDialog() {
     setWorking("app-install");
     setAppUpdaterError(null);
     setAppInstallResult(null);
+    setInstallProgress(null);
     try {
       await queue.settled();
-      setAppInstallResult(await installCheckedAppUpdate());
+      setAppInstallResult(
+        await installCheckedAppUpdate(undefined, (progress) => {
+          if (mountedRef.current) setInstallProgress(progress);
+        }),
+      );
     } catch (error) {
       setAppUpdaterError(getErrorMessage(error));
     } finally {
+      setInstallProgress(null);
       setWorking(null);
     }
   }
@@ -104,17 +107,24 @@ export function useCheckUpdateDialog() {
     }
   }
 
-  async function updateResource(kind: "geo" | "srs") {
-    setWorking(kind);
-    setResourceErrors((current) => ({ ...current, [kind]: null }));
-    setResourceResults((current) => ({ ...current, [kind]: null }));
+  /**
+   * The whole rule library in one go: IP and domain data, then the rule sets.
+   * A failure part way keeps the files that did arrive on show.
+   */
+  async function updateRuleLibrary() {
+    setWorking("rule-library");
+    setRuleLibraryError(null);
+    setRuleLibraryFiles(null);
+    const files: ResourceUpdateFile[] = [];
     try {
       await queue.settled();
-      const result = kind === "geo" ? await updateGeoAssets() : await updateSrsAssets();
-      setResourceResults((current) => ({ ...current, [kind]: result }));
+      files.push(...(await updateGeoAssets()));
+      files.push(...(await updateSrsAssets()));
+      usePreferencesStore.getState().setRuleLibraryUpdatedAt(Date.now());
     } catch (error) {
-      setResourceErrors((current) => ({ ...current, [kind]: getErrorMessage(error) }));
+      setRuleLibraryError(getErrorMessage(error));
     } finally {
+      setRuleLibraryFiles(files);
       setWorking(null);
     }
   }
@@ -125,12 +135,14 @@ export function useCheckUpdateDialog() {
     appUpdaterError,
     appUpdaterStatus,
     installAppUpdate,
-    resourceErrors,
-    resourceResults,
+    installProgress,
     restartApp,
+    ruleLibraryError,
+    ruleLibraryFiles,
+    ruleLibraryUpdatedAt,
     runAppUpdaterCheck,
     t,
-    updateResource,
+    updateRuleLibrary,
     working,
   };
 }

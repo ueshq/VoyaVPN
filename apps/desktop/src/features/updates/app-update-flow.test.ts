@@ -79,6 +79,28 @@ describe("app update flow", () => {
     await expect(installCheckedAppUpdate(deps)).rejects.toThrow("signature invalid");
     expect(close).toHaveBeenCalledTimes(1);
   });
+
+  it("reports download progress while installing", async () => {
+    const downloadAndInstall = vi.fn(async (onEvent: (event: unknown) => void) => {
+      onEvent({ data: { contentLength: 200 }, event: "Started" });
+      onEvent({ data: { chunkLength: 50 }, event: "Progress" });
+      onEvent({ data: { chunkLength: 150 }, event: "Progress" });
+      onEvent({ event: "Finished" });
+    });
+    const deps = makeDeps({
+      checkForAppUpdate: vi.fn().mockResolvedValue(makeTauriUpdate({ downloadAndInstall })),
+    });
+    const progress = vi.fn();
+
+    await installCheckedAppUpdate(deps, progress);
+
+    expect(progress.mock.calls.map(([value]) => value)).toEqual([
+      { downloaded: 0, finished: false, total: 200 },
+      { downloaded: 50, finished: false, total: 200 },
+      { downloaded: 200, finished: false, total: 200 },
+      { downloaded: 200, finished: true, total: 200 },
+    ]);
+  });
 });
 
 function makeDeps(overrides: Partial<AppUpdateFlowDeps> = {}): AppUpdateFlowDeps {

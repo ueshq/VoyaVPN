@@ -200,7 +200,6 @@
       "loading": "正在載入 DNS 設定",
       "proxyStrategy": "代理解析策略",
       "remoteDns": "遠程 DNS",
-      "standard": "標準模式",
       "title": "DNS",
       "strategyHint": "解析網域時優先使用 IPv4 或 IPv6。",
       "expectedHint": "用於直連 DNS：透過這些 IP 範圍判斷是否接受解析結果。",
@@ -229,9 +228,9 @@
       "noMatches": "沒有符合的日誌",
       "noMatchesDescription": "調整搜尋條件或日誌篩選。",
       "search": "搜尋日誌",
-      "standard": "一般",
-      "issues": "僅異常",
-      "all": "全部",
+      "standard": "資訊及以上",
+      "issues": "警告及以上",
+      "all": "全部（含偵錯）",
       "clearDisplay": "清空顯示",
       "details": "日誌詳情",
       "count": "{{count}} / {{total}} 筆日誌",
@@ -247,7 +246,9 @@
       "copyFailed": "複製日誌失敗",
       "export": "匯出顯示的日誌…",
       "exported": "日誌已儲存。",
-      "exportFailed": "匯出日誌失敗"
+      "exportFailed": "匯出日誌失敗",
+      "debugHidden": "連線日誌包含偵錯記錄，篩選選擇「全部（含偵錯）」才會顯示。",
+      "infoNotRecorded": "連線日誌只記錄警告及以上，調高上方「日誌詳細程度」可記錄更多。"
     },
     "profiles": {
       "aria": {
@@ -507,7 +508,7 @@
       "scopeRoutingOnly": "僅路由",
       "scopeDnsOnly": "僅 DNS",
       "scopeHelp": "「路由與 DNS」會讓相符的網域也使用與出站對應的 DNS 伺服器解析。",
-      "advanced": "進階",
+      "advanced": "更多選項",
       "domainHelp": "每行一個。domain: 比對後綴，full: 完全比對，keyword: 包含關鍵字，geosite: 規則集；不加前綴時按關鍵字比對。",
       "ipHelp": "每行一個：位址或 CIDR（如 10.0.0.0/8），或規則集（如 geoip:cn）。",
       "portHelp": "以英文逗號分隔的端口或區間，如 443 或 1000-2000。",
@@ -548,7 +549,9 @@
         "cnIps": "國內 IP",
         "lanIps": "區域網路 IP"
       },
-      "trafficModeUnavailable": "暫時無法讀取目前模式"
+      "trafficModeUnavailable": "暫時無法讀取目前模式",
+      "reorderFailed": "調整規則順序失敗",
+      "loadingRules": "正在載入規則"
     },
     "subscriptions": {
       "additionalUrl": "備用地址",
@@ -637,7 +640,12 @@
       "allowInsecureHint": "有風險：伺服器憑證無效時仍然連線，流量可能被竊聽。僅在節點提供方要求時開啟。",
       "cacheFileHint": "把下載的規則集等狀態保存在本機，重新連線更快。",
       "muxEnabledHint": "在一條連線上複用多個請求，節點支援時可降低延遲。",
-      "muxProtocolHint": "需與節點伺服器的設定一致。"
+      "muxProtocolHint": "需與節點伺服器的設定一致。",
+      "logLevelOptions": {
+        "warn": "警告及以上",
+        "info": "資訊及以上",
+        "debug": "全部（含偵錯）"
+      }
     },
     "fields": {
       "hysteriaDownMbps": "下載頻寬（Mbps）",
@@ -712,10 +720,10 @@
       "dnsHosts": "Hosts 與預期 IP",
       "resources": "規則庫",
       "localProxy": "本機代理",
-      "connection": "連線",
       "window": "視窗",
       "captureMode": "網路接管方式",
-      "killSwitch": "斷網保護"
+      "killSwitch": "斷網保護",
+      "behavior": "行為"
     },
     "apply": {
       "reconnect": "套用並重新連線",
@@ -834,30 +842,37 @@
   "updates": {
     "appInstalled": "應用程式更新已安裝：{{version}}",
     "appUpdateAvailable": "應用程式 {{version}} 可用",
-    "appUpdater": "應用程式更新程式",
-    "appUpdaterReady": "自動應用程式更新程式已就緒。",
+    "appUpdater": "應用程式更新",
+    "appUpdaterReady": "可以檢查新版本。",
     "appUpdaterState": {
       "error": "錯誤",
       "ready": "就緒",
       "unconfigured": "未設定",
       "unsupported": "不支援"
     },
-    "checkApp": "檢查應用程式",
-    "geoDescription": "立即下載規則識別地區和網站所用的最新資料。",
-    "geoTitle": "IP 與網域資料",
-    "installApp": "安裝應用程式",
+    "checkApp": "檢查更新",
+    "installApp": "立即安裝",
     "noAppUpdate": "應用程式已是最新",
     "redactedUrl": "[已隱藏的 URL]",
     "redactedValue": "[已隱藏]",
     "resourceUpdated": "已更新 {{count}} 個檔案",
     "restartApp": "重新啟動應用程式",
     "restartRequired": "重新啟動 VoyaVPN 以完成更新。",
-    "srsDescription": "立即下載規則頁使用的最新規則集。",
-    "srsTitle": "規則集",
     "title": "檢查更新",
     "updateNow": "立即更新",
     "waiting": "等待",
-    "busyReason": "請等待目前更新操作完成"
+    "busyReason": "請等待目前更新操作完成",
+    "currentVersion": "目前版本 {{version}}",
+    "confirmInstallTitle": "安裝 VoyaVPN {{version}}？",
+    "confirmInstallDescription": "更新會先下載再安裝，完成後需要重新啟動 VoyaVPN，重新啟動時目前連線會中斷。",
+    "confirmInstall": "下載並安裝",
+    "downloading": "正在下載 {{percent}}%",
+    "downloadingUnknown": "正在下載…",
+    "installing": "正在安裝…",
+    "ruleLibraryTitle": "IP、網域與規則集資料",
+    "ruleLibraryDescription": "用於識別地區和網站，以及規則頁使用的規則集。",
+    "lastUpdated": "上次更新：{{time}}",
+    "neverUpdated": "尚未在這台裝置上更新"
   },
   "validation": {
     "dnsAddressEmpty": "DNS 位址不可為空",
@@ -948,7 +963,8 @@
     "disconnectRow": "中斷 {{target}}",
     "ruleFinal": "未符合任何規則（預設出站）",
     "statusLoading": "正在讀取連線狀態…",
-    "loadingConnections": "正在載入連線"
+    "loadingConnections": "正在載入連線",
+    "refreshNow": "立即重新整理"
   },
   "nodeGroups": {
     "local": "本地節點",
@@ -958,7 +974,7 @@
     "empty": "此分組暫無節點。"
   },
   "common": {
-    "advanced": "進階選項",
+    "advanced": "更多參數",
     "none": "無",
     "dismiss": "關閉提示",
     "waitForConnection": "連線狀態變化中，稍後再試"
@@ -979,7 +995,8 @@
     "message": "VoyaVPN 可以在系統匣中繼續執行，保持目前連線。",
     "minimize": "在系統匣中繼續執行",
     "quit": "結束",
-    "remember": "記住我的選擇"
+    "remember": "記住我的選擇",
+    "quitDisconnects": "結束會中斷目前連線。"
   },
   "policyGroups": {
     "title": "策略群組",
@@ -1025,6 +1042,10 @@
     "title": "VoyaVPN 無法啟動",
     "resetDatabase": "重設資料庫",
     "quit": "結束",
-    "resetExplanation": "重設資料庫會將目前的資料庫移到同一資料夾中的備份，並以空白的節點、訂閱、自訂規則與預設設定重新啟動 VoyaVPN。"
+    "resetExplanation": "重設資料庫會將目前的資料庫移到同一資料夾中的備份，並以空白的節點、訂閱、自訂規則與預設設定重新啟動 VoyaVPN。",
+    "confirmTitle": "確定重設資料庫？",
+    "confirmMessage": "目前的節點、訂閱與自訂規則將不再顯示，原資料庫會備份在同一資料夾中。",
+    "confirmReset": "確定重設",
+    "moveFailed": "無法移動資料庫：{{error}}\n\n如需手動重設，請執行：\n{{command}}"
   }
 }

@@ -98,11 +98,11 @@ describe("LogsPanel", () => {
     render(<Harness />);
     expect(screen.getAllByTestId("log-line")).toHaveLength(3);
     await userEvent.click(screen.getByRole("combobox"));
-    await userEvent.click(screen.getByRole("option", { name: "Warnings & errors" }));
+    await userEvent.click(screen.getByRole("option", { name: "Warnings and errors" }));
     expect(screen.getAllByTestId("log-line")).toHaveLength(2);
     expect(screen.queryByText("core started")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("combobox"));
-    await userEvent.click(screen.getByRole("option", { name: "All" }));
+    await userEvent.click(screen.getByRole("option", { name: "Everything, including debug" }));
     expect(screen.getAllByTestId("log-line")).toHaveLength(5);
   });
 

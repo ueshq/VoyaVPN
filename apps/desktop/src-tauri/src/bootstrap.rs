@@ -256,6 +256,27 @@ pub(super) fn report_startup_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R
         ))
         .show(move |reset| {
             if reset {
+                confirm_database_reset(&handle, database.clone());
+            } else {
+                handle.exit(1);
+            }
+        });
+}
+
+/// Asks once more: after the reset no node, subscription or custom rule shows.
+fn confirm_database_reset<R: tauri::Runtime>(app: &tauri::AppHandle<R>, database: PathBuf) {
+    let handle = app.clone();
+    let text = failure_text();
+    app.dialog()
+        .message(text.confirm_message.clone())
+        .title(text.confirm_title.clone())
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            text.confirm_reset.clone(),
+            text.quit.clone(),
+        ))
+        .show(move |reset| {
+            if reset {
                 reset_database_and_restart(&handle, &database);
             } else {
                 handle.exit(1);
@@ -279,12 +300,15 @@ fn reset_database_and_restart<R: tauri::Runtime>(app: &tauri::AppHandle<R>, data
         Err(error) => {
             tracing::error!(%error, "failed to move the unusable database aside");
             let handle = app.clone();
+            let text = failure_text();
+            let command = voya_app::startup::manual_database_reset_command(database);
             app.dialog()
-                .message(format!(
-                    "Could not move the database aside: {error}\n\nTo reset it by hand, run:\n{}",
-                    voya_app::startup::manual_database_reset_command(database)
-                ))
-                .title(failure_text().title)
+                .message(
+                    text.move_failed
+                        .replace("{{error}}", &error.to_string())
+                        .replace("{{command}}", &command.to_string()),
+                )
+                .title(text.title)
                 .kind(MessageDialogKind::Error)
                 .show(move |_| handle.exit(1));
         }

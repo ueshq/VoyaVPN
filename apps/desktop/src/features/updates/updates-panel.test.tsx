@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { settingsSaveQueue } from "@/features/settings/settings-save-queue";
 import { UpdatesPanel } from "@/features/updates/updates-panel";
+import { usePreferencesStore } from "@/stores/preferences-store";
 import { changeLocale } from "@voya/i18n";
 import type { AppUpdaterStatus, ResourceUpdateFile } from "@/ipc/bindings";
 
@@ -31,30 +32,63 @@ describe("UpdatesPanel", () => {
     cleanup();
     vi.clearAllMocks();
     await changeLocale("en");
+    usePreferencesStore.setState({ ruleLibraryUpdatedAt: null });
     mockDefaultIpc();
   });
 
   afterEach(() => cleanup());
 
-  it("checks, installs, and restarts through the signed app updater", async () => {
+  it("checks, confirms, installs, and restarts through the signed app updater", async () => {
     const user = userEvent.setup();
     const checkedUpdate = makeTauriUpdate();
     const installedUpdate = makeTauriUpdate();
     tauriMocks.check.mockResolvedValueOnce(checkedUpdate).mockResolvedValueOnce(installedUpdate);
 
-    render(<QueryClientProvider client={new QueryClient()}><UpdatesPanel /></QueryClientProvider>);
+    renderPanel();
 
-    expect(await screen.findByText("Automatic app updater is ready.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Check app" }));
+    expect(await screen.findByText("Ready to check for a new version.")).toBeInTheDocument();
+    expect(screen.getByText("Current version 1.0.0")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Check for updates" }));
     expect(await screen.findByText("App 2.1.0 is available")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Install app" }));
+    await user.click(screen.getByRole("button", { name: "Install now" }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(confirm).toHaveTextContent("Install VoyaVPN 2.1.0?");
+    expect(installedUpdate.downloadAndInstall).not.toHaveBeenCalled();
+    await user.click(within(confirm).getByRole("button", { name: "Download and install" }));
     await waitFor(() => expect(installedUpdate.downloadAndInstall).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("App update installed: 2.1.0")).toBeInTheDocument();
     expect(screen.getByText("Restart VoyaVPN to finish applying the update.")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Restart app" }));
     await waitFor(() => expect(tauriMocks.relaunch).toHaveBeenCalledTimes(1));
+  });
+
+  it("shows download progress while an update installs", async () => {
+    const user = userEvent.setup();
+    let finish!: () => void;
+    const installed = makeTauriUpdate({
+      downloadAndInstall: vi.fn((onEvent: (event: unknown) => void) => {
+        onEvent({ data: { contentLength: 200 }, event: "Started" });
+        onEvent({ data: { chunkLength: 100 }, event: "Progress" });
+        return new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      }),
+    });
+    tauriMocks.check.mockResolvedValueOnce(makeTauriUpdate()).mockResolvedValueOnce(installed);
+    renderPanel();
+
+    await user.click(await screen.findByRole("button", { name: "Check for updates" }));
+    await user.click(await screen.findByRole("button", { name: "Install now" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Download and install" }),
+    );
+
+    expect(await screen.findByText("Downloading 50%")).toBeInTheDocument();
+    finish();
+    expect(await screen.findByText("App update installed: 2.1.0")).toBeInTheDocument();
+    expect(screen.queryByText("Downloading 50%")).not.toBeInTheDocument();
   });
 
   it("waits for submitted settings before installing an update", async () => {
@@ -66,57 +100,69 @@ describe("UpdatesPanel", () => {
     const installed = makeTauriUpdate();
     tauriMocks.check.mockResolvedValueOnce(makeTauriUpdate()).mockResolvedValueOnce(installed);
     render(<QueryClientProvider client={client}><UpdatesPanel /></QueryClientProvider>);
-    await user.click(await screen.findByRole("button", { name: "Check app" }));
-    await user.click(await screen.findByRole("button", { name: "Install app" }));
+    await user.click(await screen.findByRole("button", { name: "Check for updates" }));
+    await user.click(await screen.findByRole("button", { name: "Install now" }));
+    await user.click(
+      within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Download and install" }),
+    );
     expect(installed.downloadAndInstall).not.toHaveBeenCalled();
     finish();
     await waitFor(() => expect(installed.downloadAndInstall).toHaveBeenCalledTimes(1));
   });
 
-  it("updates Geo independently and displays the returned files", async () => {
+  it("updates the whole rule library at once and remembers when", async () => {
     const user = userEvent.setup();
     ipcMocks.updateGeoAssets.mockResolvedValue([
       makeResource("geoip.db", 123, true),
       makeResource("geosite.db", 456, false),
     ]);
+    ipcMocks.updateSrsAssets.mockResolvedValue([makeResource("geosite-cn.srs", 789, false)]);
 
-    render(<QueryClientProvider client={new QueryClient()}><UpdatesPanel /></QueryClientProvider>);
+    renderPanel();
 
-    const geo = await screen.findByRole("region", { name: "IP and domain data" });
-    await user.click(within(geo).getByRole("button", { name: "Update now" }));
+    const library = await screen.findByRole("region", { name: "IP, domain and rule set data" });
+    expect(library).toHaveTextContent("Not updated from this device yet");
+    await user.click(within(library).getByRole("button", { name: "Update now" }));
 
-    await waitFor(() => expect(ipcMocks.updateGeoAssets).toHaveBeenCalledTimes(1));
-    expect(ipcMocks.updateSrsAssets).not.toHaveBeenCalled();
-    expect(geo).toHaveTextContent("geoip.db, geosite.db");
-    expect(geo).toHaveTextContent("Updated 2 files");
+    await waitFor(() => expect(ipcMocks.updateSrsAssets).toHaveBeenCalledTimes(1));
+    expect(ipcMocks.updateGeoAssets).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(library).toHaveTextContent("geoip.db, geosite.db, geosite-cn.srs"));
+    expect(library).toHaveTextContent("Updated 3 files");
+    expect(library).toHaveTextContent("Last updated");
+    expect(usePreferencesStore.getState().ruleLibraryUpdatedAt).toEqual(expect.any(Number));
   });
 
-  it("updates SRS independently and redacts failure details", async () => {
+  it("redacts a rule library failure and offers a retry", async () => {
     const user = userEvent.setup();
     ipcMocks.updateSrsAssets.mockRejectedValue(
       new Error("failed at https://rules.example/secret proxyUrl=http://127.0.0.1:10808"),
     );
 
-    render(<QueryClientProvider client={new QueryClient()}><UpdatesPanel /></QueryClientProvider>);
+    renderPanel();
 
-    const srs = await screen.findByRole("region", { name: "Rule sets" });
-    await user.click(within(srs).getByRole("button", { name: "Update now" }));
+    const library = await screen.findByRole("region", { name: "IP, domain and rule set data" });
+    await user.click(within(library).getByRole("button", { name: "Update now" }));
 
-    await waitFor(() => expect(ipcMocks.updateSrsAssets).toHaveBeenCalledTimes(1));
-    expect(srs).toHaveTextContent("[redacted URL]");
-    expect(srs).toHaveTextContent("proxyUrl=[redacted]");
-    expect(srs).not.toHaveTextContent("rules.example");
+    await waitFor(() => expect(library).toHaveTextContent("[redacted URL]"));
+    expect(library).toHaveTextContent("proxyUrl=[redacted]");
+    expect(library).not.toHaveTextContent("rules.example");
+    expect(within(library).getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(usePreferencesStore.getState().ruleLibraryUpdatedAt).toBeNull();
   });
 
   it("does not render update preferences or manual download fallback", async () => {
-    render(<QueryClientProvider client={new QueryClient()}><UpdatesPanel /></QueryClientProvider>);
+    renderPanel();
 
-    expect(await screen.findByText("Automatic app updater is ready.")).toBeInTheDocument();
+    expect(await screen.findByText("Ready to check for a new version.")).toBeInTheDocument();
     expect(screen.queryByText("Pre-release")).not.toBeInTheDocument();
     expect(screen.queryByText("Manual downloads")).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 });
+
+function renderPanel() {
+  return render(<QueryClientProvider client={new QueryClient()}><UpdatesPanel /></QueryClientProvider>);
+}
 
 function mockDefaultIpc() {
   ipcMocks.appUpdateStatus.mockResolvedValue({

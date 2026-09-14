@@ -7,6 +7,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use tauri::image::Image;
 use tauri::{
     menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -14,6 +15,7 @@ use tauri::{
 };
 use tauri_specta::Event;
 use voya_app::tray::{tray_menu, tray_tooltip, TrayEntry, TrayItemId};
+use voya_app::tray_icon::with_connected_badge;
 use voya_platform::coreinfo::TargetOs;
 
 use crate::{
@@ -32,14 +34,18 @@ static REFRESH_QUEUED: AtomicBool = AtomicBool::new(false);
 pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let snapshot =
         tauri::async_runtime::block_on(commands::tray_snapshot(&app.state::<AppState>()));
-    let menu = build_menu(app.handle(), &tray_menu(&snapshot.input()))?;
+    let window_visible = residency::main_window_visible(app.handle());
+    let menu = build_menu(app.handle(), &tray_menu(&snapshot.input(window_visible)))?;
     // Windows convention: left click opens the window and right click the
     // menu. Elsewhere the menu opens on any click.
     let left_click_toggles_window = TargetOs::current() == TargetOs::Windows;
 
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
-        .tooltip(tray_tooltip(snapshot.connected_node()))
+        .tooltip(tray_tooltip(
+            snapshot.connected_node(),
+            snapshot.traffic_mode_label(),
+        ))
         .show_menu_on_left_click(!left_click_toggles_window)
         .on_menu_event(|app, event: MenuEvent| handle_menu_event(app, event.id().as_ref()))
         .on_tray_icon_event(move |tray, event| {
@@ -57,7 +63,7 @@ pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
             }
         });
 
-    if let Some(icon) = app.default_window_icon().cloned() {
+    if let Some(icon) = tray_icon(app.handle(), snapshot.connected()) {
         tray = tray.icon(icon);
     }
 
@@ -90,8 +96,31 @@ async fn rebuild_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Re
         return Ok(());
     };
     let snapshot = commands::tray_snapshot(&state).await;
-    tray.set_menu(Some(build_menu(app, &tray_menu(&snapshot.input()))?))?;
-    tray.set_tooltip(Some(tray_tooltip(snapshot.connected_node())))
+    let window_visible = residency::main_window_visible(app);
+    tray.set_menu(Some(build_menu(
+        app,
+        &tray_menu(&snapshot.input(window_visible)),
+    )?))?;
+    tray.set_icon(tray_icon(app, snapshot.connected()))?;
+    tray.set_tooltip(Some(tray_tooltip(
+        snapshot.connected_node(),
+        snapshot.traffic_mode_label(),
+    )))
+}
+
+/// The app icon, with a green dot while connected.
+fn tray_icon<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    connected: bool,
+) -> Option<Image<'static>> {
+    let base = app.default_window_icon()?;
+    let (width, height) = (base.width(), base.height());
+    let rgba = if connected {
+        with_connected_badge(base.rgba(), width, height)
+    } else {
+        base.rgba().to_vec()
+    };
+    Some(Image::new_owned(rgba, width, height))
 }
 
 fn build_menu<R: tauri::Runtime>(

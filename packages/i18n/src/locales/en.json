@@ -200,7 +200,6 @@
       "loading": "Loading DNS settings",
       "proxyStrategy": "Proxy strategy",
       "remoteDns": "Remote DNS",
-      "standard": "Standard",
       "title": "DNS",
       "strategyHint": "Prefer IPv4 or IPv6 when resolving a hostname.",
       "expectedHint": "For direct DNS: use these IP ranges to check whether a response should be accepted.",
@@ -229,9 +228,9 @@
       "noMatches": "No matching log lines",
       "noMatchesDescription": "Adjust your search or log filter.",
       "search": "Search logs",
-      "standard": "Standard",
-      "issues": "Warnings & errors",
-      "all": "All",
+      "standard": "Info and above",
+      "issues": "Warnings and errors",
+      "all": "Everything, including debug",
       "clearDisplay": "Clear display",
       "details": "Log details",
       "count": "{{count}} of {{total}} log entries",
@@ -247,7 +246,9 @@
       "copyFailed": "Could not copy logs",
       "export": "Export shown logs…",
       "exported": "Logs saved.",
-      "exportFailed": "Could not export logs"
+      "exportFailed": "Could not export logs",
+      "debugHidden": "The connection log includes debug lines; choose “Everything, including debug” to show them.",
+      "infoNotRecorded": "The connection log only records warnings and errors; raise the log detail above to record more."
     },
     "profiles": {
       "aria": {
@@ -507,7 +508,7 @@
       "scopeRoutingOnly": "Routing only",
       "scopeDnsOnly": "DNS only",
       "scopeHelp": "Routing and DNS also resolves matching domains through the DNS server that fits the outbound.",
-      "advanced": "Advanced",
+      "advanced": "More options",
       "domainHelp": "One per line. domain: matches a suffix, full: an exact name, keyword: a substring, geosite: a rule set. Values without a prefix match as keywords.",
       "ipHelp": "One per line: an address or CIDR such as 10.0.0.0/8, or a rule set such as geoip:cn.",
       "portHelp": "Comma-separated ports or ranges, such as 443 or 1000-2000.",
@@ -548,7 +549,9 @@
         "cnIps": "China IPs",
         "lanIps": "LAN IPs"
       },
-      "trafficModeUnavailable": "The current mode could not be read"
+      "trafficModeUnavailable": "The current mode could not be read",
+      "reorderFailed": "Could not reorder the rules",
+      "loadingRules": "Loading rules"
     },
     "subscriptions": {
       "additionalUrl": "More URL",
@@ -637,7 +640,12 @@
       "allowInsecureHint": "Risky: connects even when a server's certificate is invalid, so traffic can be intercepted. Only turn on if your provider requires it.",
       "cacheFileHint": "Keeps downloaded rule sets and other state on disk so reconnecting is faster.",
       "muxEnabledHint": "Carries several requests over one connection, which can cut latency when the node supports it.",
-      "muxProtocolHint": "Must match the node's server setting."
+      "muxProtocolHint": "Must match the node's server setting.",
+      "logLevelOptions": {
+        "warn": "Warnings and errors",
+        "info": "Info and above",
+        "debug": "Everything, including debug"
+      }
     },
     "fields": {
       "hysteriaDownMbps": "Download bandwidth (Mbps)",
@@ -712,10 +720,10 @@
       "dnsHosts": "Hosts and expected IPs",
       "resources": "Rule library",
       "localProxy": "Local proxy",
-      "connection": "Connection",
       "window": "Window",
       "captureMode": "Traffic capture",
-      "killSwitch": "Kill switch"
+      "killSwitch": "Kill switch",
+      "behavior": "Behavior"
     },
     "apply": {
       "reconnect": "Apply and reconnect",
@@ -834,30 +842,37 @@
   "updates": {
     "appInstalled": "App update installed: {{version}}",
     "appUpdateAvailable": "App {{version}} is available",
-    "appUpdater": "App updater",
-    "appUpdaterReady": "Automatic app updater is ready.",
+    "appUpdater": "App updates",
+    "appUpdaterReady": "Ready to check for a new version.",
     "appUpdaterState": {
       "error": "Error",
       "ready": "Ready",
       "unconfigured": "Unconfigured",
       "unsupported": "Unsupported"
     },
-    "checkApp": "Check app",
-    "geoDescription": "Download the latest data rules use to recognize regions and sites.",
-    "geoTitle": "IP and domain data",
-    "installApp": "Install app",
+    "checkApp": "Check for updates",
+    "installApp": "Install now",
     "noAppUpdate": "App is up to date",
     "redactedUrl": "[redacted URL]",
     "redactedValue": "[redacted]",
     "resourceUpdated": "Updated {{count}} files",
     "restartApp": "Restart app",
     "restartRequired": "Restart VoyaVPN to finish applying the update.",
-    "srsDescription": "Download the latest rule sets the Rules page uses.",
-    "srsTitle": "Rule sets",
     "title": "Check Updates",
     "updateNow": "Update now",
     "waiting": "Waiting",
-    "busyReason": "Wait for the current update step to finish"
+    "busyReason": "Wait for the current update step to finish",
+    "currentVersion": "Current version {{version}}",
+    "confirmInstallTitle": "Install VoyaVPN {{version}}?",
+    "confirmInstallDescription": "The update downloads and installs first. VoyaVPN then needs a restart, which ends the current connection.",
+    "confirmInstall": "Download and install",
+    "downloading": "Downloading {{percent}}%",
+    "downloadingUnknown": "Downloading…",
+    "installing": "Installing…",
+    "ruleLibraryTitle": "IP, domain and rule set data",
+    "ruleLibraryDescription": "Used to recognise regions and sites, and by the rule sets on the Rules page.",
+    "lastUpdated": "Last updated {{time}}",
+    "neverUpdated": "Not updated from this device yet"
   },
   "validation": {
     "dnsAddressEmpty": "The DNS address must not be empty",
@@ -948,7 +963,8 @@
     "disconnectRow": "Disconnect {{target}}",
     "ruleFinal": "No rule matched (default route)",
     "statusLoading": "Reading the connection state…",
-    "loadingConnections": "Loading connections"
+    "loadingConnections": "Loading connections",
+    "refreshNow": "Refresh now"
   },
   "nodeGroups": {
     "local": "Local nodes",
@@ -958,7 +974,7 @@
     "empty": "No nodes in this group."
   },
   "common": {
-    "advanced": "Advanced options",
+    "advanced": "More settings",
     "none": "None",
     "dismiss": "Dismiss",
     "waitForConnection": "Wait for the connection to settle, then try again"
@@ -979,7 +995,8 @@
     "message": "VoyaVPN can keep running in the tray so your connection stays up.",
     "minimize": "Keep running in tray",
     "quit": "Quit",
-    "remember": "Remember my choice"
+    "remember": "Remember my choice",
+    "quitDisconnects": "Quitting ends the current connection."
   },
   "policyGroups": {
     "title": "Policy groups",
@@ -1025,6 +1042,10 @@
     "title": "VoyaVPN could not start",
     "resetDatabase": "Reset Database",
     "quit": "Quit",
-    "resetExplanation": "Reset Database moves this database to a backup in the same folder and restarts VoyaVPN with no nodes, subscriptions or custom rules, and default settings."
+    "resetExplanation": "Reset Database moves this database to a backup in the same folder and restarts VoyaVPN with no nodes, subscriptions or custom rules, and default settings.",
+    "confirmTitle": "Reset the database?",
+    "confirmMessage": "Your nodes, subscriptions and custom rules will no longer appear. The current database is kept as a backup in the same folder.",
+    "confirmReset": "Reset",
+    "moveFailed": "Could not move the database aside: {{error}}\n\nTo reset it by hand, run:\n{{command}}"
   }
 }

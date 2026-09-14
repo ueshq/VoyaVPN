@@ -32,6 +32,13 @@ pub struct StartupFailureText {
     pub reset_database: String,
     pub quit: String,
     pub reset_explanation: String,
+    /// The second question before the reset, which the app cannot undo.
+    pub confirm_title: String,
+    pub confirm_message: String,
+    pub confirm_reset: String,
+    /// Shown when the database cannot be moved; `{{error}}` and `{{command}}`
+    /// are filled in by the caller.
+    pub move_failed: String,
 }
 
 /// The startup failure dialog in the language closest to `locale`, read from the
@@ -58,6 +65,10 @@ pub fn startup_failure_text(locale: &str) -> StartupFailureText {
         reset_database: text("resetDatabase"),
         quit: text("quit"),
         reset_explanation: text("resetExplanation"),
+        confirm_title: text("confirmTitle"),
+        confirm_message: text("confirmMessage"),
+        confirm_reset: text("confirmReset"),
+        move_failed: text("moveFailed"),
     }
 }
 
@@ -89,11 +100,20 @@ mod tests {
                 &text.reset_database,
                 &text.quit,
                 &text.reset_explanation,
+                &text.confirm_title,
+                &text.confirm_message,
+                &text.confirm_reset,
+                &text.move_failed,
             ] {
                 assert!(!value.is_empty(), "{locale}");
             }
             // Native custom-button results are matched by their labels.
             assert_ne!(text.reset_database, text.quit, "{locale}");
+            assert_ne!(text.confirm_reset, text.quit, "{locale}");
+            assert!(
+                text.move_failed.contains("{{error}}") && text.move_failed.contains("{{command}}"),
+                "{locale}"
+            );
             if locale.starts_with("zh") {
                 assert_ne!(text.title, english.title, "{locale}");
             }
