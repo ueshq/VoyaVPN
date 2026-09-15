@@ -1,7 +1,7 @@
 //! Ordered, once-only shutdown of background work and OS resources.
 use crate::AppState;
 use tauri::Manager;
-use voya_app::shutdown::ShutdownLatch;
+use voya_app::lifecycle::ShutdownLatch;
 
 /// Latches the exit teardown so it runs once per process.
 static SHUTDOWN_LATCH: ShutdownLatch = ShutdownLatch::new();
@@ -71,10 +71,7 @@ fn restore_system_proxy_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let Ok(config) = state.config().read().map(|guard| guard.clone()) else {
-        tracing::warn!("failed to read app config while restoring system proxy on exit");
-        return;
-    };
+    let config = state.config_mutations().current_config();
     if let Err(error) = state.system_proxy_manager().restore(&config) {
         tracing::warn!(?error, "failed to restore system proxy on exit");
     }

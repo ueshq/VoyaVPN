@@ -159,11 +159,10 @@ impl SupervisorActor {
     ) -> Result<SupervisorSnapshot, SupervisorError> {
         // No Windows wintun cleanup here: this path is only reached when the
         // backend is `Process`, and Windows + `tun_enabled` always resolves to
-        // the native `WindowsService` backend, so the branch that used to live
-        // here was unreachable. Wiring `TunCleaner` into `start_native_tun`
-        // instead is not a rename: `pnputil /remove-device` exits non-zero when
-        // the device is absent, which `windows_cleanup_result` reports as a
-        // hard error, so it would fail every start on a clean machine.
+        // the native `WindowsService` backend. A pre-start
+        // `pnputil /remove-device` is deliberately absent everywhere: it exits
+        // non-zero when the device does not exist, so it would fail every start
+        // on a clean machine.
         let job = if self.deps.target_os == TargetOs::Windows {
             self.deps.job_factory.create_job()?
         } else {

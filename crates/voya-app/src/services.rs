@@ -12,14 +12,13 @@ use voya_platform::{coreinfo::TargetOs, paths::AppPaths, process::ProcessRunner}
 use crate::{
     config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
     connection_mode::{enforce_platform_connection_mode, seed_platform_connection_defaults},
-    dns::DnsManager,
     exports::ExportManager,
     profiles::ProfileManager,
     routing::RoutingManager,
     runtime::RuntimeManager,
-    settings_save::app_config_from_settings,
+    settings::save::app_config_from_settings,
     speedtest::{SpeedtestManager, SpeedtestResult, SpeedtestRunResult},
-    statistics::{StatisticsConfigSource, StatisticsEventSink, StatisticsManager},
+    statistics::{StatisticsEventSink, StatisticsManager},
     subscriptions::{
         SubscriptionAutoUpdateScheduler, SubscriptionAutoUpdateSink, SubscriptionManager,
     },
@@ -35,7 +34,7 @@ pub struct AppServices {
     /// commands cannot interleave the runtime config write/delete around the
     /// supervisor's Start and Stop.
     runtime_lock: Arc<tokio::sync::Mutex<()>>,
-    settings_application: crate::settings_apply::SettingsApplication,
+    settings_application: crate::settings::apply::SettingsApplication,
 }
 
 impl AppServices {
@@ -44,7 +43,7 @@ impl AppServices {
             database: Database::connect(database_path).await?,
             runtime_paths,
             runtime_lock: Arc::new(tokio::sync::Mutex::new(())),
-            settings_application: crate::settings_apply::SettingsApplication::default(),
+            settings_application: crate::settings::apply::SettingsApplication::default(),
         })
     }
 
@@ -130,11 +129,6 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn dns(&self) -> DnsManager<'_> {
-        DnsManager::new(&self.database)
-    }
-
-    #[must_use]
     pub fn exports(&self) -> ExportManager<'_> {
         ExportManager::new(&self.database)
     }
@@ -172,10 +166,10 @@ impl AppServices {
     pub fn spawn_statistics(
         &self,
         supervisor: CoreSupervisor,
-        config_source: Arc<dyn StatisticsConfigSource>,
+        config: SharedAppConfig,
         event_sink: Arc<dyn StatisticsEventSink>,
     ) -> StatisticsManager {
-        StatisticsManager::spawn(self.database.clone(), supervisor, config_source, event_sink)
+        StatisticsManager::spawn(self.database.clone(), supervisor, config, event_sink)
     }
 
     /// Starts the background subscription auto-update loop.
@@ -240,7 +234,7 @@ impl AppServices {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings_save::settings_from_app_config;
+    use crate::settings::save::settings_from_app_config;
     use voya_contracts::{AppSettingsV1, SystemProxyType};
 
     #[tokio::test]

@@ -2,52 +2,20 @@ use thiserror::Error;
 use voya_contracts::ValidationCode;
 pub use voya_contracts::ValidationIssue;
 use voya_core::{SimpleDnsItem, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS};
-use voya_db::{Database, DatabaseSession, UnitOfWork};
 
-pub type Result<T> = std::result::Result<T, DnsManagerError>;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DnsSettings {
-    pub simple_dns_item: SimpleDnsItem,
-}
+pub type Result<T> = std::result::Result<T, DnsSettingsError>;
 
 #[derive(Debug, Error)]
-pub enum DnsManagerError {
+pub enum DnsSettingsError {
     #[error("DNS settings validation failed")]
     Validation(Vec<ValidationIssue>),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct DnsManager<'db> {
-    _database: DatabaseSession<'db>,
-}
-
-impl<'db> DnsManager<'db> {
-    #[must_use]
-    pub fn new(database: &'db Database) -> Self {
-        Self {
-            _database: DatabaseSession::Database(database),
-        }
-    }
-
-    #[must_use]
-    pub fn new_in(unit_of_work: &'db UnitOfWork) -> Self {
-        Self {
-            _database: DatabaseSession::UnitOfWork(unit_of_work),
-        }
-    }
-
-    pub async fn load_settings(&self, simple_dns_item: &SimpleDnsItem) -> Result<DnsSettings> {
-        Ok(DnsSettings {
-            simple_dns_item: normalize_simple_dns(simple_dns_item.clone()),
-        })
-    }
-
-    pub async fn save_settings(&self, mut settings: DnsSettings) -> Result<DnsSettings> {
-        settings.simple_dns_item = normalize_simple_dns(settings.simple_dns_item);
-        validate_settings(&settings)?;
-        Ok(settings)
-    }
+/// A submitted DNS form, normalized and checked the way it will be stored.
+pub fn validated_settings(item: SimpleDnsItem) -> Result<SimpleDnsItem> {
+    let item = normalize_simple_dns(item);
+    validate_settings(&item)?;
+    Ok(item)
 }
 
 #[must_use]
@@ -70,22 +38,18 @@ pub fn normalize_simple_dns(mut item: SimpleDnsItem) -> SimpleDnsItem {
     item
 }
 
-pub fn validate_settings(settings: &DnsSettings) -> Result<()> {
+pub fn validate_settings(item: &SimpleDnsItem) -> Result<()> {
     let mut issues = Vec::new();
-    validate_hosts(
-        settings.simple_dns_item.hosts.as_deref(),
-        "hosts",
-        &mut issues,
-    );
+    validate_hosts(item.hosts.as_deref(), "hosts", &mut issues);
     validate_expected_ips(
-        settings.simple_dns_item.direct_expected_ips.as_deref(),
+        item.direct_expected_ips.as_deref(),
         "directExpectedIps",
         &mut issues,
     );
     for (value, field) in [
-        (&settings.simple_dns_item.direct_dns, "direct"),
-        (&settings.simple_dns_item.remote_dns, "remote"),
-        (&settings.simple_dns_item.bootstrap_dns, "bootstrap"),
+        (&item.direct_dns, "direct"),
+        (&item.remote_dns, "remote"),
+        (&item.bootstrap_dns, "bootstrap"),
     ] {
         validate_dns_address(value.as_deref(), field, &mut issues);
     }
@@ -93,7 +57,7 @@ pub fn validate_settings(settings: &DnsSettings) -> Result<()> {
     if issues.is_empty() {
         Ok(())
     } else {
-        Err(DnsManagerError::Validation(issues))
+        Err(DnsSettingsError::Validation(issues))
     }
 }
 
@@ -203,33 +167,22 @@ fn clean_optional_string(value: Option<String>) -> Option<String> {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn dns_manager_normalizes_and_validates_simple_dns_only() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("DNS manager test operation should succeed");
-        let manager = DnsManager::new(&database);
-        let settings = manager
-            .save_settings(DnsSettings {
-                simple_dns_item: SimpleDnsItem {
-                    hosts: Some("example.test 192.0.2.1".to_string()),
-                    direct_dns: Some(" 1.1.1.1 ".to_string()),
-                    ..SimpleDnsItem::default()
-                },
-            })
-            .await
-            .expect("DNS manager test operation should succeed");
+    #[test]
+    fn saving_normalizes_and_validates_simple_dns_only() {
+        let settings = validated_settings(SimpleDnsItem {
+            hosts: Some("example.test 192.0.2.1".to_string()),
+            direct_dns: Some(" 1.1.1.1 ".to_string()),
+            ..SimpleDnsItem::default()
+        })
+        .expect("valid DNS settings should save");
 
-        assert_eq!(
-            settings.simple_dns_item.direct_dns.as_deref(),
-            Some("1.1.1.1")
-        );
+        assert_eq!(settings.direct_dns.as_deref(), Some("1.1.1.1"));
     }
 
-    fn validation_fields(settings: DnsSettings) -> Vec<String> {
-        match validate_settings(&settings) {
+    fn validation_fields(item: SimpleDnsItem) -> Vec<String> {
+        match validate_settings(&normalize_simple_dns(item)) {
             Ok(()) => Vec::new(),
-            Err(DnsManagerError::Validation(issues)) => {
+            Err(DnsSettingsError::Validation(issues)) => {
                 issues.into_iter().map(|issue| issue.field).collect()
             }
         }
@@ -238,13 +191,11 @@ mod tests {
     #[test]
     fn resolver_addresses_the_core_would_discard_are_rejected() {
         assert_eq!(
-            validation_fields(DnsSettings {
-                simple_dns_item: normalize_simple_dns(SimpleDnsItem {
-                    direct_dns: Some("1.1.1.1:70000".to_string()),
-                    remote_dns: Some("https://dns.example.test:0/dns-query".to_string()),
-                    bootstrap_dns: Some("8.8.8.8:dns".to_string()),
-                    ..SimpleDnsItem::default()
-                }),
+            validation_fields(SimpleDnsItem {
+                direct_dns: Some("1.1.1.1:70000".to_string()),
+                remote_dns: Some("https://dns.example.test:0/dns-query".to_string()),
+                bootstrap_dns: Some("8.8.8.8:dns".to_string()),
+                ..SimpleDnsItem::default()
             }),
             vec![
                 "direct".to_string(),
@@ -269,11 +220,9 @@ mod tests {
             "1.1.1.1, 8.8.8.8",
         ] {
             assert_eq!(
-                validation_fields(DnsSettings {
-                    simple_dns_item: normalize_simple_dns(SimpleDnsItem {
-                        direct_dns: Some(address.to_string()),
-                        ..SimpleDnsItem::default()
-                    }),
+                validation_fields(SimpleDnsItem {
+                    direct_dns: Some(address.to_string()),
+                    ..SimpleDnsItem::default()
                 }),
                 Vec::<String>::new(),
                 "{address} should be accepted"

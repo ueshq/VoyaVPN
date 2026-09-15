@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 use tauri_plugin_notification::NotificationExt;
 use tauri_specta::Event;
-use voya_app::residency::{close_request_decision, launch_hidden, CloseDecision};
+use voya_app::lifecycle::{close_request_decision, launch_hidden, CloseDecision};
 use voya_app::tray::{tray_labels, TrayLabels};
 use voya_platform::autostart::launched_by_autostart;
 

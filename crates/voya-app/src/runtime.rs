@@ -58,7 +58,7 @@ pub struct RuntimeManager<'runtime> {
     /// is about to launch the core against.
     operation_lock: Arc<Mutex<()>>,
     target_os: TargetOs,
-    settings_application: crate::settings_apply::SettingsApplication,
+    settings_application: crate::settings::apply::SettingsApplication,
 }
 
 impl<'runtime> RuntimeManager<'runtime> {
@@ -81,7 +81,7 @@ impl<'runtime> RuntimeManager<'runtime> {
             supervisor,
             operation_lock: Arc::new(Mutex::new(())),
             target_os,
-            settings_application: crate::settings_apply::SettingsApplication::default(),
+            settings_application: crate::settings::apply::SettingsApplication::default(),
         }
     }
 
@@ -106,14 +106,14 @@ impl<'runtime> RuntimeManager<'runtime> {
     #[must_use]
     pub fn with_settings_application(
         mut self,
-        application: crate::settings_apply::SettingsApplication,
+        application: crate::settings::apply::SettingsApplication,
     ) -> Self {
         self.settings_application = application;
         self
     }
 
     #[must_use]
-    pub fn settings_application(&self) -> &crate::settings_apply::SettingsApplication {
+    pub fn settings_application(&self) -> &crate::settings::apply::SettingsApplication {
         &self.settings_application
     }
 

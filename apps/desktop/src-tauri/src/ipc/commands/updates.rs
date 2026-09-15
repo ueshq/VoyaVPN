@@ -31,7 +31,9 @@ pub async fn update_geo_assets(
     let config = current_config(&state);
     let proxy_url = runtime_proxy_url(true, None, &config);
 
-    update_manager(&state)
+    state
+        .services()
+        .updates()
         .update_geo_assets(proxy_url)
         .await
         .map_err(AppError::from)
@@ -45,7 +47,9 @@ pub async fn update_srs_assets(
     let config = current_config(&state);
     let proxy_url = runtime_proxy_url(true, None, &config);
 
-    update_manager(&state)
+    state
+        .services()
+        .updates()
         .update_srs_assets(proxy_url)
         .await
         .map_err(AppError::from)

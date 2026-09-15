@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use voya_app::connection_mode::{ConnectionModeManager, ConnectionModeSink};
 
-use super::{lifecycle::*, support::*, *};
+use super::{post_commit::*, support::*, *};
 
 pub(super) fn connection_mode_manager<R>(
     app: &tauri::AppHandle<R>,

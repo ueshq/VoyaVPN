@@ -1,4 +1,4 @@
-use super::{connection_mode::*, lifecycle::*, support::*, *};
+use super::{connection_mode::*, post_commit::*, support::*, *};
 use voya_contracts::{ConnectionMode, ConnectionModeStatus};
 
 // `async` because the TUN status probe forks OS helpers; the per-app proxy

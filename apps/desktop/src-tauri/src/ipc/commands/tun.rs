@@ -1,4 +1,4 @@
-use super::{lifecycle::*, support::*, *};
+use super::{post_commit::*, support::*, *};
 
 /// Trigger the one-time native authorization dialog and, on success, install
 /// the passwordless elevation launcher. No admin password is stored.

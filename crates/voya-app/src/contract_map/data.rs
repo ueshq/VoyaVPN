@@ -9,8 +9,6 @@ use voya_core::{
     SubMetadataItem, SubscriptionUpdateResult,
 };
 
-use crate::dns::DnsSettings;
-
 #[must_use]
 pub fn subscription_to_contract(item: SubItem) -> SubscriptionContract {
     SubscriptionContract {
@@ -193,12 +191,7 @@ pub fn rule_from_contract(item: RoutingRuleContract) -> RulesItem {
 }
 
 #[must_use]
-pub fn dns_to_contract(settings: DnsSettings) -> DnsContract {
-    simple_dns_to_contract(settings.simple_dns_item)
-}
-
-#[must_use]
-pub(crate) fn simple_dns_to_contract(item: SimpleDnsItem) -> DnsContract {
+pub fn simple_dns_to_contract(item: SimpleDnsItem) -> DnsContract {
     DnsContract {
         add_common_hosts: item.add_common_hosts,
         fake_ip: item.fake_ip,
@@ -215,14 +208,7 @@ pub(crate) fn simple_dns_to_contract(item: SimpleDnsItem) -> DnsContract {
 }
 
 #[must_use]
-pub fn dns_from_contract(settings: DnsContract) -> DnsSettings {
-    DnsSettings {
-        simple_dns_item: simple_dns_from_contract(settings),
-    }
-}
-
-#[must_use]
-pub(crate) fn simple_dns_from_contract(settings: DnsContract) -> SimpleDnsItem {
+pub fn simple_dns_from_contract(settings: DnsContract) -> SimpleDnsItem {
     SimpleDnsItem {
         add_common_hosts: settings.add_common_hosts,
         fake_ip: settings.fake_ip,

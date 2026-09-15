@@ -19,12 +19,15 @@
 //! proxy are `core_flow` concerns wired to Tauri event emission, and the
 //! outcome names the action so that adapter is a `match` with no policy in it.
 
+pub mod apply;
+pub mod save;
+
 use voya_contracts::AppSettingsV1;
 use voya_core::AppConfig;
 
 use crate::{
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
-    settings_save::{
+    settings::save::{
         apply_settings_side_effects, compensate_settings_side_effects, config_from_settings,
         saved_config_requires_runtime_restart, settings_from_app_config, settings_runtime_action,
         validate_app_settings, AppSettingsValidationError, SettingsRuntimeAction,

@@ -7,7 +7,7 @@ use voya_app::contract_map::{
 use voya_app::policy_groups::{group_test_url, PolicyGroupManager};
 use voya_contracts::{PolicyGroup, PolicyGroupListing, PolicyGroupRuntime};
 
-use super::{lifecycle::*, support::*, *};
+use super::{post_commit::*, support::*, *};
 
 /// How long the running core waits on each member's probe.
 const GROUP_DELAY_TIMEOUT_MS: u32 = 5_000;

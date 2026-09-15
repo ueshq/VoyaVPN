@@ -6,7 +6,7 @@ use voya_core::CoreType;
 use voya_platform::{
     coreinfo::CoreLaunch,
     process::{ProcessError, ProcessRole},
-    tun::{NativeTunError, TunBackend, TunCleanupError},
+    tun::{NativeTunError, TunBackend},
 };
 
 /// Bearer token the running core's Clash API requires.
@@ -241,8 +241,6 @@ pub enum SupervisorError {
     ElevationNotGranted(CoreType),
     #[error(transparent)]
     Process(#[from] ProcessError),
-    #[error(transparent)]
-    TunCleanup(#[from] TunCleanupError),
     #[error(transparent)]
     NativeTun(#[from] NativeTunError),
     #[error("process job error: {0}")]

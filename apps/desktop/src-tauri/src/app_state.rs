@@ -1,12 +1,12 @@
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 use voya_app::{
     config_mutation::ConfigMutationCoordinator,
     elevation::ElevationManager,
     proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
-    services::{AppConfig, AppServices},
+    services::AppServices,
     speedtest::SpeedtestManager,
     statistics::StatisticsManager,
     subscriptions::SubscriptionAutoUpdateScheduler,
@@ -39,10 +39,6 @@ pub(crate) struct AppState {
 impl AppState {
     pub(crate) fn services(&self) -> &AppServices {
         &self.services
-    }
-
-    pub(crate) fn config(&self) -> &RwLock<AppConfig> {
-        self.config_mutations.config_lock()
     }
 
     pub(crate) fn config_mutations(&self) -> &ConfigMutationCoordinator {

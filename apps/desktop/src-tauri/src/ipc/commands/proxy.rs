@@ -1,4 +1,4 @@
-use super::{lifecycle::*, support::*, *};
+use super::{post_commit::*, support::*, *};
 
 #[tauri::command]
 #[specta::specta]
@@ -81,21 +81,12 @@ pub async fn proxy_start_monitor(
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyMonitorStatus, AppError> {
     let clash_api = current_clash_api_access(&state).await;
-
-    match state.proxy_monitor_controller().start(
+    let result = state.proxy_monitor_controller().start(
         &clash_api,
         std::sync::Arc::new(crate::TauriProxyRuntimeEventSink { app: app.clone() }),
-    ) {
-        Ok(status) => {
-            emit_proxy_monitor_status(&app, &status);
-            Ok(status)
-        }
-        Err(error) => {
-            let message = error.to_string();
-            emit_proxy_monitor_status(&app, &ProxyMonitorStatus::failed(message));
-            Err(AppError::from(error))
-        }
-    }
+    );
+
+    report_monitor_result(&app, result)
 }
 
 #[tauri::command]
@@ -104,15 +95,23 @@ pub fn proxy_stop_monitor(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyMonitorStatus, AppError> {
-    match state.proxy_monitor_controller().stop() {
-        Ok(status) => {
-            emit_proxy_monitor_status(&app, &status);
-            Ok(status)
-        }
-        Err(error) => {
-            let message = error.to_string();
-            emit_proxy_monitor_status(&app, &ProxyMonitorStatus::failed(message));
-            Err(AppError::from(error))
-        }
-    }
+    report_monitor_result(&app, state.proxy_monitor_controller().stop())
+}
+
+/// Announces where the monitor ended up, a failure included, and returns it.
+fn report_monitor_result<E>(
+    app: &tauri::AppHandle,
+    result: Result<ProxyMonitorStatus, E>,
+) -> Result<ProxyMonitorStatus, AppError>
+where
+    E: std::fmt::Display,
+    AppError: From<E>,
+{
+    let status = match &result {
+        Ok(status) => status.clone(),
+        Err(error) => ProxyMonitorStatus::failed(error.to_string()),
+    };
+    emit_proxy_monitor_status(app, &status);
+
+    result.map_err(AppError::from)
 }

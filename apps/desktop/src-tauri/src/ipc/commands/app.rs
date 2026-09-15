@@ -1,4 +1,4 @@
-use super::{lifecycle::*, support::*, *};
+use super::{post_commit::*, support::*, *};
 
 #[tauri::command]
 #[specta::specta]
@@ -7,18 +7,18 @@ pub fn load_ui_preferences(
 ) -> Result<AppearanceSettings, AppError> {
     let config = current_config(&state);
 
-    Ok(voya_app::settings_save::settings_from_app_config(&config).appearance)
+    Ok(voya_app::settings::save::settings_from_app_config(&config).appearance)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn load_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSettingsV1, AppError> {
-    Ok(voya_app::settings_save::settings_from_app_config(
+    Ok(voya_app::settings::save::settings_from_app_config(
         &current_config(&state),
     ))
 }
 
-/// Thin adapter over `voya_app::settings_flow`.
+/// Thin adapter over `voya_app::settings`.
 ///
 /// Validation, the pre-commit OS side effects, the commit and both rollback
 /// paths are the transaction in voya-app, where they are unit-tested; the only
@@ -35,13 +35,10 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     let side_effects = TauriSettingsSideEffects {
         autostart: AutostartManager::new(),
     };
-    let outcome = voya_app::settings_flow::save_app_settings(
-        state.config_mutations(),
-        &side_effects,
-        &settings,
-    )
-    .await
-    .map_err(AppError::from)?;
+    let outcome =
+        voya_app::settings::save_app_settings(state.config_mutations(), &side_effects, &settings)
+            .await
+            .map_err(AppError::from)?;
 
     // The tray is a native menu built from `ui_item.current_language`, so it is
     // the one surface a language change cannot reach on its own: the webview

@@ -13,7 +13,7 @@ pub async fn system_proxy_status(
     run_blocking("system proxy status", move || {
         manager
             .runtime_status(&config)
-            .map(system_proxy_status_response)
+            .map(system_proxy_status_to_contract)
     })
     .await?
     .map_err(AppError::from)

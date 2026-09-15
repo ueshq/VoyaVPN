@@ -442,88 +442,6 @@ use macos::{
 // crate is ever added as a dependency.
 mod windows;
 use self::windows::{start_windows_tun_service, stop_windows_tun_service, windows_service_status};
-#[cfg(windows)]
-use crate::process::hidden_command;
-
-pub trait TunCleaner: Send + Sync {
-    fn cleanup_before_start(&self) -> Result<(), TunCleanupError>;
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct NoopTunCleaner;
-
-impl TunCleaner for NoopTunCleaner {
-    fn cleanup_before_start(&self) -> Result<(), TunCleanupError> {
-        Ok(())
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy)]
-pub struct PlatformTunCleaner;
-
-impl TunCleaner for PlatformTunCleaner {
-    fn cleanup_before_start(&self) -> Result<(), TunCleanupError> {
-        platform_cleanup_before_start()
-    }
-}
-
-#[cfg(windows)]
-fn platform_cleanup_before_start() -> Result<(), TunCleanupError> {
-    for device in WINDOWS_TUN_DEVICES {
-        let output = hidden_command(r"C:\Windows\System32\pnputil.exe")
-            .args([
-                "/remove-device",
-                &format!(r"SWD\Wintun\{{{}}}", device.guid),
-            ])
-            .output()
-            .map_err(TunCleanupError::Command)?;
-
-        windows_cleanup_result(
-            device,
-            output.status.success(),
-            output.status.code(),
-            &output.stderr,
-        )?;
-    }
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn platform_cleanup_before_start() -> Result<(), TunCleanupError> {
-    Ok(())
-}
-
-#[cfg(any(windows, test))]
-fn windows_cleanup_result(
-    device: &WindowsTunDevice,
-    success: bool,
-    status_code: Option<i32>,
-    stderr: &[u8],
-) -> Result<(), TunCleanupError> {
-    if success {
-        return Ok(());
-    }
-
-    Err(TunCleanupError::CommandFailed {
-        device: device.name,
-        status_code,
-        stderr: String::from_utf8_lossy(stderr).into_owned(),
-    })
-}
-
-#[derive(Debug, Error)]
-pub enum TunCleanupError {
-    #[error("failed to run Windows TUN cleanup command: {0}")]
-    Command(io::Error),
-    #[error(
-        "Windows TUN cleanup command failed for {device} with status {status_code:?}: {stderr}"
-    )]
-    CommandFailed {
-        device: &'static str,
-        status_code: Option<i32>,
-        stderr: String,
-    },
-}
 
 #[derive(Debug, Error)]
 pub enum NativeTunError {
@@ -600,11 +518,6 @@ mod tests {
     }
 
     #[test]
-    fn process_noop_tun_cleaner_is_deterministic_for_tests() {
-        NoopTunCleaner.cleanup_before_start().expect("noop cleanup");
-    }
-
-    #[test]
     fn native_tun_config_validation_requires_tun_inbound() {
         let path = temp_config_path("native-tun-missing.json");
         fs::write(
@@ -641,26 +554,6 @@ mod tests {
             .expect("tun inbound should pass");
 
         fs::remove_file(path).expect("remove temp config");
-    }
-
-    #[test]
-    fn process_windows_tun_cleanup_failure_is_returned() {
-        let error = windows_cleanup_result(
-            &WINDOWS_TUN_DEVICES[0],
-            false,
-            Some(1),
-            b"device removal failed",
-        )
-        .expect_err("failed cleanup should propagate");
-
-        assert!(matches!(
-            error,
-            TunCleanupError::CommandFailed {
-                device: "wintunsingbox_tun",
-                status_code: Some(1),
-                ref stderr,
-            } if stderr == "device removal failed"
-        ));
     }
 
     #[test]

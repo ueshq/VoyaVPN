@@ -1,4 +1,4 @@
-use super::{lifecycle::*, support::*, *};
+use super::{post_commit::*, support::*, *};
 
 #[tauri::command]
 #[specta::specta]
@@ -17,7 +17,7 @@ pub async fn run_speedtest<R: tauri::Runtime>(
         AppErrorSubsystem::Speedtest,
     )?;
     let config = current_config(&state);
-    let manager = speedtest_manager(&state);
+    let manager = state.speedtest_manager();
     let emit_app = app.clone();
     let result = state
         .services()
@@ -40,7 +40,7 @@ pub fn cancel_speedtest<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<SpeedtestStatus, AppError> {
-    let cancelled = speedtest_manager(&state).cancel().map_err(AppError::from)?;
+    let cancelled = state.speedtest_manager().cancel().map_err(AppError::from)?;
     if cancelled {
         // The cancellation already happened; a failed log emit must not turn a
         // successful command into an error.
@@ -54,13 +54,13 @@ pub fn cancel_speedtest<R: tauri::Runtime>(
         }
     }
 
-    speedtest_manager(&state).status().map_err(AppError::from)
+    state.speedtest_manager().status().map_err(AppError::from)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn speedtest_status(state: tauri::State<'_, AppState>) -> Result<SpeedtestStatus, AppError> {
-    speedtest_manager(&state).status().map_err(AppError::from)
+    state.speedtest_manager().status().map_err(AppError::from)
 }
 
 /// Looks up the exit address of the running connection through its local proxy.

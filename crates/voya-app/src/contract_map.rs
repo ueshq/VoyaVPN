@@ -143,35 +143,43 @@ pub fn process_candidate_to_contract(
     }
 }
 
+/// A settled supervisor state in the contract's vocabulary.
+///
+/// A settled supervisor never reports a transition, so `Connecting` and
+/// `Disconnecting` have no source here; they come from [`runtime_status_event`].
+#[must_use]
+pub const fn supervisor_state_to_contract(
+    state: crate::supervisor::SupervisorConnectionState,
+) -> voya_contracts::CoreState {
+    match state {
+        crate::supervisor::SupervisorConnectionState::CleanupPending => {
+            voya_contracts::CoreState::CleanupPending
+        }
+        crate::supervisor::SupervisorConnectionState::Disconnected => {
+            voya_contracts::CoreState::Disconnected
+        }
+        crate::supervisor::SupervisorConnectionState::Connected => {
+            voya_contracts::CoreState::Connected
+        }
+    }
+}
+
 /// The supervisor's own snapshot, as the runtime status command returns it.
 ///
 /// Pure, and read by three commands plus the tray, so it lives here rather than
-/// in the shell where nothing can assert the state mapping. A settled
-/// supervisor reports settled states, including pending cleanup; transitions come
-/// from [`runtime_status_event`].
+/// in the shell where nothing can assert the state mapping. It is the event
+/// below with the state read off the snapshot: the supervisor already clears the
+/// duration and tunnel outside a confirmed connection, so the event's gating
+/// changes nothing for a settled snapshot.
 #[must_use]
 pub fn runtime_status_response(
     snapshot: crate::supervisor::SupervisorSnapshot,
 ) -> voya_contracts::RuntimeStatusResponse {
-    voya_contracts::RuntimeStatusResponse {
-        connected_duration_ms: snapshot.connected_duration_ms,
-        state: match snapshot.state {
-            crate::supervisor::SupervisorConnectionState::CleanupPending => {
-                voya_contracts::CoreState::CleanupPending
-            }
-            crate::supervisor::SupervisorConnectionState::Disconnected => {
-                voya_contracts::CoreState::Disconnected
-            }
-            crate::supervisor::SupervisorConnectionState::Connected => {
-                voya_contracts::CoreState::Connected
-            }
-        },
-        active_profile_id: snapshot.active_profile_id,
-        active_tun_backend: snapshot.active_tun_backend.map(crate::tun::tun_backend),
-        main_pid: snapshot.main_pid,
-        pre_pid: snapshot.pre_pid,
-        running_core_type: snapshot.running_core_type.map(core_type_to_contract),
-    }
+    runtime_status_event(
+        supervisor_state_to_contract(snapshot.state),
+        None,
+        Some(&snapshot),
+    )
 }
 
 /// The same status, announced mid-transition by the core flow.
@@ -242,6 +250,43 @@ pub fn server_stat_to_contract(value: voya_core::ServerStatItem) -> voya_contrac
         today_up: value.today_up,
         today_down: value.today_down,
         date_now: value.date_now,
+    }
+}
+
+/// One statistics tick, as the transient `statistics` stream carries it.
+#[must_use]
+pub fn statistics_snapshot_to_contract(
+    snapshot: crate::statistics::StatisticsSnapshot,
+) -> voya_contracts::StatisticsSnapshot {
+    voya_contracts::StatisticsSnapshot {
+        active_profile_id: snapshot.active_profile_id,
+        proxy_upload_bytes_per_second: snapshot.proxy_upload_bytes_per_second,
+        proxy_download_bytes_per_second: snapshot.proxy_download_bytes_per_second,
+        direct_upload_bytes_per_second: snapshot.direct_upload_bytes_per_second,
+        direct_download_bytes_per_second: snapshot.direct_download_bytes_per_second,
+        upload_bytes_per_second: snapshot.upload_bytes_per_second,
+        download_bytes_per_second: snapshot.download_bytes_per_second,
+        server_stat: snapshot.server_stat.map(server_stat_to_contract),
+    }
+}
+
+#[must_use]
+pub fn system_proxy_status_to_contract(
+    status: voya_platform::sysproxy::SystemProxyStatus,
+) -> voya_contracts::SystemProxyStatusResponse {
+    voya_contracts::SystemProxyStatusResponse {
+        management: match status.management {
+            voya_platform::sysproxy::SystemProxyManagement::Automatic => {
+                voya_contracts::SystemProxyManagement::Automatic
+            }
+            voya_platform::sysproxy::SystemProxyManagement::Unsupported => {
+                voya_contracts::SystemProxyManagement::Unsupported
+            }
+        },
+        requested_mode: sysproxy_type_to_contract(status.requested_type),
+        effective_mode: sysproxy_type_to_contract(status.effective_type),
+        proxy: status.proxy,
+        exceptions: status.exceptions,
     }
 }
 

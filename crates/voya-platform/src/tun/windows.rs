@@ -7,6 +7,9 @@
 
 use super::*;
 
+#[cfg(windows)]
+use crate::process::hidden_command;
+
 use std::time::Duration;
 #[cfg(windows)]
 use std::time::Instant;

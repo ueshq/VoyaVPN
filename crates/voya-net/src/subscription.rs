@@ -1,5 +1,5 @@
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
-use voya_core::text::{decode_base64_payload, nonempty_str};
+use voya_core::text::{decode_base64_payload, nonempty_str, nonempty_string};
 
 use crate::{
     is_denied_local_host, DownloadClient, DownloadError, DownloadRequest, DownloadResponse, Result,
@@ -179,7 +179,7 @@ fn text_request(
 ) -> DownloadRequest {
     DownloadRequest {
         url,
-        user_agent: nonempty(source.user_agent.clone()),
+        user_agent: nonempty_string(Some(source.user_agent.as_str())),
         prefer_proxy: options.prefer_proxy,
         proxy_url: options.proxy_url.clone(),
         response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
@@ -265,14 +265,6 @@ fn build_subscription_url(
     drop(query);
 
     Ok(url.into())
-}
-
-fn nonempty(value: String) -> Option<String> {
-    if value.trim().is_empty() {
-        None
-    } else {
-        Some(value)
-    }
 }
 
 #[cfg(test)]

@@ -13,9 +13,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
-use tauri_specta::Event;
-use voya_app::tray::{tray_menu, tray_tooltip, TrayEntry, TrayItemId};
-use voya_app::tray_icon::with_connected_badge;
+use voya_app::tray::{tray_menu, tray_tooltip, with_connected_badge, TrayEntry, TrayItemId};
 use voya_platform::coreinfo::TargetOs;
 
 use crate::{
@@ -185,9 +183,11 @@ fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str) {
         TrayItemId::Quit => app.exit(0),
         TrayItemId::AllNodes => {
             residency::show_main_window(app);
-            if let Err(error) = AppEvent::SelectTab(ShellTabTarget::Profiles).emit(app) {
-                tracing::warn!(?error, "failed to open the node list from the tray");
-            }
+            commands::emit_or_warn(
+                app,
+                AppEvent::SelectTab(ShellTabTarget::Profiles),
+                "node list tab request",
+            );
         }
         action => {
             let app = app.clone();

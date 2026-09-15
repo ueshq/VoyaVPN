@@ -18,10 +18,7 @@ use voya_core::{
 use voya_contracts::SpeedtestOutcome;
 
 use super::*;
-use crate::{
-    dns::DnsSettings,
-    supervisor::{SupervisorConnectionState, SupervisorSnapshot},
-};
+use crate::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
 
 fn distinct_rule() -> RulesItem {
     RulesItem {
@@ -111,35 +108,33 @@ fn subscription_mapping_round_trips_every_distinct_field() {
 
 #[test]
 fn dns_mapping_round_trips_every_distinct_field() {
-    let settings = DnsSettings {
-        simple_dns_item: SimpleDnsItem {
-            add_common_hosts: Some(false),
-            fake_ip: Some(true),
-            global_fake_ip: Some(false),
-            block_binding_query: Some(true),
-            direct_dns: Some("direct-dns".to_string()),
-            remote_dns: Some("remote-dns".to_string()),
-            bootstrap_dns: Some("bootstrap-dns".to_string()),
-            strategy4_freedom: Some("direct-strategy".to_string()),
-            strategy4_proxy: Some("proxy-strategy".to_string()),
-            hosts: Some("hosts-value".to_string()),
-            direct_expected_ips: Some("direct-expected-ips".to_string()),
-        },
+    let item = SimpleDnsItem {
+        add_common_hosts: Some(false),
+        fake_ip: Some(true),
+        global_fake_ip: Some(false),
+        block_binding_query: Some(true),
+        direct_dns: Some("direct-dns".to_string()),
+        remote_dns: Some("remote-dns".to_string()),
+        bootstrap_dns: Some("bootstrap-dns".to_string()),
+        strategy4_freedom: Some("direct-strategy".to_string()),
+        strategy4_proxy: Some("proxy-strategy".to_string()),
+        hosts: Some("hosts-value".to_string()),
+        direct_expected_ips: Some("direct-expected-ips".to_string()),
     };
 
     assert_eq!(
-        dns_from_contract(dns_to_contract(settings.clone())),
-        settings
+        simple_dns_from_contract(simple_dns_to_contract(item.clone())),
+        item
     );
 
     let config = voya_core::AppConfig {
-        simple_dns_item: settings.simple_dns_item.clone(),
+        simple_dns_item: item.clone(),
         ..voya_core::AppConfig::default()
     };
-    let bundle = crate::settings_save::settings_from_app_config(&config);
-    assert_eq!(bundle.dns, dns_to_contract(settings.clone()));
-    let restored = crate::settings_save::config_from_settings(&bundle, &config);
-    assert_eq!(restored.simple_dns_item, settings.simple_dns_item);
+    let bundle = crate::settings::save::settings_from_app_config(&config);
+    assert_eq!(bundle.dns, simple_dns_to_contract(item.clone()));
+    let restored = crate::settings::save::config_from_settings(&bundle, &config);
+    assert_eq!(restored.simple_dns_item, item);
 }
 
 #[test]
@@ -575,6 +570,25 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
         disconnected.state,
         voya_contracts::CoreState::Disconnected
     ));
+
+    // Pending cleanup is settled, so the response must keep it rather than
+    // collapsing it into either neighbour.
+    let cleanup_pending = runtime_status_response(SupervisorSnapshot {
+        state: SupervisorConnectionState::CleanupPending,
+        active_profile_id: Some("stuck-node".to_string()),
+        main_pid: Some(4242),
+        ..SupervisorSnapshot::disconnected()
+    });
+    assert_eq!(
+        cleanup_pending.state,
+        voya_contracts::CoreState::CleanupPending
+    );
+    assert_eq!(
+        cleanup_pending.active_profile_id.as_deref(),
+        Some("stuck-node")
+    );
+    assert_eq!(cleanup_pending.main_pid, Some(4242));
+    assert_eq!(cleanup_pending.connected_duration_ms, None);
 }
 
 #[test]
@@ -658,4 +672,63 @@ fn server_stat_mapping_keeps_each_counter_in_its_own_field() {
     assert_eq!(contract.today_up, 53);
     assert_eq!(contract.today_down, 54);
     assert_eq!(contract.date_now, 55);
+}
+
+#[test]
+fn statistics_snapshot_mapping_keeps_each_rate_in_its_own_field() {
+    let contract = statistics_snapshot_to_contract(crate::statistics::StatisticsSnapshot {
+        active_profile_id: Some("profile".to_string()),
+        proxy_upload_bytes_per_second: 1.0,
+        proxy_download_bytes_per_second: 2.0,
+        direct_upload_bytes_per_second: 3.0,
+        direct_download_bytes_per_second: 4.0,
+        upload_bytes_per_second: 5.0,
+        download_bytes_per_second: 6.0,
+        server_stat: None,
+    });
+
+    assert_eq!(contract.active_profile_id.as_deref(), Some("profile"));
+    assert_eq!(contract.proxy_upload_bytes_per_second, 1.0);
+    assert_eq!(contract.proxy_download_bytes_per_second, 2.0);
+    assert_eq!(contract.direct_upload_bytes_per_second, 3.0);
+    assert_eq!(contract.direct_download_bytes_per_second, 4.0);
+    assert_eq!(contract.upload_bytes_per_second, 5.0);
+    assert_eq!(contract.download_bytes_per_second, 6.0);
+    assert!(contract.server_stat.is_none());
+}
+
+#[test]
+fn system_proxy_status_mapping_keeps_requested_and_effective_modes_apart() {
+    for (management, expected) in [
+        (
+            voya_platform::sysproxy::SystemProxyManagement::Automatic,
+            voya_contracts::SystemProxyManagement::Automatic,
+        ),
+        (
+            voya_platform::sysproxy::SystemProxyManagement::Unsupported,
+            voya_contracts::SystemProxyManagement::Unsupported,
+        ),
+    ] {
+        let contract =
+            system_proxy_status_to_contract(voya_platform::sysproxy::SystemProxyStatus {
+                management,
+                requested_type: voya_core::SysProxyType::ForcedChange,
+                effective_type: voya_core::SysProxyType::ForcedClear,
+                target_os: voya_platform::coreinfo::TargetOs::Linux,
+                proxy: Some("127.0.0.1:10808".to_string()),
+                exceptions: "localhost".to_string(),
+            });
+
+        assert_eq!(contract.management, expected);
+        assert_eq!(
+            contract.requested_mode,
+            voya_contracts::SystemProxyType::ForcedChange
+        );
+        assert_eq!(
+            contract.effective_mode,
+            voya_contracts::SystemProxyType::ForcedClear
+        );
+        assert_eq!(contract.proxy.as_deref(), Some("127.0.0.1:10808"));
+        assert_eq!(contract.exceptions, "localhost");
+    }
 }

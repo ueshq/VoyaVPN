@@ -1,6 +1,6 @@
 //! Applied snapshots belong to the runtime, not a renderer session. A successful
 //! operation acknowledges only its captured configuration, never a later save.
-use crate::settings_save::saved_config_requires_runtime_restart;
+use crate::settings::save::saved_config_requires_runtime_restart;
 use std::sync::{Arc, Mutex};
 use voya_contracts::{SettingsApplyAction, SettingsApplyStatus};
 use voya_core::AppConfig;

@@ -2,7 +2,6 @@ use reqwest::{Client, Proxy};
 use std::{
     collections::HashMap,
     future::Future,
-    pin::Pin,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -215,11 +214,6 @@ struct DownloadOutput<T> {
     attempts: Vec<DownloadAttempt>,
 }
 
-type DownloadRequestFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>;
-
-type DownloadBodyRequest<T> =
-    for<'a> fn(&'a Client, &'a str, Option<&'a str>, usize) -> DownloadRequestFuture<'a, T>;
-
 #[derive(Debug, Clone)]
 pub struct DownloadClient {
     direct_client: std::result::Result<Client, String>,
@@ -258,11 +252,7 @@ impl DownloadClient {
 
     pub async fn download_text(&self, request: DownloadRequest) -> Result<DownloadResponse> {
         let response = self
-            .request(
-                request,
-                DEFAULT_TEXT_RESPONSE_LIMIT_BYTES,
-                request_text_boxed,
-            )
+            .request(request, DEFAULT_TEXT_RESPONSE_LIMIT_BYTES, request_text)
             .await?;
 
         Ok(DownloadResponse {
@@ -275,11 +265,7 @@ impl DownloadClient {
 
     pub async fn download_bytes(&self, request: DownloadRequest) -> Result<DownloadBytesResponse> {
         let response = self
-            .request(
-                request,
-                DEFAULT_BINARY_RESPONSE_LIMIT_BYTES,
-                request_bytes_boxed,
-            )
+            .request(request, DEFAULT_BINARY_RESPONSE_LIMIT_BYTES, request_bytes)
             .await?;
 
         Ok(DownloadBytesResponse {
@@ -289,14 +275,15 @@ impl DownloadClient {
         })
     }
 
-    async fn request<T>(
+    async fn request<T, F>(
         &self,
         request: DownloadRequest,
         default_response_body_limit: usize,
-        request_body: DownloadBodyRequest<T>,
+        request_body: F,
     ) -> Result<DownloadOutput<T>>
     where
         T: DownloadBody,
+        F: AsyncFn(&Client, &str, Option<&str>, usize) -> Result<T>,
     {
         let mut attempts = Vec::new();
         let response_body_limit = request
@@ -517,24 +504,6 @@ fn map_download_body_error(url: &str, error: LimitedBodyReadError) -> DownloadEr
             source,
         },
     }
-}
-
-fn request_text_boxed<'a>(
-    client: &'a Client,
-    url: &'a str,
-    user_agent: Option<&'a str>,
-    response_body_limit: usize,
-) -> DownloadRequestFuture<'a, BodyWithHeaders<String>> {
-    Box::pin(request_text(client, url, user_agent, response_body_limit))
-}
-
-fn request_bytes_boxed<'a>(
-    client: &'a Client,
-    url: &'a str,
-    user_agent: Option<&'a str>,
-    response_body_limit: usize,
-) -> DownloadRequestFuture<'a, Vec<u8>> {
-    Box::pin(request_bytes(client, url, user_agent, response_body_limit))
 }
 
 async fn request<T, ExtractBody, ExtractFuture>(

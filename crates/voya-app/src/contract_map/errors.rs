@@ -33,7 +33,7 @@ use crate::{
     autostart::AutostartManagerError,
     config_mutation::ConfigMutationError,
     connection_mode::ConnectionModeError,
-    dns::DnsManagerError,
+    dns::DnsSettingsError,
     elevation::ElevationError,
     exports::ExportManagerError,
     input_safety::InputSafetyError,
@@ -42,8 +42,8 @@ use crate::{
     qr::QrCodeError,
     routing::RoutingManagerError,
     runtime::RuntimeError,
-    settings_flow::SettingsSaveError,
-    settings_save::AppSettingsValidationError,
+    settings::save::AppSettingsValidationError,
+    settings::SettingsSaveError,
     speedtest::SpeedtestError,
     subscriptions::SubscriptionManagerError,
     supervisor::SupervisorError,
@@ -435,7 +435,6 @@ impl From<SupervisorError> for AppError {
             SupervisorError::Process(ref source) => io(Sub::Runtime, source),
             SupervisorError::CommandChannelClosed
             | SupervisorError::ResponseDropped
-            | SupervisorError::TunCleanup(_)
             | SupervisorError::NativeTun(_)
             | SupervisorError::Job(_)
             | SupervisorError::Elevation(_)
@@ -534,10 +533,10 @@ impl From<QrCodeError> for AppError {
     }
 }
 
-impl From<DnsManagerError> for AppError {
-    fn from(error: DnsManagerError) -> Self {
+impl From<DnsSettingsError> for AppError {
+    fn from(error: DnsSettingsError) -> Self {
         match error {
-            DnsManagerError::Validation(issues) => Self::validation(
+            DnsSettingsError::Validation(issues) => Self::validation(
                 Sub::Dns,
                 "DNS settings validation failed".to_string(),
                 issues,

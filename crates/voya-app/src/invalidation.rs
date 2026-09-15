@@ -12,7 +12,7 @@
 //!   `queryKey` some `useQuery` in `apps/desktop/src` really uses; the frontend
 //!   vitest `query-keys.test.ts` fails when that stops being true.
 //! - **`config_changed` implies `AppSettings`.** The settings bundle
-//!   (`settings_save::settings_from_app_config`) is a pure projection of
+//!   (`settings::save::settings_from_app_config`) is a pure projection of
 //!   `AppConfig`, so a command that rewrote the persisted config can have made
 //!   the cached bundle stale. Callers compute it as
 //!   `original != *mutation.config()`, which over-approximates in the safe

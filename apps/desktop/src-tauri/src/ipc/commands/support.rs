@@ -141,20 +141,12 @@ pub(super) fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
     }
 }
 
-pub(super) fn speedtest_manager(state: &AppState) -> SpeedtestManager {
-    state.speedtest_manager()
-}
-
 pub(super) fn tun_manager(state: &AppState) -> TunManager {
     // A fresh manager per command is fine — it is a handle, not a resource —
     // but the PlugInKit registration memo has to outlive it, or every status
     // read forks `pluginkit` again.
     TunManager::new(state.elevation_manager().state())
         .with_provider_registration_cache(state.provider_registration_cache())
-}
-
-pub(super) fn update_manager(state: &AppState) -> UpdateManager<'_> {
-    state.services().updates()
 }
 
 /// Runs blocking OS work off the caller's thread.
@@ -220,20 +212,25 @@ pub(super) fn runtime_proxy_url(
     app_runtime_proxy_url(prefer_proxy, proxy_url, config, TargetOs::current())
 }
 
-pub(super) fn system_proxy_status_response(status: SystemProxyStatus) -> SystemProxyStatusResponse {
-    SystemProxyStatusResponse {
-        management: match status.management {
-            voya_platform::sysproxy::SystemProxyManagement::Automatic => {
-                voya_contracts::SystemProxyManagement::Automatic
-            }
-            voya_platform::sysproxy::SystemProxyManagement::Unsupported => {
-                voya_contracts::SystemProxyManagement::Unsupported
-            }
-        },
-        requested_mode: voya_app::contract_map::sysproxy_type_to_contract(status.requested_type),
-        effective_mode: voya_app::contract_map::sysproxy_type_to_contract(status.effective_type),
-        proxy: status.proxy,
-        exceptions: status.exceptions,
+/// Emits one typed event, failing the way a command reports its own errors.
+pub(crate) fn emit_event<R, E>(app: &tauri::AppHandle<R>, event: E) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+    E: Event + serde::Serialize + Clone,
+{
+    event
+        .emit(app)
+        .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
+}
+
+/// Emits one typed event whose loss must not fail the work it reports.
+pub(crate) fn emit_or_warn<R, E>(app: &tauri::AppHandle<R>, event: E, what: &'static str)
+where
+    R: tauri::Runtime,
+    E: Event + serde::Serialize + Clone,
+{
+    if let Err(error) = event.emit(app) {
+        tracing::warn!(?error, "failed to emit {what}");
     }
 }
 
@@ -281,13 +278,14 @@ fn emit_log_line<R>(
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::LogLine(LogLineEvent {
-        id: next_log_line_id(),
-        level,
-        body,
-    })
-    .emit(app)
-    .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
+    emit_event(
+        app,
+        TransientStreamEvent::LogLine(LogLineEvent {
+            id: next_log_line_id(),
+            level,
+            body,
+        }),
+    )
 }
 
 pub(crate) fn emit_core_state<R>(
@@ -299,27 +297,22 @@ pub(crate) fn emit_core_state<R>(
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::CoreState(runtime_status_event(state, active_profile_id, snapshot))
-        .emit(app)
-        .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
+    emit_event(
+        app,
+        TransientStreamEvent::CoreState(runtime_status_event(state, active_profile_id, snapshot)),
+    )
 }
 
 pub(crate) fn emit_statistics_zero<R>(app: &tauri::AppHandle<R>) -> Result<(), AppError>
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::Statistics(crate::ipc::events::StatisticsSnapshot {
-        active_profile_id: None,
-        proxy_upload_bytes_per_second: 0.0,
-        proxy_download_bytes_per_second: 0.0,
-        direct_upload_bytes_per_second: 0.0,
-        direct_download_bytes_per_second: 0.0,
-        upload_bytes_per_second: 0.0,
-        download_bytes_per_second: 0.0,
-        server_stat: None,
-    })
-    .emit(app)
-    .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
+    emit_event(
+        app,
+        TransientStreamEvent::Statistics(statistics_snapshot_to_contract(
+            voya_app::statistics::StatisticsSnapshot::zero(),
+        )),
+    )
 }
 
 pub(super) fn emit_speedtest_result<R>(
@@ -329,9 +322,7 @@ pub(super) fn emit_speedtest_result<R>(
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::SpeedtestResult(result.clone())
-        .emit(app)
-        .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
+    emit_event(app, TransientStreamEvent::SpeedtestResult(result.clone()))
 }
 
 /// A change that was already committed, whose follow-up work failed.
@@ -363,15 +354,15 @@ pub(super) fn report_post_commit_error<R>(
     if let Err(error) = emit_app_log(app, log_level, LogCode::PostCommitFailed, Some(detail)) {
         tracing::warn!(?error, "failed to emit post-commit runtime log");
     }
-    if let Err(error) = AppEvent::Notice(AppNotice {
-        level,
-        code,
-        detail: Some(detail.to_string()),
-    })
-    .emit(app)
-    {
-        tracing::warn!(?error, "failed to emit post-commit notice");
-    }
+    emit_or_warn(
+        app,
+        AppEvent::Notice(AppNotice {
+            level,
+            code,
+            detail: Some(detail.to_string()),
+        }),
+        "post-commit notice",
+    );
 }
 
 pub(super) fn app_updater_state_for_error(error: &tauri_plugin_updater::Error) -> AppUpdaterState {

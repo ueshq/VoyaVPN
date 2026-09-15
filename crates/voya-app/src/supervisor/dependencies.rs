@@ -11,10 +11,7 @@ use voya_platform::{
         NoopProcessJobFactory, PlatformProcessJobFactory, ProcessJobFactory, ProcessRunner,
         StdProcessRunner,
     },
-    tun::{
-        NativeTunController, NoopNativeTunController, NoopTunCleaner, PlatformNativeTunController,
-        PlatformTunCleaner, TunCleaner,
-    },
+    tun::{NativeTunController, NoopNativeTunController, PlatformNativeTunController},
 };
 
 #[derive(Clone)]
@@ -22,7 +19,6 @@ pub struct SupervisorDeps {
     pub runner: Arc<dyn ProcessRunner>,
     pub elevation: Arc<ElevationState>,
     pub job_factory: Arc<dyn ProcessJobFactory>,
-    pub tun_cleaner: Arc<dyn TunCleaner>,
     pub native_tun_controller: Arc<dyn NativeTunController>,
     pub native_tun_health_interval: Duration,
     pub event_sink: Arc<dyn SupervisorEventSink>,
@@ -38,7 +34,6 @@ impl SupervisorDeps {
             runner,
             elevation,
             job_factory: Arc::new(NoopProcessJobFactory),
-            tun_cleaner: Arc::new(NoopTunCleaner),
             native_tun_controller: Arc::new(NoopNativeTunController),
             native_tun_health_interval: Duration::from_secs(3),
             event_sink: Arc::new(NoopSupervisorEventSink),
@@ -65,7 +60,6 @@ impl SupervisorDeps {
             runner,
             elevation,
             job_factory: Arc::new(PlatformProcessJobFactory),
-            tun_cleaner: Arc::new(PlatformTunCleaner),
             native_tun_controller: Arc::new(PlatformNativeTunController),
             native_tun_health_interval: Duration::from_secs(3),
             event_sink: Arc::new(NoopSupervisorEventSink),
@@ -90,12 +84,6 @@ impl SupervisorDeps {
     #[must_use]
     pub fn with_job_factory(mut self, job_factory: Arc<dyn ProcessJobFactory>) -> Self {
         self.job_factory = job_factory;
-        self
-    }
-
-    #[must_use]
-    pub fn with_tun_cleaner(mut self, tun_cleaner: Arc<dyn TunCleaner>) -> Self {
-        self.tun_cleaner = tun_cleaner;
         self
     }
 

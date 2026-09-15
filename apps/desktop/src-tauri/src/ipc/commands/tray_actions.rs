@@ -8,7 +8,7 @@ use voya_app::services::TrafficMode;
 use voya_app::tray::{TrayGroup, TrayMenuInput, TrayNode};
 use voya_contracts::{AppErrorKind, CloseRequestAction};
 
-use super::{lifecycle::*, support::*, *};
+use super::{post_commit::*, support::*, *};
 
 /// Carries out the user's answer to the close prompt, optionally keeping it
 /// as the close action from now on.
@@ -22,7 +22,7 @@ pub async fn resolve_close_request<R: tauri::Runtime>(
 ) -> Result<(), AppError> {
     if remember {
         let committed = mutate_config(&state, async |_unit_of_work, config| {
-            Ok(voya_app::residency::remember_close_action(config, action))
+            Ok(voya_app::lifecycle::remember_close_action(config, action))
         })
         .await?;
         if committed.config_changed {

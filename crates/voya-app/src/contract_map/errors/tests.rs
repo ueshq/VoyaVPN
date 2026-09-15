@@ -585,7 +585,7 @@ fn qr_and_dns_failures_are_classified() {
         ),
     ]);
 
-    let dns: AppError = DnsManagerError::Validation(vec![ValidationIssue::new(
+    let dns: AppError = DnsSettingsError::Validation(vec![ValidationIssue::new(
         "direct",
         voya_contracts::ValidationCode::DnsAddressEmpty,
     )])
@@ -624,7 +624,7 @@ fn settings_failures_reach_the_field_and_keep_a_typed_side_effect() {
     // A rejected side effect keeps the adapter's own already-typed error rather
     // than being relabelled as a settings problem.
     let side_effect: AppError = SettingsSaveError::SideEffect {
-        stage: crate::settings_save::SettingsSideEffectStage::Autostart,
+        stage: crate::settings::save::SettingsSideEffectStage::Autostart,
         source: AppError::internal(
             AppErrorSubsystem::Autostart,
             "autostart refused".to_string(),
@@ -753,7 +753,6 @@ mod guards {
             | SupervisorError::ResponseDropped
             | SupervisorError::ElevationNotGranted(_)
             | SupervisorError::Process(_)
-            | SupervisorError::TunCleanup(_)
             | SupervisorError::NativeTun(_)
             | SupervisorError::Job(_)
             | SupervisorError::Elevation(_)

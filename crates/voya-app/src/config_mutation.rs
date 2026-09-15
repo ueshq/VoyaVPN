@@ -12,11 +12,7 @@ use voya_platform::coreinfo::TargetOs;
 
 use crate::{
     connection_mode::enforce_platform_connection_mode,
-    dns::DnsManager,
-    profiles::ProfileManager,
-    routing::RoutingManager,
-    settings_save::{settings_from_app_config, state_from_app_config},
-    subscriptions::SubscriptionManager,
+    settings::save::{settings_from_app_config, state_from_app_config},
 };
 
 pub type SharedAppConfig = Arc<RwLock<AppConfig>>;
@@ -53,16 +49,6 @@ impl ConfigMutationCoordinator {
     pub fn with_target_os(mut self, target_os: TargetOs) -> Self {
         self.platform = Some(target_os);
         self
-    }
-
-    #[must_use]
-    pub fn shared_config(&self) -> SharedAppConfig {
-        Arc::clone(&self.config)
-    }
-
-    #[must_use]
-    pub fn config_lock(&self) -> &RwLock<AppConfig> {
-        self.config.as_ref()
     }
 
     #[must_use]
@@ -158,26 +144,6 @@ impl ConfigMutationGuard<'_> {
     #[must_use]
     pub fn split(&mut self) -> (&UnitOfWork, &mut AppConfig) {
         (&self.unit_of_work, &mut self.working_config)
-    }
-
-    #[must_use]
-    pub fn profiles(&self) -> ProfileManager<'_> {
-        ProfileManager::new_in(&self.unit_of_work)
-    }
-
-    #[must_use]
-    pub fn subscriptions(&self) -> SubscriptionManager<'_> {
-        SubscriptionManager::new_in(&self.unit_of_work)
-    }
-
-    #[must_use]
-    pub fn routings(&self) -> RoutingManager<'_> {
-        RoutingManager::new_in(&self.unit_of_work)
-    }
-
-    #[must_use]
-    pub fn dns(&self) -> DnsManager<'_> {
-        DnsManager::new_in(&self.unit_of_work)
     }
 
     pub async fn commit(mut self) -> Result<AppConfig, ConfigMutationError> {

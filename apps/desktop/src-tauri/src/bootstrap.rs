@@ -19,7 +19,6 @@ use voya_app::{
     elevation::ElevationManager,
     proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
     services::AppServices,
-    statistics::SharedAppConfigSource,
     supervisor::{CoreSupervisor, SupervisorDeps},
     sysproxy::SystemProxyManager,
     tun::ProviderRegistrationCache,
@@ -134,7 +133,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     );
     let statistics_manager = services.spawn_statistics(
         supervisor.clone(),
-        Arc::new(SharedAppConfigSource::new(Arc::clone(&shared_config))),
+        Arc::clone(&shared_config),
         Arc::new(TauriStatisticsEventSink {
             app: app.handle().clone(),
         }),

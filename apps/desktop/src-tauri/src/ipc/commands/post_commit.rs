@@ -1,3 +1,6 @@
+//! What follows a committed change: cache invalidation, the core restart it
+//! may need, and the status events it changes.
+
 use super::{support::*, *};
 
 /// Broadcasts one invalidation bundle and reports a failed emit as a notice.
@@ -155,9 +158,11 @@ pub(super) fn emit_proxy_monitor_status<R>(app: &tauri::AppHandle<R>, status: &P
 where
     R: tauri::Runtime,
 {
-    if let Err(error) = TransientStreamEvent::ProxyMonitorStatus(status.clone()).emit(app) {
-        tracing::warn!(?error, ?status, "failed to emit proxy monitor status event");
-    }
+    emit_or_warn(
+        app,
+        TransientStreamEvent::ProxyMonitorStatus(status.clone()),
+        "proxy monitor status event",
+    );
 }
 
 pub(crate) fn emit_tun_changed<R>(
@@ -167,9 +172,7 @@ pub(crate) fn emit_tun_changed<R>(
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::TunChanged(status.clone())
-        .emit(app)
-        .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
+    emit_event(app, TransientStreamEvent::TunChanged(status.clone()))
 }
 
 /// Names one committed configuration change for the restart that follows it.
@@ -273,7 +276,8 @@ pub(super) fn emit_sysproxy_changed<R>(
 where
     R: tauri::Runtime,
 {
-    TransientStreamEvent::SysProxyChanged(system_proxy_status_response(status.clone()))
-        .emit(app)
-        .map_err(|error| AppError::internal(AppErrorSubsystem::App, error.to_string()))
+    emit_event(
+        app,
+        TransientStreamEvent::SysProxyChanged(system_proxy_status_to_contract(status.clone())),
+    )
 }

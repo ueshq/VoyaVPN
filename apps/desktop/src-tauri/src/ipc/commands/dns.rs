@@ -1,4 +1,6 @@
-use super::{lifecycle::*, support::*, *};
+use voya_app::dns::{normalize_simple_dns, validated_settings};
+
+use super::{post_commit::*, support::*, *};
 
 #[tauri::command]
 #[specta::specta]
@@ -7,13 +9,9 @@ pub async fn load_dns_settings(
 ) -> Result<DnsSettingsContract, AppError> {
     let config = current_config(&state);
 
-    state
-        .services()
-        .dns()
-        .load_settings(&config.simple_dns_item)
-        .await
-        .map(dns_to_contract)
-        .map_err(AppError::from)
+    Ok(simple_dns_to_contract(normalize_simple_dns(
+        config.simple_dns_item,
+    )))
 }
 
 #[tauri::command]
@@ -23,15 +21,13 @@ pub async fn save_dns_settings<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     settings: DnsSettingsContract,
 ) -> Result<DnsSettingsContract, AppError> {
-    let saved = mutate_config(&state, async |unit_of_work, config| {
-        let saved = DnsManager::new_in(unit_of_work)
-            .save_settings(dns_from_contract(settings))
-            .await?;
-        config.simple_dns_item = saved.simple_dns_item.clone();
-        Ok::<_, AppError>(saved)
+    let saved = validated_settings(simple_dns_from_contract(settings))?;
+    mutate_config(&state, async |_unit_of_work, config| {
+        config.simple_dns_item = saved.clone();
+        Ok::<_, AppError>(())
     })
     .await?;
     emit_dns_invalidation(&app, "dns-settings-saved");
 
-    Ok(dns_to_contract(saved.value))
+    Ok(simple_dns_to_contract(saved))
 }

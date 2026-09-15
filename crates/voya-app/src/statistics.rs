@@ -9,7 +9,7 @@ use tokio::{
     task::JoinHandle,
     time,
 };
-use voya_core::{AppConfig, CoreType, ServerStatItem};
+use voya_core::{text::nonempty_string, AppConfig, CoreType, ServerStatItem};
 use voya_db::{Database, DbError};
 use voya_net::clash::{
     ClashTraffic, ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource,
@@ -17,6 +17,7 @@ use voya_net::clash::{
 
 use crate::{
     backoff::{sleep_or_shutdown, WebSocketReconnectBackoff},
+    config_mutation::SharedAppConfig,
     proxy_runtime::proxy_runtime_endpoint,
     supervisor::{CoreSupervisor, SupervisorSnapshot},
 };
@@ -114,38 +115,23 @@ impl StatisticsConfigSnapshot {
     #[must_use]
     pub fn from_app_config(config: &AppConfig) -> Self {
         Self {
-            active_profile_id: nonempty(config.index_id.clone()),
+            active_profile_id: nonempty_string(Some(config.index_id.as_str())),
         }
     }
-}
-
-pub trait StatisticsConfigSource: Send + Sync {
-    fn snapshot(&self) -> StatisticsConfigSnapshot;
 }
 
 pub trait StatisticsEventSink: Send + Sync {
     fn emit_statistics(&self, snapshot: StatisticsSnapshot);
 }
 
-#[derive(Clone)]
-pub struct SharedAppConfigSource {
-    config: Arc<RwLock<AppConfig>>,
-}
-
-impl SharedAppConfigSource {
-    #[must_use]
-    pub fn new(config: Arc<RwLock<AppConfig>>) -> Self {
-        Self { config }
-    }
-}
-
-impl StatisticsConfigSource for SharedAppConfigSource {
-    fn snapshot(&self) -> StatisticsConfigSnapshot {
-        self.config
-            .read()
-            .map(|config| StatisticsConfigSnapshot::from_app_config(&config))
-            .unwrap_or_else(|_| StatisticsConfigSnapshot::from_app_config(&AppConfig::default()))
-    }
+/// The statistics toggles, read from the live configuration on every tick.
+///
+/// A poisoned lock reads as the defaults rather than stopping the loop.
+fn statistics_config(config: &RwLock<AppConfig>) -> StatisticsConfigSnapshot {
+    config
+        .read()
+        .map(|config| StatisticsConfigSnapshot::from_app_config(&config))
+        .unwrap_or_else(|_| StatisticsConfigSnapshot::from_app_config(&AppConfig::default()))
 }
 
 #[derive(Clone)]
@@ -164,7 +150,7 @@ impl StatisticsManager {
     pub fn spawn(
         database: Database,
         supervisor: CoreSupervisor,
-        config_source: Arc<dyn StatisticsConfigSource>,
+        config: SharedAppConfig,
         event_sink: Arc<dyn StatisticsEventSink>,
     ) -> Self {
         let (sample_tx, sample_rx) = mpsc::channel(STATISTICS_CHANNEL_SIZE);
@@ -173,7 +159,7 @@ impl StatisticsManager {
         let handles = vec![
             tokio::spawn(run_statistics_aggregator(
                 database,
-                config_source,
+                config,
                 event_sink,
                 sample_rx,
                 shutdown_rx.clone(),
@@ -351,7 +337,7 @@ pub fn current_day_marker() -> i64 {
 
 async fn run_statistics_aggregator(
     database: Database,
-    config_source: Arc<dyn StatisticsConfigSource>,
+    config: SharedAppConfig,
     event_sink: Arc<dyn StatisticsEventSink>,
     mut sample_rx: mpsc::Receiver<ServerSpeedSample>,
     mut shutdown: watch::Receiver<bool>,
@@ -384,7 +370,7 @@ async fn run_statistics_aggregator(
             _ = interval.tick() => {
                 let sample = pending;
                 pending = ServerSpeedSample::default();
-                let config = config_source.snapshot();
+                let config_snapshot = statistics_config(&config);
                 let current_day = current_day_marker();
                 if current_day != day_marker {
                     // Buffered bytes were measured yesterday, and the rollover
@@ -401,7 +387,7 @@ async fn run_statistics_aggregator(
                 }
                 match record_statistics_tick(
                     &database,
-                    &config,
+                    &config_snapshot,
                     &mut buffer,
                     sample,
                     day_marker,
@@ -623,11 +609,6 @@ fn update_active_identity(
 /// dialling 127.0.0.1:0.
 pub(crate) fn available_state_port(port: u16) -> Option<u16> {
     (port != 0).then_some(port)
-}
-
-fn nonempty(value: String) -> Option<String> {
-    let value = value.trim().to_string();
-    (!value.is_empty()).then_some(value)
 }
 
 #[cfg(test)]
