@@ -225,10 +225,7 @@ impl<'db> RoutingManager<'db> {
         Ok(routing)
     }
 
-    pub async fn ensure_active_routing(
-        &self,
-        config: &mut AppConfig,
-    ) -> Result<Option<RoutingItem>> {
+    async fn ensure_active_routing(&self, config: &mut AppConfig) -> Result<Option<RoutingItem>> {
         if let Some(active) = self.database.routings().active().await? {
             config
                 .routing_basic_item

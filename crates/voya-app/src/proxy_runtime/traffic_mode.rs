@@ -208,7 +208,6 @@ mod tests {
             active_group_id: None,
             main_pid: None,
             pre_pid: None,
-            running_core_type: None,
             clash_api_port: connected.then_some(19371),
             clash_api_secret: access().secret,
         }

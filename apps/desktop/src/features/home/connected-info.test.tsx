@@ -10,7 +10,7 @@ import { ConnectedInfo } from "./connected-info";
 
 const connected: RuntimeStatusResponse = {
   state: "connected", connectedDurationMs: 1458000, activeProfileId: "tokyo",
-  activeTunBackend: null, mainPid: 42, prePid: null, runningCoreType: "singBox",
+  activeTunBackend: null, mainPid: 42, prePid: null,
 };
 
 function Metrics() {

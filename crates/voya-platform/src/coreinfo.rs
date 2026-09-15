@@ -1,150 +1,38 @@
 use std::{
-    collections::BTreeMap,
     fs, io,
     path::{Path, PathBuf},
 };
 
 use thiserror::Error;
-use voya_core::CoreType;
 
 use crate::paths::{core_seed_resource_dir, AppPaths};
 
-const SING_BOX_EXES: &[&str] = &["sing-box", "sing-box-client"];
-
-const EMPTY_ENV: &[CoreEnvTemplate] = &[];
-
-const CORE_INFOS: &[CoreInfo] = &[CoreInfo {
-    core_type: CoreType::sing_box,
-    executables: CoreExecutables::Static(SING_BOX_EXES),
-    arguments: CoreArguments::Static("run -c {0} --disable-color"),
-    url: "https://github.com/SagerNet/sing-box/releases",
-    release_api_url: Some("https://api.github.com/repos/SagerNet/sing-box/releases"),
-    match_keyword: Some("sing-box"),
-    version_arg: Some("version"),
-    absolute_path: false,
-    environment: EMPTY_ENV,
-}];
-
-const SEEDED_CORE_TYPES: &[CoreType] = &[CoreType::sing_box];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CoreInfo {
-    pub core_type: CoreType,
-    pub executables: CoreExecutables,
-    pub arguments: CoreArguments,
-    pub url: &'static str,
-    pub release_api_url: Option<&'static str>,
-    pub match_keyword: Option<&'static str>,
-    pub version_arg: Option<&'static str>,
-    pub absolute_path: bool,
-    pub environment: &'static [CoreEnvTemplate],
-}
-
-impl CoreInfo {
-    #[must_use]
-    pub fn executable_names(&self) -> &'static [&'static str] {
-        self.executable_names_for_os(TargetOs::current())
-    }
-
-    #[must_use]
-    pub fn executable_names_for_os(&self, os: TargetOs) -> &'static [&'static str] {
-        let _ = os;
-        match self.executables {
-            CoreExecutables::Static(names) => names,
-        }
-    }
-
-    #[must_use]
-    pub fn argument_template(&self, _paths: &AppPaths) -> String {
-        match self.arguments {
-            CoreArguments::Static(template) => template.to_string(),
-        }
-    }
-
-    #[must_use]
-    pub fn config_argument(&self, paths: &AppPaths, config_file: impl AsRef<Path>) -> String {
-        if self.absolute_path {
-            quote_path(paths.bin_config_file(config_file))
-        } else {
-            config_file.as_ref().to_string_lossy().into_owned()
-        }
-    }
-
-    #[must_use]
-    pub fn resolve_arguments(&self, paths: &AppPaths, config_file: impl AsRef<Path>) -> String {
-        let config_argument = self.config_argument(paths, config_file);
-        self.argument_template(paths)
-            .replace("{0}", &config_argument)
-    }
-
-    #[must_use]
-    pub fn resolve_environment(
-        &self,
-        paths: &AppPaths,
-        config_file: impl AsRef<Path>,
-    ) -> BTreeMap<String, String> {
-        let config_argument = self.config_argument(paths, config_file);
-        self.environment
-            .iter()
-            .map(|template| {
-                let value = match template.value {
-                    EnvValueTemplate::BinDir => paths.bin_dir().to_string_lossy().into_owned(),
-                    EnvValueTemplate::CoreBinDir => paths
-                        .core_bin_dir(core_type_dir_name(self.core_type))
-                        .to_string_lossy()
-                        .into_owned(),
-                    EnvValueTemplate::ConfigArgument => config_argument.clone(),
-                };
-                (template.key.to_string(), value)
-            })
-            .collect()
-    }
-
-    #[must_use]
-    pub fn resolve_launch(
-        &self,
-        executable: impl Into<PathBuf>,
-        paths: &AppPaths,
-        config_file: impl AsRef<Path>,
-    ) -> CoreLaunch {
-        CoreLaunch {
-            executable: executable.into(),
-            arguments: self.resolve_arguments(paths, config_file.as_ref()),
-            working_dir: paths.bin_config_dir().to_path_buf(),
-            environment: self.resolve_environment(paths, config_file),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CoreExecutables {
-    Static(&'static [&'static str]),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CoreArguments {
-    Static(&'static str),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CoreEnvTemplate {
-    pub key: &'static str,
-    pub value: EnvValueTemplate,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EnvValueTemplate {
-    BinDir,
-    CoreBinDir,
-    ConfigArgument,
-}
+/// Executable names probed for the sing-box core, in order.
+pub const SING_BOX_EXECUTABLES: &[&str] = &["sing-box", "sing-box-client"];
+/// The directory under `bin/`, and under the packaged core seeds, that holds sing-box.
+pub const CORE_DIR_NAME: &str = "sing_box";
+const SING_BOX_ARGUMENTS: &str = "run -c {0} --disable-color";
+const SING_BOX_RELEASES_URL: &str = "https://github.com/SagerNet/sing-box/releases";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreLaunch {
     pub executable: PathBuf,
     pub arguments: String,
     pub working_dir: PathBuf,
-    pub environment: BTreeMap<String, String>,
+}
+
+/// How sing-box runs `config_file`, from the runtime config directory.
+#[must_use]
+pub fn core_launch(
+    executable: impl Into<PathBuf>,
+    paths: &AppPaths,
+    config_file: impl AsRef<Path>,
+) -> CoreLaunch {
+    CoreLaunch {
+        executable: executable.into(),
+        arguments: SING_BOX_ARGUMENTS.replace("{0}", &config_file.as_ref().to_string_lossy()),
+        working_dir: paths.bin_config_dir().to_path_buf(),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,7 +44,6 @@ pub enum CoreSeedCopyStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreSeedCopyOutcome {
-    pub core_type: CoreType,
     pub seed_dir: PathBuf,
     pub target_dir: PathBuf,
     pub status: CoreSeedCopyStatus,
@@ -189,11 +76,8 @@ impl TargetOs {
 
 #[derive(Debug, Error)]
 pub enum CoreInfoError {
-    #[error("no core info entry for {0:?}")]
-    MissingCoreInfo(CoreType),
-    #[error("core {core_type:?} executable not found in {search_dir}; expected one of: {candidates}; download: {url}")]
+    #[error("core sing_box executable not found in {search_dir}; expected one of: {candidates}; download: {url}")]
     ExecutableNotFound {
-        core_type: CoreType,
         search_dir: PathDisplay,
         candidates: String,
         url: &'static str,
@@ -228,30 +112,6 @@ impl std::fmt::Display for PathDisplay {
 }
 
 #[must_use]
-pub fn get_core_info(core_type: CoreType) -> Option<&'static CoreInfo> {
-    CORE_INFOS
-        .iter()
-        .find(|core_info| core_info.core_type == core_type)
-}
-
-#[must_use]
-pub fn seeded_core_types() -> &'static [CoreType] {
-    SEEDED_CORE_TYPES
-}
-
-#[must_use]
-pub const fn core_type_name(core_type: CoreType) -> &'static str {
-    match core_type {
-        CoreType::sing_box => "sing_box",
-    }
-}
-
-#[must_use]
-pub const fn core_type_dir_name(core_type: CoreType) -> &'static str {
-    core_type_name(core_type)
-}
-
-#[must_use]
 pub fn executable_name_for_os(name: &str, os: TargetOs) -> String {
     if os == TargetOs::Windows && !name.to_ascii_lowercase().ends_with(".exe") {
         format!("{name}.exe")
@@ -265,24 +125,20 @@ pub fn executable_name_for_current_os(name: &str) -> String {
     executable_name_for_os(name, TargetOs::current())
 }
 
-pub fn discover_executable(
-    paths: &AppPaths,
-    core_info: &CoreInfo,
-) -> Result<PathBuf, CoreInfoError> {
-    let search_dir = paths.core_bin_dir(core_type_dir_name(core_info.core_type));
-    fs::create_dir_all(&search_dir).map_err(|source| CoreInfoError::CreateCoreBinDir {
-        path: search_dir.clone(),
-        source,
-    })?;
+/// The sing-box executables `dir` may hold, spelled for `os`.
+fn executable_candidates(dir: &Path, os: TargetOs) -> impl Iterator<Item = PathBuf> + '_ {
+    SING_BOX_EXECUTABLES
+        .iter()
+        .map(move |name| dir.join(executable_name_for_os(name, os)))
+}
 
-    for name in core_info.executable_names() {
-        let executable_name = executable_name_for_current_os(name);
-        let candidate = search_dir.join(executable_name);
+/// The first candidate that exists as a regular file.
+fn first_existing_file(
+    candidates: impl IntoIterator<Item = PathBuf>,
+) -> Result<Option<PathBuf>, CoreInfoError> {
+    for candidate in candidates {
         match candidate.try_exists() {
-            Ok(true) if candidate.is_file() => {
-                ensure_executable_permission(&candidate)?;
-                return Ok(candidate);
-            }
+            Ok(true) if candidate.is_file() => return Ok(Some(candidate)),
             Ok(_) => {}
             Err(source) => {
                 return Err(CoreInfoError::InspectExecutable {
@@ -293,27 +149,40 @@ pub fn discover_executable(
         }
     }
 
-    let candidates = core_info
-        .executable_names()
+    Ok(None)
+}
+
+pub fn discover_executable(paths: &AppPaths) -> Result<PathBuf, CoreInfoError> {
+    let search_dir = paths.core_bin_dir(CORE_DIR_NAME);
+    fs::create_dir_all(&search_dir).map_err(|source| CoreInfoError::CreateCoreBinDir {
+        path: search_dir.clone(),
+        source,
+    })?;
+
+    if let Some(executable) =
+        first_existing_file(executable_candidates(&search_dir, TargetOs::current()))?
+    {
+        ensure_executable_permission(&executable)?;
+        return Ok(executable);
+    }
+
+    let candidates = SING_BOX_EXECUTABLES
         .iter()
         .map(|name| executable_name_for_current_os(name))
         .collect::<Vec<_>>()
         .join(", ");
     Err(CoreInfoError::ExecutableNotFound {
-        core_type: core_info.core_type,
         search_dir: PathDisplay(search_dir),
         candidates,
-        url: core_info.url,
+        url: SING_BOX_RELEASES_URL,
     })
 }
 
 pub fn discover_packaged_seed_executable(
     seed_resources_dir: impl AsRef<Path>,
-    core_info: &CoreInfo,
     target_os: TargetOs,
 ) -> Result<Option<PathBuf>, CoreInfoError> {
-    let search_dir =
-        core_seed_resource_dir(seed_resources_dir, core_type_dir_name(core_info.core_type));
+    let search_dir = core_seed_resource_dir(seed_resources_dir, CORE_DIR_NAME);
 
     match search_dir.try_exists() {
         Ok(false) => return Ok(None),
@@ -330,47 +199,21 @@ pub fn discover_packaged_seed_executable(
         return Err(CoreInfoError::InvalidCoreSeedDir { path: search_dir });
     }
 
-    for name in core_info.executable_names_for_os(target_os) {
-        let executable_name = executable_name_for_os(name, target_os);
-        let candidate = search_dir.join(executable_name);
-        match candidate.try_exists() {
-            Ok(true) if candidate.is_file() => return Ok(Some(candidate)),
-            Ok(_) => {}
-            Err(source) => {
-                return Err(CoreInfoError::InspectExecutable {
-                    path: candidate,
-                    source,
-                });
-            }
-        }
-    }
-
-    Ok(None)
+    first_existing_file(executable_candidates(&search_dir, target_os))
 }
 
-pub fn copy_seed_core_assets(
-    paths: &AppPaths,
-    seed_resources_dir: impl AsRef<Path>,
-) -> Result<Vec<CoreSeedCopyOutcome>, CoreInfoError> {
-    seeded_core_types()
-        .iter()
-        .map(|core_type| copy_seed_core_asset(paths, seed_resources_dir.as_ref(), *core_type))
-        .collect()
-}
-
+/// Copies the packaged sing-box seed into app data unless an executable is
+/// already installed there.
 pub fn copy_seed_core_asset(
     paths: &AppPaths,
     seed_resources_dir: impl AsRef<Path>,
-    core_type: CoreType,
 ) -> Result<CoreSeedCopyOutcome, CoreInfoError> {
-    let core_info = get_core_info(core_type).ok_or(CoreInfoError::MissingCoreInfo(core_type))?;
-    let seed_dir = core_seed_resource_dir(seed_resources_dir, core_type_dir_name(core_type));
-    let target_dir = paths.core_bin_dir(core_type_dir_name(core_type));
+    let seed_dir = core_seed_resource_dir(seed_resources_dir, CORE_DIR_NAME);
+    let target_dir = paths.core_bin_dir(CORE_DIR_NAME);
 
     match seed_dir.try_exists() {
         Ok(false) => {
             return Ok(CoreSeedCopyOutcome {
-                core_type,
                 seed_dir,
                 target_dir,
                 status: CoreSeedCopyStatus::SeedMissing,
@@ -391,10 +234,9 @@ pub fn copy_seed_core_asset(
         return Err(CoreInfoError::InvalidCoreSeedDir { path: seed_dir });
     }
 
-    if existing_executable(paths, core_info)?.is_some() {
-        let chmod_paths = apply_executable_permission_plan(paths, core_info)?;
+    if first_existing_file(executable_candidates(&target_dir, TargetOs::current()))?.is_some() {
+        let chmod_paths = apply_executable_permission_plan(paths)?;
         return Ok(CoreSeedCopyOutcome {
-            core_type,
             seed_dir,
             target_dir,
             status: CoreSeedCopyStatus::AlreadyInstalled,
@@ -410,10 +252,9 @@ pub fn copy_seed_core_asset(
 
     let mut copied_files = Vec::new();
     copy_seed_dir_contents(&seed_dir, &target_dir, &mut copied_files)?;
-    let chmod_paths = apply_executable_permission_plan(paths, core_info)?;
+    let chmod_paths = apply_executable_permission_plan(paths)?;
 
     Ok(CoreSeedCopyOutcome {
-        core_type,
         seed_dir,
         target_dir,
         status: CoreSeedCopyStatus::Copied,
@@ -422,71 +263,26 @@ pub fn copy_seed_core_asset(
     })
 }
 
-#[must_use]
-pub fn executable_permission_plan_for_core(paths: &AppPaths, core_info: &CoreInfo) -> Vec<PathBuf> {
+/// The executables that need the execute bit once a seed is in place.
+fn executable_permission_plan(paths: &AppPaths) -> Vec<PathBuf> {
     #[cfg(unix)]
     {
-        core_info
-            .executable_names()
-            .iter()
-            .map(|name| {
-                paths.core_bin_file(
-                    core_type_dir_name(core_info.core_type),
-                    executable_name_for_current_os(name),
-                )
-            })
-            .collect()
+        executable_candidates(&paths.core_bin_dir(CORE_DIR_NAME), TargetOs::current()).collect()
     }
 
     #[cfg(not(unix))]
     {
         let _ = paths;
-        let _ = core_info;
         Vec::new()
     }
 }
 
-fn existing_executable(
-    paths: &AppPaths,
-    core_info: &CoreInfo,
-) -> Result<Option<PathBuf>, CoreInfoError> {
-    let search_dir = paths.core_bin_dir(core_type_dir_name(core_info.core_type));
-    for name in core_info.executable_names() {
-        let executable_name = executable_name_for_current_os(name);
-        let candidate = search_dir.join(executable_name);
-        match candidate.try_exists() {
-            Ok(true) if candidate.is_file() => return Ok(Some(candidate)),
-            Ok(_) => {}
-            Err(source) => {
-                return Err(CoreInfoError::InspectExecutable {
-                    path: candidate,
-                    source,
-                });
-            }
-        }
-    }
-
-    Ok(None)
-}
-
-fn apply_executable_permission_plan(
-    paths: &AppPaths,
-    core_info: &CoreInfo,
-) -> Result<Vec<PathBuf>, CoreInfoError> {
+fn apply_executable_permission_plan(paths: &AppPaths) -> Result<Vec<PathBuf>, CoreInfoError> {
     let mut chmod_paths = Vec::new();
-    for candidate in executable_permission_plan_for_core(paths, core_info) {
-        match candidate.try_exists() {
-            Ok(true) if candidate.is_file() => {
-                ensure_executable_permission(&candidate)?;
-                chmod_paths.push(candidate);
-            }
-            Ok(_) => {}
-            Err(source) => {
-                return Err(CoreInfoError::InspectExecutable {
-                    path: candidate,
-                    source,
-                });
-            }
+    for candidate in executable_permission_plan(paths) {
+        if let Some(executable) = first_existing_file([candidate])? {
+            ensure_executable_permission(&executable)?;
+            chmod_paths.push(executable);
         }
     }
 
@@ -596,16 +392,6 @@ fn ensure_executable_permission_inner(path: &Path) -> Result<(), CoreInfoError> 
     Ok(())
 }
 
-#[must_use]
-pub fn quote_path(path: impl AsRef<Path>) -> String {
-    let path = path.as_ref().to_string_lossy();
-    if path.is_empty() {
-        String::new()
-    } else {
-        format!("\"{path}\"")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -623,43 +409,24 @@ mod tests {
     static TEMP_ROOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
-    fn coreinfo_table_contains_only_singbox() {
-        let core_types = CORE_INFOS
-            .iter()
-            .map(|core_info| core_info.core_type)
-            .collect::<Vec<_>>();
-
-        assert_eq!(core_types, vec![CoreType::sing_box]);
-    }
-
-    #[test]
-    fn coreinfo_arguments_and_env_match_singbox_template() {
+    fn sing_box_runs_the_config_from_the_config_dir() {
         let paths = AppPaths::new("/tmp/VoyaVPN");
+        let launch = core_launch("/tmp/VoyaVPN/bin/sing_box/sing-box", &paths, "config.json");
 
-        let sing_box = get_core_info(CoreType::sing_box).expect("sing-box core info");
-        assert_eq!(
-            sing_box.resolve_arguments(&paths, "config.json"),
-            "run -c config.json --disable-color"
-        );
-        assert!(sing_box
-            .resolve_environment(&paths, "config.json")
-            .is_empty());
+        assert_eq!(launch.arguments, "run -c config.json --disable-color");
+        assert_eq!(launch.working_dir, paths.bin_config_dir());
     }
 
     #[test]
     fn coreinfo_executable_discovery_uses_core_subdir_and_probe_order() {
         let root = unique_temp_root("discover");
         let paths = AppPaths::new(root.join("VoyaVPN"));
-        let sing_box = get_core_info(CoreType::sing_box).expect("sing-box core info");
-        let exe = paths.core_bin_file(
-            core_type_dir_name(CoreType::sing_box),
-            executable_name_for_current_os("sing-box"),
-        );
+        let exe = paths.core_bin_file(CORE_DIR_NAME, executable_name_for_current_os("sing-box"));
         fs::create_dir_all(exe.parent().expect("sing-box exe parent"))
             .expect("create sing-box dir");
         fs::write(&exe, b"").expect("write sing-box exe");
 
-        let discovered = discover_executable(&paths, sing_box).expect("discover sing-box");
+        let discovered = discover_executable(&paths).expect("discover sing-box");
         assert_eq!(discovered, exe);
 
         let _ = fs::remove_dir_all(root);
@@ -671,14 +438,11 @@ mod tests {
         let paths = AppPaths::new(root.join("VoyaVPN"));
         let seed_root = core_seed_resources_dir(root.join("resources"));
 
-        let outcome = copy_seed_core_asset(&paths, &seed_root, CoreType::sing_box)
-            .expect("missing seed noop");
+        let outcome = copy_seed_core_asset(&paths, &seed_root).expect("missing seed noop");
 
         assert_eq!(outcome.status, CoreSeedCopyStatus::SeedMissing);
         assert!(outcome.copied_files.is_empty());
-        assert!(!paths
-            .core_bin_dir(core_type_dir_name(CoreType::sing_box))
-            .exists());
+        assert!(!paths.core_bin_dir(CORE_DIR_NAME).exists());
 
         let _ = fs::remove_dir_all(root);
     }
@@ -687,16 +451,14 @@ mod tests {
     fn coreinfo_discovers_packaged_seed_executable_without_copying() {
         let root = unique_temp_root("seed-discover");
         let seed_root = core_seed_resources_dir(root.join("resources"));
-        let sing_box = get_core_info(CoreType::sing_box).expect("sing-box core info");
         let seed_exe = seed_root
-            .join(core_type_dir_name(CoreType::sing_box))
+            .join(CORE_DIR_NAME)
             .join(executable_name_for_current_os("sing-box"));
         fs::create_dir_all(seed_exe.parent().expect("seed exe parent")).expect("create seed dir");
         fs::write(&seed_exe, b"seed-sing-box").expect("write seed exe");
 
-        let discovered =
-            discover_packaged_seed_executable(&seed_root, sing_box, TargetOs::current())
-                .expect("discover packaged seed executable");
+        let discovered = discover_packaged_seed_executable(&seed_root, TargetOs::current())
+            .expect("discover packaged seed executable");
 
         assert_eq!(discovered, Some(seed_exe));
 
@@ -709,17 +471,14 @@ mod tests {
         let paths = AppPaths::new(root.join("VoyaVPN"));
         let seed_root = core_seed_resources_dir(root.join("resources"));
         let seed_exe = seed_root
-            .join(core_type_dir_name(CoreType::sing_box))
+            .join(CORE_DIR_NAME)
             .join(executable_name_for_current_os("sing-box"));
         fs::create_dir_all(seed_exe.parent().expect("seed exe parent")).expect("create seed dir");
         fs::write(&seed_exe, b"seed-sing-box").expect("write seed exe");
 
-        let outcome =
-            copy_seed_core_asset(&paths, &seed_root, CoreType::sing_box).expect("copy seed");
-        let app_data_exe = paths.core_bin_file(
-            core_type_dir_name(CoreType::sing_box),
-            executable_name_for_current_os("sing-box"),
-        );
+        let outcome = copy_seed_core_asset(&paths, &seed_root).expect("copy seed");
+        let app_data_exe =
+            paths.core_bin_file(CORE_DIR_NAME, executable_name_for_current_os("sing-box"));
 
         assert_eq!(outcome.status, CoreSeedCopyStatus::Copied);
         assert_eq!(outcome.copied_files, vec![app_data_exe.clone()]);
@@ -728,11 +487,7 @@ mod tests {
             b"seed-sing-box"
         );
         assert_eq!(
-            discover_executable(
-                &paths,
-                get_core_info(CoreType::sing_box).expect("sing-box core info")
-            )
-            .expect("discover copied app data exe"),
+            discover_executable(&paths).expect("discover copied app data exe"),
             app_data_exe
         );
 
@@ -745,19 +500,15 @@ mod tests {
         let paths = AppPaths::new(root.join("VoyaVPN"));
         let seed_root = core_seed_resources_dir(root.join("resources"));
         let executable_name = executable_name_for_current_os("sing-box");
-        let seed_exe = seed_root
-            .join(core_type_dir_name(CoreType::sing_box))
-            .join(&executable_name);
-        let app_data_exe =
-            paths.core_bin_file(core_type_dir_name(CoreType::sing_box), &executable_name);
+        let seed_exe = seed_root.join(CORE_DIR_NAME).join(&executable_name);
+        let app_data_exe = paths.core_bin_file(CORE_DIR_NAME, &executable_name);
         fs::create_dir_all(seed_exe.parent().expect("seed exe parent")).expect("create seed dir");
         fs::create_dir_all(app_data_exe.parent().expect("app data exe parent"))
             .expect("create app data dir");
         fs::write(&seed_exe, b"older-seed").expect("write seed exe");
         fs::write(&app_data_exe, b"newer-installed").expect("write installed exe");
 
-        let outcome =
-            copy_seed_core_asset(&paths, &seed_root, CoreType::sing_box).expect("skip existing");
+        let outcome = copy_seed_core_asset(&paths, &seed_root).expect("skip existing");
 
         assert_eq!(outcome.status, CoreSeedCopyStatus::AlreadyInstalled);
         assert!(outcome.copied_files.is_empty());
@@ -775,20 +526,16 @@ mod tests {
         let root = unique_temp_root("seed-chmod");
         let paths = AppPaths::new(root.join("VoyaVPN"));
         let seed_root = core_seed_resources_dir(root.join("resources"));
-        let sing_box = get_core_info(CoreType::sing_box).expect("sing-box core info");
-        let seed_exe = seed_root
-            .join(core_type_dir_name(CoreType::sing_box))
-            .join("sing-box");
+        let seed_exe = seed_root.join(CORE_DIR_NAME).join("sing-box");
         fs::create_dir_all(seed_exe.parent().expect("seed exe parent")).expect("create seed dir");
         fs::write(&seed_exe, b"seed-sing-box").expect("write seed exe");
         fs::set_permissions(&seed_exe, fs::Permissions::from_mode(0o600)).expect("set seed mode");
 
-        let plan = executable_permission_plan_for_core(&paths, sing_box);
-        let app_data_exe = paths.core_bin_file(core_type_dir_name(CoreType::sing_box), "sing-box");
+        let plan = executable_permission_plan(&paths);
+        let app_data_exe = paths.core_bin_file(CORE_DIR_NAME, "sing-box");
         assert!(plan.contains(&app_data_exe));
 
-        let outcome =
-            copy_seed_core_asset(&paths, &seed_root, CoreType::sing_box).expect("copy seed");
+        let outcome = copy_seed_core_asset(&paths, &seed_root).expect("copy seed");
         let mode = fs::metadata(&app_data_exe)
             .expect("stat copied exe")
             .permissions()
@@ -805,14 +552,13 @@ mod tests {
     fn coreinfo_discovery_chmods_unix_executables() {
         let root = unique_temp_root("chmod");
         let paths = AppPaths::new(root.join("VoyaVPN"));
-        let sing_box = get_core_info(CoreType::sing_box).expect("sing-box core info");
-        let exe = paths.core_bin_file(core_type_dir_name(CoreType::sing_box), "sing-box-client");
+        let exe = paths.core_bin_file(CORE_DIR_NAME, "sing-box-client");
         fs::create_dir_all(exe.parent().expect("sing-box exe parent"))
             .expect("create sing-box dir");
         fs::write(&exe, b"").expect("write sing-box exe");
         fs::set_permissions(&exe, fs::Permissions::from_mode(0o600)).expect("set initial mode");
 
-        let discovered = discover_executable(&paths, sing_box).expect("discover sing-box");
+        let discovered = discover_executable(&paths).expect("discover sing-box");
         let mode = fs::metadata(&discovered)
             .expect("stat discovered exe")
             .permissions()

@@ -25,7 +25,6 @@ const core: RuntimeStatusResponse = {
   prePid: null,
   connectedDurationMs: null,
   activeTunBackend: null,
-  runningCoreType: null,
 };
 const empty: ProxyConnectionsSnapshot = { connections: [], downloadTotal: 0, uploadTotal: 0 };
 const clients = new Set<QueryClient>();

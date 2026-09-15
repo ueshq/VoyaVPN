@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{CoreState, CoreType, SystemProxyType, TunBackend, ValidationIssue};
+use crate::{CoreState, SystemProxyType, TunBackend, ValidationIssue};
 
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "lowercase")]
@@ -96,7 +96,6 @@ pub enum AppErrorKind {
     Unsupported,
     /// The core executable is not installed where the app looks for it.
     MissingCore {
-        core_type: CoreType,
         search_dir: String,
         candidates: Vec<String>,
         download_url: String,
@@ -151,8 +150,6 @@ pub enum AppErrorEntity {
     Routing,
     RoutingRule,
     Subscription,
-    /// The core-info table has no entry for the requested core type.
-    CoreInfo,
 }
 
 /// Why a persistence call failed, at the granularity the UI can act on.
@@ -182,7 +179,6 @@ pub enum CoreSeedInstallStatus {
 #[derive(Debug, Clone, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CoreSeedInstallResult {
-    pub core_type: CoreType,
     pub status: CoreSeedInstallStatus,
     pub installed_files: Vec<String>,
 }
@@ -210,7 +206,6 @@ pub struct RuntimeStatusResponse {
     pub active_profile_id: Option<String>,
     pub main_pid: Option<u32>,
     pub pre_pid: Option<u32>,
-    pub running_core_type: Option<CoreType>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]

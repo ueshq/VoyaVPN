@@ -28,7 +28,6 @@ function status(state: RuntimeStatusResponse["state"]): RuntimeStatusResponse {
     connectedDurationMs: null,
     mainPid: state === "connected" ? 1 : null,
     prePid: null,
-    runningCoreType: state === "connected" ? "singBox" : null,
     state,
   };
 }

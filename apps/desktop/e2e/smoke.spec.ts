@@ -57,7 +57,6 @@ async function connectFakeCore(page: Page) {
           prePid: null,
           connectedDurationMs: null,
           activeTunBackend: null,
-          runningCoreType: "singBox",
           state: "connected",
         };
         window.__VOYA_SMOKE__.emit("transient-stream-event", {

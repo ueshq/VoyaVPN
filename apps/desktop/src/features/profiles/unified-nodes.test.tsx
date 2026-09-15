@@ -66,7 +66,6 @@ function core(
     activeProfileId: state === "connected" ? "profile-2" : null,
     activeTunBackend: null,
     prePid: null,
-    runningCoreType: state === "connected" ? "singBox" : null,
     connectedDurationMs: null,
   };
 }
@@ -112,7 +111,6 @@ beforeEach(() => {
   mocks.exportProfileShareLinks.mockImplementation(async (ids: string[]) => ({
     text: ids.join("\n"),
     count: ids.length,
-    format: "shareLinks",
   }));
   mocks.generateQrCode.mockResolvedValue({
     mimeType: "image/svg+xml",

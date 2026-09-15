@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, oneshot};
-use voya_core::CoreType;
 use voya_platform::{
     coreinfo::TargetOs,
     elevation::{
@@ -218,12 +217,7 @@ fn process_uses_unix_sudo(
         return false;
     }
 
-    should_use_unix_sudo(
-        deps.target_os,
-        spec.core_type,
-        tun_enabled,
-        spec.may_need_sudo,
-    )
+    should_use_unix_sudo(deps.target_os, tun_enabled, spec.may_need_sudo)
 }
 
 fn supervisor_tun_backend(target_os: TargetOs, tun_enabled: bool) -> TunBackend {

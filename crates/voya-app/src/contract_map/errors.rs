@@ -24,7 +24,6 @@
 use voya_contracts::{AppError, AppErrorEntity, AppErrorKind, AppErrorSubsystem, ValidationIssue};
 
 use super::validation_issue_to_contract;
-use voya_core::CoreType;
 use voya_db::DbError;
 use voya_net::{ruleset::RulesetGeoError, DownloadError};
 use voya_platform::coreinfo::CoreInfoError;
@@ -97,23 +96,18 @@ pub fn input_text_error(
 pub fn core_info_error(error: &CoreInfoError, subsystem: AppErrorSubsystem) -> AppError {
     match error {
         CoreInfoError::ExecutableNotFound {
-            core_type,
             search_dir: _,
             candidates,
             url,
         } => AppError::new(
             subsystem,
             AppErrorKind::MissingCore {
-                core_type: super::core_type_to_contract(*core_type),
                 search_dir: MISSING_CORE_SEARCH_DIR_LABEL.to_string(),
                 candidates: missing_core_candidates(candidates),
                 download_url: (*url).to_string(),
             },
-            missing_core_message(*core_type),
+            MISSING_CORE_MESSAGE.to_string(),
         ),
-        CoreInfoError::MissingCoreInfo(_) => {
-            not_found(subsystem, AppErrorEntity::CoreInfo, None, error)
-        }
         _ => io(subsystem, error),
     }
 }
@@ -123,11 +117,8 @@ pub fn core_info_error(error: &CoreInfoError, subsystem: AppErrorSubsystem) -> A
 /// Deliberately not `CoreInfoError`'s own text: that one names the search
 /// directory and every candidate file name, which belong in the structured
 /// payload rather than in a sentence shown to a user.
-fn missing_core_message(core_type: CoreType) -> String {
-    format!(
-        "core {core_type:?} executable is missing; install or update the core package and try again"
-    )
-}
+const MISSING_CORE_MESSAGE: &str =
+    "core sing_box executable is missing; install or update the core package and try again";
 
 /// Splits `CoreInfoError`'s comma-joined candidate list back into entries.
 fn missing_core_candidates(candidates: &str) -> Vec<String> {
@@ -338,9 +329,6 @@ impl From<SpeedtestError> for AppError {
             SpeedtestError::CreateConfigDir { .. }
             | SpeedtestError::WriteConfig { .. }
             | SpeedtestError::RemoveConfig { .. } => io(Sub::Speedtest, &error),
-            SpeedtestError::MissingCoreInfo(_) => {
-                not_found(Sub::Speedtest, AppErrorEntity::CoreInfo, None, &error)
-            }
             SpeedtestError::Validation { .. } => invalid(Sub::Speedtest, "profile", &error),
             SpeedtestError::EmptySelection => invalid(Sub::Speedtest, "profileIds", &error),
             SpeedtestError::SingboxConfig(ref source) => internal(Sub::Speedtest, source),
@@ -402,9 +390,6 @@ impl From<RuntimeError> for AppError {
                 Some(id.clone()),
                 &error,
             ),
-            RuntimeError::MissingCoreInfo(_) => {
-                not_found(Sub::Runtime, AppErrorEntity::CoreInfo, None, &error)
-            }
             RuntimeError::Validation { ref errors, .. } => Self::validation(
                 Sub::Runtime,
                 error.to_string(),
@@ -427,7 +412,7 @@ impl From<SupervisorError> for AppError {
         match error {
             // The whole point of this pass: the frontend used to find this case
             // by searching the message for "authorization".
-            SupervisorError::ElevationNotGranted(_) => AppError::new(
+            SupervisorError::ElevationNotGranted => AppError::new(
                 Sub::Runtime,
                 AppErrorKind::ElevationRequired,
                 error.to_string(),

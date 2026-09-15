@@ -71,15 +71,6 @@ impl FromStr for ConfigType {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum CoreType {
-    #[default]
-    #[serde(rename = "singBox")]
-    sing_box,
-}
-
-#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InboundProtocol {
     socks,

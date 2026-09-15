@@ -157,62 +157,50 @@ impl SpeedtestManager {
             .prepare_speedtest_items(database, config, items)
             .await?;
         let mut results = record_item_failures(database, batch.failures, items, on_result).await?;
-        for (core_type, group) in group_prepared_items(batch.prepared) {
+        let prepared = batch.prepared;
+        let page_size = speedtest_page_size(config, prepared.len());
+        let batch_count = prepared.chunks(page_size).len();
+        for (batch_index, page) in prepared.chunks(page_size).enumerate() {
             if is_cancelled(&cancel) {
                 break;
             }
-            let page_size = speedtest_page_size(config, group.len());
-            let batch_count = group.chunks(page_size).len();
-            for (batch_index, page) in group.chunks(page_size).enumerate() {
+            let entries = page
+                .iter()
+                .map(|prepared| prepared.entry.clone())
+                .collect::<Vec<_>>();
+            let session = match self.core_backend.start(entries, Arc::clone(&cancel)).await {
+                Ok(session) => session,
+                Err(SpeedtestError::Cancelled) => break,
+                Err(error) => {
+                    // A core that will not start fails this page, not the
+                    // whole run: record every profile in it and continue.
+                    tracing::warn!(?error, "speedtest core failed to start");
+                    let failures = page
+                        .iter()
+                        .map(|prepared| {
+                            SpeedtestItemFailure::from_error(prepared.item.index_id.clone(), &error)
+                        })
+                        .collect::<Vec<_>>();
+                    results
+                        .extend(record_item_failures(database, failures, items, on_result).await?);
+                    continue;
+                }
+            };
+            for prepared in page {
                 if is_cancelled(&cancel) {
                     break;
                 }
-                let entries = page
-                    .iter()
-                    .map(|prepared| prepared.entry.clone())
-                    .collect::<Vec<_>>();
-                let session = match self
-                    .core_backend
-                    .start(core_type, entries, Arc::clone(&cancel))
-                    .await
-                {
-                    Ok(session) => session,
-                    Err(SpeedtestError::Cancelled) => break,
-                    Err(error) => {
-                        // A core that will not start fails this page, not the
-                        // whole run: record every profile in it and continue.
-                        tracing::warn!(?error, ?core_type, "speedtest core failed to start");
-                        let failures = page
-                            .iter()
-                            .map(|prepared| {
-                                SpeedtestItemFailure::from_error(
-                                    prepared.item.index_id.clone(),
-                                    &error,
-                                )
-                            })
-                            .collect::<Vec<_>>();
-                        results.extend(
-                            record_item_failures(database, failures, items, on_result).await?,
-                        );
-                        continue;
-                    }
-                };
-                for prepared in page {
-                    if is_cancelled(&cancel) {
-                        break;
-                    }
-                    let result = self
-                        .run_realping(database, config, prepared.item.clone(), Arc::clone(&cancel))
-                        .await?;
-                    if let Some(result) = result {
-                        on_result(result.clone());
-                        results.push(result);
-                    }
+                let result = self
+                    .run_realping(database, config, prepared.item.clone(), Arc::clone(&cancel))
+                    .await?;
+                if let Some(result) = result {
+                    on_result(result.clone());
+                    results.push(result);
                 }
-                session.close().await;
-                if batch_index + 1 < batch_count && !is_cancelled(&cancel) {
-                    time::sleep(speedtest_delay_interval(config)).await;
-                }
+            }
+            session.close().await;
+            if batch_index + 1 < batch_count && !is_cancelled(&cancel) {
+                time::sleep(speedtest_delay_interval(config)).await;
             }
         }
 
@@ -480,7 +468,7 @@ mod tests {
     #[test]
     fn speedtest_persist_retry_ignores_unrelated_failures() {
         let cancelled = SpeedtestError::Cancelled;
-        let missing = SpeedtestError::MissingCoreInfo(CoreType::sing_box);
+        let missing = SpeedtestError::EmptySelection;
 
         assert!(!is_database_contention(&cancelled));
         assert!(!is_database_contention(&missing));

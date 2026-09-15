@@ -65,7 +65,7 @@ impl SystemProxyManager {
         self.status_with_force_disable(config, false)
     }
 
-    pub fn status_with_force_disable(
+    fn status_with_force_disable(
         &self,
         config: &AppConfig,
         force_disable: bool,
@@ -74,7 +74,7 @@ impl SystemProxyManager {
         Ok(self.service.status(&request)?)
     }
 
-    pub fn apply_config(
+    fn apply_config(
         &self,
         config: &AppConfig,
         force_disable: bool,
@@ -201,7 +201,7 @@ pub struct RuntimeSystemProxyConfig {
 }
 
 #[must_use]
-pub fn runtime_system_proxy_config(
+fn runtime_system_proxy_config(
     config: &AppConfig,
     force_disable: bool,
     target_os: TargetOs,
@@ -223,12 +223,12 @@ pub fn runtime_system_proxy_config(
 }
 
 #[must_use]
-pub fn should_disable_native_tun_system_proxy(config: &AppConfig, target_os: TargetOs) -> bool {
+fn should_disable_native_tun_system_proxy(config: &AppConfig, target_os: TargetOs) -> bool {
     config.tun_mode_item.enable_tun && tun_backend(target_os).is_native()
 }
 
 #[must_use]
-pub fn should_apply_tun_system_proxy_fallback(config: &AppConfig, target_os: TargetOs) -> bool {
+fn should_apply_tun_system_proxy_fallback(config: &AppConfig, target_os: TargetOs) -> bool {
     config.tun_mode_item.enable_tun
         && config.system_proxy_item.sys_proxy_type == SysProxyType::ForcedClear
         && tun_backend(target_os) == TunBackend::Process

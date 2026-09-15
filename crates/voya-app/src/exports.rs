@@ -1,5 +1,5 @@
 use thiserror::Error;
-pub use voya_contracts::{ExportProfilesFormat, ExportProfilesRequest, ExportProfilesResult};
+pub use voya_contracts::ExportProfilesResult;
 use voya_core::{
     export_share_link_with_options, AppConfig, ProfileItem, ShareError, ShareLinkOptions,
 };
@@ -29,20 +29,17 @@ impl<'db> ExportManager<'db> {
         Self { database }
     }
 
+    /// The share links of `index_ids`, one per line in selection order.
     pub async fn export_profiles(
         &self,
         config: &AppConfig,
-        request: ExportProfilesRequest,
+        index_ids: &[String],
     ) -> Result<ExportProfilesResult> {
-        let profiles = self.load_profiles(&request.index_ids).await?;
-        let text = match request.format {
-            ExportProfilesFormat::ShareLinks => export_share_links(&profiles, config)?,
-        };
+        let profiles = self.load_profiles(index_ids).await?;
 
         Ok(ExportProfilesResult {
-            text,
+            text: export_share_links(&profiles, config)?,
             count: u32::try_from(profiles.len()).unwrap_or(u32::MAX),
-            format: request.format,
         })
     }
 
@@ -118,10 +115,7 @@ mod tests {
         let result = manager
             .export_profiles(
                 &AppConfig::default(),
-                ExportProfilesRequest {
-                    index_ids: vec!["two".to_string(), "one".to_string()],
-                    format: ExportProfilesFormat::ShareLinks,
-                },
+                &["two".to_string(), "one".to_string()],
             )
             .await
             .expect("export test operation should succeed");
@@ -144,13 +138,7 @@ mod tests {
             (vec!["ghost".to_string()], Some("ghost")),
         ] {
             let error = manager
-                .export_profiles(
-                    &AppConfig::default(),
-                    ExportProfilesRequest {
-                        index_ids,
-                        format: ExportProfilesFormat::ShareLinks,
-                    },
-                )
+                .export_profiles(&AppConfig::default(), &index_ids)
                 .await
                 .expect_err("an unusable selection must not reach config generation");
 

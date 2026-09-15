@@ -266,7 +266,7 @@ async fn run_proxy_ws_monitor(
     }
 }
 
-pub fn route_proxy_ws_event(sink: &dyn ProxyRuntimeEventSink, event: ClashWebSocketEvent) {
+fn route_proxy_ws_event(sink: &dyn ProxyRuntimeEventSink, event: ClashWebSocketEvent) {
     match event {
         // The monitor subscribes to /connections only — the statistics service
         // owns the /traffic stream against the same port — so a traffic frame
@@ -303,7 +303,7 @@ pub fn proxy_runtime_endpoint(access: &ClashApiAccess) -> Option<ClashApiEndpoin
 }
 
 #[must_use]
-pub fn traffic_mode_api_value(mode: TrafficMode) -> Option<&'static str> {
+fn traffic_mode_api_value(mode: TrafficMode) -> Option<&'static str> {
     match mode {
         TrafficMode::Rule => Some("rule"),
         TrafficMode::Global => Some("global"),

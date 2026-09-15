@@ -25,7 +25,6 @@ const connected: RuntimeStatusResponse = {
   connectedDurationMs: 0,
   mainPid: 42,
   prePid: null,
-  runningCoreType: "singBox",
   state: "connected",
 };
 

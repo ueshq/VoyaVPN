@@ -103,7 +103,6 @@ async function seedConnections(page: Page, connections = snapshot()) {
       ...state.runtime,
       state: "connected",
       mainPid: 42,
-      runningCoreType: "singBox",
     };
     window.__VOYA_SMOKE__.emit("transient-stream-event", {
       kind: "coreState",

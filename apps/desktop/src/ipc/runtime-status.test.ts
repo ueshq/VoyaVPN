@@ -9,7 +9,7 @@ const commands = vi.hoisted(() => ({ runtimeStatus: vi.fn(), systemProxyStatus: 
 vi.mock("@/ipc/commands", () => commands);
 
 const core: RuntimeStatusResponse = {
-  state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, prePid: null, connectedDurationMs: null, runningCoreType: "singBox",
+  state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, prePid: null, connectedDurationMs: null,
 };
 const proxy: SystemProxyStatusResponse = {
   management: "automatic",

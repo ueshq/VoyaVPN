@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 
 use crate::{
     generate_singbox_config, generate_singbox_config_value, AppConfig, ContextPolicyGroup,
-    CoreConfigContext, CoreGenPlatform, CoreType, GroupStrategy, PolicyGroupItem, ProfileItem,
+    CoreConfigContext, CoreGenPlatform, GroupStrategy, PolicyGroupItem, ProfileItem,
     ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem, ServerEndpoint, TlsMode,
     TlsSettings, BLOCK_TAG, DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
@@ -873,7 +873,6 @@ fn singbox_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContex
     let simple_dns_item = app_config.simple_dns_item.clone();
     CoreConfigContext {
         node,
-        run_core_type: CoreType::sing_box,
         app_config,
         simple_dns_item,
         all_proxies_map,

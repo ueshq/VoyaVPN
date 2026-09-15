@@ -4,8 +4,8 @@ use crate::{
     singbox::support::{singbox_supports_config_type, state_port2},
     text::nonempty_str,
     validation::{ValidationCode, ValidationMessage, ValidationScope},
-    AppConfig, ConfigType, CoreType, InboundProtocol, ProfileItem, ProfileProtocol, RoutingItem,
-    RulesItem, ServerEndpoint, SimpleDnsItem, TlsMode,
+    AppConfig, ConfigType, InboundProtocol, ProfileItem, ProfileProtocol, RoutingItem, RulesItem,
+    ServerEndpoint, SimpleDnsItem, TlsMode,
 };
 
 pub const PROXY_TAG: &str = "proxy";
@@ -152,7 +152,6 @@ impl NodeValidatorResult {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CoreConfigContext {
     pub node: ProfileItem,
-    pub run_core_type: CoreType,
     pub routing_item: Option<RoutingItem>,
     pub simple_dns_item: SimpleDnsItem,
     pub all_proxies_map: BTreeMap<String, ProfileItem>,
@@ -197,7 +196,6 @@ impl Default for CoreConfigContext {
     fn default() -> Self {
         Self {
             node: ProfileItem::default(),
-            run_core_type: CoreType::sing_box,
             routing_item: None,
             simple_dns_item: SimpleDnsItem::default(),
             all_proxies_map: BTreeMap::new(),
@@ -322,10 +320,8 @@ where
 
     #[must_use]
     pub fn build(&self, config: &AppConfig, node: &ProfileItem) -> CoreConfigContextBuilderResult {
-        let run_core_type = CoreType::sing_box;
         let mut context = CoreConfigContext {
             node: node.clone(),
-            run_core_type,
             routing_item: self.env.get_default_routing(config),
             simple_dns_item: config.simple_dns_item.clone(),
             all_proxies_map: BTreeMap::new(),
@@ -601,7 +597,7 @@ fn register_single_node(
     context: &mut CoreConfigContext,
     node: &ProfileItem,
 ) -> NodeValidatorResult {
-    let result = validate_node(node, context.run_core_type);
+    let result = validate_node(node);
     if !result.success() {
         return result;
     }
@@ -747,7 +743,6 @@ mod tests {
 
         assert!(result.success());
         assert_eq!(result.context.node.index_id, "active");
-        assert_eq!(result.context.run_core_type, CoreType::sing_box);
         assert_eq!(
             result.context.routing_item.as_ref().map(|item| &item.id),
             Some(&"routing".to_string())

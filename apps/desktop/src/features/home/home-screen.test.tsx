@@ -76,7 +76,6 @@ const disconnectedStatus: RuntimeStatusResponse = {
   prePid: null,
   connectedDurationMs: null,
   activeTunBackend: null,
-  runningCoreType: null,
   state: "disconnected",
 };
 
@@ -86,7 +85,6 @@ const connectedStatus: RuntimeStatusResponse = {
   prePid: null,
   connectedDurationMs: null,
   activeTunBackend: null,
-  runningCoreType: "singBox",
   state: "connected",
 };
 
@@ -449,7 +447,6 @@ describe("HomeScreen", () => {
       new IpcCommandError({
         kind: {
           candidates: [],
-          coreType: "singBox",
           downloadUrl: "https://example.test/core",
           searchDir: "/cores",
           type: "missingCore",
@@ -467,7 +464,6 @@ describe("HomeScreen", () => {
 
     await waitFor(() =>
       expect(useModalStore.getState().missingCore).toEqual({
-        coreType: "singBox",
         message: "sing-box is not installed",
       }),
     );
@@ -557,7 +553,6 @@ describe("HomeScreen", () => {
       prePid: null,
       connectedDurationMs: null,
       activeTunBackend: null,
-      runningCoreType: "singBox",
       state: "connected",
     });
     expect(await screen.findByRole("alert")).toHaveTextContent(

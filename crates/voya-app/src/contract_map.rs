@@ -27,16 +27,6 @@ use voya_core::{MoveAction as CoreMoveAction, ProfileListItem};
 use crate::profiles::ProfileListing;
 
 #[must_use]
-pub const fn core_type_to_contract(_: voya_core::CoreType) -> voya_contracts::CoreType {
-    voya_contracts::CoreType::SingBox
-}
-
-#[must_use]
-pub const fn core_type_from_contract(_: voya_contracts::CoreType) -> voya_core::CoreType {
-    voya_core::CoreType::sing_box
-}
-
-#[must_use]
 pub const fn sysproxy_type_to_contract(
     value: voya_core::SysProxyType,
 ) -> voya_contracts::SystemProxyType {
@@ -209,9 +199,6 @@ pub fn runtime_status_event(
             .or(active_profile_id),
         main_pid: snapshot.and_then(|snapshot| snapshot.main_pid),
         pre_pid: snapshot.and_then(|snapshot| snapshot.pre_pid),
-        running_core_type: snapshot
-            .and_then(|snapshot| snapshot.running_core_type)
-            .map(core_type_to_contract),
     }
 }
 
@@ -221,7 +208,6 @@ pub fn core_seed_install_result(
     outcome: voya_platform::coreinfo::CoreSeedCopyOutcome,
 ) -> voya_contracts::CoreSeedInstallResult {
     voya_contracts::CoreSeedInstallResult {
-        core_type: core_type_to_contract(outcome.core_type),
         status: match outcome.status {
             voya_platform::coreinfo::CoreSeedCopyStatus::Copied => {
                 voya_contracts::CoreSeedInstallStatus::Installed

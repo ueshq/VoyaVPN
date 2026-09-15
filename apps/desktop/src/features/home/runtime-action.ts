@@ -197,6 +197,6 @@ export function missingCorePayload(error: unknown): MissingCorePayload | null {
   const missingCore = appErrorOfKind(error, "missingCore");
 
   return missingCore
-    ? { coreType: missingCore.kind.coreType, message: missingCore.message }
+    ? { message: missingCore.message }
     : null;
 }

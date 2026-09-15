@@ -47,7 +47,6 @@ const missingCoreError = new IpcCommandError(
   appError(
     {
       candidates: [],
-      coreType: "singBox",
       downloadUrl: "https://example.test/core",
       searchDir: "/cores",
       type: "missingCore",
@@ -68,7 +67,6 @@ function coreStatus(state: RuntimeStatusResponse["state"]): RuntimeStatusRespons
     connectedDurationMs: null,
     mainPid: connected ? 42 : null,
     prePid: null,
-    runningCoreType: connected ? "singBox" : null,
     state,
   };
 }
@@ -83,7 +81,7 @@ function resetStores() {
 describe("runtime command responses", () => {
   const connected: RuntimeStatusResponse = {
     activeProfileId: "node", activeTunBackend: null, mainPid: 42, prePid: null,
-    runningCoreType: "singBox", state: "connected", connectedDurationMs: 0,
+    state: "connected", connectedDurationMs: 0,
   };
 
   beforeEach(() => {
@@ -268,7 +266,6 @@ describe("runRuntimeAction", () => {
     await runRuntimeAction("connect", t);
 
     expect(useModalStore.getState().missingCore).toEqual({
-      coreType: "singBox",
       message: "sing-box is not installed",
     });
     expect(useToastStore.getState().toasts).toHaveLength(0);
@@ -350,7 +347,6 @@ describe("activateSelection", () => {
 describe("missingCorePayload", () => {
   it("extracts the core type and message from a typed missing-core failure", () => {
     expect(missingCorePayload(missingCoreError)).toEqual({
-      coreType: "singBox",
       message: "sing-box is not installed",
     });
   });

@@ -20,25 +20,11 @@ pub struct AutostartStatus {
     pub artifact_name: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum ExportProfilesFormat {
-    ShareLinks,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ExportProfilesRequest {
-    pub index_ids: Vec<String>,
-    pub format: ExportProfilesFormat,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportProfilesResult {
     pub text: String,
     pub count: u32,
-    pub format: ExportProfilesFormat,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]

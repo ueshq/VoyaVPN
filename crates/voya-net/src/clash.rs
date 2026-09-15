@@ -100,7 +100,7 @@ impl ClashApiEndpoint {
     }
 
     #[must_use]
-    pub fn ws_url(&self, path_and_query: &str) -> String {
+    fn ws_url(&self, path_and_query: &str) -> String {
         format!(
             "ws://{}:{}{}",
             normalize_host(&self.host),

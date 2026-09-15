@@ -24,7 +24,7 @@ use voya_app::{
     tun::ProviderRegistrationCache,
 };
 use voya_platform::{
-    coreinfo::{copy_seed_core_assets, TargetOs},
+    coreinfo::{copy_seed_core_asset, TargetOs},
     paths::{core_seed_resources_dir, AppPaths},
     process::{JobAssignedRunner, PlatformProcessJobFactory, ProcessRunner, StdProcessRunner},
     sysproxy::SystemProxyService,
@@ -92,7 +92,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
             tracing::debug!("skipped packaged core seed copy at startup on macOS");
         }
         (_, Some(seed_dir)) => {
-            if let Err(error) = copy_seed_core_assets(&runtime_paths, seed_dir) {
+            if let Err(error) = copy_seed_core_asset(&runtime_paths, seed_dir) {
                 tracing::warn!(
                     ?error,
                     "failed to copy packaged core seed assets at startup"

@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, panic};
 use proptest::prelude::*;
 
 use super::{entry::export_share_link, *};
-use crate::{generate_singbox_config_value, AppConfig, CoreConfigContext, CoreType, PROXY_TAG};
+use crate::{generate_singbox_config_value, AppConfig, CoreConfigContext, PROXY_TAG};
 
 #[test]
 fn fmt_share_round_trips_all_supported_protocols() {
@@ -355,9 +355,8 @@ fn fmt_hostile_subscription_tls_flags_are_not_trusted_by_generators() {
     app_config.core_basic_item.def_allow_insecure = false;
     app_config.core_basic_item.def_fingerprint = "firefox".to_string();
 
-    let singbox_value =
-        generate_singbox_config_value(&fmt_test_context(CoreType::sing_box, app_config, node))
-            .expect("sing-box config should generate");
+    let singbox_value = generate_singbox_config_value(&fmt_test_context(app_config, node))
+        .expect("sing-box config should generate");
     let singbox_proxy = proxy_outbound(&singbox_value);
     assert_eq!(
         singbox_proxy
@@ -1014,17 +1013,12 @@ fn tls(mode: TlsMode, server_name: &str) -> TlsSettings {
     }
 }
 
-fn fmt_test_context(
-    run_core_type: CoreType,
-    app_config: AppConfig,
-    node: ProfileItem,
-) -> CoreConfigContext {
+fn fmt_test_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
     let mut all_proxies_map = BTreeMap::new();
     all_proxies_map.insert(node.index_id.clone(), node.clone());
     let simple_dns_item = app_config.simple_dns_item.clone();
     CoreConfigContext {
         node,
-        run_core_type,
         app_config,
         simple_dns_item,
         all_proxies_map,

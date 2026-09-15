@@ -41,27 +41,6 @@ where
     state.config_mutations().mutate(operation).await
 }
 
-pub(super) async fn export_profiles_result(
-    state: &AppState,
-    index_ids: Vec<String>,
-    format: ExportProfilesFormat,
-) -> Result<ExportProfilesResult, AppError> {
-    validate_ipc_text_list(
-        &index_ids,
-        "node id",
-        IPC_ID_MAX_CHARS,
-        AppErrorSubsystem::Export,
-    )?;
-    let config = current_config(state);
-
-    state
-        .services()
-        .exports()
-        .export_profiles(&config, ExportProfilesRequest { index_ids, format })
-        .await
-        .map_err(AppError::from)
-}
-
 // Argument guards. Rejected IPC text is a *validation* failure addressed to the
 // argument that carried it, so each guard names its subsystem and the shared
 // `input_text_error` mapper builds the issue — the shell no longer picks an

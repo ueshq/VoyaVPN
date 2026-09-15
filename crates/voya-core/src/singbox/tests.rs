@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use super::*;
-use crate::{golden, CoreGenPlatform, CoreType, RoutingItem, ServerEndpoint, TlsSettings};
+use crate::{golden, CoreGenPlatform, RoutingItem, ServerEndpoint, TlsSettings};
 
 #[test]
 fn singbox_outbound_vless_ws_tls_mux_matches_golden() {
@@ -147,7 +147,7 @@ fn singbox_h2_and_quic_transports_are_not_emitted_as_raw_tcp() {
             ..ProfileItem::default()
         };
         // Validation lets these through, so the generator has to emit them.
-        assert!(crate::validate_node(&node, CoreType::sing_box).success());
+        assert!(crate::validate_node(&node).success());
 
         let context = test_context(AppConfig::default(), node.clone());
         let outbound = build_outbound(&context, &node);
@@ -281,16 +281,13 @@ fn singbox_protocol_support_table_agrees_with_node_validation() {
         };
         assert_eq!(node.config_type(), config_type);
 
-        let rejects_protocol = crate::validate_node(&node, CoreType::sing_box)
-            .errors
-            .iter()
-            .any(|error| {
-                matches!(
-                    error.code,
-                    crate::validation::ValidationCode::UnsupportedProtocol { .. }
-                        | crate::validation::ValidationCode::UnsupportedProtocolNetwork { .. }
-                )
-            });
+        let rejects_protocol = crate::validate_node(&node).errors.iter().any(|error| {
+            matches!(
+                error.code,
+                crate::validation::ValidationCode::UnsupportedProtocol { .. }
+                    | crate::validation::ValidationCode::UnsupportedProtocolNetwork { .. }
+            )
+        });
         let expected_rejection = !singbox_supports_config_type(config_type);
         assert_eq!(
             rejects_protocol, expected_rejection,
@@ -1684,7 +1681,6 @@ fn test_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
     let simple_dns_item = app_config.simple_dns_item.clone();
     CoreConfigContext {
         node,
-        run_core_type: CoreType::sing_box,
         app_config,
         simple_dns_item,
         all_proxies_map,

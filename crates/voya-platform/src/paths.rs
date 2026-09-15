@@ -79,17 +79,17 @@ impl AppPaths {
     }
 
     #[must_use]
-    pub fn core_bin_dir(&self, core_type_dir: impl AsRef<Path>) -> PathBuf {
-        self.bin_dir.join(core_type_dir)
+    pub fn core_bin_dir(&self, core_dir: impl AsRef<Path>) -> PathBuf {
+        self.bin_dir.join(core_dir)
     }
 
     #[must_use]
     pub fn core_bin_file(
         &self,
-        core_type_dir: impl AsRef<Path>,
+        core_dir: impl AsRef<Path>,
         file_name: impl AsRef<Path>,
     ) -> PathBuf {
-        self.core_bin_dir(core_type_dir).join(file_name)
+        self.core_bin_dir(core_dir).join(file_name)
     }
 
     /// Create every app directory, owner-only, if it does not exist yet.
@@ -118,9 +118,9 @@ pub fn core_seed_resources_dir(packaged_resources_dir: impl AsRef<Path>) -> Path
 #[must_use]
 pub fn core_seed_resource_dir(
     core_seed_resources_dir: impl AsRef<Path>,
-    core_type_dir: impl AsRef<Path>,
+    core_dir: impl AsRef<Path>,
 ) -> PathBuf {
-    core_seed_resources_dir.as_ref().join(core_type_dir)
+    core_seed_resources_dir.as_ref().join(core_dir)
 }
 
 #[derive(Debug, Error)]

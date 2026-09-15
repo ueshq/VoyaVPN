@@ -8,14 +8,14 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use voya_core::{
     generate_singbox_config_json, validation::ValidationMessage, AppConfig, CoreConfigContext,
-    CoreConfigContextBuilder, CoreConfigContextBuilderAllResult, CoreGenPlatform, CoreType,
+    CoreConfigContextBuilder, CoreConfigContextBuilderAllResult, CoreGenPlatform,
     SingboxConfigError,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
     coreinfo::{
-        copy_seed_core_asset, discover_executable, discover_packaged_seed_executable,
-        get_core_info, CoreInfo, CoreInfoError, CoreLaunch, TargetOs,
+        copy_seed_core_asset, core_launch, discover_executable, discover_packaged_seed_executable,
+        CoreInfoError, TargetOs,
     },
     filesystem,
     paths::{AppPaths, PathError},
@@ -31,17 +31,6 @@ use crate::updates::local_singbox_ruleset_paths;
 pub const MAIN_CONFIG_FILE_NAME: &str = "config.json";
 pub const PRE_CONFIG_FILE_NAME: &str = "configPre.json";
 const SUDO_SCRIPT_DIR_NAME: &str = "sudo";
-
-#[must_use]
-pub fn core_launch_plan(
-    core_type: CoreType,
-    executable: impl Into<PathBuf>,
-    paths: &AppPaths,
-    config_file: impl AsRef<Path>,
-) -> Option<CoreLaunch> {
-    get_core_info(core_type)
-        .map(|core_info| core_info.resolve_launch(executable, paths, config_file))
-}
 
 #[derive(Clone)]
 pub struct RuntimeManager<'runtime> {
@@ -299,38 +288,24 @@ impl<'runtime> RuntimeManager<'runtime> {
         context: &CoreConfigContext,
         config_file_name: &str,
     ) -> Result<CoreProcessSpec, RuntimeError> {
-        let core_type = context.run_core_type;
-        let core_info = get_core_info(core_type).ok_or(RuntimeError::MissingCoreInfo(core_type))?;
-        let executable = self.core_executable(core_type, core_info)?;
-        let launch = core_launch_plan(core_type, executable, &self.paths, config_file_name)
-            .ok_or(RuntimeError::MissingCoreInfo(core_type))?;
+        let executable = resolve_core_executable(
+            &self.paths,
+            self.core_seed_resource_dir.as_deref(),
+            self.target_os,
+        )?;
+        let launch = core_launch(executable, &self.paths, config_file_name);
 
         // Only the process whose config carries the tun inbound needs root:
         // with a pre-socks split the main core does all remote I/O and must
         // stay unprivileged.
-        Ok(CoreProcessSpec::new(core_type, launch)
+        Ok(CoreProcessSpec::new(launch)
             .with_config_path(self.paths.bin_config_file(config_file_name))
             .with_display_log(context.node.display_log)
             .with_may_need_sudo(context.is_tun_enabled))
     }
-
-    fn core_executable(
-        &self,
-        core_type: CoreType,
-        core_info: &CoreInfo,
-    ) -> Result<PathBuf, RuntimeError> {
-        resolve_core_executable(
-            &self.paths,
-            self.core_seed_resource_dir.as_deref(),
-            core_info,
-            core_type,
-            self.target_os,
-        )
-        .map_err(Into::into)
-    }
 }
 
-/// Locates the executable for `core_type`, staging the packaged seed if needed.
+/// Locates the sing-box executable, staging the packaged seed if needed.
 ///
 /// Shared with the speedtest backend: a probe core has to resolve exactly the
 /// binary the runtime would launch, and two copies of this had already drifted
@@ -338,21 +313,17 @@ impl<'runtime> RuntimeManager<'runtime> {
 pub(crate) fn resolve_core_executable(
     paths: &AppPaths,
     core_seed_resource_dir: Option<&Path>,
-    core_info: &CoreInfo,
-    core_type: CoreType,
     target_os: TargetOs,
 ) -> Result<PathBuf, CoreInfoError> {
-    if let Some(executable) =
-        packaged_seed_executable(core_seed_resource_dir, core_info, target_os)?
-    {
+    if let Some(executable) = packaged_seed_executable(core_seed_resource_dir, target_os)? {
         return Ok(executable);
     }
 
     if let Some(seed_resource_dir) = core_seed_resource_dir {
-        copy_seed_core_asset(paths, seed_resource_dir, core_type)?;
+        copy_seed_core_asset(paths, seed_resource_dir)?;
     }
 
-    discover_executable(paths, core_info)
+    discover_executable(paths)
 }
 
 /// On macOS the seed inside the app bundle is launched where it lies.
@@ -362,7 +333,6 @@ pub(crate) fn resolve_core_executable(
 /// only.
 fn packaged_seed_executable(
     core_seed_resource_dir: Option<&Path>,
-    core_info: &CoreInfo,
     target_os: TargetOs,
 ) -> Result<Option<PathBuf>, CoreInfoError> {
     if target_os != TargetOs::Macos {
@@ -373,7 +343,7 @@ fn packaged_seed_executable(
         return Ok(None);
     };
 
-    discover_packaged_seed_executable(seed_resource_dir, core_info, target_os)
+    discover_packaged_seed_executable(seed_resource_dir, target_os)
 }
 
 /// Failure to write a generated core config, with the path that failed.
@@ -458,8 +428,6 @@ pub enum RuntimeError {
         errors: Vec<ValidationMessage>,
         warnings: Vec<ValidationMessage>,
     },
-    #[error("no core info entry for {0:?}")]
-    MissingCoreInfo(CoreType),
     #[error("failed to create runtime config directory {path}: {source}")]
     CreateConfigDir { path: PathBuf, source: io::Error },
     #[error("failed to write runtime config {path}: {source}")]
@@ -514,12 +482,12 @@ mod tests {
     };
 
     use voya_core::{
-        CoreType, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem,
+        ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem,
         ServerEndpoint,
     };
     use voya_db::Database;
     use voya_platform::{
-        coreinfo::{core_type_dir_name, executable_name_for_current_os},
+        coreinfo::{executable_name_for_current_os, CORE_DIR_NAME, SING_BOX_EXECUTABLES},
         paths::{core_seed_resources_dir, AppPaths},
         test_support::RecordingRunner,
         tun::{
@@ -535,22 +503,6 @@ mod tests {
 
     static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-    #[test]
-    fn coreinfo_app_layer_resolves_launch_command_and_env() {
-        let paths = AppPaths::new("/tmp/VoyaVPN");
-        let launch = core_launch_plan(
-            CoreType::sing_box,
-            "/tmp/VoyaVPN/bin/sing_box/sing-box",
-            &paths,
-            "config.json",
-        )
-        .expect("sing-box launch plan");
-
-        assert_eq!(launch.arguments, "run -c config.json --disable-color");
-        assert_eq!(launch.working_dir, paths.bin_config_dir());
-        assert!(launch.environment.is_empty());
-    }
-
     #[tokio::test]
     async fn runtime_connect_writes_generated_config_and_starts_supervisor_path() {
         let database = Database::connect_in_memory()
@@ -560,7 +512,7 @@ mod tests {
         paths
             .ensure_dirs()
             .expect("runtime test operation should succeed");
-        write_fake_core_executable(&paths, CoreType::sing_box);
+        write_fake_core_executable(&paths);
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner.clone()),
@@ -613,7 +565,7 @@ mod tests {
         paths
             .ensure_dirs()
             .expect("runtime test operation should succeed");
-        write_fake_core_executable(&paths, CoreType::sing_box);
+        write_fake_core_executable(&paths);
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(RecordingRunner::default()),
             Arc::new(voya_platform::privilege::ElevationState::new()),
@@ -731,7 +683,7 @@ mod tests {
         paths
             .ensure_dirs()
             .expect("runtime test operation should succeed");
-        write_fake_core_executable(&paths, CoreType::sing_box);
+        write_fake_core_executable(&paths);
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(RecordingRunner::default()),
             Arc::new(voya_platform::privilege::ElevationState::new()),
@@ -867,7 +819,7 @@ mod tests {
         paths
             .ensure_dirs()
             .expect("runtime test operation should succeed");
-        write_fake_core_executable(&paths, CoreType::sing_box);
+        write_fake_core_executable(&paths);
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(
             SupervisorDeps::new(
@@ -924,7 +876,7 @@ mod tests {
             .expect("runtime test operation should succeed");
         let paths = temp_paths();
         let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
-        let seed_exe = write_seed_core_executable(&seed_root, CoreType::sing_box, b"seed-sing-box");
+        let seed_exe = write_seed_core_executable(&seed_root, b"seed-sing-box");
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner.clone()),
@@ -948,10 +900,8 @@ mod tests {
             .await
             .expect("runtime test operation should succeed");
 
-        let app_data_exe = paths.core_bin_file(
-            core_type_dir_name(CoreType::sing_box),
-            executable_name_for_current_os("sing-box"),
-        );
+        let app_data_exe =
+            paths.core_bin_file(CORE_DIR_NAME, executable_name_for_current_os("sing-box"));
         let spawns = runner.spawns();
         assert_eq!(spawns.len(), 1);
         assert_eq!(spawns[0].executable, app_data_exe);
@@ -965,7 +915,7 @@ mod tests {
             .expect("runtime test operation should succeed");
         let paths = temp_paths();
         let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
-        let seed_exe = write_seed_core_executable(&seed_root, CoreType::sing_box, b"seed-sing-box");
+        let seed_exe = write_seed_core_executable(&seed_root, b"seed-sing-box");
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(
             SupervisorDeps::new(
@@ -992,10 +942,8 @@ mod tests {
             .await
             .expect("runtime test operation should succeed");
 
-        let app_data_exe = paths.core_bin_file(
-            core_type_dir_name(CoreType::sing_box),
-            executable_name_for_current_os("sing-box"),
-        );
+        let app_data_exe =
+            paths.core_bin_file(CORE_DIR_NAME, executable_name_for_current_os("sing-box"));
         let spawns = runner.spawns();
         assert_eq!(spawns.len(), 1);
         assert_eq!(spawns[0].executable, seed_exe);
@@ -1029,9 +977,7 @@ mod tests {
         let error = manager.connect(&config).await.expect_err("missing core");
 
         match error {
-            RuntimeError::CoreInfo(CoreInfoError::ExecutableNotFound { core_type, .. }) => {
-                assert_eq!(core_type, CoreType::sing_box);
-            }
+            RuntimeError::CoreInfo(CoreInfoError::ExecutableNotFound { .. }) => {}
             other => panic!("expected typed missing core error, got {other:?}"),
         }
         assert!(runner.spawns().is_empty());
@@ -1046,7 +992,7 @@ mod tests {
         paths
             .ensure_dirs()
             .expect("runtime test operation should succeed");
-        write_fake_core_executable(&paths, CoreType::sing_box);
+        write_fake_core_executable(&paths);
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(SupervisorDeps::new(
             Arc::new(runner),
@@ -1115,25 +1061,17 @@ mod tests {
         )
     }
 
-    fn write_fake_core_executable(paths: &AppPaths, core_type: CoreType) {
-        let core_info = get_core_info(core_type).expect("core info");
-        let executable_name = executable_name_for_current_os(core_info.executable_names()[0]);
-        let executable = paths.core_bin_file(core_type_dir_name(core_type), executable_name);
+    fn write_fake_core_executable(paths: &AppPaths) {
+        let executable_name = executable_name_for_current_os(SING_BOX_EXECUTABLES[0]);
+        let executable = paths.core_bin_file(CORE_DIR_NAME, executable_name);
         fs::create_dir_all(executable.parent().expect("core dir"))
             .expect("runtime test operation should succeed");
         fs::write(executable, b"fake").expect("runtime test operation should succeed");
     }
 
-    fn write_seed_core_executable(
-        seed_root: &Path,
-        core_type: CoreType,
-        contents: &[u8],
-    ) -> PathBuf {
-        let core_info = get_core_info(core_type).expect("core info");
-        let executable_name = executable_name_for_current_os(core_info.executable_names()[0]);
-        let executable = seed_root
-            .join(core_type_dir_name(core_type))
-            .join(executable_name);
+    fn write_seed_core_executable(seed_root: &Path, contents: &[u8]) -> PathBuf {
+        let executable_name = executable_name_for_current_os(SING_BOX_EXECUTABLES[0]);
+        let executable = seed_root.join(CORE_DIR_NAME).join(executable_name);
         fs::create_dir_all(executable.parent().expect("seed core dir"))
             .expect("runtime test operation should succeed");
         fs::write(&executable, contents).expect("runtime test operation should succeed");

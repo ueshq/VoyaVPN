@@ -1,9 +1,6 @@
 import { create } from "zustand";
 
-import type { CoreType } from "@/ipc/bindings";
-
 export type MissingCorePayload = {
-  coreType: CoreType;
   message: string;
 };
 

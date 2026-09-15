@@ -1,13 +1,6 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum CoreType {
-    #[default]
-    SingBox,
-}
-
 /// What the core process is doing right now.
 ///
 /// The single vocabulary for the runtime's connection state: the status command

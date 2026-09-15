@@ -91,7 +91,7 @@ pub fn connection_mode_status(config: &AppConfig, tun_status: &TunStatus) -> Con
 /// Whether `target_os` offers the system proxy mode. macOS only captures
 /// traffic through its PacketTunnel VPN.
 #[must_use]
-pub fn system_proxy_mode_available(target_os: TargetOs) -> bool {
+fn system_proxy_mode_available(target_os: TargetOs) -> bool {
     tun_backend(target_os) != PlatformTunBackend::MacosPacketTunnel
 }
 

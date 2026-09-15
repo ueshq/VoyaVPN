@@ -76,7 +76,7 @@ pub fn local_singbox_ruleset_paths(paths: &AppPaths) -> BTreeMap<String, String>
 }
 
 #[must_use]
-pub fn collect_srs_assets(routings: &[RoutingItem]) -> Vec<SrsAsset> {
+fn collect_srs_assets(routings: &[RoutingItem]) -> Vec<SrsAsset> {
     collect_singbox_ruleset_assets(None, routings)
 }
 

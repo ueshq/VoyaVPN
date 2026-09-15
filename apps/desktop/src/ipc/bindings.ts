@@ -10,7 +10,7 @@ export const commands = {
 	getSettingsApplyStatus: () => typedError<SettingsApplyStatus, AppError>(__TAURI_INVOKE("get_settings_apply_status")),
 	applyPendingSettings: () => typedError<SettingsApplyStatus, AppError>(__TAURI_INVOKE("apply_pending_settings")),
 	/**
-	 *  Thin adapter over `voya_app::settings_flow`.
+	 *  Thin adapter over `voya_app::settings`.
 	 * 
 	 *  Validation, the pre-commit OS side effects, the commit and both rollback
 	 *  paths are the transaction in voya-app, where they are unit-tested; the only
@@ -141,7 +141,7 @@ export const commands = {
 	 *  startup seed copy already runs automatically, but this lets the UI re-run it on demand
 	 *  when the binary is absent (e.g. cleared bin dir, antivirus removal, or a skipped first run).
 	 */
-	installCoreSeed: (coreType: CoreType) => typedError<CoreSeedInstallResult, AppError>(__TAURI_INVOKE("install_core_seed", { coreType })),
+	installCoreSeed: () => typedError<CoreSeedInstallResult, AppError>(__TAURI_INVOKE("install_core_seed")),
 	/**
 	 *  macOS overlays native traffic lights on the webview; Windows renders caption
 	 *  buttons in its borderless window. Linux and the web fallback use `none`.
@@ -190,9 +190,7 @@ export type AppError = {
 };
 
 /**  The kind of row a [`AppErrorKind::NotFound`] refers to. */
-export type AppErrorEntity = "policyGroup" | "profile" | "routing" | "routingRule" | "subscription" | 
-/**  The core-info table has no entry for the requested core type. */
-"coreInfo";
+export type AppErrorEntity = "policyGroup" | "profile" | "routing" | "routingRule" | "subscription";
 
 /**
  *  What went wrong, in the terms the frontend acts on.
@@ -224,7 +222,7 @@ export type AppErrorKind =
  */
 { type: "unsupported" } | 
 /**  The core executable is not installed where the app looks for it. */
-{ type: "missingCore"; coreType: CoreType; searchDir: string; candidates: string[]; downloadUrl: string } | 
+{ type: "missingCore"; searchDir: string; candidates: string[]; downloadUrl: string } | 
 /**  A download, subscription fetch or Clash API call failed. Retryable. */
 { type: "network" } | 
 /**  A filesystem or child-process operation failed. */
@@ -380,7 +378,6 @@ export type ConnectionModeStatus = {
 export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "activeProfileChanged" | "policyGroupChanged" | "settingsSaved";
 
 export type CoreSeedInstallResult = {
-	coreType: CoreType,
 	status: CoreSeedInstallStatus,
 	installedFiles: string[],
 };
@@ -413,8 +410,6 @@ export type CoreSettings = {
  */
 export type CoreState = "cleanupPending" | "disconnected" | "connecting" | "connected" | "disconnecting";
 
-export type CoreType = "singBox";
-
 /**  Why a persistence call failed, at the granularity the UI can act on. */
 export type DatabaseErrorCode = 
 /**
@@ -443,17 +438,9 @@ export type DnsSettings = {
 	directExpectedIps: string | null,
 };
 
-export type ExportProfilesFormat = "shareLinks";
-
-export type ExportProfilesRequest = {
-	indexIds: string[],
-	format: ExportProfilesFormat,
-};
-
 export type ExportProfilesResult = {
 	text: string,
 	count: number,
-	format: ExportProfilesFormat,
 };
 
 export type HysteriaSettings = {
@@ -939,7 +926,6 @@ export type RuntimeStatusResponse = {
 	activeProfileId: string | null,
 	mainPid: number | null,
 	prePid: number | null,
-	runningCoreType: CoreType | null,
 };
 
 export type ServerEndpoint = {

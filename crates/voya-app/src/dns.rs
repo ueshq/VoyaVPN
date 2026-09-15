@@ -38,7 +38,7 @@ pub fn normalize_simple_dns(mut item: SimpleDnsItem) -> SimpleDnsItem {
     item
 }
 
-pub fn validate_settings(item: &SimpleDnsItem) -> Result<()> {
+fn validate_settings(item: &SimpleDnsItem) -> Result<()> {
     let mut issues = Vec::new();
     validate_hosts(item.hosts.as_deref(), "hosts", &mut issues);
     validate_expected_ips(

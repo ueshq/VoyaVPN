@@ -5,7 +5,7 @@
 
 use std::{path::Path, sync::Arc};
 
-pub use voya_core::{AppConfig, CoreType, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
+pub use voya_core::{AppConfig, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
 use voya_db::{Database, DbError};
 use voya_platform::{coreinfo::TargetOs, paths::AppPaths, process::ProcessRunner};
 

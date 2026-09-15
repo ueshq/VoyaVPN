@@ -15,20 +15,20 @@ use thiserror::Error;
 use tokio::time;
 pub use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
-    generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, CoreType,
-    InboundProtocol, ProfileItem, SpeedTestItem, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
+    generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, InboundProtocol,
+    ProfileItem, SpeedTestItem, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
 };
 use voya_db::{Database, DbError};
 use voya_net::probe::{tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
 use voya_platform::{
-    coreinfo::{get_core_info, CoreInfoError, TargetOs},
+    coreinfo::{CoreInfoError, TargetOs},
     filesystem,
     paths::{AppPaths, PathError},
     process::{ProcessError, ProcessHandle, ProcessRole, ProcessRunner, ProcessSpawn},
 };
 
 use crate::redaction::redact_urls;
-use crate::runtime::{core_launch_plan, load_runtime_core_gen_env};
+use crate::runtime::load_runtime_core_gen_env;
 
 const REALPING_FALLBACK_URL: &str = "https://www.google.com/generate_204";
 const SPEEDTEST_BATCH_PAGE_SIZE: usize = 1000;
@@ -58,8 +58,6 @@ pub enum SpeedtestError {
     SingboxConfig(#[from] voya_core::SingboxConfigError),
     #[error("speedtest was cancelled")]
     Cancelled,
-    #[error("no core info entry for {0:?}")]
-    MissingCoreInfo(CoreType),
     #[error("failed to create speedtest config directory {path}: {source}")]
     CreateConfigDir { path: PathBuf, source: io::Error },
     #[error("failed to write speedtest config {path}: {source}")]
@@ -194,7 +192,6 @@ pub trait SpeedtestCoreSession: Send {
 pub trait SpeedtestCoreBackend: Send + Sync {
     fn start(
         &self,
-        core_type: CoreType,
         entries: Vec<SpeedtestConfigEntry>,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>>;
@@ -261,24 +258,6 @@ async fn select_test_items(
         .collect()
 }
 
-fn group_prepared_items(
-    prepared: Vec<PreparedSpeedtestItem>,
-) -> Vec<(CoreType, Vec<PreparedSpeedtestItem>)> {
-    let mut groups: Vec<(CoreType, Vec<PreparedSpeedtestItem>)> = Vec::new();
-    for item in prepared {
-        let core_type = item.entry.context.run_core_type;
-        if let Some((_, items)) = groups
-            .iter_mut()
-            .find(|(candidate, _)| *candidate == core_type)
-        {
-            items.push(item);
-        } else {
-            groups.push((core_type, vec![item]));
-        }
-    }
-    groups
-}
-
 fn speedtest_page_size(config: &AppConfig, selected_count: usize) -> usize {
     let configured = config
         .speed_test_item
@@ -320,7 +299,6 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
         }
         // The test core could not be found, written out, or launched.
         SpeedtestError::CoreInfo(_)
-        | SpeedtestError::MissingCoreInfo(_)
         | SpeedtestError::Path(_)
         | SpeedtestError::Process(_)
         | SpeedtestError::CreateConfigDir { .. }
@@ -536,7 +514,6 @@ mod tests {
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct RecordedCoreStart {
-        core_type: CoreType,
         ports: Vec<i32>,
     }
 
@@ -569,7 +546,6 @@ mod tests {
     impl SpeedtestCoreBackend for RecordingCoreBackend {
         fn start(
             &self,
-            core_type: CoreType,
             entries: Vec<SpeedtestConfigEntry>,
             cancel: CancellationFlag,
         ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
@@ -582,7 +558,6 @@ mod tests {
                     .lock()
                     .expect("speedtest test operation should succeed")
                     .push(RecordedCoreStart {
-                        core_type,
                         ports: entries.iter().map(|entry| entry.port).collect(),
                     });
                 if cancel_in_start {

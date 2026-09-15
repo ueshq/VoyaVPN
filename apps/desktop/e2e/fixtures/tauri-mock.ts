@@ -119,7 +119,6 @@ export async function installTauriSmokeMock(
         prePid: null,
         connectedDurationMs: null,
         activeTunBackend: null,
-        runningCoreType: null,
         state: "disconnected",
       },
       settings: makeAppSettings(),
@@ -390,7 +389,6 @@ export async function installTauriSmokeMock(
             prePid: null,
             connectedDurationMs: 0,
             activeTunBackend: null,
-            runningCoreType: "singBox",
             state: "connected",
           };
           return Promise.resolve(clone(state.runtime));
@@ -402,7 +400,6 @@ export async function installTauriSmokeMock(
             prePid: null,
             connectedDurationMs: null,
             activeTunBackend: null,
-            runningCoreType: null,
             state: "disconnected",
           };
           return Promise.resolve(clone(state.runtime));
@@ -529,7 +526,6 @@ export async function installTauriSmokeMock(
 
           return Promise.resolve({
             count: links.length,
-            format: "shareLinks",
             text: links.join("\n"),
           } satisfies ExportProfilesResult);
         }

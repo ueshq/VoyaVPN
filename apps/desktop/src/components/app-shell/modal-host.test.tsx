@@ -16,7 +16,7 @@ const ipcMocks = vi.hoisted(() => ({
 vi.mock("@/ipc/commands", () => ipcMocks);
 
 function seedInstallResult(status: CoreSeedInstallStatus) {
-  return { coreType: "singBox", installedFiles: [], status };
+  return { installedFiles: [], status };
 }
 
 /**
@@ -24,7 +24,7 @@ function seedInstallResult(status: CoreSeedInstallStatus) {
  * dialog is the onboarding path every user meets.
  */
 function openMissingCoreModal() {
-  useModalStore.getState().showMissingCore({ coreType: "singBox", message: "core missing" });
+  useModalStore.getState().showMissingCore({ message: "core missing" });
 }
 
 function renderModalHost() {
@@ -64,7 +64,7 @@ describe("ModalHost", () => {
     await user.click(screen.getByRole("button", { name: "Repair" }));
 
     await waitFor(() => expect(useModalStore.getState().missingCore).toBeNull());
-    expect(ipcMocks.installCoreSeed).toHaveBeenCalledWith("singBox");
+    expect(ipcMocks.installCoreSeed).toHaveBeenCalledWith();
     expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(1);
   });
 

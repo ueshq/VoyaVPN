@@ -3,7 +3,6 @@ use super::{
     CoreProcessSpec, SupervisorConnectionState, SupervisorSnapshot, SupervisorStartRequest,
 };
 use std::time::Instant;
-use voya_core::CoreType;
 use voya_platform::{
     process::{ProcessHandle, ProcessJob},
     tun::TunBackend,
@@ -19,7 +18,6 @@ pub(super) struct RunningCore {
     pub(super) elevated: Vec<ProcessHandle>,
     pub(super) job: Option<Box<dyn ProcessJob>>,
     pub(super) last_request: Option<SupervisorStartRequest>,
-    pub(super) running_core_type: Option<CoreType>,
 }
 
 pub(super) struct RunningNativeTun {
@@ -40,7 +38,6 @@ impl RunningCore {
             elevated: Vec::new(),
             job: None,
             last_request: None,
-            running_core_type: None,
         }
     }
 
@@ -98,7 +95,6 @@ impl RunningCore {
             }),
             main_pid: self.main.as_ref().map(ProcessHandle::id),
             pre_pid: self.pre.as_ref().map(ProcessHandle::id),
-            running_core_type: self.running_core_type,
             clash_api_port: live_request.map(|request| request.clash_api_port),
             clash_api_secret: live_request.and_then(|request| request.clash_api_secret.clone()),
         }

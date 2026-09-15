@@ -2,7 +2,6 @@
 use super::CoreExitEvent;
 use std::{fmt, path::PathBuf};
 use thiserror::Error;
-use voya_core::CoreType;
 use voya_platform::{
     coreinfo::CoreLaunch,
     process::{ProcessError, ProcessRole},
@@ -86,7 +85,6 @@ impl ClashApiAccess {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreProcessSpec {
-    pub core_type: CoreType,
     pub launch: CoreLaunch,
     pub config_path: Option<PathBuf>,
     pub display_log: bool,
@@ -95,9 +93,8 @@ pub struct CoreProcessSpec {
 
 impl CoreProcessSpec {
     #[must_use]
-    pub const fn new(core_type: CoreType, launch: CoreLaunch) -> Self {
+    pub const fn new(launch: CoreLaunch) -> Self {
         Self {
-            core_type,
             launch,
             config_path: None,
             display_log: true,
@@ -168,7 +165,6 @@ pub struct SupervisorSnapshot {
     pub active_group_id: Option<String>,
     pub main_pid: Option<u32>,
     pub pre_pid: Option<u32>,
-    pub running_core_type: Option<CoreType>,
     /// Clash API port the running main config actually listens on.
     pub clash_api_port: Option<i32>,
     /// Bearer token the running main config demands on that port.
@@ -209,7 +205,6 @@ impl SupervisorSnapshot {
             active_group_id: None,
             main_pid: None,
             pre_pid: None,
-            running_core_type: None,
             clash_api_port: None,
             clash_api_secret: None,
         }
@@ -237,8 +232,8 @@ pub enum SupervisorError {
     CommandChannelClosed,
     #[error("supervisor response channel was dropped")]
     ResponseDropped,
-    #[error("system authorization is required before spawning elevated {0:?}")]
-    ElevationNotGranted(CoreType),
+    #[error("system authorization is required before spawning elevated sing_box")]
+    ElevationNotGranted,
     #[error(transparent)]
     Process(#[from] ProcessError),
     #[error(transparent)]

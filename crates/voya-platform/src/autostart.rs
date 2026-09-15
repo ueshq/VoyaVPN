@@ -256,7 +256,7 @@ pub(crate) fn plan_autostart(request: &AutostartRequest) -> AutostartPlan {
 }
 
 #[must_use]
-pub fn windows_value_name(app_name: &str, executable: &Path) -> String {
+fn windows_value_name(app_name: &str, executable: &Path) -> String {
     format!(
         "{app_name}_{}",
         fnv1a_hex(executable.to_string_lossy().as_bytes())
@@ -296,7 +296,7 @@ fn desktop_entry_exec_argument(executable: &Path) -> String {
 }
 
 #[must_use]
-pub fn macos_launch_agent_plist(app_name: &str, executable: &Path) -> String {
+fn macos_launch_agent_plist(app_name: &str, executable: &Path) -> String {
     let label = macos_label(app_name);
     let process_name = executable
         .file_stem()

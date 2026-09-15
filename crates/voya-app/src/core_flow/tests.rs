@@ -8,12 +8,10 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use voya_core::{
-    AppConfig, CoreType, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint,
-};
+use voya_core::{AppConfig, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint};
 use voya_db::Database;
 use voya_platform::{
-    coreinfo::{core_type_dir_name, executable_name_for_current_os, get_core_info, TargetOs},
+    coreinfo::{executable_name_for_current_os, TargetOs, CORE_DIR_NAME, SING_BOX_EXECUTABLES},
     paths::AppPaths,
     privilege::ElevationState,
     sysproxy::SystemProxyService,
@@ -356,10 +354,8 @@ fn temp_paths() -> AppPaths {
 }
 
 fn write_fake_core_executable(paths: &AppPaths) {
-    let core_info = get_core_info(CoreType::sing_box).expect("core info");
-    let executable_name = executable_name_for_current_os(core_info.executable_names()[0]);
-    let executable: PathBuf =
-        paths.core_bin_file(core_type_dir_name(CoreType::sing_box), executable_name);
+    let executable_name = executable_name_for_current_os(SING_BOX_EXECUTABLES[0]);
+    let executable: PathBuf = paths.core_bin_file(CORE_DIR_NAME, executable_name);
     fs::create_dir_all(executable.parent().expect("core dir")).expect("core dir");
     fs::write(executable, b"fake").expect("fake core");
 }
@@ -604,7 +600,6 @@ async fn a_restarted_core_refreshes_proxy_state_before_the_snapshot() {
                         active_group_id: None,
                         main_pid: Some(12),
                         pre_pid: None,
-                        running_core_type: Some(CoreType::sing_box),
                         clash_api_port: None,
                         clash_api_secret: None,
                     },

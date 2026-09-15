@@ -121,7 +121,7 @@ test("populated pages keep scrolling inside panels and errors inside the page in
     state.connections.connections = Array.from({ length: 200 }, (_, index) => ({
       ...state.connections.connections[0], id: `connection-${index}`, host: `host-${index}.test`,
     }));
-    state.runtime = { ...state.runtime, state: "connected", mainPid: 4242, runningCoreType: "singBox" };
+    state.runtime = { ...state.runtime, state: "connected", mainPid: 4242 };
     // A committed profile change invalidates the list, including the snapshot
     // Home may already have cached before this fixture was populated.
     window.__VOYA_SMOKE__.emit("invalidate-event", {

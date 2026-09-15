@@ -82,7 +82,20 @@ pub async fn export_profile_share_links(
     state: tauri::State<'_, AppState>,
     index_ids: Vec<String>,
 ) -> Result<ExportProfilesResult, AppError> {
-    export_profiles_result(&state, index_ids, ExportProfilesFormat::ShareLinks).await
+    validate_ipc_text_list(
+        &index_ids,
+        "node id",
+        IPC_ID_MAX_CHARS,
+        AppErrorSubsystem::Export,
+    )?;
+    let config = current_config(&state);
+
+    state
+        .services()
+        .exports()
+        .export_profiles(&config, &index_ids)
+        .await
+        .map_err(AppError::from)
 }
 
 #[tauri::command]

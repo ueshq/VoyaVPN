@@ -109,7 +109,7 @@ impl ProcessSpawn {
             executable: launch.executable.clone(),
             arguments: split_command_line(&launch.arguments)?,
             working_dir: launch.working_dir.clone(),
-            environment: launch.environment.clone(),
+            environment: BTreeMap::new(),
             display_log,
             generated_scripts: Vec::new(),
         })
@@ -134,7 +134,7 @@ impl ProcessSpawn {
     }
 
     #[must_use]
-    pub fn with_generated_script(mut self, script: GeneratedScript) -> Self {
+    pub(crate) fn with_generated_script(mut self, script: GeneratedScript) -> Self {
         self.generated_scripts.push(script);
         self
     }

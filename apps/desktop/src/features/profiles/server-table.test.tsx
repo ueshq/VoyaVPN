@@ -206,7 +206,6 @@ describe("ProfilesScreen", () => {
     ipcMocks.exportProfileShareLinks.mockImplementation(
       async (indexIds: string[]) => ({
         count: indexIds.length,
-        format: "shareLinks",
         text: indexIds
           .map((indexId) => `vless://${indexId}@example.test:443`)
           .join("\n"),
@@ -667,7 +666,6 @@ describe("ProfilesScreen", () => {
         activeTunBackend: null,
         mainPid: 42,
         prePid: null,
-        runningCoreType: "singBox",
         state: "connected",
         connectedDurationMs: 0,
       }),
@@ -687,7 +685,6 @@ describe("ProfilesScreen", () => {
         activeTunBackend: null,
         mainPid: 42,
         prePid: null,
-        runningCoreType: "singBox",
         state: "connected",
         connectedDurationMs: 0,
       },
@@ -769,7 +766,6 @@ describe("ProfilesScreen", () => {
           activeTunBackend: null,
           mainPid: null,
           prePid: null,
-          runningCoreType: null,
           state,
           connectedDurationMs: null,
         },
@@ -786,7 +782,6 @@ describe("ProfilesScreen", () => {
       new IpcCommandError({
         kind: {
           type: "missingCore",
-          coreType: "singBox",
           candidates: [],
           searchDir: "/cores",
           downloadUrl: "https://example.test/core",

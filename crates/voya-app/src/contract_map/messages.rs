@@ -34,7 +34,7 @@ pub fn validation_issue_to_contract(
 }
 
 #[must_use]
-pub fn validation_code_to_contract(code: CoreValidationCode) -> ValidationCode {
+fn validation_code_to_contract(code: CoreValidationCode) -> ValidationCode {
     match code {
         CoreValidationCode::InvalidAddress => ValidationCode::InvalidAddress,
         CoreValidationCode::InvalidPort => ValidationCode::InvalidPort,
@@ -64,7 +64,7 @@ pub fn validation_code_to_contract(code: CoreValidationCode) -> ValidationCode {
 }
 
 #[must_use]
-pub fn validation_scope_to_contract(scope: CoreValidationScope) -> ValidationScope {
+fn validation_scope_to_contract(scope: CoreValidationScope) -> ValidationScope {
     match scope {
         CoreValidationScope::RoutingRuleOutbound { rule, outbound } => {
             ValidationScope::RoutingRuleOutbound { rule, outbound }

@@ -175,7 +175,7 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
     ["resetRoutingRules", ["routing-1"], ["routing-1"]],
     ["deleteProfiles", [["index-1"]], [["index-1"]]],
     ["deleteSubscriptions", [["sub-1"]], [["sub-1"]]],
-    ["installCoreSeed", ["singBox"], ["singBox"]],
+    ["installCoreSeed", [], []],
     ["setWindowAcrylic", [true], [true]],
     ["generateQrCode", ["vmess://link"], ["vmess://link"]],
   ];
@@ -198,7 +198,6 @@ function appErrors(): Array<{ error: AppError; label: AppErrorKind["type"] }> {
     { type: "elevationRequired" },
     {
       candidates: ["sing-box"],
-      coreType: "singBox",
       downloadUrl: "https://example.test/core",
       searchDir: "application core directory",
       type: "missingCore",

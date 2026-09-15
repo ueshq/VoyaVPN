@@ -9,8 +9,8 @@ resources/core-seeds/sing_box/sing-box.exe  ->  …/app.voyavpn.desktop/bin/sing
 ```
 
 (See `crates/voya-platform/src/coreinfo.rs::copy_seed_core_asset` and
-`src-tauri/src/lib.rs` startup.) The folder name must match
-`core_type_dir_name` — sing-box → `sing_box` — and the executable must be the
+`src-tauri/src/bootstrap.rs` startup.) The folder name must match
+`CORE_DIR_NAME` in `voya_platform::coreinfo` (`sing_box`) — and the executable must be the
 OS-resolved name (`sing-box.exe` on Windows, `sing-box` on Unix).
 
 ## Populating it

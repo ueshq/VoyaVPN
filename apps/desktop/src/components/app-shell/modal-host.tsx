@@ -13,8 +13,7 @@ import {
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { connectActiveProfile, installCoreSeed } from "@/ipc/commands";
-import type { CoreType } from "@/ipc/bindings";
-import { type MissingCorePayload, useModalStore } from "@/stores/modal-store";
+import { useModalStore } from "@/stores/modal-store";
 import { getErrorMessage } from "@voya/utils/error";
 
 export function ModalHost() {
@@ -26,25 +25,23 @@ export function ModalHost() {
       open={missingCore !== null}
       onOpenChange={(open) => !open && closeMissingCore()}
     >
-      {missingCore ? <MissingCoreDialog payload={missingCore} /> : null}
+      {missingCore ? <MissingCoreDialog /> : null}
     </Dialog>
   );
 }
 
-function MissingCoreDialog({ payload }: { payload: MissingCorePayload }) {
+function MissingCoreDialog() {
   const { t } = useI18n();
   const closeMissingCore = useModalStore((state) => state.closeMissingCore);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [seedMissing, setSeedMissing] = useState(false);
 
-  const coreName = formatCoreType(payload.coreType);
-
   async function installAndConnect() {
     setBusy(true);
     setError(null);
     try {
-      const result = await installCoreSeed(payload.coreType);
+      const result = await installCoreSeed();
       if (result.status === "seedMissing") {
         setSeedMissing(true);
 
@@ -72,7 +69,7 @@ function MissingCoreDialog({ payload }: { payload: MissingCorePayload }) {
           {t("missingCore.title")}
         </DialogTitle>
         <DialogDescription>
-          {t("missingCore.description", { core: coreName })}
+          {t("missingCore.description", { core: "sing-box" })}
         </DialogDescription>
       </DialogHeader>
       <DialogBody>
@@ -102,13 +99,4 @@ function MissingCoreDialog({ payload }: { payload: MissingCorePayload }) {
       </DialogFooter>
     </ScrollableDialogContent>
   );
-}
-
-function formatCoreType(coreType: CoreType | null | undefined): string {
-  switch (coreType) {
-    case "singBox":
-      return "sing-box";
-    default:
-      return coreType == null ? "" : `Core ${coreType}`;
-  }
 }

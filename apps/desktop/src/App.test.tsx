@@ -242,7 +242,6 @@ vi.mock("@/ipc/commands", () => ({
       prePid: null,
       connectedDurationMs: null,
       activeTunBackend: null,
-      runningCoreType: null,
       state: "disconnected",
     }),
   ),
@@ -838,6 +837,5 @@ function connectedCore(): NonNullable<RuntimeEventState["coreState"]> {
     prePid: null,
     connectedDurationMs: 0,
     activeTunBackend: null,
-    runningCoreType: "singBox",
   };
 }

@@ -1,7 +1,6 @@
 #[cfg(unix)]
 use std::fs;
 use std::{
-    collections::BTreeMap,
     io,
     sync::{Mutex, MutexGuard},
     time::{Duration, Instant},
@@ -370,7 +369,6 @@ fn launch(executable: &str, arguments: &str) -> CoreLaunch {
         executable: executable.into(),
         arguments: arguments.to_string(),
         working_dir: "/tmp/voya/binConfigs".into(),
-        environment: BTreeMap::new(),
     }
 }
 
@@ -395,14 +393,14 @@ async fn supervisor_stop_teardown_order_is_sudo_kill_main_pre() {
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box-main", "run -c config.json --disable-color"),
-            ),
-            pre: Some(CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box", "run -c pre.json --disable-color"),
+            main: CoreProcessSpec::new(launch(
+                "/tmp/sing-box-main",
+                "run -c config.json --disable-color",
             )),
+            pre: Some(CoreProcessSpec::new(launch(
+                "/tmp/sing-box",
+                "run -c pre.json --disable-color",
+            ))),
             tun_enabled: true,
             kill_switch: false,
             sudo_script_dir: "/tmp/voya/scripts".into(),
@@ -443,13 +441,10 @@ async fn supervisor_sudo_kill_passes_expected_core_name_for_pid_validation() {
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch(
-                    "/tmp/voya cores/sing-box-client",
-                    "run -c config.json --disable-color",
-                ),
-            ),
+            main: CoreProcessSpec::new(launch(
+                "/tmp/voya cores/sing-box-client",
+                "run -c config.json --disable-color",
+            )),
             pre: None,
             tun_enabled: true,
             kill_switch: false,
@@ -503,10 +498,10 @@ async fn supervisor_sudo_kill_nonzero_status_is_typed_error() {
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box", "run -c config.json --disable-color"),
-            ),
+            main: CoreProcessSpec::new(launch(
+                "/tmp/sing-box",
+                "run -c config.json --disable-color",
+            )),
             pre: None,
             tun_enabled: true,
             kill_switch: false,
@@ -553,10 +548,10 @@ fn supervisor_actor_drop_stops_running_core_with_sudo_kill() {
             .start(SupervisorStartRequest {
                 active_profile_id: Some("active".to_string()),
                 active_group_id: None,
-                main: CoreProcessSpec::new(
-                    CoreType::sing_box,
-                    launch("/tmp/sing-box", "run -c config.json --disable-color"),
-                ),
+                main: CoreProcessSpec::new(launch(
+                    "/tmp/sing-box",
+                    "run -c config.json --disable-color",
+                )),
                 pre: None,
                 tun_enabled: true,
                 kill_switch: false,
@@ -586,10 +581,10 @@ async fn supervisor_elevation_grant_gates_elevated_spawn() {
     let request = SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
         active_group_id: None,
-        main: CoreProcessSpec::new(
-            CoreType::sing_box,
-            launch("/tmp/sing-box", "run -c config.json --disable-color"),
-        ),
+        main: CoreProcessSpec::new(launch(
+            "/tmp/sing-box",
+            "run -c config.json --disable-color",
+        )),
         pre: None,
         tun_enabled: true,
         kill_switch: false,
@@ -603,10 +598,7 @@ async fn supervisor_elevation_grant_gates_elevated_spawn() {
         .start(request.clone())
         .await
         .expect_err("ungranted elevation should fail");
-    assert!(matches!(
-        missing,
-        SupervisorError::ElevationNotGranted(CoreType::sing_box)
-    ));
+    assert!(matches!(missing, SupervisorError::ElevationNotGranted));
 
     elevation.set_granted(true);
     supervisor
@@ -625,10 +617,10 @@ async fn supervisor_crash_restarts_serialized_lifecycle() {
     let request = SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
         active_group_id: None,
-        main: CoreProcessSpec::new(
-            CoreType::sing_box,
-            launch("/tmp/sing-box", "run -c config.json --disable-color"),
-        )
+        main: CoreProcessSpec::new(launch(
+            "/tmp/sing-box",
+            "run -c config.json --disable-color",
+        ))
         .with_may_need_sudo(false),
         pre: None,
         tun_enabled: false,
@@ -703,15 +695,11 @@ sleep 30
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                CoreLaunch {
-                    executable: script,
-                    arguments: String::new(),
-                    working_dir: temp_dir.clone(),
-                    environment: BTreeMap::new(),
-                },
-            )
+            main: CoreProcessSpec::new(CoreLaunch {
+                executable: script,
+                arguments: String::new(),
+                working_dir: temp_dir.clone(),
+            })
             .with_display_log(false)
             .with_may_need_sudo(false),
             pre: None,
@@ -765,14 +753,14 @@ async fn supervisor_windows_non_tun_process_start_assigns_job() {
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box", "run -c config.json --disable-color"),
-            ),
-            pre: Some(CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
+            main: CoreProcessSpec::new(launch(
+                "/tmp/sing-box",
+                "run -c config.json --disable-color",
             )),
+            pre: Some(CoreProcessSpec::new(launch(
+                "/tmp/sing-box-pre",
+                "run -c pre.json --disable-color",
+            ))),
             tun_enabled: false,
             kill_switch: false,
             sudo_script_dir: "/tmp/voya/scripts".into(),
@@ -810,16 +798,16 @@ async fn supervisor_windows_tun_uses_native_service_backend_without_process_spaw
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box", "run -c config.json --disable-color"),
-            )
+            main: CoreProcessSpec::new(launch(
+                "/tmp/sing-box",
+                "run -c config.json --disable-color",
+            ))
             .with_config_path("/tmp/voya/config.json"),
             pre: Some(
-                CoreProcessSpec::new(
-                    CoreType::sing_box,
-                    launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
-                )
+                CoreProcessSpec::new(launch(
+                    "/tmp/sing-box-pre",
+                    "run -c pre.json --disable-color",
+                ))
                 .with_config_path("/tmp/voya/pre.json"),
             ),
             tun_enabled: true,
@@ -871,10 +859,10 @@ async fn supervisor_native_tun_health_disconnects_once_without_restart() {
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box", "run -c config.json --disable-color"),
-            )
+            main: CoreProcessSpec::new(launch(
+                "/tmp/sing-box",
+                "run -c config.json --disable-color",
+            ))
             .with_config_path("/tmp/voya/config.json"),
             pre: None,
             tun_enabled: true,
@@ -931,10 +919,10 @@ async fn supervisor_tun_sudo_wraps_singbox() {
         .start(SupervisorStartRequest {
             active_profile_id: Some("singbox".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box", "run -c config.json --disable-color"),
-            ),
+            main: CoreProcessSpec::new(launch(
+                "/tmp/sing-box",
+                "run -c config.json --disable-color",
+            )),
             pre: None,
             tun_enabled: true,
             kill_switch: false,
@@ -962,14 +950,14 @@ async fn supervisor_tun_partial_start_failure_kills_elevated_main_before_returni
         .start(SupervisorStartRequest {
             active_profile_id: Some("active".to_string()),
             active_group_id: None,
-            main: CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box", "run -c config.json --disable-color"),
-            ),
-            pre: Some(CoreProcessSpec::new(
-                CoreType::sing_box,
-                launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
+            main: CoreProcessSpec::new(launch(
+                "/tmp/sing-box",
+                "run -c config.json --disable-color",
             )),
+            pre: Some(CoreProcessSpec::new(launch(
+                "/tmp/sing-box-pre",
+                "run -c pre.json --disable-color",
+            ))),
             tun_enabled: true,
             kill_switch: false,
             sudo_script_dir: "/tmp/voya/scripts".into(),
@@ -1003,10 +991,10 @@ fn crash_test_request() -> SupervisorStartRequest {
     SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
         active_group_id: None,
-        main: CoreProcessSpec::new(
-            CoreType::sing_box,
-            launch("/tmp/sing-box", "run -c config.json --disable-color"),
-        )
+        main: CoreProcessSpec::new(launch(
+            "/tmp/sing-box",
+            "run -c config.json --disable-color",
+        ))
         .with_may_need_sudo(false),
         pre: None,
         tun_enabled: false,
@@ -1387,10 +1375,10 @@ async fn supervisor_start_precondition_failure_keeps_the_running_core() {
     let request = SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
         active_group_id: None,
-        main: CoreProcessSpec::new(
-            CoreType::sing_box,
-            launch("/tmp/sing-box", "run -c config.json --disable-color"),
-        ),
+        main: CoreProcessSpec::new(launch(
+            "/tmp/sing-box",
+            "run -c config.json --disable-color",
+        )),
         pre: None,
         tun_enabled: true,
         kill_switch: false,
@@ -1408,10 +1396,7 @@ async fn supervisor_start_precondition_failure_keeps_the_running_core() {
         .await
         .expect_err("the elevation grant is gone");
 
-    assert!(matches!(
-        error,
-        SupervisorError::ElevationNotGranted(CoreType::sing_box)
-    ));
+    assert!(matches!(error, SupervisorError::ElevationNotGranted));
     let snapshot = supervisor.status().await.expect("status");
     assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
     assert_eq!(snapshot.main_pid, Some(100));
@@ -1548,10 +1533,10 @@ async fn supervisor_restarts_both_processes_when_the_pre_process_crashes() {
     let snapshot = supervisor
         .start(SupervisorStartRequest {
             pre: Some(
-                CoreProcessSpec::new(
-                    CoreType::sing_box,
-                    launch("/tmp/sing-box-pre", "run -c pre.json --disable-color"),
-                )
+                CoreProcessSpec::new(launch(
+                    "/tmp/sing-box-pre",
+                    "run -c pre.json --disable-color",
+                ))
                 .with_may_need_sudo(false),
             ),
             ..crash_test_request()
@@ -1603,10 +1588,10 @@ async fn supervisor_start_keeps_the_running_core_when_the_sudo_kill_fails() {
     let request = SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
         active_group_id: None,
-        main: CoreProcessSpec::new(
-            CoreType::sing_box,
-            launch("/tmp/sing-box", "run -c config.json --disable-color"),
-        ),
+        main: CoreProcessSpec::new(launch(
+            "/tmp/sing-box",
+            "run -c config.json --disable-color",
+        )),
         pre: None,
         tun_enabled: true,
         kill_switch: false,
@@ -1748,10 +1733,10 @@ fn native_tun_test_request() -> SupervisorStartRequest {
     SupervisorStartRequest {
         active_profile_id: Some("active".to_string()),
         active_group_id: None,
-        main: CoreProcessSpec::new(
-            CoreType::sing_box,
-            launch("/tmp/sing-box", "run -c config.json --disable-color"),
-        )
+        main: CoreProcessSpec::new(launch(
+            "/tmp/sing-box",
+            "run -c config.json --disable-color",
+        ))
         .with_config_path("/tmp/voya/config.json"),
         pre: None,
         tun_enabled: true,

@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorResult {
+pub fn validate_node(item: &ProfileItem) -> NodeValidatorResult {
     let mut result = NodeValidatorResult::default();
 
     if item.address().trim().is_empty() {
@@ -11,23 +11,21 @@ pub fn validate_node(item: &ProfileItem, core_type: CoreType) -> NodeValidatorRe
     }
 
     let network = get_network(item);
-    if core_type == CoreType::sing_box {
-        if !singbox_supports_config_type(item.config_type()) {
-            result.push_error(ValidationCode::UnsupportedProtocol {
-                protocol: protocol_label(item.config_type()),
-            });
-        }
-        if !singbox_transport_supported_protocol(item.config_type()) && network != DEFAULT_NETWORK {
-            result.push_error(ValidationCode::UnsupportedProtocolNetwork {
-                protocol: protocol_label(item.config_type()),
-                network: network.clone(),
-            });
-        }
-        if item.config_type() == ConfigType::Shadowsocks
-            && !SINGBOX_SHADOWSOCKS_ALLOWED_TRANSPORTS.contains(&network.as_str())
-        {
-            result.push_error(ValidationCode::UnsupportedShadowsocksNetwork { network });
-        }
+    if !singbox_supports_config_type(item.config_type()) {
+        result.push_error(ValidationCode::UnsupportedProtocol {
+            protocol: protocol_label(item.config_type()),
+        });
+    }
+    if !singbox_transport_supported_protocol(item.config_type()) && network != DEFAULT_NETWORK {
+        result.push_error(ValidationCode::UnsupportedProtocolNetwork {
+            protocol: protocol_label(item.config_type()),
+            network: network.clone(),
+        });
+    }
+    if item.config_type() == ConfigType::Shadowsocks
+        && !SINGBOX_SHADOWSOCKS_ALLOWED_TRANSPORTS.contains(&network.as_str())
+    {
+        result.push_error(ValidationCode::UnsupportedShadowsocksNetwork { network });
     }
 
     match &item.protocol {
@@ -242,7 +240,7 @@ mod tests {
         ];
 
         for (label, node, expected) in cases {
-            let result = validate_node(node, CoreType::sing_box);
+            let result = validate_node(node);
             assert_eq!(
                 result.errors,
                 expected
@@ -262,7 +260,7 @@ mod tests {
             shadowsocks_node("chacha20-ietf-poly1305"),
             socks_node(),
         ] {
-            let result = validate_node(&node, CoreType::sing_box);
+            let result = validate_node(&node);
             assert!(
                 result.success(),
                 "{:?} rejected: {:?}",

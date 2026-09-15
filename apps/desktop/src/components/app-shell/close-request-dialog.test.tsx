@@ -27,7 +27,6 @@ describe("CloseRequestDialog", () => {
         connectedDurationMs: null,
         mainPid: 1,
         prePid: null,
-        runningCoreType: "singBox",
         state: "connected",
       },
     });

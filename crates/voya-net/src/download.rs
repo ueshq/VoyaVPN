@@ -131,7 +131,7 @@ impl DownloadRequest {
 
 /// Response headers surfaced to callers, restricted to this allowlist so the
 /// download layer never leaks arbitrary server headers upward.
-pub const CAPTURED_RESPONSE_HEADERS: [&str; 6] = [
+const CAPTURED_RESPONSE_HEADERS: [&str; 6] = [
     "subscription-userinfo",
     "profile-update-interval",
     "profile-title",

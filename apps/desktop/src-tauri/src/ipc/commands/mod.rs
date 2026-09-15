@@ -29,8 +29,7 @@ use voya_app::tun::TunManager;
 use voya_contracts::{
     AppError, AppErrorSubsystem, AppNotice, AppNoticeLevel, AppSettingsV1, AppUpdaterState,
     AppUpdaterStatus, AppearanceSettings, CoreFlowReason, CoreSeedInstallResult,
-    CoreSeedInstallStatus, CoreType as ContractCoreType, DnsSettings as DnsSettingsContract,
-    ExportProfilesFormat, ExportProfilesRequest, ExportProfilesResult,
+    CoreSeedInstallStatus, DnsSettings as DnsSettingsContract, ExportProfilesResult,
     ImportProfilesResult as ImportProfilesContract, InvalidationScope, LogCode,
     MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract, ProfileListEntry,
     ProfileListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,
@@ -41,10 +40,7 @@ use voya_contracts::{
     TunProviderDiagnostics, TunStatus,
 };
 use voya_platform::{
-    coreinfo::{
-        copy_seed_core_asset, discover_packaged_seed_executable, get_core_info, CoreInfoError,
-        TargetOs,
-    },
+    coreinfo::{copy_seed_core_asset, discover_packaged_seed_executable, CoreInfoError, TargetOs},
     sysproxy::SystemProxyStatus,
 };
 

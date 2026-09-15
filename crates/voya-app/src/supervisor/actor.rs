@@ -148,7 +148,7 @@ impl SupervisorActor {
             return Ok(spawn);
         }
 
-        let launcher = self.elevation_launcher(spec.core_type)?;
+        let launcher = self.elevation_launcher()?;
         Ok(wrap_spawn_with_unix_sudo_passwordless(spawn, &launcher))
     }
 
@@ -179,7 +179,6 @@ impl SupervisorActor {
             elevated: Vec::new(),
             job,
             last_request: Some(request.clone()),
-            running_core_type: Some(request.main.core_type),
         };
 
         let main = self.deps.runner.spawn(plan.main)?;
@@ -215,12 +214,6 @@ impl SupervisorActor {
             }
         }
 
-        let running_core_type = request
-            .pre
-            .as_ref()
-            .map_or(request.main.core_type, |pre| pre.core_type);
-        partial.running_core_type = Some(running_core_type);
-
         partial.connected_since = Some(self.deps.clock.now());
         self.running = partial;
 
@@ -243,10 +236,6 @@ impl SupervisorActor {
         self.native_tun_generation = self.native_tun_generation.wrapping_add(1);
         let generation = self.native_tun_generation;
 
-        let running_core_type = request
-            .pre
-            .as_ref()
-            .map_or(request.main.core_type, |pre| pre.core_type);
         self.running = RunningCore {
             connected_since: result.is_ok().then(|| self.deps.clock.now()),
             active_profile_id: request.active_profile_id.clone(),
@@ -261,7 +250,6 @@ impl SupervisorActor {
             elevated: Vec::new(),
             job: None,
             last_request: Some(request),
-            running_core_type: Some(running_core_type),
         };
         self.spawn_native_tun_health_watcher(generation, backend);
         result?;
@@ -597,7 +585,7 @@ impl SupervisorActor {
         let target = running
             .sudo_kill_target(handle)
             .ok_or(SupervisorError::UnknownSudoKillTarget { pid: handle.id() })?;
-        let launcher = self.elevation_launcher(target.core_type)?;
+        let launcher = self.elevation_launcher()?;
         let spawn = unix_sudo_kill_spawn_passwordless(
             self.deps.target_os,
             &launcher,
@@ -610,12 +598,11 @@ impl SupervisorActor {
     }
 
     /// Resolve the root-owned elevation launcher, requiring an active grant.
-    fn elevation_launcher(&self, core_type: CoreType) -> Result<PathBuf, SupervisorError> {
+    fn elevation_launcher(&self) -> Result<PathBuf, SupervisorError> {
         if !self.deps.elevation.is_granted() {
-            return Err(SupervisorError::ElevationNotGranted(core_type));
+            return Err(SupervisorError::ElevationNotGranted);
         }
-        elevate_launcher_path(self.deps.target_os)
-            .ok_or(SupervisorError::ElevationNotGranted(core_type))
+        elevate_launcher_path(self.deps.target_os).ok_or(SupervisorError::ElevationNotGranted)
     }
 }
 

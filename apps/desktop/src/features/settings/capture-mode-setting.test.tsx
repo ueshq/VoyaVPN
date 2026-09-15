@@ -30,7 +30,6 @@ const disconnected: RuntimeStatusResponse = {
   connectedDurationMs: null,
   mainPid: null,
   prePid: null,
-  runningCoreType: null,
   state: "disconnected",
 };
 

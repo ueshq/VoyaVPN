@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
-use voya_core::CoreType;
 
 use crate::{
     coreinfo::TargetOs,
@@ -15,13 +14,7 @@ use crate::{
 pub const SUDO_EXECUTABLE: &str = "/usr/bin/sudo";
 
 #[must_use]
-pub const fn should_use_unix_sudo(
-    os: TargetOs,
-    core_type: CoreType,
-    tun_enabled: bool,
-    may_need_sudo: bool,
-) -> bool {
-    let _ = core_type;
+pub const fn should_use_unix_sudo(os: TargetOs, tun_enabled: bool, may_need_sudo: bool) -> bool {
     may_need_sudo && tun_enabled && matches!(os, TargetOs::Linux | TargetOs::Macos)
 }
 

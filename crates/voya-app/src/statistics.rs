@@ -9,7 +9,7 @@ use tokio::{
     task::JoinHandle,
     time,
 };
-use voya_core::{text::nonempty_string, AppConfig, CoreType, ServerStatItem};
+use voya_core::{text::nonempty_string, AppConfig, ServerStatItem};
 use voya_db::{Database, DbError};
 use voya_net::clash::{
     ClashTraffic, ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource,
@@ -55,7 +55,7 @@ pub struct ServerSpeedSample {
 
 impl ServerSpeedSample {
     #[must_use]
-    pub const fn has_traffic(self) -> bool {
+    const fn has_traffic(self) -> bool {
         self.proxy_up_bytes > 0
             || self.proxy_down_bytes > 0
             || self.direct_up_bytes > 0
@@ -113,7 +113,7 @@ pub struct StatisticsConfigSnapshot {
 
 impl StatisticsConfigSnapshot {
     #[must_use]
-    pub fn from_app_config(config: &AppConfig) -> Self {
+    fn from_app_config(config: &AppConfig) -> Self {
         Self {
             active_profile_id: nonempty_string(Some(config.index_id.as_str())),
         }
@@ -178,7 +178,7 @@ impl StatisticsManager {
         let _ = self.shutdown.send(true);
     }
 
-    pub async fn initialize_data(database: &Database, date_now: i64) -> Result<()> {
+    async fn initialize_data(database: &Database, date_now: i64) -> Result<()> {
         database.server_stats().delete_orphans().await?;
         database.server_stats().reset_rollover(date_now).await?;
 
@@ -327,7 +327,7 @@ impl From<ClashTraffic> for ServerSpeedSample {
 }
 
 #[must_use]
-pub fn current_day_marker() -> i64 {
+fn current_day_marker() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| {
@@ -577,16 +577,13 @@ fn snapshot_from_sample(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CoreProcessIdentity {
-    core_type: CoreType,
     main_pid: u32,
     pre_pid: Option<u32>,
 }
 
 fn core_process_identity(snapshot: SupervisorSnapshot) -> Option<CoreProcessIdentity> {
-    let core_type = snapshot.running_core_type?;
     let main_pid = snapshot.main_pid?;
     Some(CoreProcessIdentity {
-        core_type,
         main_pid,
         pre_pid: snapshot.pre_pid,
     })
@@ -676,7 +673,6 @@ mod tests {
             active_group_id: None,
             main_pid: Some(100),
             pre_pid: None,
-            running_core_type: Some(CoreType::sing_box),
             clash_api_port: None,
             clash_api_secret: None,
         };

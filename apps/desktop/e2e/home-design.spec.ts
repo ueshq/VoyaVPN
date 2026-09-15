@@ -81,7 +81,6 @@ for (const { layout, language } of [
         activeTunBackend: "process",
         mainPid: 42,
         prePid: null,
-        runningCoreType: "singBox",
         state: "connected",
         connectedDurationMs: 1458000,
       };

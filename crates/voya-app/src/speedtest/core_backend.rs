@@ -11,6 +11,7 @@
 use std::{path::Path, sync::MutexGuard};
 
 use tokio::task;
+use voya_platform::coreinfo::core_launch;
 
 use super::*;
 use crate::runtime::{resolve_core_executable, write_core_config};
@@ -60,7 +61,6 @@ impl ProcessSpeedtestCoreBackend {
 impl SpeedtestCoreBackend for ProcessSpeedtestCoreBackend {
     fn start(
         &self,
-        core_type: CoreType,
         entries: Vec<SpeedtestConfigEntry>,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
@@ -79,7 +79,6 @@ impl SpeedtestCoreBackend for ProcessSpeedtestCoreBackend {
                 start_probe_core(StartProbeCoreRequest {
                     paths: &paths,
                     config_file_name: &config_file_name,
-                    core_type,
                     entries: &entries,
                     core_seed_resource_dir: core_seed_resource_dir.as_ref(),
                     target_os,
@@ -210,7 +209,6 @@ fn stop_probe_core(
 struct StartProbeCoreRequest<'request> {
     paths: &'request AppPaths,
     config_file_name: &'request str,
-    core_type: CoreType,
     entries: &'request [SpeedtestConfigEntry],
     core_seed_resource_dir: Option<&'request PathBuf>,
     target_os: TargetOs,
@@ -223,12 +221,8 @@ struct StartedProbeCore {
 }
 
 fn start_probe_core(request: StartProbeCoreRequest<'_>) -> Result<StartedProbeCore> {
-    let config_path = write_speedtest_config(
-        request.paths,
-        request.config_file_name,
-        request.core_type,
-        request.entries,
-    )?;
+    let config_path =
+        write_speedtest_config(request.paths, request.config_file_name, request.entries)?;
     match spawn_probe_core(&request) {
         Ok(handle) => Ok(StartedProbeCore {
             handle,
@@ -244,25 +238,15 @@ fn start_probe_core(request: StartProbeCoreRequest<'_>) -> Result<StartedProbeCo
 }
 
 fn spawn_probe_core(request: &StartProbeCoreRequest<'_>) -> Result<ProcessHandle> {
-    let core_info = get_core_info(request.core_type)
-        .ok_or(SpeedtestError::MissingCoreInfo(request.core_type))?;
     // A probe core must be the same binary the runtime would launch, so the
     // resolution (packaged macOS seed, else stage-then-discover) is shared with
     // `runtime` rather than copied here.
     let executable = resolve_core_executable(
         request.paths,
         request.core_seed_resource_dir.map(PathBuf::as_path),
-        core_info,
-        request.core_type,
         request.target_os,
     )?;
-    let launch = core_launch_plan(
-        request.core_type,
-        executable,
-        request.paths,
-        request.config_file_name,
-    )
-    .ok_or(SpeedtestError::MissingCoreInfo(request.core_type))?;
+    let launch = core_launch(executable, request.paths, request.config_file_name);
     let spawn = ProcessSpawn::from_core_launch(ProcessRole::Probe, &launch, true)?;
 
     request.runner.spawn(spawn).map_err(Into::into)
@@ -271,10 +255,8 @@ fn spawn_probe_core(request: &StartProbeCoreRequest<'_>) -> Result<ProcessHandle
 fn write_speedtest_config(
     paths: &AppPaths,
     file_name: &str,
-    core_type: CoreType,
     entries: &[SpeedtestConfigEntry],
 ) -> Result<PathBuf> {
-    let _ = core_type;
     let json = generate_singbox_speedtest_config_json(entries)?;
     // Speedtest configs carry the same outbound credentials as the runtime
     // config, so they go through the same 0600 + O_NOFOLLOW writer.
@@ -393,7 +375,7 @@ mod tests {
     use std::{fs, net::TcpListener as StdTcpListener};
 
     use voya_platform::{
-        coreinfo::{core_type_dir_name, executable_name_for_current_os},
+        coreinfo::{executable_name_for_current_os, CORE_DIR_NAME},
         paths::core_seed_resources_dir,
         process::{ProcessError, ProcessOutput},
         test_support::RecordingRunner,
@@ -412,7 +394,7 @@ mod tests {
     fn seed_core_binary(paths: &AppPaths) -> (PathBuf, PathBuf) {
         let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
         let seed_exe = seed_root
-            .join(core_type_dir_name(CoreType::sing_box))
+            .join(CORE_DIR_NAME)
             .join(executable_name_for_current_os("sing-box"));
         fs::create_dir_all(seed_exe.parent().expect("seed core dir"))
             .expect("speedtest test operation should succeed");
@@ -478,18 +460,12 @@ mod tests {
         .with_target_os(TargetOs::Macos);
 
         backend
-            .start(
-                CoreType::sing_box,
-                Vec::new(),
-                Arc::new(AtomicBool::new(false)),
-            )
+            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
             .await
             .expect("speedtest test operation should succeed");
 
-        let app_data_exe = paths.core_bin_file(
-            core_type_dir_name(CoreType::sing_box),
-            executable_name_for_current_os("sing-box"),
-        );
+        let app_data_exe =
+            paths.core_bin_file(CORE_DIR_NAME, executable_name_for_current_os("sing-box"));
         let spawns = runner.spawns();
         assert_eq!(spawns.len(), 1);
         assert_eq!(spawns[0].executable, seed_exe);
@@ -508,11 +484,7 @@ mod tests {
         );
 
         let session = backend
-            .start(
-                CoreType::sing_box,
-                Vec::new(),
-                Arc::new(AtomicBool::new(false)),
-            )
+            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
             .await
             .expect("speedtest test operation should succeed");
         assert_eq!(runner.spawns().len(), 1, "one probe core was spawned");
@@ -542,11 +514,7 @@ mod tests {
         );
 
         backend
-            .start(
-                CoreType::sing_box,
-                Vec::new(),
-                Arc::new(AtomicBool::new(false)),
-            )
+            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
             .await
             .expect("speedtest test operation should succeed")
             .close()
@@ -577,11 +545,7 @@ mod tests {
         // `Box<dyn SpeedtestCoreSession>` is not `Debug`, so unwrap the error by
         // hand rather than through `expect_err`.
         let error = match backend
-            .start(
-                CoreType::sing_box,
-                Vec::new(),
-                Arc::new(AtomicBool::new(false)),
-            )
+            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
             .await
         {
             Ok(_) => panic!("a failing spawn must surface as an error"),

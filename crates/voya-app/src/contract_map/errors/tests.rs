@@ -13,7 +13,6 @@
 use std::{io, path::PathBuf};
 
 use voya_contracts::DatabaseErrorCode;
-use voya_core::CoreType;
 use voya_db::DbError;
 use voya_net::DownloadError;
 use voya_platform::coreinfo::CoreInfoError;
@@ -155,9 +154,9 @@ fn the_same_database_failure_is_classified_identically_through_every_manager() {
 #[test]
 fn both_elevation_paths_produce_the_same_kind() {
     let tun: AppError = TunManagerError::ElevationRequired.into();
-    let supervisor: AppError = SupervisorError::ElevationNotGranted(CoreType::sing_box).into();
+    let supervisor: AppError = SupervisorError::ElevationNotGranted.into();
     let through_runtime: AppError =
-        RuntimeError::Supervisor(SupervisorError::ElevationNotGranted(CoreType::sing_box)).into();
+        RuntimeError::Supervisor(SupervisorError::ElevationNotGranted).into();
     let through_connection_mode: AppError =
         ConnectionModeError::Tun(TunManagerError::ElevationRequired).into();
 
@@ -202,22 +201,6 @@ fn answering_the_elevation_prompt_is_never_a_request_to_show_it_again() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn a_missing_core_carries_the_payload_the_install_prompt_needs() {
-    let mapped = core_info_error(
-        &CoreInfoError::MissingCoreInfo(CoreType::sing_box),
-        AppErrorSubsystem::Runtime,
-    );
-
-    assert_eq!(
-        mapped.kind,
-        AppErrorKind::NotFound {
-            entity: AppErrorEntity::CoreInfo,
-            id: None,
-        }
-    );
-}
-
-#[test]
 fn core_seed_and_filesystem_failures_are_io_not_missing_core() {
     let mapped = core_info_error(
         &CoreInfoError::InvalidCoreSeedDir {
@@ -240,7 +223,7 @@ fn missing_core_candidates_split_and_trim_the_joined_list() {
 
 #[test]
 fn the_missing_core_message_names_the_core_without_leaking_the_path() {
-    let message = missing_core_message(CoreType::sing_box);
+    let message = MISSING_CORE_MESSAGE;
 
     assert!(message.contains("sing_box"), "{message}");
     assert!(!message.contains('/'), "{message}");
@@ -438,12 +421,6 @@ fn runtime_failures_are_classified() {
         (
             "active profile missing",
             RuntimeError::ActiveProfileNotFound("p-1".to_string()),
-            "notFound",
-            AppErrorSubsystem::Runtime,
-        ),
-        (
-            "no core info",
-            RuntimeError::MissingCoreInfo(CoreType::sing_box),
             "notFound",
             AppErrorSubsystem::Runtime,
         ),
@@ -704,7 +681,6 @@ mod guards {
             | SpeedtestError::Process(_)
             | SpeedtestError::SingboxConfig(_)
             | SpeedtestError::Cancelled
-            | SpeedtestError::MissingCoreInfo(_)
             | SpeedtestError::CreateConfigDir { .. }
             | SpeedtestError::WriteConfig { .. }
             | SpeedtestError::RemoveConfig { .. }
@@ -734,7 +710,6 @@ mod guards {
             | RuntimeError::ActiveProfileNotFound(_)
             | RuntimeError::ActivePolicyGroupNotFound(_)
             | RuntimeError::Validation { .. }
-            | RuntimeError::MissingCoreInfo(_)
             | RuntimeError::CreateConfigDir { .. }
             | RuntimeError::WriteConfig { .. }
             | RuntimeError::RemoveConfig { .. }
@@ -751,7 +726,7 @@ mod guards {
         match error {
             SupervisorError::CommandChannelClosed
             | SupervisorError::ResponseDropped
-            | SupervisorError::ElevationNotGranted(_)
+            | SupervisorError::ElevationNotGranted
             | SupervisorError::Process(_)
             | SupervisorError::NativeTun(_)
             | SupervisorError::Job(_)

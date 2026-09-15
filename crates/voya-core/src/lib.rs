@@ -58,7 +58,6 @@ mod tests {
                 }),
                 ..ProfileItem::default()
             },
-            run_core_type: CoreType::sing_box,
             routing_item: Some(sample_routing_item()),
             ..CoreConfigContext::default()
         };
