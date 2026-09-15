@@ -14,7 +14,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::{
-    host::is_dns_label,
+    host::{is_dns_label, strip_host_brackets},
     protocol_common::{shadowsocks_plugin_for, split_csv, DEFAULT_SECURITY, RAW_HEADER_HTTP},
     text::{decode_base64_text, nonempty_str},
     ConfigType, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint, TlsMode,
@@ -50,14 +50,13 @@ const NETWORKS: &[&str] = &[
 /// outright instead of importing a node that could never connect.
 const RETIRED_NETWORKS: &[&str] = &["xhttp", "splithttp", "kcp", "mkcp"];
 
-mod anytls;
 mod common;
 mod entry;
 mod hysteria2;
 mod naive;
+mod password_uri;
 mod shadowsocks;
 mod socks;
-mod trojan;
 mod tuic;
 mod uri;
 mod vless;

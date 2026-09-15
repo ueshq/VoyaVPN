@@ -15,7 +15,7 @@ pub fn parse_share_link(input: &str) -> Result<ProfileItem, ShareError> {
     {
         socks::parse(trimmed)
     } else if starts_with_ci(trimmed, "trojan://") {
-        trojan::parse(trimmed)
+        password_uri::TROJAN.parse(trimmed)
     } else if starts_with_ci(trimmed, "vless://") {
         vless::parse(trimmed)
     } else if starts_with_ci(trimmed, HYSTERIA2_DEFAULT_SCHEME)
@@ -27,7 +27,7 @@ pub fn parse_share_link(input: &str) -> Result<ProfileItem, ShareError> {
     } else if starts_with_ci(trimmed, "wireguard://") {
         wireguard::parse(trimmed)
     } else if starts_with_ci(trimmed, "anytls://") {
-        anytls::parse(trimmed)
+        password_uri::ANYTLS.parse(trimmed)
     } else if starts_with_ci(trimmed, "naive://")
         || starts_with_ci(trimmed, NAIVE_HTTPS_SCHEME)
         || starts_with_ci(trimmed, NAIVE_QUIC_SCHEME)
@@ -43,12 +43,12 @@ pub(crate) fn export_share_link(item: &ProfileItem) -> Result<String, ShareError
         ConfigType::VMess => vmess::export(item),
         ConfigType::Shadowsocks => shadowsocks::export(item),
         ConfigType::SOCKS => socks::export(item),
-        ConfigType::Trojan => trojan::export(item),
+        ConfigType::Trojan => password_uri::TROJAN.export(item),
         ConfigType::VLESS => vless::export(item),
         ConfigType::Hysteria2 => hysteria2::export(item),
         ConfigType::TUIC => tuic::export(item),
         ConfigType::WireGuard => wireguard::export(item),
-        ConfigType::Anytls => anytls::export(item),
+        ConfigType::Anytls => password_uri::ANYTLS.export(item),
         ConfigType::Naive => naive::export(item),
         actual => Err(ShareError::WrongConfigType {
             protocol: "share",

@@ -74,11 +74,7 @@ pub(super) fn parse_uri_with_schemes(
     {
         return Err(ShareError::UnsupportedProtocol);
     }
-    let address = url
-        .host_str()
-        .unwrap_or("")
-        .trim_matches(['[', ']'])
-        .to_string();
+    let address = strip_host_brackets(url.host_str().unwrap_or(""));
     if address.is_empty() {
         return Err(ShareError::MissingField {
             protocol,
