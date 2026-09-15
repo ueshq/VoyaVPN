@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale, i18next } from "@voya/i18n";
 
-import type { NodeNoticesController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 import { ServerTableNotices } from "./server-table-notices";
 
 function Notices({ error = null, message = null }: { error?: string | null; message?: string | null }) {
@@ -20,7 +20,7 @@ function Notices({ error = null, message = null }: { error?: string | null; mess
     setOperationMessage,
     t: i18next.t.bind(i18next),
     undecodableProfiles: 0,
-  } as unknown as NodeNoticesController;
+  } as unknown as ServerTableController;
   return <ServerTableNotices controller={controller} />;
 }
 

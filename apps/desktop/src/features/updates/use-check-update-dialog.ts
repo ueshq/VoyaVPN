@@ -11,13 +11,13 @@ import {
 } from "@/features/updates/app-update-flow";
 import { appUpdateStatus, updateGeoAssets, updateSrsAssets } from "@/ipc/commands";
 import type { AppUpdaterStatus, ResourceUpdateFile } from "@/ipc/bindings";
-import { relaunch } from "@/ipc/process";
+import { relaunch } from "@/ipc/tauri-plugins";
 import { usePreferencesStore } from "@/stores/preferences-store";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 
-export type UpdateWorkingState =
+type UpdateWorkingState =
   | "app-check"
   | "app-install"
   | "app-restart"

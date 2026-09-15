@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layers, LoaderCircle, Zap } from "lucide-react";
+import { Layers, Zap } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
+import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 import { formatDelay } from "@voya/utils/formatting";
 import {
@@ -131,7 +132,7 @@ export function ProxyGroupsPanel() {
           variant="outline"
         >
           {testing ? (
-            <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+            <Spinner className="size-4" />
           ) : (
             <Zap aria-hidden="true" className="size-4" />
           )}

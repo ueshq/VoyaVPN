@@ -48,3 +48,5 @@ export function useServerTable() {
     handleImported,
   };
 }
+
+export type ServerTableController = ReturnType<typeof useServerTable>;

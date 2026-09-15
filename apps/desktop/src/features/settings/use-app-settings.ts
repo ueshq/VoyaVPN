@@ -4,11 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { loadAppSettings, saveAppSettings } from "@/ipc/commands";
 import type { AppSettingsV1, AppearanceSettings } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
-import { getErrorMessage } from "@voya/utils/error";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 
 import { applyChanges, changedFields } from "./settings-draft";
-import { useSettingsDraft } from "./use-settings-draft";
+import { settingsFailure, useSettingsDraft } from "./use-settings-draft";
 import { applyUiPreferences, endUiPreferencesPreview, previewUiPreferences, reportUiPreferencesError, reportUiPreferencesReverted } from "./ui-preferences";
 
 export function useAppSettings() {
@@ -64,11 +63,12 @@ export function useAppSettings() {
     draft.update((current) => ({ ...current, appearance: preferences }));
   }
 
+  const failure = settingsFailure(draft, query);
   return {
     settings: draft.value,
-    error: draft.error ?? (query.error ? getErrorMessage(query.error) : null),
+    error: failure.error,
     fieldErrors: draft.fieldErrors,
-    retry: () => { draft.retry(); if (query.isError) void query.refetch(); },
+    retry: failure.retry,
     saved: draft.saved,
     saving: draft.saving,
     setAppearance,

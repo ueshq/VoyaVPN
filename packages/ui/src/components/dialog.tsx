@@ -6,25 +6,33 @@ import { XIcon } from "lucide-react";
 import { useDialogFocus } from "@voya/ui/lib/dialog-focus";
 import { cn } from "@voya/ui/lib/utils";
 
-// The width variants must beat DialogContent's `sm:max-w-lg` in the cascade
-// (an sm-scoped rule outranks any unscoped max-w-*), so drop that cap here.
-const scrollableDialogContentVariants = cva("overflow-hidden sm:max-w-none", {
+// A fixed width has to beat DialogContent's `sm:max-w-lg` in the cascade (an
+// sm-scoped rule outranks any unscoped width), so it lifts that cap and clips the
+// content to the frame. The `lg`/`xl`/`3xl` steps keep the plain frame and only
+// move the cap.
+const fixedWidth = "overflow-hidden sm:max-w-none";
+
+const scrollableDialogContentVariants = cva("", {
   variants: {
     height: {
       compact: "max-h-[86vh]",
       default: "max-h-[92vh]",
+      viewport: "max-h-[calc(100dvh-2rem)]",
     },
     rows: {
       body: "grid-rows-[auto_minmax(0,1fr)_auto]",
       "toolbar-body": "grid-rows-[auto_auto_minmax(0,1fr)_auto]",
     },
     width: {
-      // Width-style (not max-w) so every variant survives the sm:max-w-none
-      // reset above; 5xl keeps its historical 64rem cap.
-      "5xl": "w-[min(96vw,64rem)]",
-      "54rem": "w-[min(94vw,54rem)]",
-      "56rem": "w-[min(96vw,56rem)]",
-      "68rem": "w-[min(96vw,68rem)]",
+      // Width-style (not max-w) so it survives the sm:max-w-none reset; 5xl
+      // keeps its historical 64rem cap.
+      "5xl": `${fixedWidth} w-[min(96vw,64rem)]`,
+      "54rem": `${fixedWidth} w-[min(94vw,54rem)]`,
+      "56rem": `${fixedWidth} w-[min(96vw,56rem)]`,
+      "68rem": `${fixedWidth} w-[min(96vw,68rem)]`,
+      lg: "",
+      xl: "sm:max-w-xl",
+      "3xl": "sm:max-w-3xl",
     },
   },
   defaultVariants: {

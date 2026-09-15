@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { repoRootFromScript } from "../../lib/common.mjs";
+import { readJson, repoRootFromScript } from "../../lib/common.mjs";
 import {
   findSignatureArtifact,
   forbiddenHostReason,
@@ -243,7 +243,7 @@ function releaseTargetForArtifact(artifact) {
 async function loadUpdaterArtifactTargets(root) {
   const targets = new Map();
   for (const manifestPath of await walkArtifactManifests(root)) {
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const manifest = readJson(manifestPath);
     const target = String(manifest.target ?? "").trim();
     if (!target) {
       throw new Error(`${relative(repoRoot, manifestPath)} is missing target`);

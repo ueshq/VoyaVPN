@@ -1,7 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { repoRootFromScript } from "../../lib/common.mjs";
+import { readJson, repoRootFromScript } from "../../lib/common.mjs";
 import { stableTargets as stableTargetMatrix } from "../matrix.mjs";
 import {
   defaultEvidencePath,
@@ -202,7 +202,7 @@ async function loadArtifactEntries(inputDir, options, baseUrl) {
   const sourceManifests = [];
 
   for (const manifestPath of manifestPaths) {
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const manifest = readJson(manifestPath);
     const manifestArtifacts = Array.isArray(manifest.artifacts) ? manifest.artifacts : null;
     if (!manifestArtifacts) {
       throw new Error(`${manifestPath} is missing artifacts[]`);

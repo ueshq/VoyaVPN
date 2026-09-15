@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Layers, LoaderCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, Layers } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "@voya/ui/components/button";
@@ -7,18 +7,18 @@ import { Checkbox } from "@voya/ui/components/checkbox";
 import {
   Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { SelectField, TextField } from "@voya/ui/components/form-fields";
-import { redactOperationalError } from "@voya/utils/operational-redaction";
+import { Spinner } from "@voya/ui/components/spinner";
 import type { PolicyGroup, ProfileListEntry, Subscription } from "@/ipc/bindings";
-import { appErrorOfKind, savePolicyGroup } from "@/ipc/commands";
-import { validationFieldErrors } from "@/ipc/messages";
+import { savePolicyGroup } from "@/ipc/commands";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 
 import {
   POLICY_GROUP_STRATEGIES,
@@ -65,9 +65,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
   const { t } = useI18n();
   const [form, setForm] = useState<PolicyGroup>(() => group ?? blankGroup());
   const [filter, setFilter] = useState("");
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const { error, fieldErrors, pending, submit } = useDialogSubmit(t);
   const needle = filter.trim().toLowerCase();
   const visibleNodes = useMemo(
     () => nodes.filter((entry) => !needle || entry.profile.remarks.toLowerCase().includes(needle)),
@@ -98,34 +96,23 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
     });
   }
 
-  async function submit() {
+  async function save() {
     if (!canSave || pending) return;
-    setPending(true);
-    setError(null);
-    setFieldErrors({});
-    try {
+    await submit(async () => {
       await savePolicyGroup({
         ...form,
         name: form.name.trim(),
         testUrl: form.testUrl?.trim() || null,
       });
       onOpenChange(false);
-    } catch (cause) {
-      const validation = appErrorOfKind(cause, "validation");
-      if (validation) {
-        setFieldErrors(validationFieldErrors(t, validation.kind.issues));
-      } else {
-        setError(redactOperationalError(cause));
-      }
-    } finally {
-      setPending(false);
-    }
+    });
   }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <DialogContent
-        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl"
+      <ScrollableDialogContent
+        height="viewport"
+        width="xl"
         closeLabel={t("actions.close")}
         showCloseButton={!pending}
       >
@@ -289,12 +276,12 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
           <Button disabled={pending} onClick={() => onOpenChange(false)} type="button" variant="outline">
             {t("actions.cancel")}
           </Button>
-          <Button disabled={!canSave || pending} onClick={() => void submit()} type="button">
-            {pending ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
+          <Button disabled={!canSave || pending} onClick={() => void save()} type="button">
+            {pending ? <Spinner className="size-4" /> : null}
             {t("actions.save")}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
@@ -52,12 +52,7 @@ function entry(strategy: PolicyGroupEntry["group"]["strategy"], isActive = true)
 }
 
 function renderPanel() {
-  const client = new QueryClient({ defaultOptions: { queries: { gcTime: 0, retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <ProxyGroupsPanel />
-    </QueryClientProvider>,
-  );
+  return renderWithQuery(<ProxyGroupsPanel />, { queryClient: createTestQueryClient({ gcTime: 0 }) });
 }
 
 describe("ProxyGroupsPanel", () => {

@@ -1,7 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
+import { readJson, readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
 import { resolveApprovedUpdaterPublicKey, verifyTauriUpdaterSignatureFile } from "../updater-signatures.mjs";
 import { stableTargets } from "../matrix.mjs";
 import {
@@ -278,7 +278,7 @@ function buildTargetEvidence(evidence) {
 async function loadManifests(inputDir) {
   const manifests = [];
   for (const manifestPath of await walkArtifactManifests(inputDir)) {
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const manifest = readJson(manifestPath);
     manifests.push({
       manifestPath,
       manifestDir: dirname(manifestPath),

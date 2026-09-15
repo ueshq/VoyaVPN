@@ -5,11 +5,11 @@ import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { connectActiveProfile, installCoreSeed } from "@/ipc/commands";
@@ -61,8 +61,9 @@ function MissingCoreDialog({ payload }: { payload: MissingCorePayload }) {
   }
 
   return (
-    <DialogContent
-      className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
+    <ScrollableDialogContent
+      height="viewport"
+      width="lg"
       closeLabel={t("actions.close")}
     >
       <DialogHeader>
@@ -99,7 +100,7 @@ function MissingCoreDialog({ payload }: { payload: MissingCorePayload }) {
           </Button>
         )}
       </DialogFooter>
-    </DialogContent>
+    </ScrollableDialogContent>
   );
 }
 

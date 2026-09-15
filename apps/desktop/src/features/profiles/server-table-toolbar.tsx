@@ -11,7 +11,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 
-import { Toolbar } from "@/components/app-shell/toolbar";
 import { Button } from "@voya/ui/components/button";
 import { DisabledReason } from "@/components/disabled-reason";
 import {
@@ -28,12 +27,12 @@ import { useShellStore } from "@/stores/shell-store";
 import { IMPORT_METHODS } from "./import-methods";
 import { SpeedtestButton } from "./server-table-menus";
 import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
-import type { NodeToolbarController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 
 export function ServerTableToolbar({
   controller,
 }: {
-  controller: NodeToolbarController;
+  controller: ServerTableController;
 }) {
   const {
     handleCancelSpeedtest,
@@ -67,7 +66,11 @@ export function ServerTableToolbar({
   }
 
   return (
-    <Toolbar className="min-w-0 max-w-full justify-end">
+    <div
+      className="flex flex-wrap items-center gap-2 min-w-0 max-w-full justify-end"
+      data-slot="toolbar"
+      role="toolbar"
+    >
       <DisabledReason
         reason={profiles.length ? undefined : t("panes.profiles.speedtest.nothingToTest")}
       >
@@ -226,6 +229,6 @@ export function ServerTableToolbar({
       {speedtestSettingsOpen ? (
         <SpeedtestSettingsDialog onOpenChange={setSpeedtestSettingsOpen} />
       ) : null}
-    </Toolbar>
+    </div>
   );
 }

@@ -2,12 +2,11 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import type { AppSettingsV1 } from "@/ipc/bindings";
@@ -26,11 +25,11 @@ vi.mock(
   "@/ipc/commands",
   async () => (await import("./settings-backend.test-fixture")).settingsIpc,
 );
-vi.mock("@/ipc/updater", () => ({
+vi.mock("@/ipc/tauri-plugins", () => ({
   check: vi.fn(),
   getVersion: vi.fn(async () => "0.1.0"),
+  relaunch: vi.fn(),
 }));
-vi.mock("@/ipc/process", () => ({ relaunch: vi.fn() }));
 beforeEach(async () => {
   resetSettingsBackend();
   await changeLocale("en");
@@ -39,9 +38,7 @@ beforeEach(async () => {
 });
 afterEach(cleanup);
 function mount() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = createTestQueryClient();
   function Host() {
     const tab = useShellStore((s) => s.activeTab);
     return (
@@ -61,11 +58,7 @@ function mount() {
     );
   }
   return {
-    ...render(
-      <QueryClientProvider client={client}>
-        <Host />
-      </QueryClientProvider>,
-    ),
+    ...renderWithQuery(<Host />, { queryClient: client }),
     settle: () => act(() => settingsSaveQueue(client).settled()),
   };
 }

@@ -1,6 +1,5 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { act, cleanup, waitFor } from "@testing-library/react";
+import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@/ipc/query-keys";
@@ -29,16 +28,10 @@ beforeEach(async () => {
 });
 afterEach(cleanup);
 function mount() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
-  const hook = renderHook(
+  const client = createTestQueryClient();
+  const hook = renderHookWithQuery(
     () => ({ app: useAppSettings(), dns: useDnsSettings() }),
-    {
-      wrapper: ({ children }: { children: ReactNode }) => (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      ),
-    },
+    { queryClient: client },
   );
   return {
     ...hook,
@@ -182,11 +175,7 @@ describe("automatic app settings", () => {
     expect(useToastStore.getState().toasts.at(-1)?.description).toBe(
       "save unavailable",
     );
-    const next = renderHook(useAppSettings, {
-      wrapper: ({ children }: { children: ReactNode }) => (
-        <QueryClientProvider client={client}>{children}</QueryClientProvider>
-      ),
-    });
+    const next = renderHookWithQuery(useAppSettings, { queryClient: client });
     await waitFor(() => expect(next.result.current.working).toBe(false));
     expect(next.result.current.settings?.core.logLevel).toBe("trace");
     expect(next.result.current.error).toBe("save unavailable");

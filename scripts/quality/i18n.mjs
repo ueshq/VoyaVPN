@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { repoRootFromScript } from "../lib/common.mjs";
+import { readJson, repoRootFromScript } from "../lib/common.mjs";
 import { inspectI18nSource, isKnownHardcodedText, KNOWN_HARDCODED_TEXT } from "./i18n-analyzer.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
@@ -81,7 +81,7 @@ function readLocale(code) {
   if (!existsSync(path)) {
     throw new Error(`Missing directly maintained Voya locale: ${relative(repoRoot, path)}`);
   }
-  const resource = JSON.parse(readFileSync(path, "utf8"));
+  const resource = readJson(path);
   if (!isPlainObject(resource)) {
     throw new Error(`Locale root must be an object: ${relative(repoRoot, path)}`);
   }

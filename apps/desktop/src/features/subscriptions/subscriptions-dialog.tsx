@@ -1,19 +1,20 @@
 import { useId, useRef, useState } from "react";
-import { LoaderCircle, Rss } from "lucide-react";
+import { Rss } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { SwitchField, TextField } from "@voya/ui/components/form-fields";
+import { Spinner } from "@voya/ui/components/spinner";
 import { saveSubscription, updateSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
@@ -128,8 +129,9 @@ function SubscriptionEditor({
   }
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogContent
-        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl"
+      <ScrollableDialogContent
+        height="viewport"
+        width="xl"
         closeLabel={t("actions.close")}
         showCloseButton={!pending}
         onCloseAutoFocus={
@@ -265,10 +267,7 @@ function SubscriptionEditor({
             disabled={pending}
           >
             {pending ? (
-              <LoaderCircle
-                aria-hidden="true"
-                className="size-4 animate-spin"
-              />
+              <Spinner className="size-4" />
             ) : null}
             {needsUpdate
               ? t("subscriptions.retryUpdate")
@@ -277,7 +276,7 @@ function SubscriptionEditor({
                 : t("subscriptions.addAndUpdate")}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

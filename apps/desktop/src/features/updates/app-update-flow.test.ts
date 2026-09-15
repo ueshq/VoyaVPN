@@ -5,7 +5,7 @@ const updater = vi.hoisted(() => ({
   getVersion: vi.fn(),
 }));
 
-vi.mock("@/ipc/updater", () => updater);
+vi.mock("@/ipc/tauri-plugins", () => updater);
 
 import { checkAppUpdate, installCheckedAppUpdate } from "@/features/updates/app-update-flow";
 

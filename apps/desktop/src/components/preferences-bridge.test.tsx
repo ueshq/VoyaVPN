@@ -1,5 +1,5 @@
-import { cleanup, render, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, waitFor } from "@testing-library/react";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PreferencesBridge } from "@/components/preferences-bridge";
@@ -36,16 +36,10 @@ describe("PreferencesBridge", () => {
   });
 
   it("applies backend theme, locale, and direction again after cross-window invalidation", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     preferencesMocks.loadUiPreferences.mockResolvedValueOnce({ language: "zh-Hant", theme: "dark" });
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <PreferencesBridge />
-      </QueryClientProvider>,
-    );
+    renderWithQuery(<PreferencesBridge />, { queryClient });
 
     await waitFor(() => {
       expect(document.documentElement).toHaveClass("dark");

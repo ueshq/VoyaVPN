@@ -2,13 +2,12 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderWithQuery } from "@/test/render";
 import { afterEach, vi } from "vitest";
 
 import { App } from "./App";
@@ -33,9 +32,6 @@ import { usePreferencesStore } from "@/stores/preferences-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 
-vi.mock("@/ipc/process", () => ({
-  relaunch: vi.fn(() => Promise.resolve()),
-}));
 vi.mock("@/ipc/window", async (importOriginal) => ({
   // The shell checks for Tauri through the real module; only the window plugin is faked.
   isTauriRuntime: (await importOriginal<typeof import("@/ipc/window")>()).isTauriRuntime,
@@ -45,9 +41,10 @@ vi.mock("@/ipc/window", async (importOriginal) => ({
   onWindowResized: vi.fn(() => Promise.resolve(() => undefined)),
   toggleMaximizeWindow: vi.fn(() => Promise.resolve()),
 }));
-vi.mock("@/ipc/updater", () => ({
+vi.mock("@/ipc/tauri-plugins", () => ({
   check: vi.fn(() => Promise.resolve(null)),
   getVersion: vi.fn(() => Promise.resolve("0.1.0")),
+  relaunch: vi.fn(() => Promise.resolve()),
 }));
 
 // The double is checked against the real store type (`satisfies` in `makeState`),
@@ -319,20 +316,13 @@ vi.mock("@/ipc/commands", () => ({
   updateSubscriptions: vi.fn(),
 }));
 vi.mock("@/ipc/event-bridge", () => ({ EventBridge: () => null }));
-vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: runtimeStoreMock.useRuntimeEventStore }));
+vi.mock("@/ipc/runtime-event-store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/ipc/runtime-event-store")>()),
+  useRuntimeEventStore: runtimeStoreMock.useRuntimeEventStore,
+}));
 
 function renderApp() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>,
-  );
+  return renderWithQuery(<App />);
 }
 
 describe("App", () => {

@@ -47,7 +47,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 
 import { MOVE_ACTIONS } from "./profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
-import type { NodeMenuController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 
 type ExportMenuEntry = {
   icon: LucideIcon;
@@ -118,7 +118,7 @@ export function ProfileRowContextMenu({
   item,
 }: {
   children: ReactElement;
-  controller: NodeMenuController;
+  controller: ServerTableController;
   item: ProfileListEntry;
 }) {
   return (
@@ -163,7 +163,7 @@ export function ProfileCardMenu({
   controller,
   item,
 }: {
-  controller: NodeMenuController;
+  controller: ServerTableController;
   item: ProfileListEntry;
 }) {
   const label = controller.t("panes.profiles.menu.actionsFor", {
@@ -198,7 +198,7 @@ function ProfileMenuItems({
   item,
   primitives: { Item, Separator, Sub, SubContent, SubTrigger },
 }: {
-  controller: NodeMenuController;
+  controller: ServerTableController;
   item: ProfileListEntry;
   primitives: ActionMenuPrimitives;
 }) {

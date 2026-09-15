@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -21,11 +21,7 @@ const tauriMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/ipc/commands", () => ipcMocks);
-vi.mock("@/ipc/process", () => ({ relaunch: tauriMocks.relaunch }));
-vi.mock("@/ipc/updater", () => ({
-  check: tauriMocks.check,
-  getVersion: tauriMocks.getVersion,
-}));
+vi.mock("@/ipc/tauri-plugins", () => tauriMocks);
 
 describe("UpdatesPanel", () => {
   beforeEach(async () => {
@@ -93,13 +89,13 @@ describe("UpdatesPanel", () => {
 
   it("waits for submitted settings before installing an update", async () => {
     const user = userEvent.setup();
-    const client = new QueryClient();
+    const client = createTestQueryClient();
     let finish!: () => void;
     const write = new Promise<void>((resolve) => { finish = resolve; });
     settingsSaveQueue(client).enqueue({}, () => write);
     const installed = makeTauriUpdate();
     tauriMocks.check.mockResolvedValueOnce(makeTauriUpdate()).mockResolvedValueOnce(installed);
-    render(<QueryClientProvider client={client}><UpdatesPanel /></QueryClientProvider>);
+    renderWithQuery(<UpdatesPanel />, { queryClient: client });
     await user.click(await screen.findByRole("button", { name: "Check for updates" }));
     await user.click(await screen.findByRole("button", { name: "Install now" }));
     await user.click(
@@ -161,7 +157,7 @@ describe("UpdatesPanel", () => {
 });
 
 function renderPanel() {
-  return render(<QueryClientProvider client={new QueryClient()}><UpdatesPanel /></QueryClientProvider>);
+  return renderWithQuery(<UpdatesPanel />);
 }
 
 function mockDefaultIpc() {

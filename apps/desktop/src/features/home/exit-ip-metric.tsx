@@ -1,7 +1,8 @@
-import { LoaderCircle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import type { TranslationFunction } from "@voya/i18n";
 import { Button } from "@voya/ui/components/button";
+import { Spinner } from "@voya/ui/components/spinner";
 
 import { DisabledReason } from "@/components/disabled-reason";
 
@@ -54,7 +55,7 @@ export function ExitIpMetric({ t }: { t: TranslationFunction }) {
           variant="ghost"
         >
           {checking ? (
-            <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+            <Spinner className="size-3.5" />
           ) : (
             <RefreshCw aria-hidden="true" className="size-3.5" />
           )}

@@ -1,23 +1,14 @@
-import { Layers, LoaderCircle, Settings, Trash2, Zap } from "lucide-react";
+import { Layers, Settings, Trash2, Zap } from "lucide-react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@voya/ui/components/alert-dialog";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
-import { buttonVariants } from "@voya/ui/components/button-variants";
+import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
+import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 import { formatDelay } from "@voya/utils/formatting";
 import type { PolicyGroupEntry } from "@/ipc/bindings";
 
-import type { PolicyGroupsController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 import { PolicyGroupDialog } from "./policy-group-dialog";
 import { POLICY_GROUP_STRATEGY_KEYS } from "./policy-group-labels";
 import { profileMemberName } from "./profile-display";
@@ -27,7 +18,7 @@ import { SpeedtestButton } from "./server-table-menus";
  * Policy groups above the node list. The editor and the delete confirmation
  * stay mounted without any group, because the toolbar creates the first one.
  */
-export function PolicyGroupsSection({ controller }: { controller: PolicyGroupsController }) {
+export function PolicyGroupsSection({ controller }: { controller: ServerTableController }) {
   const {
     deletingPolicyGroup,
     operationError,
@@ -57,44 +48,30 @@ export function PolicyGroupsSection({ controller }: { controller: PolicyGroupsCo
         open={controller.policyGroupEditorOpen}
         subscriptions={controller.policyGroupSubscriptions}
       />
-      <AlertDialog
-        open={deletingPolicyGroup !== null}
+      <ConfirmDialog
+        cancelLabel={t("confirm.cancel")}
+        confirmLabel={t("actions.delete")}
+        description={
+          <>
+            {t("policyGroups.deleteHint")}
+            {/* Same warning as deleting the node in use: say it before, not after. */}
+            {deletingPolicyGroup?.isActive && controller.coreConnected ? (
+              <span className="mt-2 block font-medium text-warning">
+                {t("policyGroups.deleteActiveHint")}
+              </span>
+            ) : null}
+          </>
+        }
+        destructive
+        error={deletingPolicyGroup ? operationError : null}
+        onConfirm={(event) => {
+          event.preventDefault();
+          void removePolicyGroup();
+        }}
         onOpenChange={(open) => !open && setDeletingPolicyGroup(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("policyGroups.deleteTitle", { name: deletingPolicyGroup?.group.name })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("policyGroups.deleteHint")}
-              {/* Same warning as deleting the node in use: say it before, not after. */}
-              {deletingPolicyGroup?.isActive && controller.coreConnected ? (
-                <span className="mt-2 block font-medium text-warning">
-                  {t("policyGroups.deleteActiveHint")}
-                </span>
-              ) : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {operationError && deletingPolicyGroup ? (
-            <p className="text-sm text-danger" role="alert">
-              {operationError}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className={buttonVariants({ variant: "destructive" })}
-              onClick={(event) => {
-                event.preventDefault();
-                void removePolicyGroup();
-              }}
-            >
-              {t("actions.delete")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        open={deletingPolicyGroup !== null}
+        title={t("policyGroups.deleteTitle", { name: deletingPolicyGroup?.group.name })}
+      />
     </>
   );
 }
@@ -103,7 +80,7 @@ function PolicyGroupCard({
   controller,
   entry,
 }: {
-  controller: PolicyGroupsController;
+  controller: ServerTableController;
   entry: PolicyGroupEntry;
 }) {
   const {
@@ -190,7 +167,7 @@ function PolicyGroupCard({
               variant="ghost"
             >
               {testingPolicyGroup ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+                <Spinner className="size-4" />
               ) : (
                 <Zap aria-hidden="true" className="size-4" />
               )}
@@ -224,7 +201,7 @@ function PolicyGroupCard({
             variant={inUse ? "secondary" : "outline"}
           >
             {switchingPolicyGroupId === group.id ? (
-              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              <Spinner className="size-4" />
             ) : null}
             {t(inUse ? "policyGroups.inUse" : "policyGroups.use")}
           </Button>

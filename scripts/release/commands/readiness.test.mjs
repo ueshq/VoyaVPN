@@ -7,15 +7,14 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { resolveTauriConfig } from "./readiness.mjs";
+import { blockerScanFiles, findProductionBlockersInText } from "./readiness/blockers.mjs";
+import { validateStableUpdaterConfigMetadata } from "./readiness/evidence.mjs";
 import {
-  blockerScanFiles,
   checkCoreSeedPinning,
   checkStableEnvironment,
   hasSigningInput,
-  resolveTauriConfig,
-  findProductionBlockersInText,
-  validateStableUpdaterConfigMetadata,
-} from "./readiness.mjs";
+} from "./readiness/prerequisites.mjs";
 
 describe("release readiness production blocker scan", () => {
   it("scans the split voya-net download and subscription modules", () => {

@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { parseArgs } from "../../lib/args.mjs";
-import { readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
+import { readJson, readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
 import { stableTargets } from "../matrix.mjs";
 import { sha256File, walkArtifactManifests } from "../validation.mjs";
 
@@ -304,7 +304,7 @@ async function loadArtifactManifestEntries(roots) {
 
   const entries = [];
   for (const manifestPath of manifestPaths) {
-    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const manifest = readJson(manifestPath);
     if (!Array.isArray(manifest.artifacts)) {
       throw new Error(`${relative(repoRoot, manifestPath)} is missing artifacts[]`);
     }
@@ -340,7 +340,7 @@ async function loadReleaseIndexEntries(releaseIndexPath) {
   }
 
   const path = resolve(repoRoot, releaseIndexPath);
-  const index = JSON.parse(await readFile(path, "utf8"));
+  const index = readJson(path);
   if (!Array.isArray(index.artifacts)) {
     throw new Error(`${releaseIndexPath} is missing artifacts[]`);
   }

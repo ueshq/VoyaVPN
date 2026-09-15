@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@/components/app-shell/query-client";
@@ -32,15 +33,9 @@ function Harness() {
   const [filter, setFilter] = useState("");
   return <ConnectionsPanel filter={filter} onFilterChange={setFilter} />;
 }
-function renderConnections(
-  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } }),
-) {
+function renderConnections(client: QueryClient = createTestQueryClient({ gcTime: 0 })) {
   clients.add(client);
-  return render(
-    <QueryClientProvider client={client}>
-      <Harness />
-    </QueryClientProvider>,
-  );
+  return renderWithQuery(<Harness />, { queryClient: client });
 }
 function snapshot(connections: ProxyConnectionItem[]) {
   return { connections, downloadTotal: 8192, uploadTotal: 4096 } satisfies ProxyConnectionsSnapshot;

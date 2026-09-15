@@ -1,7 +1,7 @@
 import { useShellStore } from "@/stores/shell-store";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
@@ -151,7 +151,10 @@ vi.mock("@/ipc/commands", async (importOriginal) => {
     tunStatus: ipcMock.tunStatus,
   };
 });
-vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: runtimeMock.useRuntimeEventStore }));
+vi.mock("@/ipc/runtime-event-store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/ipc/runtime-event-store")>()),
+  useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
+}));
 
 // `listProfiles` answers with the rows plus the number of stored profiles this
 // build could not decode; Home only reads the rows.
@@ -160,18 +163,7 @@ function mockProfileList(entries: ProfileListEntry[], undecodableProfiles = 0) {
 }
 
 function renderHome() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { gcTime: 0, retry: false } },
-  });
-
-  return {
-    queryClient,
-    ...render(
-      <QueryClientProvider client={queryClient}>
-        <HomeScreen />
-      </QueryClientProvider>,
-    ),
-  };
+  return renderWithQuery(<HomeScreen />, { queryClient: createTestQueryClient({ gcTime: 0 }) });
 }
 
 function connectButton() {

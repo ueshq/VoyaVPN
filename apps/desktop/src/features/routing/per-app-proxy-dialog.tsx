@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AppWindow, Info, LoaderCircle, Plus, X } from "lucide-react";
+import { AppWindow, Info, Plus, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { TranslationKey } from "@voya/i18n";
@@ -22,6 +22,7 @@ import { Input } from "@voya/ui/components/input";
 import { Label } from "@voya/ui/components/label";
 import { ScrollArea } from "@voya/ui/components/scroll-area";
 import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
+import { Spinner } from "@voya/ui/components/spinner";
 import {
   connectionModeStatus,
   deleteRoutingRules,
@@ -31,8 +32,8 @@ import {
   saveRoutingRule,
 } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { redactOperationalError } from "@voya/utils/operational-redaction";
 
 import {
   buildPerAppRule,
@@ -67,10 +68,9 @@ export function PerAppProxyDialog({
   open,
 }: PerAppProxyDialogProps) {
   const { t } = useI18n();
-  const [error, setError] = useState<string | null>(null);
+  const { error, pending: saving, setError, submit } = useDialogSubmit();
   const [manualEntry, setManualEntry] = useState("");
   const [mode, setMode] = useState<PerAppProxyMode>("off");
-  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   // Tracks whether the form was seeded for the current open cycle.
@@ -150,45 +150,39 @@ export function PerAppProxyDialog({
     if (!activeRouting || saving) {
       return;
     }
-    setSaving(true);
-    setError(null);
-    try {
-      const existing = findPerAppRule(activeRouting);
-      const processes = normalizeProcessNames(selected);
-      if (mode === "off") {
-        // Turning it off keeps the chosen apps on a disabled rule, so turning
-        // it back on does not mean picking them all again.
-        if (existing && processes.length > 0) {
-          await saveRoutingRule(activeRouting.id, {
-            ...existing,
-            enabled: false,
-            process: processes,
-          });
-        } else if (existing) {
-          await deleteRoutingRules(activeRouting.id, [existing.id]);
+    await submit(async () => {
+        const existing = findPerAppRule(activeRouting);
+        const processes = normalizeProcessNames(selected);
+        if (mode === "off") {
+          // Turning it off keeps the chosen apps on a disabled rule, so turning
+          // it back on does not mean picking them all again.
+          if (existing && processes.length > 0) {
+            await saveRoutingRule(activeRouting.id, {
+              ...existing,
+              enabled: false,
+              process: processes,
+            });
+          } else if (existing) {
+            await deleteRoutingRules(activeRouting.id, [existing.id]);
+          }
+        } else {
+          const saved = await saveRoutingRule(
+            activeRouting.id,
+            buildPerAppRule(mode, processes, existing),
+          );
+          // The backend appends a new rule to the end of the rule set, which puts
+          // it behind the catch-all rule every built-in routing ends with — a
+          // process rule there can never match. Pin the managed rule to the top so
+          // the listed apps really do take precedence, as documented in
+          // per-app-proxy-rule.ts.
+          const savedRule = findPerAppRule(saved);
+          if (savedRule && saved.rules[0]?.id !== savedRule.id) {
+            await moveRoutingRule(saved.id, savedRule.id, "top", null);
+          }
         }
-      } else {
-        const saved = await saveRoutingRule(
-          activeRouting.id,
-          buildPerAppRule(mode, processes, existing),
-        );
-        // The backend appends a new rule to the end of the rule set, which puts
-        // it behind the catch-all rule every built-in routing ends with — a
-        // process rule there can never match. Pin the managed rule to the top so
-        // the listed apps really do take precedence, as documented in
-        // per-app-proxy-rule.ts.
-        const savedRule = findPerAppRule(saved);
-        if (savedRule && saved.rules[0]?.id !== savedRule.id) {
-          await moveRoutingRule(saved.id, savedRule.id, "top", null);
-        }
-      }
-      // The routing-rule commands emit the `routings` invalidation.
-      onOpenChange(false);
-    } catch (saveError) {
-      setError(redactOperationalError(saveError));
-    } finally {
-      setSaving(false);
-    }
+        // The routing-rule commands emit the `routings` invalidation.
+        onOpenChange(false);
+    });
   }
 
   const vpnHintProminent =
@@ -401,7 +395,7 @@ export function PerAppProxyDialog({
             onClick={() => void handleSave()}
             type="button"
           >
-            {saving ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : null}
+            {saving ? <Spinner className="size-4" /> : null}
             {t("actions.save")}
           </Button>
         </DialogFooter>

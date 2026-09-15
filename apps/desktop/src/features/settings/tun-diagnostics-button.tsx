@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { ClipboardCopy, LoaderCircle } from "lucide-react";
+import { ClipboardCopy } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
+import { Spinner } from "@voya/ui/components/spinner";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { tunProviderDiagnostics } from "@/ipc/commands";
 import type { TunProviderDiagnostics } from "@/ipc/bindings";
@@ -54,7 +55,7 @@ export function TunDiagnosticsButton() {
       variant="outline"
     >
       {copying ? (
-        <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+        <Spinner className="size-4" />
       ) : (
         <ClipboardCopy className="size-4" aria-hidden="true" />
       )}

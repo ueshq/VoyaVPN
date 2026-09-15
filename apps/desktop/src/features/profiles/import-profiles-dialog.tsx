@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { ImagePlus, LoaderCircle, Upload } from "lucide-react";
+import { ImagePlus, Upload } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
@@ -8,14 +8,15 @@ import { Card, CardContent } from "@voya/ui/components/card";
 import {
   Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
+import { Spinner } from "@voya/ui/components/spinner";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { importProfilesFromText } from "@/ipc/commands";
@@ -172,9 +173,10 @@ function ImportProfilesDialogSession({
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogContent
+      <ScrollableDialogContent
         aria-busy={busy}
-        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-3xl"
+        height="viewport"
+        width="3xl"
         closeLabel={t("actions.close")}
         onCloseAutoFocus={
           onCloseFocus
@@ -227,10 +229,7 @@ function ImportProfilesDialogSession({
                     className="flex items-center gap-2 text-sm text-muted-foreground"
                     role="status"
                   >
-                    <LoaderCircle
-                      aria-hidden="true"
-                      className="size-4 animate-spin"
-                    />
+                    <Spinner className="size-4" />
                     {t("panes.profiles.importDialog.reading")}
                   </span>
                 ) : null}
@@ -295,15 +294,12 @@ function ImportProfilesDialogSession({
             type="button"
           >
             {pending === "import" ? (
-              <LoaderCircle
-                aria-hidden="true"
-                className="size-4 animate-spin"
-              />
+              <Spinner className="size-4" />
             ) : null}
             {t("panes.profiles.toolbar.import")}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

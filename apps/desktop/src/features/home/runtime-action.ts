@@ -12,7 +12,7 @@ import {
 } from "@/ipc/commands";
 import type { PolicyGroupListing, RuntimeStatusResponse } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { coreStateOf, runningProfileId, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
 import { beginRuntimeRead } from "@/ipc/runtime-state-version";
 import { useModalStore, type MissingCorePayload } from "@/stores/modal-store";
@@ -44,8 +44,8 @@ export async function runRuntimeAction(
   t: TranslationFunction,
   { inline = false }: { inline?: boolean } = {},
 ) {
-  const state = useRuntimeEventStore.getState().coreState?.state ?? "disconnected";
-  if (runtimeActionPending() || isRuntimeTransitioning(state)) return;
+  const state = coreStateOf(useRuntimeEventStore.getState().coreState);
+  if (runtimeBusy(state)) return;
 
   const store = useRuntimeActionStore.getState();
   store.startAction(action);
@@ -73,8 +73,8 @@ export async function activateSelection(
   t: TranslationFunction,
   select: () => Promise<void>,
 ): Promise<boolean> {
-  const state = useRuntimeEventStore.getState().coreState?.state ?? "disconnected";
-  if (runtimeActionPending() || isRuntimeTransitioning(state) || state === "cleanupPending") {
+  const state = coreStateOf(useRuntimeEventStore.getState().coreState);
+  if (runtimeBusy(state) || state === "cleanupPending") {
     return false;
   }
 
@@ -103,9 +103,9 @@ export function useProfileActivation(t: TranslationFunction) {
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
   const pending = useRuntimeActionStore(runtimeActionPending);
-  const state = coreState?.state ?? "disconnected";
+  const state = coreStateOf(coreState);
   const busy = pending || isRuntimeTransitioning(state) || state === "cleanupPending";
-  const runningId = state === "connected" ? coreState?.activeProfileId ?? null : null;
+  const runningId = runningProfileId(coreState);
 
   function activateProfile(id: string) {
     return activateSelection(id, t, async () => {
@@ -166,6 +166,11 @@ function runtimeActionMessage(error: unknown, t: TranslationFunction) {
 
 export function isRuntimeTransitioning(state: RuntimeStatusResponse["state"]) {
   return state === "connecting" || state === "disconnecting";
+}
+
+/** A new runtime action waits while another one runs or the core is changing state. */
+export function runtimeBusy(state: RuntimeStatusResponse["state"]) {
+  return runtimeActionPending() || isRuntimeTransitioning(state);
 }
 
 /**

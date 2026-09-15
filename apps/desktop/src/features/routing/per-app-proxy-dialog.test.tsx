@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProcessCandidate, Routing_Serialize, RoutingRule } from "@/ipc/bindings";
@@ -21,16 +22,10 @@ vi.mock("@/ipc/commands", () => ipcMocks);
 const queryClients = new Set<QueryClient>();
 
 function renderDialog(onOpenChange: (open: boolean) => void = vi.fn()) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { gcTime: 0, retry: false } },
-  });
+  const queryClient = createTestQueryClient({ gcTime: 0 });
   queryClients.add(queryClient);
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <PerAppProxyDialog onOpenChange={onOpenChange} open />
-    </QueryClientProvider>,
-  );
+  return renderWithQuery(<PerAppProxyDialog onOpenChange={onOpenChange} open />, { queryClient });
 }
 
 function routing(rules: RoutingRule[] = [], isActive = true): Routing_Serialize {

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { listPolicyGroups, listProfiles, policyGroupRuntime } from "@/ipc/commands";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { coreStateOf, runningProfileId, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TunStatus } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
@@ -33,7 +33,7 @@ export function useHomeRuntime() {
     queryKey: queryKeys.profileList,
   });
 
-  const state = coreState?.state ?? "disconnected";
+  const state = coreStateOf(coreState);
   const connected = state === "connected";
   const inProgress = isRuntimeTransitioning(state);
   const busy = inProgress || pending;
@@ -41,7 +41,7 @@ export function useHomeRuntime() {
   const activeProfile =
     profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
   // Connection details follow the running node rather than the saved selection.
-  const runningId = connected ? (coreState?.activeProfileId ?? null) : null;
+  const runningId = runningProfileId(coreState);
   const tunEnabled = tun?.enabled ?? false;
   const tunProviderSummary = tun ? tunProviderLabel(tun, t) : null;
 

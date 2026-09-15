@@ -2,15 +2,15 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/components/app-shell/query-client";
+import { renderWithQuery } from "@/test/render";
 import type {
   ProfileListEntry,
   Subscription,
@@ -73,14 +73,7 @@ function core(
 function renderScreen() {
   const client = createAppQueryClient();
   clients.add(client);
-  return {
-    ...render(
-      <QueryClientProvider client={client}>
-        <ProfilesScreen />
-      </QueryClientProvider>,
-    ),
-    client,
-  };
+  return { ...renderWithQuery(<ProfilesScreen />, { queryClient: client }), client };
 }
 function changed() {
   clients.forEach(

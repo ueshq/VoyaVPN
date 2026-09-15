@@ -3,11 +3,10 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { isRuntimeTransitioning, runRuntimeAction } from "@/features/home/runtime-action";
+import { runRuntimeAction, runtimeBusy } from "@/features/home/runtime-action";
 import type { ProfileListing } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { runtimeActionPending } from "@/stores/runtime-action-store";
+import { coreStateOf, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { SHELL_TABS, useShellStore } from "@/stores/shell-store";
 
 function isApplePlatform() {
@@ -63,8 +62,8 @@ export function useShellShortcuts() {
 
 /** What the Home connect button does, from any page. */
 async function toggleConnection(t: TranslationFunction, queryClient: QueryClient) {
-  const state = useRuntimeEventStore.getState().coreState?.state ?? "disconnected";
-  if (runtimeActionPending() || isRuntimeTransitioning(state)) return;
+  const state = coreStateOf(useRuntimeEventStore.getState().coreState);
+  if (runtimeBusy(state)) return;
   const action = state === "connected" || state === "cleanupPending" ? "disconnect" : "connect";
   const profiles = queryClient.getQueryData<ProfileListing>(queryKeys.profileList);
   if (action === "connect" && profiles?.entries.length === 0) {

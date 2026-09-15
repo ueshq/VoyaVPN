@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@/ipc/query-keys";
 import { SettingsApplyStatus } from "./settings-apply-status";
@@ -13,14 +13,8 @@ beforeEach(() => {
   vi.resetAllMocks();
 });
 function mount(saving = false) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
-  const view = render(
-    <QueryClientProvider client={client}>
-      <SettingsApplyStatus saving={saving} failed={false} />
-    </QueryClientProvider>,
-  );
+  const client = createTestQueryClient({ gcTime: 0 });
+  const view = renderWithQuery(<SettingsApplyStatus saving={saving} failed={false} />, { queryClient: client });
   return { ...view, client };
 }
 it("keeps saved settings pending until the explicit reconnect action", async () => {
@@ -92,15 +86,10 @@ it("says when changes are being saved and once they are saved", async () => {
     connected: false,
     action: "none",
   });
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
   const status = (props: { saving: boolean; saved?: boolean; failed?: boolean }) => (
-    <QueryClientProvider client={client}>
-      <SettingsApplyStatus failed={props.failed ?? false} saved={props.saved} saving={props.saving} />
-    </QueryClientProvider>
+    <SettingsApplyStatus failed={props.failed ?? false} saved={props.saved} saving={props.saving} />
   );
-  const view = render(status({ saving: true }));
+  const view = renderWithQuery(status({ saving: true }), { queryClient: createTestQueryClient({ gcTime: 0 }) });
   expect(await screen.findByRole("status")).toHaveTextContent("Saving…");
   view.rerender(status({ saved: true, saving: false }));
   expect(

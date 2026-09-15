@@ -66,6 +66,16 @@ export type RuntimeEventState = {
   tun: TunStatus | null;
 };
 
+/** The core's state; `disconnected` until the first status arrives. */
+export function coreStateOf(coreState: RuntimeStatusResponse | null) {
+  return coreState?.state ?? "disconnected";
+}
+
+/** The node the core is running, or `null` while it is not connected. */
+export function runningProfileId(coreState: RuntimeStatusResponse | null) {
+  return coreState?.state === "connected" ? coreState.activeProfileId : null;
+}
+
 type FrameHandle = number | ReturnType<typeof setTimeout>;
 
 const MAX_LOG_LINES = 500;

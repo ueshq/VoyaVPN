@@ -19,7 +19,7 @@ export type RuleGroupOutbound = { id: string; name: string };
 
 type BuiltinOutbound = keyof typeof OUTBOUND_LABEL_KEYS;
 
-export type OutboundTarget =
+type OutboundTarget =
   | { kind: BuiltinOutbound }
   | { kind: "group" | "missing" | "missingGroup" | "node"; name: string };
 

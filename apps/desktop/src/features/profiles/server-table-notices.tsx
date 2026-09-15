@@ -1,15 +1,16 @@
 import { useEffect } from "react";
-import { FileWarning, LoaderCircle, X } from "lucide-react";
+import { FileWarning, X } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
+import { Spinner } from "@voya/ui/components/spinner";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { PageSurface } from "@/components/app-shell/page-section";
 import { getErrorMessage } from "@voya/utils/error";
-import type { NodeNoticesController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 
 /** Long enough to read an import summary, short enough not to linger. */
 const SUCCESS_NOTICE_MS = 8000;
 
-export function ServerTableNotices({ controller }: { controller: NodeNoticesController }) {
+export function ServerTableNotices({ controller }: { controller: ServerTableController }) {
   const {
     directImportPending,
     operationError,
@@ -32,7 +33,7 @@ export function ServerTableNotices({ controller }: { controller: NodeNoticesCont
     <>
       {directImportPending ? (
         <PageSurface className="flex shrink-0 items-center gap-2 px-4 py-2 text-sm text-muted-foreground" role="status" aria-busy="true">
-          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+          <Spinner className="size-4" />
           {directImportPending === "qrScreen" ? t("qr.scanningScreen") : directImportPending === "import" ? t("panes.profiles.import.importing") : t("panes.profiles.importDialog.reading")}
         </PageSurface>
       ) : null}

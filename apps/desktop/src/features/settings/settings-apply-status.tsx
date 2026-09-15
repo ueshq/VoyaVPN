@@ -1,8 +1,9 @@
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, LoaderCircle, RotateCcw } from "lucide-react";
+import { Check, RotateCcw } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
+import { Spinner } from "@voya/ui/components/spinner";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { applyPendingSettings, getSettingsApplyStatus } from "@/ipc/commands";
@@ -61,7 +62,7 @@ export function SettingsApplyStatus({
         role="status"
       >
         {saving ? (
-          <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin" />
+          <Spinner className="size-3.5" />
         ) : (
           <Check aria-hidden="true" className="size-3.5" />
         )}
@@ -80,7 +81,7 @@ export function SettingsApplyStatus({
     <PageSurface className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
       {working ? (
         <span className="inline-flex items-center gap-2 text-sm" role="status">
-          <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+          <Spinner className="size-4" />
           {t("settings.apply.working")}
         </span>
       ) : needsApply ? (

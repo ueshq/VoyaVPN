@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { truthy } from "../lib/common.mjs";
+import { readJson, truthy } from "../lib/common.mjs";
 
 export const DEFAULT_SING_BOX_VERSION = "v1.13.14";
 const SING_BOX_REPO = "SagerNet/sing-box";
@@ -186,7 +186,7 @@ export function readSingBoxSeedManifest(seedDir) {
   }
 
   try {
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const manifest = readJson(manifestPath);
     return manifest && typeof manifest === "object" ? manifest : null;
   } catch {
     return null;

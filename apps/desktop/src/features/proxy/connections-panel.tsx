@@ -3,17 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Activity, ArrowDown, ArrowUp, Inbox, LoaderCircle, MoreHorizontal, RefreshCw, Search, Unplug } from "lucide-react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@voya/ui/components/alert-dialog";
-import { buttonVariants } from "@voya/ui/components/button-variants";
+import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import {
   dataTableHeader,
   dataTableRowEven,
@@ -464,25 +454,16 @@ export function ConnectionsPanel({
           ) : null}
         </>
       )}
-      <AlertDialog open={confirmingDisconnectAll} onOpenChange={setConfirmingDisconnectAll}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t("confirm.disconnectAllTitle")}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("confirm.disconnectAllDescription", { count: snapshot.connections.length })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className={buttonVariants({ variant: "destructive" })}
-              onClick={() => closeMutation.mutate(null)}
-            >
-              {t("confirm.disconnectAllConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        cancelLabel={t("confirm.cancel")}
+        confirmLabel={t("confirm.disconnectAllConfirm")}
+        description={t("confirm.disconnectAllDescription", { count: snapshot.connections.length })}
+        destructive
+        onConfirm={() => closeMutation.mutate(null)}
+        onOpenChange={setConfirmingDisconnectAll}
+        open={confirmingDisconnectAll}
+        title={t("confirm.disconnectAllTitle")}
+      />
       <ConnectionDetails
         connection={selection?.connection ?? null}
         ended={selection?.ended ?? false}

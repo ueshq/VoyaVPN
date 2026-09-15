@@ -1,6 +1,5 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { act, cleanup, waitFor } from "@testing-library/react";
+import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 
 import { i18next } from "@voya/i18n";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,15 +40,12 @@ function press(init: KeyboardEventInit) {
 }
 
 function renderShortcuts(entries: number) {
-  const client = new QueryClient();
+  const client = createTestQueryClient();
   client.setQueryData<ProfileListing>(queryKeys.profileList, {
     entries: Array.from({ length: entries }, () => ({}) as ProfileListing["entries"][number]),
     undecodableProfiles: 0,
   });
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  );
-  return renderHook(() => useShellShortcuts(), { wrapper });
+  return renderHookWithQuery(() => useShellShortcuts(), { queryClient: client });
 }
 
 describe("useShellShortcuts", () => {

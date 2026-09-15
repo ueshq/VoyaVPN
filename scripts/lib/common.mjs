@@ -1,6 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -32,9 +31,12 @@ export function isCliEntrypoint(importMetaUrl) {
   return process.argv[1] ? pathToFileURL(resolve(process.argv[1])).href === importMetaUrl : false;
 }
 
+export function readJson(path) {
+  return JSON.parse(readFileSync(path, "utf8"));
+}
+
 export async function readPackageVersion(repoRoot) {
-  const packageJson = JSON.parse(await readFile(resolve(repoRoot, "package.json"), "utf8"));
-  return packageJson.version;
+  return readJson(resolve(repoRoot, "package.json")).version;
 }
 
 // Only long flags: short flags such as `-p` mean "package" to cargo and

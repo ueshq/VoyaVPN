@@ -1,6 +1,5 @@
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { act, cleanup, waitFor } from "@testing-library/react";
+import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@/ipc/query-keys";
@@ -12,9 +11,9 @@ vi.mock("@/ipc/commands", async () => (await import("@/features/settings/setting
 beforeEach(async () => { resetSettingsBackend(); await changeLocale("en"); });
 afterEach(cleanup);
 function mount(enabled = true, seedApp = true) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   if (seedApp) client.setQueryData(queryKeys.appSettings, serverSettings());
-  const hook = renderHook(() => useDnsSettings(enabled), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+  const hook = renderHookWithQuery(() => useDnsSettings(enabled), { queryClient: client });
   return { ...hook, client, settle: () => act(() => settingsSaveQueue(client).settled()) };
 }
 

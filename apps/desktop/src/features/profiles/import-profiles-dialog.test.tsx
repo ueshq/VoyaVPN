@@ -1,12 +1,12 @@
 import {
   act,
   fireEvent,
-  render,
   screen,
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
@@ -34,21 +34,17 @@ vi.mock("./qr-scanner", async (importOriginal) => {
 const queryClients = new Set<QueryClient>();
 
 function renderDialog(onImported = vi.fn(), onOpenChange = vi.fn()) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { gcTime: 0, retry: false } },
-  });
+  const queryClient = createTestQueryClient({ gcTime: 0 });
   queryClients.add(queryClient);
 
   const ui = (open: boolean) => (
-    <QueryClientProvider client={queryClient}>
-      <ImportProfilesDialog
-        onImported={onImported}
-        onOpenChange={onOpenChange}
-        open={open}
-      />
-    </QueryClientProvider>
+    <ImportProfilesDialog
+      onImported={onImported}
+      onOpenChange={onOpenChange}
+      open={open}
+    />
   );
-  const result = render(ui(true));
+  const result = renderWithQuery(ui(true), { queryClient });
   return {
     ...result,
     setOpen: (open: boolean) => result.rerender(ui(open)),

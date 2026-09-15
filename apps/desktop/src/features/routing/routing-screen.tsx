@@ -4,18 +4,8 @@ import { Menubar, MenubarMenu, MenubarTrigger, MenubarContent, MenubarItem } fro
 
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@voya/ui/components/alert-dialog";
+import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import { Button } from "@voya/ui/components/button";
-import { buttonVariants } from "@voya/ui/components/button-variants";
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { ScrollArea } from "@voya/ui/components/scroll-area";
 import { Skeleton } from "@voya/ui/components/skeleton";
@@ -146,7 +136,7 @@ export function RoutingScreen() {
         rule={ruleDialog?.mode === "edit" ? ruleDialog.rule : null}
         submitError={controller.ruleSaveFailure}
       />
-      <ConfirmDialog controller={controller} />
+      <PendingConfirmDialog controller={controller} />
       {perAppOpen && processRulesSupported ? <PerAppProxyDialog onOpenChange={controller.setPerAppOpen} open /> : null}
     </PageSection>
   );
@@ -211,7 +201,7 @@ function RulesBody({
   );
 }
 
-function ConfirmDialog({ controller }: { controller: RoutingScreenController }) {
+function PendingConfirmDialog({ controller }: { controller: RoutingScreenController }) {
   const { t } = useI18n();
   const { confirmPending, pendingConfirm, setPendingConfirm } = controller;
   // Keeps the last request's wording while the dialog animates closed.
@@ -222,28 +212,18 @@ function ConfirmDialog({ controller }: { controller: RoutingScreenController }) 
   const copy = confirmCopy(shown, t);
 
   return (
-    <AlertDialog
+    <ConfirmDialog
+      cancelLabel={t("confirm.cancel")}
+      confirmLabel={copy.confirm}
+      description={copy.description}
+      destructive={copy.destructive}
+      onConfirm={confirmPending}
       onOpenChange={(open) => {
         if (!open) setPendingConfirm(null);
       }}
       open={pendingConfirm !== null}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{copy.title}</AlertDialogTitle>
-          <AlertDialogDescription>{copy.description}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
-          <AlertDialogAction
-            className={copy.destructive ? buttonVariants({ variant: "destructive" }) : undefined}
-            onClick={confirmPending}
-          >
-            {copy.confirm}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      title={copy.title}
+    />
   );
 }
 

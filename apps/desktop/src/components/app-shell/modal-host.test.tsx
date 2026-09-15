@@ -1,6 +1,6 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ModalHost } from "@/components/app-shell/modal-host";
@@ -28,15 +28,7 @@ function openMissingCoreModal() {
 }
 
 function renderModalHost() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { gcTime: 0, retry: false } },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ModalHost />
-    </QueryClientProvider>,
-  );
+  return renderWithQuery(<ModalHost />, { queryClient: createTestQueryClient({ gcTime: 0 }) });
 }
 
 describe("ModalHost", () => {

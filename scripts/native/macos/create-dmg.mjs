@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { isCliEntrypoint, readJson, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   incompatiblePacketTunnelBundle,
   packetTunnelLayout,
@@ -10,7 +10,7 @@ import {
 } from "./tunnel-layout.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
-const packageJson = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8"));
+const packageJson = readJson(resolve(repoRoot, "package.json"));
 const appBundle = resolve(
   process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(repoRoot, "target", "release", "bundle", "macos", "VoyaVPN.app"),
 );

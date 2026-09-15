@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { repoRootFromScript } from "../lib/common.mjs";
+import { readJson, repoRootFromScript } from "../lib/common.mjs";
 import {
   criticalModules,
   evaluateCoverage,
@@ -11,7 +10,7 @@ import {
 } from "./frontend-coverage-policy.mjs";
 
 const root = repoRootFromScript(import.meta.url);
-const summary = JSON.parse(readFileSync(resolve(root, "coverage/coverage-summary.json"), "utf8"));
+const summary = readJson(resolve(root, "coverage/coverage-summary.json"));
 
 const { failures, warnings } = evaluateCoverage({
   total: summary.total,

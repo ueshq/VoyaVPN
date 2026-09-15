@@ -1,5 +1,5 @@
 import { navigateVirtualList } from "./virtual-list-keyboard";
-import { Inbox, LoaderCircle, Plus } from "lucide-react";
+import { Inbox, Plus } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { useShellStore } from "@/stores/shell-store";
 import { NodeCountryIcon } from "@/components/node-country-icon";
@@ -7,6 +7,7 @@ import { PageSurface } from "@/components/app-shell/page-section";
 
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Skeleton } from "@voya/ui/components/skeleton";
+import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 
 import { NodeGroupCard } from "./node-group-card";
@@ -21,12 +22,12 @@ import {
 import { getProtocolLabel } from "./profile-constants";
 
 import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
-import type { NodeListController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 
 export function ProfileCardList({
   controller,
 }: {
-  controller: NodeListController;
+  controller: ServerTableController;
 }) {
   const {
     activation,
@@ -204,10 +205,7 @@ export function ProfileCardList({
                           variant="outline"
                         >
                           {switching ? (
-                            <LoaderCircle
-                              aria-hidden="true"
-                              className="size-4 animate-spin"
-                            />
+                            <Spinner className="size-4" />
                           ) : null}
                           {switching
                             ? t("panes.profiles.card.switching")

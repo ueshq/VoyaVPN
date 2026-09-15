@@ -49,11 +49,6 @@
   --border: #d1d9e0;
   --input: #d1d9e0;
   --ring: #0969da;
-  --chart-1: #0969da;
-  --chart-2: #1a7f37;
-  --chart-3: #9a6700;
-  --chart-4: #8250df;
-  --chart-5: #b12f79;
 
   /* Connected state — Primer success emphasis for the VPN connected/affirmative semantics. */
   --connected: #1f883d;
@@ -65,9 +60,6 @@
      Use sparingly: connected state / primary connect glow / active node. */
   --signal: var(--connected);
   --signal-foreground: var(--connected-foreground);
-  /* Beacon — Primer severe emphasis (needs white ink for AA). */
-  --beacon: #bc4c00;
-  --beacon-foreground: #ffffff;
 
   /* Depth ladder + connection glow */
   --shadow-sm:
@@ -100,42 +92,19 @@
   --accent-blue-light: rgb(9 105 218 / 0.08);
   --accent-blue-bg: rgb(9 105 218 / 0.1);
   --accent-blue-hover: #0550ae;
-  --accent-red: #d1242f;
-  --accent-red-light: rgb(209 36 47 / 0.1);
-  --accent-orange: #bc4c00;
-  --accent-orange-light: rgb(188 76 0 / 0.1);
-  --accent-yellow: #9a6700;
-  --accent-yellow-light: rgb(154 103 0 / 0.1);
-  --accent-green: #1a7f37;
-  --accent-green-light: rgb(26 127 55 / 0.1);
-  --accent-purple: #8250df;
-  --accent-purple-light: rgb(130 80 223 / 0.1);
-  --accent-teal: #106e75;
-  --accent-teal-light: rgb(16 110 117 / 0.1);
-  --accent-pink: #b12f79;
-  --accent-pink-light: rgb(177 47 121 / 0.1);
-  --accent-gray: #59636e;
-  --accent-gray-light: rgb(89 99 110 / 0.1);
 
   /* Primer elevation — resting/overlay shadow families (light ink rgb(31 35 40)).
-     Named --shadow-raised/-overlay/-overflow indirection is registered in @theme inline. */
+     Named --shadow-raised/-overlay indirection is registered in @theme inline. */
   --elevation-raised:
     0px 1px 1px rgb(31 35 40 / 0.04), 0px 0px 1px rgb(31 35 40 / 0.12);
   --elevation-overlay:
     0px 8px 24px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.12);
-  --elevation-overflow:
-    0px 0px 8px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.1);
 
   /* nicenote motion — named durations (consumed by the @utility duration-* blocks below).
      Theme-agnostic; ADS easings live in @theme inline. */
-  --duration-instant: 0ms;
-  --duration-xxshort: 50ms;
-  --duration-xshort: 100ms;
   --duration-short: 150ms;
   --duration-medium: 200ms;
   --duration-long: 250ms;
-  --duration-xlong: 400ms;
-  --duration-xxlong: 600ms;
 
   /* Primer semantic families — text/icon hierarchy, links, border variants,
      feedback backgrounds, blanket + dialog trio (registered as utilities in @theme inline). */
@@ -152,7 +121,6 @@
   --text-information: #0969da;
   --text-discovery: #8250df;
   --link: #0969da;
-  --link-pressed: #0550ae;
   --border-bold: #818b98;
   --border-subtle: rgb(209 217 224 / 0.7);
   --border-focused: #0969da;
@@ -183,12 +151,6 @@
   /* Primer layered chrome — sidebar/titlebar paint the muted canvas distinct from content. */
   --sidebar: #f6f8fa;
   --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
 }
 
 .dark {
@@ -211,11 +173,6 @@
   --border: #3d444d;
   --input: #3d444d;
   --ring: #1f6feb;
-  --chart-1: #4493f8;
-  --chart-2: #3fb950;
-  --chart-3: #d29922;
-  --chart-4: #ab7df8;
-  --chart-5: #e57bb2;
 
   /* Connected state (Primer success emphasis; glow tints the brighter success fg).
      signal/glow inherit via the :root indirection. */
@@ -223,11 +180,6 @@
   --connected-foreground: #ffffff;
   --connected-glow:
     0 0 0 1px rgb(63 185 80 / 0.4), 0 0 14px -2px rgb(63 185 80 / 0.35);
-
-  /* Safe Passage — brand accents (signal/glow re-point to --connected above).
-     Beacon → Primer severe emphasis (dark). */
-  --beacon: #bd561d;
-  --beacon-foreground: #ffffff;
 
   /* Depth ladder + connection glow (deeper shadows on the dark canvas) */
   --shadow-sm: 0 1px 2px 0 rgb(1 4 9 / 0.4), 0 1px 3px 0 rgb(1 4 9 / 0.5);
@@ -255,22 +207,6 @@
   --accent-blue-light: rgb(68 147 248 / 0.16);
   --accent-blue-bg: rgb(68 147 248 / 0.2);
   --accent-blue-hover: #79c0ff;
-  --accent-red: #f85149;
-  --accent-red-light: rgb(248 81 73 / 0.16);
-  --accent-orange: #db6d28;
-  --accent-orange-light: rgb(219 109 40 / 0.17);
-  --accent-yellow: #d29922;
-  --accent-yellow-light: rgb(210 153 34 / 0.18);
-  --accent-green: #3fb950;
-  --accent-green-light: rgb(63 185 80 / 0.16);
-  --accent-purple: #ab7df8;
-  --accent-purple-light: rgb(171 125 248 / 0.17);
-  --accent-teal: #1cb0ab;
-  --accent-teal-light: rgb(28 176 171 / 0.16);
-  --accent-pink: #e57bb2;
-  --accent-pink-light: rgb(229 123 178 / 0.16);
-  --accent-gray: #9198a1;
-  --accent-gray-light: rgb(145 152 161 / 0.14);
 
   /* Primer elevation — deep shadows gain a 1px border ring on the dark canvas. */
   --elevation-raised:
@@ -279,7 +215,6 @@
   --elevation-overlay:
     0px 0px 0px 1px #3d444d, 0px 8px 24px rgb(1 4 9 / 0.85),
     0px 0px 1px 1px rgb(1 4 9 / 0.4);
-  --elevation-overflow: 0px 0px 12px rgb(1 4 9 / 0.85), 0px 0px 1px #3d444d;
 
   /* Primer semantic families (dark) */
   --text-subtle: #9198a1;
@@ -295,7 +230,6 @@
   --text-information: #4493f8;
   --text-discovery: #ab7df8;
   --link: #4493f8;
-  --link-pressed: #79c0ff;
   --border-bold: #656c76;
   --border-subtle: rgb(61 68 77 / 0.7);
   --border-focused: #1f6feb;
@@ -325,12 +259,6 @@
 
   --sidebar: #010409;
   --sidebar-foreground: var(--foreground);
-  --sidebar-primary: var(--primary);
-  --sidebar-primary-foreground: var(--primary-foreground);
-  --sidebar-accent: var(--accent);
-  --sidebar-accent-foreground: var(--accent-foreground);
-  --sidebar-border: var(--border);
-  --sidebar-ring: var(--ring);
 }
 
 /* —— Windows Acrylic veil scope (a single translucent layer over the OS material) ——
@@ -407,12 +335,8 @@ html.voyavpn-acrylic.dark body {
   /* nicenote named elevation → consume the theme-switched --elevation-* shadows. */
   --shadow-raised: var(--elevation-raised);
   --shadow-overlay: var(--elevation-overlay);
-  --shadow-overflow: var(--elevation-overflow);
 
-  /* ADS easings (theme-agnostic) → ease-out-bold / ease-out-practical / ease-in-practical / ease-inout-bold. */
-  --ease-out-bold: cubic-bezier(0, 0.4, 0, 1);
-  --ease-out-practical: cubic-bezier(0.4, 1, 0.6, 1);
-  --ease-in-practical: cubic-bezier(0.6, 0, 0.8, 0.6);
+  /* ADS easing (theme-agnostic) → ease-inout-bold. */
   --ease-inout-bold: cubic-bezier(0.4, 0, 0, 1);
 
   --color-background: var(--background);
@@ -433,17 +357,10 @@ html.voyavpn-acrylic.dark body {
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
   --color-signal: var(--signal);
   --color-signal-foreground: var(--signal-foreground);
   --color-connected: var(--connected);
   --color-connected-foreground: var(--connected-foreground);
-  --color-beacon: var(--beacon);
-  --color-beacon-foreground: var(--beacon-foreground);
 
   /* nicenote semantic utilities — text/icon hierarchy, links, border + focus/selection,
      feedback (danger/success/warning/information/discovery), blanket + dialog. */
@@ -501,31 +418,9 @@ html.voyavpn-acrylic.dark body {
   --color-accent-blue-light: var(--accent-blue-light);
   --color-accent-blue-bg: var(--accent-blue-bg);
   --color-accent-blue-hover: var(--accent-blue-hover);
-  --color-accent-red: var(--accent-red);
-  --color-accent-red-light: var(--accent-red-light);
-  --color-accent-orange: var(--accent-orange);
-  --color-accent-orange-light: var(--accent-orange-light);
-  --color-accent-yellow: var(--accent-yellow);
-  --color-accent-yellow-light: var(--accent-yellow-light);
-  --color-accent-green: var(--accent-green);
-  --color-accent-green-light: var(--accent-green-light);
-  --color-accent-purple: var(--accent-purple);
-  --color-accent-purple-light: var(--accent-purple-light);
-  --color-accent-teal: var(--accent-teal);
-  --color-accent-teal-light: var(--accent-teal-light);
-  --color-accent-pink: var(--accent-pink);
-  --color-accent-pink-light: var(--accent-pink-light);
-  --color-accent-gray: var(--accent-gray);
-  --color-accent-gray-light: var(--accent-gray-light);
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 @layer base {
@@ -605,14 +500,6 @@ html.voyavpn-acrylic.dark body {
    transition-duration together, so consumers avoid Tailwind arbitrary values (duration-[var(...)]).
    These own the `duration-*` class names — the --duration-* tokens are deliberately NOT registered
    in @theme inline to avoid a same-name collision with these utilities. */
-@utility duration-xxshort {
-  --tw-duration: var(--duration-xxshort);
-  transition-duration: var(--duration-xxshort);
-}
-@utility duration-xshort {
-  --tw-duration: var(--duration-xshort);
-  transition-duration: var(--duration-xshort);
-}
 @utility duration-short {
   --tw-duration: var(--duration-short);
   transition-duration: var(--duration-short);
@@ -624,8 +511,4 @@ html.voyavpn-acrylic.dark body {
 @utility duration-long {
   --tw-duration: var(--duration-long);
   transition-duration: var(--duration-long);
-}
-@utility duration-xlong {
-  --tw-duration: var(--duration-xlong);
-  transition-duration: var(--duration-xlong);
 }

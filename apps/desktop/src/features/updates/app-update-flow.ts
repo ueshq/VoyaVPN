@@ -1,4 +1,4 @@
-import { check as checkForTauriUpdate, getVersion, type Update as TauriUpdate } from "@/ipc/updater";
+import { check as checkForTauriUpdate, getVersion, type Update as TauriUpdate } from "@/ipc/tauri-plugins";
 
 type AppUpdateInfo = {
   currentVersion: string;

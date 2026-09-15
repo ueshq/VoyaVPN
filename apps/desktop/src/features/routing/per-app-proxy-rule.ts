@@ -17,7 +17,7 @@ export const PER_APP_MODE_LABEL_KEYS = {
   off: "panes.routing.perAppModeOff",
 } as const satisfies Record<PerAppProxyMode, TranslationKey>;
 
-export type PerAppProxyState = {
+type PerAppProxyState = {
   mode: PerAppProxyMode;
   processes: string[];
 };

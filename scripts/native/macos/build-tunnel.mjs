@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, readJson, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
   libboxBinaryPath,
@@ -95,7 +95,7 @@ function packetTunnelVersions() {
   return resolvePacketTunnelVersions({
     appShortVersion: hasAppPlist ? plistBuddy(appInfoPlist, "CFBundleShortVersionString", true) : "",
     appBundleVersion: hasAppPlist ? plistBuddy(appInfoPlist, "CFBundleVersion", true) : "",
-    packageVersion: JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")).version,
+    packageVersion: readJson(resolve(repoRoot, "package.json")).version,
   });
 }
 

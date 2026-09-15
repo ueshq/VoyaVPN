@@ -2,13 +2,13 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
@@ -95,20 +95,9 @@ function mockProfileListOnce(
 const queryClients = new Set<QueryClient>();
 
 function renderProfiles() {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      mutations: { retry: false },
-      queries: { gcTime: 0, retry: false },
-    },
-  });
-
+  const queryClient = createTestQueryClient({ gcTime: 0 });
   queryClients.add(queryClient);
-
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <ProfilesScreen />
-    </QueryClientProvider>,
-  );
+  return renderWithQuery(<ProfilesScreen />, { queryClient });
 }
 
 afterEach(() => {

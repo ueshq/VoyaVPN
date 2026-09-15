@@ -5,7 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { coreStateOf, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TitleBarLayout } from "@/ipc/bindings";
 import { formatBytesPerSecond } from "@voya/utils/formatting";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
@@ -115,7 +115,7 @@ function SidebarFooter() {
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const statistics = useRuntimeEventStore((state) => state.statistics);
 
-  const state = coreState?.state ?? "disconnected";
+  const state = coreStateOf(coreState);
   // Rates only mean something on a live connection; otherwise the state says it all.
   const connected = state === "connected";
   const upload = formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0);

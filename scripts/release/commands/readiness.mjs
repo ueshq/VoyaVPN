@@ -19,10 +19,6 @@ import { checkTauriConfig } from "./readiness/config.mjs";
 import { scanProductionBlockers } from "./readiness/blockers.mjs";
 import { checkGeneratedManifests } from "./readiness/evidence.mjs";
 
-export { blockerScanFiles, findProductionBlockersInText } from "./readiness/blockers.mjs";
-export { checkCoreSeedPinning, checkStableEnvironment, hasSigningInput } from "./readiness/prerequisites.mjs";
-export { validateStableUpdaterConfigMetadata } from "./readiness/evidence.mjs";
-
 const argSpec = {
   "--mode": { key: "mode" },
   "--cdn-base-url|--base-url": { key: "cdnBaseUrl" },

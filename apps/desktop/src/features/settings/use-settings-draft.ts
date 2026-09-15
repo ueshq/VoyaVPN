@@ -10,6 +10,7 @@ import { appErrorOfKind } from "@/ipc/commands";
 import { validationFieldErrors } from "@/ipc/messages";
 import { translateFieldErrors, zodIssuesToErrorMap } from "@/lib/zod-errors";
 import { i18next, type TranslationFunction } from "@voya/i18n";
+import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { toastError } from "@/stores/toast-store";
 
@@ -94,5 +95,22 @@ export function useSettingsDraft<T>({
     saved: snapshot.saved && snapshot.changes.length === 0,
     saving,
     update: draft.update,
+  };
+}
+
+/**
+ * A settings pane's failure: the draft's save error, else the failed read.
+ * Retrying resends the failed saves and reads again after a failed load.
+ */
+export function settingsFailure(
+  draft: { error: string | null; retry: () => void },
+  query: { error: unknown; isError: boolean; refetch: () => Promise<unknown> },
+) {
+  return {
+    error: draft.error ?? (query.error ? getErrorMessage(query.error) : null),
+    retry: () => {
+      draft.retry();
+      if (query.isError) void query.refetch();
+    },
   };
 }

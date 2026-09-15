@@ -243,8 +243,7 @@
   flex: 1;
   min-width: 0;
 }
-.home-node-label,
-.node-card-label {
+.home-node-label {
   font-size: 12px;
   color: var(--muted-foreground);
   line-height: 1.4;

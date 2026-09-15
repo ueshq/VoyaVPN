@@ -1,5 +1,5 @@
-import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, cleanup, waitFor } from "@testing-library/react";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EventBridge } from "@/ipc/event-bridge";
@@ -99,11 +99,11 @@ describe("EventBridge", () => {
   });
 
   it("coalesces country refreshes and never overlays persisted flags with old events", async () => {
-    const queryClient = new QueryClient();
+    const queryClient = createTestQueryClient();
     const snapshot = { entries: [{ profile: { id: "node" }, metrics: { countryCode: null } }] };
     queryClient.setQueryData(["profiles"], snapshot);
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
-    const { unmount } = render(<QueryClientProvider client={queryClient}><EventBridge /></QueryClientProvider>);
+    const { unmount } = renderWithQuery(<EventBridge />, { queryClient });
     await waitFor(() => expect(bridgeMocks.transientStreamEventListen).toHaveBeenCalledOnce());
     vi.useFakeTimers();
     const emit = (outcome: string) => bridgeMocks.listeners.transientStreamEvent[0]?.({ payload: {
@@ -124,16 +124,10 @@ describe("EventBridge", () => {
   });
 
   it("routes invalidations and notices to the query cache and toast store", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const queryClient = createTestQueryClient();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <EventBridge />
-      </QueryClientProvider>,
-    );
+    renderWithQuery(<EventBridge />, { queryClient });
 
     await waitFor(() => expect(bridgeMocks.invalidateEventListen).toHaveBeenCalledOnce());
     expect(bridgeMocks.appEventListen).toHaveBeenCalledOnce();
@@ -175,8 +169,7 @@ describe("EventBridge", () => {
   });
 
   it("repeats a notice the user must not miss as an OS notification", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={queryClient}><EventBridge /></QueryClientProvider>);
+    renderWithQuery(<EventBridge />);
     await waitFor(() => expect(bridgeMocks.appEventListen).toHaveBeenCalledOnce());
 
     act(() => {
@@ -195,8 +188,7 @@ describe("EventBridge", () => {
   });
 
   it("refreshes a restored running test when profile results change", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(<QueryClientProvider client={queryClient}><EventBridge /></QueryClientProvider>);
+    renderWithQuery(<EventBridge />);
     await waitFor(() => expect(bridgeMocks.invalidateEventListen).toHaveBeenCalledOnce());
     bridgeMocks.refreshSpeedtestStatus.mockClear();
     bridgeMocks.speedtestRunning = true;
@@ -217,15 +209,7 @@ describe("EventBridge", () => {
   });
 
   it("routes transient streams and tab selection through the shell store", async () => {
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <EventBridge />
-      </QueryClientProvider>,
-    );
+    renderWithQuery(<EventBridge />);
 
     await waitFor(() => expect(bridgeMocks.transientStreamEventListen).toHaveBeenCalledOnce());
     expect(bridgeMocks.refreshSpeedtestStatus).toHaveBeenCalledOnce();
@@ -258,11 +242,7 @@ describe("EventBridge", () => {
     }
   });
   it("opens the close prompt when the shell asks how to close", async () => {
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <EventBridge />
-      </QueryClientProvider>,
-    );
+    renderWithQuery(<EventBridge />);
 
     await waitFor(() => expect(bridgeMocks.appEventListen).toHaveBeenCalledOnce());
     act(() => {

@@ -8,7 +8,7 @@ export function profileLatency(item: ProfileListEntry, t: TranslationFunction) {
   return outcome && outcome !== "completed" ? speedtestOutcomeText(t, outcome) : delayMs > 0 ? formatDelay(delayMs) : t("panes.profiles.card.untested");
 }
 
-export type LatencyTone = "good" | "fair" | "poor" | "unknown";
+type LatencyTone = "good" | "fair" | "poor" | "unknown";
 
 /** Slow but reachable nodes are a warning; only failed tests use danger. */
 export function profileLatencyTone(item: ProfileListEntry): LatencyTone {

@@ -2,23 +2,14 @@ import { useState } from "react";
 import {
   Database,
   Download,
-  LoaderCircle,
   PackageCheck,
   RefreshCw,
 } from "lucide-react";
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@voya/ui/components/alert-dialog";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
+import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
+import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -202,24 +193,15 @@ function AppUpdatePanel({
         </p>
       ) : null}
 
-      <AlertDialog onOpenChange={setConfirmingInstall} open={confirmingInstall}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("updates.confirmInstallTitle", { version: update?.version ?? "" })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("updates.confirmInstallDescription")}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void onInstall()}>
-              {t("updates.confirmInstall")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDialog
+        cancelLabel={t("confirm.cancel")}
+        confirmLabel={t("updates.confirmInstall")}
+        description={t("updates.confirmInstallDescription")}
+        onConfirm={() => void onInstall()}
+        onOpenChange={setConfirmingInstall}
+        open={confirmingInstall}
+        title={t("updates.confirmInstallTitle", { version: update?.version ?? "" })}
+      />
     </SettingsGroup>
   );
 }
@@ -332,7 +314,7 @@ function RuleLibraryPanel({
             variant="outline"
           >
             {busy ? (
-              <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+              <Spinner className="size-4" />
             ) : (
               <Download className="size-4" aria-hidden="true" />
             )}

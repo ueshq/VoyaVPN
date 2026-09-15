@@ -1,10 +1,10 @@
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 import { createAppQueryClient } from "@/components/app-shell/query-client";
+import { renderWithQuery } from "@/test/render";
 import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import type { AppSettingsV1, CoreState, TrafficModeResponse } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
@@ -35,11 +35,12 @@ function renderSwitcher() {
   clients.add(client);
   return {
     client,
-    ...render(
-      <QueryClientProvider client={client}>
+    ...renderWithQuery(
+      <>
         <TrafficModeSwitcher />
         <TrafficModeBanner />
-      </QueryClientProvider>,
+      </>,
+      { queryClient: client },
     ),
   };
 }

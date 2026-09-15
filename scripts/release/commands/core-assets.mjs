@@ -1,7 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { repoRootFromScript } from "../../lib/common.mjs";
+import { readJson, repoRootFromScript } from "../../lib/common.mjs";
 import {
   defaultEvidencePath,
   isStableChannel,
@@ -86,7 +86,7 @@ async function main(argv = []) {
   const outputPath = resolve(repoRoot, options.output);
   const evidencePath = resolve(repoRoot, options.evidenceOutput ?? defaultEvidencePath(outputPath));
   const baseUrl = normalizeBaseUrl(options.baseUrl ?? process.env.VOYAVPN_CDN_BASE_URL, options.channel);
-  const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+  const fixture = readJson(fixturePath);
 
   if (!Array.isArray(fixture?.assets)) {
     throw new Error(`${fixturePath} is missing assets[]`);

@@ -22,14 +22,14 @@ import {
 } from "@voya/ui/components/menubar";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
 import type { NodeListRow } from "./node-list-rows";
-import type { NodeGroupCardController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 
 export function NodeGroupCard({
   row,
   controller,
 }: {
   row: Extract<NodeListRow, { kind: "group" }>;
-  controller: NodeGroupCardController;
+  controller: ServerTableController;
 }) {
   const {
     nodeGroups,

@@ -1,27 +1,17 @@
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@voya/ui/components/alert-dialog";
-import { buttonVariants } from "@voya/ui/components/button-variants";
+import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { runningProfileId, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
 import { ProfileDetailsDialog } from "./profile-details-dialog";
 import { ProfileDialog } from "./profile-dialog";
 import { ShareQrDialog } from "./share-qr-dialog";
-import type { NodeDialogsController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 
 export function ServerTableDialogs({
   controller,
 }: {
-  controller: NodeDialogsController;
+  controller: ServerTableController;
 }) {
   const {
     confirmDelete,
@@ -41,9 +31,7 @@ export function ServerTableDialogs({
   } = controller;
 
   // Deleting the node the core is running stops the connection; say so first.
-  const runningNodeId = useRuntimeEventStore((state) =>
-    state.coreState?.state === "connected" ? state.coreState.activeProfileId : null,
-  );
+  const runningNodeId = useRuntimeEventStore((state) => runningProfileId(state.coreState));
   const deletingRunningNode =
     runningNodeId !== null && (pendingDelete ?? []).includes(runningNodeId);
 
@@ -87,94 +75,61 @@ export function ServerTableDialogs({
         onOpenChange={(open) => !open && setShareQrContent(null)}
         open={shareQrContent !== null}
       />
-      <AlertDialog
-        open={!!controller.deletingSubscription}
+      <ConfirmDialog
+        cancelLabel={t("confirm.cancel")}
+        confirmLabel={t("confirm.deleteProfilesConfirm")}
+        description={t("subscriptions.deleteHint", {
+          count: controller.profiles.filter(
+            (entry) =>
+              entry.profile.subscriptionId ===
+              controller.deletingSubscription?.id,
+          ).length,
+        })}
+        destructive
+        error={controller.operationError}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          (controller.subscriptionTriggerRef.current?.isConnected
+            ? controller.subscriptionTriggerRef.current
+            : controller.viewportRef.current
+          )?.focus();
+        }}
+        onConfirm={(event) => {
+          event.preventDefault();
+          void controller.removeSubscription();
+        }}
         onOpenChange={(open) =>
           !open &&
           !controller.deletingSubscriptionPending &&
           controller.setDeletingSubscription(null)
         }
-      >
-        <AlertDialogContent
-          onCloseAutoFocus={(event) => {
-            event.preventDefault();
-            (controller.subscriptionTriggerRef.current?.isConnected
-              ? controller.subscriptionTriggerRef.current
-              : controller.viewportRef.current
-            )?.focus();
-          }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("subscriptions.deleteTitle", {
-                name: controller.deletingSubscription?.remarks,
-              })}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("subscriptions.deleteHint", {
-                count: controller.profiles.filter(
-                  (entry) =>
-                    entry.profile.subscriptionId ===
-                    controller.deletingSubscription?.id,
-                ).length,
-              })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          {controller.operationError ? (
-            <p role="alert" className="text-sm text-danger">
-              {controller.operationError}
-            </p>
-          ) : null}
-          <AlertDialogFooter>
-            <AlertDialogCancel
-              disabled={controller.deletingSubscriptionPending}
-            >
-              {t("confirm.cancel")}
-            </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={controller.deletingSubscriptionPending}
-              className={buttonVariants({ variant: "destructive" })}
-              onClick={(event) => {
-                event.preventDefault();
-                void controller.removeSubscription();
-              }}
-            >
-              {t("confirm.deleteProfilesConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-      <AlertDialog
-        open={pendingDelete !== null}
+        open={!!controller.deletingSubscription}
+        pending={controller.deletingSubscriptionPending}
+        title={t("subscriptions.deleteTitle", {
+          name: controller.deletingSubscription?.remarks,
+        })}
+      />
+      <ConfirmDialog
+        cancelLabel={t("confirm.cancel")}
+        confirmLabel={t("confirm.deleteProfilesConfirm")}
+        description={
+          <>
+            {t("confirm.deleteProfilesDescription", {
+              count: pendingDelete?.length ?? 0,
+            })}
+            {deletingRunningNode ? (
+              <span className="mt-2 block font-medium text-warning">
+                {t("confirm.deleteActiveProfileHint")}
+              </span>
+            ) : null}
+          </>
+        }
+        destructive
+        onConfirm={confirmDelete}
         onOpenChange={(open) => !open && setPendingDelete(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {t("confirm.deleteProfilesTitle")}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {t("confirm.deleteProfilesDescription", {
-                count: pendingDelete?.length ?? 0,
-              })}
-              {deletingRunningNode ? (
-                <span className="mt-2 block font-medium text-warning">
-                  {t("confirm.deleteActiveProfileHint")}
-                </span>
-              ) : null}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{t("confirm.cancel")}</AlertDialogCancel>
-            <AlertDialogAction
-              className={buttonVariants({ variant: "destructive" })}
-              onClick={confirmDelete}
-            >
-              {t("confirm.deleteProfilesConfirm")}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        open={pendingDelete !== null}
+        title={t("confirm.deleteProfilesTitle")}
+      />
     </>
   );
 }

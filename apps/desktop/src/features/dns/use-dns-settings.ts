@@ -3,9 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { loadDnsSettings, saveDnsSettings } from "@/ipc/commands";
 import type { AppSettingsV1, DnsSettings } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
-import { getErrorMessage } from "@voya/utils/error";
 import { applyChanges, changedFields } from "@/features/settings/settings-draft";
-import { useSettingsDraft } from "@/features/settings/use-settings-draft";
+import { settingsFailure, useSettingsDraft } from "@/features/settings/use-settings-draft";
 
 import { dnsSettingsSchema } from "./dns-form-schema";
 
@@ -29,13 +28,14 @@ export function useDnsSettings(enabled = true) {
     },
   });
 
+  const failure = settingsFailure(draft, dnsQuery);
   return {
     dnsQuery,
     fieldErrors: draft.fieldErrors,
     form: draft.value,
     issueCount: Object.keys(draft.fieldErrors).length,
-    operationError: draft.error ?? (dnsQuery.error ? getErrorMessage(dnsQuery.error) : null),
-    retry: () => { draft.retry(); if (dnsQuery.isError) void dnsQuery.refetch(); },
+    operationError: failure.error,
+    retry: failure.retry,
     saved: draft.saved,
     saving: draft.saving,
     updateSimple: (patch: Partial<DnsSettings>) => draft.update((current) => ({ ...current, ...patch })),

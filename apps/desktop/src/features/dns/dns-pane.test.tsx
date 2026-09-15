@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { resetSettingsBackend, settingsIpc } from "@/features/settings/settings-backend.test-fixture";
@@ -11,7 +11,7 @@ beforeEach(async () => { resetSettingsBackend(); await changeLocale("en"); });
 afterEach(cleanup);
 function mount() {
   function Pane() { return <DnsPane controller={useDnsSettings()} />; }
-  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><Pane /></QueryClientProvider>);
+  return renderWithQuery(<Pane />);
 }
 
 describe("DNS fields", () => {

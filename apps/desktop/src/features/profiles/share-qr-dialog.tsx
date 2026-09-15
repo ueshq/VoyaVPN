@@ -7,12 +7,12 @@ import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogBody,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
@@ -51,8 +51,9 @@ export function ShareQrDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
+      <ScrollableDialogContent
+        height="viewport"
+        width="lg"
         closeLabel={t("actions.close")}
       >
         <DialogHeader>
@@ -110,7 +111,7 @@ export function ShareQrDialog({
             {t("actions.close")}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

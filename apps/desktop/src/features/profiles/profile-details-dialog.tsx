@@ -5,11 +5,11 @@ import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { formatBytes } from "@voya/utils/formatting";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
@@ -17,14 +17,14 @@ import type { ProfileListEntry } from "@/ipc/bindings";
 
 import { getProtocolLabel } from "./profile-constants";
 import { profileLatency, profileTitle, profileTransportName } from "./profile-display";
-import type { NodeDetailsController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 
 // Mounted only while open; the statistics selector watches this node alone.
 export function ProfileDetailsDialog({
   controller,
   item,
 }: {
-  controller: NodeDetailsController;
+  controller: ServerTableController;
   item: ProfileListEntry;
 }) {
   const {
@@ -81,8 +81,9 @@ export function ProfileDetailsDialog({
         if (!open) setDetailsId(null);
       }}
     >
-      <DialogContent
-        className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto]"
+      <ScrollableDialogContent
+        height="viewport"
+        width="lg"
         closeLabel={t("actions.close")}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -129,7 +130,7 @@ export function ProfileDetailsDialog({
             {running ? t("panes.profiles.card.using") : t("panes.profiles.card.use")}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

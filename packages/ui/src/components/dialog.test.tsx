@@ -149,4 +149,24 @@ describe("ScrollableDialogContent", () => {
     expect(dialog.className).toContain("grid-rows-[auto_auto_minmax(0,1fr)_auto]");
     expect(dialog.className).toContain("overflow-hidden");
   });
+
+  it("keeps the plain frame for the viewport-height steps", () => {
+    render(
+      <Dialog open>
+        <ScrollableDialogContent closeLabel="Close" height="viewport" width="xl">
+          <DialogHeader>
+            <DialogTitle>Group</DialogTitle>
+            <DialogDescription>Group editor</DialogDescription>
+          </DialogHeader>
+        </ScrollableDialogContent>
+      </Dialog>,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: "Group" });
+    expect(dialog.className).toContain("max-h-[calc(100dvh-2rem)]");
+    expect(dialog.className).toContain("grid-rows-[auto_minmax(0,1fr)_auto]");
+    expect(dialog.className).toContain("sm:max-w-xl");
+    expect(dialog.className).not.toContain("sm:max-w-lg");
+    expect(dialog.className).not.toContain("overflow-hidden");
+  });
 });

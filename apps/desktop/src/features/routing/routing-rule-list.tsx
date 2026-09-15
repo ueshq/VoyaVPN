@@ -24,7 +24,6 @@ import {
   Globe,
   GripVertical,
   Layers,
-  LoaderCircle,
   Network,
   Plug,
   TriangleAlert,
@@ -43,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from "@voya/ui/components/table";
+import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 
 import {
@@ -329,7 +329,7 @@ function SortableRuleRow({
               onCheckedChange={(checked) => onToggle(rule, checked)}
             />
             {pendingEnabled !== undefined ? (
-              <LoaderCircle aria-hidden="true" className="size-3.5 animate-spin text-muted-foreground" />
+              <Spinner className="size-3.5 text-muted-foreground" />
             ) : null}
           </span>
         </TableCell>

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve, win32 } from "node:path";
 
 import {
@@ -6,6 +6,7 @@ import {
   checkedCapture,
   environmentValue,
   isCliEntrypoint,
+  readJson,
   repoRootFromScript,
   run,
 } from "../../lib/common.mjs";
@@ -230,7 +231,7 @@ export function assertWindowsGuiStopped({ env = process.env, captureCommand = ca
 }
 
 function currentVersion(repoRoot) {
-  const manifest = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8"));
+  const manifest = readJson(resolve(repoRoot, "package.json"));
   return String(manifest.version);
 }
 

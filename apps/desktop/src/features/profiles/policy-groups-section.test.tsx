@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale, i18next } from "@voya/i18n";
 import type { PolicyGroupEntry } from "@/ipc/bindings";
 
-import type { PolicyGroupsController } from "./node-controller-types";
+import type { ServerTableController } from "./use-server-table";
 import { PolicyGroupsSection } from "./policy-groups-section";
 
 vi.mock("./policy-group-dialog", () => ({ PolicyGroupDialog: () => null }));
@@ -35,7 +35,7 @@ function entry(overrides: Partial<PolicyGroupEntry["group"]>, isActive: boolean)
   };
 }
 
-function controller(overrides: Partial<PolicyGroupsController>): PolicyGroupsController {
+function controller(overrides: Partial<ServerTableController>): ServerTableController {
   return {
     activatePolicyGroup: vi.fn(),
     choosePolicyGroupMember: vi.fn(),
@@ -62,7 +62,7 @@ function controller(overrides: Partial<PolicyGroupsController>): PolicyGroupsCon
     testRunningPolicyGroup: vi.fn(),
     testingPolicyGroup: false,
     ...overrides,
-  };
+  } as ServerTableController;
 }
 
 describe("PolicyGroupsSection", () => {
@@ -148,7 +148,7 @@ describe("PolicyGroupsSection", () => {
         controller={controller({
           policyGroupEntries: [entry({ autoCreated: true, sourceSubscriptionId: "sub-1" }, true)],
           policyGroupSubscriptions: [
-            { id: "sub-1", remarks: "Airport" } as PolicyGroupsController["policyGroupSubscriptions"][number],
+            { id: "sub-1", remarks: "Airport" } as ServerTableController["policyGroupSubscriptions"][number],
           ],
         })}
       />,

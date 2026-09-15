@@ -1,13 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, checkedCapture, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import { capture, checkedCapture, readJson, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
 import { resolveDmgPath } from "./tunnel-layout.mjs";
 import { prepareVoyaForLocalBuild } from "./local-runtime.mjs";
 import { resolveSigningIdentity } from "./provisioning.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
-const packageJson = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8"));
+const packageJson = readJson(resolve(repoRoot, "package.json"));
 const appBundle = resolve(repoRoot, "target", "release", "bundle", "macos", "VoyaVPN.app");
 const appContents = resolve(appBundle, "Contents");
 const dmgDir = resolve(repoRoot, "target", "release", "bundle", "dmg");

@@ -1,6 +1,6 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { act, waitFor } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
+import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProfileListEntry, RoutingRule, Routing_Serialize, ValidationIssue } from "@/ipc/bindings";
@@ -319,12 +319,9 @@ describe("useRoutingScreen", () => {
 });
 
 function renderController() {
-  const client = new QueryClient({ defaultOptions: { queries: { gcTime: 0, retry: false } } });
+  const client = createTestQueryClient({ gcTime: 0 });
   clients.add(client);
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
-  );
-  return { client, ...renderHook(() => useRoutingScreen(), { wrapper }) };
+  return { client, ...renderHookWithQuery(() => useRoutingScreen(), { queryClient: client }) };
 }
 
 function active(): Routing_Serialize {

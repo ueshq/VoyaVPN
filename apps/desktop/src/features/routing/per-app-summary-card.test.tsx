@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RoutingRule, Routing_Serialize, TunStatus } from "@/ipc/bindings";
@@ -85,12 +85,9 @@ const macosTun: TunStatus = {
 };
 
 function renderCard(value: Routing_Serialize, onEdit: () => void, locked?: boolean) {
-  const client = new QueryClient({ defaultOptions: { queries: { gcTime: 0, retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <PerAppSummaryCard locked={locked} onEdit={onEdit} routing={value} />
-    </QueryClientProvider>,
-  );
+  return renderWithQuery(<PerAppSummaryCard locked={locked} onEdit={onEdit} routing={value} />, {
+    queryClient: createTestQueryClient({ gcTime: 0 }),
+  });
 }
 
 function routing(overrides: Partial<RoutingRule>): Routing_Serialize {

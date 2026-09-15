@@ -10,7 +10,7 @@ import {
 } from "@/features/home/tun-provider-text";
 import type { ConnectionMode } from "@/ipc/bindings";
 import { setConnectionMode, tunRequestElevation, tunStatus } from "@/ipc/commands";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { coreStateOf, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
 import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
 
@@ -28,7 +28,7 @@ export function useCaptureMode() {
     state.tun?.enabled ? "vpn" : "systemProxy",
   );
   const transitioning = useRuntimeEventStore((state) =>
-    isRuntimeTransitioning(state.coreState?.state ?? "disconnected"),
+    isRuntimeTransitioning(coreStateOf(state.coreState)),
   );
   const pending = useRuntimeActionStore(runtimeActionPending);
   const modePending = useRuntimeActionStore((state) => state.modePending);
