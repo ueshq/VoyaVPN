@@ -353,6 +353,101 @@ static NSURL *VoyaRuntimeConfigURL(NSError **outError) {
     return VoyaAppGroupURL(VoyaRuntimeConfigRelativePath, outError);
 }
 
+// The PacketTunnel extension runs in its own sandbox and cannot read files
+// inside the main app container, so local rule-set `.srs` paths must be
+// staged into the shared app group container and rewritten before the
+// config is handed to the provider.
+static NSString *VoyaStageLocalRulesets(NSString *singboxConfigJson, NSError **outError) {
+    NSData *jsonData = [singboxConfigJson dataUsingEncoding:NSUTF8StringEncoding];
+    if (jsonData == nil) {
+        if (outError != NULL) {
+            *outError = VoyaMakeError(@"sing-box config is not valid UTF-8.");
+        }
+        return nil;
+    }
+    NSError *decodeError = nil;
+    id configRoot = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&decodeError];
+    if (decodeError != nil || ![configRoot isKindOfClass:[NSDictionary class]]) {
+        if (outError != NULL) {
+            *outError = decodeError ?: VoyaMakeError(@"sing-box config is not a JSON object.");
+        }
+        return nil;
+    }
+    NSMutableDictionary *config = [(NSDictionary *)configRoot mutableCopy];
+    id routeObject = config[@"route"];
+    if (![routeObject isKindOfClass:[NSDictionary class]]) {
+        return singboxConfigJson;
+    }
+    id ruleSetObject = ((NSDictionary *)routeObject)[@"rule_set"];
+    if (![ruleSetObject isKindOfClass:[NSArray class]]) {
+        return singboxConfigJson;
+    }
+
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSURL *stagingDir = VoyaAppGroupURL(@"Library/Application Support/VoyaVPN/srss", outError);
+    if (stagingDir == nil) {
+        return nil;
+    }
+    NSError *mkdirError = nil;
+    if (![fileManager createDirectoryAtURL:stagingDir
+               withIntermediateDirectories:YES
+                                attributes:nil
+                                     error:&mkdirError]) {
+        if (outError != NULL) {
+            *outError = mkdirError;
+        }
+        return nil;
+    }
+
+    NSMutableArray *ruleSets = [NSMutableArray array];
+    BOOL rewritten = NO;
+    for (id entryObject in (NSArray *)ruleSetObject) {
+        if (![entryObject isKindOfClass:[NSDictionary class]]) {
+            [ruleSets addObject:entryObject];
+            continue;
+        }
+        NSMutableDictionary *entry = [(NSDictionary *)entryObject mutableCopy];
+        NSString *type = entry[@"type"];
+        NSString *path = entry[@"path"];
+        if ([type isKindOfClass:[NSString class]] && [type isEqualToString:@"local"]
+            && [path isKindOfClass:[NSString class]] && [path hasPrefix:@"/"]) {
+            NSURL *sourceURL = [NSURL fileURLWithPath:path];
+            NSURL *destinationURL = [stagingDir URLByAppendingPathComponent:sourceURL.lastPathComponent];
+            [fileManager removeItemAtURL:destinationURL error:nil];
+            NSError *copyError = nil;
+            if (![fileManager copyItemAtURL:sourceURL toURL:destinationURL error:&copyError]) {
+                if (outError != NULL) {
+                    *outError = VoyaMakeError([NSString
+                        stringWithFormat:@"Failed to stage rule-set %@ for the PacketTunnel: %@",
+                                          path, copyError.localizedDescription ?: @"unknown error"]);
+                }
+                return nil;
+            }
+            entry[@"path"] = destinationURL.path;
+            rewritten = YES;
+        }
+        [ruleSets addObject:entry];
+    }
+    if (!rewritten) {
+        return singboxConfigJson;
+    }
+    NSMutableDictionary *route = [(NSDictionary *)routeObject mutableCopy];
+    route[@"rule_set"] = ruleSets;
+    config[@"route"] = route;
+
+    NSError *encodeError = nil;
+    NSData *output = [NSJSONSerialization dataWithJSONObject:config
+                                                  options:0
+                                                    error:&encodeError];
+    if (output == nil) {
+        if (outError != NULL) {
+            *outError = encodeError;
+        }
+        return nil;
+    }
+    return [[NSString alloc] initWithData:output encoding:NSUTF8StringEncoding];
+}
+
 static NSData *VoyaCreateRuntimeConfigData(NSString *configPath, NSString *profileId, NSError **outError) {
     if (![configPath hasPrefix:@"/"]) {
         if (outError != NULL) {
@@ -362,12 +457,19 @@ static NSData *VoyaCreateRuntimeConfigData(NSString *configPath, NSString *profi
     }
 
     NSError *readError = nil;
-    NSString *singboxConfigJson = [NSString stringWithContentsOfFile:configPath
-                                                           encoding:NSUTF8StringEncoding
-                                                              error:&readError];
+    NSError *stageError = nil;
+    NSString *singboxConfigJson = VoyaStageLocalRulesets(
+        [NSString stringWithContentsOfFile:configPath encoding:NSUTF8StringEncoding error:&readError],
+        &stageError);
     if (readError != nil) {
         if (outError != NULL) {
             *outError = readError;
+        }
+        return nil;
+    }
+    if (singboxConfigJson == nil) {
+        if (outError != NULL) {
+            *outError = stageError ?: VoyaMakeError(@"Failed to stage sing-box rule-sets.");
         }
         return nil;
     }
