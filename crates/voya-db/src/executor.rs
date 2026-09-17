@@ -111,6 +111,28 @@ pub(crate) async fn delete_each(
     .await
 }
 
+/// `SELECT MAX(sort) FROM <table>`: the highest sort value, or 0 for an empty
+/// table.
+pub(crate) async fn max_sort(
+    executor: RepositoryExecutor<'_>,
+    statement: &'static str,
+) -> Result<i32> {
+    let max: Option<i32> = run_query!(executor, sqlx::query_scalar(statement), fetch_one)?;
+
+    Ok(max.unwrap_or(0))
+}
+
+/// `SELECT EXISTS(SELECT 1 FROM <table> WHERE <id> = ?)` with the id bound.
+pub(crate) async fn row_exists(
+    executor: RepositoryExecutor<'_>,
+    statement: &'static str,
+    id: &str,
+) -> Result<bool> {
+    let found: i64 = run_query!(executor, sqlx::query_scalar(statement).bind(id), fetch_one)?;
+
+    Ok(found != 0)
+}
+
 async fn delete_each_on(
     connection: &mut SqliteConnection,
     statement: &'static str,

@@ -36,7 +36,7 @@ test("search finds collapsed source nodes and restores the previous grouping on 
   const group = page.getByRole("button", { name: "Travel", exact: true });
   await group.click();
   await expect(group).toHaveAttribute("aria-expanded", "false");
-  const search = page.getByRole("textbox", { name: "Search node name, address or subscription" });
+  const search = page.getByRole("searchbox", { name: "Search node name, address or subscription" });
   await search.fill("node-35.example.test");
   await expect(page.getByTestId("server-row")).toHaveCount(1);
   await expect(page.getByTestId("server-row")).toContainText("Tokyo 35");

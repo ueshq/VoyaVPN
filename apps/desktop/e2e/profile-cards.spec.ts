@@ -104,7 +104,7 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
     await expect(cards.filter({ hasText: "Card node 4999" })).toBeInViewport({ ratio: 1 });
   }).toPass();
   await page.screenshot({ path: testInfo.outputPath("cards-last-node.png") });
-  await expect(page.getByRole("textbox", { name: "搜索节点名称、地址或订阅" })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "搜索节点名称、地址或订阅" })).toBeVisible();
   expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled)).toEqual([]);
 });
 
@@ -142,7 +142,7 @@ test("profile list shows its empty state when no saved nodes exist", async ({ pa
   await page.goto("/");
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
   await expect(page.getByTestId("server-row")).toHaveCount(0);
-  await expect(page.getByRole("textbox", { name: "Search node name, address or subscription" })).toHaveCount(0);
+  await expect(page.getByRole("searchbox", { name: "Search node name, address or subscription" })).toHaveCount(0);
   await expect(page.getByText("No nodes", { exact: true })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("cards-empty.png") });
 });

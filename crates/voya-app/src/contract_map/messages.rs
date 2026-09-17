@@ -42,9 +42,6 @@ fn validation_code_to_contract(code: CoreValidationCode) -> ValidationCode {
         CoreValidationCode::InvalidFlow => ValidationCode::InvalidFlow,
         CoreValidationCode::InvalidShadowsocksMethod => ValidationCode::InvalidShadowsocksMethod,
         CoreValidationCode::InvalidRealityPublicKey => ValidationCode::InvalidRealityPublicKey,
-        CoreValidationCode::UnsupportedProtocol { protocol } => {
-            ValidationCode::UnsupportedProtocol { protocol }
-        }
         CoreValidationCode::UnsupportedProtocolNetwork { protocol, network } => {
             ValidationCode::UnsupportedProtocolNetwork { protocol, network }
         }
@@ -113,9 +110,6 @@ mod tests {
             CoreValidationCode::InvalidFlow,
             CoreValidationCode::InvalidShadowsocksMethod,
             CoreValidationCode::InvalidRealityPublicKey,
-            CoreValidationCode::UnsupportedProtocol {
-                protocol: String::new(),
-            },
             CoreValidationCode::UnsupportedProtocolNetwork {
                 protocol: String::new(),
                 network: String::new(),
@@ -142,6 +136,6 @@ mod tests {
             })
             .collect::<std::collections::BTreeSet<_>>();
 
-        assert_eq!(tags.len(), 11);
+        assert_eq!(tags.len(), 10);
     }
 }

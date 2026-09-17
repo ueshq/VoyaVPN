@@ -89,11 +89,7 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
             let state = app.state::<AppState>();
-            let config = state.config_mutations().current_config();
-            if let Err(error) = ipc::commands::core_flow(&app, &state)
-                .disconnect_removed_profile(&config)
-                .await
-            {
+            if let Err(error) = ipc::commands::disconnect_removed_profile(&app, &state).await {
                 tracing::warn!(?error, "failed to disconnect removed node");
             }
         });

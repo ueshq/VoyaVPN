@@ -145,17 +145,6 @@ impl TunManager {
             .map(|(status, _report)| status)
     }
 
-    pub fn set_enabled(
-        &self,
-        config: &mut AppConfig,
-        enabled: bool,
-    ) -> Result<TunStatus, TunManagerError> {
-        let status = self.plan_set_enabled(config, enabled)?;
-        Self::apply_enabled(config, enabled);
-
-        Ok(status)
-    }
-
     /// Run the enable/disable preflight without touching the configuration.
     ///
     /// The probe forks `pluginkit`/`systemextensionsctl`/`sc.exe` and loads
@@ -457,6 +446,18 @@ pub enum TunManagerError {
 mod tests {
     use super::*;
 
+    /// The combined plan+apply step the production paths run separately so the
+    /// blocking platform probe never runs under the mutation guard.
+    fn set_enabled(
+        manager: &TunManager,
+        config: &mut AppConfig,
+        enabled: bool,
+    ) -> Result<TunStatus, TunManagerError> {
+        let status = manager.plan_set_enabled(config, enabled)?;
+        TunManager::apply_enabled(config, enabled);
+        Ok(status)
+    }
+
     #[derive(Debug)]
     struct FakeProviderResolver {
         expected: Option<std::path::PathBuf>,
@@ -581,7 +582,7 @@ mod tests {
 
         resolver.elect(OTHER_PROVIDER);
         assert!(matches!(
-            manager.set_enabled(&mut config, true),
+            set_enabled(&manager, &mut config, true),
             Err(TunManagerError::ProviderPathMismatch { .. })
         ));
         assert_eq!(resolver.probes(), 2);
@@ -608,14 +609,12 @@ mod tests {
         assert!(status.requires_elevation);
         assert_eq!(status.preflight.state, TunPreflightState::NeedsElevation);
         assert!(matches!(
-            manager.set_enabled(&mut config, true),
+            set_enabled(&manager, &mut config, true),
             Err(TunManagerError::ElevationRequired)
         ));
 
         elevation.set_granted(true);
-        let status = manager
-            .set_enabled(&mut config, true)
-            .expect("enable with elevation grant");
+        let status = set_enabled(&manager, &mut config, true).expect("enable with elevation grant");
         assert!(status.enabled);
         assert!(status.allow_enable_tun);
         assert!(status.elevation_granted);
@@ -628,7 +627,7 @@ mod tests {
         config.tun_mode_item.enable_tun = true;
         let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Linux);
 
-        let status = manager.set_enabled(&mut config, false).expect("disable");
+        let status = set_enabled(&manager, &mut config, false).expect("disable");
         assert!(!status.enabled);
         assert!(!config.tun_mode_item.enable_tun);
     }
@@ -640,7 +639,7 @@ mod tests {
         let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos);
 
         assert!(matches!(
-            manager.set_enabled(&mut config, false),
+            set_enabled(&manager, &mut config, false),
             Err(TunManagerError::VpnRequired)
         ));
         assert!(config.tun_mode_item.enable_tun);
@@ -708,8 +707,7 @@ mod tests {
         let mut config = AppConfig::default();
         let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos);
 
-        let status = manager
-            .set_enabled(&mut config, true)
+        let status = set_enabled(&manager, &mut config, true)
             .expect("macOS PacketTunnel setting can be enabled without sudo");
 
         assert!(status.enabled);
@@ -749,7 +747,7 @@ mod tests {
         );
 
         assert!(matches!(
-            manager.set_enabled(&mut config, true),
+            set_enabled(&manager, &mut config, true),
             Err(TunManagerError::ProviderPathMismatch { .. })
         ));
         assert!(!config.tun_mode_item.enable_tun);

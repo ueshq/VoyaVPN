@@ -31,6 +31,7 @@ import type { InvalidationScope } from "./bindings";
 export const queryKeys = {
   appSettings: ["app-settings"],
   settingsApply: ["app-settings", "apply-status"],
+  appUpdaterStatus: ["app-updater-status"],
   connectionIp: ["connection-ip"],
   connectionMode: ["connection-mode"],
   // Under the profiles root: groups resolve their members from the node list,

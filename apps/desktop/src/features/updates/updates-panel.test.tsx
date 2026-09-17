@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { settingsSaveQueue } from "@/features/settings/settings-save-queue";
+import { saveQueue } from "@/lib/save-queue";
 import { UpdatesPanel } from "@/features/updates/updates-panel";
 import { usePreferencesStore } from "@/stores/preferences-store";
 import { changeLocale } from "@voya/i18n";
@@ -92,7 +92,7 @@ describe("UpdatesPanel", () => {
     const client = createTestQueryClient();
     let finish!: () => void;
     const write = new Promise<void>((resolve) => { finish = resolve; });
-    settingsSaveQueue(client).enqueue({}, () => write);
+    saveQueue(client).enqueue({}, () => write);
     const installed = makeTauriUpdate();
     tauriMocks.check.mockResolvedValueOnce(makeTauriUpdate()).mockResolvedValueOnce(installed);
     renderWithQuery(<UpdatesPanel />, { queryClient: client });

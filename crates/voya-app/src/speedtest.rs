@@ -27,6 +27,7 @@ use voya_platform::{
     process::{ProcessError, ProcessHandle, ProcessRole, ProcessRunner, ProcessSpawn},
 };
 
+use crate::backoff::exponential_delay;
 use crate::redaction::redact_urls;
 use crate::runtime::load_runtime_core_gen_env;
 
@@ -682,7 +683,7 @@ mod tests {
         let config = AppConfig::default();
 
         let run = manager
-            .run(&database, &config, vec!["a".to_string()])
+            .run_with_callback(&database, &config, vec!["a".to_string()], |_| {})
             .await
             .expect("speedtest test operation should succeed");
 
@@ -718,7 +719,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
-            .run(&database, &AppConfig::default(), Vec::new())
+            .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
             .await
             .expect("speedtest test operation should succeed");
 
@@ -749,7 +750,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         manager
-            .run(&database, &AppConfig::default(), Vec::new())
+            .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
             .await
             .expect("speedtest test operation should succeed");
 
@@ -788,7 +789,7 @@ mod tests {
         );
 
         manager
-            .run(&database, &config, Vec::new())
+            .run_with_callback(&database, &config, Vec::new(), |_| {})
             .await
             .expect("speedtest test operation should succeed");
 
@@ -822,7 +823,7 @@ mod tests {
 
         let handle = tokio::spawn(async move {
             task_manager
-                .run(&database, &config, Vec::new())
+                .run_with_callback(&database, &config, Vec::new(), |_| {})
                 .await
                 .expect("speedtest test operation should succeed")
         });
@@ -879,7 +880,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
-            .run(&database, &AppConfig::default(), Vec::new())
+            .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
             .await
             .expect("a core that will not start must not abort the run");
 
@@ -916,7 +917,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
-            .run(&database, &AppConfig::default(), Vec::new())
+            .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
             .await
             .expect("a cancel while a core starts is a cancelled run, not an error");
 
@@ -943,7 +944,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
-            .run(&database, &AppConfig::default(), Vec::new())
+            .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
             .await
             .expect("an invalid profile must not abort the run");
 
@@ -984,7 +985,7 @@ mod tests {
 
         let started = Instant::now();
         manager
-            .run(&database, &config, Vec::new())
+            .run_with_callback(&database, &config, Vec::new(), |_| {})
             .await
             .expect("speedtest test operation should succeed");
         let elapsed = started.elapsed();
@@ -1025,7 +1026,7 @@ mod tests {
         let first_config = config.clone();
         let first = tokio::spawn(async move {
             first_manager
-                .run(&first_database, &first_config, Vec::new())
+                .run_with_callback(&first_database, &first_config, Vec::new(), |_| {})
                 .await
                 .expect("the superseded run still completes")
         });
@@ -1048,7 +1049,7 @@ mod tests {
         );
 
         let second = manager
-            .run(&database, &config, Vec::new())
+            .run_with_callback(&database, &config, Vec::new(), |_| {})
             .await
             .expect("the superseding run completes");
         let first = first

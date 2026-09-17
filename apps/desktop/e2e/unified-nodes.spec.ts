@@ -30,7 +30,6 @@ async function seed(page: Page, count: number, groupName = "Work") {
 test("source groups retain subscription settings and only Use connects", async ({ page }) => {
   await seed(page, 4);
   await expect(page.getByTestId("server-row")).toHaveCount(4);
-  await expect(page.getByRole("searchbox")).toHaveCount(0);
   await expect(page.getByText("Tokyo", { exact: true })).toHaveCount(2);
   await expect(page.getByText("Create group", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Edit group", { exact: true })).toHaveCount(0);

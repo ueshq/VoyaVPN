@@ -27,6 +27,8 @@ const scrollableDialogContentVariants = cva("", {
       // Width-style (not max-w) so it survives the sm:max-w-none reset; 5xl
       // keeps its historical 64rem cap.
       "5xl": `${fixedWidth} w-[min(96vw,64rem)]`,
+      "35rem": `${fixedWidth} w-[min(96vw,35rem)]`,
+      "40rem": `${fixedWidth} w-[min(96vw,40rem)]`,
       "54rem": `${fixedWidth} w-[min(94vw,54rem)]`,
       "56rem": `${fixedWidth} w-[min(96vw,56rem)]`,
       "68rem": `${fixedWidth} w-[min(96vw,68rem)]`,

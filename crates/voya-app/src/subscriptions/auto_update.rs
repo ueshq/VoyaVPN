@@ -6,13 +6,16 @@
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use tokio::{sync::watch, task::JoinHandle, time};
 use voya_core::{SubItem, SubMetadataItem, SubscriptionUpdateResult};
 use voya_db::Database;
 use voya_platform::coreinfo::TargetOs;
+
+use super::unix_now_seconds;
+use crate::backoff::exponential_delay;
 
 use crate::{
     config_mutation::ConfigMutationCoordinator,
@@ -25,7 +28,7 @@ use crate::{
 const TICK_INTERVAL: Duration = Duration::from_secs(60);
 /// Base delay before retrying a subscription whose last automatic update
 /// failed; doubles per consecutive failure, capped by the interval itself.
-const FAILURE_BACKOFF_BASE_SECONDS: i64 = 300;
+const FAILURE_BACKOFF_BASE_SECONDS: u32 = 300;
 const FAILURE_BACKOFF_MAX_DOUBLINGS: u32 = 6;
 /// Never re-attempt the same subscription faster than this, regardless of
 /// how short its configured interval is.
@@ -111,10 +114,14 @@ pub fn due_subscription_ids(
 }
 
 fn failure_backoff_seconds(consecutive_failures: u32) -> i64 {
-    let doublings = consecutive_failures
-        .saturating_sub(1)
-        .min(FAILURE_BACKOFF_MAX_DOUBLINGS);
-    FAILURE_BACKOFF_BASE_SECONDS.saturating_mul(1_i64 << doublings)
+    let base = u64::from(FAILURE_BACKOFF_BASE_SECONDS);
+    let delay = exponential_delay(
+        consecutive_failures.saturating_sub(1),
+        Duration::from_secs(base),
+        // The doubling cap is the schedule's own maximum.
+        Duration::from_secs(base << FAILURE_BACKOFF_MAX_DOUBLINGS),
+    );
+    i64::try_from(delay.as_secs()).unwrap_or(i64::MAX)
 }
 
 pub struct SubscriptionAutoUpdateScheduler {
@@ -405,12 +412,6 @@ fn unusable_update_message(result: &SubscriptionUpdateResult) -> Option<String> 
             .cloned()
             .unwrap_or_else(|| "subscription update imported nothing".to_string()),
     )
-}
-
-fn unix_now_seconds() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0))
 }
 
 #[cfg(test)]

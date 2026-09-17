@@ -33,6 +33,9 @@ pub use validation::*;
 pub(crate) mod golden;
 
 #[cfg(test)]
+pub(crate) mod testutil;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value;

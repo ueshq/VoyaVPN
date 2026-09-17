@@ -1,4 +1,5 @@
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
+import { restoreFocus } from "@voya/ui/lib/focus";
 import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
 import { runningProfileId, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 
@@ -62,10 +63,10 @@ export function ServerTableDialogs({
       <SubscriptionsDialog
         subscription={controller.editingSubscription}
         onCloseFocus={() =>
-          (controller.subscriptionTriggerRef.current?.isConnected
-            ? controller.subscriptionTriggerRef.current
-            : controller.viewportRef.current
-          )?.focus()
+          restoreFocus(
+            controller.subscriptionTriggerRef.current,
+            controller.viewportRef.current,
+          )
         }
         onOpenChange={setSubscriptionsOpen}
         open={subscriptionsOpen}
@@ -89,10 +90,10 @@ export function ServerTableDialogs({
         error={controller.operationError}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          (controller.subscriptionTriggerRef.current?.isConnected
-            ? controller.subscriptionTriggerRef.current
-            : controller.viewportRef.current
-          )?.focus();
+          restoreFocus(
+            controller.subscriptionTriggerRef.current,
+            controller.viewportRef.current,
+          );
         }}
         onConfirm={(event) => {
           event.preventDefault();

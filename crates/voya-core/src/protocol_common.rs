@@ -1,6 +1,6 @@
 use crate::{
-    text::nonempty_str, AppConfig, ConfigType, InboundProtocol, ProfileItem, ProfileProtocol,
-    ProfileTransport, STREAM_SECURITY_TLS,
+    text::nonempty_str, AppConfig, InboundProtocol, ProfileItem, ProfileProtocol, ProfileTransport,
+    STREAM_SECURITY_TLS,
 };
 
 pub(crate) const DEFAULT_SECURITY: &str = "auto";
@@ -9,22 +9,6 @@ pub(crate) const WIREGUARD_DEFAULT_ADDRESS: &str = "172.16.0.2/32";
 pub(crate) const WIREGUARD_DEFAULT_ALLOWED_IPS: &[&str] = &["0.0.0.0/0", "::/0"];
 pub(crate) const WIREGUARD_DEFAULT_MTU: i32 = 1280;
 pub(crate) const WIREGUARD_RESERVED_LEN: usize = 3;
-
-pub(crate) fn protocol_name(config_type: ConfigType) -> &'static str {
-    match config_type {
-        ConfigType::VMess => "vmess",
-        ConfigType::Shadowsocks => "shadowsocks",
-        ConfigType::SOCKS => "socks",
-        ConfigType::HTTP => "http",
-        ConfigType::VLESS => "vless",
-        ConfigType::Trojan => "trojan",
-        ConfigType::Hysteria2 => "hysteria2",
-        ConfigType::TUIC => "tuic",
-        ConfigType::WireGuard => "wireguard",
-        ConfigType::Anytls => "anytls",
-        ConfigType::Naive => "naive",
-    }
-}
 
 pub(crate) fn raw_http_user_agent(user_agent: &str) -> String {
     match user_agent {
@@ -188,14 +172,15 @@ pub(crate) fn wireguard_allowed_ips(protocol: &ProfileProtocol) -> Vec<String> {
         ProfileProtocol::WireGuard { allowed_ips, .. } => allowed_ips.as_deref(),
         _ => None,
     };
-    split_list(allowed_ips.unwrap_or_default())
-        .filter(|items| !items.is_empty())
-        .unwrap_or_else(|| {
-            WIREGUARD_DEFAULT_ALLOWED_IPS
-                .iter()
-                .map(|item| (*item).to_string())
-                .collect()
-        })
+    let items = split_csv(allowed_ips.unwrap_or_default());
+    if items.is_empty() {
+        WIREGUARD_DEFAULT_ALLOWED_IPS
+            .iter()
+            .map(|item| (*item).to_string())
+            .collect()
+    } else {
+        items
+    }
 }
 
 pub(crate) fn parse_wireguard_reserved(value: Option<&str>) -> Option<Vec<i32>> {
@@ -211,26 +196,13 @@ pub(crate) fn parse_wireguard_reserved(value: Option<&str>) -> Option<Vec<i32>> 
     (reserved.len() == WIREGUARD_RESERVED_LEN).then_some(reserved)
 }
 
-pub(crate) fn split_list(value: &str) -> Option<Vec<String>> {
-    let value = value.trim();
-    if value.is_empty() {
-        return None;
-    }
-    Some(
-        value
-            .replace(['\n', '\r'], "")
-            .split(',')
-            .filter(|item| !item.is_empty())
-            .map(str::to_string)
-            .collect(),
-    )
-}
-
-/// Comma-separated list with per-item trimming. The share-link parsers and the
-/// sing-box generator both use it, so an `alpn`/`pcs`/`ech` list parses the
-/// same way on both sides of a round trip.
+/// The one comma-separated-list parser: newlines are dropped, each item is
+/// trimmed, empty items are removed. The share-link parsers and the sing-box
+/// generator both use it, so an `alpn`/host/address list parses the same way
+/// on both sides of a round trip.
 pub(crate) fn split_csv(input: &str) -> Vec<String> {
     input
+        .replace(['\n', '\r'], "")
         .split(',')
         .map(str::trim)
         .filter(|item| !item.is_empty())
@@ -238,14 +210,11 @@ pub(crate) fn split_csv(input: &str) -> Vec<String> {
         .collect()
 }
 
+/// The first item of a comma-separated list, or an empty string.
 pub(crate) fn first_list_value(value: Option<&str>) -> String {
-    split_list(value.unwrap_or_default())
-        .and_then(|items| {
-            items
-                .into_iter()
-                .map(|item| item.trim().to_string())
-                .find(|item| !item.is_empty())
-        })
+    value
+        .map(split_csv)
+        .and_then(|items| items.into_iter().next())
         .unwrap_or_default()
 }
 

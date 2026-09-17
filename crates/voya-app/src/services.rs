@@ -47,17 +47,8 @@ impl AppServices {
         })
     }
 
-    /// Read the persisted settings and project them onto an `AppConfig`.
-    ///
-    /// Only the database can fail here: every settings field is typed, so the
-    /// projection itself is total.
-    pub async fn load_config(&self) -> Result<AppConfig, DbError> {
-        let settings = self.database.settings().load().await?;
-        let state = self.database.app_state().load().await?;
-        Ok(app_config_from_settings(&settings, &state))
-    }
-
-    /// [`Self::load_config`] for the platform the app runs on: a fresh install
+    /// Load the persisted settings projected onto an `AppConfig` for the
+    /// platform the app runs on: a fresh install
     /// starts in the native VPN mode where the platform has one and in the
     /// shipped language closest to `system_locale`, and macOS always loads in
     /// VPN mode.
@@ -234,8 +225,16 @@ impl AppServices {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::save::settings_from_app_config;
+    use crate::settings::save::{app_config_from_settings, settings_from_app_config};
     use voya_contracts::{AppSettingsV1, SystemProxyType};
+
+    /// The plain persisted-settings projection, without the platform seeding
+    /// and enforcement that [`AppServices::load_config_for`] layers on top.
+    async fn load_config(services: &AppServices) -> Result<AppConfig, DbError> {
+        let settings = services.database.settings().load().await?;
+        let state = services.database.app_state().load().await?;
+        Ok(app_config_from_settings(&settings, &state))
+    }
 
     #[tokio::test]
     async fn fresh_database_loads_default_settings_and_reopens() {
@@ -254,8 +253,7 @@ mod tests {
         let services = AppServices::connect(&database_path, runtime_paths.clone())
             .await
             .expect("current database should connect");
-        let initial = services
-            .load_config()
+        let initial = load_config(&services)
             .await
             .expect("fresh default settings should load");
         assert_eq!(
@@ -272,8 +270,7 @@ mod tests {
         let reopened = AppServices::connect(&database_path, runtime_paths)
             .await
             .expect("initialized database should reconnect");
-        let persisted = reopened
-            .load_config()
+        let persisted = load_config(&reopened)
             .await
             .expect("persisted default settings should reload");
         assert_eq!(
@@ -401,7 +398,7 @@ mod tests {
                     .await
                     .expect("settings");
 
-                let loaded = services.load_config().await.expect("settings read");
+                let loaded = load_config(&services).await.expect("settings read");
                 assert_eq!(settings_from_app_config(&loaded), expected);
                 assert_eq!(
                     services
@@ -418,7 +415,7 @@ mod tests {
                 let reopened = AppServices::connect(&database_path, paths)
                     .await
                     .expect("reopen");
-                let reloaded = reopened.load_config().await.expect("reload settings");
+                let reloaded = load_config(&reopened).await.expect("reload settings");
                 assert_eq!(settings_from_app_config(&reloaded), expected);
                 reopened.database.close().await;
                 assert_eq!(

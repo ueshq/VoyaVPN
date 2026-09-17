@@ -4,18 +4,19 @@ import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { cn } from "@voya/ui/lib/utils";
-import type { TranslationFunction, TranslationKey } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { listRoutings } from "@/ipc/commands";
 import type { ProxyConnectionItem } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
+import { outboundLabelKey } from "@/features/routing/rule-outbound";
 import { connectionBytes } from "./connection-display";
 import { connectionRuleText } from "./connection-rule";
 
@@ -101,8 +102,8 @@ export function ConnectionDetails({
         if (!open) onClose();
       }}
     >
-      <DialogContent
-        className="flex max-h-[85vh] flex-col sm:max-w-[560px]"
+      <ScrollableDialogContent
+        width="35rem"
         closeLabel={t("actions.close")}
         // The footer carries Close next to the destructive action.
         showCloseButton={false}
@@ -170,22 +171,15 @@ export function ConnectionDetails({
             {t("activity.disconnectOne")}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }
 
-// The core names its built-in outbounds by tag; the Rules page has words for them.
-const OUTBOUND_KEYS: Record<string, TranslationKey> = {
-  block: "panes.routing.outboundBlock",
-  direct: "panes.routing.outboundDirect",
-  proxy: "panes.routing.outboundProxy",
-};
-
 function chainText(chains: readonly string[], t: TranslationFunction) {
   return chains
     .map((tag) => {
-      const key = OUTBOUND_KEYS[tag.toLowerCase()];
+      const key = outboundLabelKey(tag.toLowerCase());
       return key ? t(key) : tag;
     })
     .join(" → ");

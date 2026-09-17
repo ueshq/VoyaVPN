@@ -257,6 +257,57 @@ pub(super) async fn restart_after_config_change<R>(
     }
 }
 
+/// The tail every routing mutation shares: refresh the routing caches, then
+/// restart the connected core for the committed change. `config_changed` is
+/// whatever the commit itself reported.
+pub(super) async fn finish_routing_change<R, T>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    committed: &CommittedMutation<T>,
+    reason: &str,
+    change: ConfigChange,
+) where
+    R: tauri::Runtime,
+{
+    emit_routing_invalidation(app, reason, committed.config_changed);
+    restart_after_config_change(app, state, &committed.config, change).await;
+}
+
+/// The tail the removal-family commands share: emit the subsystem's
+/// invalidation, then disconnect the core if the change removed the node or
+/// group it was running. Every path that can delete or replace the running
+/// target must end here, or the core stays connected to a deleted profile.
+pub(super) async fn emit_then_disconnect_removed<R, F>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    emit: F,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+    F: FnOnce(&tauri::AppHandle<R>),
+{
+    emit(app);
+    disconnect_removed_profile(app, state).await
+}
+
+/// Disconnects the core if the node or group it is running no longer exists.
+///
+/// Split out of [`emit_then_disconnect_removed`] for the auto-update sink,
+/// which emits its invalidation before spawning the disconnect off its
+/// callback thread.
+pub(crate) async fn disconnect_removed_profile<R>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+) -> Result<(), AppError>
+where
+    R: tauri::Runtime,
+{
+    core_flow(app, state)
+        .disconnect_removed_profile(&current_config(state))
+        .await
+        .map_err(AppError::from)
+}
+
 pub(super) fn emit_settings_bundle_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
 where
     R: tauri::Runtime,

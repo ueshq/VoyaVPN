@@ -47,10 +47,9 @@ impl SupervisorActor {
 
     pub(super) fn handle(&mut self, command: SupervisorCommand) {
         match command {
-            // Restart is Start: `start` stops the running core itself, once its
+            // `start` is restart: it stops the running core itself, once its
             // own preconditions have passed.
-            SupervisorCommand::Start(request, reply)
-            | SupervisorCommand::Restart(request, reply) => {
+            SupervisorCommand::Start(request, reply) => {
                 let _ = reply.send(self.user_start(*request));
             }
             SupervisorCommand::Stop(reply) => {

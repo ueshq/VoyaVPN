@@ -169,7 +169,9 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
     pub async fn restart(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
         let _flow = self.runtime.settings_application().flow_lock.lock().await;
         self.announce_start(config, LogCode::Restarting);
-        let result = self.runtime.restart(config).await;
+        // `connect` is restart at this layer: starting stops the running core
+        // itself; only the announced log codes differ.
+        let result = self.runtime.connect(config).await;
 
         self.settle(config, result, LogCode::Restarted, CoreFlowReason::Restart)
             .await

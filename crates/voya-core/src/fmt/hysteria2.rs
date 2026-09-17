@@ -46,10 +46,10 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
     Ok(format!(
         "{}{}",
         HYSTERIA2_DEFAULT_SCHEME,
-        to_uri_without_scheme(
+        to_uri_without_scheme_preencoded_userinfo(
             item.address(),
             item.port(),
-            item.password(),
+            &url_encode(item.password()),
             &query,
             &item.remarks
         )

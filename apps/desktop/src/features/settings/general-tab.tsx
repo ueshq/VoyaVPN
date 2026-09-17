@@ -133,7 +133,7 @@ export function GeneralTab({
               behavior: { ...current.behavior, closeAction: closeAction as CloseAction },
             }))
           }
-          optionLabel={(action) => t(CLOSE_ACTION_LABELS[action as CloseAction])}
+          optionLabel={CLOSE_ACTION_LABELS}
           options={CLOSE_ACTIONS}
           value={settings.behavior.closeAction}
         />

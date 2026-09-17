@@ -2,7 +2,7 @@ use super::*;
 
 pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) -> SingboxOutbound {
     let mut outbound = SingboxOutbound {
-        r#type: protocol_name(node.config_type()).to_string(),
+        r#type: singbox_protocol_type(node.config_type()),
         tag: PROXY_TAG.to_string(),
         server: Some(node.address().to_string()),
         server_port: Some(node.port()),
@@ -127,11 +127,16 @@ pub(crate) fn build_wireguard_endpoint(node: &ProfileItem) -> Option<SingboxEndp
     };
     let public_key = wireguard_public_key(&node.protocol)?;
     Some(SingboxEndpoint {
-        r#type: protocol_name(node.config_type()).to_string(),
+        r#type: singbox_protocol_type(node.config_type()),
         tag: PROXY_TAG.to_string(),
-        address: split_list(interface_address.as_deref().unwrap_or_default())
-            .filter(|items| !items.is_empty())
-            .unwrap_or_else(|| vec![WIREGUARD_DEFAULT_ADDRESS.to_string()]),
+        address: {
+            let items = split_csv(interface_address.as_deref().unwrap_or_default());
+            if items.is_empty() {
+                vec![WIREGUARD_DEFAULT_ADDRESS.to_string()]
+            } else {
+                items
+            }
+        },
         private_key: private_key.clone(),
         mtu: Some(mtu.filter(|mtu| *mtu > 0).unwrap_or(WIREGUARD_DEFAULT_MTU)),
         peers: vec![SingboxPeer {

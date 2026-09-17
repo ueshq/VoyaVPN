@@ -6,20 +6,6 @@ use super::{Result, SubscriptionManager, SubscriptionManagerError};
 use voya_core::{AppConfig, SubscriptionUpdateResult};
 
 impl SubscriptionManager<'_> {
-    pub async fn update_subscriptions(
-        &self,
-        config: &mut AppConfig,
-        subscription_id: Option<&str>,
-        prefer_proxy: bool,
-        proxy_url: Option<&str>,
-    ) -> Result<SubscriptionUpdateResult> {
-        let prepared = self
-            .prepare_subscription_update(subscription_id, prefer_proxy, proxy_url)
-            .await?;
-        self.apply_prepared_subscription_update(config, prepared)
-            .await
-    }
-
     pub async fn prepare_subscription_update(
         &self,
         subscription_id: Option<&str>,

@@ -14,6 +14,7 @@ import {
   TextField as SharedTextField,
 } from "@voya/ui/components/form-fields";
 import { cn } from "@voya/ui/lib/utils";
+import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { pageSurfaceClassName } from "@/components/app-shell/page-section";
 
@@ -188,21 +189,32 @@ export function NumberField({
 
 export function SelectField({
   field,
-  optionLabel = (value) => value,
+  optionLabel,
   options,
   ...props
 }: Omit<ComponentProps<typeof SharedSelectField>, "options" | "layout"> & {
   field: string;
-  optionLabel?: (value: string) => string;
+  /** A label per value, or a record of translation keys keyed by value. */
+  optionLabel?:
+    | ((value: string) => string)
+    | Partial<Record<string, TranslationKey>>;
   options: readonly string[];
 }) {
+  const { t } = useI18n();
+  const labelOf =
+    typeof optionLabel === "function"
+      ? optionLabel
+      : (value: string) => {
+          const key = optionLabel?.[value];
+          return key ? t(key) : value;
+        };
   const errors = useContext(FieldErrors);
   return (
     <SharedSelectField
       {...props}
       error={errors[field]}
       layout="row"
-      options={options.map((value) => ({ value, label: optionLabel(value) }))}
+      options={options.map((value) => ({ value, label: labelOf(value) }))}
     />
   );
 }

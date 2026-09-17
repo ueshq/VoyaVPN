@@ -61,10 +61,6 @@ impl SystemProxyManager {
         self.status_with_force_disable(&runtime.config, runtime.force_disable)
     }
 
-    pub fn status(&self, config: &AppConfig) -> Result<SystemProxyStatus, SystemProxyManagerError> {
-        self.status_with_force_disable(config, false)
-    }
-
     fn status_with_force_disable(
         &self,
         config: &AppConfig,

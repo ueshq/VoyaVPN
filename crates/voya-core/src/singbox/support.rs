@@ -41,25 +41,10 @@ fn should_bind_outbound(outbound: &SingboxOutbound) -> bool {
         .as_deref()
         .is_none_or(|server| !is_loopback_address(server))
 }
-/// Single source of truth for the sing-box protocol support table.
-///
-/// `crate::context::validation` gates node validation on the same predicate so
-/// validation and generation cannot drift apart.
-pub(crate) fn singbox_supports_config_type(config_type: ConfigType) -> bool {
-    matches!(
-        config_type,
-        ConfigType::VMess
-            | ConfigType::VLESS
-            | ConfigType::Shadowsocks
-            | ConfigType::Trojan
-            | ConfigType::Hysteria2
-            | ConfigType::TUIC
-            | ConfigType::Anytls
-            | ConfigType::Naive
-            | ConfigType::WireGuard
-            | ConfigType::SOCKS
-            | ConfigType::HTTP
-    )
+/// The sing-box outbound `type` spelling for a protocol: the stored spelling
+/// lowercased (`wireGuard` → `wireguard`).
+pub(super) fn singbox_protocol_type(config_type: ConfigType) -> String {
+    config_type.as_str().to_ascii_lowercase()
 }
 
 pub(super) fn vmess_security(protocol: &ProfileProtocol) -> String {

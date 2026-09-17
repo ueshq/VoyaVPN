@@ -1,11 +1,6 @@
 //! Share-link parsers and exporters.
-//!
-//! Standard protocol links can also be exchanged as a versioned node bundle.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    net::IpAddr,
-};
+use std::{collections::BTreeMap, net::IpAddr};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use percent_encoding::percent_decode_str;
@@ -30,7 +25,6 @@ const HYSTERIA2_DEFAULT_SCHEME: &str = "hysteria2://";
 const HYSTERIA2_ALT_SCHEME: &str = "hy2://";
 const NAIVE_HTTPS_SCHEME: &str = "naive+https://";
 const NAIVE_QUIC_SCHEME: &str = "naive+quic://";
-const VOYA_PROFILE_BUNDLE_PREFIX: &str = "voya://profiles/v1/";
 const MAX_BASE64_DECODE_INPUT: usize = 1024 * 1024;
 
 const HTTP2_NETWORK: &str = "h2";
@@ -66,9 +60,7 @@ mod wireguard;
 use common::*;
 use uri::*;
 
-pub use entry::{
-    export_share_link_with_options, parse_share_link, parse_voya_profile_bundle, ShareLinkOptions,
-};
+pub use entry::{export_share_link_with_options, parse_share_link, ShareLinkOptions};
 pub use shadowsocks::parse_ss_sip008;
 pub use wireguard::parse_wireguard_config;
 
@@ -109,8 +101,6 @@ pub enum ShareError {
     },
     #[error("invalid WireGuard config")]
     InvalidWireGuardConfig,
-    #[error("invalid Voya node bundle: {reason}")]
-    InvalidVoyaBundle { reason: String },
 }
 
 #[cfg(test)]

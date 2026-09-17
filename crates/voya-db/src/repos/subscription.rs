@@ -2,7 +2,7 @@ use sqlx::{sqlite::SqliteRow, Row};
 use voya_core::SubItem;
 
 use crate::{
-    executor::{repository_constructors, run_query, RepositoryExecutor},
+    executor::{max_sort, repository_constructors, run_query, RepositoryExecutor},
     Result,
 };
 
@@ -82,13 +82,7 @@ impl<'executor> SubscriptionRepository<'executor> {
     }
 
     pub async fn max_sort(&self) -> Result<i32> {
-        let max_sort: Option<i32> = run_query!(
-            self.executor,
-            sqlx::query_scalar("SELECT MAX(sort) FROM subscriptions"),
-            fetch_one
-        )?;
-
-        Ok(max_sort.unwrap_or(0))
+        max_sort(self.executor, "SELECT MAX(sort) FROM subscriptions").await
     }
 
     pub async fn delete(&self, id: &str) -> Result<bool> {

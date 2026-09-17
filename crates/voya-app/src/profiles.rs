@@ -1,8 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::atomic::{AtomicU64, Ordering as AtomicOrdering},
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::HashMap;
 
 use thiserror::Error;
 use voya_core::{
@@ -25,8 +21,6 @@ pub struct ProfileListing {
     pub items: Vec<ProfileListItem>,
     pub undecodable_profiles: usize,
 }
-
-static PROFILE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 pub type Result<T> = std::result::Result<T, ProfileManagerError>;
 
@@ -128,7 +122,7 @@ impl<'db> ProfileManager<'db> {
         mut profile: ProfileItem,
     ) -> Result<ProfileListItem> {
         let is_new = if profile.index_id.trim().is_empty() {
-            profile.index_id = generate_profile_id();
+            profile.index_id = uuid::Uuid::new_v4().simple().to_string();
             true
         } else {
             !self.database.profiles().exists(&profile.index_id).await?
@@ -564,16 +558,6 @@ fn empty_server_stat(index_id: &str) -> ServerStatItem {
         index_id: index_id.to_string(),
         ..ServerStatItem::default()
     }
-}
-
-fn generate_profile_id() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
-    let counter = PROFILE_ID_COUNTER.fetch_add(1, AtomicOrdering::Relaxed) as u128;
-    let pid = u128::from(std::process::id());
-
-    format!("{:032x}", nanos ^ (counter << 64) ^ pid)
 }
 
 #[cfg(test)]

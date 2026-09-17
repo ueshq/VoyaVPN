@@ -135,7 +135,6 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   textTooLong: "validation.textTooLong",
   tooManyItems: "validation.tooManyItems",
   tunMtuOutOfRange: "validation.tunMtuOutOfRange",
-  unsupportedProtocol: "validation.unsupportedProtocol",
   unsupportedProtocolNetwork: "validation.unsupportedProtocolNetwork",
   unsupportedSettingsSchema: "validation.unsupportedSettingsSchema",
   unsupportedShadowsocksNetwork: "validation.unsupportedShadowsocksNetwork",

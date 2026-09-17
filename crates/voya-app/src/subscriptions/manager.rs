@@ -1,8 +1,3 @@
-use std::{
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
-};
-
 use thiserror::Error;
 use voya_core::{AppConfig, SubItem, SubMetadataItem};
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
@@ -15,8 +10,6 @@ mod parse;
 mod update;
 
 use import::compile_filter;
-
-static SUBSCRIPTION_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 pub type Result<T> = std::result::Result<T, SubscriptionManagerError>;
 
@@ -86,7 +79,7 @@ impl<'db> SubscriptionManager<'db> {
         compile_filter(item.filter.as_deref())?;
 
         if item.id.is_empty() {
-            item.id = generate_subscription_id();
+            item.id = format!("sub-{}", uuid::Uuid::new_v4().simple());
         }
         if item.sort <= 0 {
             item.sort = self.database.subscriptions().max_sort().await? + 1;
@@ -175,16 +168,6 @@ fn extract_remarks_from_url(url: &str) -> Option<String> {
     })
 }
 
-fn generate_subscription_id() -> String {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos());
-    let counter = SUBSCRIPTION_ID_COUNTER.fetch_add(1, Ordering::Relaxed) as u128;
-    let pid = u128::from(std::process::id());
-
-    format!("sub-{:032x}", nanos ^ (counter << 64) ^ pid)
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -200,6 +183,23 @@ mod tests {
     use voya_core::{ProfileProtocol, ProfileTransport, ServerEndpoint};
 
     use super::*;
+
+    /// The composed prepare+apply flow the command and the scheduler spell out
+    /// explicitly so the fetch runs outside the mutation lock.
+    async fn update_subscriptions(
+        manager: &SubscriptionManager<'_>,
+        config: &mut AppConfig,
+        subscription_id: Option<&str>,
+        prefer_proxy: bool,
+        proxy_url: Option<&str>,
+    ) -> Result<voya_core::SubscriptionUpdateResult> {
+        let prepared = manager
+            .prepare_subscription_update(subscription_id, prefer_proxy, proxy_url)
+            .await?;
+        manager
+            .apply_prepared_subscription_update(config, prepared)
+            .await
+    }
 
     #[tokio::test]
     async fn subscription_import_filters_dedupes_persists_without_selecting() {
@@ -286,8 +286,7 @@ mod tests {
             })
             .await
             .expect("subscription manager test operation should succeed");
-        let result = manager
-            .update_subscriptions(&mut config, None, false, None)
+        let result = update_subscriptions(&manager, &mut config, None, false, None)
             .await
             .expect("subscription manager test operation should succeed");
         assert_eq!(result.updated, 1);
@@ -336,8 +335,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        let result = manager
-            .update_subscriptions(&mut config, None, false, None)
+        let result = update_subscriptions(&manager, &mut config, None, false, None)
             .await
             .expect("a failing mirror must not fail the subscription update");
 
@@ -399,8 +397,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        manager
-            .update_subscriptions(&mut config, Some(&sub.id), false, None)
+        update_subscriptions(&manager, &mut config, Some(&sub.id), false, None)
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -448,8 +445,7 @@ mod tests {
             .save_subscription(updated_sub)
             .await
             .expect("subscription manager test operation should succeed");
-        manager
-            .update_subscriptions(&mut config, Some(&sub.id), false, None)
+        update_subscriptions(&manager, &mut config, Some(&sub.id), false, None)
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -524,8 +520,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        let result = manager
-            .update_subscriptions(&mut config, None, false, None)
+        let result = update_subscriptions(&manager, &mut config, None, false, None)
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -671,8 +666,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        let result = manager
-            .update_subscriptions(&mut config, None, false, None)
+        let result = update_subscriptions(&manager, &mut config, None, false, None)
             .await
             .expect("one broken filter must not abort the whole batch");
 

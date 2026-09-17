@@ -178,7 +178,6 @@ describe("source-derived node groups", () => {
     const toggle = await screen.findByRole("button", { name: "Asia" });
     expect(screen.getAllByTestId("server-row")).toHaveLength(4);
     expect(screen.getAllByText("Tokyo")).toHaveLength(2);
-    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
     await userEvent.click(toggle);
     expect(screen.getAllByTestId("server-row")).toHaveLength(2);
     await act(async () => changed());
@@ -352,7 +351,7 @@ describe("group panels and scoped export", () => {
     useNodeListStore.setState({ collapsedGroups: ["subscription:a"], hideUnreachable: false });
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
-    const search = screen.getByRole("textbox", { name: "Search node name, address or subscription" });
+    const search = screen.getByRole("searchbox", { name: "Search node name, address or subscription" });
     fireEvent.change(search, { target: { value: " osaka " } });
     expect(screen.getAllByTestId("server-row")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Asia" })).toHaveAttribute("aria-expanded", "true");

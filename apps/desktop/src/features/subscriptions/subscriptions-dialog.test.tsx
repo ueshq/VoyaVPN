@@ -7,7 +7,11 @@ const ipc = vi.hoisted(() => ({
   saveSubscription: vi.fn(),
   updateSubscriptions: vi.fn(),
 }));
-vi.mock("@/ipc/commands", () => ipc);
+vi.mock("@/ipc/commands", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/ipc/commands")>()),
+  saveSubscription: ipc.saveSubscription,
+  updateSubscriptions: ipc.updateSubscriptions,
+}));
 const source: Subscription = {
   id: "source",
   remarks: "My source",

@@ -215,9 +215,6 @@ pub enum ValidationCode {
     InvalidFlow,
     InvalidShadowsocksMethod,
     InvalidRealityPublicKey,
-    UnsupportedProtocol {
-        protocol: String,
-    },
     UnsupportedProtocolNetwork {
         protocol: String,
         network: String,

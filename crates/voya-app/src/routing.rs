@@ -1,16 +1,8 @@
-use std::{
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
-};
-
 use thiserror::Error;
 use voya_core::{AppConfig, MoveAction, RoutingItem, RulesItem};
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
 const DEFAULT_ROUTING_SORT_STEP: i32 = 10;
-
-static ROUTING_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
-static ROUTING_RULE_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 pub type Result<T> = std::result::Result<T, RoutingManagerError>;
 
@@ -312,22 +304,11 @@ fn moved_index(
 }
 
 fn generate_routing_id() -> String {
-    generate_id("routing", &ROUTING_ID_COUNTER)
+    format!("routing-{}", uuid::Uuid::new_v4().simple())
 }
 
 fn generate_rule_id() -> String {
-    generate_id("rule", &ROUTING_RULE_ID_COUNTER)
-}
-
-fn generate_id(prefix: &str, counter: &AtomicU64) -> String {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| {
-            u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
-        });
-    let sequence = counter.fetch_add(1, Ordering::Relaxed);
-
-    format!("{prefix}-{millis}-{sequence}")
+    format!("rule-{}", uuid::Uuid::new_v4().simple())
 }
 
 #[cfg(test)]

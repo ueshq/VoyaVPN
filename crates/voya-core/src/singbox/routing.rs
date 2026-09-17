@@ -418,9 +418,6 @@ fn gen_routing_user_rule_outbound(
     else {
         return PROXY_TAG.to_string();
     };
-    if !singbox_supports_config_type(node.config_type()) {
-        return PROXY_TAG.to_string();
-    }
 
     let tag = format!("{}-{PROXY_TAG}-{}", node.index_id, node.remarks);
     if config

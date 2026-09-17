@@ -148,7 +148,8 @@ pub(super) fn protocol_share(config_type: ConfigType) -> &'static str {
         ConfigType::WireGuard => "wireguard://",
         ConfigType::Anytls => "anytls://",
         ConfigType::Naive => "naive://",
-        _ => "",
+        // Not shareable: export rejects HTTP nodes with WrongConfigType.
+        ConfigType::HTTP => "",
     }
 }
 
@@ -166,6 +167,8 @@ pub(super) fn option_or(value: &Option<String>, default_value: &str) -> String {
         .to_string()
 }
 
+/// An is-empty check on an owned value — unlike the trimming
+/// [`crate::text`] helpers, wire-format fields keep their whitespace.
 pub(super) fn nonempty(value: String) -> Option<String> {
     if value.is_empty() {
         None

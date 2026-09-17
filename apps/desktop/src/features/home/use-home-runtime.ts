@@ -2,28 +2,29 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { listPolicyGroups, listProfiles, policyGroupRuntime } from "@/ipc/commands";
+import { listPolicyGroups, listProfiles } from "@/ipc/commands";
 import { coreStateOf, runningProfileId, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TunStatus } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
-import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { usePolicyGroupRuntime } from "@/features/profiles/use-policy-group-runtime";
 
-import { isRuntimeTransitioning, runRuntimeAction } from "./runtime-action";
-import { tunProviderLabel, tunProviderPathMismatchDescription } from "./tun-provider-text";
+import {
+  isRuntimeTransitioning,
+  runRuntimeAction,
+  useRuntimeBusy,
+} from "@/stores/runtime-action";
+import { tunProviderLabel, tunProviderPathMismatchDescription } from "@/components/app-shell/tun-provider-text";
 
 /**
  * Runtime controller for the Home screen: connect/disconnect/restart with
  * elevation + missing-core handling, node selection/switching, and the seeded
  * TUN live state. How traffic is captured is chosen in Settings, never here.
  */
-/** How often the running group's current member is read again, as on the Nodes page. */
-const GROUP_RUNTIME_REFRESH_MS = 3_000;
-
 export function useHomeRuntime() {
   const { t } = useI18n();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const tun = useRuntimeEventStore((state) => state.tun);
-  const pending = useRuntimeActionStore(runtimeActionPending);
   const modePending = useRuntimeActionStore((state) => state.modePending);
   const lastError = useRuntimeActionStore((state) => state.lastError);
   // Shares the ProfilesScreen query cache (same key) so resolving the active
@@ -35,8 +36,11 @@ export function useHomeRuntime() {
 
   const state = coreStateOf(coreState);
   const connected = state === "connected";
+  // Home separates "a runtime action runs" (busy) from "the core itself is
+  // mid-transition" (inProgress): the button label and the mode-pending hint
+  // depend on the difference.
+  const busy = useRuntimeBusy();
   const inProgress = isRuntimeTransitioning(state);
-  const busy = inProgress || pending;
 
   const activeProfile =
     profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
@@ -58,16 +62,7 @@ export function useHomeRuntime() {
   });
   const activeGroup =
     policyGroupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
-  const groupRuntimeQuery = useQuery({
-    enabled: connected && activeGroup !== null,
-    queryFn: policyGroupRuntime,
-    queryKey: queryKeys.policyGroupRuntime,
-    refetchInterval: GROUP_RUNTIME_REFRESH_MS,
-  });
-  const groupRuntime =
-    connected && activeGroup && groupRuntimeQuery.data?.groupId === activeGroup.group.id
-      ? groupRuntimeQuery.data
-      : null;
+  const groupRuntime = usePolicyGroupRuntime(activeGroup?.group.id ?? null);
 
   function handlePrimaryAction() {
     const action = connected || state === "cleanupPending" ? "disconnect" : "connect";

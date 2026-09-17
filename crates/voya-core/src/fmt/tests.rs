@@ -3,7 +3,8 @@ use std::{collections::BTreeMap, panic};
 use proptest::prelude::*;
 
 use super::{entry::export_share_link, *};
-use crate::{generate_singbox_config_value, AppConfig, CoreConfigContext, PROXY_TAG};
+use crate::testutil::{endpoint, linux_context as fmt_test_context};
+use crate::{generate_singbox_config_value, AppConfig, PROXY_TAG};
 
 #[test]
 fn fmt_share_round_trips_all_supported_protocols() {
@@ -382,16 +383,9 @@ fn fmt_negative_inputs_return_typed_errors_without_panicking() {
         "ss://not-base64",
         "wireguard://key@example.com:notaport",
         "tuic://onlyuser@example.com:443",
-        "voya://profiles/v1/not-base64",
         "v2rayn://retired-private-format",
     ] {
-        let result = panic::catch_unwind(|| {
-            if starts_with_ci(bad, VOYA_PROFILE_BUNDLE_PREFIX) {
-                parse_voya_profile_bundle(bad, "sub").map(|_| ())
-            } else {
-                parse_share_link(bad).map(|_| ())
-            }
-        });
+        let result = panic::catch_unwind(|| parse_share_link(bad).map(|_| ()));
         assert!(result.is_ok(), "{bad} panicked");
         assert!(result.expect("panic checked").is_err(), "{bad} parsed");
     }
@@ -554,22 +548,6 @@ fn fmt_wireguard_config_parses_peers_and_inline_comments() {
     assert_eq!(*mtu, Some(1420));
     assert_eq!(resolved[1].address(), "example.com");
     assert_eq!(resolved[1].port(), 12345);
-}
-
-#[test]
-fn voya_profile_bundle_rejects_versions_invalid_refs_and_retired_kinds() {
-    for json in [
-        r#"{"schemaVersion":2,"profiles":[]}"#,
-        r#"{"schemaVersion":1,"profiles":[],"retired":true}"#,
-        r#"{"schemaVersion":1,"profiles":[{"kind":"proxyChain","reference":"a","name":"a","childRefs":["missing"],"includeCurrentSubscription":false}]}"#,
-        r#"{"schemaVersion":1,"profiles":[{"kind":"proxyChain","reference":"a","name":"a","childRefs":["b"],"includeCurrentSubscription":false},{"kind":"proxyChain","reference":"b","name":"b","childRefs":["a"],"includeCurrentSubscription":false}]}"#,
-    ] {
-        let payload = base64_encode(json, true)
-            .replace('+', "-")
-            .replace('/', "_");
-        let uri = format!("{VOYA_PROFILE_BUNDLE_PREFIX}{payload}");
-        assert!(parse_voya_profile_bundle(&uri, "sub").is_err());
-    }
 }
 
 #[test]
@@ -986,13 +964,6 @@ fn profile(
     }
 }
 
-fn endpoint(address: &str, port: i32) -> ServerEndpoint {
-    ServerEndpoint {
-        address: address.to_string(),
-        port,
-    }
-}
-
 fn raw_transport() -> ProfileTransport {
     ProfileTransport::Tcp {
         header: Some(NONE.to_string()),
@@ -1002,28 +973,7 @@ fn raw_transport() -> ProfileTransport {
 }
 
 fn tls(mode: TlsMode, server_name: &str) -> TlsSettings {
-    TlsSettings {
-        mode,
-        server_name: Some(server_name.to_string()),
-        alpn: Vec::new(),
-        reality_public_key: None,
-        reality_short_id: None,
-        certificate_pem: None,
-        ech_config: Vec::new(),
-    }
-}
-
-fn fmt_test_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
-    let mut all_proxies_map = BTreeMap::new();
-    all_proxies_map.insert(node.index_id.clone(), node.clone());
-    let simple_dns_item = app_config.simple_dns_item.clone();
-    CoreConfigContext {
-        node,
-        app_config,
-        simple_dns_item,
-        all_proxies_map,
-        ..CoreConfigContext::default()
-    }
+    crate::testutil::tls_settings(mode, Some(server_name), &[], Vec::new())
 }
 
 fn proxy_outbound(config: &Value) -> &Value {

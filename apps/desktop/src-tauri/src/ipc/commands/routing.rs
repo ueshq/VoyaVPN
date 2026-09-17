@@ -27,8 +27,14 @@ pub async fn save_routing<R: tauri::Runtime>(
             .await?)
     })
     .await?;
-    emit_routing_invalidation(&app, "routing-saved", saved.config_changed);
-    restart_after_config_change(&app, &state, &saved.config, ConfigChange::ROUTING_SAVED).await;
+    finish_routing_change(
+        &app,
+        &state,
+        &saved,
+        "routing-saved",
+        ConfigChange::ROUTING_SAVED,
+    )
+    .await;
 
     Ok(routing_to_contract(saved.value))
 }
@@ -52,8 +58,14 @@ pub async fn delete_routings<R: tauri::Runtime>(
             .await?)
     })
     .await?;
-    emit_routing_invalidation(&app, "routings-deleted", deleted.config_changed);
-    restart_after_config_change(&app, &state, &deleted.config, ConfigChange::ROUTING_DELETED).await;
+    finish_routing_change(
+        &app,
+        &state,
+        &deleted,
+        "routings-deleted",
+        ConfigChange::ROUTING_DELETED,
+    )
+    .await;
 
     Ok(deleted.value)
 }
@@ -77,8 +89,14 @@ pub async fn set_active_routing<R: tauri::Runtime>(
             .await?)
     })
     .await?;
-    emit_routing_invalidation(&app, "active-routing-changed", true);
-    restart_after_config_change(&app, &state, &active.config, ConfigChange::ROUTING_SELECTED).await;
+    finish_routing_change(
+        &app,
+        &state,
+        &active,
+        "active-routing-changed",
+        ConfigChange::ROUTING_SELECTED,
+    )
+    .await;
 
     Ok(routing_to_contract(active.value))
 }
@@ -104,11 +122,11 @@ pub async fn save_routing_rule<R: tauri::Runtime>(
     })
     .await?;
 
-    emit_routing_invalidation(&app, "routing-rule-saved", false);
-    restart_after_config_change(
+    finish_routing_change(
         &app,
         &state,
-        &saved.config,
+        &saved,
+        "routing-rule-saved",
         ConfigChange::ROUTING_RULE_SAVED,
     )
     .await;
@@ -143,11 +161,11 @@ pub async fn delete_routing_rules<R: tauri::Runtime>(
     })
     .await?;
 
-    emit_routing_invalidation(&app, "routing-rules-deleted", false);
-    restart_after_config_change(
+    finish_routing_change(
         &app,
         &state,
-        &saved.config,
+        &saved,
+        "routing-rules-deleted",
         ConfigChange::ROUTING_RULES_DELETED,
     )
     .await;
@@ -189,11 +207,11 @@ pub async fn move_routing_rule<R: tauri::Runtime>(
     })
     .await?;
 
-    emit_routing_invalidation(&app, "routing-rule-moved", false);
-    restart_after_config_change(
+    finish_routing_change(
         &app,
         &state,
-        &saved.config,
+        &saved,
+        "routing-rule-moved",
         ConfigChange::ROUTING_RULE_MOVED,
     )
     .await;
@@ -223,11 +241,11 @@ pub async fn reset_routing_rules<R: tauri::Runtime>(
     })
     .await?;
 
-    emit_routing_invalidation(&app, "routing-rules-reset", false);
-    restart_after_config_change(
+    finish_routing_change(
         &app,
         &state,
-        &saved.config,
+        &saved,
+        "routing-rules-reset",
         ConfigChange::ROUTING_RULES_RESET,
     )
     .await;

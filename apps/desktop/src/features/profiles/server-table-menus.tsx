@@ -5,7 +5,6 @@ import {
   ChevronsUp,
   Info,
   Link,
-  MoreHorizontal,
   Pencil,
   QrCode,
   Share2,
@@ -17,20 +16,14 @@ import type { ComponentType, ReactElement, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
+import { MoreMenu, RowContextMenu } from "@voya/ui/components/row-menus";
 import { DisabledReason } from "@/components/disabled-reason";
 import {
-  ContextMenu,
-  ContextMenuContent,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
-  ContextMenuTrigger,
 } from "@voya/ui/components/context-menu";
 import {
-  Menubar,
-  MenubarMenu,
-  MenubarTrigger,
-  MenubarContent,
   MenubarSub,
   MenubarSubTrigger,
   MenubarSubContent,
@@ -122,22 +115,20 @@ export function ProfileRowContextMenu({
   item: ProfileListEntry;
 }) {
   return (
-    <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild>
-        {children}
-      </ContextMenuTrigger>
-      <ContextMenuContent
-        aria-label={controller.t("panes.profiles.menu.actionsFor", {
-          name: item.profile.remarks || item.profile.id,
-        })}
-      >
+    <RowContextMenu
+      content={
         <ProfileMenuItems
           controller={controller}
           item={item}
           primitives={CONTEXT_ACTION_PRIMITIVES}
         />
-      </ContextMenuContent>
-    </ContextMenu>
+      }
+      label={controller.t("panes.profiles.menu.actionsFor", {
+        name: item.profile.remarks || item.profile.id,
+      })}
+    >
+      {children}
+    </RowContextMenu>
   );
 }
 
@@ -166,30 +157,19 @@ export function ProfileCardMenu({
   controller: ServerTableController;
   item: ProfileListEntry;
 }) {
-  const label = controller.t("panes.profiles.menu.actionsFor", {
-    name: item.profile.remarks || item.profile.id,
-  });
   return (
-    <Menubar bare>
-      <MenubarMenu>
-        <MenubarTrigger asChild>
-          <Button
-            aria-label={label}
-            size="icon"
-            variant="ghost"
-          >
-            <MoreHorizontal aria-hidden="true" className="size-4" />
-          </Button>
-        </MenubarTrigger>
-        <MenubarContent align="end" aria-label={label}>
-          <ProfileMenuItems
-            controller={controller}
-            item={item}
-            primitives={MENUBAR_ACTION_PRIMITIVES}
-          />
-        </MenubarContent>
-      </MenubarMenu>
-    </Menubar>
+    <MoreMenu
+      label={controller.t("panes.profiles.menu.actionsFor", {
+        name: item.profile.remarks || item.profile.id,
+      })}
+      triggerSize="icon"
+    >
+      <ProfileMenuItems
+        controller={controller}
+        item={item}
+        primitives={MENUBAR_ACTION_PRIMITIVES}
+      />
+    </MoreMenu>
   );
 }
 

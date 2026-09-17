@@ -24,13 +24,13 @@ import { ScrollArea } from "@voya/ui/components/scroll-area";
 import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
 import { Spinner } from "@voya/ui/components/spinner";
 import {
-  connectionModeStatus,
   deleteRoutingRules,
   listProcessCandidates,
   listRoutings,
   moveRoutingRule,
   saveRoutingRule,
 } from "@/ipc/commands";
+import { useConnectionModeStatus } from "./use-connection-mode-status";
 import { queryKeys } from "@/ipc/query-keys";
 import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -87,11 +87,7 @@ export function PerAppProxyDialog({
     queryKey: queryKeys.processCandidates,
     staleTime: 30_000,
   });
-  const modeStatusQuery = useQuery({
-    enabled: open,
-    queryFn: connectionModeStatus,
-    queryKey: queryKeys.connectionMode,
-  });
+  const modeStatusQuery = useConnectionModeStatus(open);
 
   const activeRouting =
     routingsQuery.data?.find((routing) => routing.isActive) ?? null;

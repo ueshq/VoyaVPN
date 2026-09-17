@@ -2,33 +2,28 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
-import type {
-  PolicyGroup,
-  PolicyGroupEntry,
-  PolicyGroupListing,
-  PolicyGroupRuntime,
-  ProfileListing,
-} from "@/ipc/bindings";
+import type { PolicyGroup, PolicyGroupEntry, ProfileListing } from "@/ipc/bindings";
 import {
   deletePolicyGroups,
   listPolicyGroups,
   listSubscriptions,
-  policyGroupRuntime,
   selectPolicyGroupMember,
   setActivePolicyGroup,
-  testPolicyGroupDelay,
 } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
-import { activateSelection } from "@/features/home/runtime-action";
+import { activateSelection } from "@/stores/runtime-action";
 
 import { profileMemberName } from "./profile-display";
+import {
+  useGroupDelayTest,
+  usePolicyGroupMemberSwitch,
+  usePolicyGroupRuntime,
+} from "./use-policy-group-runtime";
 import type { NodeOperation } from "./use-node-operation";
 
-/** How often a running group's live member and delays are read again; the same everywhere a group shows. */
-const RUNTIME_REFRESH_MS = 3_000;
 /** Marks a group switch in the shared runtime-action guard, apart from node ids. */
 const GROUP_SWITCH_PREFIX = "group:";
 
@@ -46,12 +41,11 @@ export function usePolicyGroups(
     queryKey: queryKeys.policyGroups,
   });
   const policyGroupEntries = policyGroupsQuery.data?.entries ?? [];
-  const runtimeQuery = useQuery({
-    enabled: coreConnected && policyGroupEntries.some((entry) => entry.isActive),
-    queryFn: policyGroupRuntime,
-    queryKey: queryKeys.policyGroupRuntime,
-    refetchInterval: RUNTIME_REFRESH_MS,
-  });
+  const activeGroupId =
+    policyGroupEntries.find((entry) => entry.isActive)?.group.id ?? null;
+  const policyGroupRuntimeState = usePolicyGroupRuntime(activeGroupId);
+  const memberSwitch = usePolicyGroupMemberSwitch();
+  const delayTest = useGroupDelayTest(operation.runOperation);
   const subscriptionsQuery = useQuery({
     queryFn: listSubscriptions,
     queryKey: queryKeys.subscriptions,
@@ -59,7 +53,6 @@ export function usePolicyGroups(
   const [editingPolicyGroup, setEditingPolicyGroup] = useState<PolicyGroup | null>(null);
   const [policyGroupEditorOpen, setPolicyGroupEditorOpen] = useState(false);
   const [deletingPolicyGroup, setDeletingPolicyGroup] = useState<PolicyGroupEntry | null>(null);
-  const [testingPolicyGroup, setTestingPolicyGroup] = useState(false);
 
   function openGroupEditor(group: PolicyGroup | null) {
     setEditingPolicyGroup(group);
@@ -88,47 +81,10 @@ export function usePolicyGroups(
     });
   }
 
-  /** The chip moves at once; the next runtime read confirms it and a failure puts it back. */
   async function choosePolicyGroupMember(groupId: string, profileId: string) {
-    const previousRuntime = queryClient.getQueryData<PolicyGroupRuntime | null>(
-      queryKeys.policyGroupRuntime,
+    return memberSwitch(groupId, profileId, () =>
+      operation.runOperation(() => selectPolicyGroupMember(groupId, profileId)),
     );
-    const previousGroups = queryClient.getQueryData<PolicyGroupListing>(queryKeys.policyGroups);
-    if (previousRuntime?.groupId === groupId) {
-      queryClient.setQueryData(queryKeys.policyGroupRuntime, {
-        ...previousRuntime,
-        nowProfileId: profileId,
-      });
-    }
-    if (previousGroups) {
-      queryClient.setQueryData<PolicyGroupListing>(queryKeys.policyGroups, {
-        ...previousGroups,
-        entries: previousGroups.entries.map((entry) =>
-          entry.group.id === groupId
-            ? { ...entry, group: { ...entry.group, selectedProfileId: profileId } }
-            : entry,
-        ),
-      });
-    }
-    const saved = await operation.runOperation(() => selectPolicyGroupMember(groupId, profileId));
-    if (!saved) {
-      queryClient.setQueryData(queryKeys.policyGroupRuntime, previousRuntime);
-      queryClient.setQueryData(queryKeys.policyGroups, previousGroups);
-    }
-    return saved;
-  }
-
-  async function testRunningPolicyGroup() {
-    if (testingPolicyGroup) return;
-    setTestingPolicyGroup(true);
-    try {
-      await operation.runOperation(async () => {
-        const runtime = await testPolicyGroupDelay();
-        if (runtime) queryClient.setQueryData(queryKeys.policyGroupRuntime, runtime);
-      });
-    } finally {
-      setTestingPolicyGroup(false);
-    }
   }
 
   async function removePolicyGroup() {
@@ -147,8 +103,7 @@ export function usePolicyGroups(
     openGroupEditor,
     policyGroupEditorOpen,
     policyGroupEntries,
-    // Only a connected core has a running group; stale data never outlives it.
-    policyGroupRuntimeState: coreConnected ? (runtimeQuery.data ?? null) : null,
+    policyGroupRuntimeState,
     policyGroupSubscriptions: subscriptionsQuery.data ?? [],
     removePolicyGroup,
     setDeletingPolicyGroup,
@@ -156,7 +111,7 @@ export function usePolicyGroups(
     switchingPolicyGroupId: switchingId?.startsWith(GROUP_SWITCH_PREFIX)
       ? switchingId.slice(GROUP_SWITCH_PREFIX.length)
       : null,
-    testRunningPolicyGroup,
-    testingPolicyGroup,
+    testRunningPolicyGroup: delayTest.test,
+    testingPolicyGroup: delayTest.testing,
   };
 }

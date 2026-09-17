@@ -3,8 +3,8 @@ use super::{is_http_url, Result, SubscriptionManagerError};
 use regex::Regex;
 use std::collections::BTreeSet;
 use voya_core::{
-    parse_share_link, parse_ss_sip008, parse_voya_profile_bundle, parse_wireguard_config,
-    text::decode_base64_payload, ImportLineCode, ImportLineIssue, ProfileItem, ShareError,
+    parse_share_link, parse_ss_sip008, parse_wireguard_config, text::decode_base64_payload,
+    ImportLineCode, ImportLineIssue, ProfileItem, ShareError,
 };
 
 #[derive(Debug, Default)]
@@ -64,9 +64,6 @@ pub(super) fn parse_import_text(text: &str, subscription_id: &str) -> Result<Par
             }
         }
 
-        if let Ok(mut bundle) = parse_voya_profile_bundle(&content, subscription_id) {
-            profiles.append(&mut bundle);
-        }
         if let Ok(mut ss) = parse_ss_sip008(&content) {
             profiles.append(&mut ss);
         }

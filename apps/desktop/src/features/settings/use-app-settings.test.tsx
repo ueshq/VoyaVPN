@@ -13,7 +13,7 @@ import {
   serverSettings,
   settingsIpc,
 } from "./settings-backend.test-fixture";
-import { settingsSaveQueue } from "./settings-save-queue";
+import { saveQueue } from "@/lib/save-queue";
 import { useAppSettings } from "./use-app-settings";
 
 vi.mock(
@@ -36,7 +36,7 @@ function mount() {
   return {
     ...hook,
     client,
-    settle: () => act(() => settingsSaveQueue(client).settled()),
+    settle: () => act(() => saveQueue(client).settled()),
   };
 }
 

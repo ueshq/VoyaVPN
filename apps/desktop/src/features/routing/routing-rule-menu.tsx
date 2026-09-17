@@ -1,27 +1,15 @@
-import type { ReactElement } from "react";
 import {
   ArrowDown,
   ArrowUp,
   ChevronsDown,
   ChevronsUp,
-  MoreHorizontal,
   Pencil,
   Trash2,
 } from "lucide-react";
+import type { ReactElement } from "react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
-import { Button } from "@voya/ui/components/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuTrigger,
-} from "@voya/ui/components/context-menu";
-import {
-  Menubar,
-  MenubarContent,
-  MenubarMenu,
-  MenubarTrigger,
-} from "@voya/ui/components/menubar";
+import { MoreMenu, RowContextMenu } from "@voya/ui/components/row-menus";
 
 import {
   CONTEXT_MENU_PRIMITIVES,
@@ -51,12 +39,12 @@ export function RuleRowContextMenu({
   label: string;
 }) {
   return (
-    <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent aria-label={label}>
-        <RuleMenuItems actions={actions} primitives={CONTEXT_MENU_PRIMITIVES} />
-      </ContextMenuContent>
-    </ContextMenu>
+    <RowContextMenu
+      content={<RuleMenuItems actions={actions} primitives={CONTEXT_MENU_PRIMITIVES} />}
+      label={label}
+    >
+      {children}
+    </RowContextMenu>
   );
 }
 
@@ -69,18 +57,9 @@ export function RuleRowMenuButton({
 }) {
   return (
     // The 32 px trigger is wider than the cell's content box; it overhangs the leading padding.
-    <Menubar bare className="justify-end">
-      <MenubarMenu>
-        <MenubarTrigger asChild disabled={actions.locked}>
-          <Button aria-label={label} size="icon-sm" type="button" variant="ghost">
-            <MoreHorizontal aria-hidden="true" className="size-4" />
-          </Button>
-        </MenubarTrigger>
-        <MenubarContent align="end" aria-label={label}>
-          <RuleMenuItems actions={actions} primitives={MENUBAR_PRIMITIVES} />
-        </MenubarContent>
-      </MenubarMenu>
-    </Menubar>
+    <MoreMenu className="justify-end" disabled={actions.locked} label={label}>
+      <RuleMenuItems actions={actions} primitives={MENUBAR_PRIMITIVES} />
+    </MoreMenu>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { Rss } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
+import type { TranslationKey } from "@voya/i18n";
 import { Alert, AlertDescription } from "@voya/ui/components/alert";
 import { Button } from "@voya/ui/components/button";
 import {
@@ -17,8 +18,12 @@ import { SwitchField, TextField } from "@voya/ui/components/form-fields";
 import { Spinner } from "@voya/ui/components/spinner";
 import { saveSubscription, updateSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
-import { redactOperationalError } from "@voya/utils/operational-redaction";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { assertSubscriptionUpdated } from "./subscription-update-result";
+import { subscriptionFormSchema } from "./subscriptions-form-schema";
+
+/** Fields the dialog validates; also the suffixes of the input ids. */
+type SubscriptionField = "hours" | "remarks" | "url";
 
 type Props = {
   subscription?: Subscription | null;
@@ -71,37 +76,51 @@ function SubscriptionEditor({
     const minutes = subscription?.autoUpdateIntervalMinutes ?? 0;
     return subscription?.enabled && minutes > 0 ? String(minutes / 60) : "1";
   });
-  const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
   const [needsUpdate, setNeedsUpdate] = useState(false);
-  const working = useRef(false);
-  const fieldErrors = {
-    remarks: form.remarks.trim() ? undefined : t("subscriptions.validation.name"),
-    url: /^https?:\/\/\S+$/i.test(form.url.trim()) ? undefined : t("subscriptions.validation.url"),
-    hours: form.enabled && (!hours.trim() || !Number.isFinite(Number(hours)) || Number(hours) <= 0 || Number(hours) * 60 > 2147483647)
-      ? t("subscriptions.validation.interval") : undefined,
-  };
-  function fieldFeedback(field: keyof typeof fieldErrors) {
-    return submitted || touched.has(field) ? fieldErrors[field] : undefined;
+  const {
+    error,
+    fieldErrors: serverFieldErrors,
+    pending,
+    submit,
+  } = useDialogSubmit(t);
+
+  const parsed = subscriptionFormSchema.safeParse({
+    enabled: form.enabled,
+    hours,
+    remarks: form.remarks,
+    url: form.url,
+  });
+  const schemaErrors: Partial<Record<SubscriptionField, TranslationKey>> = parsed.success
+    ? {}
+    : Object.fromEntries(
+        parsed.error.issues.map((issue) => [issue.path[0], issue.message]),
+      );
+  function fieldFeedback(field: SubscriptionField) {
+    // Backend validation issues arrive pre-translated; local schema issues are keys.
+    const serverError = serverFieldErrors[field];
+    if (serverError) return serverError;
+    // Local checks stay quiet until the field was touched or the form was sent.
+    const schemaError = (submitted || touched.has(field)) && schemaErrors[field];
+    return schemaError ? t(schemaError) : undefined;
   }
   function touch(field: string) {
     setTouched((current) => new Set(current).add(field));
   }
   function changeOpen(next: boolean) {
-    if (!working.current) onOpenChange(next);
+    if (!pending) onOpenChange(next);
   }
-  async function submit() {
-    if (working.current) return;
+  async function submitForm() {
     setSubmitted(true);
-    const invalid = (Object.keys(fieldErrors) as (keyof typeof fieldErrors)[]).find((field) => fieldErrors[field]);
-    if (invalid) {
-      formRef.current?.querySelector<HTMLInputElement>(`[id="${id}-${invalid}"]`)?.focus();
+    if (!parsed.success) {
+      const invalid = parsed.error.issues[0]?.path[0];
+      if (typeof invalid === "string") {
+        formRef.current
+          ?.querySelector<HTMLInputElement>(`[id="${id}-${invalid}"]`)
+          ?.focus();
+      }
       return;
     }
-    working.current = true;
-    setPending(true);
-    setError(null);
-    try {
+    await submit(async () => {
       const create = !form.id;
       const saved = await saveSubscription({
         ...form,
@@ -120,12 +139,7 @@ function SubscriptionEditor({
         setNeedsUpdate(false);
       }
       onOpenChange(false);
-    } catch (cause) {
-      setError(redactOperationalError(cause));
-    } finally {
-      working.current = false;
-      setPending(false);
-    }
+    });
   }
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
@@ -159,7 +173,7 @@ function SubscriptionEditor({
             className="grid gap-4"
             onSubmit={(event) => {
               event.preventDefault();
-              void submit();
+              void submitForm();
             }}
           >
             <TextField

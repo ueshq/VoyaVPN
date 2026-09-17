@@ -1,18 +1,17 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    env, fs,
-    path::PathBuf,
-    process::Command,
-};
+use std::{collections::BTreeSet, env, fs, path::PathBuf, process::Command};
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
+use crate::testutil::{
+    base_remote_node as singbox_base_remote_node, endpoint, linux_context as singbox_context,
+    raw_transport, socks_node as singbox_socks_node, tls_settings as full_tls_settings,
+};
 use crate::{
     generate_singbox_config, generate_singbox_config_value, AppConfig, ContextPolicyGroup,
     CoreConfigContext, CoreGenPlatform, GroupStrategy, PolicyGroupItem, ProfileItem,
-    ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem, ServerEndpoint, TlsMode,
-    TlsSettings, BLOCK_TAG, DIRECT_TAG, LOOPBACK, PROXY_TAG,
+    ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem, TlsMode, TlsSettings,
+    BLOCK_TAG, DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
 
 #[derive(Debug, Deserialize)]
@@ -867,73 +866,8 @@ fn singbox_routing_dns_contexts() -> (CoreConfigContext, CoreConfigContext) {
     (dns_context, tun_context)
 }
 
-fn singbox_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
-    let mut all_proxies_map = BTreeMap::new();
-    all_proxies_map.insert(node.index_id.clone(), node.clone());
-    let simple_dns_item = app_config.simple_dns_item.clone();
-    CoreConfigContext {
-        node,
-        app_config,
-        simple_dns_item,
-        all_proxies_map,
-        platform: CoreGenPlatform::Linux,
-        ..CoreConfigContext::default()
-    }
-}
-
-fn singbox_base_remote_node() -> ProfileItem {
-    ProfileItem {
-        remarks: "remote".to_string(),
-        protocol: ProfileProtocol::Vmess {
-            server: endpoint("server.example", 443),
-            uuid: String::new(),
-            cipher: None,
-        },
-        transport: Some(raw_transport()),
-        tls: Some(tls_settings("server.example", &[], Vec::new())),
-        ..ProfileItem::default()
-    }
-}
-
-fn singbox_socks_node(index_id: &str, remarks: &str) -> ProfileItem {
-    ProfileItem {
-        index_id: index_id.to_string(),
-        remarks: remarks.to_string(),
-        protocol: ProfileProtocol::Socks {
-            server: endpoint(LOOPBACK, 1080),
-            username: "user".to_string(),
-            password: "pass".to_string(),
-        },
-        transport: Some(raw_transport()),
-        ..ProfileItem::default()
-    }
-}
-
-fn endpoint(address: &str, port: i32) -> ServerEndpoint {
-    ServerEndpoint {
-        address: address.to_string(),
-        port,
-    }
-}
-
-fn raw_transport() -> ProfileTransport {
-    ProfileTransport::Tcp {
-        header: None,
-        host: None,
-        path: None,
-    }
-}
-
 fn tls_settings(server_name: &str, alpn: &[&str], ech_config: Vec<String>) -> TlsSettings {
-    TlsSettings {
-        mode: TlsMode::Tls,
-        server_name: Some(server_name.to_string()),
-        alpn: alpn.iter().map(|value| (*value).to_string()).collect(),
-        reality_public_key: None,
-        reality_short_id: None,
-        certificate_pem: None,
-        ech_config,
-    }
+    full_tls_settings(TlsMode::Tls, Some(server_name), alpn, ech_config)
 }
 
 #[test]

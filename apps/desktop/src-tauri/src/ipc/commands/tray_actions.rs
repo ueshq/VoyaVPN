@@ -223,19 +223,14 @@ pub(crate) async fn tray_activate_node<R: tauri::Runtime>(
             .await?)
     })
     .await;
-    match activated {
-        Ok(committed) => {
-            emit_profile_invalidation(app, "active-profile-changed", true);
-            restart_after_config_change(
-                app,
-                &state,
-                &committed.config,
-                ConfigChange::ACTIVE_PROFILE,
-            )
-            .await;
-        }
-        Err(error) => report_tray_failure(app, &error),
-    }
+    tray_commit(
+        app,
+        &state,
+        activated,
+        |app| emit_profile_invalidation(app, "active-profile-changed", true),
+        ConfigChange::ACTIVE_PROFILE,
+    )
+    .await;
 }
 
 /// Makes a policy group active and, when connected, restarts onto it: the
@@ -255,11 +250,33 @@ pub(crate) async fn tray_activate_group<R: tauri::Runtime>(
         )
     })
     .await;
+    tray_commit(
+        app,
+        &state,
+        activated,
+        |app| emit_policy_group_invalidation(app, "active-policy-group-changed", true),
+        ConfigChange::POLICY_GROUP,
+    )
+    .await;
+}
+
+/// A tray mutation's post-commit tail: on success the same emit-then-restart
+/// the matching command runs, on failure a notice — a tray click has no
+/// caller to return an error to.
+async fn tray_commit<R, F, T>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    activated: Result<CommittedMutation<T>, AppError>,
+    emit: F,
+    change: ConfigChange,
+) where
+    R: tauri::Runtime,
+    F: FnOnce(&tauri::AppHandle<R>),
+{
     match activated {
         Ok(committed) => {
-            emit_policy_group_invalidation(app, "active-policy-group-changed", true);
-            restart_after_config_change(app, &state, &committed.config, ConfigChange::POLICY_GROUP)
-                .await;
+            emit(app);
+            restart_after_config_change(app, state, &committed.config, change).await;
         }
         Err(error) => report_tray_failure(app, &error),
     }

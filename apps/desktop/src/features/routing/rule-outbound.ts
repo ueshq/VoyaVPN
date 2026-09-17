@@ -14,6 +14,13 @@ export const OUTBOUND_LABEL_KEYS = {
 
 export const GROUP_OUTBOUND_PREFIX = "group:";
 
+/** The label key for a built-in outbound tag, or `null` for any other tag. */
+export function outboundLabelKey(tag: string): TranslationKey | null {
+  return Object.hasOwn(OUTBOUND_LABEL_KEYS, tag)
+    ? OUTBOUND_LABEL_KEYS[tag as BuiltinOutbound]
+    : null;
+}
+
 /** A policy group a rule can send traffic through. */
 export type RuleGroupOutbound = { id: string; name: string };
 

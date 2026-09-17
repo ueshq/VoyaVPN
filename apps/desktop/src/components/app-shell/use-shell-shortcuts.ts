@@ -3,7 +3,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { runRuntimeAction, runtimeBusy } from "@/features/home/runtime-action";
+import { runRuntimeAction, runtimeBusy } from "@/stores/runtime-action";
 import type { ProfileListing } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { coreStateOf, useRuntimeEventStore } from "@/ipc/runtime-event-store";

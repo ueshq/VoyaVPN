@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, net::IpAddr};
 
 use crate::{
-    singbox::support::{singbox_supports_config_type, state_port2},
+    singbox::support::state_port2,
     text::nonempty_str,
     validation::{ValidationCode, ValidationMessage, ValidationScope},
     AppConfig, ConfigType, InboundProtocol, ProfileItem, ProfileProtocol, RoutingItem, RulesItem,
@@ -578,8 +578,8 @@ where
 }
 
 mod validation;
+pub(crate) use validation::validate_node;
 use validation::*;
-pub use validation::{is_domain, validate_node};
 
 fn pre_socks_item<E: CoreGenEnv>(config: &AppConfig, env: &E) -> Option<ProfileItem> {
     // The topology is an injected platform fact, not something derived from

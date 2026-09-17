@@ -133,18 +133,14 @@ pub(super) fn to_uri(
     format!(
         "{}{}",
         protocol_share(config_type),
-        to_uri_without_scheme(address, port, user_info, query, remark)
+        to_uri_without_scheme_preencoded_userinfo(
+            address,
+            port,
+            &url_encode(user_info),
+            query,
+            remark
+        )
     )
-}
-
-pub(super) fn to_uri_without_scheme(
-    address: &str,
-    port: i32,
-    user_info: &str,
-    query: &[(String, String)],
-    remark: &str,
-) -> String {
-    to_uri_without_scheme_preencoded_userinfo(address, port, &url_encode(user_info), query, remark)
 }
 
 pub(super) fn to_uri_without_scheme_preencoded_userinfo(

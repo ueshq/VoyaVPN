@@ -1,16 +1,19 @@
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use thiserror::Error;
 pub use voya_contracts::ResourceUpdateFile;
-use voya_core::RoutingItem;
 use voya_db::{Database, DbError};
 use voya_net::ruleset::{
     collect_singbox_ruleset_assets, discover_local_singbox_ruleset_paths, geo_assets,
-    AcquiredRulesetGeoAsset, AssetAcquisitionOptions, RulesetGeoClient, RulesetGeoError, SrsAsset,
+    AcquiredRulesetGeoAsset, AssetAcquisitionOptions, RulesetGeoClient, RulesetGeoError,
 };
 use voya_platform::paths::AppPaths;
 
 pub type Result<T> = std::result::Result<T, UpdateManagerError>;
+
+/// Where staged rule sets live under the app-data bin directory.
+const SRS_DIR_NAME: &str = "srss";
 
 #[derive(Debug, Error)]
 pub enum UpdateManagerError {
@@ -59,11 +62,14 @@ impl<'db> UpdateManager<'db> {
         proxy_url: Option<String>,
     ) -> Result<Vec<ResourceUpdateFile>> {
         let routings = self.database.routings().list().await?;
-        let assets = collect_srs_assets(&routings);
-        let srs_dir = self.paths.bin_dir().join("srss");
+        let assets = collect_singbox_ruleset_assets(None, &routings);
         let acquired = self
             .ruleset_geo
-            .acquire_srs_assets(&assets, srs_dir, &asset_acquisition_options(proxy_url))
+            .acquire_srs_assets(
+                &assets,
+                srs_dir(&self.paths),
+                &asset_acquisition_options(proxy_url),
+            )
             .await?;
 
         Ok(acquired.into_iter().map(resource_update_file).collect())
@@ -72,12 +78,12 @@ impl<'db> UpdateManager<'db> {
 
 #[must_use]
 pub fn local_singbox_ruleset_paths(paths: &AppPaths) -> BTreeMap<String, String> {
-    discover_local_singbox_ruleset_paths(paths.bin_dir().join("srss"))
+    discover_local_singbox_ruleset_paths(srs_dir(paths))
 }
 
 #[must_use]
-fn collect_srs_assets(routings: &[RoutingItem]) -> Vec<SrsAsset> {
-    collect_singbox_ruleset_assets(None, routings)
+fn srs_dir(paths: &AppPaths) -> PathBuf {
+    paths.bin_dir().join(SRS_DIR_NAME)
 }
 
 fn asset_acquisition_options(proxy_url: Option<String>) -> AssetAcquisitionOptions {
@@ -98,6 +104,7 @@ fn resource_update_file(asset: AcquiredRulesetGeoAsset) -> ResourceUpdateFile {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use voya_core::RoutingItem;
 
     #[test]
     fn resource_assets_use_builtin_urls() {
@@ -117,7 +124,7 @@ mod tests {
             }],
             ..RoutingItem::default()
         };
-        let srs = collect_srs_assets(&[routing]);
+        let srs = collect_singbox_ruleset_assets(None, &[routing]);
         for (tag, kind) in [("geoip-cn", "geoip"), ("geosite-google", "geosite")] {
             let asset = srs
                 .iter()

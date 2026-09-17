@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Activity, ArrowDown, ArrowUp, Inbox, LoaderCircle, MoreHorizontal, RefreshCw, Search, Unplug } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Inbox, LoaderCircle, RefreshCw, Unplug } from "lucide-react";
 
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import {
@@ -11,14 +11,9 @@ import {
 } from "@/components/app-shell/data-table-surface";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
-import { Input } from "@voya/ui/components/input";
-import {
-  Menubar,
-  MenubarContent,
-  MenubarItem,
-  MenubarMenu,
-  MenubarTrigger,
-} from "@voya/ui/components/menubar";
+import { SearchInput } from "@voya/ui/components/search-input";
+import { MenubarItem } from "@voya/ui/components/menubar";
+import { MoreMenu } from "@voya/ui/components/row-menus";
 import { Badge } from "@voya/ui/components/badge";
 import { Skeleton } from "@voya/ui/components/skeleton";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
@@ -26,12 +21,15 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { proxyCloseConnection, proxyListConnections } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@/ipc/bindings";
+import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { queryKeys } from "@/ipc/query-keys";
+import { restoreFocus } from "@voya/ui/lib/focus";
 import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 import { PageHeader } from "@/components/app-shell/page-section";
 import { ConnectionDetails } from "./connection-details";
 import { connectionBytes, connectionKey } from "./connection-display";
+import { outboundLabelKey } from "@/features/routing/rule-outbound";
 import { connectionRoute, type ConnectionRoute } from "./connection-route";
 
 type SortColumn = "host" | "process" | "route" | "traffic";
@@ -51,16 +49,9 @@ const ROUTE_CHIP_CLASSES: Record<Exclude<ConnectionRoute["kind"], "unknown">, st
 };
 
 function routeLabel(route: ConnectionRoute, t: TranslationFunction) {
-  switch (route.kind) {
-    case "block":
-      return t("panes.routing.outboundBlock");
-    case "direct":
-      return t("panes.routing.outboundDirect");
-    case "proxy":
-      return route.node ?? t("panes.routing.outboundProxy");
-    default:
-      return "";
-  }
+  if (route.kind === "proxy" && route.node) return route.node;
+  const key = outboundLabelKey(route.kind);
+  return key ? t(key) : "";
 }
 
 export function ConnectionsPanel({
@@ -176,10 +167,12 @@ export function ConnectionsPanel({
     initialRect: { height: 520, width: 900 },
     overscan: 10,
   });
-  const virtualRows = virtualizer.getVirtualItems();
-  const renderedRows = virtualRows.length
-    ? virtualRows
-    : rows.slice(0, 30).map((_, index) => ({ index, start: index * ROW_HEIGHT }));
+  const renderedRows = firstPaintVirtualItems(
+    virtualizer.getVirtualItems(),
+    rows.length,
+    ROW_HEIGHT,
+    30,
+  );
   const headings: { column: SortColumn; label: string }[] = [
     { column: "host", label: t("activity.target") },
     { column: "process", label: t("activity.application") },
@@ -226,20 +219,14 @@ export function ConnectionsPanel({
       ) : (
         <>
           <PageHeader>
-            <div className="relative min-w-0 flex-1 sm:max-w-sm">
-              <Search
-                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                type="search"
-                className="h-9 ps-9"
-                aria-label={t("proxy.filterConnections")}
-                placeholder={t("proxy.filterConnections")}
-                value={filter}
-                onChange={(event) => onFilterChange(event.target.value)}
-              />
-            </div>
+            <SearchInput
+              className="sm:max-w-sm"
+              clearLabel={t("activity.clearSearch")}
+              label={t("proxy.filterConnections")}
+              value={filter}
+              onChange={(event) => onFilterChange(event.target.value)}
+              onClear={() => onFilterChange("")}
+            />
             <Badge className="ms-auto" variant={monitorBadge.live ? "secondary" : "outline"}>
               {t(monitorBadge.key)}
             </Badge>
@@ -259,25 +246,16 @@ export function ConnectionsPanel({
                 className={cn("size-4", connectionsQuery.isFetching && "animate-spin")}
               />
             </Button>
-            <Menubar bare>
-              <MenubarMenu>
-                <MenubarTrigger asChild>
-                  <Button aria-label={moreLabel} size="icon-sm" title={moreLabel} type="button" variant="ghost">
-                    <MoreHorizontal className="size-4" aria-hidden="true" />
-                  </Button>
-                </MenubarTrigger>
-                <MenubarContent align="end">
-                  <MenubarItem
-                    variant="destructive"
-                    disabled={!snapshot.connections.length || closeMutation.isPending}
-                    onSelect={() => setConfirmingDisconnectAll(true)}
-                  >
-                    <Unplug className="size-4" aria-hidden="true" />
-                    {t("activity.disconnectAll")}
-                  </MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>
-            </Menubar>
+            <MoreMenu label={moreLabel} title={moreLabel}>
+              <MenubarItem
+                variant="destructive"
+                disabled={!snapshot.connections.length || closeMutation.isPending}
+                onSelect={() => setConfirmingDisconnectAll(true)}
+              >
+                <Unplug className="size-4" aria-hidden="true" />
+                {t("activity.disconnectAll")}
+              </MenubarItem>
+            </MoreMenu>
           </PageHeader>
           {updateFailed ? (
             <div
@@ -472,7 +450,7 @@ export function ConnectionsPanel({
         onDisconnect={disconnectSelected}
         onClose={() => setSelection(null)}
         onCloseFocus={() => {
-          (returnFocusRef.current?.isConnected ? returnFocusRef.current : panelRef.current)?.focus();
+          restoreFocus(returnFocusRef.current, panelRef.current);
         }}
       />
     </div>

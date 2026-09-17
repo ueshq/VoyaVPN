@@ -4,7 +4,7 @@ use voya_core::{ConfigType, ProfileExItem, ProfileItem};
 use super::decode_rows;
 use crate::{
     blob,
-    executor::{delete_each, repository_constructors, run_query, RepositoryExecutor},
+    executor::{delete_each, repository_constructors, row_exists, run_query, RepositoryExecutor},
     DbError, ProfileExRepository, Result,
 };
 
@@ -165,14 +165,12 @@ impl<'executor> ProfileRepository<'executor> {
     }
 
     pub async fn exists(&self, index_id: &str) -> Result<bool> {
-        let exists: i64 = run_query!(
+        row_exists(
             self.executor,
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM profile_items WHERE index_id = ?)")
-                .bind(index_id),
-            fetch_one
-        )?;
-
-        Ok(exists != 0)
+            "SELECT EXISTS(SELECT 1 FROM profile_items WHERE index_id = ?)",
+            index_id,
+        )
+        .await
     }
 
     pub async fn delete(&self, index_id: &str) -> Result<bool> {

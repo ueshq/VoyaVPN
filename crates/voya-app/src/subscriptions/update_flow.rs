@@ -2,8 +2,6 @@
 //! snapshot (built outside any mutation lock), server-reported metadata
 //! persistence. Manual group membership is independent of subscriptions.
 
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use voya_core::{
     parse_profile_update_interval_minutes, parse_subscription_userinfo, SubItem, SubMetadataItem,
     SubscriptionUpdateResult, SubscriptionUserInfo,
@@ -17,6 +15,7 @@ use voya_net::{
 use crate::redaction::redact_urls;
 
 use super::manager::{is_http_url, Result};
+use super::unix_now_seconds;
 
 #[derive(Debug)]
 pub struct PreparedSubscriptionUpdate {
@@ -180,12 +179,6 @@ fn header_value<'headers>(
         .iter()
         .find(|(header, _)| header == name)
         .map(|(_, value)| value.as_str())
-}
-
-fn unix_now_seconds() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0))
 }
 
 async fn fetch_subscription(

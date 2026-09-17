@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@/ipc/query-keys";
 import { resetSettingsBackend, serverSettings, settingsIpc } from "@/features/settings/settings-backend.test-fixture";
-import { settingsSaveQueue } from "@/features/settings/settings-save-queue";
+import { saveQueue } from "@/lib/save-queue";
 import { useDnsSettings } from "./use-dns-settings";
 
 vi.mock("@/ipc/commands", async () => (await import("@/features/settings/settings-backend.test-fixture")).settingsIpc);
@@ -14,7 +14,7 @@ function mount(enabled = true, seedApp = true) {
   const client = createTestQueryClient();
   if (seedApp) client.setQueryData(queryKeys.appSettings, serverSettings());
   const hook = renderHookWithQuery(() => useDnsSettings(enabled), { queryClient: client });
-  return { ...hook, client, settle: () => act(() => settingsSaveQueue(client).settled()) };
+  return { ...hook, client, settle: () => act(() => saveQueue(client).settled()) };
 }
 
 describe("DNS automatic writes", () => {

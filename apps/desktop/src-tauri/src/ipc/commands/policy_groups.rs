@@ -81,11 +81,10 @@ pub async fn delete_policy_groups<R: tauri::Runtime>(
             .await?)
     })
     .await?;
-    emit_policy_group_invalidation(&app, "policy-groups-deleted", deleted.config_changed);
-    core_flow(&app, &state)
-        .disconnect_removed_profile(&current_config(&state))
-        .await
-        .map_err(AppError::from)?;
+    emit_then_disconnect_removed(&app, &state, |app| {
+        emit_policy_group_invalidation(app, "policy-groups-deleted", deleted.config_changed)
+    })
+    .await?;
 
     Ok(u32::try_from(deleted.value).unwrap_or(u32::MAX))
 }

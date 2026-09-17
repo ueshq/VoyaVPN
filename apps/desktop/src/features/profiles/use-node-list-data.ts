@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { listProfiles, listSubscriptions, listSubscriptionMetadata } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { queryKeys } from "@/ipc/query-keys";
 import type { ProfileListEntry, SpeedtestResult } from "@/ipc/bindings";
 import type { TranslationFunction } from "@voya/i18n";
@@ -94,15 +95,13 @@ export function useNodeListData(
     initialRect: { height: 520, width: 1200 },
     overscan: 5,
   });
-  const visibleRows = rowVirtualizer.getVirtualItems();
-  const renderedRows =
-    visibleRows.length > 0
-      ? visibleRows
-      : rows.slice(0, 15).map((row, index) => ({
-          index,
-          key: row.key,
-          start: index * 64,
-        }));
+  const renderedRows = firstPaintVirtualItems(
+    rowVirtualizer.getVirtualItems(),
+    rows.length,
+    64,
+    15,
+    (index) => rows[index]!.key,
+  );
   function subscriptionName(item: ProfileListEntry) {
     return item.profile.subscriptionId
       ? (subscriptionNames.get(item.profile.subscriptionId) ??

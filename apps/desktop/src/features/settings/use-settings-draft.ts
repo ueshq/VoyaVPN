@@ -19,7 +19,7 @@ import {
   SettingsDraft,
   type SettingsChange,
 } from "./settings-draft";
-import { settingsSaveQueue } from "./settings-save-queue";
+import { saveQueue } from "@/lib/save-queue";
 
 // Async failures use the current locale even after the originating pane unmounts.
 const draftsByClient = new WeakMap<QueryClient, Map<string, unknown>>();
@@ -36,7 +36,7 @@ export function useSettingsDraft<T>({
   write: (change: SettingsChange) => Promise<T>;
 }) {
   const client = useQueryClient();
-  const queue = settingsSaveQueue(client);
+  const queue = saveQueue(client);
   const [draft] = useState(() => {
     const key = JSON.stringify(queryKey);
     const drafts = draftsByClient.get(client) ?? new Map<string, unknown>();

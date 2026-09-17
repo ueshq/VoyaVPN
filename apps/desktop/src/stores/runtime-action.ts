@@ -74,7 +74,7 @@ export async function activateSelection(
   select: () => Promise<void>,
 ): Promise<boolean> {
   const state = coreStateOf(useRuntimeEventStore.getState().coreState);
-  if (runtimeBusy(state) || state === "cleanupPending") {
+  if (switchBusy(state)) {
     return false;
   }
 
@@ -102,9 +102,7 @@ export function useProfileActivation(t: TranslationFunction) {
   const queryClient = useQueryClient();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
-  const pending = useRuntimeActionStore(runtimeActionPending);
-  const state = coreStateOf(coreState);
-  const busy = pending || isRuntimeTransitioning(state) || state === "cleanupPending";
+  const busy = useSwitchBusy();
   const runningId = runningProfileId(coreState);
 
   function activateProfile(id: string) {
@@ -171,6 +169,34 @@ export function isRuntimeTransitioning(state: RuntimeStatusResponse["state"]) {
 /** A new runtime action waits while another one runs or the core is changing state. */
 export function runtimeBusy(state: RuntimeStatusResponse["state"]) {
   return runtimeActionPending() || isRuntimeTransitioning(state);
+}
+
+/**
+ * The reactive form of [`runtimeBusy`], for rendering: every busy indicator on
+ * every screen derives from these two subscriptions, so they cannot drift.
+ */
+export function useRuntimeBusy() {
+  const transitioning = useRuntimeEventStore((state) =>
+    isRuntimeTransitioning(coreStateOf(state.coreState)),
+  );
+  const pending = useRuntimeActionStore(runtimeActionPending);
+  return transitioning || pending;
+}
+
+/**
+ * Node and group switches also wait out a pending TUN cleanup, which runs
+ * after a disconnect and would race the switch's own connect.
+ */
+export function switchBusy(state: RuntimeStatusResponse["state"]) {
+  return runtimeBusy(state) || state === "cleanupPending";
+}
+
+/** The reactive form of [`switchBusy`], for rendering a switch button's busy state. */
+export function useSwitchBusy() {
+  const cleaning = useRuntimeEventStore(
+    (state) => coreStateOf(state.coreState) === "cleanupPending",
+  );
+  return useRuntimeBusy() || cleaning;
 }
 
 /**

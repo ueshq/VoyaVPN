@@ -115,10 +115,7 @@ export function AdvancedTab({
             id="rt-tun-stack"
             label={t("settings.network.tunStack")}
             onChange={(stack) => patchTun({ stack })}
-            optionLabel={(stack) => {
-              const key = TUN_STACK_LABELS[stack];
-              return key ? t(key) : stack;
-            }}
+            optionLabel={TUN_STACK_LABELS}
             options={TUN_STACKS}
             value={settings.network.tun.stack || DEFAULT_TUN_STACK}
           />
@@ -136,10 +133,7 @@ export function AdvancedTab({
             id="rt-tun-icmp-routing"
             label={t("settings.network.icmpRoutingPolicy")}
             onChange={(icmpRouting) => patchTun({ icmpRouting })}
-            optionLabel={(policy) => {
-              const key = TUN_ICMP_LABELS[policy];
-              return key ? t(key) : policy;
-            }}
+            optionLabel={TUN_ICMP_LABELS}
             options={TUN_ICMP_ROUTING}
             value={settings.network.tun.icmpRouting || DEFAULT_TUN_ICMP_ROUTING}
           />

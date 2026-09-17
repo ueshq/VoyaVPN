@@ -124,10 +124,7 @@ export function CoreTab({
           id="rt-loglevel"
           label={t("settings.core.logLevel")}
           onChange={(logLevel) => patchCore({ logLevel })}
-          optionLabel={(level) => {
-            const key = LOG_LEVEL_LABELS[level];
-            return key ? t(key) : level;
-          }}
+          optionLabel={LOG_LEVEL_LABELS}
           options={logLevelOptions(settings.core.logLevel)}
           value={settings.core.logLevel}
         />
@@ -138,7 +135,7 @@ export function CoreTab({
           onChange={(tlsFragment) =>
             patchCore({ tlsFragment: tlsFragment as TlsFragmentMode })
           }
-          optionLabel={(mode) => t(TLS_FRAGMENT_LABELS[mode as TlsFragmentMode])}
+          optionLabel={TLS_FRAGMENT_LABELS}
           options={TLS_FRAGMENT_MODES}
           value={settings.core.tlsFragment}
         />

@@ -14,6 +14,8 @@ use std::{
 
 use super::SupervisorSnapshot;
 
+use crate::backoff::exponential_delay;
+
 /// Monotonic time source for the crash bookkeeping.
 ///
 /// Injected so the uptime window can be exercised without sleeping.
@@ -67,15 +69,7 @@ impl CrashRestartPolicy {
             return Duration::ZERO;
         }
 
-        let multiplier = 1_u32
-            .checked_shl(attempt.saturating_sub(2).min(16))
-            .unwrap_or(u32::MAX);
-        let scaled = self.initial_delay.saturating_mul(multiplier);
-        if scaled > self.max_delay {
-            self.max_delay
-        } else {
-            scaled
-        }
+        exponential_delay(attempt - 2, self.initial_delay, self.max_delay)
     }
 
     /// Whether `attempt` is still inside the budget.

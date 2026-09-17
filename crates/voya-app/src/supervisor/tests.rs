@@ -1049,7 +1049,7 @@ async fn connected_duration_tracks_backend_lifetime_and_resets_on_restart() {
         );
         assert_eq!(
             supervisor
-                .restart(request)
+                .start(request)
                 .await
                 .expect("restart")
                 .connected_duration_ms,
@@ -1439,7 +1439,7 @@ async fn supervisor_restart_stops_the_previous_core_before_spawning_a_new_one() 
 
     let first = supervisor.start(crash_test_request()).await.expect("start");
     let second = supervisor
-        .restart(crash_test_request())
+        .start(crash_test_request())
         .await
         .expect("restart");
 
@@ -1482,7 +1482,7 @@ async fn supervisor_ignores_the_health_watcher_of_a_superseded_native_tun_start(
         .await
         .expect("first native tun start");
     let restarted = supervisor
-        .restart(native_tun_test_request())
+        .start(native_tun_test_request())
         .await
         .expect("native tun restart");
     assert_eq!(restarted.state, SupervisorConnectionState::Connected);
@@ -1712,13 +1712,13 @@ async fn active_tun_backend_tracks_the_running_request_and_clears_after_stop() {
         if target == TargetOs::Macos {
             let mut invalid = native_tun_test_request();
             invalid.main.config_path = None;
-            assert!(supervisor.restart(invalid).await.is_err());
+            assert!(supervisor.start(invalid).await.is_err());
             let retained = supervisor.status().await.expect("retained local proxy");
             assert_eq!(retained.state, SupervisorConnectionState::Connected);
             assert_eq!(retained.active_tun_backend, None);
         }
         let tunnel = supervisor
-            .restart(native_tun_test_request())
+            .start(native_tun_test_request())
             .await
             .expect("tunnel");
         assert_eq!(tunnel.active_tun_backend, Some(expected));

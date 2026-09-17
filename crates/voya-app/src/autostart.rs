@@ -9,8 +9,8 @@ pub use voya_contracts::{AutostartPlatform, AutostartStatus};
 use voya_core::AppConfig;
 use voya_platform::{
     autostart::{
-        AutostartAdapter, AutostartArtifact, AutostartError, AutostartRequest, AutostartService,
-        StdAutostartAdapter, AUTOSTART_APP_NAME,
+        AutostartArtifact, AutostartError, AutostartRequest, AutostartService, StdAutostartAdapter,
+        AUTOSTART_APP_NAME,
     },
     coreinfo::TargetOs,
     process::StdProcessRunner,
@@ -31,15 +31,6 @@ impl AutostartManager {
                 StdProcessRunner::new(),
             )))),
             TargetOs::current(),
-            AUTOSTART_APP_NAME,
-        )
-    }
-
-    #[must_use]
-    pub fn with_adapter(adapter: Arc<dyn AutostartAdapter>, target_os: TargetOs) -> Self {
-        Self::with_service(
-            AutostartService::new(adapter),
-            target_os,
             AUTOSTART_APP_NAME,
         )
     }
@@ -283,7 +274,11 @@ mod autostart_app_tests {
     #[test]
     fn autostart_manager_updates_config_after_adapter_success() {
         let adapter = Arc::new(FakeAutostartAdapter::default());
-        let manager = AutostartManager::with_adapter(adapter.clone(), TargetOs::Linux);
+        let manager = AutostartManager::with_service(
+            AutostartService::new(adapter.clone()),
+            TargetOs::Linux,
+            AUTOSTART_APP_NAME,
+        );
         let mut config = AppConfig::default();
 
         let status = manager

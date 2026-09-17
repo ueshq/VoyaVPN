@@ -34,6 +34,12 @@ export function formatClock(hours: number, minutes: number, seconds: number) {
   return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
+/** The wall-clock time of day of a timestamp, in the user's local timezone. */
+export function formatTimeOfDay(timestampMs: number) {
+  const date = new Date(timestampMs);
+  return formatClock(date.getHours(), date.getMinutes(), date.getSeconds());
+}
+
 /** A measured latency, or an empty string when no measurement is available. */
 export function formatDelay(delay: number | null | undefined) {
   if (typeof delay === "number" && delay > 0) {

@@ -16,7 +16,10 @@ use voya_net::clash::{
 };
 
 use crate::{
-    backoff::{sleep_or_shutdown, WebSocketReconnectBackoff},
+    backoff::{
+        sleep_or_shutdown, WebSocketReconnectBackoff, WS_CONNECT_TIMEOUT,
+        WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY,
+    },
     config_mutation::SharedAppConfig,
     proxy_runtime::proxy_runtime_endpoint,
     supervisor::{CoreSupervisor, SupervisorSnapshot},
@@ -32,10 +35,7 @@ const COALESCE_INTERVAL: Duration = Duration::from_secs(1);
 const TRAFFIC_FLUSH_INTERVAL: Duration = Duration::from_secs(10);
 /// Coalesced ticks per flush. The aggregator's only clock is its tick.
 const TRAFFIC_FLUSH_TICKS: u64 = TRAFFIC_FLUSH_INTERVAL.as_secs() / COALESCE_INTERVAL.as_secs();
-const SINGBOX_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
-const SINGBOX_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
 const SINGBOX_INITIAL_DELAY: Duration = Duration::from_secs(5);
-const SINGBOX_WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub type Result<T> = std::result::Result<T, StatisticsError>;
 
@@ -430,10 +430,8 @@ async fn run_singbox_statistics_service(
         _ = &mut initial_delay => {}
     }
 
-    let mut reconnect_backoff = WebSocketReconnectBackoff::new(
-        SINGBOX_RECONNECT_INITIAL_DELAY,
-        SINGBOX_RECONNECT_MAX_DELAY,
-    );
+    let mut reconnect_backoff =
+        WebSocketReconnectBackoff::new(WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY);
     let mut active_identity = None;
 
     loop {
@@ -456,7 +454,7 @@ async fn run_singbox_statistics_service(
         let Some(identity) = snapshot.and_then(core_process_identity) else {
             active_identity = None;
             reconnect_backoff.reset();
-            if sleep_or_shutdown(SINGBOX_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
+            if sleep_or_shutdown(WS_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
                 break;
             }
             continue;
@@ -468,7 +466,7 @@ async fn run_singbox_statistics_service(
             active_identity = None;
             reconnect_backoff.reset();
             tracing::debug!("skipping sing-box statistics because state port is unavailable");
-            if sleep_or_shutdown(SINGBOX_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
+            if sleep_or_shutdown(WS_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
                 break;
             }
             continue;
@@ -476,7 +474,7 @@ async fn run_singbox_statistics_service(
 
         let client = ClashWebSocketClient::new(endpoint);
         match time::timeout(
-            SINGBOX_WS_CONNECT_TIMEOUT,
+            WS_CONNECT_TIMEOUT,
             client.connect(ClashWebSocketResource::Traffic),
         )
         .await

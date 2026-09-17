@@ -23,7 +23,10 @@ vi.mock("@/ipc/commands", () => ({
   loadAppSettings: mocks.load,
   proxySetTrafficMode: mocks.save,
 }));
-vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) => select({ coreState: { state: mocks.state } }) }));
+vi.mock("@/ipc/runtime-event-store", () => ({
+  useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) => select({ coreState: { state: mocks.state } }),
+  coreStateOf: (coreState: { state: CoreState } | null) => coreState?.state ?? "disconnected",
+}));
 
 const GLOBAL_BANNER = "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.";
 

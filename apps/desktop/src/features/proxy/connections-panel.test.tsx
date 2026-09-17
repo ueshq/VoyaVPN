@@ -308,7 +308,15 @@ describe("ConnectionsPanel", () => {
     renderConnections();
     await userEvent.type(screen.getByRole("searchbox"), "no-match");
     expect(screen.getByText("No matching connections")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    // The empty state and the search field both offer "Clear search"; this
+    // exercises the empty state's action button.
+    const emptyState = screen
+      .getByText("No matching connections")
+      .closest('div[role="status"]');
+    expect(emptyState).not.toBeNull();
+    await userEvent.click(
+      within(emptyState as HTMLElement).getByRole("button", { name: "Clear search" }),
+    );
     expect(screen.getByTestId("connection-row")).toBeInTheDocument();
   });
 

@@ -42,16 +42,6 @@ impl SpeedtestManager {
         self
     }
 
-    pub async fn run(
-        &self,
-        database: &Database,
-        config: &AppConfig,
-        index_ids: Vec<String>,
-    ) -> Result<SpeedtestRunResult> {
-        self.run_with_callback(database, config, index_ids, |_| {})
-            .await
-    }
-
     pub async fn run_with_callback<F>(
         &self,
         database: &Database,
@@ -394,6 +384,8 @@ const PERSIST_RETRY_MAX_ATTEMPTS: u32 = 5;
 /// First backoff step; doubles per attempt, so the total wait stays under a
 /// second even in the worst case.
 const PERSIST_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(20);
+/// Cap of the backoff schedule; reached on the last retry.
+const PERSIST_RETRY_MAX_DELAY: Duration = Duration::from_millis(160);
 
 /// Persists one result, riding out a contended SQLite write.
 ///
@@ -417,7 +409,11 @@ async fn persist_speedtest_result_with_retry(
                     "speedtest result write contended; retrying"
                 );
                 time::sleep(delay).await;
-                delay = delay.saturating_mul(2);
+                delay = exponential_delay(
+                    attempt,
+                    PERSIST_RETRY_INITIAL_DELAY,
+                    PERSIST_RETRY_MAX_DELAY,
+                );
             }
             outcome => return outcome,
         }
@@ -526,10 +522,12 @@ mod tests {
     #[test]
     fn speedtest_persist_retry_backoff_is_bounded() {
         let mut total = Duration::ZERO;
-        let mut delay = PERSIST_RETRY_INITIAL_DELAY;
-        for _ in 1..PERSIST_RETRY_MAX_ATTEMPTS {
-            total += delay;
-            delay = delay.saturating_mul(2);
+        for attempt in 0..PERSIST_RETRY_MAX_ATTEMPTS {
+            total += exponential_delay(
+                attempt,
+                PERSIST_RETRY_INITIAL_DELAY,
+                PERSIST_RETRY_MAX_DELAY,
+            );
         }
 
         assert!(total < Duration::from_secs(1), "{total:?}");

@@ -17,7 +17,10 @@ use voya_net::clash::{
 };
 
 use crate::{
-    backoff::{sleep_or_shutdown, WebSocketReconnectBackoff},
+    backoff::{
+        sleep_or_shutdown, WebSocketReconnectBackoff, WS_CONNECT_TIMEOUT,
+        WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY,
+    },
     statistics::available_state_port,
     supervisor::ClashApiAccess,
 };
@@ -27,9 +30,6 @@ mod traffic_mode;
 pub use groups::{RuntimeGroupMember, RuntimeGroupState};
 pub use traffic_mode::{TrafficModeChangeError, TrafficModeChangeOutcome};
 
-const PROXY_WS_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
-const PROXY_WS_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
-const PROXY_WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub type Result<T> = std::result::Result<T, ProxyRuntimeError>;
 
 #[derive(Debug, Error)]
@@ -213,10 +213,8 @@ async fn run_proxy_ws_monitor(
     sink: Arc<dyn ProxyRuntimeEventSink>,
     mut shutdown: watch::Receiver<bool>,
 ) {
-    let mut reconnect_backoff = WebSocketReconnectBackoff::new(
-        PROXY_WS_RECONNECT_INITIAL_DELAY,
-        PROXY_WS_RECONNECT_MAX_DELAY,
-    );
+    let mut reconnect_backoff =
+        WebSocketReconnectBackoff::new(WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY);
 
     loop {
         if *shutdown.borrow() {
@@ -224,7 +222,7 @@ async fn run_proxy_ws_monitor(
         }
 
         let client = ClashWebSocketClient::new(endpoint.clone());
-        match time::timeout(PROXY_WS_CONNECT_TIMEOUT, client.connect(resource)).await {
+        match time::timeout(WS_CONNECT_TIMEOUT, client.connect(resource)).await {
             Ok(Ok(mut session)) => loop {
                 tokio::select! {
                     changed = shutdown.changed() => {

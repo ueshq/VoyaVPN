@@ -3,7 +3,6 @@ import {
   ArrowDownToLine,
   ClipboardCopy,
   FileDown,
-  MoreHorizontal,
   ScrollText,
   Search,
   Trash2,
@@ -15,20 +14,15 @@ import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { EmptyState } from "@voya/ui/components/empty-state";
-import { Input } from "@voya/ui/components/input";
-import {
-  Menubar,
-  MenubarContent,
-  MenubarItem,
-  MenubarMenu,
-  MenubarTrigger,
-} from "@voya/ui/components/menubar";
+import { SearchInput } from "@voya/ui/components/search-input";
+import { MenubarItem } from "@voya/ui/components/menubar";
+import { MoreMenu } from "@voya/ui/components/row-menus";
 import {
   Select,
   SelectContent,
@@ -38,15 +32,17 @@ import {
 } from "@voya/ui/components/select";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { formatClock } from "@voya/utils/formatting";
+import { formatTimeOfDay } from "@voya/utils/formatting";
 import { exportLogs } from "@/ipc/commands";
 import { logLineText } from "@/ipc/messages";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { StoredLogLine } from "@/ipc/runtime-event-store";
 import type { LogLevel } from "@/ipc/bindings";
+import { restoreFocus } from "@voya/ui/lib/focus";
 import { cn } from "@voya/ui/lib/utils";
 import { PageHeader } from "@/components/app-shell/page-section";
 import { writeClipboard } from "@/lib/clipboard";
+import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { toastError, useToastStore } from "@/stores/toast-store";
 
 export type LogFilter = "standard" | "issues" | "all";
@@ -96,7 +92,7 @@ export function LogsPanel({
     filtered
       .map(
         (line) =>
-          `${formatTimestamp(line.receivedAt)} [${line.level}] ${line.text}`,
+          `${formatTimeOfDay(line.receivedAt)} [${line.level}] ${line.text}`,
       )
       .join("\n");
 
@@ -169,12 +165,12 @@ export function LogsPanel({
     if (filtered.length > 0)
       virtualizer.scrollToIndex(filtered.length - 1, { align: "end" });
   }
-  const virtualRows = virtualizer.getVirtualItems();
-  const renderedRows = virtualRows.length
-    ? virtualRows
-    : filtered
-        .slice(0, 50)
-        .map((_, index) => ({ index, start: index * ROW_HEIGHT }));
+  const renderedRows = firstPaintVirtualItems(
+    virtualizer.getVirtualItems(),
+    filtered.length,
+    ROW_HEIGHT,
+    50,
+  );
 
   return (
     <section
@@ -182,21 +178,15 @@ export function LogsPanel({
       className="flex h-full min-h-0 min-w-0 flex-col"
     >
       <PageHeader>
-        <div className="relative min-w-0 flex-1 sm:max-w-sm">
-          <Search
-            className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            aria-label={t("panes.logs.search")}
-            className="h-9 ps-9"
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder={t("panes.logs.search")}
-            type="search"
-            value={search}
-            ref={searchRef}
-          />
-        </div>
+        <SearchInput
+          className="sm:max-w-sm"
+          clearLabel={t("actions.clear")}
+          label={t("panes.logs.search")}
+          ref={searchRef}
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          onClear={() => onSearchChange("")}
+        />
         <Select
           value={filter}
           onValueChange={(value) => {
@@ -216,41 +206,26 @@ export function LogsPanel({
             <SelectItem value="all">{t("panes.logs.all")}</SelectItem>
           </SelectContent>
         </Select>
-        <Menubar bare className="ms-auto">
-          <MenubarMenu>
-            <MenubarTrigger asChild>
-              <Button
-                aria-label={t("proxy.moreActions")}
-                size="icon-sm"
-                title={t("proxy.moreActions")}
-                type="button"
-                variant="ghost"
-              >
-                <MoreHorizontal className="size-4" aria-hidden="true" />
-              </Button>
-            </MenubarTrigger>
-            <MenubarContent align="end">
-              <MenubarItem
-                disabled={!filtered.length}
-                onSelect={() => void copyShown()}
-              >
-                <ClipboardCopy className="size-4" aria-hidden="true" />
-                {t("panes.logs.copy")}
-              </MenubarItem>
-              <MenubarItem
-                disabled={!filtered.length}
-                onSelect={() => void exportShown()}
-              >
-                <FileDown className="size-4" aria-hidden="true" />
-                {t("panes.logs.export")}
-              </MenubarItem>
-              <MenubarItem disabled={!logLines.length} onSelect={clearLogs}>
-                <Trash2 className="size-4" aria-hidden="true" />
-                {t("panes.logs.clearDisplay")}
-              </MenubarItem>
-            </MenubarContent>
-          </MenubarMenu>
-        </Menubar>
+        <MoreMenu className="ms-auto" label={t("proxy.moreActions")} title={t("proxy.moreActions")}>
+          <MenubarItem
+            disabled={!filtered.length}
+            onSelect={() => void copyShown()}
+          >
+            <ClipboardCopy className="size-4" aria-hidden="true" />
+            {t("panes.logs.copy")}
+          </MenubarItem>
+          <MenubarItem
+            disabled={!filtered.length}
+            onSelect={() => void exportShown()}
+          >
+            <FileDown className="size-4" aria-hidden="true" />
+            {t("panes.logs.export")}
+          </MenubarItem>
+          <MenubarItem disabled={!logLines.length} onSelect={clearLogs}>
+            <Trash2 className="size-4" aria-hidden="true" />
+            {t("panes.logs.clearDisplay")}
+          </MenubarItem>
+        </MoreMenu>
       </PageHeader>
       <div className="relative min-h-0 flex-1">
         <div
@@ -300,7 +275,7 @@ export function LogsPanel({
                       }}
                     >
                       <time className="tabular-nums text-muted-foreground">
-                        {formatTimestamp(line.receivedAt)}
+                        {formatTimeOfDay(line.receivedAt)}
                       </time>
                       <Badge
                         className={cn(
@@ -345,37 +320,29 @@ export function LogsPanel({
           if (!open) setSelected(null);
         }}
       >
-        <DialogContent
-          className="flex max-h-[85vh] flex-col sm:max-w-[560px]"
+        <ScrollableDialogContent
+          width="35rem"
           closeLabel={t("actions.close")}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            (returnFocusRef.current?.isConnected
-              ? returnFocusRef.current
-              : searchRef.current
-            )?.focus();
+            restoreFocus(returnFocusRef.current, searchRef.current);
           }}
         >
           <DialogHeader>
             <DialogTitle>{t("panes.logs.details")}</DialogTitle>
             <DialogDescription>
               {selected
-                ? `${formatTimestamp(selected.receivedAt)} · ${levels[selected.level]}`
+                ? `${formatTimeOfDay(selected.receivedAt)} · ${levels[selected.level]}`
                 : ""}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="select-text whitespace-pre-wrap font-mono text-sm [overflow-wrap:anywhere]">
             {selected ? logLineText(t, selected.body) : ""}
           </DialogBody>
-        </DialogContent>
+        </ScrollableDialogContent>
       </Dialog>
     </section>
   );
-}
-
-function formatTimestamp(receivedAt: number) {
-  const date = new Date(receivedAt);
-  return formatClock(date.getHours(), date.getMinutes(), date.getSeconds());
 }
 
 function logLevelClassName(level: LogLevel) {

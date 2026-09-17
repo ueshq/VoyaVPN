@@ -67,9 +67,10 @@ pub(crate) fn fill_outbound_transport(
 fn http_transport(host: Option<&str>, path: Option<&str>, user_agent: String) -> SingboxTransport {
     SingboxTransport {
         r#type: Some("http".to_string()),
-        host: split_list(host.unwrap_or_default())
-            .filter(|items| !items.is_empty())
-            .map(|items| json!(items)),
+        host: {
+            let hosts = split_csv(host.unwrap_or_default());
+            (!hosts.is_empty()).then(|| json!(hosts))
+        },
         path: nonempty_string(path),
         headers: ua_only_headers(user_agent),
         ..SingboxTransport::default()

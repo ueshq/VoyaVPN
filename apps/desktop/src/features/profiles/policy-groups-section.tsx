@@ -4,13 +4,13 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import { Spinner } from "@voya/ui/components/spinner";
-import { cn } from "@voya/ui/lib/utils";
 import { formatDelay } from "@voya/utils/formatting";
 import type { PolicyGroupEntry } from "@/ipc/bindings";
 
 import type { ServerTableController } from "./use-server-table";
 import { PolicyGroupDialog } from "./policy-group-dialog";
 import { POLICY_GROUP_STRATEGY_KEYS } from "./policy-group-labels";
+import { PolicyGroupMemberChip } from "./policy-group-member-chip";
 import { profileMemberName } from "./profile-display";
 import { SpeedtestButton } from "./server-table-menus";
 
@@ -230,39 +230,20 @@ function PolicyGroupCard({
       </div>
       {members.length ? (
         <div className="flex flex-wrap gap-2 px-5 pb-4">
-          {members.map((member) => {
-            const current = member.profileId === currentId;
-            const delay = formatDelay(delays.get(member.profileId));
-            const name = profileMemberName(member.remarks, member.profileId);
-            const detail = delay ? (
-              <span className="text-xs text-muted-foreground">{delay}</span>
-            ) : null;
-            return group.strategy === "selector" ? (
-              <Button
-                aria-pressed={current}
-                key={member.profileId}
-                onClick={() => void choosePolicyGroupMember(group.id, member.profileId)}
-                size="sm"
-                type="button"
-                variant={current ? "secondary" : "outline"}
-              >
-                <span className="max-w-48 truncate">{name}</span>
-                {detail}
-              </Button>
-            ) : (
-              <span
-                className={cn(
-                  "inline-flex h-8 items-center gap-2 rounded-md border px-3 text-sm",
-                  current && "border-primary text-brand",
-                )}
-                data-current={current || undefined}
-                key={member.profileId}
-              >
-                <span className="max-w-48 truncate">{name}</span>
-                {detail}
-              </span>
-            );
-          })}
+          {members.map((member) => (
+            <PolicyGroupMemberChip
+              current={member.profileId === currentId}
+              delay={formatDelay(delays.get(member.profileId))}
+              key={member.profileId}
+              name={profileMemberName(member.remarks, member.profileId)}
+              onChoose={
+                group.strategy === "selector"
+                  ? (profileId) => void choosePolicyGroupMember(group.id, profileId)
+                  : undefined
+              }
+              profileId={member.profileId}
+            />
+          ))}
         </div>
       ) : (
         <p className="node-group-empty">{t("nodeGroups.empty")}</p>

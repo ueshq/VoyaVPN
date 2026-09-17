@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import { AppWindow, Info, Pencil } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -8,11 +7,10 @@ import { cn } from "@voya/ui/lib/utils";
 
 import { PageSurface } from "@/components/app-shell/page-section";
 import type { Routing_Serialize } from "@/ipc/bindings";
-import { connectionModeStatus } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
 
 import { PER_APP_MODE_LABEL_KEYS, readPerAppRule } from "./per-app-proxy-rule";
 import { useProcessRulesSupported } from "./use-process-rules-supported";
+import { useConnectionModeStatus } from "./use-connection-mode-status";
 
 const VISIBLE_APPS = 4;
 
@@ -33,10 +31,7 @@ export function PerAppSummaryCard({
 }) {
   const { t } = useI18n();
   const { mode, processes } = readPerAppRule(routing);
-  const statusQuery = useQuery({
-    queryFn: connectionModeStatus,
-    queryKey: queryKeys.connectionMode,
-  });
+  const statusQuery = useConnectionModeStatus();
   const processRulesSupported = useProcessRulesSupported();
   if (!processRulesSupported) return null;
   const on = mode !== "off";

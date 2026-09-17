@@ -3,14 +3,14 @@ import { useState } from "react";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
-import { isRuntimeTransitioning } from "@/features/home/runtime-action";
+import { useRuntimeBusy } from "@/stores/runtime-action";
 import {
   tunProviderErrorDescription,
   tunProviderPathMismatchDescription,
-} from "@/features/home/tun-provider-text";
+} from "@/components/app-shell/tun-provider-text";
 import type { ConnectionMode } from "@/ipc/bindings";
 import { setConnectionMode, tunRequestElevation, tunStatus } from "@/ipc/commands";
-import { coreStateOf, useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
 import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
 
@@ -27,16 +27,12 @@ export function useCaptureMode() {
   const mode: ConnectionMode = useRuntimeEventStore((state) =>
     state.tun?.enabled ? "vpn" : "systemProxy",
   );
-  const transitioning = useRuntimeEventStore((state) =>
-    isRuntimeTransitioning(coreStateOf(state.coreState)),
-  );
-  const pending = useRuntimeActionStore(runtimeActionPending);
   const modePending = useRuntimeActionStore((state) => state.modePending);
   const [error, setError] = useState<string | null>(null);
   // A pending connect blocks the switch too: flipping TUN while the core is
   // still starting persists the flag but cannot restart a core that is not
   // connected yet, leaving the UI claiming TUN over a non-TUN core.
-  const busy = transitioning || pending;
+  const busy = useRuntimeBusy();
 
   async function selectMode(next: ConnectionMode) {
     if (busy || runtimeActionPending() || next === mode) return;

@@ -3,7 +3,6 @@ import {
   ChevronDown,
   ChevronRight,
   Folder,
-  MoreHorizontal,
   RefreshCw,
   Rss,
   Settings,
@@ -12,14 +11,8 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 import { SubscriptionMetaLine } from "@/features/subscriptions/subscription-card";
 import { Button } from "@voya/ui/components/button";
-import {
-  Menubar,
-  MenubarContent,
-  MenubarItem,
-  MenubarMenu,
-  MenubarSeparator,
-  MenubarTrigger,
-} from "@voya/ui/components/menubar";
+import { MoreMenu } from "@voya/ui/components/row-menus";
+import { MenubarItem, MenubarSeparator } from "@voya/ui/components/menubar";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
 import type { NodeListRow } from "./node-list-rows";
 import type { ServerTableController } from "./use-server-table";
@@ -139,69 +132,56 @@ export function NodeGroupCard({
             running={speedtestRunning && speedtestSource === source}
             variant="ghost"
           />
-          <Menubar bare>
-            <MenubarMenu>
-              <MenubarTrigger asChild>
-                <Button
-                  aria-label={moreLabel}
-                  ref={moreRef}
-                  size="icon-sm"
-                  title={moreLabel}
-                  type="button"
-                  variant="ghost"
+          <MoreMenu
+            contentProps={{
+              onCloseAutoFocus: (event) => {
+                if (openingDialogRef.current) {
+                  event.preventDefault();
+                  openingDialogRef.current = false;
+                }
+              },
+            }}
+            label={moreLabel}
+            title={moreLabel}
+            triggerRef={moreRef}
+          >
+            {subscription ? (
+              <>
+                <MenubarItem
+                  onSelect={() => {
+                    openingDialogRef.current = true;
+                    controller.openSubscription(subscription, returnFocusTo());
+                  }}
                 >
-                  <MoreHorizontal aria-hidden="true" className="size-4" />
-                </Button>
-              </MenubarTrigger>
-              <MenubarContent
-                align="end"
-                aria-label={moreLabel}
-                onCloseAutoFocus={(event) => {
-                  if (openingDialogRef.current) {
-                    event.preventDefault();
-                    openingDialogRef.current = false;
-                  }
-                }}
-              >
-                {subscription ? (
-                  <>
-                    <MenubarItem
-                      onSelect={() => {
-                        openingDialogRef.current = true;
-                        controller.openSubscription(subscription, returnFocusTo());
-                      }}
-                    >
-                      <Settings aria-hidden="true" className="size-4" />
-                      {t("subscriptions.edit")}
-                    </MenubarItem>
-                    <MenubarSeparator />
-                  </>
-                ) : null}
-                {/* Hidden unreachable nodes still export, so only an empty group cannot. */}
-                <ExportMenuItems
-                  disabled={!row.allMembers.length}
-                  onExport={() => void handleGroupExport(row.groupKey)}
-                  onShowQr={() => void handleGroupExport(row.groupKey, "qr")}
-                  t={t}
-                />
-                {subscription ? (
-                  <>
-                    <MenubarSeparator />
-                    <MenubarItem
-                      onSelect={() => {
-                        openingDialogRef.current = true;
-                        controller.confirmSubscriptionDeletion(subscription, returnFocusTo());
-                      }}
-                      variant="destructive"
-                    >
-                      <Trash2 aria-hidden="true" className="size-4" />
-                      {t("subscriptions.delete")}
-                    </MenubarItem>
-                  </>
-                ) : null}
-              </MenubarContent>
-            </MenubarMenu>
-          </Menubar>
+                  <Settings aria-hidden="true" className="size-4" />
+                  {t("subscriptions.edit")}
+                </MenubarItem>
+                <MenubarSeparator />
+              </>
+            ) : null}
+            {/* Hidden unreachable nodes still export, so only an empty group cannot. */}
+            <ExportMenuItems
+              disabled={!row.allMembers.length}
+              onExport={() => void handleGroupExport(row.groupKey)}
+              onShowQr={() => void handleGroupExport(row.groupKey, "qr")}
+              t={t}
+            />
+            {subscription ? (
+              <>
+                <MenubarSeparator />
+                <MenubarItem
+                  onSelect={() => {
+                    openingDialogRef.current = true;
+                    controller.confirmSubscriptionDeletion(subscription, returnFocusTo());
+                  }}
+                  variant="destructive"
+                >
+                  <Trash2 aria-hidden="true" className="size-4" />
+                  {t("subscriptions.delete")}
+                </MenubarItem>
+              </>
+            ) : null}
+          </MoreMenu>
         </div>
       </div>
       {subscription ? (

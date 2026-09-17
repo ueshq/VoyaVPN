@@ -74,14 +74,6 @@ impl CoreSupervisor {
         self.request(SupervisorCommand::Stop).await
     }
 
-    pub async fn restart(
-        &self,
-        request: SupervisorStartRequest,
-    ) -> Result<SupervisorSnapshot, SupervisorError> {
-        self.request(|reply| SupervisorCommand::Restart(Box::new(request), reply))
-            .await
-    }
-
     pub async fn process_exited(
         &self,
         process_id: u32,
@@ -149,10 +141,6 @@ enum SupervisorCommand {
         oneshot::Sender<Result<SupervisorSnapshot, SupervisorError>>,
     ),
     Stop(oneshot::Sender<Result<SupervisorSnapshot, SupervisorError>>),
-    Restart(
-        Box<SupervisorStartRequest>,
-        oneshot::Sender<Result<SupervisorSnapshot, SupervisorError>>,
-    ),
     Status(oneshot::Sender<Result<SupervisorSnapshot, SupervisorError>>),
     ProcessExited {
         process_id: u32,

@@ -32,6 +32,7 @@ const runtime = vi.hoisted(() => ({ state: "disconnected" as CoreState }));
 vi.mock("@/ipc/runtime-event-store", () => ({
   useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) =>
     select({ coreState: { state: runtime.state } }),
+  coreStateOf: (coreState: { state: CoreState } | null) => coreState?.state ?? "disconnected",
 }));
 
 const clients = new Set<QueryClient>();

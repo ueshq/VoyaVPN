@@ -11,11 +11,6 @@ pub fn validate_node(item: &ProfileItem) -> NodeValidatorResult {
     }
 
     let network = get_network(item);
-    if !singbox_supports_config_type(item.config_type()) {
-        result.push_error(ValidationCode::UnsupportedProtocol {
-            protocol: protocol_label(item.config_type()),
-        });
-    }
     if !singbox_transport_supported_protocol(item.config_type()) && network != DEFAULT_NETWORK {
         result.push_error(ValidationCode::UnsupportedProtocolNetwork {
             protocol: protocol_label(item.config_type()),

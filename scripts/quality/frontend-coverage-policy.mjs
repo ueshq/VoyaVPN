@@ -61,7 +61,7 @@ export const runtimeModules = [
   // Runs every runtime action and node or group switch, with the shared guard
   // and the elevation and missing-core recovery paths. Measured 97/98 when
   // profile activation merged into it.
-  { path: "apps/desktop/src/features/home/runtime-action.ts", lines: 85, branches: 85 },
+  { path: "apps/desktop/src/stores/runtime-action.ts", lines: 85, branches: 85 },
   { path: "apps/desktop/src/stores/runtime-action-store.ts", lines: 90, branches: 90 },
   // Proxy-monitor lifecycle.
   { path: "apps/desktop/src/components/app-shell/app-shell.tsx", lines: 75, branches: 55 },

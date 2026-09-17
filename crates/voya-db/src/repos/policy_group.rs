@@ -2,7 +2,9 @@ use sqlx::{sqlite::SqliteRow, Row};
 use voya_core::{GroupStrategy, PolicyGroupItem};
 
 use crate::{
-    executor::{delete_each, repository_constructors, run_query, RepositoryExecutor},
+    executor::{
+        delete_each, max_sort, repository_constructors, row_exists, run_query, RepositoryExecutor,
+    },
     Result,
 };
 
@@ -120,13 +122,12 @@ impl<'executor> PolicyGroupRepository<'executor> {
     }
 
     pub async fn exists(&self, id: &str) -> Result<bool> {
-        let found: i64 = run_query!(
+        row_exists(
             self.executor,
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM policy_groups WHERE id = ?)").bind(id),
-            fetch_one
-        )?;
-
-        Ok(found != 0)
+            "SELECT EXISTS(SELECT 1 FROM policy_groups WHERE id = ?)",
+            id,
+        )
+        .await
     }
 
     pub async fn delete_many(&self, ids: &[String]) -> Result<u64> {
@@ -175,13 +176,7 @@ impl<'executor> PolicyGroupRepository<'executor> {
     }
 
     pub async fn max_sort(&self) -> Result<i32> {
-        let max_sort: Option<i32> = run_query!(
-            self.executor,
-            sqlx::query_scalar("SELECT MAX(sort) FROM policy_groups"),
-            fetch_one
-        )?;
-
-        Ok(max_sort.unwrap_or(0))
+        max_sort(self.executor, "SELECT MAX(sort) FROM policy_groups").await
     }
 }
 

@@ -1,7 +1,9 @@
-use std::collections::BTreeMap;
-
 use super::*;
-use crate::{golden, CoreGenPlatform, RoutingItem, ServerEndpoint, TlsSettings};
+use crate::testutil::{
+    base_remote_node, endpoint, linux_context as test_context, raw_transport, socks_node,
+    tls_settings as full_tls_settings,
+};
+use crate::{golden, CoreGenPlatform, RoutingItem, TlsSettings};
 
 #[test]
 fn singbox_outbound_vless_ws_tls_mux_matches_golden() {
@@ -255,45 +257,6 @@ fn singbox_tls_only_protocols_always_emit_a_tls_block() {
     let socks = socks_node("socks", "socks");
     let context = test_context(AppConfig::default(), socks.clone());
     assert!(build_outbound(&context, &socks).tls.is_none());
-}
-
-#[test]
-fn singbox_protocol_support_table_agrees_with_node_validation() {
-    for config_type in [
-        ConfigType::VMess,
-        ConfigType::Shadowsocks,
-        ConfigType::SOCKS,
-        ConfigType::VLESS,
-        ConfigType::Trojan,
-        ConfigType::Hysteria2,
-        ConfigType::TUIC,
-        ConfigType::WireGuard,
-        ConfigType::HTTP,
-        ConfigType::Anytls,
-        ConfigType::Naive,
-    ] {
-        let node = ProfileItem {
-            remarks: format!("{config_type:?}"),
-            protocol: sample_protocol(config_type),
-            transport: Some(raw_transport()),
-            tls: None,
-            ..ProfileItem::default()
-        };
-        assert_eq!(node.config_type(), config_type);
-
-        let rejects_protocol = crate::validate_node(&node).errors.iter().any(|error| {
-            matches!(
-                error.code,
-                crate::validation::ValidationCode::UnsupportedProtocol { .. }
-                    | crate::validation::ValidationCode::UnsupportedProtocolNetwork { .. }
-            )
-        });
-        let expected_rejection = !singbox_supports_config_type(config_type);
-        assert_eq!(
-            rejects_protocol, expected_rejection,
-            "validation and generation disagree about {config_type:?}"
-        );
-    }
 }
 
 #[test]
@@ -1675,46 +1638,8 @@ fn group_outbounds_clamp_their_timing_and_start_on_the_first_member() {
         .any(|outbound| outbound.tag == "Osaka [osaka]"));
 }
 
-fn test_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
-    let mut all_proxies_map = BTreeMap::new();
-    all_proxies_map.insert(node.index_id.clone(), node.clone());
-    let simple_dns_item = app_config.simple_dns_item.clone();
-    CoreConfigContext {
-        node,
-        app_config,
-        simple_dns_item,
-        all_proxies_map,
-        platform: CoreGenPlatform::Linux,
-        ..CoreConfigContext::default()
-    }
-}
-
-fn base_remote_node() -> ProfileItem {
-    ProfileItem {
-        remarks: "remote".to_string(),
-        protocol: ProfileProtocol::Vmess {
-            server: endpoint("server.example", 443),
-            uuid: String::new(),
-            cipher: None,
-        },
-        transport: Some(raw_transport()),
-        tls: Some(tls_settings(TlsMode::Tls, Some("server.example"))),
-        ..ProfileItem::default()
-    }
-}
-
-fn socks_node(index_id: &str, remarks: &str) -> ProfileItem {
-    ProfileItem {
-        index_id: index_id.to_string(),
-        remarks: remarks.to_string(),
-        protocol: ProfileProtocol::Socks {
-            server: endpoint(LOOPBACK, 1080),
-            username: "user".to_string(),
-            password: "pass".to_string(),
-        },
-        transport: Some(raw_transport()),
-        ..ProfileItem::default()
-    }
+fn tls_settings(mode: TlsMode, server_name: Option<&str>) -> TlsSettings {
+    full_tls_settings(mode, server_name, &[], Vec::new())
 }
 
 fn generated_proxy_outbound_value(app_config: AppConfig, node: ProfileItem) -> Value {
@@ -1728,105 +1653,6 @@ fn generated_proxy_outbound_value(app_config: AppConfig, node: ProfileItem) -> V
     let value = serde_json::to_value(proxy).expect("sing-box outbound should serialize to JSON");
     assert_no_nulls(&value);
     value
-}
-
-fn sample_protocol(config_type: ConfigType) -> ProfileProtocol {
-    let server = endpoint("server.example", 443);
-    match config_type {
-        ConfigType::VMess => ProfileProtocol::Vmess {
-            server,
-            uuid: "00000000-0000-0000-0000-000000000041".to_string(),
-            cipher: Some(DEFAULT_SECURITY.to_string()),
-        },
-        ConfigType::Shadowsocks => ProfileProtocol::Shadowsocks {
-            server,
-            password: "secret".to_string(),
-            method: "aes-128-gcm".to_string(),
-            udp_over_tcp: false,
-        },
-        ConfigType::SOCKS => ProfileProtocol::Socks {
-            server,
-            username: "user".to_string(),
-            password: "pass".to_string(),
-        },
-        ConfigType::VLESS => ProfileProtocol::Vless {
-            server,
-            uuid: "00000000-0000-0000-0000-000000000042".to_string(),
-            flow: None,
-            encryption: Some("none".to_string()),
-        },
-        ConfigType::Trojan => ProfileProtocol::Trojan {
-            server,
-            password: "secret".to_string(),
-        },
-        ConfigType::Hysteria2 => ProfileProtocol::Hysteria2 {
-            server,
-            password: "secret".to_string(),
-            port_hops: None,
-            obfuscation_password: None,
-        },
-        ConfigType::TUIC => ProfileProtocol::Tuic {
-            server,
-            uuid: "00000000-0000-0000-0000-000000000043".to_string(),
-            password: "secret".to_string(),
-            congestion_control: None,
-        },
-        ConfigType::WireGuard => ProfileProtocol::WireGuard {
-            server,
-            private_key: "private-key".to_string(),
-            peer_public_key: Some("public-key".to_string()),
-            preshared_key: None,
-            interface_address: None,
-            allowed_ips: None,
-            reserved: None,
-            mtu: None,
-        },
-        ConfigType::HTTP => ProfileProtocol::Http {
-            server,
-            username: "user".to_string(),
-            password: "pass".to_string(),
-        },
-        ConfigType::Anytls => ProfileProtocol::Anytls {
-            server,
-            password: "secret".to_string(),
-        },
-        ConfigType::Naive => ProfileProtocol::Naive {
-            server,
-            username: "user".to_string(),
-            password: "pass".to_string(),
-            quic: false,
-            congestion_control: None,
-            insecure_concurrency: None,
-            udp_over_tcp: false,
-        },
-    }
-}
-
-fn endpoint(address: &str, port: i32) -> ServerEndpoint {
-    ServerEndpoint {
-        address: address.to_string(),
-        port,
-    }
-}
-
-fn raw_transport() -> ProfileTransport {
-    ProfileTransport::Tcp {
-        header: None,
-        host: None,
-        path: None,
-    }
-}
-
-fn tls_settings(mode: TlsMode, server_name: Option<&str>) -> TlsSettings {
-    TlsSettings {
-        mode,
-        server_name: server_name.map(str::to_string),
-        alpn: Vec::new(),
-        reality_public_key: None,
-        reality_short_id: None,
-        certificate_pem: None,
-        ech_config: Vec::new(),
-    }
 }
 
 fn assert_no_nulls(value: &Value) {

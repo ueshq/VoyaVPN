@@ -2,11 +2,11 @@ import { Button } from "@voya/ui/components/button";
 import {
   Dialog,
   DialogBody,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { SettingsFields } from "@/features/settings/settings-form";
@@ -28,7 +28,7 @@ export function SpeedtestSettingsDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-[640px]" closeLabel={t("actions.close")}>
+      <ScrollableDialogContent closeLabel={t("actions.close")} width="40rem">
         <DialogHeader>
           <DialogTitle>{t("panes.profiles.speedtest.settings")}</DialogTitle>
           <DialogDescription>{t("panes.profiles.speedtest.settingsDescription")}</DialogDescription>
@@ -62,7 +62,7 @@ export function SpeedtestSettingsDialog({
             {t("actions.done")}
           </Button>
         </DialogFooter>
-      </DialogContent>
+      </ScrollableDialogContent>
     </Dialog>
   );
 }

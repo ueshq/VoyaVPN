@@ -4,7 +4,7 @@ use voya_core::{ProfileExItem, ProfileItem};
 
 use crate::{
     blob,
-    executor::{repository_constructors, run_query, with_connection, RepositoryExecutor},
+    executor::{max_sort, repository_constructors, run_query, with_connection, RepositoryExecutor},
     Result,
 };
 
@@ -128,13 +128,7 @@ impl<'executor> ProfileExRepository<'executor> {
     }
 
     pub async fn max_sort(&self) -> Result<i32> {
-        let max_sort: Option<i32> = run_query!(
-            self.executor,
-            sqlx::query_scalar("SELECT MAX(sort) FROM profile_ex_items"),
-            fetch_one
-        )?;
-
-        Ok(max_sort.unwrap_or(0))
+        max_sort(self.executor, "SELECT MAX(sort) FROM profile_ex_items").await
     }
 
     /// Assigns one profile's sort position in a single statement.

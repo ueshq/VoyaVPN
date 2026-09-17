@@ -1,7 +1,11 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-/** One writer for app settings and DNS, including work that outlives the page. */
-class SettingsSaveQueue {
+/**
+ * One serial writer per `QueryClient` for settings-class saves — work that
+ * must not interleave and sometimes outlives the page it started on. The
+ * updates flow only waits for it to drain; settings and DNS enqueue into it.
+ */
+class SaveQueue {
   private jobs = new Map<object, () => Promise<void>>();
   private running = false;
   private listeners = new Set<() => void>();
@@ -50,12 +54,13 @@ class SettingsSaveQueue {
   }
 }
 
-const queues = new WeakMap<QueryClient, SettingsSaveQueue>();
+const queues = new WeakMap<QueryClient, SaveQueue>();
 
-export function settingsSaveQueue(client: QueryClient): SettingsSaveQueue {
+/** The serial save queue owned by this `QueryClient`. */
+export function saveQueue(client: QueryClient): SaveQueue {
   let queue = queues.get(client);
   if (!queue) {
-    queue = new SettingsSaveQueue();
+    queue = new SaveQueue();
     queues.set(client, queue);
   }
   return queue;

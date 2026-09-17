@@ -1,9 +1,10 @@
 import { useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { restoreFocus } from "@voya/ui/lib/focus";
 import { deleteProfiles, listProfiles, saveProfile } from "@/ipc/commands";
 import type { ImportProfilesResult, Profile, ProfileListEntry } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
-import { useProfileActivation } from "@/features/home/runtime-action";
+import { useProfileActivation } from "@/stores/runtime-action";
 import { formatImportSummary } from "./server-table-actions";
 import type { DialogImportMethod } from "./import-methods";
 import type { TranslationFunction } from "@voya/i18n";
@@ -33,9 +34,7 @@ export function useNodeEditor(
     setDetailsId(id);
   }
   function restoreDetailsFocus() {
-    const trigger = detailsTriggerRef.current;
-    if (trigger?.isConnected) trigger.focus();
-    else viewportRef.current?.focus();
+    restoreFocus(detailsTriggerRef.current, viewportRef.current);
   }
   // Opening or closing the editor drops the previous rejection message.
   function setDialogState(next: DialogState) {
@@ -90,9 +89,7 @@ export function useNodeEditor(
   }
 
   function restoreProfileDialogFocus() {
-    const trigger = profileDialogTriggerRef.current;
-    if (trigger?.isConnected) trigger.focus();
-    else viewportRef.current?.focus();
+    restoreFocus(profileDialogTriggerRef.current, viewportRef.current);
   }
 
   return {

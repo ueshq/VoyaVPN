@@ -918,7 +918,6 @@
     "textTooLong": "该值过长",
     "tooManyItems": "条目过多",
     "tunMtuOutOfRange": "VPN MTU 必须介于 {{min}} 到 {{max}} 之间",
-    "unsupportedProtocol": "sing-box 不支持 {{protocol}} 协议",
     "unsupportedProtocolNetwork": "sing-box 不支持在 {{network}} 上使用 {{protocol}}",
     "unsupportedSettingsSchema": "不支持的设置版本 {{found}}；当前版本需要 {{expected}}",
     "unsupportedShadowsocksNetwork": "sing-box 不支持在 {{network}} 上使用 Shadowsocks",

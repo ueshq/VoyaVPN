@@ -75,12 +75,6 @@ impl ShutdownLatch {
     pub fn begin(&self) -> bool {
         !self.started.swap(true, Ordering::SeqCst)
     }
-
-    /// Whether the teardown has already been claimed.
-    #[must_use]
-    pub fn started(&self) -> bool {
-        self.started.load(Ordering::SeqCst)
-    }
 }
 
 #[cfg(test)]
@@ -144,9 +138,9 @@ mod tests {
     fn only_the_first_caller_claims_the_teardown() {
         let latch = ShutdownLatch::new();
 
-        assert!(!latch.started());
+        // The latch starts unclaimed, so the first caller wins and every
+        // later one — including the repeated exit passes — loses.
         assert!(latch.begin());
-        assert!(latch.started());
         assert!(!latch.begin());
         assert!(!latch.begin());
     }

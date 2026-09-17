@@ -918,7 +918,6 @@
     "textTooLong": "This value is too long",
     "tooManyItems": "Too many items",
     "tunMtuOutOfRange": "The VPN MTU must be between {{min}} and {{max}}",
-    "unsupportedProtocol": "sing-box does not support the {{protocol}} protocol",
     "unsupportedProtocolNetwork": "sing-box does not support {{protocol}} over {{network}}",
     "unsupportedSettingsSchema": "Unsupported settings version {{found}}; this build expects {{expected}}",
     "unsupportedShadowsocksNetwork": "sing-box does not support Shadowsocks over {{network}}",

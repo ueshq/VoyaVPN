@@ -6,10 +6,8 @@ import { loadAppSettings, proxySetTrafficMode } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { AppSettingsV1, TrafficMode } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
-import {
-  runtimeActionPending,
-  useRuntimeActionStore,
-} from "@/stores/runtime-action-store";
+import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useRuntimeBusy } from "@/stores/runtime-action";
 
 /**
  * The saved traffic mode. The Rules page locks its rules while it is global,
@@ -33,7 +31,7 @@ export function useTrafficMode() {
   const { t } = useI18n();
   const client = useQueryClient();
   const state = useRuntimeEventStore((store) => store.coreState?.state);
-  const pending = useRuntimeActionStore(runtimeActionPending);
+  const busy = useRuntimeBusy();
   const { error, mode } = useSavedTrafficMode();
   const mutation = useMutation({
     mutationFn: proxySetTrafficMode,
@@ -61,12 +59,12 @@ export function useTrafficMode() {
     },
   });
   const ready = state === "connected" || state === "disconnected";
-  const disabled = !ready || pending || mode === undefined || error !== null;
+  const disabled = !ready || busy || mode === undefined || error !== null;
   // A disabled button cannot say why, so the switcher shows this on hover.
   const disabledReason: TranslationKey | null =
     error !== null
       ? "panes.routing.trafficModeUnavailable"
-      : !ready || pending
+      : !ready || busy
         ? "common.waitForConnection"
         : null;
 

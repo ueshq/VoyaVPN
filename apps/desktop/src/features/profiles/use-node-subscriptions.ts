@@ -8,6 +8,15 @@ import {
 import type { TranslationFunction } from "@voya/i18n";
 import type { NodeOperation } from "./use-node-operation";
 
+/**
+ * Pending-action markers for the one re-entrancy guard: a subscription id
+ * while that subscription updates, `UPDATING_ALL` while they all do, and
+ * `DELETING` while the confirm dialog's request is in flight. Backend ids are
+ * `sub-`-prefixed uuids, so the sentinels cannot collide with them.
+ */
+const UPDATING_ALL = "all";
+const DELETING = "delete";
+
 export function useNodeSubscriptions(
   { runOperation, setOperationError, setOperationMessage }: NodeOperation,
   t: TranslationFunction,
@@ -17,16 +26,24 @@ export function useNodeSubscriptions(
     useState<Subscription | null>(null);
   const [deletingSubscription, setDeletingSubscription] =
     useState<Subscription | null>(null);
-  const [deletingSubscriptionPending, setDeletingSubscriptionPending] =
-    useState(false);
-  const deletingSubscriptionRef = useRef(false);
-  const [updatingSubscriptions, setUpdatingSubscriptions] = useState<
-    Set<string>
-  >(() => new Set());
-  const updatingRef = useRef(new Set<string>());
-  const [updatingAllSubscriptions, setUpdatingAllSubscriptions] = useState(false);
-  const updatingAllRef = useRef(false);
+  const [pendingActions, setPendingActions] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const pendingActionsRef = useRef(new Set<string>());
   const subscriptionTriggerRef = useRef<HTMLElement | null>(null);
+
+  function claimPending(key: string) {
+    if (pendingActionsRef.current.has(key)) return false;
+    pendingActionsRef.current.add(key);
+    setPendingActions(new Set(pendingActionsRef.current));
+    return true;
+  }
+
+  function releasePending(key: string) {
+    pendingActionsRef.current.delete(key);
+    setPendingActions(new Set(pendingActionsRef.current));
+  }
+
   function openSubscription(
     subscription: Subscription | null,
     trigger?: HTMLElement,
@@ -39,10 +56,9 @@ export function useNodeSubscriptions(
     setEditingSubscription(subscription);
     setSubscriptionsOpen(true);
   }
-  async function updateSubscription(id: string) {
-    if (updatingRef.current.has(id)) return;
-    updatingRef.current.add(id);
-    setUpdatingSubscriptions(new Set(updatingRef.current));
+
+  async function runSubscriptionUpdate(id: string | null) {
+    if (!claimPending(id ?? UPDATING_ALL)) return;
     try {
       await runOperation(async () => {
         const result = await updateSubscriptions(id, true, null);
@@ -50,29 +66,20 @@ export function useNodeSubscriptions(
         setOperationMessage(formatSubscriptionUpdateSummary(result, t));
       });
     } finally {
-      updatingRef.current.delete(id);
-      setUpdatingSubscriptions(new Set(updatingRef.current));
+      releasePending(id ?? UPDATING_ALL);
     }
   }
-  async function updateAllSubscriptions() {
-    if (updatingAllRef.current) return;
-    updatingAllRef.current = true;
-    setUpdatingAllSubscriptions(true);
-    try {
-      await runOperation(async () => {
-        const result = await updateSubscriptions(null, true, null);
-        assertSubscriptionUpdated(result, t);
-        setOperationMessage(formatSubscriptionUpdateSummary(result, t));
-      });
-    } finally {
-      updatingAllRef.current = false;
-      setUpdatingAllSubscriptions(false);
-    }
+
+  function updateSubscription(id: string) {
+    return runSubscriptionUpdate(id);
   }
+
+  function updateAllSubscriptions() {
+    return runSubscriptionUpdate(null);
+  }
+
   async function removeSubscription() {
-    if (!deletingSubscription || deletingSubscriptionRef.current) return;
-    deletingSubscriptionRef.current = true;
-    setDeletingSubscriptionPending(true);
+    if (!deletingSubscription || !claimPending(DELETING)) return;
     try {
       if (
         await runOperation(() => deleteSubscriptions([deletingSubscription.id]))
@@ -80,8 +87,7 @@ export function useNodeSubscriptions(
         setDeletingSubscription(null);
       }
     } finally {
-      deletingSubscriptionRef.current = false;
-      setDeletingSubscriptionPending(false);
+      releasePending(DELETING);
     }
   }
   function confirmSubscriptionDeletion(
@@ -99,14 +105,14 @@ export function useNodeSubscriptions(
     editingSubscription,
     deletingSubscription,
     setDeletingSubscription,
-    deletingSubscriptionPending,
+    deletingSubscriptionPending: pendingActions.has(DELETING),
     removeSubscription,
     confirmSubscriptionDeletion,
     openSubscription,
     updateAllSubscriptions,
     updateSubscription,
-    updatingAllSubscriptions,
-    updatingSubscriptions,
+    updatingAllSubscriptions: pendingActions.has(UPDATING_ALL),
+    updatingSubscriptions: pendingActions,
     subscriptionTriggerRef,
   };
 }

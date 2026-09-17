@@ -1,13 +1,21 @@
 //! Shared reconnect backoff for the Clash-compatible websocket monitors.
 //!
 //! The statistics aggregator and the proxy runtime monitor both reconnect to
-//! sing-box's websocket endpoints, so the jittered exponential schedule and the
-//! shutdown-aware wait live here instead of being tuned in one copy only. The
-//! per-manager delay bounds stay with their managers.
+//! sing-box's websocket endpoints, so the jittered exponential schedule, the
+//! shutdown-aware wait, and the delay bounds they both use live here instead of
+//! being tuned in one copy only.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::{sync::watch, time};
+
+/// Reconnect bounds every Clash websocket monitor reconnects on: both watch
+/// the same sing-box API, so one monitor falling over usually means the other
+/// reconnects at the same moment.
+pub(crate) const WS_RECONNECT_INITIAL_DELAY: Duration = Duration::from_secs(1);
+pub(crate) const WS_RECONNECT_MAX_DELAY: Duration = Duration::from_secs(30);
+/// How long one websocket handshake may take before it counts as a failure.
+pub(crate) const WS_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Fraction of the current delay that may be added as jitter, so several
 /// monitors reconnecting after the same core restart spread out.
@@ -62,16 +70,26 @@ pub(crate) async fn sleep_or_shutdown(
     }
 }
 
+/// Exponential schedule: `initial` doubled `attempt` times, saturating at
+/// `max`. The shared core of every reconnect/retry delay in this crate; callers
+/// layer their own first-attempt-is-zero and jitter policies on top.
+pub(crate) fn exponential_delay(attempt: u32, initial: Duration, max: Duration) -> Duration {
+    let multiplier = 1_u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX);
+    let scaled = initial.saturating_mul(multiplier);
+    if scaled > max {
+        max
+    } else {
+        scaled
+    }
+}
+
 fn websocket_reconnect_delay(
     attempt: u32,
     initial: Duration,
     max: Duration,
     jitter_seed: u64,
 ) -> Duration {
-    let multiplier = 1_u32.checked_shl(attempt.min(16)).unwrap_or(u32::MAX);
-    let scaled = initial.saturating_mul(multiplier);
-    let base = if scaled > max { max } else { scaled };
-
+    let base = exponential_delay(attempt, initial, max);
     base.saturating_add(reconnect_jitter(base, jitter_seed))
 }
 

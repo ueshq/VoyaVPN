@@ -12,9 +12,9 @@ use crate::{
     context::SS_SECURITIES_IN_SINGBOX,
     protocol_common::{
         first_list_value, inbound_port, inbound_protocol_tag, parse_pem_chain,
-        parse_wireguard_reserved, protocol_name, raw_http_user_agent, shadowsocks_plugin_for,
-        split_csv, split_list, wireguard_allowed_ips, wireguard_public_key, DEFAULT_SECURITY,
-        RAW_HEADER_HTTP, WIREGUARD_DEFAULT_ADDRESS, WIREGUARD_DEFAULT_MTU,
+        parse_wireguard_reserved, raw_http_user_agent, shadowsocks_plugin_for, split_csv,
+        wireguard_allowed_ips, wireguard_public_key, DEFAULT_SECURITY, RAW_HEADER_HTTP,
+        WIREGUARD_DEFAULT_ADDRESS, WIREGUARD_DEFAULT_MTU,
     },
     text::{nonempty_str, nonempty_string},
     AppConfig, ConfigType, CoreConfigContext, InItem, InboundProtocol, ProfileItem,

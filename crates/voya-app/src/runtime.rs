@@ -8,8 +8,7 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use voya_core::{
     generate_singbox_config_json, validation::ValidationMessage, AppConfig, CoreConfigContext,
-    CoreConfigContextBuilder, CoreConfigContextBuilderAllResult, CoreGenPlatform,
-    SingboxConfigError,
+    CoreConfigContextBuilder, CoreGenPlatform, SingboxConfigError,
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
@@ -111,11 +110,6 @@ impl<'runtime> RuntimeManager<'runtime> {
         self.start_core(config).await
     }
 
-    pub async fn restart(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
-        let _guard = self.operation_lock.lock().await;
-        self.start_core(config).await
-    }
-
     /// Restart only while the supervisor is connected.
     ///
     /// The status check runs under the runtime lock, so a disconnect that
@@ -206,7 +200,7 @@ impl<'runtime> RuntimeManager<'runtime> {
             .with_clash_api_secret(clash_api_secret.clone());
         let contexts = match &target {
             LaunchTarget::Node(profile) => {
-                runtime_config_contexts(&env, config, profile, self.target_os)
+                CoreConfigContextBuilder::new(&env).build_all(config, profile)
             }
             LaunchTarget::Group(group) => {
                 let members: Vec<voya_core::ProfileItem> =
@@ -376,16 +370,6 @@ pub(crate) fn write_core_config(
     })?;
 
     Ok(path)
-}
-
-fn runtime_config_contexts(
-    env: &SnapshotCoreGenEnv,
-    config: &AppConfig,
-    active_profile: &voya_core::ProfileItem,
-    _target_os: TargetOs,
-) -> CoreConfigContextBuilderAllResult {
-    let builder = CoreConfigContextBuilder::new(env);
-    builder.build_all(config, active_profile)
 }
 
 fn write_runtime_config(
@@ -587,7 +571,7 @@ mod tests {
             Vec::new(),
         );
 
-        let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
+        let contexts = CoreConfigContextBuilder::new(&env).build_all(&config, &profile);
         let pre_context = &contexts
             .pre_socks_result
             .as_ref()
@@ -634,7 +618,7 @@ mod tests {
             Vec::new(),
         );
 
-        let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
+        let contexts = CoreConfigContextBuilder::new(&env).build_all(&config, &profile);
         let main_context = &contexts.main_result.context;
         assert!(
             !main_context.is_tun_enabled,
@@ -772,7 +756,7 @@ mod tests {
             vec![routing],
         );
 
-        let contexts = runtime_config_contexts(&env, &config, &profile, TargetOs::Linux);
+        let contexts = CoreConfigContextBuilder::new(&env).build_all(&config, &profile);
 
         assert!(contexts.success(), "the config still generates");
         assert!(
@@ -801,13 +785,9 @@ mod tests {
             Vec::new(),
         );
 
-        for contexts in [
-            runtime_config_contexts(&env, &config, &profile, TargetOs::Macos),
-            CoreConfigContextBuilder::new(&env).build_all(&config, &profile),
-        ] {
-            assert!(contexts.pre_socks_result.is_none());
-            assert!(contexts.main_result.context.is_tun_enabled);
-        }
+        let contexts = CoreConfigContextBuilder::new(&env).build_all(&config, &profile);
+        assert!(contexts.pre_socks_result.is_none());
+        assert!(contexts.main_result.context.is_tun_enabled);
     }
 
     #[tokio::test]
