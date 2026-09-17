@@ -6,9 +6,8 @@ import { Activity, ArrowDown, ArrowUp, Inbox, LoaderCircle, MoreHorizontal, Refr
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import {
   dataTableHeader,
-  dataTableRowEven,
+  dataTableRowDivider,
   dataTableRowHover,
-  dataTableRowOdd,
 } from "@/components/app-shell/data-table-surface";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
@@ -355,7 +354,7 @@ export function ConnectionsPanel({
                       key={connectionKey(connection)}
                       className={cn(
                         "group absolute inset-x-0 top-0 flex h-14 items-center gap-2 pe-2",
-                        index % 2 === 0 ? dataTableRowEven : dataTableRowOdd,
+                        index < rows.length - 1 && dataTableRowDivider,
                         dataTableRowHover,
                       )}
                       style={{ transform: `translateY(${start}px)` }}

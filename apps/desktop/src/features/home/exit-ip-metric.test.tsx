@@ -1,4 +1,4 @@
-import { renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -60,6 +60,25 @@ describe("ExitIpMetric", () => {
     await waitFor(() =>
       expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"),
     );
+  });
+
+  it("remembers the address when the screen unmounts and remounts", async () => {
+    const user = userEvent.setup();
+    useRuntimeEventStore.setState({ coreState: connected });
+    // One query client across both mounts: the cache outlives the screen.
+    const queryClient = createTestQueryClient();
+    const view = renderWithQuery(<Metric />, { queryClient });
+
+    await user.click(screen.getByRole("button", { name: "Check exit IP" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"),
+    );
+
+    view.unmount();
+    renderWithQuery(<Metric />, { queryClient });
+
+    expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP");
+    expect(ipc.checkConnectionIp).toHaveBeenCalledOnce();
   });
 
   it("checks automatically on connect when enabled and reports a failure", async () => {

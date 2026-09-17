@@ -1,16 +1,38 @@
 /* Nodes page: the virtualized node list, its group panels and the policy groups
-   above it. The node surface pieces shared with Home's node card
-   (.node-card-surface, icon, name, meta) live in home.css; this sheet is imported
-   after it and compacts them for a list that may hold hundreds of nodes. */
+   above it. The node pieces shared with Home's node card (icon, name, meta) live
+   in home.css; this sheet is imported after it and compacts them for a list that
+   may hold hundreds of nodes. Row colors (hover, selected) come from the shared
+   table vocabulary in data-table-surface.tsx, as on Rules and Network activity,
+   so no rule here paints a node row's background: an unlayered background would
+   override those utilities. */
 .profile-card-list {
   container-type: inline-size;
 }
 .profile-node-card {
+  --node-row-pad: 20px;
   position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
   gap: 12px;
   min-height: 56px;
-  padding: 8px 20px;
+  padding: 8px var(--node-row-pad);
   transition: background var(--duration-short);
+}
+/* Rows are separated by a hairline that starts where the name starts (row
+   padding + 32px icon + 12px gap), so the icon column stays unbroken. The last
+   row of a group ends on the panel edge and draws none. */
+.profile-node-card::after {
+  content: "";
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: calc(var(--node-row-pad) + 44px) var(--node-row-pad);
+  height: 1px;
+  background: var(--border-subtle);
+  pointer-events: none;
+}
+.node-group-end .profile-node-card::after {
+  display: none;
 }
 .profile-node-card .node-card-icon {
   width: 32px;
@@ -33,9 +55,6 @@
 .profile-node-card .node-card-meta {
   margin-top: 0;
   line-height: 16px;
-}
-.profile-node-card-selected {
-  background: color-mix(in srgb, var(--text-brand) 4%, var(--card));
 }
 /* A straight bar inside the row, so rounded group corners never bend it. */
 .profile-node-card-selected::before {
@@ -121,8 +140,9 @@
   outline-offset: 2px;
 }
 
-/* Consecutive virtual rows form one continuous group panel. Only its last
-   measured row includes the gap before the next group. */
+/* Consecutive virtual rows form one continuous group panel: the group header
+   and each node row's wrapper paint it. Only its last measured row includes the
+   gap before the next group. */
 .node-group-segment .node-group-surface {
   width: 100%;
   border-radius: 0;
@@ -140,6 +160,10 @@
 }
 .node-group-start.node-group-end .node-group-surface {
   border-radius: var(--radius-xl);
+}
+/* A node row follows its panel's corners, so a tinted last row stays inside them. */
+.node-group-segment .profile-node-card {
+  border-radius: inherit;
 }
 .node-group-segment .node-group-header {
   background: color-mix(in srgb, var(--background) 50%, var(--card));
@@ -178,18 +202,12 @@
   color: var(--muted-foreground);
   font-size: 14px;
 }
-.node-group-segment .profile-node-card:hover {
-  background: color-mix(in srgb, var(--text-brand) 3%, var(--card));
-}
-.node-group-segment .profile-node-card-selected {
-  background: color-mix(in srgb, var(--text-brand) 6%, var(--card));
-}
 @container (max-width: 700px) {
   .node-group-heading {
     padding: 8px 16px;
   }
   .profile-node-card {
-    padding-inline: 16px;
+    --node-row-pad: 16px;
   }
   /* Header actions keep their row as icons; their names stay for tooltips and
      assistive technology. */

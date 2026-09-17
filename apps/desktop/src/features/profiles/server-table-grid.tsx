@@ -4,6 +4,10 @@ import { Button } from "@voya/ui/components/button";
 import { useShellStore } from "@/stores/shell-store";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { PageSurface } from "@/components/app-shell/page-section";
+import {
+  dataTableRowHover,
+  dataTableRowSelected,
+} from "@/components/app-shell/data-table-surface";
 
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Skeleton } from "@voya/ui/components/skeleton";
@@ -134,89 +138,96 @@ export function ProfileCardList({
               const tone = profileLatencyTone(item);
               return (
                 <li key={row.key} {...rowProps}>
-                  <ProfileRowContextMenu controller={controller} item={item}>
-                    <article
-                      className={cn(
-                        "node-card-surface node-group-surface profile-node-card",
-                        // The highlight marks the node a connection uses.
-                        item.isActive && "profile-node-card-selected",
-                      )}
-                      data-testid="server-row"
-                    >
-                      <div aria-hidden="true" className="node-card-icon">
-                        {/* A measured exit wins; a flag in the name is the provisional hint. */}
-                        <NodeCountryIcon countryCode={entryCountry(item)} />
-                      </div>
-                      <div className="node-card-content">
-                        {/* The name opens the node's details, where it can also be used or tested. */}
-                        <button
-                          aria-label={t("panes.profiles.card.openDetails", {
-                            name: rawName,
-                          })}
-                          data-row-focus
-                          title={t("panes.profiles.card.openDetails", { name: rawName })}
-                          className="node-card-select"
-                          onClick={(event) => openDetails(id, event.currentTarget)}
-                          type="button"
-                        >
-                          <span className="node-card-title">
-                            <span className="node-card-name" title={rawName}>
-                              {name}
-                            </span>
-                            {running ? (
-                              <span className="node-card-state" data-state="running">
-                                <span
-                                  aria-hidden="true"
-                                  className="size-1.5 rounded-full bg-connected"
-                                />
-                                {t("panes.profiles.aria.activeProfile")}
-                              </span>
-                            ) : item.isActive ? (
-                              <span className="node-card-state">
-                                {t("panes.profiles.card.default")}
-                              </span>
-                            ) : null}
-                          </span>
-                        </button>
-                        <div className="node-card-meta">
-                          <span className="node-card-address" title={address}>
-                            {address}
-                          </span>
-                          <span>{getProtocolLabel(profile.protocol.kind)}</span>
+                  {/* The wrapper paints the group panel; the row itself carries
+                      only the shared table row colors, which a panel background
+                      on the same element would override. */}
+                  <div className="node-group-surface">
+                    <ProfileRowContextMenu controller={controller} item={item}>
+                      <article
+                        className={cn(
+                          "profile-node-card",
+                          // The highlight marks the node a connection uses; it
+                          // keeps its color under the pointer.
+                          item.isActive ? dataTableRowSelected : dataTableRowHover,
+                          item.isActive && "profile-node-card-selected",
+                        )}
+                        data-testid="server-row"
+                      >
+                        <div aria-hidden="true" className="node-card-icon">
+                          {/* A measured exit wins; a flag in the name is the provisional hint. */}
+                          <NodeCountryIcon countryCode={entryCountry(item)} />
                         </div>
-                      </div>
-                      <div className="profile-node-actions">
-                        <span
-                          className="profile-node-latency"
-                          data-tone={tone}
-                          title={t("panes.profiles.cardFields.delay")}
-                        >
-                          {tone === "unknown" ? null : (
-                            <span aria-hidden="true" className="profile-node-latency-dot" />
-                          )}
-                          {profileLatency(item, t)}
-                        </span>
-                        <Button
-                          aria-busy={switching || undefined}
-                          disabled={activation.busy || running}
-                          onClick={() => void activation.activateProfile(id)}
-                          size="sm"
-                          type="button"
-                          variant="outline"
-                        >
-                          {switching ? (
-                            <Spinner className="size-4" />
-                          ) : null}
-                          {switching
-                            ? t("panes.profiles.card.switching")
-                            : running
-                              ? t("panes.profiles.card.using")
-                              : t(activation.runningId ? "panes.profiles.card.switch" : "panes.profiles.card.connect")}
-                        </Button>
-                        <ProfileCardMenu controller={controller} item={item} />
-                      </div>
-                    </article>
-                  </ProfileRowContextMenu>
+                        <div className="node-card-content">
+                          {/* The name opens the node's details, where it can also be used or tested. */}
+                          <button
+                            aria-label={t("panes.profiles.card.openDetails", {
+                              name: rawName,
+                            })}
+                            data-row-focus
+                            title={t("panes.profiles.card.openDetails", { name: rawName })}
+                            className="node-card-select"
+                            onClick={(event) => openDetails(id, event.currentTarget)}
+                            type="button"
+                          >
+                            <span className="node-card-title">
+                              <span className="node-card-name" title={rawName}>
+                                {name}
+                              </span>
+                              {running ? (
+                                <span className="node-card-state" data-state="running">
+                                  <span
+                                    aria-hidden="true"
+                                    className="size-1.5 rounded-full bg-connected"
+                                  />
+                                  {t("panes.profiles.aria.activeProfile")}
+                                </span>
+                              ) : item.isActive ? (
+                                <span className="node-card-state">
+                                  {t("panes.profiles.card.default")}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                          <div className="node-card-meta">
+                            <span className="node-card-address" title={address}>
+                              {address}
+                            </span>
+                            <span>{getProtocolLabel(profile.protocol.kind)}</span>
+                          </div>
+                        </div>
+                        <div className="profile-node-actions">
+                          <span
+                            className="profile-node-latency"
+                            data-tone={tone}
+                            title={t("panes.profiles.cardFields.delay")}
+                          >
+                            {tone === "unknown" ? null : (
+                              <span aria-hidden="true" className="profile-node-latency-dot" />
+                            )}
+                            {profileLatency(item, t)}
+                          </span>
+                          <Button
+                            aria-busy={switching || undefined}
+                            disabled={activation.busy || running}
+                            onClick={() => void activation.activateProfile(id)}
+                            size="sm"
+                            type="button"
+                            variant="outline"
+                          >
+                            {switching ? (
+                              <Spinner className="size-4" />
+                            ) : null}
+                            {switching
+                              ? t("panes.profiles.card.switching")
+                              : running
+                                ? t("panes.profiles.card.using")
+                                : t(activation.runningId ? "panes.profiles.card.switch" : "panes.profiles.card.connect")}
+                          </Button>
+                          <ProfileCardMenu controller={controller} item={item} />
+                        </div>
+                      </article>
+                    </ProfileRowContextMenu>
+                  </div>
                 </li>
               );
             })}

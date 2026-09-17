@@ -47,9 +47,8 @@ import { cn } from "@voya/ui/lib/utils";
 
 import {
   dataTableHeader,
-  dataTableRowEven,
+  dataTableRowDivider,
   dataTableRowHover,
-  dataTableRowOdd,
 } from "@/components/app-shell/data-table-surface";
 import type { RoutingRule } from "@/ipc/bindings";
 
@@ -226,7 +225,6 @@ export function RoutingRuleList({
                 processRulesSupported={processRulesSupported}
                 reordering={reordering}
                 rule={rule}
-                striped={index % 2 === 0}
               />
             ))}
           </TableBody>
@@ -249,7 +247,6 @@ function SortableRuleRow({
   processRulesSupported,
   reordering,
   rule,
-  striped,
   groupOutbounds,
   onFixOutbound,
 }: Pick<
@@ -263,7 +260,6 @@ function SortableRuleRow({
   processRulesSupported: boolean;
   reordering: boolean;
   rule: RoutingRule;
-  striped: boolean;
 }) {
   const { t } = useI18n();
   const name = ruleDisplayName(rule, t);
@@ -298,8 +294,7 @@ function SortableRuleRow({
     <RuleRowContextMenu actions={actions} label={menuLabel}>
       <TableRow
         className={cn(
-          "border-0",
-          striped ? dataTableRowEven : dataTableRowOdd,
+          dataTableRowDivider,
           dataTableRowHover,
           isDragging && "relative z-20 bg-surface-raised shadow-overlay",
         )}

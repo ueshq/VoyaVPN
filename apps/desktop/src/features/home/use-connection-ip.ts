@@ -9,6 +9,9 @@ import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
  * connection itself (node and process), so a result never outlives the
  * connection it describes; the lookup runs on connect only when the user
  * asked for it in settings. Home's exit IP metric and map share this query.
+ * The cached result survives leaving and re-entering Home (screens unmount on
+ * tab switch), but reconnecting spawns a new core process, hence a new key,
+ * and returns the metric to "not checked".
  */
 export function useConnectionIp() {
   const coreState = useRuntimeEventStore((state) => state.coreState);
@@ -23,7 +26,7 @@ export function useConnectionIp() {
   const autoCheck = settingsQuery.data?.behavior.autoCheckIp ?? false;
   const ipQuery = useQuery({
     enabled: connectionKey !== null && autoCheck,
-    gcTime: 0,
+    gcTime: Number.POSITIVE_INFINITY,
     queryFn: () => checkConnectionIp(),
     queryKey: connectionIpQueryKey(connectionKey),
     retry: false,
