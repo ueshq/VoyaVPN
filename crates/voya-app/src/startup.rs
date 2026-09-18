@@ -124,8 +124,8 @@ mod tests {
     fn schema_and_unreadable_database_failures_offer_a_reset() {
         let schema = boxed(DbError::UnsupportedDatabaseSchema {
             path: PathBuf::from("voyavpn.sqlite"),
-            found: Some(9),
-            expected: 10,
+            found: Some(10),
+            expected: 11,
             manual_reset_command: "rm -f -- voyavpn.sqlite".to_string(),
         });
         assert!(offers_database_reset(schema.as_ref()));

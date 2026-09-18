@@ -16,6 +16,7 @@ use crate::{
     profiles::ProfileManager,
     routing::RoutingManager,
     runtime::RuntimeManager,
+    self_host::{SelfHostDeps, SelfHostManager},
     settings::save::app_config_from_settings,
     speedtest::{SpeedtestManager, SpeedtestResult, SpeedtestRunResult},
     statistics::{StatisticsEventSink, StatisticsManager},
@@ -185,6 +186,13 @@ impl AppServices {
             target_os,
             sink,
         )
+    }
+
+    /// Starts the self-hosted node's manager: its exit listener, its watch
+    /// loop, and the node itself when it was left enabled.
+    #[must_use]
+    pub fn spawn_self_host(&self, deps: SelfHostDeps) -> SelfHostManager {
+        SelfHostManager::spawn(self.database.clone(), deps)
     }
 
     pub async fn run_speedtest<F>(

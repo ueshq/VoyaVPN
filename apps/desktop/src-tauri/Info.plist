@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged by Tauri into the app bundle's Info.plist. -->
+<plist version="1.0">
+<dict>
+  <!-- The self-hosted node asks the router to forward its ports (UPnP), which
+       discovers the router over local multicast; macOS 15 requires a reason. -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>VoyaVPN asks your router to forward the self-hosted node's ports so other devices can reach it.</string>
+</dict>
+</plist>

@@ -1,8 +1,8 @@
 //! Startup assembly and deferred startup-failure reporting.
 use crate::{
     event_sinks::{
-        TauriProcessLogSink, TauriStatisticsEventSink, TauriSubscriptionAutoUpdateSink,
-        TauriSupervisorEventSink,
+        TauriProcessLogSink, TauriSelfHostEventSink, TauriStatisticsEventSink,
+        TauriSubscriptionAutoUpdateSink, TauriSupervisorEventSink,
     },
     logging,
     tray::setup_tray,
@@ -19,6 +19,10 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use voya_app::{
     elevation::ElevationManager,
     proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
+    self_host::{
+        probe_service, router_port_mapper, ProbeCoreSelfTester, RestartBackoff, SelfHostDeps,
+        SelfHostManager, SupervisorTunnelState, SystemLocalNetwork, DEFAULT_PROBE_BASE_URL,
+    },
     services::AppServices,
     supervisor::{CoreSupervisor, SupervisorDeps},
     sysproxy::SystemProxyManager,
@@ -26,6 +30,7 @@ use voya_app::{
 };
 use voya_platform::{
     coreinfo::{copy_seed_core_asset, TargetOs},
+    firewall::FirewallService,
     paths::{core_seed_resources_dir, AppPaths},
     process::{JobAssignedRunner, PlatformProcessJobFactory, ProcessRunner, StdProcessRunner},
     sysproxy::SystemProxyService,
@@ -158,6 +163,15 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
             app: app.handle().clone(),
         }),
     );
+    let self_host = spawn_self_host(
+        app,
+        &services,
+        &runtime_paths,
+        core_seed_resource_dir.clone(),
+        supervisor.clone(),
+        Arc::clone(&shared_config),
+        config.core_basic_item.loglevel.clone(),
+    )?;
     drop(runtime_guard);
     let speedtest_manager = services.speedtest_manager(
         core_seed_resource_dir.clone(),
@@ -177,6 +191,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         proxy_monitor_controller: ProxyMonitorController::new(),
         proxy_runtime: ProxyRuntimeManager::new(),
         provider_registration_cache: Arc::new(ProviderRegistrationCache::new()),
+        self_host,
     });
 
     timed("build tray", || setup_tray(app))?;
@@ -185,6 +200,53 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         "startup initialized"
     );
     Ok(())
+}
+
+/// Environment override for the probe service, for staging deployments.
+const PROBE_URL_ENV: &str = "VOYAVPN_PROBE_URL";
+
+/// The self-hosted node gets its own runner — the connection core's runner
+/// has one exit-handler slot and the supervisor holds it — with the same
+/// kill-with-the-app job object the other cores get.
+fn spawn_self_host(
+    app: &tauri::App,
+    services: &AppServices,
+    runtime_paths: &AppPaths,
+    core_seed_resource_dir: Option<PathBuf>,
+    supervisor: CoreSupervisor,
+    shared_config: voya_app::config_mutation::SharedAppConfig,
+    log_level: String,
+) -> Result<SelfHostManager, Box<dyn Error>> {
+    let runner = JobAssignedRunner::new(
+        StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
+            app: app.handle().clone(),
+        })),
+        &PlatformProcessJobFactory,
+    );
+    let probe_url = std::env::var(PROBE_URL_ENV)
+        .ok()
+        .filter(|url| !url.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_PROBE_BASE_URL.to_string());
+    Ok(services.spawn_self_host(SelfHostDeps {
+        paths: runtime_paths.clone(),
+        core_seed_resource_dir,
+        runner: Arc::new(runner),
+        target_os: TargetOs::current(),
+        probe: probe_service(&probe_url)?,
+        port_mapper: router_port_mapper(),
+        firewall: FirewallService::new(Arc::new(StdProcessRunner::new()), TargetOs::current()),
+        network: Arc::new(SystemLocalNetwork),
+        host_tunnel: Arc::new(SupervisorTunnelState {
+            supervisor,
+            config: shared_config,
+        }),
+        sink: Arc::new(TauriSelfHostEventSink {
+            app: app.handle().clone(),
+        }),
+        self_tester: Arc::new(ProbeCoreSelfTester),
+        log_level,
+        restart_backoff: RestartBackoff::default(),
+    }))
 }
 
 /// Runs one startup step and logs how long it took, so a slow launch can be

@@ -142,6 +142,17 @@ export const commands = {
 	 *  when the binary is absent (e.g. cleared bin dir, antivirus removal, or a skipped first run).
 	 */
 	installCoreSeed: () => typedError<CoreSeedInstallResult, AppError>(__TAURI_INVOKE("install_core_seed")),
+	getSelfHostState: () => typedError<SelfHostState, AppError>(__TAURI_INVOKE("get_self_host_state")),
+	saveSelfHostConfig: (config: SelfHostConfig) => typedError<SelfHostState, AppError>(__TAURI_INVOKE("save_self_host_config", { config })),
+	setSelfHostEnabled: (enabled: boolean) => typedError<SelfHostState, AppError>(__TAURI_INVOKE("set_self_host_enabled", { enabled })),
+	rotateSelfHostCredentials: () => typedError<SelfHostState, AppError>(__TAURI_INVOKE("rotate_self_host_credentials")),
+	getSelfHostStats: () => typedError<SelfHostStats, AppError>(__TAURI_INVOKE("get_self_host_stats")),
+	runSelfHostEnvironmentCheck: () => typedError<SelfHostState, AppError>(__TAURI_INVOKE("run_self_host_environment_check")),
+	/**
+	 *  Adds the Windows firewall rule; the UAC prompt blocks until answered, so
+	 *  the work runs off the UI thread inside the manager.
+	 */
+	applySelfHostFirewallRule: () => typedError<SelfHostState, AppError>(__TAURI_INVOKE("apply_self_host_firewall_rule")),
 	/**
 	 *  macOS overlays native traffic lights on the webview; Windows renders caption
 	 *  buttons in its borderless window. Linux and the web fallback use `none`.
@@ -246,7 +257,9 @@ export type AppErrorSubsystem =
 /**  Reading or writing the persisted application configuration. */
 "config" | "dns" | "export" | "policyGroup" | "profile" | "proxyRuntime" | "qr" | "routing" | 
 /**  Core lifecycle: config generation, supervisor, connect/disconnect. */
-"runtime" | "speedtest" | "subscription" | "sysProxy" | "tun" | "update";
+"runtime" | 
+/**  The self-hosted exit node. */
+"selfHost" | "speedtest" | "subscription" | "sysProxy" | "tun" | "update";
 
 export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "selectTab"; payload: ShellTabTarget } | 
 /**  The main window was closed while the close action is "ask". */
@@ -546,7 +559,12 @@ export type InvalidationScope =
 /**  `["profiles", "policy-groups"]` — stored groups and their resolved members. */
 { kind: "policyGroups" } | 
 /**  `["policy-group-runtime"]` — the running group's current member and delays. */
-{ kind: "policyGroupRuntime" };
+{ kind: "policyGroupRuntime" } | 
+/**
+ *  `["self-host"]` — the self-hosted node's settings, status, links and
+ *  last network check.
+ */
+{ kind: "selfHost" };
 
 /**
  *  A log line the **app** wrote, named by code.
@@ -571,7 +589,9 @@ export type LogCode = { code: "connecting" } | { code: "connected" } | { code: "
 /**  A core operation failed; `detail` carries the error. */
 { code: "coreOperationFailed"; reason: CoreFlowReason } | 
 /**  A change was committed and its follow-up work failed. */
-{ code: "postCommitFailed" } | { code: "speedtestCancellationRequested" } | { code: "subscriptionAutoUpdateFailed"; remarks: string } | { code: "subscriptionAutoUpdateFinished"; remarks: string; imported: number };
+{ code: "postCommitFailed" } | { code: "speedtestCancellationRequested" } | { code: "subscriptionAutoUpdateFailed"; remarks: string } | { code: "subscriptionAutoUpdateFinished"; remarks: string; imported: number } | { code: "selfHostStarted" } | { code: "selfHostStartFailed" } | { code: "selfHostStopped" } | 
+/**  The node's core exited and a restart is scheduled. */
+{ code: "selfHostRetryScheduled"; attempt: number; delayMs: number } | { code: "selfHostGaveUp" } | { code: "selfHostPortMapped"; port: number } | { code: "selfHostPortMappingFailed" };
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
@@ -634,7 +654,14 @@ export type NetworkSettings = {
  */
 export type NoticeCode = { code: "profileRefreshFailed" } | { code: "policyGroupRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "policyGroupSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "policyGroupSelectionRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | 
 /**  The running node or policy group was deleted, so the connection stopped. */
-{ code: "activeSelectionRemoved" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string };
+{ code: "activeSelectionRemoved" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string } | 
+/**  The node's core kept exiting and was left stopped. */
+{ code: "selfHostGaveUp" } | 
+/**
+ *  This device's public address changed; links handed out earlier point
+ *  at the old one.
+ */
+{ code: "selfHostAddressChanged" } | { code: "selfHostRefreshFailed" };
 
 /**  A stored group as the editor reads and writes it. */
 export type PolicyGroup = {
@@ -926,6 +953,201 @@ export type RuntimeStatusResponse = {
 	activeProfileId: string | null,
 	mainPid: number | null,
 	prePid: number | null,
+};
+
+export type SelfHostAddressFamily = "ipv4" | "ipv6";
+
+/**  Where a share link's address came from. */
+export type SelfHostAddressKind = "custom" | "ipv4" | "ipv6";
+
+/**  How an interface address relates to the internet. */
+export type SelfHostAddressScope = 
+/**  Globally routable. */
+"public" | 
+/**  RFC 1918 or IPv6 unique-local. */
+"private" | 
+/**  100.64.0.0/10, assigned by a carrier-grade NAT or an overlay network. */
+"shared" | "linkLocal";
+
+/**
+ *  The part of the node the user edits.
+ * 
+ *  A port of `0` means "not chosen yet": the app picks a free one the first
+ *  time the node is enabled and stores it, so links stay stable afterwards.
+ */
+export type SelfHostConfig = {
+	enabled: boolean,
+	/**  First part of every link's remark. Empty uses the product name. */
+	deviceLabel: string,
+	vlessEnabled: boolean,
+	vlessPort: number,
+	shadowsocksEnabled: boolean,
+	shadowsocksPort: number,
+	/**  The public site whose TLS handshake the REALITY inbound borrows. */
+	realityServerName: string,
+	realityServerPort: number,
+	/**
+	 *  A DDNS name or fixed address links should use instead of the detected
+	 *  public addresses.
+	 */
+	customAddress: string | null,
+	/**  Lets peers reach this device's local network. Loopback stays closed. */
+	allowLanAccess: boolean,
+	blockBittorrent: boolean,
+	/**  Ask the router (UPnP IGD) to forward the node's ports. */
+	upnpEnabled: boolean,
+};
+
+export type SelfHostEnvironmentReport = {
+	/**  Milliseconds since the Unix epoch. */
+	checkedAtMs: number | null,
+	localAddresses: SelfHostLocalAddress[],
+	ipv4: SelfHostFamilyReport,
+	ipv6: SelfHostFamilyReport,
+	portMapping: SelfHostPortMappingReport,
+	firewall: SelfHostFirewallStatus,
+	/**  Whether the probe service answered at all. */
+	probeAvailable: boolean,
+	selfTest: SelfHostSelfTest,
+};
+
+export type SelfHostFamilyReport = {
+	family: SelfHostAddressFamily,
+	publicAddress: string | null,
+	nat: SelfHostNatKind,
+	reachability: SelfHostReachability,
+	/**  Set when `reachability` comes from the probe service, not inference. */
+	verifiedByProbe: boolean,
+	reasons: SelfHostReasonCode[],
+};
+
+export type SelfHostFirewallStatus = 
+/**  The platform's firewall is not managed by the app. */
+"notManaged" | "ruleMissing" | "rulePresent" | "unknown";
+
+export type SelfHostLocalAddress = {
+	interface: string,
+	address: string,
+	family: SelfHostAddressFamily,
+	scope: SelfHostAddressScope,
+};
+
+/**  What sits between this device and the internet for one address family. */
+export type SelfHostNatKind = 
+/**  The public address is on this device. */
+"none" | 
+/**  One home router. */
+"nat" | 
+/**  The carrier shares one public address between customers. */
+"carrierGrade" | 
+/**  Two routers in a row. */
+"double" | 
+/**  No public address was learned for this family. */
+"noConnectivity" | "unknown";
+
+export type SelfHostPortMappingReport = {
+	status: SelfHostPortMappingStatus,
+	/**  The router's own WAN address, as it reported it. */
+	gatewayExternalAddress: string | null,
+	mappedPorts: number[],
+	detail: string | null,
+};
+
+export type SelfHostPortMappingStatus = "disabled" | 
+/**  No UPnP gateway answered on this network. */
+"noGateway" | "mapped" | "failed";
+
+/**  Why the node is not running as asked. The frontend translates the code. */
+export type SelfHostProblem = 
+/**  Neither protocol is switched on. */
+"noProtocol" | 
+/**  Another program already listens on one of the node's ports. */
+"portInUse" | 
+/**  The sing-box core is not installed. */
+"coreMissing" | 
+/**  The core exited on its own. */
+"coreExited" | 
+/**  The config could not be written or the core could not be launched. */
+"startFailed";
+
+export type SelfHostProtocol = "vless" | "shadowsocks";
+
+/**  Whether a device on the internet can open a connection to the node. */
+export type SelfHostReachability = 
+/**  The probe service connected to every node port. */
+"reachable" | 
+/**  The probe service could not connect. */
+"unreachable" | 
+/**  No probe, but nothing in the way was found. */
+"likelyReachable" | 
+/**  No probe, and a router is in the way without a forwarding rule. */
+"needsPortForward" | "noConnectivity" | "unknown";
+
+/**
+ *  One finding of the network check. Each code has its own explanation and
+ *  suggestion in the locale files.
+ */
+export type SelfHostReasonCode = "publicAddressOnDevice" | "behindNat" | "carrierGradeNat" | "doubleNat" | "portMapped" | "upnpUnavailable" | "upnpFailed" | "probeReachable" | "probeTimedOut" | "probeRefused" | "probeUnavailable" | "noPublicAddress" | "ipv6FirewallUnknown" | "tunActive" | "nodeNotRunning" | "firewallRuleMissing";
+
+export type SelfHostRuntime = {
+	status: SelfHostRuntimeStatus,
+	problem: SelfHostProblem | null,
+	/**  Untranslated diagnostic behind `problem`. */
+	detail: string | null,
+	/**  The port behind `PortInUse`. */
+	port: number | null,
+};
+
+export type SelfHostRuntimeStatus = "stopped" | "starting" | "running" | 
+/**  The core exited and a restart is scheduled. */
+"retrying" | 
+/**
+ *  Starting failed, or the core kept exiting; the node stays down until the
+ *  user changes something or switches it off and on.
+ */
+"failed";
+
+/**
+ *  A real client connecting to the node over loopback and fetching a page
+ *  through it: the only check that catches a disguise site REALITY cannot
+ *  use, which otherwise fails silently on every peer.
+ */
+export type SelfHostSelfTest = {
+	vless: SelfHostSelfTestResult,
+	shadowsocks: SelfHostSelfTestResult,
+};
+
+/**  Whether a client on this device could use the node through one protocol. */
+export type SelfHostSelfTestResult = "passed" | "failed" | 
+/**  The protocol is off, or the node was not running. */
+"skipped";
+
+export type SelfHostShareLink = {
+	protocol: SelfHostProtocol,
+	addressKind: SelfHostAddressKind,
+	address: string,
+	port: number,
+	remarks: string,
+	link: string,
+};
+
+/**  Everything the Self-hosted node page renders. */
+export type SelfHostState = {
+	config: SelfHostConfig,
+	runtime: SelfHostRuntime,
+	/**  Links for every enabled protocol at every usable address. */
+	shareLinks: SelfHostShareLink[],
+	/**  The latest network check, if one ran since launch. */
+	environment: SelfHostEnvironmentReport | null,
+	/**  Whether this platform can add a firewall rule for the node. */
+	firewallRuleSupported: boolean,
+};
+
+/**  Live traffic through the node, read from its core. */
+export type SelfHostStats = {
+	activeConnections: number,
+	uploadTotalBytes: number | null,
+	downloadTotalBytes: number | null,
 };
 
 export type ServerEndpoint = {
@@ -1224,7 +1446,11 @@ export type TunStatus = {
  *  greppable, it shows the English diagnostic verbatim, and adding a code for
  *  one is a purely additive change.
  */
-export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "policyGroupWithoutValidMembers"; group: string } | { code: "policyGroupWithoutMembers" } | { code: "policyGroupIntervalOutOfRange"; min: number; max: number } | { code: "policyGroupToleranceOutOfRange"; min: number; max: number } | { code: "policyGroupTestUrlInvalid" } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | { code: "inboundPortOutOfRange"; min: number; max: number } | { code: "inboundCredentialsIncomplete" } | { code: "inboundRequired" } | 
+export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "policyGroupWithoutValidMembers"; group: string } | { code: "policyGroupWithoutMembers" } | { code: "policyGroupIntervalOutOfRange"; min: number; max: number } | { code: "policyGroupToleranceOutOfRange"; min: number; max: number } | { code: "policyGroupTestUrlInvalid" } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | { code: "inboundPortOutOfRange"; min: number; max: number } | { code: "inboundCredentialsIncomplete" } | { code: "inboundRequired" } | { code: "selfHostPortOutOfRange"; min: number; max: number } | 
+/**  Two of the node's ports are the same. */
+{ code: "selfHostPortsCollide" } | 
+/**  Neither protocol is switched on. */
+{ code: "selfHostNoProtocol" } | 
 /**
  *  A rejection this contract has no code for. The English `message` is the
  *  failing manager's own diagnostic and is rendered verbatim.

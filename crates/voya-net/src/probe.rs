@@ -11,7 +11,13 @@ use tokio::{net::TcpStream, time};
 use voya_core::LOOPBACK;
 
 mod country;
+mod reachability;
 pub use country::{IpLookupResult, DEFAULT_IP_LOOKUP_URL};
+pub use reachability::{
+    PortProbeOutcome, PortProbeResult, ProbeFamily, ReachabilityProbeClient,
+    ReachabilityProbeError, ReachabilityProbeRequest, ReachabilityProbeResponse,
+    DEFAULT_PROBE_BASE_URL, MAX_PROBE_PORTS,
+};
 
 pub type CancellationFlag = Arc<AtomicBool>;
 pub type Result<T> = std::result::Result<T, NetworkProbeError>;

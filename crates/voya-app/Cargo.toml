@@ -9,6 +9,8 @@ version.workspace = true
 [dependencies]
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 futures-util = "0.3"
+base64 = "0.22"
+getrandom = "0.4"
 regex = "1.12"
 rqrr = { version = "=0.10.1", default-features = false }
 serde.workspace = true
@@ -22,9 +24,10 @@ voya-contracts.workspace = true
 voya-db.workspace = true
 voya-net.workspace = true
 voya-platform.workspace = true
+# Self-hosted node REALITY keypairs; the private key never leaves the backend.
+x25519-dalek = { version = "3", default-features = false, features = ["static_secrets", "zeroize"] }
 
 [dev-dependencies]
-base64 = "0.22"
 criterion.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 sqlx.workspace = true

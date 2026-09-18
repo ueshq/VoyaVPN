@@ -1,0 +1,12 @@
+{
+  "ip": "2001:db8::7",
+  "family": "ipv6",
+  "results": [
+    {
+      "port": 42443,
+      "reachable": false,
+      "reason": "refused",
+      "elapsedMs": 211
+    }
+  ]
+}

@@ -17,6 +17,8 @@ export default defineConfig({
     },
     projects: [
       "apps/desktop",
+      // The self-hosted node's reachability probe (a Cloudflare Worker).
+      "apps/probe",
       "packages/*",
       {
         test: {

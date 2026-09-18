@@ -1,0 +1,569 @@
+//! The manager against fakes: a recording process runner, a scripted probe
+//! service and router, and a network whose busy ports the test chooses.
+
+use std::{
+    collections::HashSet,
+    fs,
+    net::IpAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
+use futures_util::future::BoxFuture;
+use voya_contracts::{
+    AppNoticeLevel, LogCode, LogLevel, NoticeCode, SelfHostConfig, SelfHostPortMappingStatus,
+    SelfHostProblem, SelfHostReachability, SelfHostRuntimeStatus,
+};
+use voya_db::Database;
+use voya_net::{
+    portmap::{PortMapper, PortMappingError, PortMappingResult},
+    probe::{
+        PortProbeOutcome, PortProbeResult, ProbeFamily, ReachabilityProbeError,
+        ReachabilityProbeResponse,
+    },
+};
+use voya_platform::{
+    coreinfo::{executable_name_for_current_os, TargetOs, CORE_DIR_NAME},
+    firewall::FirewallService,
+    netif::InterfaceAddress,
+    paths::{core_seed_resources_dir, AppPaths},
+    process::{ProcessExit, ProcessRole},
+    test_support::RecordingRunner,
+};
+
+use voya_contracts::{SelfHostRecordV1, SelfHostSelfTest, SelfHostSelfTestResult};
+
+use super::{
+    HostTunnelState, LocalNetwork, NodeSelfTester, ReachabilityProbe, RestartBackoff, SelfHostDeps,
+    SelfHostError, SelfHostEventSink, SelfHostManager,
+};
+
+#[cfg(test)]
+mod live;
+
+/// Reports every enabled protocol as working, without a core.
+struct PassingSelfTest;
+
+impl NodeSelfTester for PassingSelfTest {
+    fn run<'a>(
+        &'a self,
+        _deps: &'a SelfHostDeps,
+        record: &'a SelfHostRecordV1,
+    ) -> BoxFuture<'a, SelfHostSelfTest> {
+        let verdict = |enabled| {
+            if enabled {
+                SelfHostSelfTestResult::Passed
+            } else {
+                SelfHostSelfTestResult::Skipped
+            }
+        };
+        let result = SelfHostSelfTest {
+            vless: verdict(record.config.vless_enabled),
+            shadowsocks: verdict(record.config.shadowsocks_enabled),
+        };
+        Box::pin(async move { result })
+    }
+}
+
+#[derive(Default)]
+struct RecordingSink {
+    changes: Mutex<u32>,
+    logs: Mutex<Vec<LogCode>>,
+    notices: Mutex<Vec<NoticeCode>>,
+}
+
+impl SelfHostEventSink for RecordingSink {
+    fn state_changed(&self) {
+        *self.changes.lock().expect("changes") += 1;
+    }
+
+    fn log(&self, _level: LogLevel, code: LogCode, _detail: Option<String>) {
+        self.logs.lock().expect("logs").push(code);
+    }
+
+    fn notice(&self, _level: AppNoticeLevel, code: NoticeCode, _detail: Option<String>) {
+        self.notices.lock().expect("notices").push(code);
+    }
+}
+
+/// Answers every probe with the current public address and every port open.
+struct FakeProbe {
+    ipv4: Mutex<Option<IpAddr>>,
+    reachable: bool,
+}
+
+impl ReachabilityProbe for FakeProbe {
+    fn probe(
+        &self,
+        family: ProbeFamily,
+        ports: Vec<u16>,
+    ) -> BoxFuture<'static, Result<ReachabilityProbeResponse, ReachabilityProbeError>> {
+        let address = *self.ipv4.lock().expect("address");
+        let reachable = self.reachable;
+        Box::pin(async move {
+            match (family, address) {
+                (ProbeFamily::Ipv4, Some(address)) => Ok(ReachabilityProbeResponse {
+                    ip: address.to_string(),
+                    family,
+                    results: ports
+                        .into_iter()
+                        .map(|port| PortProbeResult {
+                            port,
+                            reachable,
+                            reason: if reachable {
+                                PortProbeOutcome::Connected
+                            } else {
+                                PortProbeOutcome::Timeout
+                            },
+                            elapsed_ms: 5,
+                        })
+                        .collect(),
+                }),
+                _ => Err(ReachabilityProbeError::Status { status: 503 }),
+            }
+        })
+    }
+
+    fn public_address(
+        &self,
+        family: ProbeFamily,
+    ) -> BoxFuture<'static, Result<IpAddr, ReachabilityProbeError>> {
+        let address = *self.ipv4.lock().expect("address");
+        Box::pin(async move {
+            match (family, address) {
+                (ProbeFamily::Ipv4, Some(address)) => Ok(address),
+                _ => Err(ReachabilityProbeError::Decode("no address".to_string())),
+            }
+        })
+    }
+}
+
+#[derive(Default)]
+struct FakeRouter {
+    maps: Mutex<Vec<Vec<u16>>>,
+    unmaps: Mutex<Vec<Vec<u16>>>,
+}
+
+impl PortMapper for FakeRouter {
+    fn map(
+        &self,
+        ports: Vec<u16>,
+        _lease_seconds: u32,
+    ) -> BoxFuture<'static, Result<PortMappingResult, PortMappingError>> {
+        self.maps.lock().expect("maps").push(ports.clone());
+        Box::pin(async move {
+            Ok(PortMappingResult {
+                external_address: "203.0.113.7".parse().ok(),
+                mapped: ports,
+                refused: Vec::new(),
+            })
+        })
+    }
+
+    fn unmap(&self, ports: Vec<u16>) -> BoxFuture<'static, Result<(), PortMappingError>> {
+        self.unmaps.lock().expect("unmaps").push(ports);
+        Box::pin(async { Ok(()) })
+    }
+}
+
+#[derive(Default)]
+struct FakeNetwork {
+    busy: Mutex<HashSet<u16>>,
+}
+
+impl LocalNetwork for FakeNetwork {
+    fn interface_addresses(&self) -> Vec<InterfaceAddress> {
+        vec![InterfaceAddress {
+            interface: "en0".to_string(),
+            address: "192.168.1.20".parse().expect("address"),
+        }]
+    }
+
+    fn port_available(&self, port: u16) -> bool {
+        !self.busy.lock().expect("busy").contains(&port)
+    }
+}
+
+struct NoTunnel;
+
+impl HostTunnelState for NoTunnel {
+    fn tunnel_active(&self) -> BoxFuture<'static, bool> {
+        Box::pin(async { false })
+    }
+}
+
+struct Fixture {
+    manager: SelfHostManager,
+    runner: RecordingRunner,
+    sink: Arc<RecordingSink>,
+    probe: Arc<FakeProbe>,
+    router: Arc<FakeRouter>,
+    network: Arc<FakeNetwork>,
+    paths: AppPaths,
+}
+
+impl Fixture {
+    async fn new() -> Self {
+        Self::with_restart_delay(Duration::from_millis(2)).await
+    }
+
+    async fn with_restart_delay(initial: Duration) -> Self {
+        let paths = AppPaths::new(
+            std::env::temp_dir().join(format!("voyavpn-self-host-{}", uuid::Uuid::new_v4())),
+        );
+        let seed_root = seed_core(&paths);
+        let runner = RecordingRunner::default();
+        let sink = Arc::new(RecordingSink::default());
+        let probe = Arc::new(FakeProbe {
+            ipv4: Mutex::new("203.0.113.7".parse().ok()),
+            reachable: true,
+        });
+        let router = Arc::new(FakeRouter::default());
+        let network = Arc::new(FakeNetwork::default());
+        let deps = SelfHostDeps {
+            paths: paths.clone(),
+            core_seed_resource_dir: Some(seed_root),
+            runner: Arc::new(runner.clone()),
+            target_os: TargetOs::Linux,
+            probe: Arc::clone(&probe) as Arc<dyn ReachabilityProbe>,
+            port_mapper: Arc::clone(&router) as Arc<dyn PortMapper>,
+            firewall: FirewallService::new(Arc::new(RecordingRunner::default()), TargetOs::Linux),
+            network: Arc::clone(&network) as Arc<dyn LocalNetwork>,
+            host_tunnel: Arc::new(NoTunnel),
+            sink: Arc::clone(&sink) as Arc<dyn SelfHostEventSink>,
+            self_tester: Arc::new(PassingSelfTest),
+            log_level: "warning".to_string(),
+            restart_backoff: RestartBackoff {
+                initial,
+                max: initial * 4,
+            },
+        };
+        let database = Database::connect_in_memory().await.expect("database");
+        Self {
+            manager: SelfHostManager::spawn(database, deps),
+            runner,
+            sink,
+            probe,
+            router,
+            network,
+            paths,
+        }
+    }
+
+    fn self_host_spawns(&self) -> usize {
+        self.runner
+            .spawns()
+            .iter()
+            .filter(|spawn| spawn.role == ProcessRole::SelfHost)
+            .count()
+    }
+
+    fn config_path(&self) -> PathBuf {
+        self.paths.bin_config_file("configSelfHost.json")
+    }
+
+    fn notices(&self) -> Vec<NoticeCode> {
+        self.sink.notices.lock().expect("notices").clone()
+    }
+}
+
+fn seed_core(paths: &AppPaths) -> PathBuf {
+    let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
+    let seed = seed_root
+        .join(CORE_DIR_NAME)
+        .join(executable_name_for_current_os("sing-box"));
+    fs::create_dir_all(seed.parent().expect("seed dir")).expect("seed dir");
+    fs::write(&seed, b"seed-sing-box").expect("seed");
+    seed_root
+}
+
+async fn wait_for_spawns(fixture: &Fixture, count: usize) {
+    for _ in 0..500 {
+        if fixture.self_host_spawns() >= count {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    panic!(
+        "expected {count} self-hosted spawns, saw {}",
+        fixture.self_host_spawns()
+    );
+}
+
+async fn exit(fixture: &Fixture) {
+    let pid = fixture
+        .runner
+        .spawns()
+        .len()
+        .checked_add(9)
+        .and_then(|pid| u32::try_from(pid).ok())
+        .expect("pid");
+    fixture
+        .manager
+        .handle_exit(ProcessExit {
+            process_id: pid,
+            role: ProcessRole::SelfHost,
+            exit_code: Some(1),
+        })
+        .await;
+}
+
+#[tokio::test]
+async fn enabling_mints_an_identity_and_starts_the_core() {
+    let fixture = Fixture::new().await;
+    let initial = fixture.manager.state().await.expect("state");
+    assert_eq!(initial.runtime.status, SelfHostRuntimeStatus::Stopped);
+    assert_eq!(initial.config.vless_port, 0);
+    assert!(initial.share_links.is_empty());
+
+    let state = fixture.manager.set_enabled(true).await.expect("enable");
+    assert_eq!(state.runtime.status, SelfHostRuntimeStatus::Running);
+    assert!(state.config.vless_port >= 1024);
+    assert_ne!(state.config.vless_port, state.config.shadowsocks_port);
+    assert_eq!(fixture.self_host_spawns(), 1);
+
+    let config = fs::read_to_string(fixture.config_path()).expect("config written");
+    assert!(config.contains("\"selfhost-vless\""));
+    assert!(config.contains(&format!("\"listen_port\": {}", state.config.vless_port)));
+    assert!(config.contains("\"level\": \"warn\""));
+
+    // Ports and keys stick: re-enabling reuses them.
+    let again = fixture
+        .manager
+        .set_enabled(true)
+        .await
+        .expect("enable again");
+    assert_eq!(again.config.vless_port, state.config.vless_port);
+    assert_eq!(
+        fixture.self_host_spawns(),
+        1,
+        "a running node is not restarted"
+    );
+}
+
+#[tokio::test]
+async fn disabling_stops_the_core_and_removes_its_config() {
+    let fixture = Fixture::new().await;
+    fixture.manager.set_enabled(true).await.expect("enable");
+    let state = fixture.manager.set_enabled(false).await.expect("disable");
+    assert_eq!(state.runtime.status, SelfHostRuntimeStatus::Stopped);
+    assert_eq!(fixture.runner.stops().len(), 1);
+    assert!(!fixture.config_path().exists());
+    assert!(fixture
+        .sink
+        .logs
+        .lock()
+        .expect("logs")
+        .contains(&LogCode::SelfHostStopped));
+}
+
+#[tokio::test]
+async fn a_busy_port_fails_the_start_without_spawning() {
+    let fixture = Fixture::new().await;
+    let state = fixture.manager.set_enabled(true).await.expect("enable");
+    fixture.manager.set_enabled(false).await.expect("disable");
+    fixture
+        .network
+        .busy
+        .lock()
+        .expect("busy")
+        .insert(state.config.vless_port);
+
+    let failed = fixture.manager.set_enabled(true).await.expect("enable");
+    assert_eq!(failed.runtime.status, SelfHostRuntimeStatus::Failed);
+    assert_eq!(failed.runtime.problem, Some(SelfHostProblem::PortInUse));
+    assert_eq!(failed.runtime.port, Some(state.config.vless_port));
+    assert_eq!(fixture.self_host_spawns(), 1);
+}
+
+#[tokio::test]
+async fn only_core_settings_restart_a_running_node() {
+    let fixture = Fixture::new().await;
+    let state = fixture.manager.set_enabled(true).await.expect("enable");
+
+    let cosmetic = SelfHostConfig {
+        device_label: "Tokyo".to_string(),
+        ..state.config.clone()
+    };
+    fixture
+        .manager
+        .save_config(cosmetic.clone())
+        .await
+        .expect("save");
+    assert_eq!(fixture.self_host_spawns(), 1);
+
+    let lan = SelfHostConfig {
+        allow_lan_access: true,
+        ..cosmetic
+    };
+    fixture.manager.save_config(lan).await.expect("save");
+    assert_eq!(fixture.self_host_spawns(), 2);
+    assert_eq!(fixture.runner.stops().len(), 1);
+}
+
+#[tokio::test]
+async fn invalid_settings_are_rejected_before_anything_changes() {
+    let fixture = Fixture::new().await;
+    let error = fixture
+        .manager
+        .save_config(SelfHostConfig {
+            enabled: true,
+            vless_port: 80,
+            ..SelfHostConfig::default()
+        })
+        .await
+        .expect_err("port 80 is privileged");
+    assert!(
+        matches!(error, SelfHostError::Validation(ref issues) if issues[0].field == "vlessPort")
+    );
+    assert_eq!(fixture.self_host_spawns(), 0);
+}
+
+#[tokio::test]
+async fn a_crashed_core_is_restarted_and_then_given_up_on() {
+    let fixture = Fixture::new().await;
+    fixture.manager.set_enabled(true).await.expect("enable");
+
+    exit(&fixture).await;
+    // The restart may already have happened, so the log is what is checked.
+    assert!(fixture
+        .sink
+        .logs
+        .lock()
+        .expect("logs")
+        .contains(&LogCode::SelfHostRetryScheduled {
+            attempt: 1,
+            delay_ms: 2,
+        }));
+
+    for attempt in 2..=6 {
+        wait_for_spawns(&fixture, attempt).await;
+        exit(&fixture).await;
+    }
+
+    let failed = fixture.manager.state().await.expect("state");
+    assert_eq!(failed.runtime.status, SelfHostRuntimeStatus::Failed);
+    assert_eq!(failed.runtime.problem, Some(SelfHostProblem::CoreExited));
+    assert!(fixture.notices().contains(&NoticeCode::SelfHostGaveUp));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(fixture.self_host_spawns(), 6, "a given-up node stays down");
+}
+
+#[tokio::test]
+async fn a_user_change_cancels_a_pending_restart() {
+    // Long enough that the retry cannot fire before the user acts.
+    let fixture = Fixture::with_restart_delay(Duration::from_millis(300)).await;
+    fixture.manager.set_enabled(true).await.expect("enable");
+    exit(&fixture).await;
+    let retrying = fixture.manager.state().await.expect("state");
+    assert_eq!(retrying.runtime.status, SelfHostRuntimeStatus::Retrying);
+    assert_eq!(retrying.runtime.problem, Some(SelfHostProblem::CoreExited));
+    assert!(
+        !fixture.config_path().exists(),
+        "a dead core's config is removed"
+    );
+    fixture.manager.set_enabled(false).await.expect("disable");
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    assert_eq!(fixture.self_host_spawns(), 1);
+}
+
+#[tokio::test]
+async fn the_network_check_maps_ports_and_fills_the_links() {
+    let fixture = Fixture::new().await;
+    let enabled = fixture.manager.set_enabled(true).await.expect("enable");
+    let state = fixture
+        .manager
+        .run_environment_check()
+        .await
+        .expect("check");
+    let environment = state.environment.expect("report");
+    assert_eq!(
+        environment.ipv4.public_address.as_deref(),
+        Some("203.0.113.7")
+    );
+    assert_eq!(
+        environment.ipv4.reachability,
+        SelfHostReachability::Reachable
+    );
+    assert_eq!(
+        environment.port_mapping.status,
+        SelfHostPortMappingStatus::Mapped
+    );
+    assert_eq!(environment.self_test.vless, SelfHostSelfTestResult::Passed);
+    assert_eq!(
+        environment.self_test.shadowsocks,
+        SelfHostSelfTestResult::Passed
+    );
+    assert!(!environment.probe_available || environment.ipv4.verified_by_probe);
+    assert_eq!(state.share_links.len(), 2, "one link per protocol on IPv4");
+    assert!(state.share_links[0].link.contains("203.0.113.7"));
+    let maps = fixture.router.maps.lock().expect("maps").clone();
+    assert!(maps
+        .iter()
+        .all(|ports| ports == &vec![enabled.config.vless_port, enabled.config.shadowsocks_port]));
+
+    fixture.manager.set_enabled(false).await.expect("disable");
+    assert!(
+        !fixture.router.unmaps.lock().expect("unmaps").is_empty(),
+        "stopping removes the router forward"
+    );
+}
+
+#[tokio::test]
+async fn a_moved_public_address_is_announced_once() {
+    let fixture = Fixture::new().await;
+    fixture.manager.set_enabled(true).await.expect("enable");
+    fixture.manager.periodic_check().await.expect("check");
+    assert!(!fixture
+        .notices()
+        .contains(&NoticeCode::SelfHostAddressChanged));
+
+    *fixture.probe.ipv4.lock().expect("address") = "198.51.100.9".parse().ok();
+    fixture.manager.periodic_check().await.expect("check");
+    fixture.manager.periodic_check().await.expect("check");
+    let announced = fixture
+        .notices()
+        .into_iter()
+        .filter(|notice| *notice == NoticeCode::SelfHostAddressChanged)
+        .count();
+    assert_eq!(announced, 1);
+    let state = fixture.manager.state().await.expect("state");
+    assert!(state.share_links[0].link.contains("198.51.100.9"));
+}
+
+#[tokio::test]
+async fn rotating_credentials_changes_every_link() {
+    let fixture = Fixture::new().await;
+    fixture.manager.set_enabled(true).await.expect("enable");
+    let before = fixture
+        .manager
+        .run_environment_check()
+        .await
+        .expect("check");
+    let after = fixture.manager.rotate_credentials().await.expect("rotate");
+    assert_eq!(after.share_links.len(), before.share_links.len());
+    for (old, new) in before.share_links.iter().zip(&after.share_links) {
+        assert_ne!(old.link, new.link);
+        assert_eq!(old.port, new.port, "rotation keeps the ports");
+    }
+    assert_eq!(fixture.self_host_spawns(), 2);
+}
+
+#[tokio::test]
+async fn stats_are_zero_while_stopped_and_shutdown_stops_the_core() {
+    let fixture = Fixture::new().await;
+    let stats = fixture.manager.stats().await.expect("stats");
+    assert_eq!(stats.active_connections, 0);
+
+    fixture.manager.set_enabled(true).await.expect("enable");
+    fixture.manager.shutdown().await;
+    assert_eq!(fixture.runner.stops().len(), 1);
+    assert!(!fixture.config_path().exists());
+    let state = fixture.manager.state().await.expect("state");
+    assert_eq!(state.runtime.status, SelfHostRuntimeStatus::Stopped);
+    assert!(
+        state.config.enabled,
+        "quitting keeps the node enabled for next launch"
+    );
+}

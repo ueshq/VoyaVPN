@@ -119,6 +119,11 @@ pub fn policy_group_runtime_scopes() -> Vec<InvalidationScope> {
     ]
 }
 
+/// Every self-hosted node change: settings, status, links, network report.
+pub fn self_host_scopes() -> Vec<InvalidationScope> {
+    vec![InvalidationScope::SelfHost]
+}
+
 fn push_config_scopes(scopes: &mut Vec<InvalidationScope>, config_changed: bool) {
     if config_changed {
         scopes.push(InvalidationScope::AppSettings);

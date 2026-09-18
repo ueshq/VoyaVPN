@@ -467,7 +467,7 @@ pub(crate) async fn load_runtime_core_gen_env(
     .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths)))
 }
 
-const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {
+pub(crate) const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {
     match target_os {
         TargetOs::Windows => CoreGenPlatform::Windows,
         TargetOs::Macos => CoreGenPlatform::MacOS,

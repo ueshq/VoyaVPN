@@ -44,6 +44,11 @@ const ConnectionsScreen = lazy(() =>
     default: ConnectionsScreen,
   })),
 );
+const SelfHostScreen = lazy(() =>
+  import("@/features/self-host/self-host-screen").then(({ SelfHostScreen }) => ({
+    default: SelfHostScreen,
+  })),
+);
 const SettingsScreen = lazy(() =>
   import("@/features/settings/settings-screen").then(({ SettingsScreen }) => ({
     default: SettingsScreen,
@@ -64,6 +69,8 @@ function renderActiveScreen(tab: ShellTab) {
       return <RulesScreen />;
     case "connections":
       return <ConnectionsScreen />;
+    case "selfHost":
+      return <SelfHostScreen />;
     case "settings":
       return <SettingsScreen />;
     default:

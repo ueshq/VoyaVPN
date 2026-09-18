@@ -6,6 +6,7 @@ use voya_app::{
     config_mutation::ConfigMutationCoordinator,
     elevation::ElevationManager,
     proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
+    self_host::SelfHostManager,
     services::AppServices,
     speedtest::SpeedtestManager,
     statistics::StatisticsManager,
@@ -34,6 +35,8 @@ pub(crate) struct AppState {
     /// One PlugInKit registration memo for every `TunManager` the commands
     /// build, so the `pluginkit` fork is not repeated on every status read.
     pub(super) provider_registration_cache: Arc<ProviderRegistrationCache>,
+    /// The self-hosted node: its own core, runner and watch loop.
+    pub(super) self_host: SelfHostManager,
 }
 
 impl AppState {
@@ -87,5 +90,9 @@ impl AppState {
 
     pub(crate) fn provider_registration_cache(&self) -> Arc<ProviderRegistrationCache> {
         Arc::clone(&self.provider_registration_cache)
+    }
+
+    pub(crate) fn self_host(&self) -> &SelfHostManager {
+        &self.self_host
     }
 }

@@ -1,0 +1,18 @@
+{
+  "ip": "203.0.113.7",
+  "family": "ipv4",
+  "results": [
+    {
+      "port": 42443,
+      "reachable": true,
+      "reason": "connected",
+      "elapsedMs": 182
+    },
+    {
+      "port": 42444,
+      "reachable": false,
+      "reason": "timeout",
+      "elapsedMs": 4000
+    }
+  ]
+}

@@ -1,0 +1,89 @@
+{
+  "dns": {
+    "final": "local_dns",
+    "servers": [
+      {
+        "tag": "local_dns",
+        "type": "local"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "listen": "::",
+      "listen_port": 42443,
+      "tag": "selfhost-vless",
+      "tls": {
+        "enabled": true,
+        "reality": {
+          "enabled": true,
+          "handshake": {
+            "server": "www.apple.com",
+            "server_port": 443
+          },
+          "private_key": "sJ2_PK3Bd1use05cc9jK6gcEarznMKgXeVNz9Dt4VF0",
+          "short_id": [
+            "751998bfb8ed69a6"
+          ]
+        },
+        "server_name": "www.apple.com"
+      },
+      "type": "vless",
+      "users": [
+        {
+          "flow": "xtls-rprx-vision",
+          "name": "voya",
+          "uuid": "bd3a7c33-98cb-4faf-b0b5-853e2707be3f"
+        }
+      ]
+    }
+  ],
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "outbounds": [
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": {
+      "server": "local_dns"
+    },
+    "final": "direct",
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "action": "resolve"
+      },
+      {
+        "action": "reject",
+        "ip_cidr": [
+          "0.0.0.0/8",
+          "127.0.0.0/8",
+          "169.254.0.0/16",
+          "224.0.0.0/4",
+          "255.255.255.255/32",
+          "100.100.100.200/32",
+          "::/128",
+          "::1/128",
+          "fe80::/10",
+          "ff00::/8",
+          "fd00:ec2::254/128"
+        ]
+      },
+      {
+        "action": "reject",
+        "ip_cidr": [
+          "100.64.0.0/10"
+        ],
+        "ip_is_private": true
+      }
+    ]
+  }
+}

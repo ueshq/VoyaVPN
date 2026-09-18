@@ -111,6 +111,19 @@ pub(super) fn emit_routing_invalidation<R>(
     );
 }
 
+/// Self-hosted node changes, from a command or from the node's own loops.
+pub(crate) fn emit_self_host_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
+where
+    R: tauri::Runtime,
+{
+    emit_invalidation(
+        app,
+        NoticeCode::SelfHostRefreshFailed,
+        reason,
+        invalidation::self_host_scopes(),
+    );
+}
+
 pub(super) fn emit_dns_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
 where
     R: tauri::Runtime,

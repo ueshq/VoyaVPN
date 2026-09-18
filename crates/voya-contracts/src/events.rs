@@ -41,6 +41,9 @@ pub enum InvalidationScope {
     PolicyGroups,
     /// `["policy-group-runtime"]` — the running group's current member and delays.
     PolicyGroupRuntime,
+    /// `["self-host"]` — the self-hosted node's settings, status, links and
+    /// last network check.
+    SelfHost,
 }
 
 /// One invalidated cache plus the change that invalidated it.

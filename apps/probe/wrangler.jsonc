@@ -1,0 +1,22 @@
+{
+  // VoyaVPN reachability probe. Deploy with `pnpm --filter @voya/probe deploy`
+  // after `npx wrangler login`; see docs/release/self-host-probe-worker.md.
+  "name": "voyavpn-probe",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  // workers.dev is unreachable from mainland China and must not be the
+  // address clients use; the custom domain below is the only route.
+  "workers_dev": false,
+  "routes": [{ "pattern": "probe.voyavpn.app", "custom_domain": true }],
+  // Request URLs and caller addresses are not worth keeping.
+  "observability": { "enabled": false },
+  "ratelimits": [
+    {
+      "name": "PROBE_LIMITER",
+      "namespace_id": "1001",
+      // A network check sends one request per address family; six a minute
+      // per caller leaves room for retries and nothing for scanning.
+      "simple": { "limit": 6, "period": 60 }
+    }
+  ]
+}

@@ -514,7 +514,7 @@ test("keeps the simplified navigation usable at desktop and minimum sizes", asyn
     });
   }, savedNodeFixture);
   const mainNav = page.getByRole("tablist", { name: "Main sections" });
-  await expect(mainNav.getByRole("tab")).toHaveCount(5);
+  await expect(mainNav.getByRole("tab")).toHaveCount(6);
   await expect(
     mainNav.getByRole("tab", { name: "Proxies", exact: true }),
   ).toHaveCount(0);

@@ -39,12 +39,29 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
     })?;
     ensure_nonempty("ss", "password", password)?;
 
-    let user_info = base64_encode(&format!("{method}:{password}"), true);
     let mut query = Vec::new();
     if let Some(plugin) = shadowsocks_plugin_for(item) {
         query.push(("plugin".to_string(), url_encode(&plugin.render_share())));
     }
 
+    // SIP022 forbids the base64 userinfo for the 2022 methods: their keys are
+    // already base64 and clients expect `method:percent-encoded-key`.
+    if is_shadowsocks_2022_method(method) {
+        let user_info = format!("{}:{}", url_encode(method), url_encode(password));
+        return Ok(format!(
+            "{}{}",
+            protocol_share(ConfigType::Shadowsocks),
+            to_uri_without_scheme_preencoded_userinfo(
+                item.address(),
+                item.port(),
+                &user_info,
+                &query,
+                &item.remarks,
+            )
+        ));
+    }
+
+    let user_info = base64_encode(&format!("{method}:{password}"), true);
     Ok(to_uri(
         ConfigType::Shadowsocks,
         item.address(),
@@ -53,6 +70,10 @@ pub(super) fn export(item: &ProfileItem) -> Result<String, ShareError> {
         &query,
         &item.remarks,
     ))
+}
+
+fn is_shadowsocks_2022_method(method: &str) -> bool {
+    method.trim().to_ascii_lowercase().starts_with("2022-")
 }
 
 pub fn parse_ss_sip008(input: &str) -> Result<Vec<ProfileItem>, ShareError> {

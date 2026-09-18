@@ -53,7 +53,7 @@ Shared frontend code lives in source-only `packages/*` modules. Desktop-private 
 
 ## Amendment (2026-09-11): Current Database Baseline Only
 
-VoyaVPN initializes new databases from the single `0010_current_schema.sql`
+VoyaVPN initializes new databases from the single `0011_current_schema.sql`
 baseline. Existing databases must have exactly its successful SQLx record and
 matching checksum. Earlier migration histories, newer schemas and invalid records
 are inspected through a read-only connection and rejected before WAL checkpointing
@@ -62,7 +62,8 @@ the path and a manual reset hint; the application never deletes or upgrades it.
 An empty database, including an empty SQLx bookkeeping table left by interrupted
 initialization, can be initialized normally.
 
-The database baseline identifier is 10; settings DTOs and node bundles retain their
+The database baseline identifier is 11 (it moved from 10 when the self-hosted
+node added its `self_host` table, see ADR 0011); settings DTOs and node bundles retain their
 current version 1. Current optional-field defaults remain supported, but there are
 no historical settings conversions. Startup reads settings without rewriting them.
 

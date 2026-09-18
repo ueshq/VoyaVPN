@@ -81,6 +81,13 @@ pub enum NoticeCode {
     SubscriptionAutoUpdateFailed {
         remarks: String,
     },
+    // ---- self-hosted node ----
+    /// The node's core kept exiting and was left stopped.
+    SelfHostGaveUp,
+    /// This device's public address changed; links handed out earlier point
+    /// at the old one.
+    SelfHostAddressChanged,
+    SelfHostRefreshFailed,
 }
 
 /// Which core operation a log line is about.
@@ -162,6 +169,19 @@ pub enum LogCode {
         remarks: String,
         imported: u32,
     },
+    SelfHostStarted,
+    SelfHostStartFailed,
+    SelfHostStopped,
+    /// The node's core exited and a restart is scheduled.
+    SelfHostRetryScheduled {
+        attempt: u32,
+        delay_ms: u32,
+    },
+    SelfHostGaveUp,
+    SelfHostPortMapped {
+        port: u16,
+    },
+    SelfHostPortMappingFailed,
 }
 
 /// One line in the Logs panel.
@@ -280,6 +300,15 @@ pub enum ValidationCode {
     },
     InboundCredentialsIncomplete,
     InboundRequired,
+    // ---- self-hosted node ----
+    SelfHostPortOutOfRange {
+        min: u32,
+        max: u32,
+    },
+    /// Two of the node's ports are the same.
+    SelfHostPortsCollide,
+    /// Neither protocol is switched on.
+    SelfHostNoProtocol,
     /// A rejection this contract has no code for. The English `message` is the
     /// failing manager's own diagnostic and is rendered verbatim.
     Untranslated {

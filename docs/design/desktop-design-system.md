@@ -64,7 +64,8 @@ allows scripts only from its own origin.
   16 px from the window's left and top edges, and the toggle starts at 88 px in
   the same 46 px row; the collapsed rail moves it just below that row. On
   Windows the toolbar starts below the 40 px caption band. Navigation: Home,
-  Nodes (server icon), Rules, Network activity, Settings. The selected item
+  Nodes (server icon), Rules, Network activity, Self-hosted node (radio tower
+  icon), Settings. The selected item
   keeps its fill on hover. The footer shows the connection state; rates appear
   only while connected.
 - **Page title** — the single `h1` on the left; actions on the right with the
@@ -75,6 +76,20 @@ allows scripts only from its own origin.
   its buttons and tabs stay clickable.
 
 ## Screens
+
+**Self-hosted node**
+- The title row holds Check network and the Host a node switch, the switch
+  last as the page's primary control.
+- Cards in reading order: status (dot, state, live connections and traffic,
+  the "your address becomes their exit" warning), share links (one row per
+  protocol and address with QR and Copy; Copy all and Reset keys in the card
+  header), network check (one block per address family with public address,
+  NAT kind, a reachability badge, whether it was tested from the internet, and
+  every finding as a sentence that says what to do), node settings (settings
+  rows that save on change), and adding another device's node.
+- Reachability badges use the quiet status tints: success for tested
+  reachable, warning for probably reachable or needs forwarding, danger for
+  unreachable, secondary when unknown.
 
 **Home**
 - The disc is the action: an idle `primary` ring on a card, green fill with glow

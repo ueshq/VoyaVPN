@@ -22,6 +22,15 @@
         "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"]
       }
     },
+    "apps/probe": {
+      "entry": ["src/index.ts", "test/**/*.test.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts"],
+      // Deployment only: `pnpm --filter @voya/probe deploy` runs a wrangler the
+      // operator installs, so it is not a workspace dependency.
+      "ignoreBinaries": ["wrangler"],
+      // `cloudflare:sockets` is a Workers runtime module, not a package.
+      "ignoreDependencies": ["cloudflare"]
+    },
     "packages/ui": {
       "project": ["src/**/*.{ts,tsx,css}"]
     }

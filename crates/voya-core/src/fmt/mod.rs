@@ -9,7 +9,7 @@ use thiserror::Error;
 use url::Url;
 
 use crate::{
-    host::{is_dns_label, strip_host_brackets},
+    host::strip_host_brackets,
     protocol_common::{shadowsocks_plugin_for, split_csv, DEFAULT_SECURITY, RAW_HEADER_HTTP},
     text::{decode_base64_text, nonempty_str},
     ConfigType, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint, TlsMode,

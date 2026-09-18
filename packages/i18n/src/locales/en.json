@@ -131,7 +131,14 @@
     "runtimeStatusRefreshFailed": "{{reason}} failed and the core state could not be read",
     "speedtestCancellationRequested": "Ping cancellation requested",
     "subscriptionAutoUpdateFailed": "Automatic subscription update failed for {{remarks}}",
-    "subscriptionAutoUpdateFinished": "Automatic subscription update finished for {{remarks}} ({{imported}} nodes imported)"
+    "subscriptionAutoUpdateFinished": "Automatic subscription update finished for {{remarks}} ({{imported}} nodes imported)",
+    "selfHostGaveUp": "Self-hosted node: the core kept exiting; restarts stopped",
+    "selfHostPortMapped": "Self-hosted node: the router forwards port {{port}}",
+    "selfHostPortMappingFailed": "Self-hosted node: the router refused to forward the ports",
+    "selfHostRetryScheduled": "Self-hosted node: the core exited; restarting in {{delayMs}} ms (attempt {{attempt}})",
+    "selfHostStartFailed": "Self-hosted node: the core could not start",
+    "selfHostStarted": "Self-hosted node started",
+    "selfHostStopped": "Self-hosted node stopped"
   },
   "menu": {
     "themeDark": "Dark",
@@ -184,7 +191,10 @@
     "policyGroupRefreshFailed": "Policy group refresh failed",
     "policyGroupSavedRestartFailed": "Policy group saved, but reconnecting failed",
     "policyGroupSelectionRuntimeUpdateFailed": "Selection saved, but the current connection could not switch",
-    "activeSelectionRemoved": "The node or policy group in use was deleted, so the connection stopped."
+    "activeSelectionRemoved": "The node or policy group in use was deleted, so the connection stopped.",
+    "selfHostAddressChanged": "This device's public address changed. Links shared earlier point to the old address; share the new links.",
+    "selfHostGaveUp": "The self-hosted node kept stopping and was left off.",
+    "selfHostRefreshFailed": "The self-hosted node changed, but the page could not be refreshed."
   },
   "options": {
     "autostart": "Autostart",
@@ -593,6 +603,150 @@
       "url": "URL",
       "userAgent": "User agent",
       "updateResultWithRemoved": "{{updated}} updated, {{imported}} nodes imported, {{removed}} nodes no longer offered were removed"
+    },
+    "selfHost": {
+      "enable": "Host a node",
+      "enableHint": "Turn on hosting to run a VLESS and Shadowsocks server on this device. Other devices can then use it as their exit to the internet.",
+      "exitWarning": "Devices you share a link with reach the internet through this device's connection and public address. Only share links with people you trust.",
+      "actionFailed": "The self-hosted node could not be changed",
+      "status": {
+        "stopped": "Not hosting",
+        "starting": "Starting…",
+        "running": "Hosting",
+        "retrying": "Restarting…",
+        "failed": "Not running"
+      },
+      "problem": {
+        "noProtocol": "Turn on at least one protocol below.",
+        "portInUse": "Port {{port}} is used by another program. Choose another port below.",
+        "coreMissing": "The sing-box core is missing. Reinstall VoyaVPN.",
+        "coreExited": "The server stopped unexpectedly.",
+        "startFailed": "The server could not start."
+      },
+      "stats": {
+        "connections": "Connections",
+        "upload": "Sent",
+        "download": "Received"
+      },
+      "links": {
+        "title": "Share links",
+        "hint": "Scan the QR code or paste a link on the other device. VoyaVPN, v2rayN, Shadowrocket and most other clients accept them.",
+        "emptyHint": "No address yet. Run the network check to find this device's public address, or enter a fixed address in the settings below.",
+        "notRunning": "The links work only while the node is hosting.",
+        "copy": "Copy",
+        "copyAll": "Copy all",
+        "copied": "Copied",
+        "showQr": "Show QR code",
+        "rotate": "Reset keys",
+        "rotateTitle": "Reset the node's keys?",
+        "rotateDescription": "Every link shared so far stops working, and devices need the new links.",
+        "addressKind": {
+          "custom": "Fixed address",
+          "ipv4": "IPv4",
+          "ipv6": "IPv6"
+        }
+      },
+      "network": {
+        "title": "Network check",
+        "run": "Check network",
+        "checking": "Checking…",
+        "never": "Not checked yet. The check finds this device's public address and tests whether other devices can reach the node.",
+        "checkedAt": "Checked at {{time}}",
+        "none": "None",
+        "verified": "Tested from the internet.",
+        "inferred": "Estimated from this network; not tested from outside.",
+        "localAddresses": "This device's addresses",
+        "probeNote": "The test connects from Cloudflare's network. Passing it does not guarantee a fast or unblocked route from mainland China; confirm by connecting from the device that will use the node.",
+        "nat": {
+          "none": "Directly on the internet",
+          "nat": "Behind a router",
+          "carrierGrade": "Carrier-grade NAT",
+          "double": "Behind two routers",
+          "noConnectivity": "No connection",
+          "unknown": "Unknown"
+        },
+        "reachability": {
+          "reachable": "Reachable",
+          "unreachable": "Not reachable",
+          "likelyReachable": "Probably reachable",
+          "needsPortForward": "Needs port forwarding",
+          "noConnectivity": "Unavailable",
+          "unknown": "Unknown"
+        },
+        "reasons": {
+          "publicAddressOnDevice": "This device holds its public address, so other devices can connect to it directly.",
+          "behindNat": "A router sits between this device and the internet. It has to forward the node's ports to this device.",
+          "carrierGradeNat": "Your provider shares one public address among many customers, so devices outside cannot connect in. Ask the provider for a public IP address, use IPv6, or host on a cloud server.",
+          "doubleNat": "Two routers sit in a row. Forward the ports on both, or switch the provider's modem to bridge mode.",
+          "portMapped": "The router forwards the node's ports to this device automatically (UPnP).",
+          "upnpUnavailable": "The router does not offer UPnP. Forward the node's TCP and UDP ports to this device in the router's settings.",
+          "upnpFailed": "The router refused to forward the ports. Forward them by hand, or choose other ports.",
+          "probeReachable": "The test service reached every node port from the internet.",
+          "probeTimedOut": "The test connection timed out: a router or firewall drops it before it reaches the node.",
+          "probeRefused": "The test connection was refused: nothing accepts it at this address. Check where the router forwards the port.",
+          "probeUnavailable": "The reachability test service did not answer, so this is an estimate.",
+          "noPublicAddress": "This device has no internet connection over this address type.",
+          "ipv6FirewallUnknown": "Many routers block incoming IPv6 connections by default. If devices cannot connect, allow the node's ports in the router's IPv6 firewall.",
+          "tunActive": "This device's own VPN connection hides its real network. Disconnect, then check again.",
+          "nodeNotRunning": "The node is not hosting, so it could not be tested. Turn on hosting, then check again.",
+          "firewallRuleMissing": "Windows Firewall may block the node. Allow it with the button below."
+        },
+        "upnp": {
+          "title": "Router port forwarding",
+          "disabled": "Off",
+          "noGateway": "The router does not answer UPnP",
+          "mapped": "Forwarding {{ports}}",
+          "failed": "The router refused"
+        },
+        "firewall": {
+          "title": "Windows Firewall",
+          "notManaged": "Not managed",
+          "rulePresent": "Allowed",
+          "ruleMissing": "No rule for VoyaVPN",
+          "unknown": "Could not be read",
+          "allow": "Allow"
+        },
+        "selfTest": {
+          "title": "Node self-test",
+          "passed": "Works",
+          "failed": "Failed",
+          "skipped": "Not tested",
+          "vlessFailed": "A test client on this device could not sign in to the VLESS node. The disguise site probably does not work with REALITY; choose another, such as www.apple.com.",
+          "shadowsocksFailed": "A test client on this device could not use the Shadowsocks node. Check the runtime logs for the node's errors."
+        }
+      },
+      "config": {
+        "title": "Node settings",
+        "deviceLabel": "Name",
+        "deviceLabelHint": "Starts the name of every link. Empty uses VoyaVPN.",
+        "vless": "VLESS + REALITY",
+        "vlessHint": "Recommended. Looks like a visit to the site below, which makes it the hardest to block.",
+        "vlessPort": "VLESS port",
+        "shadowsocks": "Shadowsocks 2022",
+        "shadowsocksHint": "Light and supports UDP, but easier to detect than REALITY.",
+        "shadowsocksPort": "Shadowsocks port",
+        "portAuto": "Picked automatically the first time the node starts.",
+        "portHint": "Forward this TCP and UDP port on the router if it has no UPnP.",
+        "realityServer": "Disguise site",
+        "realityServerHint": "A large HTTPS site with TLS 1.3, ideally near this device. Unverified visitors see this site.",
+        "realityServerPort": "Disguise site port",
+        "customAddress": "Fixed address",
+        "customAddressHint": "A DDNS name or fixed IP address for the links. Leave empty to use the addresses the network check finds.",
+        "upnp": "Forward ports automatically",
+        "upnpHint": "Asks the router to forward the node's ports while it runs (UPnP).",
+        "allowLan": "Allow access to the local network",
+        "allowLanHint": "Lets connected devices reach printers and other devices on this network. This device itself stays off limits.",
+        "blockBittorrent": "Block BitTorrent",
+        "blockBittorrentHint": "Avoids copyright complaints to this device's internet provider."
+      },
+      "connect": {
+        "title": "Use another device's node",
+        "description": "On the device that hosts the node, open Self-hosted node and copy a link or show its QR code, then add it here.",
+        "paste": "Paste link",
+        "scan": "Scan QR code on screen",
+        "more": "More ways to add",
+        "goToNodes": "Open Nodes"
+      }
     }
   },
   "proxy": {
@@ -851,7 +1005,8 @@
     "logs": "Runtime logs",
     "profiles": "Nodes",
     "rules": "Rules",
-    "settings": "Settings"
+    "settings": "Settings",
+    "selfHost": "Self-hosted node"
   },
   "updates": {
     "appInstalled": "App update installed: {{version}}",
@@ -933,7 +1088,10 @@
     "policyGroupTestUrlInvalid": "Test URL must start with http:// or https://",
     "policyGroupToleranceOutOfRange": "Tolerance must be between {{min}} and {{max}} ms",
     "policyGroupWithoutMembers": "Add at least one node or choose a subscription",
-    "routingRuleWithoutMatcher": "Add at least one condition: a domain, IP, port, network, app or protocol."
+    "routingRuleWithoutMatcher": "Add at least one condition: a domain, IP, port, network, app or protocol.",
+    "selfHostNoProtocol": "Turn on at least one protocol",
+    "selfHostPortOutOfRange": "The port must be between {{min}} and {{max}}",
+    "selfHostPortsCollide": "The two protocols need different ports"
   },
   "window": {
     "close": "Close",

@@ -17,6 +17,7 @@ use super::*;
 mod country;
 mod policy_groups;
 mod schema;
+mod self_host;
 
 /// The stored shape of every value voya-db writes into a SQLite `TEXT` column.
 ///
@@ -132,6 +133,7 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
             "profile_items",
             "routing_items",
             "schema_metadata",
+            "self_host",
             "server_stat_items",
             "subscription_metadata",
             "subscriptions",

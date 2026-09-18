@@ -2,6 +2,7 @@
 //! geo assets, and rulesets.
 
 mod download;
+pub mod portmap;
 pub mod probe;
 mod subscription;
 

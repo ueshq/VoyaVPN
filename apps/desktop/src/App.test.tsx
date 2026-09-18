@@ -384,7 +384,7 @@ describe("App", () => {
       .__TAURI_INTERNALS__;
   });
 
-  it("renders the five-item sidebar nav with the speed footer", () => {
+  it("renders the six-item sidebar nav with the speed footer", () => {
     renderApp();
 
     const sidebar = screen.getByRole("complementary");
@@ -399,6 +399,7 @@ describe("App", () => {
       "Nodes",
       "Rules",
       "Network activity",
+      "Self-hosted node",
       "Settings",
     ]);
     expect(footer).toHaveTextContent("Disconnected");
@@ -422,7 +423,7 @@ describe("App", () => {
       within(
         screen.getByRole("tablist", { name: "Main sections" }),
       ).getAllByRole("tab"),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
     await user.click(screen.getByRole("tab", { name: "Settings" }));
     expect(
       await screen.findByRole("region", { name: "Settings" }),

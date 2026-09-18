@@ -70,6 +70,13 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::update_geo_assets,
         commands::update_srs_assets,
         commands::install_core_seed,
+        commands::get_self_host_state,
+        commands::save_self_host_config::<tauri::Wry>,
+        commands::set_self_host_enabled::<tauri::Wry>,
+        commands::rotate_self_host_credentials::<tauri::Wry>,
+        commands::get_self_host_stats,
+        commands::run_self_host_environment_check::<tauri::Wry>,
+        commands::apply_self_host_firewall_rule::<tauri::Wry>,
         window::get_window_chrome_config,
         window::set_window_acrylic,
     ]

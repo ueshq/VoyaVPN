@@ -131,6 +131,15 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.outbound.vless_quic_tls" => singbox_vless_quic_tls_outbound(),
         "singbox.outbound.shadowsocks_plugins" => singbox_shadowsocks_plugins_outbounds(),
         "singbox.route.bind_interface_windows" => singbox_bind_interface_windows_outbounds(),
+        "singbox.selfhost.vless_reality" => selfhost::selfhost_vless_reality(),
+        "singbox.selfhost.shadowsocks_2022" => selfhost::selfhost_shadowsocks_2022(),
+        "singbox.selfhost.dual_allow_lan" => selfhost::selfhost_dual_allow_lan(),
+        "singbox.outbound.vless_reality_vision" => {
+            selfhost::proxy_outbound(&selfhost::vless_reality_vision_context())
+        }
+        "singbox.outbound.shadowsocks_2022" => {
+            selfhost::proxy_outbound(&selfhost::shadowsocks_2022_context())
+        }
         generated => panic!(
             "golden case `{}` references unknown generated selector `{generated}`",
             case.id
@@ -1068,7 +1077,7 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
                     .expect("Windows bind_interface acceptance config should generate"),
             ]
         }
-        _ => Vec::new(),
+        generated => selfhost::acceptance_configs(generated).unwrap_or_default(),
     }
 }
 
@@ -1178,3 +1187,6 @@ fn generated_configs_only_have_ordinary_nodes_and_platform_forwarding() {
     }
     assert!(checked > 0);
 }
+
+#[cfg(test)]
+mod selfhost;

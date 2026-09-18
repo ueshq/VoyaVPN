@@ -131,7 +131,14 @@
     "runtimeStatusRefreshFailed": "{{reason}}失敗，且無法讀取核心狀態",
     "speedtestCancellationRequested": "已要求取消測速",
     "subscriptionAutoUpdateFailed": "訂閱 {{remarks}} 自動更新失敗",
-    "subscriptionAutoUpdateFinished": "訂閱 {{remarks}} 自動更新完成（已匯入 {{imported}} 個節點）"
+    "subscriptionAutoUpdateFinished": "訂閱 {{remarks}} 自動更新完成（已匯入 {{imported}} 個節點）",
+    "selfHostGaveUp": "自建節點：核心反覆結束，已停止重新啟動",
+    "selfHostPortMapped": "自建節點：路由器已轉送連接埠 {{port}}",
+    "selfHostPortMappingFailed": "自建節點：路由器拒絕轉送連接埠",
+    "selfHostRetryScheduled": "自建節點：核心已結束，{{delayMs}} 毫秒後重新啟動（第 {{attempt}} 次）",
+    "selfHostStartFailed": "自建節點：核心無法啟動",
+    "selfHostStarted": "自建節點已啟動",
+    "selfHostStopped": "自建節點已停止"
   },
   "menu": {
     "themeDark": "深色",
@@ -184,7 +191,10 @@
     "policyGroupRefreshFailed": "重新整理策略群組失敗",
     "policyGroupSavedRestartFailed": "策略群組已儲存，但重新連線失敗",
     "policyGroupSelectionRuntimeUpdateFailed": "已儲存選擇，但目前連線未能切換",
-    "activeSelectionRemoved": "正在使用的節點或策略群組已被刪除，連線已中斷。"
+    "activeSelectionRemoved": "正在使用的節點或策略群組已被刪除，連線已中斷。",
+    "selfHostAddressChanged": "本機公網位址已變更。先前分享的連結仍指向舊位址，請重新分享新連結。",
+    "selfHostGaveUp": "自建節點反覆停止，已停止執行。",
+    "selfHostRefreshFailed": "自建節點已變更，但頁面未能重新整理。"
   },
   "options": {
     "autostart": "開機自動啟動",
@@ -593,6 +603,150 @@
       "url": "訂閱地址",
       "userAgent": "客戶端標識（User-Agent）",
       "updateResultWithRemoved": "已更新 {{updated}} 個訂閱，匯入 {{imported}} 個節點，移除 {{removed}} 個已下架節點"
+    },
+    "selfHost": {
+      "enable": "託管節點",
+      "enableHint": "開啟託管後，本機會執行 VLESS 與 Shadowsocks 伺服器，其他裝置可將本機作為連上網際網路的出口。",
+      "exitWarning": "收到連結的裝置會透過本機的網路與公網位址連上網際網路。請只把連結分享給信任的人。",
+      "actionFailed": "自建節點變更失敗",
+      "status": {
+        "stopped": "未託管",
+        "starting": "正在啟動…",
+        "running": "託管中",
+        "retrying": "正在重新啟動…",
+        "failed": "未執行"
+      },
+      "problem": {
+        "noProtocol": "請在下方至少開啟一種協定。",
+        "portInUse": "連接埠 {{port}} 已被其他程式使用，請在下方改用其他連接埠。",
+        "coreMissing": "缺少 sing-box 核心，請重新安裝 VoyaVPN。",
+        "coreExited": "伺服器意外停止。",
+        "startFailed": "伺服器無法啟動。"
+      },
+      "stats": {
+        "connections": "連線",
+        "upload": "已傳送",
+        "download": "已接收"
+      },
+      "links": {
+        "title": "分享連結",
+        "hint": "在另一台裝置上掃描 QR 碼或貼上連結即可使用。VoyaVPN、v2rayN、Shadowrocket 等大多數用戶端都支援。",
+        "emptyHint": "尚無可用位址。請執行網路檢測以取得本機公網位址，或在下方設定中填寫固定位址。",
+        "notRunning": "只有在託管中時連結才可使用。",
+        "copy": "複製",
+        "copyAll": "全部複製",
+        "copied": "已複製",
+        "showQr": "顯示 QR 碼",
+        "rotate": "重設金鑰",
+        "rotateTitle": "要重設節點金鑰嗎？",
+        "rotateDescription": "先前分享的所有連結都會失效，裝置需要使用新連結。",
+        "addressKind": {
+          "custom": "固定位址",
+          "ipv4": "IPv4",
+          "ipv6": "IPv6"
+        }
+      },
+      "network": {
+        "title": "網路檢測",
+        "run": "檢測網路",
+        "checking": "正在檢測…",
+        "never": "尚未檢測。檢測會取得本機公網位址，並測試其他裝置能否連線到節點。",
+        "checkedAt": "檢測於 {{time}}",
+        "none": "無",
+        "verified": "已從網際網路實測。",
+        "inferred": "依本機網路推測，未經外部實測。",
+        "localAddresses": "本機位址",
+        "probeNote": "測試從 Cloudflare 網路發起連線。通過測試不代表中國大陸到本機的線路快速或未被封鎖，請以實際使用節點的裝置連線結果為準。",
+        "nat": {
+          "none": "直接連上網際網路",
+          "nat": "位於路由器之後",
+          "carrierGrade": "電信商級 NAT",
+          "double": "位於兩層路由器之後",
+          "noConnectivity": "無連線",
+          "unknown": "未知"
+        },
+        "reachability": {
+          "reachable": "可連線",
+          "unreachable": "無法連線",
+          "likelyReachable": "可能可連線",
+          "needsPortForward": "需要連接埠轉送",
+          "noConnectivity": "無法使用",
+          "unknown": "未知"
+        },
+        "reasons": {
+          "publicAddressOnDevice": "本機直接持有公網位址，其他裝置可以直接連線。",
+          "behindNat": "本機與網際網路之間有路由器，需要路由器把節點連接埠轉送到本機。",
+          "carrierGradeNat": "電信商讓多位用戶共用一個公網位址，外部裝置無法連入。請向電信商申請公網 IP、改用 IPv6，或在雲端伺服器上託管。",
+          "doubleNat": "網路中串接了兩台路由器。請在兩台路由器上都設定連接埠轉送，或把數據機改為橋接模式。",
+          "portMapped": "路由器已自動把節點連接埠轉送到本機（UPnP）。",
+          "upnpUnavailable": "路由器不支援 UPnP。請在路由器設定中把節點的 TCP 與 UDP 連接埠轉送到本機。",
+          "upnpFailed": "路由器拒絕轉送連接埠。請手動設定轉送，或改用其他連接埠。",
+          "probeReachable": "測試服務從網際網路成功連線到所有節點連接埠。",
+          "probeTimedOut": "測試連線逾時：路由器或防火牆在連線抵達節點前將其丟棄。",
+          "probeRefused": "測試連線被拒絕：此位址上沒有程式接受連線。請檢查路由器把連接埠轉送到哪裡。",
+          "probeUnavailable": "可達性測試服務沒有回應，以上為推測結果。",
+          "noPublicAddress": "本機在此位址類型下沒有網際網路連線。",
+          "ipv6FirewallUnknown": "許多路由器預設封鎖 IPv6 連入連線。若裝置無法連線，請在路由器的 IPv6 防火牆中允許節點連接埠。",
+          "tunActive": "本機自身的 VPN 連線會遮蔽真實網路。請先中斷連線再重新檢測。",
+          "nodeNotRunning": "節點未在託管，無法測試。請開啟託管後重新檢測。",
+          "firewallRuleMissing": "Windows 防火牆可能會封鎖節點。請用下方按鈕允許。"
+        },
+        "upnp": {
+          "title": "路由器連接埠轉送",
+          "disabled": "關閉",
+          "noGateway": "路由器未回應 UPnP",
+          "mapped": "正在轉送 {{ports}}",
+          "failed": "路由器拒絕"
+        },
+        "firewall": {
+          "title": "Windows 防火牆",
+          "notManaged": "不受管理",
+          "rulePresent": "已允許",
+          "ruleMissing": "沒有 VoyaVPN 的規則",
+          "unknown": "無法讀取",
+          "allow": "允許"
+        },
+        "selfTest": {
+          "title": "節點自我檢測",
+          "passed": "正常",
+          "failed": "失敗",
+          "skipped": "未測試",
+          "vlessFailed": "本機的測試用戶端無法登入 VLESS 節點。偽裝網站很可能不相容 REALITY，請改用其他網站，例如 www.apple.com。",
+          "shadowsocksFailed": "本機的測試用戶端無法使用 Shadowsocks 節點。請在執行記錄中查看節點的錯誤。"
+        }
+      },
+      "config": {
+        "title": "節點設定",
+        "deviceLabel": "名稱",
+        "deviceLabelHint": "顯示在每條連結名稱的開頭。留空則使用 VoyaVPN。",
+        "vless": "VLESS + REALITY",
+        "vlessHint": "推薦。流量看起來像在瀏覽下方的網站，最不容易被封鎖。",
+        "vlessPort": "VLESS 連接埠",
+        "shadowsocks": "Shadowsocks 2022",
+        "shadowsocksHint": "輕量且支援 UDP，但比 REALITY 更容易被識別。",
+        "shadowsocksPort": "Shadowsocks 連接埠",
+        "portAuto": "節點首次啟動時自動選擇。",
+        "portHint": "若路由器不支援 UPnP，請在路由器上轉送此 TCP 與 UDP 連接埠。",
+        "realityServer": "偽裝網站",
+        "realityServerHint": "一個支援 TLS 1.3 的大型 HTTPS 網站，最好離本機較近。未通過驗證的訪客會看到這個網站。",
+        "realityServerPort": "偽裝網站連接埠",
+        "customAddress": "固定位址",
+        "customAddressHint": "連結使用的 DDNS 網域名稱或固定 IP。留空則使用網路檢測找到的位址。",
+        "upnp": "自動轉送連接埠",
+        "upnpHint": "節點執行時請求路由器轉送節點連接埠（UPnP）。",
+        "allowLan": "允許存取區域網路",
+        "allowLanHint": "讓連線的裝置可以存取本網路中的印表機等裝置。本機自身始終無法存取。",
+        "blockBittorrent": "封鎖 BitTorrent",
+        "blockBittorrentHint": "避免本機的網路服務供應商收到版權申訴。"
+      },
+      "connect": {
+        "title": "使用其他裝置的節點",
+        "description": "在託管節點的裝置上開啟「自建節點」，複製連結或顯示 QR 碼，然後在這裡新增。",
+        "paste": "貼上連結",
+        "scan": "掃描螢幕 QR 碼",
+        "more": "更多新增方式",
+        "goToNodes": "開啟節點頁"
+      }
     }
   },
   "proxy": {
@@ -851,7 +1005,8 @@
     "logs": "執行日誌",
     "profiles": "節點",
     "rules": "規則",
-    "settings": "設定"
+    "settings": "設定",
+    "selfHost": "自建節點"
   },
   "updates": {
     "appInstalled": "應用程式更新已安裝：{{version}}",
@@ -933,7 +1088,10 @@
     "policyGroupTestUrlInvalid": "測速網址需以 http:// 或 https:// 開頭",
     "policyGroupToleranceOutOfRange": "容差需介於 {{min}} 到 {{max}} 毫秒",
     "policyGroupWithoutMembers": "請至少加入一個節點或選擇一個訂閱",
-    "routingRuleWithoutMatcher": "請至少填寫一個比對條件：域名、IP、端口、網絡、應用進程或協議。"
+    "routingRuleWithoutMatcher": "請至少填寫一個比對條件：域名、IP、端口、網絡、應用進程或協議。",
+    "selfHostNoProtocol": "請至少開啟一種協定",
+    "selfHostPortOutOfRange": "連接埠必須介於 {{min}} 與 {{max}} 之間",
+    "selfHostPortsCollide": "兩種協定需要使用不同連接埠"
   },
   "window": {
     "close": "關閉",

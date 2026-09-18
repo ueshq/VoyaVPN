@@ -46,6 +46,10 @@ export const queryKeys = {
   profiles: ["profiles"],
   proxyConnections: ["proxy-connections"],
   routings: ["routings"],
+  /** The self-hosted node page: settings, status, links, network report. */
+  selfHost: ["self-host"],
+  // Under the self-host root, so every node change refetches the counters.
+  selfHostStats: ["self-host", "stats"],
   subscriptionMetadata: ["subscription-metadata"],
   subscriptions: ["subscriptions"],
   uiPreferences: ["ui-preferences"],
@@ -77,6 +81,7 @@ const INVALIDATION_KEYS = {
   policyGroups: queryKeys.policyGroups,
   policyGroupRuntime: queryKeys.policyGroupRuntime,
   routings: queryKeys.routings,
+  selfHost: queryKeys.selfHost,
   subscriptionMetadata: queryKeys.subscriptionMetadata,
   subscriptions: queryKeys.subscriptions,
   uiPreferences: queryKeys.uiPreferences,

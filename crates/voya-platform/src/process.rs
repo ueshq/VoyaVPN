@@ -24,6 +24,10 @@ pub enum ProcessRole {
     SysProxy,
     Probe,
     Autostart,
+    /// The self-hosted node's server core.
+    SelfHost,
+    /// Reading or changing the self-hosted node's firewall rule.
+    Firewall,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

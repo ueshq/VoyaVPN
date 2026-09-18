@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     AppStateRepository, DbError, PolicyGroupRepository, ProfileExRepository, ProfileRepository,
-    Result, RoutingRepository, ServerStatRepository, SettingsRepository,
+    Result, RoutingRepository, SelfHostRepository, ServerStatRepository, SettingsRepository,
     SubscriptionMetadataRepository, SubscriptionRepository,
 };
 
@@ -210,6 +210,7 @@ session_accessors! {
     settings => SettingsRepository,
     app_state => AppStateRepository,
     policy_groups => PolicyGroupRepository,
+    self_host => SelfHostRepository,
 }
 
 /// Switches the database file to write-ahead logging.

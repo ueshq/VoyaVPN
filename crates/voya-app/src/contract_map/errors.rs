@@ -41,6 +41,7 @@ use crate::{
     qr::QrCodeError,
     routing::RoutingManagerError,
     runtime::RuntimeError,
+    self_host::SelfHostError,
     settings::save::AppSettingsValidationError,
     settings::SettingsSaveError,
     speedtest::SpeedtestError,
@@ -338,6 +339,37 @@ impl From<SpeedtestError> for AppError {
             | SpeedtestError::BackgroundTask(_) => internal(Sub::Speedtest, &error),
         }
     }
+}
+
+impl From<SelfHostError> for AppError {
+    fn from(error: SelfHostError) -> Self {
+        match error {
+            SelfHostError::Validation(issues) => {
+                AppError::validation(Sub::SelfHost, error_message(&issues), issues)
+            }
+            SelfHostError::Database(ref source) => database_error(source, Sub::SelfHost),
+            SelfHostError::CoreInfo(ref source) => core_info_error(source, Sub::SelfHost),
+            SelfHostError::Process(ref source) => io(Sub::SelfHost, source),
+            SelfHostError::WriteConfig { .. } => io(Sub::SelfHost, &error),
+            SelfHostError::Firewall(ref source) => io(Sub::SelfHost, source),
+            SelfHostError::Clash(ref source) => network(Sub::SelfHost, source),
+            SelfHostError::Probe(ref source) => network(Sub::SelfHost, source),
+            SelfHostError::Random(_)
+            | SelfHostError::NoFreePort
+            | SelfHostError::Config(_)
+            | SelfHostError::NotRunning
+            | SelfHostError::Task(_) => internal(Sub::SelfHost, &error),
+        }
+    }
+}
+
+fn error_message(issues: &[ValidationIssue]) -> String {
+    let fields = issues
+        .iter()
+        .map(|issue| issue.field.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("self-hosted node settings are invalid: {fields}")
 }
 
 impl From<ProxyRuntimeError> for AppError {

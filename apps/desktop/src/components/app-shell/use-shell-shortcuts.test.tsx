@@ -66,6 +66,8 @@ describe("useShellShortcuts", () => {
     press({ ctrlKey: true, key: "3" });
     expect(useShellStore.getState()).toMatchObject({ activeTab: "rules", focusPageTitle: true });
     press({ ctrlKey: true, key: "5" });
+    expect(useShellStore.getState().activeTab).toBe("selfHost");
+    press({ ctrlKey: true, key: "6" });
     expect(useShellStore.getState().activeTab).toBe("settings");
 
     // Without the modifier, with Shift, or past the last page, nothing moves.

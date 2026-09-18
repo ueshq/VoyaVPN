@@ -145,6 +145,21 @@ export const updateSrsAssets = wrapCommand(commands.updateSrsAssets);
 
 export const installCoreSeed = wrapCommand(commands.installCoreSeed);
 
+export const getSelfHostState = wrapCommand(commands.getSelfHostState);
+
+export const saveSelfHostConfig = wrapCommand(commands.saveSelfHostConfig);
+
+export const setSelfHostEnabled = wrapCommand(commands.setSelfHostEnabled);
+
+export const rotateSelfHostCredentials = wrapCommand(commands.rotateSelfHostCredentials);
+
+export const getSelfHostStats = wrapCommand(commands.getSelfHostStats);
+
+export const runSelfHostEnvironmentCheck = wrapCommand(commands.runSelfHostEnvironmentCheck);
+
+/** Adds the Windows Firewall rule for the node; blocks on a UAC prompt. */
+export const applySelfHostFirewallRule = wrapCommand(commands.applySelfHostFirewallRule);
+
 export const getWindowChromeConfig = wrapCommand(commands.getWindowChromeConfig);
 
 export const setWindowAcrylic = wrapCommand(commands.setWindowAcrylic);

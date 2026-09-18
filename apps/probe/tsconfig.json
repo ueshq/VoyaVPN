@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The Workers runtime is not a browser: its globals come from the Workers
+    // types, never from the DOM library the desktop app compiles against.
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}

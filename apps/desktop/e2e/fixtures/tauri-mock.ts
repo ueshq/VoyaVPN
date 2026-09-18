@@ -26,6 +26,11 @@ import type {
   Routing_Serialize,
   RoutingRule,
   RuntimeStatusResponse,
+  SelfHostConfig,
+  SelfHostEnvironmentReport,
+  SelfHostShareLink,
+  SelfHostState,
+  SelfHostStats,
   SpeedtestRunResult,
   SpeedtestStatus,
   Subscription,
@@ -78,6 +83,7 @@ export async function installTauriSmokeMock(
       failNextCommand: string | null;
       trafficModeFailure: "apply" | "close" | null;
       appliedTrafficMode: TrafficMode;
+      selfHost: SelfHostState;
     };
     type Callback = (event: {
       id: number;
@@ -99,6 +105,7 @@ export async function installTauriSmokeMock(
       failNextCommand: null,
       trafficModeFailure: null,
       appliedTrafficMode: "rule",
+      selfHost: makeSelfHostState(),
       calls: [] as Array<{ command: string; args: CommandArgs }>,
       dns: makeDnsSettings(),
       policyGroups: [],
@@ -214,6 +221,11 @@ export async function installTauriSmokeMock(
       select_policy_group_member: ["policyGroups", "policyGroupRuntime"],
       set_active_policy_group: ["policyGroups", "profiles", "appSettings"],
       test_policy_group_delay: ["policyGroups", "policyGroupRuntime"],
+      save_self_host_config: ["selfHost"],
+      set_self_host_enabled: ["selfHost"],
+      rotate_self_host_credentials: ["selfHost"],
+      run_self_host_environment_check: ["selfHost"],
+      apply_self_host_firewall_rule: ["selfHost"],
     };
 
     function invoke(command: string, args: CommandArgs = {}) {
@@ -812,6 +824,47 @@ export async function installTauriSmokeMock(
           return Promise.resolve(
             " vless://00000000-0000-0000-0000-000000000002@clipboard.example.test:443#Clipboard%20direct ",
           );
+        case "get_self_host_state":
+          return Promise.resolve(clone(state.selfHost) satisfies SelfHostState);
+        case "save_self_host_config":
+          state.selfHost.config = readRecord(args, "config") as SelfHostConfig;
+          state.selfHost.shareLinks = selfHostLinks(state.selfHost, 1);
+          return Promise.resolve(clone(state.selfHost) satisfies SelfHostState);
+        case "set_self_host_enabled": {
+          const enabled = Boolean(args.enabled);
+          const config = state.selfHost.config;
+          config.enabled = enabled;
+          if (enabled) {
+            config.vlessPort ||= 42443;
+            config.shadowsocksPort ||= 42444;
+          }
+          state.selfHost.runtime = {
+            detail: null,
+            port: null,
+            problem: null,
+            status: enabled ? "running" : "stopped",
+          };
+          state.selfHost.shareLinks = selfHostLinks(state.selfHost, 1);
+          return Promise.resolve(clone(state.selfHost) satisfies SelfHostState);
+        }
+        case "rotate_self_host_credentials":
+          state.selfHost.shareLinks = selfHostLinks(state.selfHost, 2);
+          return Promise.resolve(clone(state.selfHost) satisfies SelfHostState);
+        case "get_self_host_stats":
+          return Promise.resolve({
+            activeConnections: 2,
+            downloadTotalBytes: 5 * 1024 * 1024,
+            uploadTotalBytes: 1024 * 1024,
+          } satisfies SelfHostStats);
+        case "run_self_host_environment_check":
+          state.selfHost.environment = makeSelfHostEnvironment(
+            state.selfHost.runtime.status === "running",
+          );
+          state.selfHost.shareLinks = selfHostLinks(state.selfHost, 1);
+          return Promise.resolve(clone(state.selfHost) satisfies SelfHostState);
+        case "apply_self_host_firewall_rule":
+          if (state.selfHost.environment) state.selfHost.environment.firewall = "rulePresent";
+          return Promise.resolve(clone(state.selfHost) satisfies SelfHostState);
         case "generate_qr_code":
           return Promise.resolve({
             mimeType: "image/svg+xml",
@@ -1222,6 +1275,108 @@ export async function installTauriSmokeMock(
         remote: "https://1.1.1.1/dns-query",
         directStrategy: "AsIs",
       };
+    }
+
+    function makeSelfHostState(): SelfHostState {
+      return {
+        config: {
+          allowLanAccess: false,
+          blockBittorrent: true,
+          customAddress: null,
+          deviceLabel: "",
+          enabled: false,
+          realityServerName: "www.apple.com",
+          realityServerPort: 443,
+          shadowsocksEnabled: true,
+          shadowsocksPort: 0,
+          upnpEnabled: true,
+          vlessEnabled: true,
+          vlessPort: 0,
+        },
+        environment: null,
+        firewallRuleSupported: false,
+        runtime: { detail: null, port: null, problem: null, status: "stopped" },
+        shareLinks: [],
+      };
+    }
+
+    function makeSelfHostEnvironment(running: boolean): SelfHostEnvironmentReport {
+      return {
+        checkedAtMs: Date.now(),
+        firewall: "notManaged",
+        ipv4: {
+          family: "ipv4",
+          nat: "nat",
+          publicAddress: "203.0.113.7",
+          reachability: running ? "reachable" : "needsPortForward",
+          reasons: running
+            ? ["behindNat", "portMapped", "probeReachable"]
+            : ["behindNat", "nodeNotRunning"],
+          verifiedByProbe: running,
+        },
+        ipv6: {
+          family: "ipv6",
+          nat: "none",
+          publicAddress: "2001:db8::7",
+          reachability: running ? "unreachable" : "likelyReachable",
+          reasons: running
+            ? ["publicAddressOnDevice", "probeTimedOut", "ipv6FirewallUnknown"]
+            : ["publicAddressOnDevice", "ipv6FirewallUnknown", "nodeNotRunning"],
+          verifiedByProbe: running,
+        },
+        localAddresses: [
+          { address: "192.168.1.20", family: "ipv4", interface: "en0", scope: "private" },
+          { address: "2001:db8::7", family: "ipv6", interface: "en0", scope: "public" },
+        ],
+        portMapping: {
+          detail: null,
+          gatewayExternalAddress: running ? "203.0.113.7" : null,
+          mappedPorts: running ? [42443, 42444] : [],
+          status: running ? "mapped" : "disabled",
+        },
+        probeAvailable: true,
+        selfTest: running
+          ? { shadowsocks: "passed", vless: "passed" }
+          : { shadowsocks: "skipped", vless: "skipped" },
+      };
+    }
+
+    /** The links the backend builds: every enabled protocol at every known address. */
+    function selfHostLinks(selfHost: SelfHostState, generation: number): SelfHostShareLink[] {
+      const { config, environment } = selfHost;
+      if (config.vlessPort === 0 && config.shadowsocksPort === 0) return [];
+      const addresses: Array<[SelfHostShareLink["addressKind"], string]> = config.customAddress
+        ? [["custom", config.customAddress]]
+        : [
+            ["ipv4", environment?.ipv4.publicAddress ?? ""],
+            ["ipv6", environment?.ipv6.publicAddress ?? ""],
+          ].filter((entry): entry is [SelfHostShareLink["addressKind"], string] => entry[1] !== "");
+      const label = config.deviceLabel || "VoyaVPN";
+      return addresses.flatMap(([addressKind, address]) => {
+        const host = address.includes(":") ? `[${address}]` : address;
+        const links: SelfHostShareLink[] = [];
+        if (config.vlessEnabled) {
+          links.push({
+            address,
+            addressKind,
+            link: `vless://00000000-0000-0000-0000-00000000000${generation}@${host}:${config.vlessPort}?encryption=none&security=reality&sni=${config.realityServerName}&fp=chrome&type=tcp&flow=xtls-rprx-vision#${label}`,
+            port: config.vlessPort,
+            protocol: "vless",
+            remarks: `${label} · VLESS`,
+          });
+        }
+        if (config.shadowsocksEnabled) {
+          links.push({
+            address,
+            addressKind,
+            link: `ss://2022-blake3-aes-128-gcm:key${generation}@${host}:${config.shadowsocksPort}#${label}`,
+            port: config.shadowsocksPort,
+            protocol: "shadowsocks",
+            remarks: `${label} · SS`,
+          });
+        }
+        return links;
+      });
     }
 
     function clone<T>(value: T): T {

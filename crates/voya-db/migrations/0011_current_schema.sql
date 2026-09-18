@@ -80,6 +80,12 @@ CREATE TABLE schema_metadata (
     version INTEGER NOT NULL CHECK (version >= 1)
 );
 
+CREATE TABLE self_host (
+    id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
+    schema_version INTEGER NOT NULL CHECK (schema_version >= 1),
+    payload TEXT NOT NULL
+);
+
 CREATE TABLE server_stat_items (
     index_id TEXT PRIMARY KEY NOT NULL,
     total_up INTEGER NOT NULL DEFAULT 0,

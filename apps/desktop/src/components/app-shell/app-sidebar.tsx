@@ -1,5 +1,5 @@
 import type * as React from "react";
-import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, PanelRight, Route, Server, Settings } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, PanelRight, RadioTower, Route, Server, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@voya/ui/lib/utils";
@@ -26,6 +26,7 @@ const navItems: NavItem[] = [
   { icon: Server, titleKey: "tabs.profiles", value: "profiles" },
   { icon: Route, titleKey: "tabs.rules", value: "rules" },
   { icon: Activity, titleKey: "tabs.connections", value: "connections" },
+  { icon: RadioTower, titleKey: "tabs.selfHost", value: "selfHost" },
   { icon: Settings, titleKey: "tabs.settings", value: "settings" },
 ];
 

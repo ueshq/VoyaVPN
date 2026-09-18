@@ -4,10 +4,17 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { mergeValidated } from "./persisted";
 
 export type ShellTab =
-  "home" | "profiles" | "settings" | "connections" | "rules";
+  "home" | "profiles" | "settings" | "connections" | "rules" | "selfHost";
 
 /** The pages in sidebar order, which is also the order of the number shortcuts. */
-export const SHELL_TABS: readonly ShellTab[] = ["home", "profiles", "rules", "connections", "settings"];
+export const SHELL_TABS: readonly ShellTab[] = [
+  "home",
+  "profiles",
+  "rules",
+  "connections",
+  "selfHost",
+  "settings",
+];
 
 /**
  * Sub-view of the Connections page: the live connection table or the running

@@ -92,6 +92,15 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/routing/routing-screen.tsx", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/routing/traffic-mode-switcher.tsx", lines: 85, branches: 75 },
   { path: "apps/desktop/src/stores/modal-store.ts", lines: 75, branches: 90 },
+  // The Self-hosted node page, measured when it landed: controller 100/81,
+  // cards 90-100 lines and 75-92 branches.
+  { path: "apps/desktop/src/features/self-host/use-self-host.ts", lines: 95, branches: 75 },
+  { path: "apps/desktop/src/features/self-host/self-host-screen.tsx", lines: 95, branches: 75 },
+  { path: "apps/desktop/src/features/self-host/node-config-card.tsx", lines: 95, branches: 80 },
+  { path: "apps/desktop/src/features/self-host/share-links-card.tsx", lines: 90, branches: 85 },
+  { path: "apps/desktop/src/features/self-host/environment-card.tsx", lines: 95, branches: 75 },
+  { path: "apps/desktop/src/features/self-host/status-card.tsx", lines: 95, branches: 75 },
+  { path: "apps/desktop/src/features/self-host/connect-card.tsx", lines: 85, branches: 70 },
 ];
 
 /**

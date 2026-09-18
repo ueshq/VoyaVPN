@@ -1,0 +1,23 @@
+{
+  "flow": "xtls-rprx-vision",
+  "packet_encoding": "xudp",
+  "server": "203.0.113.7",
+  "server_port": 42443,
+  "tag": "proxy",
+  "tls": {
+    "enabled": true,
+    "insecure": false,
+    "reality": {
+      "enabled": true,
+      "public_key": "Q5mEoK_fSpzT4d13YC4_HI_2Crte_pRkSElgYb5wCD8",
+      "short_id": "751998bfb8ed69a6"
+    },
+    "server_name": "www.apple.com",
+    "utls": {
+      "enabled": true,
+      "fingerprint": "chrome"
+    }
+  },
+  "type": "vless",
+  "uuid": "bd3a7c33-98cb-4faf-b0b5-853e2707be3f"
+}

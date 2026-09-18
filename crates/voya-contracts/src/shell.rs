@@ -134,6 +134,8 @@ pub enum AppErrorSubsystem {
     Routing,
     /// Core lifecycle: config generation, supervisor, connect/disconnect.
     Runtime,
+    /// The self-hosted exit node.
+    SelfHost,
     Speedtest,
     Subscription,
     SysProxy,

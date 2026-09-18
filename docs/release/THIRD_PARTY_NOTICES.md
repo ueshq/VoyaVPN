@@ -8,7 +8,7 @@ This document is bundled with release packages as attribution. It is not a legal
 - Tauri: Apache-2.0 OR MIT.
 - React: MIT.
 - TypeScript, Vite, Tailwind CSS, Radix UI, TanStack, Zustand, i18next, and Lucide React: bundled through npm dependencies under their published package licenses.
-- Rust crates: bundled through Cargo dependencies under their published crate licenses.
+- Rust crates: bundled through Cargo dependencies under their published crate licenses. The self-hosted node adds `x25519-dalek` and `curve25519-dalek` (BSD-3-Clause), `igd-next` and `xmltree` (MIT), `if-addrs` (MIT OR BSD-3-Clause), and `attohttpc` (MPL-2.0, unmodified; source at https://github.com/sbstp/attohttpc).
 
 ## Runtime Cores
 

@@ -27,6 +27,7 @@ pub mod qr;
 pub mod redaction;
 pub mod routing;
 pub mod runtime;
+pub mod self_host;
 pub mod services;
 pub mod settings;
 pub mod speedtest;

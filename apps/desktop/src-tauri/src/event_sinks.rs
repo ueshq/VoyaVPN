@@ -6,6 +6,7 @@ use voya_app::{
     logging::process_log_level_to_contract,
     proxy_runtime::{ProxyConnectionsSnapshot, ProxyRuntimeEventSink},
     redaction::{redact_url_userinfo, redact_urls},
+    self_host::SelfHostEventSink,
     statistics::{StatisticsEventSink, StatisticsSnapshot as AppStatisticsSnapshot},
     subscriptions::{AutoUpdateOutcome, SubscriptionAutoUpdateSink},
     supervisor::{CoreExitEvent, NativeTunExitEvent, SupervisorEventSink},
@@ -30,6 +31,39 @@ pub(crate) struct TauriSupervisorEventSink {
 
 pub(crate) struct TauriSubscriptionAutoUpdateSink {
     pub(crate) app: tauri::AppHandle,
+}
+
+pub(crate) struct TauriSelfHostEventSink {
+    pub(crate) app: tauri::AppHandle,
+}
+
+impl SelfHostEventSink for TauriSelfHostEventSink {
+    fn state_changed(&self) {
+        ipc::commands::emit_self_host_invalidation(&self.app, "self-host-state-changed");
+    }
+
+    fn log(
+        &self,
+        level: voya_contracts::LogLevel,
+        code: voya_contracts::LogCode,
+        detail: Option<String>,
+    ) {
+        ipc::commands::emit_app_log(&self.app, level, code, detail.as_deref());
+    }
+
+    fn notice(
+        &self,
+        level: voya_contracts::AppNoticeLevel,
+        code: voya_contracts::NoticeCode,
+        detail: Option<String>,
+    ) {
+        let notice = ipc::events::AppEvent::Notice(voya_contracts::AppNotice {
+            level,
+            code,
+            detail,
+        });
+        ipc::commands::emit_or_warn(&self.app, notice, "self-hosted node notice");
+    }
 }
 
 impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
@@ -180,5 +214,7 @@ fn process_role_label(role: ProcessRole) -> &'static str {
         ProcessRole::SysProxy => "sysproxy",
         ProcessRole::Probe => "probe",
         ProcessRole::Autostart => "autostart",
+        ProcessRole::SelfHost => "selfhost",
+        ProcessRole::Firewall => "firewall",
     }
 }

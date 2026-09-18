@@ -153,7 +153,7 @@ const SINGBOX_FALLBACK_LOG_LEVEL: &str = "warn";
 ///
 /// The settings UI uses sing-box spellings. `none` is expressed through
 /// `log.disabled` and must not reach `log.level`.
-fn singbox_log_level(configured: &str) -> &'static str {
+pub(super) fn singbox_log_level(configured: &str) -> &'static str {
     let lowercased = configured.trim().to_ascii_lowercase();
     let normalized = lowercased.as_str();
     SINGBOX_LOG_LEVELS

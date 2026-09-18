@@ -69,6 +69,7 @@ mod profiles;
 mod proxy;
 mod routing;
 mod runtime;
+mod self_host;
 mod speedtest;
 mod subscriptions;
 mod support;
@@ -88,6 +89,7 @@ pub use profiles::*;
 pub use proxy::*;
 pub use routing::*;
 pub use runtime::*;
+pub use self_host::*;
 pub use speedtest::*;
 pub use subscriptions::*;
 pub use sysproxy::*;
@@ -95,6 +97,8 @@ pub use tray_actions::*;
 pub use tun::*;
 pub use updates::*;
 
-pub(crate) use post_commit::{disconnect_removed_profile, emit_subscription_invalidation};
+pub(crate) use post_commit::{
+    disconnect_removed_profile, emit_self_host_invalidation, emit_subscription_invalidation,
+};
 pub(crate) use runtime::core_flow;
 pub(crate) use support::{emit_app_log, emit_core_log, emit_or_warn, queue_log_line};

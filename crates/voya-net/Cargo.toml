@@ -11,6 +11,7 @@ test-utils = []
 
 [dependencies]
 futures-util = "0.3"
+igd-next = { version = "0.17", default-features = false, features = ["aio_tokio"] }
 percent-encoding = "2.3"
 # `rustls-tls-native-roots` trusts the bundled webpki roots plus the OS trust store.
 reqwest = { version = "0.12", default-features = false, features = ["charset", "http2", "json", "rustls-tls", "rustls-tls-native-roots", "socks"] }

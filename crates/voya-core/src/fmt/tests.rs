@@ -674,6 +674,46 @@ fn fmt_shadowsocks_plain_user_info_password_is_decoded_once() {
 }
 
 #[test]
+fn fmt_shadowsocks_2022_exports_plain_sip022_user_info() {
+    // The key is base64 with `+`, `/` and `=`, the characters a double encoding
+    // or a second base64 layer would corrupt.
+    let key = "Qm+E/Zx0cWFyTr4w9q8a2A==";
+    let source = ProfileItem {
+        remarks: "Tokyo · SS".to_string(),
+        protocol: ProfileProtocol::Shadowsocks {
+            server: endpoint("2001:db8::1", 40_123),
+            password: key.to_string(),
+            method: "2022-blake3-aes-128-gcm".to_string(),
+            udp_over_tcp: false,
+        },
+        ..ProfileItem::default()
+    };
+
+    let link = export_share_link(&source).expect("export SS-2022 link");
+    assert_eq!(
+        link,
+        "ss://2022-blake3-aes-128-gcm:Qm%2BE%2FZx0cWFyTr4w9q8a2A%3D%3D@[2001:db8::1]:40123#Tokyo%20%C2%B7%20SS"
+    );
+
+    let parsed = parse_share_link(&link).expect("parse SS-2022 link");
+    assert_eq!(parsed.protocol, source.protocol);
+    assert_eq!(parsed.remarks, source.remarks);
+
+    // Legacy methods keep the SIP002 base64 user info.
+    let legacy = ProfileItem {
+        protocol: ProfileProtocol::Shadowsocks {
+            server: endpoint("ss.example", 8388),
+            password: "legacy-pass".to_string(),
+            method: "aes-256-gcm".to_string(),
+            udp_over_tcp: false,
+        },
+        ..ProfileItem::default()
+    };
+    let legacy_link = export_share_link(&legacy).expect("export legacy SS link");
+    assert!(legacy_link.starts_with("ss://YWVz"), "{legacy_link}");
+}
+
+#[test]
 fn fmt_http2_and_quic_transports_survive_import_and_export() {
     for (link, host, path) in [
         (

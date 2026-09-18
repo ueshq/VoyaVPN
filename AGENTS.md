@@ -13,6 +13,7 @@ The package manager is **pnpm 11.5.0** (pinned via Corepack). Rust toolchain is 
 - `apps/desktop/` — `@voya/desktop`, the Tauri desktop app. It owns `apps/desktop/src`, `apps/desktop/src-tauri`, `apps/desktop/public`, `apps/desktop/e2e`, Vite, Playwright, shadcn, and desktop tsconfigs.
 - `apps/web/` — `@voya/web`, placeholder for a future web management surface. Do not copy desktop IPC here; the current backend surface is Tauri IPC only.
 - `apps/mobile/` — `@voya/mobile`, placeholder for a future bare React Native app. It does not consume `@voya/ui`, which is DOM/Radix-specific.
+- `apps/probe/` — `@voya/probe`, the Cloudflare Worker the self-hosted node's network check calls (`POST /v1/probe`, stateless, connects back only to the caller). Its wire contract is `tests/probe-contract/*.json`, shared with `crates/voya-net`. Deploy per `docs/release/self-host-probe-worker.md`; wrangler is not a workspace dependency.
 - `packages/ui/` — `@voya/ui`, source-only shadcn primitives, design tokens, shared CSS, fonts, and `cn()`.
 - `packages/i18n/` — `@voya/i18n`, source-only i18next setup and imported locale JSON.
 - `packages/utils/` — `@voya/utils`, source-only shared formatting/redaction/error helpers.
@@ -85,7 +86,7 @@ A Rust workspace of layered crates plus the Tauri desktop shell, React app, and 
 - **voya-db** — Fresh sqlx SQLite schema, migrations, repositories. It is the **only** typed persistence boundary: tagged `ProfileProtocol`, `ProfileTransport`, TLS settings, and routing rules serialize to SQLite `TEXT` only here.
 - **voya-platform** — All OS-specific code: `paths`, `process`, `elevation`, `tun`, `sysproxy`, `autostart`, `coreinfo`, `privilege`. Domain crates reach platform side effects through traits/adapters defined here.
 - **voya-net** — HTTP downloads, subscriptions, Clash REST/WebSocket, and ruleset/Geo asset acquisition.
-- **voya-app** — Orchestration layer. Managers (one module per subsystem: `runtime`, `supervisor`, `profiles`, `subscriptions`, `routing`, `dns`, `proxy_runtime`, `statistics`, `sysproxy`, `tun`, `elevation`, `updates`, etc.) that combine the domain/db/net/platform crates. `proxy_runtime` exposes product-level connection monitoring and traffic-mode behavior through the sing-box Clash-compatible API. No Tauri wiring here.
+- **voya-app** — Orchestration layer. Managers (one module per subsystem: `runtime`, `supervisor`, `profiles`, `subscriptions`, `routing`, `dns`, `proxy_runtime`, `statistics`, `sysproxy`, `tun`, `elevation`, `updates`, `self_host`, etc.) that combine the domain/db/net/platform crates. `proxy_runtime` exposes product-level connection monitoring and traffic-mode behavior through the sing-box Clash-compatible API. No Tauri wiring here.
 - **apps/desktop/src-tauri** — Tauri bootstrap and the *only* backend place that knows about Tauri APIs: command/event registration, `AppState` injection, tray, capabilities, plugins, packaging, lifecycle. `src/lib.rs` `run()` wires everything in `setup()`; IPC lives in `apps/desktop/src-tauri/src/ipc/` (`commands/` holds the `#[tauri::command]` functions split by subsystem, `ipc/window.rs` adds the two window-chrome commands, and the fixed `collect_commands!` list registers every one of them identically in debug and release builds; events live in `events.rs`).
 
 ### Frontend (`apps/desktop/src/` + `packages/`)

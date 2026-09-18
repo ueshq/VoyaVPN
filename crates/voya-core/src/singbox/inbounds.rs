@@ -33,8 +33,9 @@ pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigConte
             lan.listen = Some("0.0.0.0".to_string());
             if !in_item.user.trim().is_empty() && !in_item.pass.trim().is_empty() {
                 lan.users = Some(vec![SingboxUser {
-                    username: in_item.user.clone(),
-                    password: in_item.pass.clone(),
+                    username: Some(in_item.user.clone()),
+                    password: Some(in_item.pass.clone()),
+                    ..SingboxUser::default()
                 }]);
             }
             config.inbounds.push(lan);

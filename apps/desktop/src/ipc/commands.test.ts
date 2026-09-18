@@ -79,6 +79,13 @@ const wrapperNames = [
   "updateGeoAssets",
   "updateSrsAssets",
   "installCoreSeed",
+  "getSelfHostState",
+  "saveSelfHostConfig",
+  "setSelfHostEnabled",
+  "rotateSelfHostCredentials",
+  "getSelfHostStats",
+  "runSelfHostEnvironmentCheck",
+  "applySelfHostFirewallRule",
   "getWindowChromeConfig",
   "setWindowAcrylic",
 ] as const;
@@ -176,6 +183,7 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
     ["deleteProfiles", [["index-1"]], [["index-1"]]],
     ["deleteSubscriptions", [["sub-1"]], [["sub-1"]]],
     ["installCoreSeed", [], []],
+    ["setSelfHostEnabled", [true], [true]],
     ["setWindowAcrylic", [true], [true]],
     ["generateQrCode", ["vmess://link"], ["vmess://link"]],
   ];

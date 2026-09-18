@@ -25,6 +25,9 @@ pub(super) fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         // a speedtest still in flight would leave its temporary sing-box probe
         // cores running with open outbound tunnels after the app is gone.
         state.speedtest_manager().shutdown();
+        // The self-hosted core, its router forwards and its watch loop go down
+        // before the connection core, whose tunnel may carry the unmap calls.
+        tauri::async_runtime::block_on(state.self_host().shutdown());
     }
     // The root launcher is the only passwordless way to kill an elevated core,
     // so it is only removed once the core is confirmed stopped. Removing it

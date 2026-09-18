@@ -55,6 +55,9 @@ const VMESS_SECURITIES: &[&str] = &[
     "none",
     "zero",
 ];
+/// The uTLS fingerprint a REALITY client uses when no global one is set, and
+/// the one self-hosted REALITY share links advertise.
+pub const REALITY_FALLBACK_FINGERPRINT: &str = "chrome";
 const SINGBOX_UTLS_FINGERPRINTS: &[&str] = &[
     "chrome",
     "firefox",
@@ -75,12 +78,16 @@ mod inbounds;
 mod outbounds;
 mod routing;
 mod schema;
+mod schema_inbound;
+mod selfhost;
 pub(crate) mod support;
 
 pub use dns::first_dns_address;
 pub use entry::*;
 pub use outbounds::{is_latency_probe_candidate, latency_probe_tag};
 pub use schema::*;
+pub use schema_inbound::*;
+pub use selfhost::*;
 
 use dns::*;
 use experimental::*;

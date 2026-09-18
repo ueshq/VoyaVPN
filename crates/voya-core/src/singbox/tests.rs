@@ -328,6 +328,45 @@ fn singbox_pinned_cert_and_reality_force_insecure_false() {
 }
 
 #[test]
+fn singbox_reality_client_always_carries_utls() {
+    // sing-box rejects a REALITY client without uTLS, and the global
+    // fingerprint setting defaults to empty.
+    let reality_node = ProfileItem {
+        tls: Some(TlsSettings {
+            reality_public_key: Some("reality-public-key".to_string()),
+            ..tls_settings(TlsMode::Reality, Some("server.example"))
+        }),
+        ..base_remote_node()
+    };
+    let context = test_context(AppConfig::default(), reality_node.clone());
+    let utls = build_outbound(&context, &reality_node)
+        .tls
+        .and_then(|tls| tls.utls)
+        .expect("REALITY needs uTLS");
+    assert_eq!(utls.fingerprint, REALITY_FALLBACK_FINGERPRINT);
+
+    let mut config = AppConfig::default();
+    config.core_basic_item.def_fingerprint = "firefox".to_string();
+    let context = test_context(config, reality_node.clone());
+    let utls = build_outbound(&context, &reality_node)
+        .tls
+        .and_then(|tls| tls.utls)
+        .expect("REALITY keeps the configured fingerprint");
+    assert_eq!(utls.fingerprint, "firefox");
+
+    let plain_tls_node = ProfileItem {
+        tls: Some(tls_settings(TlsMode::Tls, Some("server.example"))),
+        ..base_remote_node()
+    };
+    let context = test_context(AppConfig::default(), plain_tls_node.clone());
+    assert!(build_outbound(&context, &plain_tls_node)
+        .tls
+        .expect("tls settings should be generated")
+        .utls
+        .is_none());
+}
+
+#[test]
 fn singbox_transport_hosts_use_first_authority() {
     let node = ProfileItem {
         transport: Some(ProfileTransport::Websocket {

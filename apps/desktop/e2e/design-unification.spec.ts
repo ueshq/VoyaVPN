@@ -271,6 +271,7 @@ for (const viewport of [
           "profiles",
           "rules",
           "connections",
+          "selfHost",
           "settings",
         ]) {
           await page.locator(`#shell-tab-${tab}`).click();

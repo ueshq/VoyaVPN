@@ -364,6 +364,94 @@
         "crates/voya-core/src/singbox/outbounds/latency_probes.rs"
       ],
       "core_acceptance": true
+    },
+    {
+      "id": "singbox-outbound-vless-reality-vision",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/vless_reality_vision.json",
+      "generated": "singbox.outbound.vless_reality_vision",
+      "summary": "sing-box VLESS REALITY client with XTLS Vision imported from a self-hosted node link under default settings; REALITY always carries uTLS.",
+      "hotspots": [
+        "security",
+        "reality",
+        "protocol"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/outbounds/stream.rs",
+        "crates/voya-core/src/singbox/selfhost.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
+    },
+    {
+      "id": "singbox-outbound-shadowsocks-2022",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/shadowsocks_2022.json",
+      "generated": "singbox.outbound.shadowsocks_2022",
+      "summary": "sing-box Shadowsocks 2022 client imported from a self-hosted node link.",
+      "hotspots": [
+        "protocol",
+        "shadowsocks"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/outbounds/protocols.rs",
+        "crates/voya-core/src/fmt/shadowsocks.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
+    },
+    {
+      "id": "singbox-selfhost-vless-reality",
+      "core": "sing-box",
+      "fixture": "singbox/selfhost/vless_reality.json",
+      "generated": "singbox.selfhost.vless_reality",
+      "summary": "Self-hosted node server config with a dual-stack VLESS REALITY Vision inbound, resolve-before-reject rules, LAN closed, and direct egress.",
+      "hotspots": [
+        "inbounds",
+        "security",
+        "route",
+        "selfhost"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/selfhost.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
+    },
+    {
+      "id": "singbox-selfhost-shadowsocks-2022",
+      "core": "sing-box",
+      "fixture": "singbox/selfhost/shadowsocks_2022.json",
+      "generated": "singbox.selfhost.shadowsocks_2022",
+      "summary": "Self-hosted node server config with a dual-stack Shadowsocks 2022 inbound and LAN closed.",
+      "hotspots": [
+        "inbounds",
+        "route",
+        "selfhost"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/selfhost.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
+    },
+    {
+      "id": "singbox-selfhost-dual-allow-lan",
+      "core": "sing-box",
+      "fixture": "singbox/selfhost/dual_allow_lan.json",
+      "generated": "singbox.selfhost.dual_allow_lan",
+      "summary": "Self-hosted node server config with both inbounds, LAN access allowed while loopback and metadata stay denied, BitTorrent blocked, and a secret-protected loopback Clash API.",
+      "hotspots": [
+        "inbounds",
+        "route",
+        "selfhost",
+        "serialization"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/selfhost.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
     }
   ]
 }

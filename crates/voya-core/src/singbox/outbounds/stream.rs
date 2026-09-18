@@ -172,7 +172,13 @@ fn apply_outbound_tls(
         ..SingboxTls::default()
     };
 
-    if let Some(fingerprint) = effective_fingerprint(context) {
+    // sing-box refuses a REALITY client without uTLS ("uTLS is required by
+    // reality client"), so REALITY falls back to a fingerprint when the global
+    // setting leaves it empty.
+    let fingerprint = effective_fingerprint(context).or_else(|| {
+        (domain_tls.mode == TlsMode::Reality).then(|| REALITY_FALLBACK_FINGERPRINT.to_string())
+    });
+    if let Some(fingerprint) = fingerprint {
         tls.utls = Some(SingboxUtls {
             enabled: true,
             fingerprint,

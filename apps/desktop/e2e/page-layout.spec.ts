@@ -9,7 +9,7 @@ const sizes = [
   { width: 1180, height: 760 },
   { width: 1440, height: 900 },
 ];
-const destinations = ["profiles", "rules", "connections", "settings"] as const;
+const destinations = ["profiles", "rules", "connections", "selfHost", "settings"] as const;
 
 async function openPage(page: Page, destination: (typeof destinations)[number]) {
   await page.locator(`#shell-tab-${destination}`).click();

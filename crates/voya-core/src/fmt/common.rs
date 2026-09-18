@@ -108,32 +108,7 @@ pub(super) fn ensure_nonempty(
 }
 
 pub(super) fn valid_host(host: &str) -> bool {
-    let host = host.trim();
-    if host.is_empty()
-        || host.len() > 253
-        || host.chars().any(|ch| {
-            ch.is_control()
-                || ch.is_whitespace()
-                || matches!(ch, '=' | '/' | '?' | '#' | '@' | '\\')
-        })
-    {
-        return false;
-    }
-
-    let host_for_ip = host
-        .strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-        .unwrap_or(host);
-    if host_for_ip.parse::<IpAddr>().is_ok() {
-        return true;
-    }
-
-    if host.contains(':') {
-        return false;
-    }
-
-    let domain = host.trim_end_matches('.');
-    !domain.is_empty() && domain.split('.').all(is_dns_label)
+    crate::host::is_valid_host(host)
 }
 
 pub(super) fn protocol_share(config_type: ConfigType) -> &'static str {
