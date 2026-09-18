@@ -1,10 +1,13 @@
 use super::*;
 
 mod groups;
+mod latency_probes;
 mod protocols;
 mod stream;
 
 pub(super) use groups::{build_policy_group_servers, rule_group_tag};
+pub(super) use latency_probes::gen_latency_probes;
+pub use latency_probes::{is_latency_probe_candidate, latency_probe_tag};
 
 pub(super) use protocols::*;
 pub(super) use stream::*;

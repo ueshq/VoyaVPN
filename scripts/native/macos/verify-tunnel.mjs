@@ -24,9 +24,14 @@ const appContents = resolve(appBundle, "Contents");
 const appInfoPlist = resolve(appContents, "Info.plist");
 const appProvisioningProfile = resolve(appContents, "embedded.provisionprofile");
 const tunnelService = resolve(appContents, "MacOS", "voyavpn-tunnel-service");
+// A cargo example since the package stopped shipping it; a copy here means a
+// stale bin target is being bundled again.
 const exportBindings = resolve(appContents, "MacOS", "export-bindings");
-const singBoxCoreSeed = resolve(appContents, "Resources", "core-seeds", "sing_box", "sing-box");
-const libboxSymbols = ["_LibboxVersion", "_LibboxSetup", "_LibboxNewCommandServer", "_LibboxGetTunnelFileDescriptor"];
+// macOS packages ship no sing-box seed: the PacketTunnel's Libbox is the core.
+const coreSeeds = resolve(appContents, "Resources", "core-seeds");
+// Only entry points the provider actually calls: the appex links with
+// `-dead_strip`, which drops Libbox exports nothing references.
+const libboxSymbols = ["_LibboxSetup", "_LibboxNewCommandServer", "_LibboxGetTunnelFileDescriptor"];
 let macosDistribution;
 let tunnelLayout;
 let incompatibleTunnelBundle;
@@ -40,6 +45,13 @@ function requirePath(path, label) {
     throw new Error(`${label} is missing: ${path}`);
   }
   console.log(`✓ ${label}: ${path}`);
+}
+
+function requireAbsent(path, label) {
+  if (existsSync(path)) {
+    throw new Error(`${label} must not be packaged: ${path}`);
+  }
+  console.log(`✓ ${label} is not packaged`);
 }
 
 function decodeProvisioningProfile(profilePath) {
@@ -221,6 +233,8 @@ function main() {
   verifyNoIncompatibleTunnelBundle();
   requirePath(appex, tunnelLayout.label);
   requirePath(appexBinary, "PacketTunnel binary");
+  requireAbsent(exportBindings, "Export bindings development tool");
+  requireAbsent(coreSeeds, "sing-box core seed");
   verifyLibboxRuntime();
 
   const appProfile = verifyProvisioningProfile(appProvisioningProfile, "macOS app", appBundleIdentifier);
@@ -245,12 +259,6 @@ function main() {
   ]);
   if (existsSync(tunnelService)) {
     verifySignature(tunnelService, "Tunnel service binary");
-  }
-  if (existsSync(exportBindings)) {
-    verifySignature(exportBindings, "Export bindings binary");
-  }
-  if (existsSync(singBoxCoreSeed)) {
-    verifySignature(singBoxCoreSeed, "sing-box core seed binary");
   }
   verifySignature(appex, tunnelLayout.label, [
     "com.apple.developer.networking.networkextension",

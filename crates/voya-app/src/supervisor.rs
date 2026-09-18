@@ -244,8 +244,6 @@ fn native_tun_start_request(
         backend,
         active_profile_id: request.active_profile_id.clone(),
         kill_switch: request.kill_switch,
-        main_launch: request.main.launch.clone(),
-        pre_launch: request.pre.as_ref().map(|pre| pre.launch.clone()),
         main_config_path,
         pre_config_path,
     })

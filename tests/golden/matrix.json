@@ -349,6 +349,21 @@
       ],
       "core_acceptance": true,
       "volatile_fields": []
+    },
+    {
+      "id": "singbox-outbound-latency-probes",
+      "core": "sing-box",
+      "fixture": "singbox/outbounds/latency_probes.json",
+      "generated": "singbox.outbound.latency_probes",
+      "summary": "macOS latency probes: every node that can carry one, the active node included, gets an unrouted probe outbound whose tag carries a fingerprint of its settings; WireGuard and a node without a usable port get none, and the route still ends at proxy.",
+      "hotspots": [
+        "outbounds",
+        "latency-probes"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/outbounds/latency_probes.rs"
+      ],
+      "core_acceptance": true
     }
   ]
 }

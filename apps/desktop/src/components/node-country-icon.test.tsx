@@ -6,8 +6,11 @@ afterEach(cleanup);
 
 describe("NodeCountryIcon", () => {
   it.each(["US", " jp ", "HK", "TW", "DE"])("renders the bundled flag for %s", (countryCode) => {
+    const code = countryCode.trim().toLowerCase();
     const { container } = render(<NodeCountryIcon countryCode={countryCode} />);
-    expect(container.querySelector(`.fi-${countryCode.trim().toLowerCase()}`)).toBeInTheDocument();
+    const flag = container.querySelector<HTMLElement>(`.fi-${code}`);
+    expect(flag).toBeInTheDocument();
+    expect(flag?.style.backgroundImage).toContain(`/flags/4x3/${code}.svg`);
     expect(container.querySelector("svg")).toBeNull();
   });
 

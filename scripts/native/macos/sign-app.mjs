@@ -93,8 +93,6 @@ function signNestedCode(identity, packetTunnelProfile) {
   }
 
   signPlainExecutable(identity, resolve(appContents, "MacOS", "voyavpn-tunnel-service"), "voyavpn-tunnel-service");
-  signPlainExecutable(identity, resolve(appContents, "MacOS", "export-bindings"), "export-bindings");
-  signPlainExecutable(identity, resolve(appContents, "Resources", "core-seeds", "sing_box", "sing-box"), "sing-box core seed");
 }
 
 function removeUnsupportedLaunchServicesKeys() {

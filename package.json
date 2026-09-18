@@ -36,6 +36,7 @@
     "check:frontend:coverage": "pnpm test --run --coverage && node scripts/quality/frontend-coverage.mjs",
     "check:dead-code": "knip --treat-config-hints-as-errors && knip --strict --no-config-hints --config knip.production.jsonc",
     "check:sing-box": "node scripts/quality/sing-box.mjs",
+    "size:report": "node scripts/quality/package-size.mjs",
     "core:sing-box:install": "node scripts/core/install-sing-box.mjs --force",
     "verify:local": "node scripts/quality/verify-local.mjs",
     "release": "node scripts/release/cli.mjs",

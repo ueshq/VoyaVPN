@@ -269,6 +269,10 @@ function buildPacketTunnel() {
     "-e",
     "-Xlinker",
     "_NSExtensionMain",
+    // Drop the Libbox API surface the provider never calls (Xcode's release
+    // default); verify-tunnel checks the entry points that must survive.
+    "-Xlinker",
+    "-dead_strip",
   ];
 
   if (libboxFramework) {
@@ -287,6 +291,10 @@ function buildPacketTunnel() {
   args.push(...providerSources, "-o", appexBinary);
   run("xcrun", args, { cwd: repoRoot });
   removeSwiftModuleArtifacts(appexBinary);
+  // Local symbols are ~13 MB of the unstripped binary and nothing reads them
+  // (no DWARF/dSYM is produced). Global symbols stay for verify-tunnel's `nm -gU`.
+  // Must run before codesign, which seals the stripped bytes.
+  run("xcrun", ["strip", "-x", appexBinary], { cwd: repoRoot });
 
   writePlist(
     resolve(nativeRoot, "PacketTunnel", "Info.plist"),

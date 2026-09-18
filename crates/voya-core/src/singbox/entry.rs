@@ -9,6 +9,7 @@ pub(crate) fn generate_singbox_config(
     gen_log(&mut config, context);
     gen_inbounds(&mut config, context);
     gen_outbounds(&mut config, context);
+    gen_latency_probes(&mut config, context);
     gen_routing(&mut config, context);
     gen_dns(&mut config, context);
     gen_experimental(&mut config, context);

@@ -1,7 +1,11 @@
 # Bundled sing-box seed
 
-This directory holds the sing-box binary that ships inside the app bundle as a
-**seed**. At startup the app copies the seed into the per-user core dir:
+This directory holds the sing-box binary that ships inside the Windows and Linux
+packages as a **seed**. macOS packages carry none: the PacketTunnel extension
+links sing-box (Libbox) itself, so `scripts/tauri/core-seeds.mjs` skips the seed
+overlay for darwin targets. The seed is still staged here on macOS hosts for
+developer tooling such as `pnpm check:sing-box`. At startup the Windows/Linux
+app copies the seed into the per-user core dir:
 
 ```
 resources/core-seeds/<core>/        ->  {appConfigDir}/bin/<core>/
@@ -38,7 +42,7 @@ This downloads the pinned sing-box release, records its SHA256 in
 
 ## Recovery path
 
-If a user's `bin/sing_box/` is empty at connect time, the app surfaces a
+On Windows and Linux, if a user's `bin/sing_box/` is empty at connect time, the app surfaces a
 one-click **Install core** prompt that re-runs the seed copy
 (`install_core_seed` command). There is no core download/update fallback;
 sing-box updates are delivered by shipping a new app package.

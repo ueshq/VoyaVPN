@@ -323,6 +323,8 @@ jobs:
             exit 1
           fi
           echo "BUNDLE_DIR=$bundle_dir" >> "$GITHUB_ENV"
+          # Informational: sizes land in the job summary, nothing is gated yet.
+          pnpm size:report --target "$TAURI_TARGET" --profile "$RELEASE_PROFILE" || true
 
       - name: Normalize artifacts and write checksums
         run: |

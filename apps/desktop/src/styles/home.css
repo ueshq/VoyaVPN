@@ -233,10 +233,15 @@
   font-size: 24px;
   color: var(--muted-foreground);
 }
+/* The flag artwork itself is an inline background-image (node-country-icon.tsx). */
 .node-country-flag.fi {
+  display: inline-block;
   width: 32px;
   height: 24px;
   line-height: 24px;
+  background-position: 50%;
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 .home-node-content,
 .node-card-content {

@@ -1,0 +1,40 @@
+{
+  "final": "proxy",
+  "outbounds": [
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "proxy",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "password": "pass",
+      "server": "127.0.0.1",
+      "server_port": 1080,
+      "tag": "probe:active:efcc97df0c75841c",
+      "type": "socks",
+      "username": "user",
+      "version": "5"
+    },
+    {
+      "down_mbps": 100,
+      "password": "hy2-pass",
+      "server": "203.0.113.5",
+      "server_port": 443,
+      "tag": "probe:n-hy2:a6da551d16fff7be",
+      "tls": {
+        "enabled": true,
+        "insecure": false
+      },
+      "type": "hysteria2",
+      "up_mbps": 100
+    }
+  ]
+}

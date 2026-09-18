@@ -44,6 +44,11 @@ pub type Result<T> = std::result::Result<T, ClashError>;
 pub enum ClashError {
     #[error("Clash request failed: {0}")]
     Request(String),
+    /// The core answered with a non-success HTTP status. Kept apart from
+    /// `Request` because callers branch on it: a delay test reports a missing
+    /// outbound as 404, a timeout as 504 and an unreachable node as 503.
+    #[error("Clash request returned HTTP {0}")]
+    Status(u16),
     #[error(
         "Clash response body too large for {url}: limit {limit} bytes, content length {content_length:?}, received {received}"
     )]
@@ -210,7 +215,10 @@ impl ClashHttpTransport for ReqwestClashHttpTransport {
                 .await
                 .map_err(|error| ClashError::Request(error.to_string()))?
                 .error_for_status()
-                .map_err(|error| ClashError::Request(error.to_string()))?;
+                .map_err(|error| match error.status() {
+                    Some(status) => ClashError::Status(status.as_u16()),
+                    None => ClashError::Request(error.to_string()),
+                })?;
 
             let text = crate::read_response_text_limited(response, CLASH_HTTP_RESPONSE_LIMIT_BYTES)
                 .await
@@ -319,6 +327,20 @@ where
         self.request(ClashHttpMethod::Get, &path, None).await
     }
 
+    /// Measures one outbound through the core (a HEAD of `test_url`, dial
+    /// included). A tag the core does not know fails with `Status(404)`, a
+    /// probe past `timeout_ms` with `Status(504)`, any other failed probe with
+    /// `Status(503)`.
+    pub async fn proxy_delay(&self, tag: &str, test_url: &str, timeout_ms: u32) -> Result<u32> {
+        let path = format!(
+            "/proxies/{}/delay?url={}&timeout={timeout_ms}",
+            encode_segment(tag),
+            encode_query_value(test_url)
+        );
+        let response: ClashDelayResponse = self.request(ClashHttpMethod::Get, &path, None).await?;
+        Ok(response.delay)
+    }
+
     async fn request<R>(
         &self,
         method: ClashHttpMethod,
@@ -347,6 +369,11 @@ where
             })
             .await
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct ClashDelayResponse {
+    delay: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -799,6 +826,42 @@ mod tests {
             .expect("select request");
         assert_eq!(select.method, ClashHttpMethod::Put);
         assert_eq!(select.body, Some(json!({ "name": "Tokyo [a1]" })));
+    }
+
+    #[tokio::test]
+    async fn clash_proxy_delay_encodes_the_tag_and_url() {
+        let transport = MockTransport::default();
+        transport.respond(
+            "/proxies/probe:node%2F1:00ff/delay?url=https%3A%2F%2Fprobe.example%2Fgenerate_204&timeout=4000",
+            json!({ "delay": 142 }),
+        );
+        let client =
+            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
+
+        let delay = client
+            .proxy_delay(
+                "probe:node/1:00ff",
+                "https://probe.example/generate_204",
+                4_000,
+            )
+            .await
+            .expect("proxy delay");
+
+        assert_eq!(delay, 142);
+        assert_eq!(transport.requests()[0].method, ClashHttpMethod::Get);
+    }
+
+    #[tokio::test]
+    async fn clash_reqwest_transport_reports_the_status_of_a_failed_request() {
+        let port = spawn_clash_http_response("/other", "200 OK", Some(2), b"{}".to_vec()).await;
+        let client = ClashRestClient::new(ClashApiEndpoint::loopback(port));
+
+        let error = client
+            .proxy_delay("probe:missing:00", "https://probe.example/", 1_000)
+            .await
+            .expect_err("unknown outbound");
+
+        assert!(matches!(error, ClashError::Status(404)), "{error:?}");
     }
 
     #[tokio::test]

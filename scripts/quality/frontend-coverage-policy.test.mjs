@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkBundleBudgets } from "./frontend-bundle.mjs";
+import { checkBundleBudgets, checkDistBudgets } from "./frontend-bundle.mjs";
 import {
   criticalModules,
   evaluateCoverage,
@@ -144,5 +144,31 @@ describe("frontend bundle budgets", () => {
 
     expect(failures).toHaveLength(1);
     expect(failures[0]).toContain("total emitted JavaScript");
+  });
+});
+
+describe("frontend dist budgets", () => {
+  const files = [
+    { name: "index.html", bytes: 2 * 1024 },
+    { name: "index-abc.css", bytes: 80 * 1024 },
+    { name: "index-abc.js", bytes: 1500 * 1024 },
+    { name: "us-abc.svg", bytes: 1700 * 1024 },
+  ];
+
+  it("accepts the sizes the budgets were ratcheted around", () => {
+    expect(checkDistBudgets(files).failures).toEqual([]);
+  });
+
+  it("catches a stylesheet that inlines assets and assets JavaScript budgets never see", () => {
+    const flags = [
+      ...files,
+      { name: "vendor-abc.css", bytes: 421 * 1024 },
+      ...Array.from({ length: 142 }, (_, index) => ({ name: `flag-${index}.svg`, bytes: 26 * 1024 })),
+    ];
+
+    expect(checkDistBudgets(flags).failures).toEqual([
+      expect.stringContaining("total CSS"),
+      expect.stringContaining("whole embedded dist"),
+    ]);
   });
 });

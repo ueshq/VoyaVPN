@@ -265,22 +265,28 @@ static BOOL VoyaReloadManager(NETunnelProviderManager *manager, NSError **outErr
 }
 
 static NSString *VoyaFetchLastDisconnectError(NETunnelProviderSession *session) {
-    if (@available(macOS 13.0, *)) {
-        dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
-        __block NSError *disconnectError = nil;
-        [session fetchLastDisconnectErrorWithCompletionHandler:^(NSError *error) {
-            disconnectError = error;
-            dispatch_semaphore_signal(semaphore);
-        }];
-        // Diagnostics only: a wedged daemon must not hold up the status query
-        // that asked for this context.
-        if (!VoyaWaitWithTimeout(semaphore, VoyaPreferencesTimeoutSeconds)) {
-            return @"";
-        }
-        return disconnectError.localizedDescription ?: @"";
+    // A selector check rather than `@available` (macOS 13): that one compiles to
+    // a call to `__isPlatformVersionAtLeast`, which Rust's std exports only
+    // until the release profile's fat LTO internalizes it, and the link fails.
+    if (![session respondsToSelector:@selector(fetchLastDisconnectErrorWithCompletionHandler:)]) {
+        return @"";
     }
 
-    return @"";
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    __block NSError *disconnectError = nil;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+    [session fetchLastDisconnectErrorWithCompletionHandler:^(NSError *error) {
+        disconnectError = error;
+        dispatch_semaphore_signal(semaphore);
+    }];
+#pragma clang diagnostic pop
+    // Diagnostics only: a wedged daemon must not hold up the status query
+    // that asked for this context.
+    if (!VoyaWaitWithTimeout(semaphore, VoyaPreferencesTimeoutSeconds)) {
+        return @"";
+    }
+    return disconnectError.localizedDescription ?: @"";
 }
 
 // Observe only this session. Notifications wake the waiter; bounded polling

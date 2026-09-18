@@ -142,7 +142,11 @@ impl SupervisorActor {
         spec: &CoreProcessSpec,
         request: &SupervisorStartRequest,
     ) -> Result<ProcessSpawn, SupervisorError> {
-        let spawn = ProcessSpawn::from_core_launch(role, &spec.launch, spec.display_log)?;
+        let launch = spec
+            .launch
+            .as_ref()
+            .ok_or(SupervisorError::MissingCoreLaunch { role })?;
+        let spawn = ProcessSpawn::from_core_launch(role, launch, spec.display_log)?;
         if !process_uses_unix_sudo(&self.deps, spec, request.tun_enabled) {
             return Ok(spawn);
         }
@@ -581,16 +585,17 @@ impl SupervisorActor {
         if running.last_request.is_none() {
             return Ok(());
         }
-        let target = running
+        let launch = running
             .sudo_kill_target(handle)
+            .and_then(|target| target.launch.as_ref())
             .ok_or(SupervisorError::UnknownSudoKillTarget { pid: handle.id() })?;
         let launcher = self.elevation_launcher()?;
         let spawn = unix_sudo_kill_spawn_passwordless(
             self.deps.target_os,
             &launcher,
             handle.id(),
-            &target.launch.executable,
-            target.launch.working_dir.clone(),
+            &launch.executable,
+            launch.working_dir.clone(),
         )?;
         let output = self.deps.runner.run_oneshot(spawn)?;
         ensure_sudo_kill_success(handle.id(), output)

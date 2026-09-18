@@ -14,6 +14,15 @@ const optionalCoreSeedResources = [
   },
 ];
 
+/**
+ * macOS packages carry no sing-box seed: the PacketTunnel extension links
+ * sing-box (Libbox) and is the only core that runs there, so a second copy
+ * would only add ~50 MB.
+ */
+export function platformShipsCoreSeed(platform = process.platform) {
+  return platform !== "darwin";
+}
+
 export function hasExpectedSeedExecutable(seedDir, platform = process.platform) {
   if (!existsSync(seedDir)) {
     return false;
@@ -27,6 +36,9 @@ export function hasExpectedSeedExecutable(seedDir, platform = process.platform) 
 }
 
 export function coreSeedBundleResources(repoRoot, { platform = process.platform } = {}) {
+  if (!platformShipsCoreSeed(platform)) {
+    return {};
+  }
   const seedRoot = join(repoRoot, "apps", "desktop", "src-tauri", "resources", "core-seeds");
   const resources = {};
 

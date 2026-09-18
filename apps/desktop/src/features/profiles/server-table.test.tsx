@@ -21,6 +21,7 @@ import type {
   ProfileListEntry,
   RuntimeStatusResponse,
   SpeedtestResult,
+  TunStatus,
 } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
@@ -860,6 +861,39 @@ describe("ProfilesScreen", () => {
     ).toBeInTheDocument();
   });
 
+  it("waits for a connection before testing on macOS, where the VPN measures nodes", async () => {
+    mockProfileList(makeProfiles(2));
+    useRuntimeEventStore.setState({ tun: macosTun });
+    try {
+      renderProfiles();
+      await screen.findByText("Server 0");
+      const testAll = within(screen.getByRole("toolbar")).getByRole("button", { name: "Test all" });
+      expect(testAll).toBeDisabled();
+      expect(testAll.parentElement).toHaveAttribute(
+        "title",
+        "Connect first: on macOS, nodes are tested through the running VPN",
+      );
+
+      act(() => {
+        useRuntimeEventStore.setState({
+          coreState: {
+            activeProfileId: "profile-0",
+            activeTunBackend: "macosPacketTunnel",
+            mainPid: null,
+            prePid: null,
+            state: "connected",
+            connectedDurationMs: 0,
+          },
+        });
+      });
+      expect(testAll).toBeEnabled();
+      await userEvent.click(testAll);
+      expect(ipcMocks.runSpeedtest).toHaveBeenCalledOnce();
+    } finally {
+      useRuntimeEventStore.setState({ tun: null });
+    }
+  });
+
   it("says nothing about unreadable profiles when every stored profile decoded", async () => {
     mockProfileList(makeProfiles(2));
 
@@ -1679,3 +1713,21 @@ async function openImport(method = "Paste links or subscription URLs") {
   await userEvent.click(screen.getByRole("menuitem", { name: "Add" }));
   await userEvent.click(await screen.findByRole("menuitem", { name: method }));
 }
+
+const macosTun: TunStatus = {
+  allowEnableTun: true,
+  backend: "macosPacketTunnel",
+  elevationGranted: false,
+  enabled: true,
+  expectedProviderPath: null,
+  lastProviderError: null,
+  nativeComponentReady: true,
+  needsServiceInstall: false,
+  needsVpnPermission: false,
+  preflight: { notes: [], platform: "macos", routeRestoreNote: "", state: "ready", windowsCleanupDevices: [] },
+  providerPathMismatch: false,
+  providerState: "stopped",
+  requiresElevation: false,
+  resolvedProviderPath: null,
+  restoreOnDisconnect: true,
+};

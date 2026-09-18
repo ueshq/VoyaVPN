@@ -32,6 +32,7 @@ export function ProfileDetailsDialog({
     handleSpeedtest,
     restoreDetailsFocus,
     setDetailsId,
+    speedtestNeedsConnection,
     speedtestRunning,
     subscriptionName,
     t,
@@ -109,7 +110,7 @@ export function ProfileDetailsDialog({
         {/* Details should not be a dead end: the two things done with a node are here too. */}
         <DialogFooter>
           <Button
-            disabled={speedtestRunning}
+            disabled={speedtestRunning || speedtestNeedsConnection}
             onClick={() =>
               void handleSpeedtest(
                 { profileIds: [profile.id], scope: "profiles" },

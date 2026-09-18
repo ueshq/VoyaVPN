@@ -425,6 +425,7 @@ impl From<SupervisorError> for AppError {
             | SupervisorError::Elevation(_)
             | SupervisorError::UnknownSudoKillTarget { .. }
             | SupervisorError::MissingNativeTunConfigPath { .. }
+            | SupervisorError::MissingCoreLaunch { .. }
             | SupervisorError::SudoKillFailed { .. } => internal(Sub::Runtime, &error),
         }
     }

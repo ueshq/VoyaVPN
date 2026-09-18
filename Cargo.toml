@@ -39,6 +39,19 @@ voya-db = { path = "crates/voya-db" }
 voya-net = { path = "crates/voya-net" }
 voya-platform = { path = "crates/voya-platform" }
 
+# Shipped binaries are the GUI shell and its helpers; the proxy hot path runs
+# inside sing-box, so size wins over speed here. Measured on macOS arm64 (the
+# `voyavpn` binary): default profile 34.6 MB, opt 3 + fat LTO + strip 19.7 MB,
+# "s" 15.3 MB, "z" 11.7 MB. The CPU-bound work left in-process (QR decoding,
+# SQLite, config generation) is occasional and small.
+# `panic` stays at the default `unwind` on purpose: a panicking Tokio task must
+# not take the process down before shutdown restores the system proxy/TUN.
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+
 [workspace.lints.rust]
 rust_2018_idioms = "warn"
 # Edition 2021 leaves this allow-by-default, so an `unsafe fn` body may perform

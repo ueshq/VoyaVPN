@@ -155,11 +155,7 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
         Box::pin(async move {
             check_cancelled(&cancel)?;
             let client = SocksHttpProbe::new(socks_port)?;
-            let url = if speed_test_item.speed_ping_test_url.trim().is_empty() {
-                REALPING_FALLBACK_URL
-            } else {
-                speed_test_item.speed_ping_test_url.as_str()
-            };
+            let url = latency_test_url(&speed_test_item);
             let timeout = Duration::from_secs(
                 u64::try_from(speed_test_item.speed_test_timeout.max(1)).unwrap_or(1),
             );
@@ -176,6 +172,15 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
                 ip_info: lookup.map(|result| result.text),
             })
         })
+    }
+}
+
+/// The URL a latency probe fetches: the configured one, else the default.
+fn latency_test_url(item: &SpeedTestItem) -> &str {
+    if item.speed_ping_test_url.trim().is_empty() {
+        REALPING_FALLBACK_URL
+    } else {
+        item.speed_ping_test_url.as_str()
     }
 }
 
@@ -205,17 +210,30 @@ pub trait SpeedtestCoreBackend: Send + Sync {
 
 #[derive(Clone)]
 pub struct SpeedtestManager {
-    probe: Arc<dyn SpeedtestProbe>,
-    core_backend: Arc<dyn SpeedtestCoreBackend>,
+    backend: SpeedtestBackend,
     paths: AppPaths,
     target_os: TargetOs,
     active_cancel: Arc<Mutex<Option<CancellationFlag>>>,
 }
 
+/// Where a latency test runs.
+#[derive(Clone)]
+enum SpeedtestBackend {
+    /// Windows and Linux: a throwaway sing-box per page, probed over SOCKS.
+    ProbeCore {
+        probe: Arc<dyn SpeedtestProbe>,
+        core: Arc<dyn SpeedtestCoreBackend>,
+    },
+    /// macOS: the running PacketTunnel core, through its Clash API.
+    RunningCore(Arc<dyn RunningCoreProbe>),
+}
+
 mod core_backend;
 mod manager;
+mod running_core;
 
 pub use core_backend::ProcessSpeedtestCoreBackend;
+pub use running_core::{RunningCoreDelay, RunningCoreProbe, SupervisorRunningCoreProbe};
 
 async fn select_test_items(
     database: &Database,

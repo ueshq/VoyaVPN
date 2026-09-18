@@ -40,7 +40,7 @@ use voya_contracts::{
     TunProviderDiagnostics, TunStatus,
 };
 use voya_platform::{
-    coreinfo::{copy_seed_core_asset, discover_packaged_seed_executable, CoreInfoError, TargetOs},
+    coreinfo::{copy_seed_core_asset, CoreInfoError, TargetOs},
     sysproxy::SystemProxyStatus,
 };
 

@@ -86,20 +86,18 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         tracing::warn!(?error, "failed to seed the default routing profile");
     }
     tauri::async_runtime::block_on(services.initialize_profile_metrics())?;
-    let core_seed_resource_dir = Some(core_seed_resources_dir(app.path().resource_dir()?));
-    match (TargetOs::current(), core_seed_resource_dir.as_ref()) {
-        (TargetOs::Macos, _) => {
-            tracing::debug!("skipped packaged core seed copy at startup on macOS");
+    // The macOS package carries no sing-box seed: the PacketTunnel extension
+    // links sing-box itself and is the only core that ever runs there.
+    let core_seed_resource_dir = (TargetOs::current() != TargetOs::Macos)
+        .then(|| app.path().resource_dir().map(core_seed_resources_dir))
+        .transpose()?;
+    if let Some(seed_dir) = core_seed_resource_dir.as_ref() {
+        if let Err(error) = copy_seed_core_asset(&runtime_paths, seed_dir) {
+            tracing::warn!(
+                ?error,
+                "failed to copy packaged core seed assets at startup"
+            );
         }
-        (_, Some(seed_dir)) => {
-            if let Err(error) = copy_seed_core_asset(&runtime_paths, seed_dir) {
-                tracing::warn!(
-                    ?error,
-                    "failed to copy packaged core seed assets at startup"
-                );
-            }
-        }
-        (_, None) => {}
     }
     let runner: Arc<dyn ProcessRunner> = Arc::new(StdProcessRunner::with_log_sink(Arc::new(
         TauriProcessLogSink {
@@ -147,8 +145,11 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         }),
     );
     drop(runtime_guard);
-    let speedtest_manager =
-        services.speedtest_manager(core_seed_resource_dir.clone(), Arc::new(speedtest_runner));
+    let speedtest_manager = services.speedtest_manager(
+        core_seed_resource_dir.clone(),
+        Arc::new(speedtest_runner),
+        supervisor.clone(),
+    );
     app.manage(AppState {
         services,
         config_mutations,

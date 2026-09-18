@@ -113,8 +113,10 @@ function createDmg(outputPath) {
     "-fs",
     "HFS+",
     "-ov",
+    // LZMA: the payload is almost entirely Mach-O, which it packs noticeably
+    // tighter than zlib (UDZO). Mountable from macOS 10.15, the app's minimum.
     "-format",
-    "UDZO",
+    "ULMO",
     outputPath,
   ], { cwd: repoRoot });
 }

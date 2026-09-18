@@ -29,7 +29,7 @@ pub fn run() {
 
     // The path is baked in at compile time, so a packaged debug build moved to
     // another machine would panic before a window exists. `pnpm generate:bindings`
-    // (the `export-bindings` binary) is the canonical path; this convenience
+    // (the `export-bindings` example) is the canonical path; this convenience
     // export is limited to `tauri dev` and an explicit opt-in, and never fatal.
     #[cfg(debug_assertions)]
     if tauri::is_dev() || std::env::var_os("VOYAVPN_EXPORT_BINDINGS").is_some() {

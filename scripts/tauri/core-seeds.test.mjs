@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { coreSeedBundleResources, hasExpectedSeedExecutable } from "./core-seeds.mjs";
+import { coreSeedBundleResources, hasExpectedSeedExecutable, platformShipsCoreSeed } from "./core-seeds.mjs";
 
 describe("tauri core seed overlay", () => {
   it("requires the current platform executable before bundling sing-box seeds", async () => {
@@ -22,6 +22,12 @@ describe("tauri core seed overlay", () => {
       expect(coreSeedBundleResources(repoRoot, { platform: "linux" })).toEqual({
         "resources/core-seeds/sing_box/*": "core-seeds/sing_box/",
       });
+
+      // The PacketTunnel extension carries sing-box on macOS, so a staged
+      // seed is never bundled there.
+      await writeFile(join(singBoxDir, "sing-box"), "fake executable");
+      expect(platformShipsCoreSeed("darwin")).toBe(false);
+      expect(coreSeedBundleResources(repoRoot, { platform: "darwin" })).toEqual({});
     } finally {
       await rm(repoRoot, { force: true, recursive: true });
     }

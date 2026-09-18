@@ -85,7 +85,10 @@ impl ClashApiAccess {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreProcessSpec {
-    pub launch: CoreLaunch,
+    /// How to start sing-box as a child process. `None` for a config only a
+    /// native TUN backend runs: the macOS PacketTunnel carries sing-box itself,
+    /// so that build ships no executable to point at.
+    pub launch: Option<CoreLaunch>,
     pub config_path: Option<PathBuf>,
     pub display_log: bool,
     pub may_need_sudo: bool,
@@ -95,10 +98,21 @@ impl CoreProcessSpec {
     #[must_use]
     pub const fn new(launch: CoreLaunch) -> Self {
         Self {
-            launch,
+            launch: Some(launch),
             config_path: None,
             display_log: true,
             may_need_sudo: true,
+        }
+    }
+
+    /// A config for a native TUN backend, which starts no child process.
+    #[must_use]
+    pub const fn native_tun() -> Self {
+        Self {
+            launch: None,
+            config_path: None,
+            display_log: true,
+            may_need_sudo: false,
         }
     }
 
@@ -246,6 +260,8 @@ pub enum SupervisorError {
     UnknownSudoKillTarget { pid: u32 },
     #[error("missing runtime config path for native TUN {role:?} process")]
     MissingNativeTunConfigPath { role: ProcessRole },
+    #[error("no sing-box executable to launch the {role:?} process with")]
+    MissingCoreLaunch { role: ProcessRole },
     #[error("sudo kill for pid {pid} failed with status {status_code:?}: {stderr}")]
     SudoKillFailed {
         pid: u32,

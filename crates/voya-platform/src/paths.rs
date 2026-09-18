@@ -159,16 +159,13 @@ mod tests {
 
     #[test]
     fn coreinfo_paths_locate_packaged_core_seed_resources() {
-        let resources_dir = Path::new("/tmp/VoyaVPN.app/Contents/Resources");
+        let resources_dir = Path::new("/usr/lib/VoyaVPN");
         let seed_root = core_seed_resources_dir(resources_dir);
 
-        assert_eq!(
-            seed_root,
-            Path::new("/tmp/VoyaVPN.app/Contents/Resources/core-seeds")
-        );
+        assert_eq!(seed_root, Path::new("/usr/lib/VoyaVPN/core-seeds"));
         assert_eq!(
             core_seed_resource_dir(&seed_root, "sing_box"),
-            Path::new("/tmp/VoyaVPN.app/Contents/Resources/core-seeds/sing_box")
+            Path::new("/usr/lib/VoyaVPN/core-seeds/sing_box")
         );
     }
 

@@ -79,6 +79,7 @@ pub(crate) mod support;
 
 pub use dns::first_dns_address;
 pub use entry::*;
+pub use outbounds::{is_latency_probe_candidate, latency_probe_tag};
 pub use schema::*;
 
 use dns::*;

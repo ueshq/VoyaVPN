@@ -7,7 +7,8 @@
     "beforeDevCommand": "pnpm dev:web",
     "beforeBuildCommand": "pnpm build",
     "devUrl": "http://127.0.0.1:1420",
-    "frontendDist": "../dist"
+    "frontendDist": "../dist",
+    "removeUnusedCommands": true
   },
   "app": {
     "windows": [

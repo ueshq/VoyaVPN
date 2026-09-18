@@ -119,6 +119,7 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.route.tun" => singbox_tun_route(),
         "singbox.route.default_seed" => singbox_default_seed_snapshot(),
         "singbox.outbound.policy_groups" => singbox_policy_groups_snapshot(),
+        "singbox.outbound.latency_probes" => singbox_latency_probes_snapshot(),
         "singbox.outbound.tuic_tls" => singbox_tuic_tls_outbound(),
         "singbox.outbound.anytls_tls" => singbox_anytls_tls_outbound(),
         "singbox.outbound.naive_quic_tls" => singbox_naive_quic_tls_outbound(),
@@ -687,6 +688,57 @@ fn singbox_policy_groups_snapshot() -> Value {
     serde_json::json!({ "selector": selector, "urltest": urltest, "fallback": fallback })
 }
 
+/// The macOS runtime config with latency probes: the active node stays the
+/// `proxy` outbound and every probe-worthy node, the active one included, gets
+/// an unrouted `probe:` outbound. A WireGuard node and a node without a usable
+/// port get none.
+fn singbox_latency_probes_context() -> CoreConfigContext {
+    let active = singbox_socks_node("active", "Active");
+    let mut context = singbox_context(AppConfig::default(), active.clone());
+    context.platform = CoreGenPlatform::MacOS;
+    context.latency_probe_nodes = vec![
+        active,
+        singbox_hysteria2_minimal_context().node,
+        ProfileItem {
+            index_id: "wg".to_string(),
+            remarks: "WireGuard".to_string(),
+            protocol: ProfileProtocol::WireGuard {
+                server: endpoint("198.51.100.7", 51820),
+                private_key: "cHJpdmF0ZS1rZXktcHJpdmF0ZS1rZXktcHJpdmF0ZTA=".to_string(),
+                peer_public_key: Some("cHVibGljLWtleS1wdWJsaWMta2V5LXB1YmxpYy1rZXk=".to_string()),
+                preshared_key: None,
+                interface_address: Some("10.0.0.2/32".to_string()),
+                allowed_ips: None,
+                reserved: None,
+                mtu: None,
+            },
+            ..ProfileItem::default()
+        },
+        ProfileItem {
+            protocol: ProfileProtocol::Socks {
+                server: endpoint(LOOPBACK, 0),
+                username: String::new(),
+                password: String::new(),
+            },
+            ..singbox_socks_node("no-port", "No port")
+        },
+    ];
+    context
+}
+
+fn singbox_latency_probes_config() -> Value {
+    generate_singbox_config_value(&singbox_latency_probes_context())
+        .expect("latency probe config should generate")
+}
+
+fn singbox_latency_probes_snapshot() -> Value {
+    let config = singbox_latency_probes_config();
+    serde_json::json!({
+        "outbounds": config["outbounds"],
+        "final": config["route"]["final"],
+    })
+}
+
 fn singbox_pre_socks_configs() -> Vec<Value> {
     let mut config = AppConfig::default();
     config.tun_mode_item.enable_tun = true;
@@ -982,6 +1034,7 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
             ]
         }
         "singbox.outbound.policy_groups" => singbox_policy_group_configs(),
+        "singbox.outbound.latency_probes" => vec![singbox_latency_probes_config()],
         "singbox.routing.per_rule_outbound" => vec![singbox_per_rule_outbound_config()],
         "singbox.runtime.logs_and_api" => vec![singbox_logs_and_api_config()],
         "singbox.outbound.hysteria2_minimal" => {

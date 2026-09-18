@@ -1825,3 +1825,89 @@ fn singbox_macos_leaves_out_app_conditions_the_network_extension_cannot_match() 
     assert!(has_app_rule(&linux));
     assert!(!has_app_rule(&macos));
 }
+
+#[test]
+fn latency_probe_tag_follows_the_generated_outbound() {
+    let context = test_context(AppConfig::default(), socks_node("active", "Active"));
+    let node = socks_node("node", "Node");
+    let tag = latency_probe_tag(&context, &node);
+
+    assert!(tag.starts_with("probe:node:"), "{tag}");
+    assert_eq!(tag, latency_probe_tag(&context, &node.clone()));
+    // A renamed node generates the same outbound, so a running core can still
+    // measure it; an identical node under another id is a different probe.
+    let renamed = ProfileItem {
+        remarks: "Renamed".to_string(),
+        ..node.clone()
+    };
+    assert_eq!(tag, latency_probe_tag(&context, &renamed));
+    assert_ne!(
+        tag,
+        latency_probe_tag(&context, &socks_node("twin", "Node"))
+    );
+
+    // An edited server or a changed outbound setting no longer matches what
+    // the running core was started with.
+    let moved = ProfileItem {
+        protocol: ProfileProtocol::Socks {
+            server: endpoint(LOOPBACK, 1081),
+            username: "user".to_string(),
+            password: "pass".to_string(),
+        },
+        ..node.clone()
+    };
+    assert_ne!(tag, latency_probe_tag(&context, &moved));
+    let mut remote = base_remote_node();
+    remote.index_id = "remote".to_string();
+    let mut muxed = context.clone();
+    muxed.app_config.core_basic_item.mux_enabled = true;
+    assert_ne!(
+        latency_probe_tag(&context, &remote),
+        latency_probe_tag(&muxed, &remote)
+    );
+}
+
+#[test]
+fn latency_probe_candidates_exclude_nodes_that_could_break_the_connection() {
+    assert!(is_latency_probe_candidate(&socks_node("node", "Node")));
+    assert!(!is_latency_probe_candidate(&socks_node("", "No id")));
+    let no_port = ProfileItem {
+        protocol: ProfileProtocol::Socks {
+            server: endpoint(LOOPBACK, 0),
+            username: String::new(),
+            password: String::new(),
+        },
+        ..socks_node("no-port", "No port")
+    };
+    assert!(!is_latency_probe_candidate(&no_port));
+    let wireguard = ProfileItem {
+        index_id: "wg".to_string(),
+        protocol: ProfileProtocol::WireGuard {
+            server: endpoint("198.51.100.7", 51820),
+            private_key: "key".to_string(),
+            peer_public_key: Some("peer".to_string()),
+            preshared_key: None,
+            interface_address: None,
+            allowed_ips: None,
+            reserved: None,
+            mtu: None,
+        },
+        ..ProfileItem::default()
+    };
+    assert!(!is_latency_probe_candidate(&wireguard));
+}
+
+#[test]
+fn latency_probes_are_absent_unless_requested() {
+    let context = test_context(AppConfig::default(), socks_node("active", "Active"));
+    let outbounds = generate_singbox_config_value(&context).expect("config")["outbounds"].clone();
+
+    assert!(outbounds
+        .as_array()
+        .expect("outbounds")
+        .iter()
+        .all(|outbound| !outbound["tag"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("probe:")));
+}

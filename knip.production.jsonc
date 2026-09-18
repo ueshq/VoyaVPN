@@ -15,7 +15,9 @@
       "entry": ["src/main.tsx!"],
       "project": ["src/**/*.{ts,tsx,css}!"],
       "ignore": ["e2e/**", "src/**/*.{test,spec}.{ts,tsx}", "src/**/*.test-fixture.ts", "src/test/**"],
-      "ignoreDependencies": ["@tauri-apps/cli"],
+      // flag-icons ships only SVG files, reached through `import.meta.glob`
+      // in node-country-icon.tsx, which knip cannot follow.
+      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
       "ignoreIssues": {
         "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"]
       }

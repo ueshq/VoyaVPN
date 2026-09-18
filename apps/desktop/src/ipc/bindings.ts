@@ -972,6 +972,13 @@ export type SpeedtestOutcome =
 "coreUnavailable" | 
 /**  No free local port was available for the probe. */
 "noAvailablePort" | 
+/**  Nothing is connected, and on macOS only the running core can measure. */
+"notConnected" | 
+/**
+ *  The running core predates this node or its current settings (it was
+ *  added or edited after connecting), so measuring needs a reconnect.
+ */
+"reconnectRequired" | 
 /**  A failure with no more specific code. */
 "failed" | 
 /**  A stored value this build cannot classify, without dropping the row. */

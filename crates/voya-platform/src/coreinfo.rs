@@ -178,30 +178,6 @@ pub fn discover_executable(paths: &AppPaths) -> Result<PathBuf, CoreInfoError> {
     })
 }
 
-pub fn discover_packaged_seed_executable(
-    seed_resources_dir: impl AsRef<Path>,
-    target_os: TargetOs,
-) -> Result<Option<PathBuf>, CoreInfoError> {
-    let search_dir = core_seed_resource_dir(seed_resources_dir, CORE_DIR_NAME);
-
-    match search_dir.try_exists() {
-        Ok(false) => return Ok(None),
-        Ok(true) => {}
-        Err(source) => {
-            return Err(CoreInfoError::InspectCoreSeed {
-                path: search_dir,
-                source,
-            });
-        }
-    }
-
-    if !search_dir.is_dir() {
-        return Err(CoreInfoError::InvalidCoreSeedDir { path: search_dir });
-    }
-
-    first_existing_file(executable_candidates(&search_dir, target_os))
-}
-
 /// Copies the packaged sing-box seed into app data unless an executable is
 /// already installed there.
 pub fn copy_seed_core_asset(
@@ -443,24 +419,6 @@ mod tests {
         assert_eq!(outcome.status, CoreSeedCopyStatus::SeedMissing);
         assert!(outcome.copied_files.is_empty());
         assert!(!paths.core_bin_dir(CORE_DIR_NAME).exists());
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn coreinfo_discovers_packaged_seed_executable_without_copying() {
-        let root = unique_temp_root("seed-discover");
-        let seed_root = core_seed_resources_dir(root.join("resources"));
-        let seed_exe = seed_root
-            .join(CORE_DIR_NAME)
-            .join(executable_name_for_current_os("sing-box"));
-        fs::create_dir_all(seed_exe.parent().expect("seed exe parent")).expect("create seed dir");
-        fs::write(&seed_exe, b"seed-sing-box").expect("write seed exe");
-
-        let discovered = discover_packaged_seed_executable(&seed_root, TargetOs::current())
-            .expect("discover packaged seed executable");
-
-        assert_eq!(discovered, Some(seed_exe));
 
         let _ = fs::remove_dir_all(root);
     }

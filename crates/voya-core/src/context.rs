@@ -172,6 +172,10 @@ pub struct CoreConfigContext {
     /// Policy groups that routing rules send traffic to, each with its usable
     /// members in order. A rule naming the active group uses `proxy` instead.
     pub rule_policy_groups: Vec<ContextPolicyGroup>,
+    /// Nodes that get an unrouted probe outbound (see [`crate::latency_probe_tag`])
+    /// so the running core can measure them. Empty unless the orchestration
+    /// layer asks for it; the builder never fills it.
+    pub latency_probe_nodes: Vec<ProfileItem>,
 }
 
 /// How a routing rule names a policy group as its outbound: this prefix and
@@ -207,6 +211,7 @@ impl Default for CoreConfigContext {
             clash_api_secret: None,
             policy_group: None,
             rule_policy_groups: Vec::new(),
+            latency_probe_nodes: Vec::new(),
         }
     }
 }
@@ -333,6 +338,7 @@ where
             clash_api_secret: self.env.get_clash_api_secret(),
             policy_group: None,
             rule_policy_groups: Vec::new(),
+            latency_probe_nodes: Vec::new(),
         };
 
         let node_result = self.resolve_node(&mut context, node);

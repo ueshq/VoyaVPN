@@ -733,6 +733,7 @@ mod guards {
             | SupervisorError::Elevation(_)
             | SupervisorError::UnknownSudoKillTarget { .. }
             | SupervisorError::MissingNativeTunConfigPath { .. }
+            | SupervisorError::MissingCoreLaunch { .. }
             | SupervisorError::SudoKillFailed { .. } => (),
         }
     }

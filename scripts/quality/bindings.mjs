@@ -9,7 +9,9 @@ const repoRoot = repoRootFromScript(import.meta.url);
 const bindingsPath = resolve(repoRoot, "apps/desktop/src/ipc/bindings.ts");
 
 function runExport(outputPath) {
-  const result = spawnSync("cargo", ["run", "-p", "voyavpn", "--bin", "export-bindings", "--", outputPath], {
+  // A cargo example rather than a bin: Tauri bundles every bin target, and this
+  // codegen tool has no business in a shipped package.
+  const result = spawnSync("cargo", ["run", "-p", "voyavpn", "--example", "export-bindings", "--", outputPath], {
     cwd: repoRoot,
     encoding: "utf8",
     stdio: "inherit",

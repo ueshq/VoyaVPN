@@ -21,15 +21,31 @@ impl SpeedtestManager {
         )
     }
 
+    /// The macOS manager: nodes are measured by the running PacketTunnel core,
+    /// since the package ships no sing-box to launch a probe core with.
+    #[must_use]
+    pub fn through_running_core(paths: AppPaths, running_core: Arc<dyn RunningCoreProbe>) -> Self {
+        Self::with_backend(paths, SpeedtestBackend::RunningCore(running_core))
+    }
+
     #[must_use]
     pub(super) fn with_probe_and_backend(
         paths: AppPaths,
         probe: Arc<dyn SpeedtestProbe>,
         core_backend: Arc<dyn SpeedtestCoreBackend>,
     ) -> Self {
+        Self::with_backend(
+            paths,
+            SpeedtestBackend::ProbeCore {
+                probe,
+                core: core_backend,
+            },
+        )
+    }
+
+    fn with_backend(paths: AppPaths, backend: SpeedtestBackend) -> Self {
         Self {
-            probe,
-            core_backend,
+            backend,
             paths,
             target_os: TargetOs::current(),
             active_cancel: Arc::new(Mutex::new(None)),
@@ -75,9 +91,31 @@ impl SpeedtestManager {
         let selected = select_test_items(database, config, &index_ids).await?;
         clear_previous_results(database, &selected, &on_result).await?;
 
-        let mut results = self
-            .run_batch_items(database, config, &selected, Arc::clone(&cancel), &on_result)
-            .await?;
+        let mut results = match &self.backend {
+            SpeedtestBackend::ProbeCore { probe, core } => {
+                self.run_batch_items(
+                    probe.as_ref(),
+                    core.as_ref(),
+                    database,
+                    config,
+                    &selected,
+                    Arc::clone(&cancel),
+                    &on_result,
+                )
+                .await?
+            }
+            SpeedtestBackend::RunningCore(running_core) => {
+                self.run_through_running_core(
+                    running_core.as_ref(),
+                    database,
+                    config,
+                    &selected,
+                    Arc::clone(&cancel),
+                    &on_result,
+                )
+                .await?
+            }
+        };
         let completed_count = u32::try_from(results.len()).unwrap_or(u32::MAX);
 
         let cancelled = is_cancelled(&cancel);
@@ -106,7 +144,9 @@ impl SpeedtestManager {
         if let Err(error) = self.cancel() {
             tracing::warn!(?error, "failed to cancel speedtest during shutdown");
         }
-        self.core_backend.stop_all();
+        if let SpeedtestBackend::ProbeCore { core, .. } = &self.backend {
+            core.stop_all();
+        }
     }
 
     pub fn cancel(&self) -> Result<bool> {
@@ -132,8 +172,11 @@ impl SpeedtestManager {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn run_batch_items<F>(
         &self,
+        probe: &dyn SpeedtestProbe,
+        core_backend: &dyn SpeedtestCoreBackend,
         database: &Database,
         config: &AppConfig,
         items: &[ServerTestItem],
@@ -158,7 +201,7 @@ impl SpeedtestManager {
                 .iter()
                 .map(|prepared| prepared.entry.clone())
                 .collect::<Vec<_>>();
-            let session = match self.core_backend.start(entries, Arc::clone(&cancel)).await {
+            let session = match core_backend.start(entries, Arc::clone(&cancel)).await {
                 Ok(session) => session,
                 Err(SpeedtestError::Cancelled) => break,
                 Err(error) => {
@@ -180,9 +223,14 @@ impl SpeedtestManager {
                 if is_cancelled(&cancel) {
                     break;
                 }
-                let result = self
-                    .run_realping(database, config, prepared.item.clone(), Arc::clone(&cancel))
-                    .await?;
+                let result = run_realping(
+                    probe,
+                    database,
+                    config,
+                    prepared.item.clone(),
+                    Arc::clone(&cancel),
+                )
+                .await?;
                 if let Some(result) = result {
                     on_result(result.clone());
                     results.push(result);
@@ -248,47 +296,6 @@ impl SpeedtestManager {
         Ok(batch)
     }
 
-    async fn run_realping(
-        &self,
-        database: &Database,
-        config: &AppConfig,
-        item: ServerTestItem,
-        cancel: CancellationFlag,
-    ) -> Result<Option<SpeedtestResult>> {
-        let index_id = item.index_id.clone();
-        let result = match self
-            .probe
-            .realping(item.socks_port, config.speed_test_item.clone(), cancel)
-            .await
-        {
-            Ok(realping) => SpeedtestResult {
-                index_id,
-                delay: Some(realping.delay),
-                outcome: measured_outcome(realping.delay),
-                detail: None,
-                ip_info: realping.ip_info,
-                country_code: realping.country_code,
-            },
-            Err(error) => {
-                tracing::warn!(index_id = %index_id, ?error, "speedtest realping failed");
-                SpeedtestResult {
-                    index_id,
-                    delay: Some(-1),
-                    outcome: speedtest_outcome(&error),
-                    detail: speedtest_detail(&error),
-                    // The failure is the outcome now. This used to write
-                    // "Skipped" into the IP-info column, which is neither IP
-                    // information nor translatable.
-                    ip_info: None,
-                    country_code: None,
-                }
-            }
-        };
-        let saved = persist_speedtest_result_with_retry(database, &result, &item.profile).await?;
-
-        Ok(saved.then_some(result))
-    }
-
     fn begin_job(&self) -> Result<CancellationFlag> {
         let cancel = Arc::new(AtomicBool::new(false));
         let mut active = self
@@ -318,10 +325,50 @@ impl SpeedtestManager {
     }
 }
 
+async fn run_realping(
+    probe: &dyn SpeedtestProbe,
+    database: &Database,
+    config: &AppConfig,
+    item: ServerTestItem,
+    cancel: CancellationFlag,
+) -> Result<Option<SpeedtestResult>> {
+    let index_id = item.index_id.clone();
+    let result = match probe
+        .realping(item.socks_port, config.speed_test_item.clone(), cancel)
+        .await
+    {
+        Ok(realping) => SpeedtestResult {
+            index_id,
+            delay: Some(realping.delay),
+            outcome: measured_outcome(realping.delay),
+            detail: None,
+            ip_info: realping.ip_info,
+            country_code: realping.country_code,
+        },
+        Err(error) => {
+            tracing::warn!(index_id = %index_id, ?error, "speedtest realping failed");
+            SpeedtestResult {
+                index_id,
+                delay: Some(-1),
+                outcome: speedtest_outcome(&error),
+                detail: speedtest_detail(&error),
+                // The failure is the outcome now. This used to write
+                // "Skipped" into the IP-info column, which is neither IP
+                // information nor translatable.
+                ip_info: None,
+                country_code: None,
+            }
+        }
+    };
+    let saved = persist_speedtest_result_with_retry(database, &result, &item.profile).await?;
+
+    Ok(saved.then_some(result))
+}
+
 /// Persists and reports a terminal result for profiles that could not be
 /// tested, so a bad profile or a core that refuses to start is a per-item
 /// failure instead of an aborted run.
-async fn record_item_failures<F>(
+pub(super) async fn record_item_failures<F>(
     database: &Database,
     failures: Vec<SpeedtestItemFailure>,
     selected: &[ServerTestItem],
@@ -394,7 +441,7 @@ const PERSIST_RETRY_MAX_DELAY: Duration = Duration::from_millis(160);
 /// before the busy handler could be armed). Propagating it aborted the whole
 /// run and threw away every probe that had already completed, which is a far
 /// worse outcome than waiting a few tens of milliseconds for one row.
-async fn persist_speedtest_result_with_retry(
+pub(super) async fn persist_speedtest_result_with_retry(
     database: &Database,
     result: &SpeedtestResult,
     profile: &ProfileItem,

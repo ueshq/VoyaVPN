@@ -8,7 +8,7 @@ use std::process::Command;
 
 use thiserror::Error;
 
-use crate::coreinfo::{CoreLaunch, TargetOs};
+use crate::coreinfo::TargetOs;
 
 pub const MACOS_PACKET_TUNNEL_BUNDLE_ID: &str = "app.voyavpn.desktop.PacketTunnel";
 pub const WINDOWS_TUN_SERVICE_NAME: &str = "VoyaVPNTunnelService";
@@ -258,8 +258,6 @@ pub struct NativeTunStartRequest {
     /// routes every network through the VPN; the Windows service relies on the
     /// generated `strict_route`.
     pub kill_switch: bool,
-    pub main_launch: CoreLaunch,
-    pub pre_launch: Option<CoreLaunch>,
     pub main_config_path: PathBuf,
     pub pre_config_path: Option<PathBuf>,
 }

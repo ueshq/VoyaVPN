@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 import { ensureSingBoxSeedForBuild } from "../core/sing-box-installer.mjs";
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
-import { writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
+import { platformShipsCoreSeed, writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
 import {
   normalizeCiEnv,
   requestedStableUpdaterConfig,
@@ -70,6 +70,7 @@ export async function prepareTauriInvocation(
     ensureSeed = ensureSingBoxSeedForBuild,
     writeCoreOverlay = writeOptionalCoreSeedOverlay,
     writeUpdaterOverlay = writeStableUpdaterOverlay,
+    hostPlatform = process.platform,
   } = {},
 ) {
   const desktopRoot = resolve(repoRoot, "apps", "desktop");
@@ -78,15 +79,20 @@ export async function prepareTauriInvocation(
   const operation = tauriArgs[0];
   const env = operation === "build" ? normalizeCiEnv(sourceEnv) : { ...sourceEnv };
 
-  if (operation === "build") {
-    await ensureSeed({ repoRoot, ...seedTargetFromArgs(tauriArgs) });
+  const seedTarget = seedTargetFromArgs(tauriArgs);
+  const targetPlatform = seedTarget.platform ?? hostPlatform;
+  const shipsSeed = platformShipsCoreSeed(targetPlatform);
+
+  if (operation === "build" && shipsSeed) {
+    await ensureSeed({ repoRoot, ...seedTarget });
   }
 
-  if (operation === "dev" || operation === "build") {
+  if ((operation === "dev" || operation === "build") && shipsSeed) {
     const configRoot = operation === "build" ? "release-config" : "tauri-config";
     const coreSeedOverlayPath = writeCoreOverlay(
       repoRoot,
       resolve(repoRoot, "target", configRoot, "tauri.core-seeds.generated.json"),
+      { platform: targetPlatform },
     );
     if (coreSeedOverlayPath) {
       tauriArgs.splice(1, 0, "--config", coreSeedOverlayPath);

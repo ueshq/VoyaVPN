@@ -12,10 +12,7 @@ use voya_core::{
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
-    coreinfo::{
-        copy_seed_core_asset, core_launch, discover_executable, discover_packaged_seed_executable,
-        CoreInfoError, TargetOs,
-    },
+    coreinfo::{copy_seed_core_asset, core_launch, discover_executable, CoreInfoError, TargetOs},
     filesystem,
     paths::{AppPaths, PathError},
 };
@@ -198,7 +195,7 @@ impl<'runtime> RuntimeManager<'runtime> {
         let env = load_runtime_core_gen_env(self.database, &self.paths, config, self.target_os)
             .await?
             .with_clash_api_secret(clash_api_secret.clone());
-        let contexts = match &target {
+        let mut contexts = match &target {
             LaunchTarget::Node(profile) => {
                 CoreConfigContextBuilder::new(&env).build_all(config, profile)
             }
@@ -232,6 +229,12 @@ impl<'runtime> RuntimeManager<'runtime> {
                 group = ?active_group_id,
                 "core config generation warning: {warning:?}"
             );
+        }
+        if self.target_os == TargetOs::Macos {
+            // The PacketTunnel core is the only one on macOS, so the speedtest
+            // measures nodes through it (`speedtest::running_core`) and every
+            // node that can carry a probe outbound gets one.
+            contexts.main_result.context.latency_probe_nodes = env.profiles().to_vec();
         }
 
         let main_config_path = write_runtime_config(
@@ -282,17 +285,20 @@ impl<'runtime> RuntimeManager<'runtime> {
         context: &CoreConfigContext,
         config_file_name: &str,
     ) -> Result<CoreProcessSpec, RuntimeError> {
-        let executable = resolve_core_executable(
-            &self.paths,
-            self.core_seed_resource_dir.as_deref(),
-            self.target_os,
-        )?;
-        let launch = core_launch(executable, &self.paths, config_file_name);
+        let spec = if self.target_os == TargetOs::Macos {
+            // The PacketTunnel extension runs sing-box through Libbox; the
+            // macOS package ships no executable for a child process.
+            CoreProcessSpec::native_tun()
+        } else {
+            let executable =
+                resolve_core_executable(&self.paths, self.core_seed_resource_dir.as_deref())?;
+            CoreProcessSpec::new(core_launch(executable, &self.paths, config_file_name))
+        };
 
         // Only the process whose config carries the tun inbound needs root:
         // with a pre-socks split the main core does all remote I/O and must
         // stay unprivileged.
-        Ok(CoreProcessSpec::new(launch)
+        Ok(spec
             .with_config_path(self.paths.bin_config_file(config_file_name))
             .with_display_log(context.node.display_log)
             .with_may_need_sudo(context.is_tun_enabled))
@@ -302,42 +308,17 @@ impl<'runtime> RuntimeManager<'runtime> {
 /// Locates the sing-box executable, staging the packaged seed if needed.
 ///
 /// Shared with the speedtest backend: a probe core has to resolve exactly the
-/// binary the runtime would launch, and two copies of this had already drifted
-/// into subtly different macOS handling.
+/// binary the runtime would launch. Windows and Linux only; the macOS package
+/// ships no executable (the PacketTunnel extension links sing-box instead).
 pub(crate) fn resolve_core_executable(
     paths: &AppPaths,
     core_seed_resource_dir: Option<&Path>,
-    target_os: TargetOs,
 ) -> Result<PathBuf, CoreInfoError> {
-    if let Some(executable) = packaged_seed_executable(core_seed_resource_dir, target_os)? {
-        return Ok(executable);
-    }
-
     if let Some(seed_resource_dir) = core_seed_resource_dir {
         copy_seed_core_asset(paths, seed_resource_dir)?;
     }
 
     discover_executable(paths)
-}
-
-/// On macOS the seed inside the app bundle is launched where it lies.
-///
-/// Copying it into app data would strip the bundle's code signature context and
-/// break the notarized launch, so the copy-then-discover path is Windows/Linux
-/// only.
-fn packaged_seed_executable(
-    core_seed_resource_dir: Option<&Path>,
-    target_os: TargetOs,
-) -> Result<Option<PathBuf>, CoreInfoError> {
-    if target_os != TargetOs::Macos {
-        return Ok(None);
-    }
-
-    let Some(seed_resource_dir) = core_seed_resource_dir else {
-        return Ok(None);
-    };
-
-    discover_packaged_seed_executable(seed_resource_dir, target_os)
 }
 
 /// Failure to write a generated core config, with the path that failed.
@@ -521,7 +502,12 @@ mod tests {
             .expect("runtime test operation should succeed");
 
         assert_eq!(connected.active_profile_id.as_deref(), Some("active"));
-        assert!(paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
+        let generated = fs::read_to_string(paths.bin_config_file(MAIN_CONFIG_FILE_NAME))
+            .expect("runtime test operation should succeed");
+        assert!(
+            !generated.contains("\"probe:"),
+            "only the macOS core measures nodes through latency probes"
+        );
         let spawns = runner.spawns();
         assert_eq!(spawns.len(), 1);
         assert_eq!(
@@ -790,6 +776,9 @@ mod tests {
         assert!(contexts.main_result.context.is_tun_enabled);
     }
 
+    /// The macOS package ships no sing-box executable: connecting must not
+    /// look for one, and the config it hands the PacketTunnel carries a probe
+    /// outbound for every node so the speedtest can measure through it.
     #[tokio::test]
     async fn runtime_macos_native_tun_writes_single_tun_config() {
         let database = Database::connect_in_memory()
@@ -799,7 +788,6 @@ mod tests {
         paths
             .ensure_dirs()
             .expect("runtime test operation should succeed");
-        write_fake_core_executable(&paths);
         let runner = RecordingRunner::default();
         let supervisor = CoreSupervisor::spawn(
             SupervisorDeps::new(
@@ -819,11 +807,13 @@ mod tests {
             },
             ..AppConfig::default()
         };
-        database
-            .profiles()
-            .upsert(&active_singbox_profile("active"))
-            .await
-            .expect("runtime test operation should succeed");
+        for id in ["active", "other"] {
+            database
+                .profiles()
+                .upsert(&active_singbox_profile(id))
+                .await
+                .expect("runtime test operation should succeed");
+        }
 
         let connected = manager
             .connect(&config)
@@ -847,6 +837,14 @@ mod tests {
                 .any(|inbound| inbound["type"] == "tun"),
             "native macOS TUN must pass a tun inbound to PacketTunnel"
         );
+        let probes = json["outbounds"]
+            .as_array()
+            .expect("outbounds")
+            .iter()
+            .filter_map(|outbound| outbound["tag"].as_str())
+            .filter(|tag| tag.starts_with("probe:"))
+            .collect::<Vec<_>>();
+        assert_eq!(probes.len(), 2, "{probes:?}");
     }
 
     #[tokio::test]
@@ -886,48 +884,6 @@ mod tests {
         assert_eq!(spawns.len(), 1);
         assert_eq!(spawns[0].executable, app_data_exe);
         assert_ne!(spawns[0].executable, seed_exe);
-    }
-
-    #[tokio::test]
-    async fn coreinfo_runtime_connect_uses_packaged_seed_directly_on_macos() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("runtime test operation should succeed");
-        let paths = temp_paths();
-        let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
-        let seed_exe = write_seed_core_executable(&seed_root, b"seed-sing-box");
-        let runner = RecordingRunner::default();
-        let supervisor = CoreSupervisor::spawn(
-            SupervisorDeps::new(
-                Arc::new(runner.clone()),
-                Arc::new(voya_platform::privilege::ElevationState::new()),
-            )
-            .with_target_os(TargetOs::Macos),
-        );
-        let manager =
-            RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Macos)
-                .with_core_seed_resource_dir(seed_root);
-        let config = AppConfig {
-            index_id: "active".to_string(),
-            ..AppConfig::default()
-        };
-        database
-            .profiles()
-            .upsert(&active_singbox_profile("active"))
-            .await
-            .expect("runtime test operation should succeed");
-
-        manager
-            .connect(&config)
-            .await
-            .expect("runtime test operation should succeed");
-
-        let app_data_exe =
-            paths.core_bin_file(CORE_DIR_NAME, executable_name_for_current_os("sing-box"));
-        let spawns = runner.spawns();
-        assert_eq!(spawns.len(), 1);
-        assert_eq!(spawns[0].executable, seed_exe);
-        assert!(!app_data_exe.exists());
     }
 
     #[tokio::test]

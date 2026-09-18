@@ -6,6 +6,7 @@ describe("Tauri CLI", () => {
   it("defaults to dev and adds the generated core overlay", async () => {
     const invocation = await prepareTauriInvocation([], {
       repoRoot: "/repo",
+      hostPlatform: "linux",
       sourceEnv: {},
       ensureSeed: vi.fn(),
       writeCoreOverlay: () => "/repo/target/tauri-config/tauri.core-seeds.generated.json",
@@ -22,6 +23,7 @@ describe("Tauri CLI", () => {
     const ensureSeed = vi.fn();
     const invocation = await prepareTauriInvocation(["build", "--debug"], {
       repoRoot: "/repo",
+      hostPlatform: "linux",
       sourceEnv: { CI: "1", VOYAVPN_TAURI_UPDATER_CONFIG: "false" },
       ensureSeed,
       writeCoreOverlay: () => null,
@@ -37,6 +39,7 @@ describe("Tauri CLI", () => {
     const writeUpdaterOverlay = vi.fn(() => "/repo/target/release-config/tauri.updater.json");
     const invocation = await prepareTauriInvocation(["build", "--bundles", "app"], {
       repoRoot: "/repo",
+      hostPlatform: "linux",
       sourceEnv,
       ensureSeed: vi.fn(),
       writeCoreOverlay: () => "/repo/target/release-config/tauri.core.json",
@@ -60,24 +63,50 @@ describe("Tauri CLI", () => {
 
   it("stages the seed for the requested cross-compilation target", async () => {
     const ensureSeed = vi.fn();
-    await prepareTauriInvocation(["build", "--target", "aarch64-apple-darwin", "--bundles", "app"], {
+    await prepareTauriInvocation(["build", "--target", "aarch64-unknown-linux-gnu", "--bundles", "app"], {
       repoRoot: "/repo",
+      hostPlatform: "linux",
       sourceEnv: {},
       ensureSeed,
       writeCoreOverlay: () => null,
     });
 
-    expect(ensureSeed).toHaveBeenCalledWith({ arch: "arm64", platform: "darwin", repoRoot: "/repo" });
+    expect(ensureSeed).toHaveBeenCalledWith({ arch: "arm64", platform: "linux", repoRoot: "/repo" });
 
     const inlineEnsureSeed = vi.fn();
     await prepareTauriInvocation(["build", "--target=x86_64-pc-windows-msvc"], {
       repoRoot: "/repo",
+      hostPlatform: "linux",
       sourceEnv: {},
       ensureSeed: inlineEnsureSeed,
       writeCoreOverlay: () => null,
     });
 
     expect(inlineEnsureSeed).toHaveBeenCalledWith({ arch: "x64", platform: "win32", repoRoot: "/repo" });
+  });
+
+  it("ships no core seed in macOS packages", async () => {
+    const ensureSeed = vi.fn();
+    const writeCoreOverlay = vi.fn(() => "/repo/target/release-config/tauri.core.json");
+    const targeted = await prepareTauriInvocation(["build", "--target", "aarch64-apple-darwin"], {
+      repoRoot: "/repo",
+      hostPlatform: "linux",
+      sourceEnv: {},
+      ensureSeed,
+      writeCoreOverlay,
+    });
+    const hosted = await prepareTauriInvocation(["dev"], {
+      repoRoot: "/repo",
+      hostPlatform: "darwin",
+      sourceEnv: {},
+      ensureSeed,
+      writeCoreOverlay,
+    });
+
+    expect(ensureSeed).not.toHaveBeenCalled();
+    expect(writeCoreOverlay).not.toHaveBeenCalled();
+    expect(targeted.commandArgs).toEqual(["build", "--target", "aarch64-apple-darwin"]);
+    expect(hosted.commandArgs).toEqual(["dev"]);
   });
 
   it("maps Rust target triples to core seed platforms", () => {
@@ -92,6 +121,7 @@ describe("Tauri CLI", () => {
     const ensureSeed = vi.fn();
     const invocation = await prepareTauriInvocation(["signer", "generate"], {
       repoRoot: "/repo",
+      hostPlatform: "linux",
       sourceEnv: {},
       ensureSeed,
       writeCoreOverlay: vi.fn(),
