@@ -28,11 +28,12 @@ import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 import { PageHeader } from "@/components/app-shell/page-section";
 import { ConnectionDetails } from "./connection-details";
-import { connectionBytes, connectionKey } from "./connection-display";
+import { arrangeConnections, connectionBytes, connectionKey, connectionSearchHay } from "./connection-display";
+import type { ConnectionSort } from "./connection-display";
 import { outboundLabelKey } from "@/features/routing/rule-outbound";
 import { connectionRoute, type ConnectionRoute } from "./connection-route";
 
-type SortColumn = "host" | "process" | "route" | "traffic";
+type SortColumn = ConnectionSort["column"];
 type Selection = { connection: ProxyConnectionItem; ended: boolean };
 const GRID = "grid grid-cols-[minmax(0,1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)_7rem] gap-4";
 // Room at the end of every row for its own disconnect button.
@@ -68,7 +69,7 @@ export function ConnectionsPanel({
   const storeSnapshot = useRuntimeEventStore((state) => state.proxyConnections);
   const setProxyConnections = useRuntimeEventStore((state) => state.setProxyConnections);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [sort, setSort] = useState<{ column: SortColumn; ascending: boolean } | null>(null);
+  const [sort, setSort] = useState<ConnectionSort | null>(null);
   const [confirmingDisconnectAll, setConfirmingDisconnectAll] = useState(false);
   const returnFocusRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -94,39 +95,24 @@ export function ConnectionsPanel({
   const updateFailed =
     connectionsQuery.isError || monitor.state === "failed" || (hasSnapshot && monitor.state === "stopped");
   const stale = hasSnapshot && (monitor.stale || updateFailed);
-  const rows = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    const filtered = snapshot.connections.filter(
-      (connection) =>
-        !needle ||
-        [
-          connection.host,
-          connection.source,
-          connection.destination,
-          connection.process,
-          connection.processPath,
-          connection.rule,
-          connection.rulePayload,
-          connection.network,
-          connection.connectionType,
-          ...connection.chains,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
-    );
-    if (!sort) return filtered;
-    return filtered.toSorted((a, b) => {
-      const comparison =
-        sort.column === "traffic"
-          ? (a.upload ?? 0) + (a.download ?? 0) - (b.upload ?? 0) - (b.download ?? 0)
-          : sort.column === "route"
-            ? routeLabel(connectionRoute(a), t).localeCompare(routeLabel(connectionRoute(b), t))
-            : (a[sort.column] ?? "").localeCompare(b[sort.column] ?? "");
-      return sort.ascending ? comparison : -comparison;
-    });
-  }, [snapshot.connections, filter, sort, t]);
+  const needle = filter.trim().toLowerCase();
+  const searching = needle.length > 0;
+  const sortingByRoute = sort?.column === "route";
+  // Search text and route labels are per-snapshot costs: compute them once per
+  // push so keystrokes only re-run the filter and the route sort reads strings
+  // instead of re-deriving the outbound chain per comparison.
+  const searchHays = useMemo(
+    () => (searching ? snapshot.connections.map(connectionSearchHay) : null),
+    [snapshot.connections, searching],
+  );
+  const routeTexts = useMemo(
+    () => (sortingByRoute ? snapshot.connections.map((connection) => routeLabel(connectionRoute(connection), t)) : null),
+    [snapshot.connections, sortingByRoute, t],
+  );
+  const rows = useMemo(
+    () => arrangeConnections(snapshot.connections, { hays: searchHays, needle, routeTexts, sort }),
+    [snapshot.connections, searchHays, needle, routeTexts, sort],
+  );
 
   // Keep the last received details when a connection ends. Search results do
   // not determine liveness, and a missing ID still supports read-only details.

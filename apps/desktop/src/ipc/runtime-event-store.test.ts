@@ -59,7 +59,8 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().speedtestRunning).toBe(false);
   });
 
-  it("stores speedtest result events without ending the running state", () => {
+  it("stores speedtest result events without ending the running state", async () => {
+    vi.useFakeTimers();
     const result: SpeedtestResult = {
       delay: 42,
       indexId: "profile-a",
@@ -75,6 +76,12 @@ describe("runtime event store", () => {
       payload: result,
     });
 
+    // One `set` per frame, not one per node: a run reports a result each time
+    // a probe completes, and each stored result rebuilds the node table.
+    expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({});
+
+    await vi.advanceTimersByTimeAsync(20);
+
     expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({
       "profile-a": result,
     });
@@ -83,6 +90,59 @@ describe("runtime event store", () => {
     useRuntimeEventStore.getState().clearSpeedtestResults();
     expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({});
     expect(useRuntimeEventStore.getState().speedtestRunning).toBe(true);
+  });
+
+  it("coalesces a burst of speedtest results into one frame with the latest per node", async () => {
+    vi.useFakeTimers();
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "speedtestResult",
+      payload: speedtestResult("profile-a", "testing"),
+    });
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "speedtestResult",
+      payload: speedtestResult("profile-b", "completed", 42),
+    });
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "speedtestResult",
+      payload: speedtestResult("profile-a", "completed", 12),
+    });
+
+    expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({});
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({
+      "profile-a": speedtestResult("profile-a", "completed", 12),
+      "profile-b": speedtestResult("profile-b", "completed", 42),
+    });
+
+    // Results arriving after a flush schedule a new frame and merge on top of
+    // what is already stored.
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "speedtestResult",
+      payload: speedtestResult("profile-c", "timedOut"),
+    });
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(Object.keys(useRuntimeEventStore.getState().speedtestResultsByProfileId)).toEqual([
+      "profile-a",
+      "profile-b",
+      "profile-c",
+    ]);
+  });
+
+  it("drops buffered speedtest results when the overlay is cleared before the frame runs", async () => {
+    vi.useFakeTimers();
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "speedtestResult",
+      payload: speedtestResult("profile-a", "completed", 42),
+    });
+    useRuntimeEventStore.getState().clearSpeedtestResults();
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({});
   });
 
   it("sets proxy monitor lifecycle state through store actions", () => {
@@ -333,6 +393,21 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().proxyConnections?.downloadTotal).toBe(200);
   });
 });
+
+function speedtestResult(
+  indexId: string,
+  outcome: SpeedtestResult["outcome"],
+  delay: number | null = null,
+): SpeedtestResult {
+  return {
+    countryCode: null,
+    delay,
+    detail: null,
+    indexId,
+    ipInfo: null,
+    outcome,
+  };
+}
 
 function makeConnectionsSnapshot(
   id: string,

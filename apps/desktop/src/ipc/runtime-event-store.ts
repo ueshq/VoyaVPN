@@ -85,6 +85,8 @@ let pendingProxyConnections: ProxyConnectionsSnapshot | null = null;
 let pendingProxyConnectionsFrame: FrameHandle | null = null;
 let pendingLogLines: StoredLogLine[] = [];
 let pendingLogLinesFrame: FrameHandle | null = null;
+let pendingSpeedtestResults: Record<string, SpeedtestResult> = {};
+let pendingSpeedtestResultsFrame: FrameHandle | null = null;
 
 const payloadStringSchema = z.string().max(4096);
 const nullablePayloadStringSchema = payloadStringSchema.nullable();
@@ -180,6 +182,29 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       return;
     }
 
+    // A speedtest run reports one result per node as each probe completes, and
+    // every stored result rebuilds the node table (overlay remap, regroup,
+    // per-group sort). Buffer them and apply one `set` per frame (the log-line
+    // treatment) so a burst of results costs one rebuild.
+    if (event.kind === "speedtestResult") {
+      pendingSpeedtestResults[event.payload.indexId] = event.payload;
+      if (pendingSpeedtestResultsFrame === null) {
+        pendingSpeedtestResultsFrame = scheduleFrame(() => {
+          const batch = pendingSpeedtestResults;
+          pendingSpeedtestResults = {};
+          pendingSpeedtestResultsFrame = null;
+          if (Object.keys(batch).length === 0) {
+            return;
+          }
+
+          set((state) => ({
+            speedtestResultsByProfileId: { ...state.speedtestResultsByProfileId, ...batch },
+          }));
+        });
+      }
+      return;
+    }
+
     set((state) => {
       switch (event.kind) {
         case "coreState":
@@ -211,13 +236,6 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           return { tun: event.payload };
         case "proxyMonitorStatus":
           return { proxyMonitorStatus: event.payload };
-        case "speedtestResult":
-          return {
-            speedtestResultsByProfileId: {
-              ...state.speedtestResultsByProfileId,
-              [event.payload.indexId]: event.payload,
-            },
-          };
       }
     });
   },
@@ -248,7 +266,12 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     set({ coreState, coreStateReceivedAt: performance.now() });
   },
   setSpeedtestRunning: (speedtestRunning) => set({ speedtestRunning }),
-  clearSpeedtestResults: () => set({ speedtestResultsByProfileId: {} }),
+  clearSpeedtestResults: () => {
+    // Drop the pending buffer too: the invalidation that triggers this must
+    // not be followed by a scheduled frame resurrecting the cleared results.
+    pendingSpeedtestResults = {};
+    set({ speedtestResultsByProfileId: {} });
+  },
   setSysProxy: (sysProxy) => {
     markRuntimeUpdate("sysProxy");
     set({ sysProxy });

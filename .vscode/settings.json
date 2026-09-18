@@ -1,0 +1,15 @@
+{
+  "files.watcherExclude": {
+    "**/target/**": true,
+    "**/node_modules/**": true,
+    "**/coverage/**": true,
+    "**/dist/**": true,
+    "**/dist-pack/**": true,
+    "**/playwright-report/**": true,
+    "**/test-results/**": true
+  },
+  "search.exclude": {
+    "**/target/**": true
+  },
+  "vitest.filesWatcherInclude": "{apps/*/src,apps/*/e2e,packages/*/src,scripts}/**/*.{ts,tsx,js,jsx,mjs,cjs}"
+}
