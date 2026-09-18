@@ -2,9 +2,9 @@
 use super::parse::parse_import_text;
 use super::{Result, SubscriptionManager, SubscriptionManagerError};
 use crate::policy_groups::PolicyGroupManager;
-use crate::profiles::{normalize_profile, ProfileManager, ProfileManagerError};
+use crate::profiles::{normalize_profile, NewProfileSort, ProfileManager, ProfileManagerError};
 use regex::Regex;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use voya_core::{profile_items_match, AppConfig, ImportProfilesResult, ProfileExItem, ProfileItem};
 
 impl SubscriptionManager<'_> {
@@ -106,62 +106,50 @@ impl SubscriptionManager<'_> {
         }
 
         let profile_manager = ProfileManager::from_session(self.database);
-        let mut existing_profiles = self
-            .database
-            .profiles()
-            .list_with_profile_ex(None)
-            .await?
-            .items;
+        let mut existing_profiles = ExistingProfiles::new(
+            self.database
+                .profiles()
+                .list_with_profile_ex(None)
+                .await?
+                .items,
+        );
         let mut imported_index_ids = Vec::new();
         let mut updated_index_ids = Vec::new();
         let mut duplicate_index_ids_to_remove = Vec::new();
+        let mut new_sort = NewProfileSort::default();
         for mut profile in profiles {
-            let match_indices = existing_profiles
-                .iter()
-                .enumerate()
-                .filter_map(|(index, (existing, _))| {
-                    (existing.subscription_id.as_deref() == subscription_id
-                        && profile_items_match(existing, &profile, false))
-                    .then_some(index)
-                })
-                .collect::<Vec<_>>();
+            let match_indices = existing_profiles.matches(&profile, subscription_id);
 
-            if let Some(canonical_index) = choose_canonical_match_index(
+            if let Some(canonical_index_id) = choose_canonical_match_index(
                 &match_indices,
                 &existing_profiles,
                 &config.index_id,
                 subscription_id,
             ) {
-                let canonical_index_id = existing_profiles[canonical_index].0.index_id.clone();
                 let duplicate_index_ids = match_indices
                     .iter()
                     .filter_map(|index| {
-                        let index_id = &existing_profiles[*index].0.index_id;
-                        (index_id != &canonical_index_id).then(|| index_id.clone())
+                        let index_id = &existing_profiles.entry(*index)?.0.index_id;
+                        (*index_id != canonical_index_id).then(|| index_id.clone())
                     })
                     .collect::<Vec<_>>();
 
                 profile.index_id.clone_from(&canonical_index_id);
-                let saved = profile_manager
-                    .save_imported_profile(config, profile)
+                let (saved, saved_ex) = profile_manager
+                    .write_imported_profile(profile, &mut new_sort)
                     .await?;
-                update_existing_profile_cache(
-                    &mut existing_profiles,
-                    saved.profile.clone(),
-                    saved.profile_ex.clone(),
-                    &duplicate_index_ids,
-                );
+                updated_index_ids.push(saved.index_id.clone());
+                imported_index_ids.push(saved.index_id.clone());
+                existing_profiles.store(saved, saved_ex, &duplicate_index_ids);
                 duplicate_index_ids_to_remove.extend(duplicate_index_ids);
-                updated_index_ids.push(saved.profile.index_id.clone());
-                imported_index_ids.push(saved.profile.index_id.clone());
             } else {
                 // External bundle IDs cannot overwrite another source's node.
                 profile.index_id.clear();
-                let saved = profile_manager
-                    .save_imported_profile(config, profile)
+                let (saved, saved_ex) = profile_manager
+                    .write_imported_profile(profile, &mut new_sort)
                     .await?;
-                existing_profiles.push((saved.profile.clone(), saved.profile_ex.clone()));
-                imported_index_ids.push(saved.profile.index_id.clone());
+                imported_index_ids.push(saved.index_id.clone());
+                existing_profiles.store(saved, saved_ex, &[]);
             }
         }
 
@@ -240,28 +228,146 @@ pub(super) fn compile_filter(filter: Option<&str>) -> Result<Option<Regex>> {
         .map_err(|error| SubscriptionManagerError::InvalidFilter(error.to_string()))
 }
 
+/// The part of a profile that `profile_items_match` implies: equal protocols
+/// share a server address and port. Bucketing on it keeps matching linear in
+/// the import size; the full predicate still decides within a bucket.
+type EndpointKey = (String, i32);
+
+fn endpoint_key(profile: &ProfileItem) -> EndpointKey {
+    (profile.address().to_owned(), profile.port())
+}
+
 fn dedupe_profiles(profiles: Vec<ProfileItem>) -> Vec<ProfileItem> {
     let mut kept = Vec::<ProfileItem>::new();
+    let mut kept_by_endpoint = HashMap::<EndpointKey, Vec<usize>>::new();
     for profile in profiles {
-        if kept
+        let bucket = kept_by_endpoint.entry(endpoint_key(&profile)).or_default();
+        if bucket
             .iter()
-            .any(|existing| profile_items_match(existing, &profile, false))
+            .any(|index| profile_items_match(&kept[*index], &profile, false))
         {
             continue;
         }
+        bucket.push(kept.len());
         kept.push(profile);
     }
     kept
 }
 
+/// Stored profiles an import matches against.
+///
+/// A linear scan with `profile_items_match` per parsed node made a large
+/// subscription update quadratic, so entries are indexed by endpoint. A
+/// replaced duplicate leaves a hole instead of shifting later entries: the
+/// position is the final canonical tie-breaker, and holes keep its order.
+struct ExistingProfiles {
+    entries: Vec<Option<(ProfileItem, ProfileExItem)>>,
+    by_endpoint: HashMap<EndpointKey, Vec<usize>>,
+    by_index_id: HashMap<String, usize>,
+}
+
+impl ExistingProfiles {
+    fn new(items: Vec<(ProfileItem, ProfileExItem)>) -> Self {
+        let mut existing = Self {
+            entries: Vec::with_capacity(items.len()),
+            by_endpoint: HashMap::new(),
+            by_index_id: HashMap::with_capacity(items.len()),
+        };
+        for (profile, profile_ex) in items {
+            existing.push(profile, profile_ex);
+        }
+        existing
+    }
+
+    fn push(&mut self, profile: ProfileItem, profile_ex: ProfileExItem) {
+        let index = self.entries.len();
+        self.by_endpoint
+            .entry(endpoint_key(&profile))
+            .or_default()
+            .push(index);
+        self.by_index_id.insert(profile.index_id.clone(), index);
+        self.entries.push(Some((profile, profile_ex)));
+    }
+
+    /// Positions of stored profiles in `subscription_id` matching `profile`,
+    /// ascending.
+    fn matches(&self, profile: &ProfileItem, subscription_id: Option<&str>) -> Vec<usize> {
+        let Some(bucket) = self.by_endpoint.get(&endpoint_key(profile)) else {
+            return Vec::new();
+        };
+        bucket
+            .iter()
+            .copied()
+            .filter(|index| {
+                self.entries[*index].as_ref().is_some_and(|(existing, _)| {
+                    existing.subscription_id.as_deref() == subscription_id
+                        && profile_items_match(existing, profile, false)
+                })
+            })
+            .collect()
+    }
+
+    /// The live entry at `index`; `None` once it was removed.
+    fn entry(&self, index: usize) -> Option<&(ProfileItem, ProfileExItem)> {
+        self.entries.get(index)?.as_ref()
+    }
+
+    /// Records a saved profile, replacing its stored copy, and drops the
+    /// duplicates it absorbed.
+    fn store(
+        &mut self,
+        saved_profile: ProfileItem,
+        saved_profile_ex: ProfileExItem,
+        removed_index_ids: &[String],
+    ) {
+        for index_id in removed_index_ids {
+            if *index_id == saved_profile.index_id {
+                continue;
+            }
+            if let Some(index) = self.by_index_id.remove(index_id) {
+                self.remove_from_bucket(index);
+                self.entries[index] = None;
+            }
+        }
+
+        let Some(&index) = self.by_index_id.get(&saved_profile.index_id) else {
+            self.push(saved_profile, saved_profile_ex);
+            return;
+        };
+        let new_key = endpoint_key(&saved_profile);
+        let moved = self.entries[index]
+            .as_ref()
+            .is_some_and(|(stored, _)| endpoint_key(stored) != new_key);
+        if moved {
+            self.remove_from_bucket(index);
+            let bucket = self.by_endpoint.entry(new_key).or_default();
+            let position = bucket.partition_point(|existing| *existing < index);
+            bucket.insert(position, index);
+        }
+        self.entries[index] = Some((saved_profile, saved_profile_ex));
+    }
+
+    fn remove_from_bucket(&mut self, index: usize) {
+        let Some((stored, _)) = &self.entries[index] else {
+            return;
+        };
+        if let Some(bucket) = self.by_endpoint.get_mut(&endpoint_key(stored)) {
+            bucket.retain(|existing| *existing != index);
+        }
+    }
+}
+
+/// The index id of the stored match the import updates in place.
 fn choose_canonical_match_index(
     match_indices: &[usize],
-    existing_profiles: &[(ProfileItem, ProfileExItem)],
+    existing_profiles: &ExistingProfiles,
     active_index_id: &str,
     target_subscription_id: Option<&str>,
-) -> Option<usize> {
-    match_indices.iter().copied().min_by_key(|index| {
-        let (profile, profile_ex) = &existing_profiles[*index];
+) -> Option<String> {
+    let entries = match_indices
+        .iter()
+        .filter_map(|index| Some((*index, existing_profiles.entry(*index)?)));
+    let (_, (canonical, _)) = entries.min_by_key(|(index, (profile, profile_ex))| {
         let active_rank = if !active_index_id.is_empty() && profile.index_id == active_index_id {
             0
         } else {
@@ -281,30 +387,6 @@ fn choose_canonical_match_index(
             profile_ex.sort,
             *index,
         )
-    })
-}
-
-fn update_existing_profile_cache(
-    existing_profiles: &mut Vec<(ProfileItem, ProfileExItem)>,
-    saved_profile: ProfileItem,
-    saved_profile_ex: ProfileExItem,
-    removed_index_ids: &[String],
-) {
-    let saved_index_id = saved_profile.index_id.clone();
-    existing_profiles.retain(|(profile, _)| {
-        profile.index_id == saved_index_id
-            || !removed_index_ids
-                .iter()
-                .any(|index_id| index_id == &profile.index_id)
-    });
-
-    if let Some((profile, profile_ex)) = existing_profiles
-        .iter_mut()
-        .find(|(profile, _)| profile.index_id == saved_index_id)
-    {
-        *profile = saved_profile;
-        *profile_ex = saved_profile_ex;
-    } else {
-        existing_profiles.push((saved_profile, saved_profile_ex));
-    }
+    })?;
+    Some(canonical.index_id.clone())
 }

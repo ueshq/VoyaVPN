@@ -94,9 +94,7 @@ where
     R: tauri::Runtime + 'static,
 {
     fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>) {
-        if let Err(error) = emit_app_log(&self.app, log_level(level), code, detail) {
-            tracing::warn!(?error, "failed to emit core flow log line");
-        }
+        emit_app_log(&self.app, log_level(level), code, detail);
     }
 
     fn core_state(

@@ -9,7 +9,7 @@
 //! * a rolling file layer under `AppPaths::log_dir()` (`guiLogs`), retained for
 //!   [`LOG_FILE_RETENTION_DAYS`] days, with URL userinfo stripped on the way
 //!   out, and
-//! * a layer that forwards `warn`/`error` records to the `LogLine` transient
+//! * a layer that forwards `warn`/`error` records to the `LogLines` transient
 //!   stream so they also show up in the Logs panel.
 //!
 //! Raw core stdout/stderr is deliberately excluded (see
@@ -23,7 +23,6 @@ use std::{
     str::FromStr as _,
 };
 
-use tauri_specta::Event as _;
 use tracing::Subscriber;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{
@@ -42,7 +41,7 @@ use voya_app::{
     redaction::redact_url_userinfo,
 };
 
-use crate::ipc::events::{next_log_line_id, LogLineBody, LogLineEvent, TransientStreamEvent};
+use crate::ipc::{commands::queue_log_line, events::LogLineBody};
 
 const LOG_FILE_PREFIX: &str = "voyavpn";
 const LOG_FILE_SUFFIX: &str = "log";
@@ -135,18 +134,17 @@ where
         let mut visitor = TracingLineVisitor::new();
         event.record(&mut visitor);
 
-        // A failed emit must never be traced from here: that would re-enter this
-        // layer and recurse. The file layer still records the original event.
-        let _ = TransientStreamEvent::LogLine(LogLineEvent {
-            id: next_log_line_id(),
+        // Queued, never emitted from here: an emit failure traced from this
+        // layer would re-enter it. The file layer still records the event.
+        queue_log_line(
+            &self.app,
             level,
             // A `tracing` event: developer diagnostics with a module target,
             // not an app-authored sentence, so it stays raw like core output.
-            body: LogLineBody::Diagnostic {
+            LogLineBody::Diagnostic {
                 line: visitor.into_line(metadata.target()),
             },
-        })
-        .emit(&self.app);
+        );
     }
 }
 

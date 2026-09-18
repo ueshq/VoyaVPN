@@ -988,7 +988,9 @@
     "exportFor": "Export {{name}}",
     "empty": "No nodes in this group.",
     "moreFor": "More actions for {{name}}",
-    "autoUpdateOff": "Auto-update off"
+    "autoUpdateOff": "Auto-update off",
+    "showAllMembers": "Show all {{count}}",
+    "showFewerMembers": "Show fewer"
   },
   "common": {
     "advanced": "More settings",

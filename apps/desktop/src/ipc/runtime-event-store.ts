@@ -145,10 +145,13 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
           pendingProxyConnectionsFrame = null;
           if (snapshot) {
             // Fresh data clears staleness only; the monitor state itself waits
-            // for a lifecycle event.
+            // for a lifecycle event. Kept by identity once fresh, so its
+            // subscribers are not notified on every snapshot.
             set((state) => ({
               proxyConnections: snapshot,
-              proxyMonitorStatus: { ...state.proxyMonitorStatus, stale: false },
+              proxyMonitorStatus: state.proxyMonitorStatus.stale
+                ? { ...state.proxyMonitorStatus, stale: false }
+                : state.proxyMonitorStatus,
             }));
           }
         });
@@ -156,12 +159,15 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       return;
     }
 
-    // The shell emits one event per core stdout/stderr line, which at debug
-    // verbosity is hundreds per second. Buffer them and apply one `set` per
-    // frame (the proxy-connections treatment) instead of copying the capped
-    // array twice and notifying every subscriber per line.
-    if (event.kind === "logLine") {
-      pendingLogLines.push({ ...event.payload, receivedAt: Date.now() });
+    // The shell batches log lines (at most one event per 100 ms), but a batch
+    // can still land between frames with another. Buffer them and apply one
+    // `set` per frame (the proxy-connections treatment) instead of copying the
+    // capped array and notifying every subscriber per event.
+    if (event.kind === "logLines") {
+      const receivedAt = Date.now();
+      for (const line of event.payload) {
+        pendingLogLines.push({ ...line, receivedAt });
+      }
       if (pendingLogLines.length > MAX_LOG_LINES) {
         pendingLogLines = pendingLogLines.slice(-MAX_LOG_LINES);
       }

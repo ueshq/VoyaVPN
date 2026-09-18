@@ -35,8 +35,9 @@ pnpm tauri:build --debug # Unsigned debug Tauri packages (no signing creds neede
 pnpm run verify:local       # Full local verification suite — run this before declaring work done
 ```
 
-`scripts/quality/verify-local.mjs` is the source of truth for the gate list: its
-steps are exactly the gates the CI `baseline` job runs, in the same order. Run
+`scripts/quality/verify-local.mjs` is the source of truth for the gate list. CI
+splits it across three parallel jobs (`baseline-fast`, `baseline-rust`,
+`baseline-frontend`) that together run exactly its steps, each gate once. Run
 them individually while iterating:
 
 ```sh
@@ -48,7 +49,7 @@ pnpm run check:rust:deps           # cargo-machete 0.9.2; install it locally fir
 pnpm run check:rust:test           # Workspace tests (see note below) + shell binary test targets
 pnpm run check:frontend:typecheck  # pnpm -r run typecheck
 pnpm run check:frontend:coverage   # Vitest once + global thresholds + per-module coverage floors
-pnpm run check:frontend:lint       # ESLint
+pnpm run check:frontend:lint       # ESLint, uncached: type-aware rules make its per-file cache unsound (`pnpm lint` caches)
 pnpm run check:frontend:bundle     # Production build + bundle size budgets
 pnpm run check:frontend:smoke:mock # Playwright renderer smoke against the Tauri IPC mock
 pnpm run check:dead-code           # Knip workspace scan + strict production scan
@@ -63,6 +64,13 @@ pnpm --filter @voya/desktop test --run src/features/profiles/server-table.test.t
 ```
 
 Single Rust test: `cargo test -p voya-core <test_name>` (substitute the owning crate).
+
+`pnpm bench:rust` runs the criterion benchmarks (config generation with 100–3000
+nodes in `crates/voya-core/benches/`, subscription import in
+`crates/voya-app/benches/`). They are not a gate; run them before and after a
+change to config generation or import and compare. `check:rust:test` builds
+them in test mode, so they must keep compiling. Startup cost is logged per step
+(`startup step` lines in `guiLogs`).
 
 **Do not run bare `cargo test --workspace --all-targets`.** Use `pnpm run check:rust:test` (→ `scripts/quality/rust-tests.mjs`). It runs workspace all-target tests while excluding the Tauri shell lib harness (whose lib test harness is intentionally disabled to avoid Windows WebView/Wry loader failures), then builds the shell binary test target separately; on macOS it also runs the PacketTunnel bridge test (`scripts/native/macos/test-bridge.mjs`). `--all-targets` forces explicitly-disabled targets, breaking Windows.
 
@@ -99,7 +107,7 @@ Command-boundary errors are converted into a typed `AppError` union exposed to T
 ### Architecture gate (`pnpm run check:architecture`)
 
 `scripts/quality/architecture.mjs` is the first step of `verify:local` and of the
-CI `baseline` job. It enforces rules that neither Clippy nor ESLint can express,
+CI `baseline-fast` job. It enforces rules that neither Clippy nor ESLint can express,
 so read it before moving code between crates:
 
 - **800 production lines per Rust file.** Lines inside terminal `#[cfg(test)]`
@@ -177,5 +185,5 @@ become the elected provider for `app.voyavpn.desktop.PacketTunnel`.
 - Clippy is strict: `unwrap_used`, `dbg_macro`, `todo`, and `all` are warnings, and CI runs clippy with `-D warnings` — avoid `.unwrap()`/`.expect()` outside tests and setup.
 - The ADRs indexed in `docs/adr/README.md` are the authoritative design record — consult them before changing crate boundaries or the IPC contract.
 - Commit messages in this repo are written in Chinese with `type:` prefixes (feat/fix/refactor/chore/docs); multiple changes are often combined in one message.
-- **CI OS coverage.** Clippy with `-D warnings` runs on ubuntu-24.04, macos-15 and windows-2025 (`platform-check`), so `#[cfg(windows)]` / `#[cfg(target_os = "macos")]` code is linted by the strict workspace lints. Rust *tests* run only on Linux on purpose: no `#[cfg(test)]` module in the workspace is OS-gated, so a cross-OS run would re-execute the same suite at triple the wall-clock cost. If you add an OS-gated test module, add `pnpm run check:rust:test` to that matrix in the same change. OS behaviour that only a real machine can exercise is covered at release time by `docs/release/os-smoke-matrix.md`.
+- **CI OS coverage.** Clippy with `-D warnings` runs on Linux in `baseline-rust` and on macos-15 and windows-2025 in `platform-check`, so `#[cfg(windows)]` / `#[cfg(target_os = "macos")]` code is linted by the strict workspace lints. Rust *tests* run only on Linux on purpose: no `#[cfg(test)]` module in the workspace is OS-gated, so a cross-OS run would re-execute the same suite at triple the wall-clock cost. If you add an OS-gated test module, add `pnpm run check:rust:test` to that matrix in the same change. OS behaviour that only a real machine can exercise is covered at release time by `docs/release/os-smoke-matrix.md`.
 - Renderer smoke tests use Playwright with a Tauri IPC mock (`pnpm check:frontend:smoke:mock`); Linux CI separately runs the packaged shell through `tauri-driver` (`pnpm check:desktop:smoke`). Release tooling and runbooks live in `scripts/release/` and `docs/release/`.

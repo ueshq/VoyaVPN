@@ -1,3 +1,5 @@
+use futures_util::{stream, StreamExt};
+
 use super::core_backend::{cleanup_stale_speedtest_configs, reserve_speedtest_ports};
 
 use super::*;
@@ -192,23 +194,61 @@ impl SpeedtestManager {
                     continue;
                 }
             };
-            for prepared in page {
-                if is_cancelled(&cancel) {
-                    break;
+            // Every node in the page has its own inbound on this core, so the
+            // probes are independent. One at a time, a page of mostly dead
+            // nodes cost two full timeouts per node. Indices rather than
+            // borrows keep the stream's futures `'static`, as in
+            // `run_through_running_core`.
+            let probes = page
+                .iter()
+                .enumerate()
+                .map(|(index, prepared)| (index, prepared.item.socks_port))
+                .collect::<Vec<_>>();
+            let mut pending = stream::iter(probes.into_iter().map(|(index, socks_port)| {
+                let probe = Arc::clone(&self.probe);
+                let speed_test_item = config.speed_test_item.clone();
+                let cancel = Arc::clone(&cancel);
+                async move {
+                    // Queued probes that would start after a cancel never run.
+                    let probed = if is_cancelled(&cancel) {
+                        None
+                    } else {
+                        Some(
+                            ProbeTask::spawn(probe.realping(socks_port, speed_test_item, cancel))
+                                .join()
+                                .await,
+                        )
+                    };
+                    (index, probed)
                 }
-                let result = run_realping(
-                    self.probe.as_ref(),
-                    database,
-                    config,
-                    prepared.item.clone(),
-                    Arc::clone(&cancel),
-                )
-                .await?;
-                if let Some(result) = result {
+            }))
+            .buffer_unordered(SPEEDTEST_CONCURRENCY);
+            loop {
+                // A probe only notices a cancel between attempts, so the run
+                // stops waiting at once and `finalize_pending_results` marks
+                // whatever was still in flight.
+                let next = tokio::select! {
+                    biased;
+                    () = cancelled(&cancel) => break,
+                    next = pending.next() => next,
+                };
+                // `cancelled` polls, so a probe answering its own cancel can
+                // still win the race above.
+                let Some((index, probed)) = next.filter(|_| !is_cancelled(&cancel)) else {
+                    break;
+                };
+                let (Some(prepared), Some(probed)) = (page.get(index), probed) else {
+                    continue;
+                };
+                let result = realping_result(prepared.item.index_id.clone(), probed);
+                if persist_speedtest_result_with_retry(database, &result, &prepared.item.profile)
+                    .await?
+                {
                     on_result(result.clone());
                     results.push(result);
                 }
             }
+            drop(pending);
             session.close().await;
             if batch_index + 1 < batch_count && !is_cancelled(&cancel) {
                 time::sleep(speedtest_delay_interval(config)).await;
@@ -290,18 +330,36 @@ impl SpeedtestManager {
     }
 }
 
-async fn run_realping(
-    probe: &dyn SpeedtestProbe,
-    database: &Database,
-    config: &AppConfig,
-    item: ServerTestItem,
-    cancel: CancellationFlag,
-) -> Result<Option<SpeedtestResult>> {
-    let index_id = item.index_id.clone();
-    let result = match probe
-        .realping(item.socks_port, config.speed_test_item.clone(), cancel)
-        .await
-    {
+/// One probe on its own task.
+///
+/// A probe times its request from send to the moment its future resumes. In
+/// the run's result stream that future would sit unpolled while the loop
+/// writes another probe's result, and the write would be counted as latency;
+/// on a task of its own it is polled as soon as the response arrives.
+/// Dropping the handle (a cancelled run) aborts the probe.
+struct ProbeTask(tokio::task::JoinHandle<Result<RealPingProbeResult>>);
+
+impl ProbeTask {
+    fn spawn(probe: BoxFuture<'static, Result<RealPingProbeResult>>) -> Self {
+        Self(tokio::spawn(probe))
+    }
+
+    async fn join(mut self) -> Result<RealPingProbeResult> {
+        (&mut self.0)
+            .await
+            .unwrap_or_else(|error| Err(SpeedtestError::BackgroundTask(error.to_string())))
+    }
+}
+
+impl Drop for ProbeTask {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// Maps one probe-core measurement onto the persisted outcome vocabulary.
+fn realping_result(index_id: String, probed: Result<RealPingProbeResult>) -> SpeedtestResult {
+    match probed {
         Ok(realping) => SpeedtestResult {
             index_id,
             delay: Some(realping.delay),
@@ -324,10 +382,7 @@ async fn run_realping(
                 country_code: None,
             }
         }
-    };
-    let saved = persist_speedtest_result_with_retry(database, &result, &item.profile).await?;
-
-    Ok(saved.then_some(result))
+    }
 }
 
 /// Persists and reports a terminal result for profiles that could not be

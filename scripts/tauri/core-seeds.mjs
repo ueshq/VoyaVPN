@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { singBoxExecutableName } from "../core/sing-box-installer.mjs";
 
@@ -54,8 +54,13 @@ export function writeOptionalCoreSeedOverlay(repoRoot, overlayPath, options = {}
     },
   };
 
-  mkdirSync(dirname(overlayPath), { recursive: true });
-  writeFileSync(overlayPath, `${JSON.stringify(overlay, null, 2)}\n`);
+  // Every `pnpm dev` / `tauri build` regenerates the overlay; rewriting identical
+  // bytes would only bump its mtime for anything that watches the file.
+  const content = `${JSON.stringify(overlay, null, 2)}\n`;
+  if (!existsSync(overlayPath) || readFileSync(overlayPath, "utf8") !== content) {
+    mkdirSync(dirname(overlayPath), { recursive: true });
+    writeFileSync(overlayPath, content);
+  }
 
   return overlayPath;
 }

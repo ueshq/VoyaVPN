@@ -3,9 +3,9 @@ import { spawnSync } from "node:child_process";
 import { isCliEntrypoint } from "../lib/common.mjs";
 
 /**
- * The canonical gate list. AGENTS.md, README.md and the CI `baseline` job all
- * mirror this array, and scripts/quality/verify-local.test.mjs fails when any of
- * them drifts from it.
+ * The canonical gate list. AGENTS.md and README.md mirror this array, the CI
+ * `baseline-*` jobs split it between them and together run each gate once, and
+ * scripts/quality/verify-local.test.mjs fails when any of them drifts from it.
  */
 export const steps = [
   ["Architecture boundaries", "pnpm", ["run", "check:architecture"]],

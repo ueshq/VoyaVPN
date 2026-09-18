@@ -38,10 +38,10 @@ libdbus-1-dev libpipewire-0.3-dev libwayland-dev libegl-dev`, in addition to the
 existing Tauri requirements. CI and release workflows install these packages;
 deb/rpm packages declare the corresponding runtime libraries.
 
-Run `pnpm run verify:local`. CI's existing platform-check matrix supplies strict
-Clippy checks on Windows, macOS and Linux. Native tests use injected capture and
-window adapters plus generated QR pixels, so the Rust test suite does not require
-a desktop session. Record real-device OS/version, display setup, permission
+Run `pnpm run verify:local`. CI's platform-check matrix supplies strict Clippy
+checks on Windows and macOS, and the baseline-rust job on Linux. Native tests use
+injected capture and window adapters plus generated QR pixels, so the Rust test
+suite does not require a desktop session. Record real-device OS/version, display setup, permission
 state, outcomes and logs with the release evidence. Any macOS packaged fixture
 must follow the NetworkExtension cleanup rules in AGENTS.md.
 

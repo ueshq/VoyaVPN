@@ -30,8 +30,8 @@ pub(crate) const TRAY_ID: &str = "main";
 static REFRESH_QUEUED: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
-    let snapshot =
-        tauri::async_runtime::block_on(commands::tray_snapshot(&app.state::<AppState>()));
+    // Built without the node list, then refreshed off the startup path.
+    let snapshot = commands::initial_tray_snapshot(&app.state::<AppState>());
     let window_visible = residency::main_window_visible(app.handle());
     let menu = build_menu(app.handle(), &tray_menu(&snapshot.input(window_visible)))?;
     // Windows convention: left click opens the window and right click the
@@ -67,7 +67,7 @@ pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
 
     tray.build(app)?;
 
-    Ok(())
+    refresh_tray_menu(app.handle())
 }
 
 /// Queues a rebuild of the tray from the app's current state.

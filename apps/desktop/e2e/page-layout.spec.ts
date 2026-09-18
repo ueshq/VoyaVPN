@@ -128,11 +128,12 @@ test("populated pages keep scrolling inside panels and errors inside the page in
       keys: [{ reason: "fixture", scope: { kind: "profiles" } }],
     });
     window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "coreState", payload: state.runtime });
-    for (let id = 0; id < 500; id++) {
-      window.__VOYA_SMOKE__.emit("transient-stream-event", {
-        kind: "logLine", payload: { id, level: "info", body: { source: "diagnostic", line: `Log ${id}` } },
-      });
-    }
+    window.__VOYA_SMOKE__.emit("transient-stream-event", {
+      kind: "logLines",
+      payload: Array.from({ length: 500 }, (_, id) => ({
+        id, level: "info", body: { source: "diagnostic", line: `Log ${id}` },
+      })),
+    });
   }, savedNodeFixture);
 
   const nodes = await openPage(page, "profiles");

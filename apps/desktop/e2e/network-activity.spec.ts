@@ -193,20 +193,19 @@ for (const viewport of [
           .getByRole("region", { name: labels.logs, exact: true })
           .first();
         await emit(page, {
-          kind: "logLine",
-          payload: {
-            id: 1,
-            level: "info",
-            body: { source: "core", line: "core started" },
-          },
-        });
-        await emit(page, {
-          kind: "logLine",
-          payload: {
-            id: 2,
-            level: "error",
-            body: { source: "core", line: longMessage },
-          },
+          kind: "logLines",
+          payload: [
+            {
+              id: 1,
+              level: "info",
+              body: { source: "core", line: "core started" },
+            },
+            {
+              id: 2,
+              level: "error",
+              body: { source: "core", line: longMessage },
+            },
+          ],
         });
         await expect(page.getByTestId("log-line")).toHaveCount(2);
         await logs.getByRole("combobox").click();
@@ -341,15 +340,14 @@ test("logs follow new entries at the 500-line cap and stop following while readi
   async function pushLines(from: number, count: number) {
     await page.evaluate(
       ({ from, count }) => {
-        for (let id = from; id < from + count; id++)
-          window.__VOYA_SMOKE__.emit("transient-stream-event", {
-            kind: "logLine",
-            payload: {
-              id,
-              level: "info",
-              body: { source: "core", line: `log-line-${id}` },
-            },
-          });
+        window.__VOYA_SMOKE__.emit("transient-stream-event", {
+          kind: "logLines",
+          payload: Array.from({ length: count }, (_, index) => ({
+            id: from + index,
+            level: "info",
+            body: { source: "core", line: `log-line-${from + index}` },
+          })),
+        });
       },
       { from, count },
     );

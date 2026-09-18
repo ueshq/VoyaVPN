@@ -52,6 +52,24 @@ describe("backend connection duration", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("stops ticking while the window is hidden and resumes on the right second", () => {
+    const visibility = vi.spyOn(document, "visibilityState", "get");
+    useRuntimeEventStore.getState().setCoreState(connected);
+    render(<Metrics />);
+    expect(vi.getTimerCount()).toBe(1);
+
+    visibility.mockReturnValue("hidden");
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => { vi.advanceTimersByTime(5000); });
+
+    visibility.mockReturnValue("visible");
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    expect(vi.getTimerCount()).toBe(1);
+    expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:24:23");
+    visibility.mockRestore();
+  });
+
   it("shows hours beyond a day and does not invent an unknown duration", () => {
     useRuntimeEventStore.getState().setCoreState({ ...connected, connectedDurationMs: 90061000 });
     render(<Metrics />);

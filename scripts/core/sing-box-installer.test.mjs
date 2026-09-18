@@ -415,4 +415,25 @@ describe("sing-box seed integrity pinning", () => {
       await rm(workDir, { force: true, recursive: true });
     }
   });
+
+  // The executable is hashed in 1 MiB chunks; a body that spans several chunks
+  // and ends mid-chunk proves every byte, including the last, is covered.
+  it("hashes a multi-chunk executable end to end", async () => {
+    const workDir = await mkdtemp(join(tmpdir(), "voyavpn-sing-box-chunks-"));
+    try {
+      const repoRoot = join(workDir, "repo");
+      const seedDir = singBoxSeedDir(repoRoot);
+      const body = Buffer.alloc(2.5 * 1024 * 1024, "sing-box");
+      await writeStagedWindowsSeed(seedDir, body);
+      const verify = () => verifyStagedSingBoxSeed({ arch: "x64", env: {}, platform: "win32", repoRoot, version: pinnedVersion });
+
+      expect(verify()).toMatchObject({ code: "verified", ok: true });
+
+      body[body.length - 1] ^= 1;
+      await writeFile(join(seedDir, "sing-box.exe"), body);
+      expect(verify()).toMatchObject({ code: "executable-digest-mismatch", ok: false });
+    } finally {
+      await rm(workDir, { force: true, recursive: true });
+    }
+  });
 });

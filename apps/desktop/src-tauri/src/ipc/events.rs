@@ -31,7 +31,9 @@ pub struct InvalidateEvent {
 #[derive(Debug, Clone, Deserialize, Serialize, Type, Event)]
 #[serde(tag = "kind", content = "payload", rename_all = "camelCase")]
 pub enum TransientStreamEvent {
-    LogLine(LogLineEvent),
+    /// Logs-panel lines in the order they were written, delivered at most
+    /// once per batch window instead of one event per line.
+    LogLines(Vec<LogLineEvent>),
     CoreState(RuntimeStatusResponse),
     Statistics(StatisticsSnapshot),
     SysProxyChanged(SystemProxyStatusResponse),

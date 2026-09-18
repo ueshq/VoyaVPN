@@ -296,7 +296,7 @@ describe("RoutingRuleList", () => {
 function listProps(): ComponentProps<typeof RoutingRuleList> {
   return {
     ...handlers,
-    nodeNames: ["Tokyo"],
+    nodeNames: new Set(["Tokyo"]),
     pendingToggles: new Map(),
     rules: rules(),
   };

@@ -94,31 +94,37 @@ impl TraySnapshot {
     }
 }
 
+/// The tray before anything is read from the database: no nodes or groups
+/// yet. Setup builds the menu from this so the window does not wait on two
+/// table reads; the queued refresh fills it in.
+pub(crate) fn initial_tray_snapshot(state: &AppState) -> TraySnapshot {
+    let config = current_config(state);
+    TraySnapshot {
+        language: config.ui_item.current_language.clone(),
+        connected: false,
+        traffic_mode: config.proxy_ui_item.traffic_mode,
+        nodes: Vec::new(),
+        active_node_id: None,
+        groups: Vec::new(),
+        active_group_id: None,
+    }
+}
+
 pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
     let config = current_config(state);
     let connected = matches!(
         state.supervisor().status().await,
         Ok(snapshot) if snapshot.state == SupervisorConnectionState::Connected
     );
-    let (nodes, active_node_id) = match state
-        .services()
-        .profiles()
-        .list_profiles(&config, None, None)
-        .await
-    {
-        Ok(listing) => {
-            let active = listing
-                .items
-                .iter()
-                .find(|item| item.is_active)
-                .map(|item| item.profile.index_id.clone());
-            let nodes = listing
-                .items
+    let (nodes, active_node_id) = match state.services().profiles().list_names().await {
+        Ok(names) => {
+            let active = (!config.index_id.is_empty())
+                .then(|| names.iter().find(|(id, _)| *id == config.index_id))
+                .flatten()
+                .map(|(id, _)| id.clone());
+            let nodes = names
                 .into_iter()
-                .map(|item| TrayNode {
-                    id: item.profile.index_id,
-                    remarks: item.profile.remarks,
-                })
+                .map(|(id, remarks)| TrayNode { id, remarks })
                 .collect();
             (nodes, active)
         }
@@ -128,17 +134,17 @@ pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
         }
     };
 
-    let (groups, active_group_id) = match state.services().policy_groups().list(&config).await {
-        Ok(entries) => {
-            let active = entries
+    let (groups, active_group_id) = match state.services().policy_groups().list_groups().await {
+        Ok(groups) => {
+            let active = groups
                 .iter()
-                .find(|entry| entry.is_active)
-                .map(|entry| entry.group.id.clone());
-            let groups = entries
+                .find(|group| group.id == config.active_group_id)
+                .map(|group| group.id.clone());
+            let groups = groups
                 .into_iter()
-                .map(|entry| TrayGroup {
-                    id: entry.group.id,
-                    name: entry.group.name,
+                .map(|group| TrayGroup {
+                    id: group.id,
+                    name: group.name,
                 })
                 .collect();
             (groups, active)

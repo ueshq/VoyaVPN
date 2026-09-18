@@ -70,7 +70,7 @@ type RoutingRuleListProps = {
   /** Global mode skips every rule, so nothing in the list can change. */
   locked?: boolean;
   /** Node remarks a rule can target; `null` while the node list loads. */
-  nodeNames: readonly string[] | null;
+  nodeNames: ReadonlySet<string> | null;
   /** Points a rule whose node or group is gone back at the proxy. */
   onFixOutbound?: (rule: RoutingRule) => void;
   onDelete: (rule: RoutingRule) => void;

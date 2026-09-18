@@ -74,7 +74,7 @@ describe("useRoutingScreen", () => {
     await waitFor(() => expect(result.current.activeRouting?.id).toBe("route-active"));
     expect(result.current.loading).toBe(false);
     expect(result.current.rules.map((rule) => rule.id)).toEqual(["rule-a", "rule-b", "rule-c"]);
-    await waitFor(() => expect(result.current.nodeNames).toEqual(["Tokyo", "Osaka"]));
+    await waitFor(() => expect(result.current.nodeNames).toEqual(new Set(["Tokyo", "Osaka"])));
   });
 
   it("lists a per-app rule that is not pinned first like any other rule", async () => {

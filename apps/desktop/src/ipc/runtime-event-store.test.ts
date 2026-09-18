@@ -268,7 +268,7 @@ describe("runtime event store", () => {
     });
   });
 
-  it("coalesces log lines into one frame and stamps each at receipt", async () => {
+  it("coalesces log batches into one frame and stamps each at receipt", async () => {
     vi.useFakeTimers();
     // Drive the receipt clock with a `Date.now` spy rather than `setSystemTime`:
     // moving the fake system clock after a frame is already scheduled stops that
@@ -280,21 +280,26 @@ describe("runtime event store", () => {
 
     now.mockReturnValue(firstAt);
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "logLine",
-      payload: { body: { line: "core started", source: "core" }, id: 1, level: "info" },
+      kind: "logLines",
+      payload: [
+        { body: { line: "core started", source: "core" }, id: 1, level: "info" },
+        { body: { line: "inbound/mixed started", source: "core" }, id: 2, level: "info" },
+      ],
     });
     now.mockReturnValue(secondAt);
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "logLine",
-      payload: {
-        body: { code: { code: "connected" }, detail: null, source: "app" },
-        id: 2,
-        level: "warn",
-      },
+      kind: "logLines",
+      payload: [
+        {
+          body: { code: { code: "connected" }, detail: null, source: "app" },
+          id: 3,
+          level: "warn",
+        },
+      ],
     });
 
-    // One `set` per frame, not one per line: the core emits an event per stdout
-    // line, which is hundreds per second at debug verbosity.
+    // One `set` per frame, not one per batch: two batches can land between
+    // frames.
     expect(useRuntimeEventStore.getState().logLines).toEqual([]);
 
     await vi.advanceTimersByTimeAsync(20);
@@ -304,8 +309,14 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().logLines).toEqual([
       { body: { line: "core started", source: "core" }, id: 1, level: "info", receivedAt: firstAt },
       {
-        body: { code: { code: "connected" }, detail: null, source: "app" },
+        body: { line: "inbound/mixed started", source: "core" },
         id: 2,
+        level: "info",
+        receivedAt: firstAt,
+      },
+      {
+        body: { code: { code: "connected" }, detail: null, source: "app" },
+        id: 3,
         level: "warn",
         receivedAt: secondAt,
       },
@@ -317,8 +328,8 @@ describe("runtime event store", () => {
     vi.useFakeTimers();
 
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "logLine",
-      payload: { body: { line: "core started", source: "core" }, id: 1, level: "info" },
+      kind: "logLines",
+      payload: [{ body: { line: "core started", source: "core" }, id: 1, level: "info" }],
     });
     useRuntimeEventStore.getState().clearLogs();
     await vi.advanceTimersByTimeAsync(20);

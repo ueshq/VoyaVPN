@@ -17,12 +17,9 @@ use super::*;
 use crate::proxy_runtime::proxy_runtime_endpoint;
 use crate::supervisor::{CoreSupervisor, SupervisorConnectionState};
 
-/// Delay requests in flight at once; sing-box's own group test runs ten.
-const RUNNING_CORE_CONCURRENCY: usize = 8;
 /// sing-box parses the delay `timeout` as a 16-bit millisecond count, and the
 /// Clash transport abandons any request after 30 s.
 const RUNNING_CORE_TIMEOUT_MS: RangeInclusive<u32> = 1_000..=25_000;
-const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 /// Reaches the running core for a speedtest run.
 pub trait RunningCoreProbe: Send + Sync {
@@ -150,7 +147,7 @@ impl SpeedtestManager {
                 (index, measured)
             }
         }))
-        .buffer_unordered(RUNNING_CORE_CONCURRENCY);
+        .buffer_unordered(SPEEDTEST_CONCURRENCY);
 
         loop {
             let next = tokio::select! {
@@ -220,12 +217,6 @@ fn running_core_result(
             };
             make_failure_result(index_id, outcome, detail)
         }
-    }
-}
-
-async fn cancelled(cancel: &CancellationFlag) {
-    while !is_cancelled(cancel) {
-        time::sleep(CANCEL_POLL_INTERVAL).await;
     }
 }
 

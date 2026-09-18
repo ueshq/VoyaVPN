@@ -27,10 +27,28 @@ export function ConnectedInfo({
   const connected = status?.state === "connected";
   const duration = connected ? status.connectedDurationMs : null;
 
+  // Ticks only while the window is visible: elapsed time is re-derived from
+  // `receivedAt` on every tick, so a paused clock resumes exactly.
   useEffect(() => {
     if (!connected || duration == null) return;
-    const timer = window.setInterval(() => setNow(performance.now()), 1000);
-    return () => window.clearInterval(timer);
+    let timer: number | undefined;
+    function schedule() {
+      window.clearInterval(timer);
+      timer =
+        document.visibilityState === "hidden"
+          ? undefined
+          : window.setInterval(() => setNow(performance.now()), 1000);
+    }
+    function onVisibilityChange() {
+      if (document.visibilityState !== "hidden") setNow(performance.now());
+      schedule();
+    }
+    schedule();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.clearInterval(timer);
+    };
   }, [connected, duration]);
 
   const elapsed = duration == null ? null : duration + Math.max(0, now - (receivedAt ?? now));

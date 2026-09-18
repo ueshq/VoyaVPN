@@ -97,4 +97,4 @@ pub use updates::*;
 
 pub(crate) use post_commit::{disconnect_removed_profile, emit_subscription_invalidation};
 pub(crate) use runtime::core_flow;
-pub(crate) use support::{emit_app_log, emit_core_log, emit_or_warn};
+pub(crate) use support::{emit_app_log, emit_core_log, emit_or_warn, queue_log_line};

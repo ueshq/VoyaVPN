@@ -18,6 +18,7 @@ pub mod input_safety;
 pub mod invalidation;
 pub mod language;
 pub mod lifecycle;
+pub mod log_batch;
 pub mod logging;
 pub mod policy_groups;
 pub mod profiles;

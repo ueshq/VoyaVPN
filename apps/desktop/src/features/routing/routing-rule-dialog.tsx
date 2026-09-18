@@ -67,7 +67,7 @@ export function RoutingRuleDialog({
   groupOutbounds?: readonly RuleGroupOutbound[] | null;
   mode: "create" | "edit";
   /** Node remarks a rule can target; `null` while the node list loads. */
-  nodeNames: readonly string[] | null;
+  nodeNames: ReadonlySet<string> | null;
   onOpenChange: (open: boolean) => void;
   onSubmit: (rule: RoutingRulePayload) => Promise<void>;
   open: boolean;
@@ -121,7 +121,7 @@ export function RoutingRuleDialog({
       label: t("panes.routing.outboundGroup", { name }),
       value: groupOutboundValue(id),
     })),
-    ...(nodeNames ?? []).map((name) => ({ label: name, value: name })),
+    ...[...(nodeNames ?? [])].map((name) => ({ label: name, value: name })),
   ];
   if (!outboundOptions.some((option) => option.value === form.outbound)) {
     // A node or group the rule names stays selectable even when it no longer

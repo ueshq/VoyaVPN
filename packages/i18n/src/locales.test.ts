@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import ts from "typescript";
 
 import { changeLocale, getInitialLocale, i18next, localeOptions, type Locale } from "./index";
@@ -13,6 +13,11 @@ const desktopSourceRoot = resolve(findRepoRoot(process.cwd()), "apps/desktop/src
 const sourceModules = readSourceModules(desktopSourceRoot);
 
 describe("i18n locales", () => {
+  // Non-English locales load on first use; choosing each once loads it.
+  beforeAll(async () => {
+    for (const { code } of localeOptions) await changeLocale(code, { persist: false });
+  });
+
   afterEach(async () => {
     vi.restoreAllMocks();
     window.localStorage.removeItem("voyavpn.locale");

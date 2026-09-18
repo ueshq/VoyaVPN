@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { changeLocale, i18next, localeOptions, type Locale, type TranslationFunction } from "@voya/i18n";
 
@@ -32,6 +32,11 @@ function translator(locale: Locale): TranslationFunction {
 
 const en = translator("en");
 const zh = translator("zh-Hans");
+
+// Non-English locales load on first use; choosing each once loads it.
+beforeAll(async () => {
+  for (const { code } of localeOptions) await changeLocale(code, { persist: false });
+});
 
 afterAll(async () => {
   await changeLocale("en");

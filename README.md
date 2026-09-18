@@ -111,8 +111,8 @@ pnpm run verify:local
 ```
 
 Run the final gate checks individually. `scripts/quality/verify-local.mjs` is the
-source of truth for this list and its order; CI's `baseline` job runs the same
-steps:
+source of truth for this list and its order; CI's parallel `baseline-fast`,
+`baseline-rust` and `baseline-frontend` jobs together run the same steps:
 
 ```sh
 pnpm run check:architecture

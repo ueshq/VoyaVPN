@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { Layers, Settings, Trash2, Zap } from "lucide-react";
 
 import { Badge } from "@voya/ui/components/badge";
@@ -15,6 +16,13 @@ import { profileMemberName } from "./profile-display";
 import { SpeedtestButton } from "./server-table-menus";
 
 /**
+ * Member chips a card shows before "Show all". A subscription's auto-created
+ * group mirrors every node it has, and hundreds of chips re-rendered on every
+ * speedtest frame.
+ */
+const COLLAPSED_MEMBER_LIMIT = 60;
+
+/**
  * Policy groups above the node list. The editor and the delete confirmation
  * stay mounted without any group, because the toolbar creates the first one.
  */
@@ -23,10 +31,17 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
     deletingPolicyGroup,
     operationError,
     policyGroupEntries,
+    profiles,
     removePolicyGroup,
     setDeletingPolicyGroup,
     t,
   } = controller;
+  // The last speed test's delay per node, looked up once per list rather than
+  // searched per member of every card.
+  const testedDelays = useMemo(
+    () => new Map(profiles.map((item) => [item.profile.id, item.metrics.delayMs || null])),
+    [profiles],
+  );
 
   return (
     <>
@@ -37,7 +52,12 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
           data-testid="policy-groups-section"
         >
           {policyGroupEntries.map((entry) => (
-            <PolicyGroupCard controller={controller} entry={entry} key={entry.group.id} />
+            <PolicyGroupCard
+              controller={controller}
+              entry={entry}
+              key={entry.group.id}
+              testedDelays={testedDelays}
+            />
           ))}
         </section>
       ) : null}
@@ -79,9 +99,11 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
 function PolicyGroupCard({
   controller,
   entry,
+  testedDelays,
 }: {
   controller: ServerTableController;
   entry: PolicyGroupEntry;
+  testedDelays: ReadonlyMap<string, number | null>;
 }) {
   const {
     activatePolicyGroup,
@@ -92,7 +114,6 @@ function PolicyGroupCard({
     openGroupEditor,
     policyGroupRuntimeState,
     policyGroupSubscriptions,
-    profiles,
     setDeletingPolicyGroup,
     speedtestProgress,
     speedtestRunning,
@@ -103,6 +124,7 @@ function PolicyGroupCard({
     testingPolicyGroup,
   } = controller;
   const { group, isActive, members } = entry;
+  const [showAllMembers, setShowAllMembers] = useState(false);
   const live = policyGroupRuntimeState?.groupId === group.id ? policyGroupRuntimeState : null;
   // Without a running core a selector still shows the member it starts on.
   const currentId =
@@ -111,14 +133,12 @@ function PolicyGroupCard({
       ? (group.selectedProfileId ?? members[0]?.profileId ?? null)
       : null);
   // A running group reports its members' delays; otherwise the last speed test does.
-  const delays = new Map(
-    live
-      ? live.members.map((member) => [member.profileId, member.delayMs])
-      : members.map((member) => [
-          member.profileId,
-          profiles.find((item) => item.profile.id === member.profileId)?.metrics.delayMs || null,
-        ]),
-  );
+  const delays: ReadonlyMap<string, number | null> = live
+    ? new Map(live.members.map((member) => [member.profileId, member.delayMs]))
+    : testedDelays;
+  const collapsible = members.length > COLLAPSED_MEMBER_LIMIT;
+  const shownMembers =
+    collapsible && !showAllMembers ? members.slice(0, COLLAPSED_MEMBER_LIMIT) : members;
   const speedtestKey = `policy:${group.id}`;
   const inUse = isActive && coreConnected;
   const source = group.autoCreated
@@ -230,7 +250,7 @@ function PolicyGroupCard({
       </div>
       {members.length ? (
         <div className="flex flex-wrap gap-2 px-5 pb-4">
-          {members.map((member) => (
+          {shownMembers.map((member) => (
             <PolicyGroupMemberChip
               current={member.profileId === currentId}
               delay={formatDelay(delays.get(member.profileId))}
@@ -244,6 +264,19 @@ function PolicyGroupCard({
               profileId={member.profileId}
             />
           ))}
+          {collapsible ? (
+            <Button
+              aria-expanded={showAllMembers}
+              onClick={() => setShowAllMembers((shown) => !shown)}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              {showAllMembers
+                ? t("nodeGroups.showFewerMembers")
+                : t("nodeGroups.showAllMembers", { count: members.length })}
+            </Button>
+          ) : null}
         </div>
       ) : (
         <p className="node-group-empty">{t("nodeGroups.empty")}</p>

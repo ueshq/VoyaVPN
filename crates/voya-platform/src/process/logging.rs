@@ -12,7 +12,15 @@ pub enum ProcessOutputStream {
 }
 
 pub trait ProcessLogSink: Send + Sync {
-    fn line(&self, role: ProcessRole, stream: ProcessOutputStream, line: String);
+    /// One line of child output; `level` is [`classify_core_log_line`]'s
+    /// reading of it, so a sink need not parse the line again.
+    fn line(
+        &self,
+        role: ProcessRole,
+        stream: ProcessOutputStream,
+        level: ProcessLogLevel,
+        line: String,
+    );
 }
 
 /// Severity of a single core log line.
@@ -79,10 +87,8 @@ pub(super) fn drain_child_pipe<T>(
     thread::spawn(move || {
         let reader = io::BufReader::new(pipe);
         for line in reader.lines().map_while(Result::ok) {
-            if let Some(log_sink) = &log_sink {
-                log_sink.line(role, stream, line.clone());
-            }
-            match classify_core_log_line(&line) {
+            let level = classify_core_log_line(&line);
+            match level {
                 ProcessLogLevel::Trace | ProcessLogLevel::Debug => {
                     tracing::debug!(target: CORE_OUTPUT_TARGET, ?role, ?stream, "{line}");
                 }
@@ -95,6 +101,9 @@ pub(super) fn drain_child_pipe<T>(
                 ProcessLogLevel::Error => {
                     tracing::error!(target: CORE_OUTPUT_TARGET, ?role, ?stream, "{line}");
                 }
+            }
+            if let Some(log_sink) = &log_sink {
+                log_sink.line(role, stream, level, line);
             }
         }
     });

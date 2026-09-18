@@ -25,10 +25,15 @@ voya-platform.workspace = true
 
 [dev-dependencies]
 base64 = "0.22"
+criterion.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 sqlx.workspace = true
 voya-net = { workspace = true, features = ["test-utils"] }
 voya-platform = { workspace = true, features = ["test-support"] }
+
+[[bench]]
+name = "subscription_import"
+harness = false
 
 [lints]
 workspace = true

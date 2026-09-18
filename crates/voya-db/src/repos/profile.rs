@@ -101,9 +101,20 @@ impl<'executor> ProfileRepository<'executor> {
             profile_ex.message = None;
             profile_ex.ip_info = None;
         }
+        self.upsert_with_checked_profile_ex(item, &profile_ex).await
+    }
+
+    /// [`Self::upsert_with_profile_ex`] for a caller that has already read the
+    /// stored row and cleared `profile_ex`'s measurements if the connection
+    /// changed, so the row is not read a second time.
+    pub async fn upsert_with_checked_profile_ex(
+        &self,
+        item: &ProfileItem,
+        profile_ex: &ProfileExItem,
+    ) -> Result<()> {
         self.upsert(item).await?;
         ProfileExRepository::from_executor(self.executor)
-            .upsert(&profile_ex)
+            .upsert(profile_ex)
             .await
     }
 

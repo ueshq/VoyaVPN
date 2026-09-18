@@ -231,11 +231,31 @@ describe("GitHub Actions workflows", () => {
   });
 
   it("lints Rust on every platform-check runner so OS-gated code is covered", () => {
-    const platformCheck = workflowJobs(readWorkflow("ci.yml")).get("platform-check");
+    const jobs = workflowJobs(readWorkflow("ci.yml"));
+    const platformCheck = jobs.get("platform-check");
     expect(platformCheck).toBeDefined();
     const body = platformCheck.join("\n");
     expect(body).toMatch(/cargo clippy --workspace --all-targets --locked -- -D warnings/);
     expect(body).toMatch(/macos-15/);
     expect(body).toMatch(/windows-2025/);
+
+    // Linux clippy runs once, in baseline-rust; a Linux leg here linted the
+    // same target a second time.
+    expect(body).not.toMatch(/ubuntu-/);
+    expect(jobs.get("baseline-rust")?.join("\n")).toContain("pnpm run check:rust:clippy");
+  });
+
+  // A cache hit only skips the browser download; the apt libraries Chromium
+  // needs are not in ~/.cache/ms-playwright and must still be installed.
+  it("installs Chromium's system libraries whether or not the browser cache hits", () => {
+    for (const [job, body] of workflowJobs(readWorkflow("ci.yml"))) {
+      const text = body.join("\n");
+      if (!/playwright install\b/.test(text)) {
+        continue;
+      }
+      expect(text, job).toMatch(/path: ~\/\.cache\/ms-playwright/);
+      expect(text, job).toContain("playwright install --with-deps chromium");
+      expect(text, job).toContain("playwright install-deps chromium");
+    }
   });
 });

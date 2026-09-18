@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use super::*;
 
 pub(crate) fn fill_outbound_transport(
@@ -85,12 +87,19 @@ fn ua_only_headers(user_agent: String) -> Option<SingboxHeaders> {
     })
 }
 
+// Compiled once: every WebSocket node passes through here, and a macOS connect
+// builds each node's outbound twice (main and latency probe).
+static EARLY_DATA_REGEX: LazyLock<Option<Regex>> =
+    LazyLock::new(|| Regex::new(r"[?&]ed=(\d+)").ok());
+static EARLY_HEADER_REGEX: LazyLock<Option<Regex>> =
+    LazyLock::new(|| Regex::new(r"[?&]eh=([^&]+)").ok());
+
 fn parse_ws_early_data(path: &str) -> (String, Option<i32>, Option<String>) {
     let mut result_path = path.to_string();
     let mut early_data = None;
     let mut early_header = None;
 
-    if let Ok(ed_regex) = Regex::new(r"[?&]ed=(\d+)") {
+    if let Some(ed_regex) = EARLY_DATA_REGEX.as_ref() {
         if let Some(captures) = ed_regex.captures(&result_path) {
             early_data = captures
                 .get(1)
@@ -106,7 +115,7 @@ fn parse_ws_early_data(path: &str) -> (String, Option<i32>, Option<String>) {
         }
     }
 
-    if let Ok(eh_regex) = Regex::new(r"[?&]eh=([^&]+)") {
+    if let Some(eh_regex) = EARLY_HEADER_REGEX.as_ref() {
         if let Some(captures) = eh_regex.captures(&result_path) {
             if let Some(value) = captures.get(1) {
                 early_header = percent_encoding::percent_decode_str(value.as_str())

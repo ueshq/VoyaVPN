@@ -157,4 +157,36 @@ describe("PolicyGroupsSection", () => {
     expect(screen.getByText("Created for Airport")).toBeInTheDocument();
     expect(screen.getByText("Selected")).toBeInTheDocument();
   });
+
+  it("collapses a large group's members until asked, keeping tested delays", async () => {
+    const user = userEvent.setup();
+    const members = Array.from({ length: 75 }, (_, index) => ({
+      profileId: `n${index}`,
+      remarks: `Node ${index}`,
+    }));
+    const large: PolicyGroupEntry = {
+      ...entry({ memberIds: members.map((member) => member.profileId) }, false),
+      members,
+    };
+    render(
+      <PolicyGroupsSection
+        controller={controller({
+          policyGroupEntries: [large],
+          profiles: [
+            { metrics: { delayMs: 88 }, profile: { id: "n0" } },
+          ] as unknown as ServerTableController["profiles"],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Node 59")).toBeInTheDocument();
+    expect(screen.queryByText("Node 60")).not.toBeInTheDocument();
+    expect(screen.getByText("88 ms")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show all 75" }));
+    expect(screen.getByText("Node 74")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show fewer" }));
+    expect(screen.queryByText("Node 74")).not.toBeInTheDocument();
+  });
 });

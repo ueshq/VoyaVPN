@@ -31,10 +31,15 @@ pub fn is_latency_probe_candidate(node: &ProfileItem) -> bool {
 /// delay request fails with "not found" instead of measuring stale settings.
 #[must_use]
 pub fn latency_probe_tag(context: &CoreConfigContext, node: &ProfileItem) -> String {
-    let outbound = build_outbound(context, node);
+    tag_for_outbound(&build_outbound(context, node), node)
+}
+
+/// The probe tag for `outbound`, which must be `build_outbound(context, node)`
+/// as generated, before its tag is replaced.
+fn tag_for_outbound(outbound: &SingboxOutbound, node: &ProfileItem) -> String {
     // `SingboxOutbound` serializes in declaration order, so the bytes are
     // stable for one build of the app, which is all a running core needs.
-    let fingerprint = serde_json::to_vec(&outbound).map_or(0, |bytes| fnv1a64(&bytes));
+    let fingerprint = serde_json::to_vec(outbound).map_or(0, |bytes| fnv1a64(&bytes));
     format!(
         "{LATENCY_PROBE_TAG_PREFIX}{}:{fingerprint:016x}",
         node.index_id
@@ -50,8 +55,10 @@ pub(in crate::singbox) fn gen_latency_probes(
         .iter()
         .filter(|node| is_latency_probe_candidate(node))
     {
+        // Built once and fingerprinted before the tag changes, which is
+        // exactly what `latency_probe_tag` computes from a second build.
         let mut outbound = build_outbound(context, node);
-        outbound.tag = latency_probe_tag(context, node);
+        outbound.tag = tag_for_outbound(&outbound, node);
         config.outbounds.push(outbound);
     }
 }

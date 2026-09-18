@@ -38,6 +38,30 @@ pub enum ProfileManagerError {
     InvalidMove { index_id: String, reason: String },
 }
 
+/// Hands out sort positions for newly imported profiles.
+///
+/// A new profile goes after every stored one. `MAX(sort)` has no index to use
+/// (and the single-baseline schema cannot gain one), so reading it per node
+/// scanned the table once per imported node. An import reads it once and
+/// counts up in memory: nothing else assigns sort positions inside the
+/// import's transaction.
+#[derive(Debug, Default)]
+pub(crate) struct NewProfileSort {
+    last: Option<i32>,
+}
+
+impl NewProfileSort {
+    async fn next(&mut self, database: DatabaseSession<'_>) -> Result<i32> {
+        let last = match self.last {
+            Some(last) => last,
+            None => database.profile_exs().max_sort().await?,
+        };
+        let next = last.saturating_add(DEFAULT_PROFILE_SORT_STEP);
+        self.last = Some(next);
+        Ok(next)
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct ProfileManager<'db> {
     database: DatabaseSession<'db>,
@@ -57,6 +81,21 @@ impl<'db> ProfileManager<'db> {
     #[must_use]
     pub(crate) const fn from_session(database: DatabaseSession<'db>) -> Self {
         Self { database }
+    }
+
+    /// Every listed node's id and remarks, in list order: the tray's node
+    /// menu, which needs neither traffic stats nor the list items built from
+    /// them.
+    pub async fn list_names(&self) -> Result<Vec<(String, String)>> {
+        Ok(self
+            .database
+            .profiles()
+            .list_with_profile_ex(None)
+            .await?
+            .items
+            .into_iter()
+            .map(|(profile, _)| (profile.index_id, profile.remarks))
+            .collect())
     }
 
     /// The listing behind every profile view, with the undecodable-row count
@@ -119,48 +158,10 @@ impl<'db> ProfileManager<'db> {
     pub(crate) async fn save_imported_profile(
         &self,
         config: &mut AppConfig,
-        mut profile: ProfileItem,
+        profile: ProfileItem,
     ) -> Result<ProfileListItem> {
-        let is_new = if profile.index_id.trim().is_empty() {
-            profile.index_id = uuid::Uuid::new_v4().simple().to_string();
-            true
-        } else {
-            !self.database.profiles().exists(&profile.index_id).await?
-        };
-
-        normalize_profile(&mut profile);
-
-        let profile_ex = if is_new {
-            ProfileExItem {
-                index_id: profile.index_id.clone(),
-                sort: self.database.profile_exs().max_sort().await? + DEFAULT_PROFILE_SORT_STEP,
-                ..ProfileExItem::default()
-            }
-        } else {
-            let mut existing = self
-                .database
-                .profile_exs()
-                .ensure(&profile.index_id)
-                .await?;
-            existing.index_id.clone_from(&profile.index_id);
-            if self
-                .database
-                .profiles()
-                .get(&profile.index_id)
-                .await?
-                .is_some_and(|previous| !voya_core::profile_items_match(&previous, &profile, false))
-            {
-                existing.country_code = None;
-                existing.delay = 0;
-                existing.message = None;
-                existing.ip_info = None;
-            }
-            existing
-        };
-
-        self.database
-            .profiles()
-            .upsert_with_profile_ex(&profile, &profile_ex)
+        let (profile, profile_ex) = self
+            .write_imported_profile(profile, &mut NewProfileSort::default())
             .await?;
         self.ensure_active_profile(config).await?;
 
@@ -177,6 +178,57 @@ impl<'db> ProfileManager<'db> {
             server_stat,
             &config.index_id,
         ))
+    }
+
+    /// Writes one imported profile and its extension row, without the active
+    /// profile check or the stats lookup a single save reports back.
+    ///
+    /// A subscription update calls this once per node inside one transaction,
+    /// so it reads the stored row once and leaves the final active-profile
+    /// check to the caller.
+    pub(crate) async fn write_imported_profile(
+        &self,
+        mut profile: ProfileItem,
+        new_sort: &mut NewProfileSort,
+    ) -> Result<(ProfileItem, ProfileExItem)> {
+        let previous = if profile.index_id.trim().is_empty() {
+            profile.index_id = uuid::Uuid::new_v4().simple().to_string();
+            None
+        } else {
+            self.database.profiles().get(&profile.index_id).await?
+        };
+
+        normalize_profile(&mut profile);
+
+        let profile_ex = match previous {
+            None => ProfileExItem {
+                index_id: profile.index_id.clone(),
+                sort: new_sort.next(self.database).await?,
+                ..ProfileExItem::default()
+            },
+            Some(previous) => {
+                let mut existing = self
+                    .database
+                    .profile_exs()
+                    .get(&profile.index_id)
+                    .await?
+                    .unwrap_or_default();
+                existing.index_id.clone_from(&profile.index_id);
+                if !voya_core::profile_items_match(&previous, &profile, false) {
+                    existing.country_code = None;
+                    existing.delay = 0;
+                    existing.message = None;
+                    existing.ip_info = None;
+                }
+                existing
+            }
+        };
+
+        self.database
+            .profiles()
+            .upsert_with_checked_profile_ex(&profile, &profile_ex)
+            .await?;
+        Ok((profile, profile_ex))
     }
 
     pub async fn delete_profiles(

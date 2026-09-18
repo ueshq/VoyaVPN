@@ -82,6 +82,12 @@ impl<'db> PolicyGroupManager<'db> {
         Self { database }
     }
 
+    /// Every group in display order, without resolving members: the tray
+    /// names groups only, and resolving reads the whole node list.
+    pub async fn list_groups(&self) -> Result<Vec<PolicyGroupItem>> {
+        Ok(self.database.policy_groups().list().await?)
+    }
+
     /// Every group in display order with its resolved members.
     pub async fn list(&self, config: &AppConfig) -> Result<Vec<PolicyGroupEntry>> {
         let nodes = self.database.profiles().list().await?;
@@ -118,8 +124,18 @@ impl<'db> PolicyGroupManager<'db> {
     pub async fn save(&self, draft: PolicyGroupItem) -> Result<PolicyGroupItem> {
         let mut group = normalized(draft);
         validate(&group)?;
+        // One listing answers for every member instead of a query each; an id
+        // it lacks is asked for directly, since the listing leaves out rows it
+        // cannot decode and those still exist.
+        let nodes = self.database.profiles().list().await?;
+        let listed = nodes
+            .iter()
+            .map(|node| node.index_id.as_str())
+            .collect::<BTreeSet<_>>();
         for member_id in &group.member_ids {
-            if !self.database.profiles().exists(member_id).await? {
+            if !listed.contains(member_id.as_str())
+                && !self.database.profiles().exists(member_id).await?
+            {
                 return Err(PolicyGroupManagerError::MemberNotFound(member_id.clone()));
             }
         }
@@ -150,7 +166,6 @@ impl<'db> PolicyGroupManager<'db> {
             group.sort = existing.sort;
             group.auto_created = existing.auto_created;
         }
-        let nodes = self.database.profiles().list().await?;
         let members = resolve_group_members(&group, &nodes);
         // A saved choice that is no longer a member would be ignored by the
         // generator anyway; dropping it keeps the stored group honest.

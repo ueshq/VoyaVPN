@@ -101,7 +101,7 @@ describe("EventBridge", () => {
   it("coalesces country refreshes and never overlays persisted flags with old events", async () => {
     const queryClient = createTestQueryClient();
     const snapshot = { entries: [{ profile: { id: "node" }, metrics: { countryCode: null } }] };
-    queryClient.setQueryData(["profiles"], snapshot);
+    queryClient.setQueryData(["profiles", "list"], snapshot);
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
     const { unmount } = renderWithQuery(<EventBridge />, { queryClient });
     await waitFor(() => expect(bridgeMocks.transientStreamEventListen).toHaveBeenCalledOnce());
@@ -112,13 +112,16 @@ describe("EventBridge", () => {
     act(() => { emit("testing"); emit("waiting"); });
     expect(vi.getTimerCount()).toBe(0);
     act(() => { emit("completed"); emit("failed"); emit("completed"); });
-    expect(invalidate).not.toHaveBeenCalled();
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-    expect(invalidate).toHaveBeenCalledExactlyOnceWith({ queryKey: ["profiles"] });
-    expect(queryClient.getQueryData(["profiles"])).toEqual(snapshot);
+    expect(invalidate).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    // Only the node list carries flags; policy groups are not refetched per
+    // result.
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith({ queryKey: ["profiles", "list"] });
+    expect(queryClient.getQueryData(["profiles", "list"])).toEqual(snapshot);
     act(() => { emit("completed"); });
     unmount();
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(3000);
     expect(invalidate).toHaveBeenCalledOnce();
     queryClient.clear();
   });

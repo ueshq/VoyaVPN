@@ -2,12 +2,14 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  closeSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
-  readFileSync,
+  readSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -175,8 +177,26 @@ export function assertPinnedSingBoxArchive({
   return { pinned: status.pinned, sha256: actualSha256 };
 }
 
+const HASH_CHUNK_BYTES = 1024 * 1024;
+
+/**
+ * Hashes in fixed chunks instead of buffering the whole ~48 MiB executable.
+ * It stays synchronous on purpose: verifyStagedSingBoxSeed is a sync export
+ * that the release readiness check and the tests call directly.
+ */
 function sha256OfFile(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+  const hash = createHash("sha256");
+  const chunk = Buffer.allocUnsafe(HASH_CHUNK_BYTES);
+  const fd = openSync(path, "r");
+  try {
+    let bytesRead;
+    while ((bytesRead = readSync(fd, chunk, 0, chunk.length, null)) > 0) {
+      hash.update(chunk.subarray(0, bytesRead));
+    }
+  } finally {
+    closeSync(fd);
+  }
+  return hash.digest("hex");
 }
 
 export function readSingBoxSeedManifest(seedDir) {

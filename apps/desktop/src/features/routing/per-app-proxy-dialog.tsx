@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { AppWindow, Info, Plus, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -20,7 +20,6 @@ import {
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Input } from "@voya/ui/components/input";
 import { Label } from "@voya/ui/components/label";
-import { ScrollArea } from "@voya/ui/components/scroll-area";
 import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
 import { Spinner } from "@voya/ui/components/spinner";
 import {
@@ -30,6 +29,7 @@ import {
   moveRoutingRule,
   saveRoutingRule,
 } from "@/ipc/commands";
+import { VirtualScrollList } from "@/components/virtual-scroll-list";
 import { useConnectionModeStatus } from "./use-connection-mode-status";
 import { queryKeys } from "@/ipc/query-keys";
 import { useDialogSubmit } from "@/lib/use-dialog-submit";
@@ -110,8 +110,10 @@ export function PerAppProxyDialog({
 
   const candidatesData = candidatesQuery.data;
   const candidates = useMemo(() => candidatesData ?? [], [candidatesData]);
+  // The input stays responsive while a long process list re-filters.
+  const deferredSearch = useDeferredValue(search);
   const filteredCandidates = useMemo(() => {
-    const needle = search.trim().toLowerCase();
+    const needle = deferredSearch.trim().toLowerCase();
     if (!needle) {
       return candidates;
     }
@@ -120,7 +122,7 @@ export function PerAppProxyDialog({
         candidate.displayName.toLowerCase().includes(needle) ||
         candidate.processName.toLowerCase().includes(needle),
     );
-  }, [candidates, search]);
+  }, [candidates, deferredSearch]);
   const selectedKeys = useMemo(
     () => new Set(selected.map((process) => process.toLowerCase())),
     [selected],
@@ -273,15 +275,17 @@ export function PerAppProxyDialog({
                       placeholder={t("panes.routing.perAppPickerSearch")}
                       value={search}
                     />
-                    <ScrollArea className="h-56 rounded-md border bg-card">
-                      {candidatesQuery.isLoading ? (
+                    {candidatesQuery.isLoading ? (
+                      <div className="h-56 rounded-md border bg-card">
                         <p
                           className="p-3 text-xs text-muted-foreground"
                           role="status"
                         >
                           {t("panes.routing.perAppLoading")}
                         </p>
-                      ) : filteredCandidates.length === 0 ? (
+                      </div>
+                    ) : filteredCandidates.length === 0 ? (
+                      <div className="h-56 rounded-md border bg-card">
                         <EmptyState
                           description={t(
                             "panes.routing.perAppEmptyDescription",
@@ -289,46 +293,51 @@ export function PerAppProxyDialog({
                           icon={AppWindow}
                           title={t("panes.routing.perAppEmpty")}
                         />
-                      ) : (
-                        <div className="p-1">
-                          {filteredCandidates.map((candidate) => {
-                            const checked = selectedKeys.has(
-                              candidate.processName.toLowerCase(),
-                            );
-                            const checkboxId = `per-app-${candidate.processName.toLowerCase()}`;
+                      </div>
+                    ) : (
+                      // Every running process, often several hundred: only the
+                      // rows in view are mounted.
+                      <VirtualScrollList
+                        className="h-56 rounded-md border bg-card"
+                        estimateSize={36}
+                        itemKey={(candidate) => candidate.processName.toLowerCase()}
+                        items={filteredCandidates}
+                        renderItem={(candidate) => {
+                          const checked = selectedKeys.has(
+                            candidate.processName.toLowerCase(),
+                          );
+                          const checkboxId = `per-app-${candidate.processName.toLowerCase()}`;
 
-                            return (
-                              <Label
-                                className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-                                htmlFor={checkboxId}
-                                key={candidate.processName.toLowerCase()}
-                              >
-                                <Checkbox
-                                  checked={checked}
-                                  id={checkboxId}
-                                  onCheckedChange={() =>
-                                    toggleProcess(candidate.processName)
-                                  }
-                                />
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate font-medium">
-                                    {candidate.displayName}
-                                  </span>
-                                  {candidate.processName !==
-                                    candidate.displayName ||
-                                  candidate.executablePath ? (
-                                    <span className="block truncate text-xs text-muted-foreground">
-                                      {candidate.executablePath ??
-                                        candidate.processName}
-                                    </span>
-                                  ) : null}
+                          return (
+                            <Label
+                              className="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+                              htmlFor={checkboxId}
+                            >
+                              <Checkbox
+                                checked={checked}
+                                id={checkboxId}
+                                onCheckedChange={() =>
+                                  toggleProcess(candidate.processName)
+                                }
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate font-medium">
+                                  {candidate.displayName}
                                 </span>
-                              </Label>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </ScrollArea>
+                                {candidate.processName !==
+                                  candidate.displayName ||
+                                candidate.executablePath ? (
+                                  <span className="block truncate text-xs text-muted-foreground">
+                                    {candidate.executablePath ??
+                                      candidate.processName}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </Label>
+                          );
+                        }}
+                      />
+                    )}
                   </div>
 
                   <div className="flex items-end gap-2">

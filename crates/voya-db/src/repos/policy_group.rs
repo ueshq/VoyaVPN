@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use sqlx::{sqlite::SqliteRow, Row};
 use voya_core::{GroupStrategy, PolicyGroupItem};
 
@@ -35,8 +37,16 @@ impl<'executor> PolicyGroupRepository<'executor> {
             fetch_all
         )?;
         let mut groups = rows.iter().map(row_to_group).collect::<Result<Vec<_>>>()?;
+        let positions = groups
+            .iter()
+            .enumerate()
+            .map(|(index, group)| (group.id.clone(), index))
+            .collect::<HashMap<_, _>>();
         for (group_id, profile_id) in members {
-            if let Some(group) = groups.iter_mut().find(|group| group.id == group_id) {
+            if let Some(group) = positions
+                .get(&group_id)
+                .and_then(|index| groups.get_mut(*index))
+            {
                 group.member_ids.push(profile_id);
             }
         }

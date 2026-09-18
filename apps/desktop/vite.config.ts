@@ -1,11 +1,24 @@
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   clearScreen: false,
-  plugins: [react(), tailwindcss()],
+  // React Compiler memoizes components and hooks, so a screen fed by a
+  // per-frame store update (speedtest results, connections, logs) re-renders
+  // only what changed. The `useVirtualizer` call sites opt out; see their
+  // `react-hooks/incompatible-library` notes. Unit tests run the source as
+  // written: Babel's on-demand transform pushed lazy screens past Testing
+  // Library's timeouts, and several suites drive non-reactive store mocks that
+  // rely on whole-tree re-renders. The renderer smoke runs compiled code, and
+  // `eslint-plugin-react-hooks` enforces the compiler's rules on the source.
+  plugins: [
+    react(),
+    ...(process.env.VITEST ? [] : [babel({ presets: [reactCompilerPreset()] })]),
+    tailwindcss(),
+  ],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -52,15 +65,14 @@ export default defineConfig({
               test: /node_modules[\\/]lucide-react[\\/]/,
             },
             {
-              // The shipped locales are data, not application code, and
-              // they are ~40% of what the entry chunk used to weigh. Splitting
-              // them keeps the entry budget a guard on *code* growth — an
-              // accidental dependency import — instead of a cap that ordinary
-              // translation work walks into. Both chunks load at startup, and
-              // `frontend-bundle.mjs` budgets each one plus the total.
+              // English, the fallback locale, is data rather than application
+              // code. Splitting it keeps the entry budget a guard on *code*
+              // growth instead of a cap that ordinary translation work walks
+              // into. It loads at startup; the other locales stay out of this
+              // group so each remains its own on-demand chunk.
               name: "locales",
               priority: 30,
-              test: /packages[\\/]i18n[\\/]src[\\/]locales[\\/]/,
+              test: /packages[\\/]i18n[\\/]src[\\/]locales[\\/]en\.json$/,
             },
             {
               name: "vendor-data",
@@ -81,6 +93,9 @@ export default defineConfig({
     environment: "jsdom",
     exclude: [...configDefaults.exclude, "e2e/**"],
     globals: true,
+    // Worker threads instead of the default child processes; each file still
+    // gets a fresh environment. Measured 2026-09-19: 13.7-15.0 s -> 11.7 s.
+    pool: "threads",
     setupFiles: "./src/test/setup.ts",
     // Heavy interaction tests (e.g. the protocol-dialog walkthrough) can exceed
     // the 5s default under parallel CPU contention; give them comfortable margin

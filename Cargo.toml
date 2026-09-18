@@ -18,6 +18,9 @@ rust-version = "1.94"
 version = "0.1.0"
 
 [workspace.dependencies]
+# Benchmarks only (`pnpm bench:rust`); no plots or rayon, so the test gate that
+# builds bench targets stays light.
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 libc = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -46,6 +49,13 @@ voya-platform = { path = "crates/voya-platform" }
 # SQLite, config generation) is occasional and small.
 # `panic` stays at the default `unwind` on purpose: a panicking Tokio task must
 # not take the process down before shutdown restores the system proxy/TUN.
+# Dependencies keep line tables (backtraces still name file and line) but no
+# full debuginfo: nobody steps through a dependency's locals, and the full
+# tables were most of every dev/test build's size and of CI's Rust cache.
+# Workspace crates keep full debuginfo.
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 [profile.release]
 opt-level = "z"
 lto = "fat"

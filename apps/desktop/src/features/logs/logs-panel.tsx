@@ -30,6 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@voya/ui/components/select";
+import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { formatTimeOfDay } from "@voya/utils/formatting";
@@ -48,6 +49,27 @@ import { toastError, useToastStore } from "@/stores/toast-store";
 export type LogFilter = "standard" | "issues" | "all";
 const ROW_HEIGHT = 36;
 const STICK_THRESHOLD = 24;
+
+type ResolvedLogLine = StoredLogLine & { searchText: string; text: string };
+
+/**
+ * Translated lines, keyed by the stored line. The store keeps each line's
+ * object from frame to frame, so a line is translated once per language
+ * instead of all 500 on every flush; entries leave with their lines.
+ */
+const resolvedLines = new WeakMap<
+  StoredLogLine,
+  { resolved: ResolvedLogLine; t: TranslationFunction }
+>();
+
+function resolveLogLine(t: TranslationFunction, line: StoredLogLine): ResolvedLogLine {
+  const cached = resolvedLines.get(line);
+  if (cached?.t === t) return cached.resolved;
+  const text = logLineText(t, line.body);
+  const resolved = { ...line, searchText: text.toLowerCase(), text };
+  resolvedLines.set(line, { resolved, t });
+  return resolved;
+}
 
 export function LogsPanel({
   search,
@@ -68,8 +90,7 @@ export function LogsPanel({
   const searchRef = useRef<HTMLInputElement>(null);
   const needle = search.trim().toLowerCase();
   const resolved = useMemo(
-    () =>
-      logLines.map((line) => ({ ...line, text: logLineText(t, line.body) })),
+    () => logLines.map((line) => resolveLogLine(t, line)),
     [logLines, t],
   );
   const filtered = useMemo(
@@ -81,7 +102,7 @@ export function LogsPanel({
           line.level === "error" ||
           (filter === "standard" && line.level === "info");
         return (
-          included && (!needle || line.text.toLowerCase().includes(needle))
+          included && (!needle || line.searchText.includes(needle))
         );
       }),
     [filter, needle, resolved],

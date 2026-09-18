@@ -10,9 +10,7 @@ use voya_app::{
     subscriptions::{AutoUpdateOutcome, SubscriptionAutoUpdateSink},
     supervisor::{CoreExitEvent, NativeTunExitEvent, SupervisorEventSink},
 };
-use voya_platform::process::{
-    classify_core_log_line, ProcessLogSink, ProcessOutputStream, ProcessRole,
-};
+use voya_platform::process::{ProcessLogLevel, ProcessLogSink, ProcessOutputStream, ProcessRole};
 
 pub(crate) struct TauriProcessLogSink {
     pub(crate) app: tauri::AppHandle,
@@ -40,16 +38,14 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
             // Redacted at the source too; repeated here so a future failure
             // path cannot put a tokenized subscription URL in a toast.
             let error = redact_urls(error);
-            if let Err(emit_error) = ipc::commands::emit_app_log(
+            ipc::commands::emit_app_log(
                 &self.app,
                 ipc::events::LogLevel::Warn,
                 voya_contracts::LogCode::SubscriptionAutoUpdateFailed {
                     remarks: outcome.remarks.clone(),
                 },
                 Some(&error),
-            ) {
-                tracing::warn!(?emit_error, "failed to emit auto-update failure log");
-            }
+            );
             // Only the first failure of a streak surfaces as a user notice;
             // retries stay in the log until the subscription recovers.
             if outcome.consecutive_failures == 1 {
@@ -66,7 +62,7 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
         }
 
         let imported = outcome.result.as_ref().map_or(0, |result| result.imported);
-        if let Err(emit_error) = ipc::commands::emit_app_log(
+        ipc::commands::emit_app_log(
             &self.app,
             ipc::events::LogLevel::Info,
             voya_contracts::LogCode::SubscriptionAutoUpdateFinished {
@@ -74,9 +70,7 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
                 imported,
             },
             None,
-        ) {
-            tracing::warn!(?emit_error, "failed to emit auto-update log");
-        }
+        );
 
         // Same helper the `update_subscriptions` command uses, so the
         // background path can never drift from the key set the command emits.
@@ -150,7 +144,13 @@ impl ProxyRuntimeEventSink for TauriProxyRuntimeEventSink {
 }
 
 impl ProcessLogSink for TauriProcessLogSink {
-    fn line(&self, role: ProcessRole, _stream: ProcessOutputStream, line: String) {
+    fn line(
+        &self,
+        role: ProcessRole,
+        _stream: ProcessOutputStream,
+        level: ProcessLogLevel,
+        line: String,
+    ) {
         // Speedtest spawns one throwaway core per node, each with its own
         // startup banner, and every line here costs a JSON-serialized IPC event
         // plus a store write in the webview. A latency run over a few hundred
@@ -163,15 +163,12 @@ impl ProcessLogSink for TauriProcessLogSink {
         }
         // The stream carries no severity: sing-box writes every level to stderr
         // unless `log.output` is set, so the level comes from the line itself.
-        let level = process_log_level_to_contract(classify_core_log_line(&line));
         let line = redact_url_userinfo(&line);
-        if let Err(error) = ipc::commands::emit_core_log(
+        ipc::commands::emit_core_log(
             &self.app,
-            level,
+            process_log_level_to_contract(level),
             format!("[{}] {line}", process_role_label(role)),
-        ) {
-            tracing::warn!(?error, "failed to emit process log event");
-        }
+        );
     }
 }
 

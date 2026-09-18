@@ -2,6 +2,7 @@
 //! snapshot (built outside any mutation lock), server-reported metadata
 //! persistence. Manual group membership is independent of subscriptions.
 
+use futures_util::{stream, StreamExt};
 use voya_core::{
     parse_profile_update_interval_minutes, parse_subscription_userinfo, SubItem, SubMetadataItem,
     SubscriptionUpdateResult, SubscriptionUserInfo,
@@ -45,6 +46,11 @@ pub(super) struct PreparedSubscriptionImport {
     pub(super) fetched_at_unix: i64,
 }
 
+/// Subscriptions fetched at once. Each fetch is network-bound and can take up
+/// to the full request timeout, so one at a time made an update of several
+/// subscriptions wait on each slow server in turn.
+const SUBSCRIPTION_FETCH_CONCURRENCY: usize = 4;
+
 pub(super) async fn prepare_subscription_snapshot(
     subscriptions: Vec<SubItem>,
     subscription_id: Option<&str>,
@@ -57,7 +63,12 @@ pub(super) async fn prepare_subscription_snapshot(
     let subscription_id = subscription_id
         .map(str::trim)
         .filter(|value| !value.is_empty());
+    let options = SubscriptionFetchOptions {
+        prefer_proxy,
+        proxy_url: proxy_url.map(str::to_string),
+    };
 
+    let mut fetchable = Vec::new();
     for item in subscriptions {
         if subscription_id.is_some_and(|wanted| wanted != item.id) {
             continue;
@@ -68,7 +79,13 @@ pub(super) async fn prepare_subscription_snapshot(
         }
         // `enabled` only switches automatic updates, which the scheduler checks
         // itself; an update the user asks for always runs.
+        fetchable.push(item);
+    }
 
+    // `buffered`, not `buffer_unordered`: results are handled in subscription
+    // order, so messages and imports read the same as a sequential update.
+    let (client, options) = (&client, &options);
+    let mut fetches = stream::iter(fetchable.into_iter().map(|item| async move {
         let source = SubscriptionFetchSource {
             url: item.url.clone(),
             more_url: item.more_url.clone(),
@@ -76,11 +93,13 @@ pub(super) async fn prepare_subscription_snapshot(
             convert_target: item.convert_target.clone(),
             sub_convert_url: None,
         };
-        let options = SubscriptionFetchOptions {
-            prefer_proxy,
-            proxy_url: proxy_url.map(str::to_string),
-        };
-        match fetch_subscription(&client, &source, &options).await {
+        let fetched = fetch_subscription(client, &source, options).await;
+        (item, fetched)
+    }))
+    .buffered(SUBSCRIPTION_FETCH_CONCURRENCY);
+
+    while let Some((item, fetched)) = fetches.next().await {
+        match fetched {
             Ok(fetch) if !fetch.content.trim().is_empty() => {
                 push_failed_more_url_warnings(&mut result, &item.remarks, &fetch.failed_more_urls);
                 let headers = fetch

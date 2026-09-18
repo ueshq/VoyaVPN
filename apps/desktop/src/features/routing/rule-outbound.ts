@@ -42,9 +42,10 @@ export function groupOutboundValue(id: string) {
  * The nodes a rule can send traffic to, by remarks, in list order. The
  * generator resolves a rule outbound to the first node carrying those remarks
  * and checks the built-in tags first, so duplicates and nodes named after a
- * built-in tag are not separate targets.
+ * built-in tag are not separate targets. A set, because every rule row looks
+ * its outbound up in it.
  */
-export function nodeOutboundNames(entries: readonly ProfileListEntry[]): string[] {
+export function nodeOutboundNames(entries: readonly ProfileListEntry[]): ReadonlySet<string> {
   const names = new Set<string>();
   for (const { profile } of entries) {
     if (
@@ -56,7 +57,7 @@ export function nodeOutboundNames(entries: readonly ProfileListEntry[]): string[
     }
   }
 
-  return [...names];
+  return names;
 }
 
 /**
@@ -66,7 +67,7 @@ export function nodeOutboundNames(entries: readonly ProfileListEntry[]): string[
  */
 export function describeOutbound(
   outbound: string | null | undefined,
-  nodeNames: readonly string[] | null,
+  nodeNames: ReadonlySet<string> | null,
   groups: readonly RuleGroupOutbound[] | null = [],
 ): OutboundTarget {
   const value = outbound?.trim() ? outbound : "proxy";
@@ -82,7 +83,7 @@ export function describeOutbound(
     return group ? { kind: "group", name: group.name } : { kind: "missingGroup", name: id };
   }
 
-  return nodeNames === null || nodeNames.includes(value)
+  return nodeNames === null || nodeNames.has(value)
     ? { kind: "node", name: value }
     : { kind: "missing", name: value };
 }

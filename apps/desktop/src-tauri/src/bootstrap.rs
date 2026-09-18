@@ -12,6 +12,7 @@ use std::{
     error::Error,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
+    time::Instant,
 };
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -37,22 +38,28 @@ use voya_platform::{
 /// Windows, a bundle on macOS) that made the process vanish with no
 /// explanation, including user-actionable database schema failures.
 pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
+    let started = Instant::now();
     let app_config_dir = app_data_dir(app)?;
     let runtime_paths = AppPaths::new(&app_config_dir);
     runtime_paths.ensure_dirs()?;
     // Installed before the first `tracing::warn!` below so the startup
     // recovery paths are captured too.
     logging::install(app.handle().clone(), runtime_paths.log_dir());
-    let services = tauri::async_runtime::block_on(AppServices::connect(
-        &database_path(app)?,
-        runtime_paths.clone(),
-    ))?;
+    let services = timed("open database", || {
+        tauri::async_runtime::block_on(AppServices::connect(
+            &database_path(app)?,
+            runtime_paths.clone(),
+        ))
+        .map_err(Box::<dyn Error>::from)
+    })?;
     // A fresh install starts in the platform's native VPN mode where it has one,
     // and macOS never loads in a system proxy mode it does not offer.
     let system_locale = voya_platform::locale::system_locale();
-    let config = tauri::async_runtime::block_on(
-        services.load_config_for(TargetOs::current(), system_locale.as_deref()),
-    )?;
+    let config = timed("load settings", || {
+        tauri::async_runtime::block_on(
+            services.load_config_for(TargetOs::current(), system_locale.as_deref()),
+        )
+    })?;
     let system_proxy_manager = SystemProxyManager::new(
         SystemProxyService::new(Arc::new(StdProcessRunner::new())),
         runtime_paths.clone(),
@@ -62,7 +69,9 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // on the local port until the user connects, and `connect` applies
     // the mode itself once the core is up. Applying it here pointed the
     // machine at a dead port on every launch.
-    match system_proxy_manager.restore_dirty_proxy_if_needed(&config) {
+    match timed("restore system proxy", || {
+        system_proxy_manager.restore_dirty_proxy_if_needed(&config)
+    }) {
         Ok(true) => {
             tracing::warn!("restored system proxy from previous dirty shutdown marker");
         }
@@ -80,17 +89,21 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     );
     // A fresh install starts with the default routing profile rather than an
     // empty Rules page. A failure only costs the seed, never startup.
-    if let Err(error) =
+    if let Err(error) = timed("seed default routing", || {
         tauri::async_runtime::block_on(services.ensure_default_routing(&config_mutations))
-    {
+    }) {
         tracing::warn!(?error, "failed to seed the default routing profile");
     }
-    tauri::async_runtime::block_on(services.initialize_profile_metrics())?;
+    timed("sweep orphaned metrics", || {
+        tauri::async_runtime::block_on(services.initialize_profile_metrics())
+    })?;
     let seed_dir = core_seed_resources_dir(app.path().resource_dir()?);
     // macOS launches the seed inside the signed bundle (only the disconnected
     // speedtest does), so only Windows and Linux stage it into app data.
     if TargetOs::current() != TargetOs::Macos {
-        if let Err(error) = copy_seed_core_asset(&runtime_paths, &seed_dir) {
+        if let Err(error) = timed("stage core seed", || {
+            copy_seed_core_asset(&runtime_paths, &seed_dir)
+        }) {
             tracing::warn!(
                 ?error,
                 "failed to copy packaged core seed assets at startup"
@@ -111,7 +124,9 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // A crash never reaches the exit-time revoke, so a previous run can
     // leave a root launcher + NOPASSWD drop-in installed. Sweep it
     // before the supervisor can spawn anything through it.
-    elevation_manager.revoke_stale_grant();
+    timed("revoke stale grant", || {
+        elevation_manager.revoke_stale_grant()
+    });
     // Probe cores get the same kill-with-the-app job object the supervisor
     // gives the real core below via `SupervisorDeps::platform_with_runner`.
     let speedtest_runner = JobAssignedRunner::new(
@@ -164,8 +179,25 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         provider_registration_cache: Arc::new(ProviderRegistrationCache::new()),
     });
 
-    setup_tray(app)?;
+    timed("build tray", || setup_tray(app))?;
+    tracing::info!(
+        elapsed_ms = started.elapsed().as_millis(),
+        "startup initialized"
+    );
     Ok(())
+}
+
+/// Runs one startup step and logs how long it took, so a slow launch can be
+/// attributed from the log file without a profiler.
+fn timed<T>(step: &'static str, run: impl FnOnce() -> T) -> T {
+    let started = Instant::now();
+    let value = run();
+    tracing::info!(
+        step,
+        elapsed_ms = started.elapsed().as_millis(),
+        "startup step"
+    );
+    value
 }
 
 /// Where this launch keeps its database and runtime files.

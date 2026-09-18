@@ -988,7 +988,9 @@
     "exportFor": "导出“{{name}}”",
     "empty": "此分组暂无节点。",
     "moreFor": "“{{name}}”的更多操作",
-    "autoUpdateOff": "自动更新已关闭"
+    "autoUpdateOff": "自动更新已关闭",
+    "showAllMembers": "显示全部 {{count}} 个",
+    "showFewerMembers": "收起"
   },
   "common": {
     "advanced": "更多参数",

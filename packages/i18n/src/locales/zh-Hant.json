@@ -988,7 +988,9 @@
     "exportFor": "匯出「{{name}}」",
     "empty": "此分組暫無節點。",
     "moreFor": "「{{name}}」的更多操作",
-    "autoUpdateOff": "自動更新已關閉"
+    "autoUpdateOff": "自動更新已關閉",
+    "showAllMembers": "顯示全部 {{count}} 個",
+    "showFewerMembers": "收合"
   },
   "common": {
     "advanced": "更多參數",

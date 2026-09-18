@@ -105,7 +105,7 @@ describe("RoutingRuleDialog", () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
     const { unmount } = renderDialog({
       mode: "edit",
-      nodeNames: ["Tokyo"],
+      nodeNames: new Set(["Tokyo"]),
       onSubmit,
       rule: rule({ outbound: "Paris", scope: "routing" }),
     });
@@ -206,7 +206,7 @@ function renderDialog(props: Partial<ComponentProps<typeof RoutingRuleDialog>> =
   return render(
     <RoutingRuleDialog
       mode="create"
-      nodeNames={[]}
+      nodeNames={new Set()}
       onOpenChange={vi.fn()}
       onSubmit={vi.fn().mockResolvedValue(undefined)}
       open
@@ -250,7 +250,7 @@ describe("RoutingRuleDialog after the backend refused a save", () => {
     return render(
       <RoutingRuleDialog
         mode="create"
-        nodeNames={[]}
+        nodeNames={new Set()}
         onOpenChange={vi.fn()}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
         open

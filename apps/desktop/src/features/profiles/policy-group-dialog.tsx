@@ -17,6 +17,7 @@ import { Disclosure } from "@voya/ui/components/disclosure";
 import { SelectField, TextField } from "@voya/ui/components/form-fields";
 import { Spinner } from "@voya/ui/components/spinner";
 import type { PolicyGroup, ProfileListEntry, Subscription } from "@/ipc/bindings";
+import { VirtualScrollList } from "@/components/virtual-scroll-list";
 import { savePolicyGroup } from "@/ipc/commands";
 import { useDialogSubmit } from "@/lib/use-dialog-submit";
 
@@ -56,9 +57,13 @@ function optionalCount(value: string) {
   return value.trim() && Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : null;
 }
 
-/** Rebuilt for every opening, so a cancelled edit never leaks into the next one. */
+/**
+ * Rebuilt for every opening, so a cancelled edit never leaks into the next one.
+ * Not mounted while closed: it filters the whole node list, and that list
+ * changes on every speedtest frame.
+ */
 export function PolicyGroupDialog(props: Props) {
-  return <PolicyGroupEditor key={`${props.group?.id ?? "new"}:${props.open}`} {...props} />;
+  return props.open ? <PolicyGroupEditor key={props.group?.id ?? "new"} {...props} /> : null;
 }
 
 function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: Props) {
@@ -70,6 +75,11 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
   const visibleNodes = useMemo(
     () => nodes.filter((entry) => !needle || entry.profile.remarks.toLowerCase().includes(needle)),
     [needle, nodes],
+  );
+  const memberIds = useMemo(() => new Set(form.memberIds), [form.memberIds]);
+  const remarksById = useMemo(
+    () => new Map(nodes.map((entry) => [entry.profile.id, entry.profile.remarks])),
+    [nodes],
   );
   const canSave =
     form.name.trim() !== "" && (form.memberIds.length > 0 || form.sourceSubscriptionId !== null);
@@ -165,24 +175,26 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
               onChange={setFilter}
               value={filter}
             />
-            <div
+            <VirtualScrollList
               aria-label={t("policyGroups.members")}
-              className="grid max-h-56 gap-1 overflow-y-auto rounded-md border p-2"
-              role="group"
-            >
-              {visibleNodes.map((entry) => {
+              className="max-h-56 rounded-md border"
+              estimateSize={30}
+              itemKey={(entry) => entry.profile.id}
+              items={visibleNodes}
+              renderItem={(entry) => {
                 const id = entry.profile.id;
                 return (
-                  <label className="flex items-center gap-2 rounded px-2 py-1 text-sm" key={id}>
+                  <label className="flex items-center gap-2 rounded px-2 py-1 text-sm">
                     <Checkbox
-                      checked={form.memberIds.includes(id)}
+                      checked={memberIds.has(id)}
                       onCheckedChange={(checked) => toggleMember(id, checked === true)}
                     />
                     <span className="truncate">{profileMemberName(entry.profile.remarks, id)}</span>
                   </label>
                 );
-              })}
-            </div>
+              }}
+              role="group"
+            />
             {fieldErrors.memberIds ? (
               <p className="text-sm text-danger" role="alert">
                 {fieldErrors.memberIds}
@@ -196,7 +208,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
               <span className="text-xs text-muted-foreground">{t("policyGroups.orderHint")}</span>
               <ol aria-label={t("policyGroups.order")} className="grid gap-1 rounded-md border p-2">
                 {form.memberIds.map((id, index) => {
-                  const remarks = nodes.find((entry) => entry.profile.id === id)?.profile.remarks ?? "";
+                  const remarks = remarksById.get(id) ?? "";
                   const name = profileMemberName(remarks, id);
                   return (
                     <li className="flex items-center gap-2 text-sm" key={id}>

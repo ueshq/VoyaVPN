@@ -35,6 +35,10 @@ const REALPING_FALLBACK_URL: &str = "https://www.google.com/generate_204";
 const SPEEDTEST_BATCH_PAGE_SIZE: usize = 1000;
 const SPEEDTEST_DELAY_INTERVAL: Duration = Duration::from_secs(1);
 const LOOPBACK_ADDR: &str = "127.0.0.1";
+/// Latency probes in flight at once, through probe cores or the running core;
+/// sing-box's own group test runs ten.
+const SPEEDTEST_CONCURRENCY: usize = 8;
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(50);
 
 pub type CancellationFlag = Arc<AtomicBool>;
 pub type Result<T> = std::result::Result<T, SpeedtestError>;
@@ -471,6 +475,13 @@ fn is_cancelled(cancel: &CancellationFlag) -> bool {
     cancel.load(Ordering::SeqCst)
 }
 
+/// Resolves once `cancel` is set, for racing a run's result stream.
+async fn cancelled(cancel: &CancellationFlag) {
+    while !is_cancelled(cancel) {
+        time::sleep(CANCEL_POLL_INTERVAL).await;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -750,12 +761,14 @@ mod tests {
         assert_eq!(starts.len(), 1);
         assert_eq!(starts[0].ports.len(), 2);
         assert_eq!(
-            probe.calls(),
-            starts[0]
-                .ports
-                .iter()
-                .map(|port| format!("realping:{port}"))
-                .collect::<Vec<_>>()
+            sorted(probe.calls()),
+            sorted(
+                starts[0]
+                    .ports
+                    .iter()
+                    .map(|port| format!("realping:{port}"))
+                    .collect()
+            )
         );
     }
 
@@ -780,12 +793,14 @@ mod tests {
         assert_eq!(starts.len(), 1);
         assert_eq!(starts[0].ports.len(), 2);
         assert_eq!(
-            probe.calls(),
-            starts[0]
-                .ports
-                .iter()
-                .map(|port| format!("realping:{port}"))
-                .collect::<Vec<_>>()
+            sorted(probe.calls()),
+            sorted(
+                starts[0]
+                    .ports
+                    .iter()
+                    .map(|port| format!("realping:{port}"))
+                    .collect()
+            )
         );
     }
 
@@ -842,6 +857,7 @@ mod tests {
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
         let task_manager = manager.clone();
         let config = AppConfig::default();
+        let database_check = database.clone();
 
         let handle = tokio::spawn(async move {
             task_manager
@@ -867,16 +883,71 @@ mod tests {
             .expect("speedtest test operation should succeed");
 
         assert!(run.cancelled);
-        assert_eq!(run.completed_count, 1);
+        // The run stops waiting on in-flight probes at the cancel, so both are
+        // written back as cancelled by the finalize pass, not by a probe.
+        assert_eq!(run.completed_count, 0);
         let starts = backend.starts();
         assert_eq!(starts.len(), 1);
         assert_eq!(starts[0].ports.len(), 2);
         assert_eq!(backend.active.load(Ordering::SeqCst), 0);
-        assert_eq!(
-            probe.calls(),
-            vec![format!("realping:{}", starts[0].ports[0])]
-        );
+        for index_id in ["a", "b"] {
+            let profile_ex = profile_ex_row(&database_check, index_id).await;
+            assert_eq!(profile_ex.message.as_deref(), Some("cancelled"));
+        }
         assert!(!manager.status().running);
+    }
+
+    #[tokio::test]
+    async fn speedtest_manager_probes_a_page_concurrently_up_to_the_limit() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        let node_count = SPEEDTEST_CONCURRENCY + 4;
+        for index in 0..node_count {
+            let port = i32::try_from(1000 + index).expect("port fits");
+            insert_profile(&database, &format!("n{index}"), port).await;
+        }
+        let probe = Arc::new(RecordingProbe {
+            blocking_realpings: Arc::new(AtomicUsize::new(usize::MAX)),
+            ..RecordingProbe::default()
+        });
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+        let task_manager = manager.clone();
+        let task_database = database.clone();
+
+        let handle = tokio::spawn(async move {
+            task_manager
+                .run_with_callback(&task_database, &AppConfig::default(), Vec::new(), |_| {})
+                .await
+                .expect("speedtest test operation should succeed")
+        });
+
+        while probe.calls().len() < SPEEDTEST_CONCURRENCY {
+            time::sleep(Duration::from_millis(10)).await;
+        }
+        // Every probe blocks, so a slot only frees up at the cancel: nothing
+        // past the limit may have started.
+        time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(probe.calls().len(), SPEEDTEST_CONCURRENCY);
+
+        assert!(manager.cancel());
+        let run = handle
+            .await
+            .expect("speedtest test operation should succeed");
+
+        assert!(run.cancelled);
+        assert_eq!(
+            probe.calls().len(),
+            SPEEDTEST_CONCURRENCY,
+            "queued probes never start after a cancel"
+        );
+        assert_eq!(run.results.len(), node_count);
+        for index in 0..node_count {
+            let profile_ex = profile_ex_row(&database, &format!("n{index}")).await;
+            assert_eq!(profile_ex.message.as_deref(), Some("cancelled"));
+        }
     }
 
     #[tokio::test]
@@ -1112,6 +1183,12 @@ mod tests {
 
         config.speed_test_item.speed_test_delay_interval_seconds = Some(0);
         assert_eq!(speedtest_delay_interval(&config), SPEEDTEST_DELAY_INTERVAL);
+    }
+
+    /// Probes start concurrently, so call order is not part of the contract.
+    fn sorted(mut calls: Vec<String>) -> Vec<String> {
+        calls.sort();
+        calls
     }
 
     async fn profile_ex_row(database: &Database, index_id: &str) -> ProfileExItem {

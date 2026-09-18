@@ -40,6 +40,9 @@ const BACKGROUND_NOTICE_CODES = new Set<NoticeCode["code"]>([
   "trayActionFailed",
 ]);
 
+/** Longest a finished speedtest result waits for its country flag to show. */
+const COUNTRY_REFRESH_MS = 3000;
+
 export function EventBridge() {
   const queryClient = useQueryClient();
   const mountedRef = useMountedRef();
@@ -82,14 +85,17 @@ export function EventBridge() {
           useRuntimeEventStore.getState().pushTransientEvent(event.payload);
           // Country flags use persisted query data, never a long-lived event
           // overlay: an old event must not resurrect a flag after a profile
-          // edit. Coalesce batch results into at most one refresh per second.
+          // edit. Only the node list carries flags (delays come from the live
+          // overlay), and a full refetch of it per result was the dominant
+          // cost of a long run, so results coalesce into one list refresh per
+          // COUNTRY_REFRESH_MS. The run's closing invalidation covers the tail.
           if (event.payload.kind === "speedtestResult"
             && !["waiting", "testing"].includes(event.payload.payload.outcome)
             && countryRefresh === undefined) {
             countryRefresh = setTimeout(() => {
               countryRefresh = undefined;
-              void queryClient.invalidateQueries({ queryKey: queryKeys.profiles });
-            }, 1000);
+              void queryClient.invalidateQueries({ queryKey: queryKeys.profileList });
+            }, COUNTRY_REFRESH_MS);
           }
         }),
       ),

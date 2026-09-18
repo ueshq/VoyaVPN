@@ -1,12 +1,17 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync, utimesSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { repoRootFromScript } from "../lib/common.mjs";
-import { coreSeedBundleResources, hasExpectedSeedExecutable, requiredBundleResources } from "./core-seeds.mjs";
+import {
+  coreSeedBundleResources,
+  hasExpectedSeedExecutable,
+  requiredBundleResources,
+  writeOptionalCoreSeedOverlay,
+} from "./core-seeds.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 
@@ -48,6 +53,35 @@ describe("tauri core seed overlay", () => {
       expect(coreSeedBundleResources(repoRoot, { platform: "darwin" })).toEqual({
         "resources/core-seeds/sing_box/*": "core-seeds/sing_box/",
       });
+    } finally {
+      await rm(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("rewrites the overlay only when its content changes", async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), "voyavpn-tauri-overlay-"));
+    try {
+      const singBoxDir = join(repoRoot, "apps", "desktop", "src-tauri", "resources", "core-seeds", "sing_box");
+      await mkdir(singBoxDir, { recursive: true });
+      await writeFile(join(singBoxDir, "sing-box"), "fake executable");
+      const overlayPath = join(repoRoot, "target", "tauri-config", "tauri.core-seeds.generated.json");
+
+      expect(writeOptionalCoreSeedOverlay(repoRoot, overlayPath, { platform: "linux" })).toBe(overlayPath);
+      const written = readFileSync(overlayPath, "utf8");
+      expect(JSON.parse(written).bundle.resources).toEqual({
+        ...requiredBundleResources,
+        "resources/core-seeds/sing_box/*": "core-seeds/sing_box/",
+      });
+
+      // Backdate the file so an unnecessary rewrite would show up as a new mtime.
+      const past = new Date("2020-01-01T00:00:00Z");
+      utimesSync(overlayPath, past, past);
+      writeOptionalCoreSeedOverlay(repoRoot, overlayPath, { platform: "linux" });
+      expect(statSync(overlayPath).mtimeMs).toBe(past.getTime());
+
+      await writeFile(overlayPath, "{}\n");
+      writeOptionalCoreSeedOverlay(repoRoot, overlayPath, { platform: "linux" });
+      expect(readFileSync(overlayPath, "utf8")).toBe(written);
     } finally {
       await rm(repoRoot, { force: true, recursive: true });
     }

@@ -1,6 +1,22 @@
-use voya_app::supervisor::ClashApiAccess;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    LazyLock,
+};
+
+use voya_app::{
+    log_batch::{LogBatcher, LOG_BATCH_CAPACITY, LOG_BATCH_WINDOW},
+    supervisor::ClashApiAccess,
+};
 
 use super::*;
+
+/// Every Logs-panel line, whoever wrote it, so batching keeps their order.
+static LOG_LINES: LazyLock<LogBatcher<LogLineEvent>> =
+    LazyLock::new(|| LogBatcher::new(LOG_BATCH_CAPACITY));
+/// Set by whichever line starts the flusher. A flag rather than a `OnceLock`:
+/// the `tracing` layer queues lines too, so starting the flusher may re-enter
+/// here, which `get_or_init` would deadlock on.
+static LOG_FLUSHER_STARTED: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn current_config(state: &AppState) -> AppConfig {
     state.config_mutations().current_config()
@@ -223,11 +239,10 @@ pub(crate) fn emit_app_log<R>(
     level: LogLevel,
     code: LogCode,
     detail: Option<&str>,
-) -> Result<(), AppError>
-where
+) where
     R: tauri::Runtime,
 {
-    emit_log_line(
+    queue_log_line(
         app,
         level,
         LogLineBody::App {
@@ -238,33 +253,37 @@ where
 }
 
 /// One line of the core process's own output, passed through verbatim.
-pub(crate) fn emit_core_log<R>(
-    app: &tauri::AppHandle<R>,
-    level: LogLevel,
-    line: String,
-) -> Result<(), AppError>
+pub(crate) fn emit_core_log<R>(app: &tauri::AppHandle<R>, level: LogLevel, line: String)
 where
     R: tauri::Runtime,
 {
-    emit_log_line(app, level, LogLineBody::Core { line })
+    queue_log_line(app, level, LogLineBody::Core { line });
 }
 
-fn emit_log_line<R>(
-    app: &tauri::AppHandle<R>,
-    level: LogLevel,
-    body: LogLineBody,
-) -> Result<(), AppError>
+/// Queues one Logs-panel line; the flusher delivers queued lines as a single
+/// `LogLines` event per [`LOG_BATCH_WINDOW`]. Never blocks and never fails,
+/// so the core's pipe reader and the `tracing` layer can call it directly.
+pub(crate) fn queue_log_line<R>(app: &tauri::AppHandle<R>, level: LogLevel, body: LogLineBody)
 where
     R: tauri::Runtime,
 {
-    emit_event(
-        app,
-        TransientStreamEvent::LogLine(LogLineEvent {
-            id: next_log_line_id(),
-            level,
-            body,
-        }),
-    )
+    if !LOG_FLUSHER_STARTED.swap(true, Ordering::AcqRel) {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            LOG_LINES
+                .run(LOG_BATCH_WINDOW, |lines| {
+                    // Not traced on failure: the `tracing` layer would queue
+                    // that warning here again, once per window.
+                    let _ = TransientStreamEvent::LogLines(lines).emit(&app);
+                })
+                .await;
+        });
+    }
+    LOG_LINES.push(LogLineEvent {
+        id: next_log_line_id(),
+        level,
+        body,
+    });
 }
 
 pub(crate) fn emit_core_state<R>(
@@ -330,9 +349,7 @@ pub(super) fn report_post_commit_error<R>(
         AppNoticeLevel::Warning => LogLevel::Warn,
         AppNoticeLevel::Error => LogLevel::Error,
     };
-    if let Err(error) = emit_app_log(app, log_level, LogCode::PostCommitFailed, Some(detail)) {
-        tracing::warn!(?error, "failed to emit post-commit runtime log");
-    }
+    emit_app_log(app, log_level, LogCode::PostCommitFailed, Some(detail));
     emit_or_warn(
         app,
         AppEvent::Notice(AppNotice {

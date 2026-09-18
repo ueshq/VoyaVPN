@@ -21,12 +21,23 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * inlined into a startup CSS file). CSS and the whole `dist` are budgeted too.
  * Sizes recorded 2026-09-18, after flags were cut to the 4x3 two-letter set:
  * CSS 78.5 KiB, whole `dist` 3328 KiB (1717 KiB of it flag SVGs).
+ *
+ * 2026-09-19: React Compiler was enabled (`vite.config.ts`). Its memoization
+ * code grows component chunks by roughly a third to two thirds, which was
+ * accepted for fewer re-renders on screens fed per frame; the profiles screen
+ * budget moved up with it. The locales now load on demand except English, so
+ * `locales` is the English fallback alone and each other locale has a line.
+ * Sizes recorded then: index 43.1 KiB, locales 40.0 KiB, zh-Hans 39.3 KiB,
+ * zh-Hant 39.8 KiB, server-table 129.4 KiB, settings-screen 64.2 KiB; total
+ * emitted JS 1677 KiB; whole `dist` 3475 KiB.
  */
 const budgets = [
-  { label: "application entry", maxKiB: 90, prefix: "index-" },
-  { label: "locale resources", maxKiB: 330, prefix: "locales-" },
-  { label: "profiles screen", maxKiB: 100, prefix: "server-table-" },
-  { label: "settings screen", maxKiB: 70, prefix: "settings-screen-" },
+  { label: "application entry", maxKiB: 60, prefix: "index-" },
+  { label: "English locale (startup)", maxKiB: 55, prefix: "locales-" },
+  { label: "Simplified Chinese locale", maxKiB: 55, prefix: "zh-Hans-" },
+  { label: "Traditional Chinese locale", maxKiB: 55, prefix: "zh-Hant-" },
+  { label: "profiles screen", maxKiB: 170, prefix: "server-table-" },
+  { label: "settings screen", maxKiB: 85, prefix: "settings-screen-" },
   { label: "QR decoder", maxKiB: 500, prefix: "vendor-qr-" },
   { label: "data vendor chunk", maxKiB: 320, prefix: "vendor-data-" },
   { label: "React vendor chunk", maxKiB: 240, prefix: "vendor-react-" },
@@ -35,7 +46,7 @@ const budgets = [
 
 const totalBudgetKiB = 1900;
 const cssBudgetKiB = 120;
-const distBudgetKiB = 4400;
+const distBudgetKiB = 4000;
 
 export function checkBundleBudgets(assets, { budgets: budgetList = budgets, totalKiB = totalBudgetKiB } = {}) {
   const failures = [];

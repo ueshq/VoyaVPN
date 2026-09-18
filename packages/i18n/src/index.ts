@@ -1,8 +1,6 @@
 import i18next from "i18next";
 
 import en from "./locales/en.json";
-import zhHans from "./locales/zh-Hans.json";
-import zhHant from "./locales/zh-Hant.json";
 
 // `nativeName` is each language's own name — locale-invariant data (never
 // translated), so a language picker stays readable whatever the current UI
@@ -27,15 +25,23 @@ export type TranslationFunction = (key: TranslationKey, options?: Record<string,
 // localStorage key holding the chosen locale. `changeLocale` is the only writer.
 const storageKey = "voyavpn.locale";
 
-const i18nResources = {
-  en,
-  "zh-Hans": zhHans,
-  "zh-Hant": zhHant,
-} satisfies Record<Locale, object>;
+/**
+ * English ships with the entry: it is the fallback for every key and the
+ * source of `TranslationKey`. The others load when first chosen, so a UI in
+ * one language does not parse the other two at startup.
+ */
+const lazyLocales: Record<Exclude<Locale, "en">, () => Promise<{ default: object }>> = {
+  "zh-Hans": () => import("./locales/zh-Hans.json"),
+  "zh-Hant": () => import("./locales/zh-Hant.json"),
+};
 
-const resources = Object.fromEntries(
-  localeOptions.map(({ code }) => [code, { translation: i18nResources[code] }]),
-) as Record<Locale, { translation: object }>;
+async function loadLocale(locale: Locale) {
+  if (locale === "en" || i18next.hasResourceBundle(locale, "translation")) {
+    return;
+  }
+  const { default: translation } = await lazyLocales[locale]();
+  i18next.addResourceBundle(locale, "translation", translation);
+}
 
 export function isLocale(value: string | null | undefined): value is Locale {
   return localeOptions.some((locale) => locale.code === value);
@@ -96,9 +102,11 @@ export function applyDocumentLocale(locale: Locale = getInitialLocale()) {
   document.documentElement.dir = "ltr";
 }
 
+const initialLocale = getInitialLocale();
+
 void i18next.init({
-  resources,
-  lng: getInitialLocale(),
+  resources: { en: { translation: en } },
+  lng: initialLocale,
   fallbackLng: "en",
   initAsync: false,
   returnNull: false,
@@ -108,7 +116,7 @@ void i18next.init({
   },
 });
 
-applyDocumentLocale(i18next.resolvedLanguage as Locale);
+applyDocumentLocale(initialLocale);
 
 /**
  * Switch the UI language.
@@ -123,8 +131,17 @@ export async function changeLocale(locale: Locale, options?: { persist?: boolean
     window.localStorage.setItem(storageKey, locale);
   }
 
+  await loadLocale(locale);
   await i18next.changeLanguage(locale);
   applyDocumentLocale(locale);
 }
+
+/**
+ * Settles once the startup locale's resources are in place. The entry point
+ * renders after it, so a Chinese UI never flashes English first; a failed
+ * load leaves the English fallback.
+ */
+export const localeReady: Promise<void> =
+  initialLocale === "en" ? Promise.resolve() : changeLocale(initialLocale, { persist: false });
 
 export { i18next };

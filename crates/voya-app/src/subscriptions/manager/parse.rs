@@ -1,7 +1,7 @@
 //! Parse imported text into a plan; persistence belongs to the caller's transaction.
 use super::{is_http_url, Result, SubscriptionManagerError};
 use regex::Regex;
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::LazyLock};
 use voya_core::{
     parse_share_link, parse_ss_sip008, parse_wireguard_config, text::decode_base64_payload,
     ImportLineCode, ImportLineIssue, ProfileItem, ShareError,
@@ -104,19 +104,27 @@ fn import_line_code(error: ShareError) -> ImportLineCode {
         },
     }
 }
-fn count_discarded_node_overrides(content: &str) -> usize {
-    let query_count = Regex::new(
+// Compiled once per process: an import runs both over every decoded payload.
+static QUERY_OVERRIDE_REGEX: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(
         r"(?i)(?:\?|&)(?:allowinsecure|allow_insecure|insecure|fp|muxenabled|mux_enabled|upmbps|downmbps|hopinterval)=",
     )
-    .map(|pattern| pattern.find_iter(content).count())
-    .unwrap_or(0);
-    let json_count = Regex::new(
+    .ok()
+});
+static JSON_OVERRIDE_REGEX: LazyLock<Option<Regex>> = LazyLock::new(|| {
+    Regex::new(
         r#"(?i)"(?:fingerprint|fp|allowinsecure|allow_insecure|muxenabled|mux_enabled|upmbps|downmbps|hopinterval)"\s*:"#,
     )
-    .map(|pattern| pattern.find_iter(content).count())
-    .unwrap_or(0);
+    .ok()
+});
 
-    query_count.saturating_add(json_count)
+fn count_discarded_node_overrides(content: &str) -> usize {
+    let count = |pattern: &Option<Regex>| {
+        pattern
+            .as_ref()
+            .map_or(0, |pattern| pattern.find_iter(content).count())
+    };
+    count(&QUERY_OVERRIDE_REGEX).saturating_add(count(&JSON_OVERRIDE_REGEX))
 }
 
 // Share-link schemes recognized by `parse_share_link`. A parse failure on a

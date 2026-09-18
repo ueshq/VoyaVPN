@@ -72,7 +72,39 @@ jobs:
       - name: Run pnpm audit
         run: pnpm audit --prod --audit-level high
 
-  baseline:
+  # verify:local's gates, split across three parallel jobs so the Rust compile
+  # and the frontend build/Playwright run no longer wait on each other.
+  # scripts/quality/verify-local.test.mjs fails unless the baseline-* jobs
+  # together run every gate in scripts/quality/verify-local.mjs exactly once.
+  baseline-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.5.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # check:i18n parses sources with the workspace's typescript.
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check architecture boundaries
+        run: pnpm run check:architecture
+
+      - name: Check lockfile single versions
+        run: pnpm run check:lockfile
+
+      - name: Check i18n locale drift
+        run: pnpm run check:i18n
+
+  baseline-rust:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -118,6 +150,9 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # These gates are cargo and Node builtins only, but pnpm 11 installs the
+      # workspace on the first `pnpm run` when node_modules is missing; doing it
+      # here keeps that install frozen and out of the fmt step's timing.
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
@@ -133,11 +168,17 @@ jobs:
       - name: Install cargo-machete
         run: cargo install cargo-machete --locked --version "$CARGO_MACHETE_VERSION"
 
-      - name: Check architecture boundaries
-        run: pnpm run check:architecture
-
-      - name: Check lockfile single versions
-        run: pnpm run check:lockfile
+      # check:sing-box downloads and extracts the pinned sing-box archive when no
+      # verified seed is staged. The key hashes the installer, which holds the
+      # pinned version and digests, so a pin bump starts a fresh entry. A
+      # restored seed is still re-verified before use (manifest against the
+      # pinned archive digest, executable against the manifest) and re-staged on
+      # any mismatch. Only sing_box/ is cached: its parent holds tracked files.
+      - name: Cache sing-box core seed
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/desktop/src-tauri/resources/core-seeds/sing_box
+          key: ${{ runner.os }}-${{ runner.arch }}-sing-box-seed-${{ hashFiles('scripts/core/sing-box-installer.mjs') }}
 
       - name: Check Rust formatting
         run: pnpm run check:rust:fmt
@@ -151,6 +192,30 @@ jobs:
       - name: Run Rust tests
         run: pnpm run check:rust:test
 
+      - name: Validate generated configs with sing-box
+        run: pnpm run check:sing-box
+
+      - name: Check generated IPC binding drift
+        run: pnpm run check:bindings
+
+  baseline-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.5.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Typecheck frontend
         run: pnpm run check:frontend:typecheck
 
@@ -163,23 +228,38 @@ jobs:
       - name: Build frontend and enforce bundle budgets
         run: pnpm run check:frontend:bundle
 
+      # Playwright pins its browser builds per release, so the resolved
+      # @playwright/test version is the cache key.
+      - name: Resolve Playwright version
+        id: playwright
+        run: |
+          version="$(pnpm --filter @voya/desktop exec playwright --version)"
+          version="${version#Version }"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright.outputs.version }}
+
       - name: Install Chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: pnpm --filter @voya/desktop exec playwright install --with-deps chromium
+
+      # The cache holds only the browser download; the system libraries
+      # Chromium links against still have to be installed on every runner.
+      - name: Install Chromium system dependencies
+        if: ${{ steps.playwright-cache.outputs.cache-hit == 'true' }}
+        run: pnpm --filter @voya/desktop exec playwright install-deps chromium
 
       - name: Run frontend mock smoke tests
         run: pnpm run check:frontend:smoke:mock
 
       - name: Check dead code and dependency usage
         run: pnpm run check:dead-code
-
-      - name: Validate generated configs with sing-box
-        run: pnpm run check:sing-box
-
-      - name: Check generated IPC binding drift
-        run: pnpm run check:bindings
-
-      - name: Check i18n locale drift
-        run: pnpm run check:i18n
 
   desktop-smoke:
     name: Linux native desktop smoke
@@ -241,6 +321,14 @@ jobs:
       - name: Install tauri-driver
         run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
 
+      # tauri:build stages the same pinned seed check:sing-box uses; see the
+      # baseline-rust cache step for why a restored copy is safe to reuse.
+      - name: Cache sing-box core seed
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/desktop/src-tauri/resources/core-seeds/sing_box
+          key: ${{ runner.os }}-${{ runner.arch }}-sing-box-seed-${{ hashFiles('scripts/core/sing-box-installer.mjs') }}
+
       - name: Run real desktop smoke
         run: xvfb-run -a pnpm run check:desktop:smoke
 
@@ -285,9 +373,11 @@ jobs:
     # Clippy, not cargo check: the strict workspace lints (unwrap_used,
     # undocumented_unsafe_blocks) are the only gate that ever sees the
     # #[cfg(windows)] / #[cfg(target_os = "macos")] code paths, which the Linux
-    # baseline job cannot lint. Rust tests stay Linux-only on purpose: no
-    # #[cfg(test)] module in the workspace is OS-gated, so running them here
-    # would only re-run the same suite at triple the wall-clock cost.
+    # baseline-rust job cannot lint. There is no Linux leg: baseline-rust
+    # already runs the same workspace clippy with -D warnings on Linux, so one
+    # here only re-linted identical code. Rust tests stay Linux-only on
+    # purpose: no #[cfg(test)] module in the workspace is OS-gated, so running
+    # them here would only re-run the same suite at triple the wall-clock cost.
     name: Rust lint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -295,31 +385,10 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-24.04
           - macos-15
           - windows-2025
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Install Linux Tauri dependencies
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libclang-dev \
-            libxcb1-dev \
-            libxrandr-dev \
-            libdbus-1-dev \
-            libpipewire-0.3-dev \
-            libwayland-dev \
-            libegl-dev \
-            pkg-config \
-            libxdo-dev
 
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
