@@ -5,7 +5,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        Arc, Mutex, MutexGuard,
     },
     time::{Duration, Instant},
 };
@@ -71,8 +71,6 @@ pub enum SpeedtestError {
     NoAvailablePort(i32),
     #[error("speedtest local SOCKS port {0} is outside the valid range")]
     InvalidSocksPort(i32),
-    #[error("speedtest job lock is poisoned")]
-    JobLockPoisoned,
     #[error("speedtest background task failed: {0}")]
     BackgroundTask(String),
     #[error("select at least one node to test")]
@@ -223,6 +221,18 @@ pub struct SpeedtestManager {
     active_cancel: Arc<Mutex<Option<CancellationFlag>>>,
 }
 
+/// Lock a speedtest mutex even after a panicking holder poisoned it. Both
+/// guarded values survive a panic intact: the probe registry still holds the
+/// child handles it exists to reap, and the job slot is a single `Option`.
+/// Refusing the lock would leak probe cores, or break cancel and status for
+/// the rest of the process.
+fn lock_ignoring_poison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    match mutex.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
 mod core_backend;
 mod manager;
 mod running_core;
@@ -323,7 +333,6 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
         }
         SpeedtestError::Database(_)
         | SpeedtestError::Profile(_)
-        | SpeedtestError::JobLockPoisoned
         | SpeedtestError::EmptySelection
         | SpeedtestError::BackgroundTask(_) => SpeedtestOutcome::Failed,
     }
@@ -852,9 +861,7 @@ mod tests {
             time::sleep(Duration::from_millis(10)).await;
         }
 
-        assert!(manager
-            .cancel()
-            .expect("speedtest test operation should succeed"));
+        assert!(manager.cancel());
         let run = handle
             .await
             .expect("speedtest test operation should succeed");
@@ -869,12 +876,7 @@ mod tests {
             probe.calls(),
             vec![format!("realping:{}", starts[0].ports[0])]
         );
-        assert!(
-            !manager
-                .status()
-                .expect("speedtest test operation should succeed")
-                .running
-        );
+        assert!(!manager.status().running);
     }
 
     #[tokio::test]
@@ -1054,12 +1056,7 @@ mod tests {
             }
             time::sleep(Duration::from_millis(10)).await;
         }
-        assert!(
-            manager
-                .status()
-                .expect("speedtest test operation should succeed")
-                .running
-        );
+        assert!(manager.status().running);
 
         let second = manager
             .run_with_callback(&database, &config, Vec::new(), |_| {})
@@ -1078,10 +1075,7 @@ mod tests {
             "the superseding run must not inherit its predecessor's cancel flag"
         );
         assert!(
-            !manager
-                .status()
-                .expect("speedtest test operation should succeed")
-                .running,
+            !manager.status().running,
             "only the run that owns the slot may release it"
         );
     }

@@ -91,6 +91,15 @@ applyManifestRules(
   "crates/voya-app/Cargo.toml",
   manifestDependencyRules("specta", "voya-app must not depend on Specta"),
 );
+// The source rules match crate names, so a renamed dependency
+// (`http = { package = "reqwest" }`) would slip past them; ban the edge itself.
+applyManifestRules(
+  "crates/voya-app/Cargo.toml",
+  manifestDependencyRules(
+    "(?:reqwest|tokio-tungstenite)",
+    "voya-app must reach the network through voya-net",
+  ),
+);
 
 for (const path of walk(resolve(root, "crates/voya-contracts/src")).filter((item) => item.endsWith(".rs"))) {
   const source = readFileSync(path, "utf8");

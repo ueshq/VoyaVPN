@@ -190,16 +190,20 @@ fn running_core_result(
     measured: std::result::Result<u32, ClashError>,
 ) -> SpeedtestResult {
     match measured {
-        Ok(delay) => SpeedtestResult {
-            index_id,
-            delay: Some(i32::try_from(delay).unwrap_or(i32::MAX)),
-            outcome: SpeedtestOutcome::Completed,
-            detail: None,
-            // The core measures the node itself; there is no local proxy port
-            // for an exit-country lookup to go through.
-            ip_info: None,
-            country_code: None,
-        },
+        Ok(delay) => {
+            let delay = i32::try_from(delay).unwrap_or(i32::MAX);
+            SpeedtestResult {
+                index_id,
+                delay: Some(delay),
+                // Same rule as the probe-core path, so the two cannot drift.
+                outcome: measured_outcome(delay),
+                detail: None,
+                // The core measures the node itself; there is no local proxy
+                // port for an exit-country lookup to go through.
+                ip_info: None,
+                country_code: None,
+            }
+        }
         Err(error) => {
             tracing::warn!(index_id = %index_id, ?error, "running-core delay test failed");
             let (outcome, detail) = match error {

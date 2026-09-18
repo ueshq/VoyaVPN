@@ -61,11 +61,11 @@ impl SpeedtestManager {
     where
         F: Fn(SpeedtestResult) + Send + Sync,
     {
-        let cancel = self.begin_job()?;
+        let cancel = self.begin_job();
         let result = self
             .run_inner(database, config, index_ids, Arc::clone(&cancel), on_result)
             .await;
-        self.finish_job(&cancel)?;
+        self.finish_job(&cancel);
 
         result
     }
@@ -127,33 +127,25 @@ impl SpeedtestManager {
     /// The shell has to call this from its exit handler, otherwise probe cores
     /// outlive the app holding loopback listeners and open tunnels.
     pub fn shutdown(&self) {
-        if let Err(error) = self.cancel() {
-            tracing::warn!(?error, "failed to cancel speedtest during shutdown");
-        }
+        self.cancel();
         self.core_backend.stop_all();
     }
 
-    pub fn cancel(&self) -> Result<bool> {
-        let active = self
-            .active_cancel
-            .lock()
-            .map_err(|_| SpeedtestError::JobLockPoisoned)?;
-        if let Some(cancel) = active.as_ref() {
-            cancel.store(true, Ordering::SeqCst);
-            Ok(true)
-        } else {
-            Ok(false)
+    /// Returns whether a run was active to cancel.
+    pub fn cancel(&self) -> bool {
+        match lock_ignoring_poison(&self.active_cancel).as_ref() {
+            Some(cancel) => {
+                cancel.store(true, Ordering::SeqCst);
+                true
+            }
+            None => false,
         }
     }
 
-    pub fn status(&self) -> Result<SpeedtestStatus> {
-        Ok(SpeedtestStatus {
-            running: self
-                .active_cancel
-                .lock()
-                .map_err(|_| SpeedtestError::JobLockPoisoned)?
-                .is_some(),
-        })
+    pub fn status(&self) -> SpeedtestStatus {
+        SpeedtestStatus {
+            running: lock_ignoring_poison(&self.active_cancel).is_some(),
+        }
     }
 
     async fn run_batch_items<F>(
@@ -277,32 +269,24 @@ impl SpeedtestManager {
         Ok(batch)
     }
 
-    fn begin_job(&self) -> Result<CancellationFlag> {
+    fn begin_job(&self) -> CancellationFlag {
         let cancel = Arc::new(AtomicBool::new(false));
-        let mut active = self
-            .active_cancel
-            .lock()
-            .map_err(|_| SpeedtestError::JobLockPoisoned)?;
+        let mut active = lock_ignoring_poison(&self.active_cancel);
         if let Some(previous) = active.replace(Arc::clone(&cancel)) {
             previous.store(true, Ordering::SeqCst);
         }
 
-        Ok(cancel)
+        cancel
     }
 
-    fn finish_job(&self, cancel: &CancellationFlag) -> Result<()> {
-        let mut active = self
-            .active_cancel
-            .lock()
-            .map_err(|_| SpeedtestError::JobLockPoisoned)?;
+    fn finish_job(&self, cancel: &CancellationFlag) {
+        let mut active = lock_ignoring_poison(&self.active_cancel);
         if active
             .as_ref()
             .is_some_and(|current| Arc::ptr_eq(current, cancel))
         {
             *active = None;
         }
-
-        Ok(())
     }
 }
 

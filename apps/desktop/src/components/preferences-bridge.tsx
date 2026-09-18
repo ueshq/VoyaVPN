@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { getErrorMessage } from "@voya/utils/error";
 
 import { applyUiPreferences, useUiPreferencesQuery } from "@/features/settings/ui-preferences";
 import {
@@ -14,7 +15,12 @@ export function PreferencesBridge() {
 
   useEffect(() => {
     if (preferencesQuery.data) {
-      void applyUiPreferences(preferencesQuery.data).catch(() => undefined);
+      // The theme is applied before anything can fail; a failed locale load
+      // keeps the current language, so there is nothing to show the user, but
+      // the failure must not vanish without a trace.
+      void applyUiPreferences(preferencesQuery.data).catch((error: unknown) => {
+        console.error(`[preferences-bridge] apply: ${getErrorMessage(error)}`);
+      });
     }
   }, [preferencesQuery.data]);
 

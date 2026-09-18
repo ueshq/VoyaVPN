@@ -40,8 +40,7 @@ pub fn cancel_speedtest<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<SpeedtestStatus, AppError> {
-    let cancelled = state.speedtest_manager().cancel().map_err(AppError::from)?;
-    if cancelled {
+    if state.speedtest_manager().cancel() {
         // The cancellation already happened; a failed log emit must not turn a
         // successful command into an error.
         if let Err(error) = emit_app_log(
@@ -54,13 +53,13 @@ pub fn cancel_speedtest<R: tauri::Runtime>(
         }
     }
 
-    state.speedtest_manager().status().map_err(AppError::from)
+    Ok(state.speedtest_manager().status())
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn speedtest_status(state: tauri::State<'_, AppState>) -> Result<SpeedtestStatus, AppError> {
-    state.speedtest_manager().status().map_err(AppError::from)
+    Ok(state.speedtest_manager().status())
 }
 
 /// Looks up the exit address of the running connection through its local proxy.

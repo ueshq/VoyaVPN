@@ -276,8 +276,18 @@ impl<'runtime> RuntimeManager<'runtime> {
                 Ok(snapshot)
             }
             Err(error) => {
-                let _ = filesystem::remove_file_if_exists(&main_config_path);
-                let _ = cleanup_config_file(&self.paths, PRE_CONFIG_FILE_NAME);
+                // The start error is what the caller needs; a failed removal
+                // only leaves a credential-bearing config behind, so say so.
+                if let Err(cleanup) = filesystem::remove_file_if_exists(&main_config_path) {
+                    tracing::warn!(
+                        path = %main_config_path.display(),
+                        error = ?cleanup,
+                        "failed to remove core config after a failed start"
+                    );
+                }
+                if let Err(cleanup) = cleanup_config_file(&self.paths, PRE_CONFIG_FILE_NAME) {
+                    tracing::warn!(error = ?cleanup, "failed to remove pre-core config after a failed start");
+                }
                 Err(error.into())
             }
         }

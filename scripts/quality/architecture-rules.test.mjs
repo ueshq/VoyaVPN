@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   clashBoundaryRules,
+  contractsCasingRule,
   findUndocumentedUnsafe,
   KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT,
   manifestDependencyRules,
   moduleFileCandidates,
   resolveTestModuleFiles,
+  retiredCompatibilityRules,
+  shellDtoRule,
   shellRules,
   untranslatedMessageRule,
   voyaAppRules,
@@ -98,6 +101,81 @@ describe("Tauri shell boundary", () => {
     expect(violates(shellRules, "use voya_core::AppConfig;")).toContain("shell-domain");
     expect(violates(shellRules, "voya_db::ProfileRepository::new(pool)")).toContain("shell-domain");
   });
+
+  it.each([
+    '#[cfg(all(test, feature = "x"))]\nmod tests {}',
+    "#[cfg( test )]\nmod tests {}",
+    "#[cfg(any(debug_assertions, test))]\nfn helper() {}",
+  ])("rejects test-only code behind %s", (source) => {
+    expect(violates(shellRules, source)).toContain("shell-tests");
+  });
+
+  it.each([
+    "#[cfg(not(test))]\nfn production() {}",
+    "#[cfg(not( test ))]\nfn production() {}",
+    '#[cfg(feature = "test-utils")]',
+    '#[cfg(feature = "unit_test")]',
+  ])("accepts %s", (source) => {
+    expect(violates(shellRules, source)).toEqual([]);
+  });
+
+  it.each([
+    "#[derive(Debug, Serialize, Type)]",
+    "#[derive(specta::Type)]",
+    "#[derive(\n    Debug,\n    Type,\n)]",
+    // Wrapping the derive in cfg_attr compiles the same DTO in the shell.
+    '#[cfg_attr(feature = "ipc", derive(specta::Type))]',
+  ])("rejects a shell DTO derived as %s", (source) => {
+    expect(violates([shellDtoRule], source)).toContain("shell-dto");
+  });
+
+  it.each([
+    "#[derive(Debug, Clone)]\nstruct TypeName;",
+    "#[derive(Serialize)]\npub struct Type;",
+    "#[cfg_attr(test, derive(Debug))]",
+  ])("accepts %s", (source) => {
+    expect(violates([shellDtoRule], source)).toEqual([]);
+  });
+});
+
+describe("retired v2rayN compatibility", () => {
+  it.each([
+    ['const SCHEME: &str = "v2rayn://";', "retired-share-scheme"],
+    ['if url.starts_with("V2RAYN://") {}', "retired-share-scheme"],
+    ["struct AppConfigStore;", "retired-config-compat"],
+    ["let extra = ProtocolExtraItem::default();", "retired-config-compat"],
+    ["fn remove_retired_voya_config_fields() {}", "retired-config-compat"],
+    ["let id = config.prev_profile;", "retired-config-compat"],
+  ])("rejects %s", (source, id) => {
+    expect(violates(retiredCompatibilityRules, source)).toContain(id);
+  });
+
+  it.each([
+    "struct AppConfig;",
+    "let prev_profile_id = String::new();",
+    'const SCHEME: &str = "vless://";',
+  ])("accepts %s", (source) => {
+    expect(violates(retiredCompatibilityRules, source)).toEqual([]);
+  });
+});
+
+describe("contracts casing", () => {
+  it.each([
+    '#[serde(rename_all = "PascalCase")]',
+    '#[serde(rename_all = "snake_case")]',
+    '#[serde(rename_all = "lowercase")]',
+    '#[serde(tag = "type", rename_all_fields = "kebab-case")]',
+  ])("rejects %s", (source) => {
+    expect(violates([contractsCasingRule], source)).toContain("contracts-casing");
+  });
+
+  it.each([
+    '#[serde(rename_all = "camelCase")]',
+    '#[serde(tag = "type", rename_all = "camelCase", rename_all_fields = "camelCase")]',
+    '#[serde(rename = "HTTP")]',
+  ])("accepts %s", (source) => {
+    expect(violates([contractsCasingRule], source)).toEqual([]);
+  });
 });
 
 describe("Clash boundary rules", () => {
@@ -153,6 +231,20 @@ describe("manifest dependency rules", () => {
     const spectaRules = manifestDependencyRules("specta", "voya-app must not depend on Specta");
     expect(violates(spectaRules, 'types = { package = "specta", version = "2" }')).toContain("manifest-renamed");
     expect(violates(spectaRules, "[dependencies.specta]")).toContain("manifest-table");
+  });
+
+  it("rejects a network client in voya-app under any spelling", () => {
+    const networkRules = manifestDependencyRules(
+      "(?:reqwest|tokio-tungstenite)",
+      "voya-app must reach the network through voya-net",
+    );
+    expect(violates(networkRules, 'reqwest = { version = "0.12" }')).toContain("manifest-direct");
+    // Renamed, the source rules would only ever see `http::Client`.
+    expect(violates(networkRules, 'http = { package = "reqwest", version = "0.12" }')).toContain(
+      "manifest-renamed",
+    );
+    expect(violates(networkRules, "[dependencies.tokio-tungstenite]")).toContain("manifest-table");
+    expect(violates(networkRules, "voya-net.workspace = true")).toEqual([]);
   });
 });
 

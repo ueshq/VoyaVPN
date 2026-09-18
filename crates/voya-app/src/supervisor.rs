@@ -1,4 +1,11 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 use tokio::sync::{mpsc, oneshot};
 use voya_platform::{
     coreinfo::TargetOs,
@@ -174,7 +181,9 @@ struct SupervisorActor {
     /// explicit handle. `None` in unit tests that drive the actor directly.
     runtime: Option<tokio::runtime::Handle>,
     running: RunningCore,
-    native_tun_generation: u64,
+    /// Shared with the health watchers so a start or stop that supersedes one
+    /// makes it exit on its next tick.
+    native_tun_generation: Arc<AtomicU64>,
     restart_generation: u64,
     crash: CrashTracker,
 }

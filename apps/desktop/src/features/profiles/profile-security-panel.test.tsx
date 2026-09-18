@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { describe, expect, it } from "vitest";
 
 import { type ParsedProfileFormValues, type ProfileFormValues } from "./profile-form-schema";
@@ -16,10 +16,11 @@ function SecurityPanelHarness({ security }: { security: string }) {
       remarks: "Pinned node",
     } as ProfileFormValues,
   });
+  const cert = useWatch({ control: form.control, name: "cert" });
 
   return (
     <>
-      <output data-testid="cert">{String(form.watch("cert") ?? "")}</output>
+      <output data-testid="cert">{String(cert ?? "")}</output>
       <SecurityPanel
         control={form.control}
         register={form.register}

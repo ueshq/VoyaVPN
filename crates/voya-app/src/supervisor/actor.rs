@@ -23,7 +23,7 @@ impl SupervisorActor {
             tx,
             runtime,
             running: RunningCore::empty(),
-            native_tun_generation: 0,
+            native_tun_generation: Arc::new(AtomicU64::new(0)),
             restart_generation: 0,
             crash: CrashTracker::default(),
         }
@@ -236,8 +236,7 @@ impl SupervisorActor {
                 .map(|()| self.running.snapshot(self.deps.clock.now()))
                 .map_err(Into::into);
         }
-        self.native_tun_generation = self.native_tun_generation.wrapping_add(1);
-        let generation = self.native_tun_generation;
+        let generation = self.retire_native_tun_watchers();
 
         self.running = RunningCore {
             connected_since: result.is_ok().then(|| self.deps.clock.now()),
@@ -263,7 +262,12 @@ impl SupervisorActor {
         let running = std::mem::replace(&mut self.running, RunningCore::empty());
 
         match self.stop_running(&running) {
-            Ok(()) => Ok(SupervisorSnapshot::disconnected()),
+            Ok(()) => {
+                if running.native_tun.is_some() {
+                    self.retire_native_tun_watchers();
+                }
+                Ok(SupervisorSnapshot::disconnected())
+            }
             Err(error) => {
                 self.running = running;
                 if let Some(native_tun) = self.running.native_tun.as_mut() {
@@ -537,16 +541,30 @@ impl SupervisorActor {
         });
     }
 
+    /// Advance the native TUN generation and return the new value. Every health
+    /// watcher spawned before this call exits on its next tick.
+    fn retire_native_tun_watchers(&self) -> u64 {
+        self.native_tun_generation
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1)
+    }
+
     fn spawn_native_tun_health_watcher(&self, generation: u64, backend: TunBackend) {
         let controller = Arc::clone(&self.deps.native_tun_controller);
+        let current_generation = Arc::clone(&self.native_tun_generation);
         let tx = self.tx.clone();
         let interval = self.deps.native_tun_health_interval;
         self.spawn_task(async move {
             loop {
-                if tx.upgrade().is_none() {
+                tokio::time::sleep(interval).await;
+                // A healthy provider is no exit condition: a watcher whose tick
+                // lands after a restart finds the new provider running and
+                // would otherwise poll for the rest of the process lifetime.
+                if current_generation.load(Ordering::Relaxed) != generation
+                    || tx.upgrade().is_none()
+                {
                     return;
                 }
-                tokio::time::sleep(interval).await;
                 let status = match tokio::task::spawn_blocking({
                     let controller = Arc::clone(&controller);
                     move || controller.status(backend)

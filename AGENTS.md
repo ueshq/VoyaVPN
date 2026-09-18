@@ -17,6 +17,7 @@ The package manager is **pnpm 11.5.0** (pinned via Corepack). Rust toolchain is 
 - `packages/i18n/` — `@voya/i18n`, source-only i18next setup and imported locale JSON.
 - `packages/utils/` — `@voya/utils`, source-only shared formatting/redaction/error helpers.
 - `crates/`, `tests/`, `docs/`, and `scripts/` remain rooted at the workspace.
+- `docs/` is tracked and holds only what governs or ships with the product: ADRs, release runbooks and legal notices, and design references. `docs/release/THIRD_PARTY_NOTICES.md` is a Tauri bundle resource, so an untracked copy breaks every clean build (`scripts/tauri/core-seeds.test.mjs` guards this). Development-process notes — verification logs, before/after screenshots, usability checks — go in the untracked `.agents/docs/`.
 
 Package scope is always `@voya/*`. The `@/*` alias is desktop-private and resolves to `apps/desktop/src`; shared imports use `@voya/*`.
 
@@ -63,7 +64,7 @@ pnpm --filter @voya/desktop test --run src/features/profiles/server-table.test.t
 
 Single Rust test: `cargo test -p voya-core <test_name>` (substitute the owning crate).
 
-**Do not run bare `cargo test --workspace --all-targets`.** Use `pnpm run check:rust:test` (→ `scripts/quality/rust-tests.mjs`). It runs workspace all-target tests while excluding the Tauri shell lib harness (whose lib test harness is intentionally disabled to avoid Windows WebView/Wry loader failures), then builds the shell binary test target separately. `--all-targets` forces explicitly-disabled targets, breaking Windows.
+**Do not run bare `cargo test --workspace --all-targets`.** Use `pnpm run check:rust:test` (→ `scripts/quality/rust-tests.mjs`). It runs workspace all-target tests while excluding the Tauri shell lib harness (whose lib test harness is intentionally disabled to avoid Windows WebView/Wry loader failures), then builds the shell binary test target separately; on macOS it also runs the PacketTunnel bridge test (`scripts/native/macos/test-bridge.mjs`). `--all-targets` forces explicitly-disabled targets, breaking Windows.
 
 ## Architecture
 
@@ -110,22 +111,29 @@ so read it before moving code between crates:
 - **`unsafe` needs a `SAFETY:` comment** within the three preceding lines.
   This covers `unsafe {`, `unsafe impl`, `unsafe extern`, and `unsafe fn`.
 - **`voya-core` must be OS independent and deterministic:** no `#[cfg]` on
-  `target_os`/`target_family`/`windows`/`unix`, no `cfg!()` on those, and no
-  `std::fs`/`std::net`/`std::process`/`std::env`, `SystemTime::now`,
-  `Instant::now`, or `rand`. Inject clocks, randomness, ports, and platform facts.
+  `target_os`/`target_family`/`windows`/`unix`, no `cfg!()` on those, no
+  `std::fs`/`std::process`/`std::env`, no `std::net` socket types
+  (`TcpStream`/`TcpListener`/`UdpSocket`/`ToSocketAddrs`; address value types
+  such as `IpAddr` stay allowed), no `SystemTime::now`, `Instant::now`, or
+  `rand`. Inject clocks, randomness, ports, and platform facts.
 - **`voya-app` reaches the network and filesystem through adapters:** no
-  `reqwest`, `tokio_tungstenite`, `tokio::net`, `tokio::fs`, `std::fs`,
-  `std::net`, `std::process`, or `tokio::process` (grouped imports such as
-  `use std::{fs, io};` are matched too), and no `specta`.
+  `reqwest`, `tokio_tungstenite`, `tokio::net`, `tokio::fs`, `tokio::process`,
+  `std::fs`, or `std::process::{Command, Stdio}` (grouped imports such as
+  `use std::{fs, io};` are matched too; a `std::process::id()` read and
+  `std::net` address types stay allowed), and no `specta`.
 - **The Tauri shell has no tests, no direct domain access, and no DTOs:** no
-  `#[cfg(test)]` (its lib test harness is disabled), no `voya_core::`/`voya_db::`,
-  and no `#[derive(… Type …)]` outside `ipc/events.rs`. Manifest checks reject a
-  direct, renamed, or `[dependencies.…]`-table dependency on `voya-core`/`voya-db`
-  in the shell and on `specta` in `voya-app`.
+  `#[cfg(…)]` that enables code under `test` (its lib test harness is disabled),
+  no `voya_core::`/`voya_db::`, and no `derive(… Type …)`, plain or inside
+  `cfg_attr`, outside `ipc/events.rs`. The standalone binaries under
+  `src-tauri/src/bin/` are exempt from these shell rules: they carry their own
+  tests, which `check:rust:test` builds as a separate target.
+- **Manifest checks** reject a direct, renamed (`x = { package = "…" }`), or
+  `[dependencies.…]`-table dependency on `voya-core`/`voya-db` in the shell, and
+  on `specta`, `reqwest`, or `tokio-tungstenite` in `voya-app`.
 - **Retired v2rayN compatibility stays retired:** no `serde(alias = …)` or
   `rename_all = "PascalCase"` outside `crates/voya-net/src/clash.rs`, no
-  `v2rayn://`, and no retired config-compat identifiers. `voya-contracts` must be
-  camelCase everywhere.
+  `v2rayn://`, and no retired config-compat identifiers. Every `rename_all` and
+  `rename_all_fields` in `voya-contracts` must say `camelCase`.
 
 The rule set itself is unit-tested in `scripts/quality/architecture-analyzer.test.mjs`
 and `scripts/quality/architecture-rules.test.mjs`.

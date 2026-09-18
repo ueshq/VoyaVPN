@@ -335,7 +335,6 @@ impl From<SpeedtestError> for AppError {
             SpeedtestError::Cancelled
             | SpeedtestError::NoAvailablePort(_)
             | SpeedtestError::InvalidSocksPort(_)
-            | SpeedtestError::JobLockPoisoned
             | SpeedtestError::BackgroundTask(_) => internal(Sub::Speedtest, &error),
         }
     }

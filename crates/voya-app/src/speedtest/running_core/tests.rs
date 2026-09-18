@@ -286,11 +286,11 @@ async fn running_core_speedtest_stops_waiting_on_cancel() {
             .expect("run")
     });
 
-    while !manager.status().expect("status").running {
+    while !manager.status().running {
         time::sleep(Duration::from_millis(5)).await;
     }
     time::sleep(Duration::from_millis(20)).await;
-    assert!(manager.cancel().expect("cancel"));
+    assert!(manager.cancel());
     let run = time::timeout(Duration::from_secs(2), run)
         .await
         .expect("the run returns without waiting on the core")

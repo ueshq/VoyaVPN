@@ -687,7 +687,6 @@ mod guards {
             | SpeedtestError::Validation { .. }
             | SpeedtestError::NoAvailablePort(_)
             | SpeedtestError::InvalidSocksPort(_)
-            | SpeedtestError::JobLockPoisoned
             | SpeedtestError::EmptySelection
             | SpeedtestError::BackgroundTask(_) => (),
         }

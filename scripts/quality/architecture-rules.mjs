@@ -95,9 +95,13 @@ export const voyaAppRules = [
 
 export const shellRules = [
   {
+    // Any `#[cfg(...)]` that enables code under `test`, not only the bare
+    // `#[cfg(test)]`: `all(test, ...)`, `any(test, ...)` and extra whitespace
+    // compile the same test-only code. `not(test)` is production code, and a
+    // `test` inside a feature name or string is not the predicate.
     id: "shell-tests",
     scope: "raw",
-    pattern: /#\[cfg\(test\)\]/u,
+    pattern: /#\[cfg\s*\([^\]]*(?<![\w"-]|not\s*\(\s*)test(?![\w"-])/u,
     message: "tests belong in app/contracts/platform crates because the Tauri shell lib harness is disabled",
   },
   {
@@ -107,9 +111,10 @@ export const shellRules = [
   },
 ];
 
+/** A plain `#[derive(...)]` or one wrapped in `#[cfg_attr(..., derive(...))]`. */
 export const shellDtoRule = {
   id: "shell-dto",
-  pattern: /#\[derive\([^\]]*\bType\b/u,
+  pattern: /#\[(?:cfg_attr\s*\([^\]]*?\b)?derive\s*\([^\]]*\bType\b/u,
   message: "business and command DTOs belong in voya-contracts",
 };
 
@@ -148,7 +153,7 @@ export const clashBoundaryRules = [
  * It exists so the ~20 managers that have no code yet still say *something*,
  * and it belongs in the single file that maps manager errors onto `AppError`.
  * Anywhere else it is a new untranslatable string, so a new producer has to add
- * a `ValidationCode` variant (and its eight locale entries) instead.
+ * a `ValidationCode` variant (and an entry in every locale file) instead.
  */
 export const untranslatedMessageRule = {
   id: "untranslated-message",
@@ -157,9 +162,14 @@ export const untranslatedMessageRule = {
     "untranslated validation text belongs in contract_map/errors.rs; add a ValidationCode variant instead",
 };
 
+/**
+ * Every `rename_all` / `rename_all_fields` in the contracts crate must say
+ * camelCase. Rejecting only PascalCase let `snake_case` or `lowercase` through,
+ * which is a second wire casing for the frontend to learn.
+ */
 export const contractsCasingRule = {
   id: "contracts-casing",
-  pattern: /rename_all\s*=\s*"PascalCase"/u,
+  pattern: /\brename_all(?:_fields)?\s*=\s*"(?!camelCase")/u,
   message: "public contracts must use camelCase",
 };
 

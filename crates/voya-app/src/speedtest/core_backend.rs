@@ -8,7 +8,7 @@
 //! `run_speedtest` future ever reaps a probe core, and `SpeedtestManager`
 //! has to kill them synchronously on shutdown.
 
-use std::{path::Path, sync::MutexGuard};
+use std::path::Path;
 
 use tokio::task;
 use voya_platform::coreinfo::core_launch;
@@ -140,15 +140,6 @@ impl LiveProbeCores {
 
     fn take_all(&self) -> Vec<LiveProbeCore> {
         std::mem::take(&mut *lock_ignoring_poison(&self.entries))
-    }
-}
-
-/// A poisoned registry still holds valid child handles, and losing them would
-/// leak the very processes this registry exists to reap.
-fn lock_ignoring_poison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    match mutex.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
     }
 }
 

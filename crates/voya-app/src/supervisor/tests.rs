@@ -224,10 +224,7 @@ impl NativeTunController for FailedStartController {
         }
     }
     fn stop(&self, _backend: TunBackend) -> Result<(), NativeTunError> {
-        if self
-            .cleanup_fails
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
+        if self.cleanup_fails.load(Ordering::Relaxed) {
             Err(NativeTunError::Bridge {
                 action: "stop",
                 message: "stop timed out".into(),
@@ -272,9 +269,7 @@ async fn failed_native_start_keeps_cleanup_record_until_stop_succeeds() {
         } else {
             assert_eq!(status.state, SupervisorConnectionState::Disconnected);
         }
-        controller
-            .cleanup_fails
-            .store(false, std::sync::atomic::Ordering::Relaxed);
+        controller.cleanup_fails.store(false, Ordering::Relaxed);
         assert_eq!(
             supervisor.stop().await.expect("retry stop").state,
             SupervisorConnectionState::Disconnected
@@ -1455,10 +1450,10 @@ async fn supervisor_restart_stops_the_previous_core_before_spawning_a_new_one() 
     );
 }
 
-/// Each native TUN start spawns its own health watcher, and the watcher from
-/// the superseded start is still alive after a restart: it observes the
-/// `Stopped` the restart itself caused. The generation guard is what stops
-/// that from tearing the freshly started provider down again.
+/// Each native TUN start spawns its own health watcher. A watcher from a
+/// superseded start can still be mid-status-call when the restart happens and
+/// report the `Stopped` the restart itself caused. The generation check on the
+/// report is what stops that from tearing the freshly started provider down.
 #[tokio::test]
 async fn supervisor_ignores_the_health_watcher_of_a_superseded_native_tun_start() {
     let events = SharedEvents::default();
@@ -1514,6 +1509,58 @@ async fn supervisor_ignores_the_health_watcher_of_a_superseded_native_tun_start(
         "only the current generation may report the provider exit: {reported:?}"
     );
     assert_eq!(reported[0].message, "provider exited");
+}
+
+/// A restart must retire the previous health watcher even when that watcher
+/// never observes a terminal state: its next tick lands after the new provider
+/// is already running, so the state alone would keep it polling forever. Each
+/// live watcher holds one clone of the controller, so the strong count is the
+/// number of watchers still running.
+#[tokio::test]
+async fn supervisor_retires_superseded_native_tun_health_watchers() {
+    let events = SharedEvents::default();
+    let controller = Arc::new(FlippableNativeTunController::new(
+        events.clone(),
+        TunBackend::WindowsService,
+    ));
+    let deps = SupervisorDeps::new(
+        Arc::new(FakeRunner::new(events.clone())),
+        Arc::new(ElevationState::new()),
+    )
+    .with_target_os(TargetOs::Windows)
+    .with_native_tun_controller(controller.clone())
+    .with_native_tun_health_interval(Duration::from_millis(10));
+    let supervisor = CoreSupervisor::spawn(deps);
+    let without_watchers = Arc::strong_count(&controller);
+
+    for _ in 0..3 {
+        supervisor
+            .start(native_tun_test_request())
+            .await
+            .expect("native tun start");
+    }
+    wait_for_live_watchers(&controller, without_watchers, 1).await;
+
+    supervisor.stop().await.expect("native tun stop");
+    wait_for_live_watchers(&controller, without_watchers, 0).await;
+}
+
+async fn wait_for_live_watchers(
+    controller: &Arc<FlippableNativeTunController>,
+    without_watchers: usize,
+    expected: usize,
+) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    // A status call briefly holds one more clone, so wait for the count to
+    // settle rather than sampling it once.
+    while Arc::strong_count(controller) != without_watchers + expected {
+        assert!(
+            Instant::now() < deadline,
+            "expected {expected} live health watcher(s), found {}",
+            Arc::strong_count(controller) - without_watchers
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
 }
 
 /// The pre-process is tracked for crash restarts too: when it dies the whole

@@ -41,8 +41,15 @@ try {
     .withCapabilities(capabilities)
     .build();
 
-  const heading = await driver.wait(until.elementLocated(By.css("h1")), 30_000);
-  assert.equal(await heading.getText(), "VoyaVPN");
+  // The shell has rendered once the sidebar footer is on screen. Home has no
+  // page heading, and visible text depends on the locale, so neither is a
+  // stable readiness signal; the document title comes from index.html.
+  const sidebarFooter = await driver.wait(
+    until.elementLocated(By.css('[data-testid="sidebar-footer"]')),
+    30_000,
+  );
+  await driver.wait(until.elementIsVisible(sidebarFooter), 30_000);
+  assert.equal(await driver.getTitle(), "VoyaVPN");
 
   const initialSettings = await invoke("load_app_settings");
   assert.equal(initialSettings.ok, true, initialSettings.error);

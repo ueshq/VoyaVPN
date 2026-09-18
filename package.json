@@ -16,7 +16,7 @@
     "preview": "pnpm --filter @voya/desktop preview",
     "typecheck": "pnpm -r run typecheck",
     "test": "vitest",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "check:native:macos:bridge": "node scripts/native/macos/test-bridge.mjs",
     "check:frontend:smoke:mock": "pnpm --filter @voya/desktop exec playwright test",
     "check:desktop:smoke": "pnpm tauri:build --debug --no-bundle && node apps/desktop/e2e/desktop-smoke.mjs",

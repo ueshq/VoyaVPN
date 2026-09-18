@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { singBoxExecutableName } from "../core/sing-box-installer.mjs";
 
-const requiredBundleResources = {
+export const requiredBundleResources = {
   "../../../docs/release/THIRD_PARTY_NOTICES.md": "release/THIRD_PARTY_NOTICES.md",
 };
 

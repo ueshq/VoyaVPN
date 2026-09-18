@@ -4,7 +4,7 @@ use specta::Type;
 use crate::{CoreState, SystemProxyType, TunBackend, ValidationIssue};
 
 #[derive(Debug, Clone, Serialize, Type)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum TitleBarLayout {
     Macos,
     Windows,

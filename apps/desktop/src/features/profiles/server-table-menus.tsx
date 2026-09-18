@@ -75,32 +75,34 @@ export function SpeedtestButton({
   variant?: "outline" | "ghost";
 }) {
   const { t } = useI18n();
+  // A running test can always be stopped from here, whoever started it.
+  const blockedElsewhere = !running && Boolean(busyElsewhere);
 
   return (
     <DisabledReason
-      reason={!running && busyElsewhere ? t("panes.profiles.speedtest.runningElsewhere") : undefined}
+      reason={blockedElsewhere ? t("panes.profiles.speedtest.runningElsewhere") : undefined}
     >
-    <Button
-      disabled={!running && (disabled || busyElsewhere)}
-      onClick={() => void (running ? onCancel() : onRun())}
-      size="sm"
-      title={running ? t("panes.profiles.speedtest.cancelTitle") : label}
-      type="button"
-      variant={variant}
-    >
-      {running ? (
-        <Square className="size-4" aria-hidden="true" />
-      ) : (
-        <Zap className="size-4" aria-hidden="true" />
-      )}
-      <span data-slot="button-label">
-        {running
-          ? progress
-            ? t("panes.profiles.speedtest.stopProgress", progress)
-            : t("panes.profiles.speedtest.stop")
-          : label}
-      </span>
-    </Button>
+      <Button
+        disabled={blockedElsewhere || (!running && disabled)}
+        onClick={() => void (running ? onCancel() : onRun())}
+        size="sm"
+        title={running ? t("panes.profiles.speedtest.cancelTitle") : label}
+        type="button"
+        variant={variant}
+      >
+        {running ? (
+          <Square className="size-4" aria-hidden="true" />
+        ) : (
+          <Zap className="size-4" aria-hidden="true" />
+        )}
+        <span data-slot="button-label">
+          {running
+            ? progress
+              ? t("panes.profiles.speedtest.stopProgress", progress)
+              : t("panes.profiles.speedtest.stop")
+            : label}
+        </span>
+      </Button>
     </DisabledReason>
   );
 }
