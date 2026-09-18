@@ -85,7 +85,7 @@ describe("Tauri CLI", () => {
     expect(inlineEnsureSeed).toHaveBeenCalledWith({ arch: "x64", platform: "win32", repoRoot: "/repo" });
   });
 
-  it("ships no core seed in macOS packages", async () => {
+  it("stages and bundles the seed for macOS packages", async () => {
     const ensureSeed = vi.fn();
     const writeCoreOverlay = vi.fn(() => "/repo/target/release-config/tauri.core.json");
     const targeted = await prepareTauriInvocation(["build", "--target", "aarch64-apple-darwin"], {
@@ -95,18 +95,20 @@ describe("Tauri CLI", () => {
       ensureSeed,
       writeCoreOverlay,
     });
-    const hosted = await prepareTauriInvocation(["dev"], {
-      repoRoot: "/repo",
-      hostPlatform: "darwin",
-      sourceEnv: {},
-      ensureSeed,
-      writeCoreOverlay,
-    });
 
-    expect(ensureSeed).not.toHaveBeenCalled();
-    expect(writeCoreOverlay).not.toHaveBeenCalled();
-    expect(targeted.commandArgs).toEqual(["build", "--target", "aarch64-apple-darwin"]);
-    expect(hosted.commandArgs).toEqual(["dev"]);
+    expect(ensureSeed).toHaveBeenCalledWith({ arch: "arm64", platform: "darwin", repoRoot: "/repo" });
+    expect(writeCoreOverlay).toHaveBeenCalledWith(
+      "/repo",
+      "/repo/target/release-config/tauri.core-seeds.generated.json",
+      { platform: "darwin" },
+    );
+    expect(targeted.commandArgs).toEqual([
+      "build",
+      "--config",
+      "/repo/target/release-config/tauri.core.json",
+      "--target",
+      "aarch64-apple-darwin",
+    ]);
   });
 
   it("maps Rust target triples to core seed platforms", () => {

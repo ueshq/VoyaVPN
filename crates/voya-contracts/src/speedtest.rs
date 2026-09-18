@@ -44,8 +44,6 @@ pub enum SpeedtestOutcome {
     CoreUnavailable,
     /// No free local port was available for the probe.
     NoAvailablePort,
-    /// Nothing is connected, and on macOS only the running core can measure.
-    NotConnected,
     /// The running core predates this node or its current settings (it was
     /// added or edited after connecting), so measuring needs a reconnect.
     ReconnectRequired,
@@ -75,7 +73,6 @@ impl SpeedtestOutcome {
             Self::InvalidProfile => "invalidProfile",
             Self::CoreUnavailable => "coreUnavailable",
             Self::NoAvailablePort => "noAvailablePort",
-            Self::NotConnected => "notConnected",
             Self::ReconnectRequired => "reconnectRequired",
             Self::Failed => "failed",
             Self::Unknown => "unknown",
@@ -195,7 +192,6 @@ mod tests {
             SpeedtestOutcome::InvalidProfile,
             SpeedtestOutcome::CoreUnavailable,
             SpeedtestOutcome::NoAvailablePort,
-            SpeedtestOutcome::NotConnected,
             SpeedtestOutcome::ReconnectRequired,
             SpeedtestOutcome::Failed,
             SpeedtestOutcome::Unknown,

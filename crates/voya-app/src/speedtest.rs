@@ -208,24 +208,19 @@ pub trait SpeedtestCoreBackend: Send + Sync {
     fn stop_all(&self) {}
 }
 
+/// Measures nodes with a throwaway sing-box per page, probed over SOCKS.
+///
+/// On macOS a connected PacketTunnel core takes over instead: every connection
+/// then goes through the tunnel, so a probe core would measure the node through
+/// the running VPN rather than directly.
 #[derive(Clone)]
 pub struct SpeedtestManager {
-    backend: SpeedtestBackend,
+    probe: Arc<dyn SpeedtestProbe>,
+    core_backend: Arc<dyn SpeedtestCoreBackend>,
+    running_core: Option<Arc<dyn RunningCoreProbe>>,
     paths: AppPaths,
     target_os: TargetOs,
     active_cancel: Arc<Mutex<Option<CancellationFlag>>>,
-}
-
-/// Where a latency test runs.
-#[derive(Clone)]
-enum SpeedtestBackend {
-    /// Windows and Linux: a throwaway sing-box per page, probed over SOCKS.
-    ProbeCore {
-        probe: Arc<dyn SpeedtestProbe>,
-        core: Arc<dyn SpeedtestCoreBackend>,
-    },
-    /// macOS: the running PacketTunnel core, through its Clash API.
-    RunningCore(Arc<dyn RunningCoreProbe>),
 }
 
 mod core_backend;
@@ -481,7 +476,7 @@ mod tests {
     use super::*;
 
     #[derive(Default)]
-    struct RecordingProbe {
+    pub(super) struct RecordingProbe {
         calls: Arc<StdMutex<Vec<String>>>,
         /// How many `realping` calls hold open until the run is cancelled, so
         /// a test can block the first run and let a superseding one through.
@@ -489,7 +484,7 @@ mod tests {
     }
 
     impl RecordingProbe {
-        fn calls(&self) -> Vec<String> {
+        pub(super) fn calls(&self) -> Vec<String> {
             self.calls
                 .lock()
                 .expect("speedtest test operation should succeed")
@@ -532,12 +527,12 @@ mod tests {
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
-    struct RecordedCoreStart {
-        ports: Vec<i32>,
+    pub(super) struct RecordedCoreStart {
+        pub(super) ports: Vec<i32>,
     }
 
     #[derive(Default)]
-    struct RecordingCoreBackend {
+    pub(super) struct RecordingCoreBackend {
         starts: Arc<StdMutex<Vec<RecordedCoreStart>>>,
         active: Arc<AtomicUsize>,
         stop_all_calls: Arc<AtomicUsize>,
@@ -550,7 +545,7 @@ mod tests {
     }
 
     impl RecordingCoreBackend {
-        fn starts(&self) -> Vec<RecordedCoreStart> {
+        pub(super) fn starts(&self) -> Vec<RecordedCoreStart> {
             self.starts
                 .lock()
                 .expect("speedtest test operation should succeed")

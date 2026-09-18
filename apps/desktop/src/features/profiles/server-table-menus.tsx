@@ -39,7 +39,6 @@ import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { MOVE_ACTIONS } from "./profile-constants";
-import { useSpeedtestNeedsConnection } from "./use-node-speedtest";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 import type { ServerTableController } from "./use-server-table";
 
@@ -76,19 +75,13 @@ export function SpeedtestButton({
   variant?: "outline" | "ghost";
 }) {
   const { t } = useI18n();
-  const needsConnection = useSpeedtestNeedsConnection();
-  const reason = running
-    ? undefined
-    : busyElsewhere
-      ? t("panes.profiles.speedtest.runningElsewhere")
-      : needsConnection
-        ? t("panes.profiles.speedtest.connectFirst")
-        : undefined;
 
   return (
-    <DisabledReason reason={reason}>
+    <DisabledReason
+      reason={!running && busyElsewhere ? t("panes.profiles.speedtest.runningElsewhere") : undefined}
+    >
     <Button
-      disabled={!running && (disabled || busyElsewhere || needsConnection)}
+      disabled={!running && (disabled || busyElsewhere)}
       onClick={() => void (running ? onCancel() : onRun())}
       size="sm"
       title={running ? t("panes.profiles.speedtest.cancelTitle") : label}
@@ -195,7 +188,6 @@ function ProfileMenuItems({
     requestDelete,
     runOperation,
     setDialogState,
-    speedtestNeedsConnection,
     speedtestRunning,
     t,
   } = controller;
@@ -225,7 +217,7 @@ function ProfileMenuItems({
         </>
       )}
       <Item
-        disabled={speedtestRunning || speedtestNeedsConnection}
+        disabled={speedtestRunning}
         onSelect={() => void handleSpeedtest(target, `node:${indexId}`)}
       >
         <Zap className="size-4" aria-hidden="true" />

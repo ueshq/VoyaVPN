@@ -212,8 +212,9 @@ impl AppServices {
         &self.runtime_paths
     }
 
-    /// Windows and Linux measure nodes with throwaway probe cores; macOS ships
-    /// no sing-box to launch one with and measures through the running core.
+    /// Nodes are measured with throwaway probe cores from the packaged seed.
+    /// On macOS a connected PacketTunnel would carry their traffic, so while
+    /// connected the test goes through the running core instead.
     #[must_use]
     pub fn speedtest_manager(
         &self,
@@ -221,15 +222,14 @@ impl AppServices {
         runner: Arc<dyn ProcessRunner>,
         supervisor: CoreSupervisor,
     ) -> SpeedtestManager {
+        let manager =
+            SpeedtestManager::new(self.runtime_paths.clone(), core_seed_resource_dir, runner);
         if TargetOs::current() == TargetOs::Macos {
-            SpeedtestManager::through_running_core(
-                self.runtime_paths.clone(),
-                Arc::new(crate::speedtest::SupervisorRunningCoreProbe::new(
-                    supervisor,
-                )),
-            )
+            manager.with_running_core(Arc::new(crate::speedtest::SupervisorRunningCoreProbe::new(
+                supervisor,
+            )))
         } else {
-            SpeedtestManager::new(self.runtime_paths.clone(), core_seed_resource_dir, runner)
+            manager
         }
     }
 }

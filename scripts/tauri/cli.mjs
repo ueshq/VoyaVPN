@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 
 import { ensureSingBoxSeedForBuild } from "../core/sing-box-installer.mjs";
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
-import { platformShipsCoreSeed, writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
+import { writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
 import {
   normalizeCiEnv,
   requestedStableUpdaterConfig,
@@ -81,13 +81,12 @@ export async function prepareTauriInvocation(
 
   const seedTarget = seedTargetFromArgs(tauriArgs);
   const targetPlatform = seedTarget.platform ?? hostPlatform;
-  const shipsSeed = platformShipsCoreSeed(targetPlatform);
 
-  if (operation === "build" && shipsSeed) {
+  if (operation === "build") {
     await ensureSeed({ repoRoot, ...seedTarget });
   }
 
-  if ((operation === "dev" || operation === "build") && shipsSeed) {
+  if (operation === "dev" || operation === "build") {
     const configRoot = operation === "build" ? "release-config" : "tauri-config";
     const coreSeedOverlayPath = writeCoreOverlay(
       repoRoot,

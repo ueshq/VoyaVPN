@@ -1,10 +1,10 @@
-//! macOS latency tests: measure nodes through the core that is already running.
+//! macOS latency tests while connected: measure through the running core.
 //!
-//! The macOS package ships no standalone sing-box, so there is no probe core
-//! to launch. The runtime config carries one unrouted probe outbound per node
-//! instead (`voya_core::latency_probe_tag`), and each measurement is a Clash
-//! API delay request against the PacketTunnel core. Nothing can be measured
-//! while disconnected.
+//! Once the PacketTunnel is up, a probe core's own connections would go through
+//! the tunnel too. The runtime config therefore carries one unrouted probe
+//! outbound per node (`voya_core::latency_probe_tag`), and each measurement is
+//! a Clash API delay request against the PacketTunnel core. While disconnected
+//! the manager launches probe cores from the packaged seed instead.
 
 use std::ops::RangeInclusive;
 
@@ -27,7 +27,7 @@ const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// Reaches the running core for a speedtest run.
 pub trait RunningCoreProbe: Send + Sync {
     /// A delay client bound to the core running now; `None` while nothing is
-    /// connected.
+    /// connected, which sends the run to probe cores.
     fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreDelay>>>;
 }
 
@@ -94,7 +94,7 @@ impl RunningCoreDelay for ClashRunningCoreDelay {
 impl SpeedtestManager {
     pub(super) async fn run_through_running_core<F>(
         &self,
-        running_core: &dyn RunningCoreProbe,
+        core: Arc<dyn RunningCoreDelay>,
         database: &Database,
         config: &AppConfig,
         items: &[ServerTestItem],
@@ -104,16 +104,6 @@ impl SpeedtestManager {
     where
         F: Fn(SpeedtestResult) + Send + Sync,
     {
-        let Some(core) = running_core.connect().await else {
-            let failures = items
-                .iter()
-                .map(|item| {
-                    SpeedtestItemFailure::new(item.index_id.clone(), SpeedtestOutcome::NotConnected)
-                })
-                .collect();
-            return record_item_failures(database, failures, items, on_result).await;
-        };
-
         let env = load_runtime_core_gen_env(database, &self.paths, config, self.target_os).await?;
         let builder = CoreConfigContextBuilder::new(&env);
         let mut failures = Vec::new();

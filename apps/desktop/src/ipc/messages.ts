@@ -158,7 +158,6 @@ export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> =
     failed: "speedtest.outcome.failed",
     invalidProfile: "speedtest.outcome.invalidProfile",
     noAvailablePort: "speedtest.outcome.noAvailablePort",
-    notConnected: "speedtest.outcome.notConnected",
     proxyConnectFailed: "speedtest.outcome.proxyConnectFailed",
     proxyConnectionClosed: "speedtest.outcome.proxyConnectionClosed",
     proxyConnectionRefused: "speedtest.outcome.proxyConnectionRefused",

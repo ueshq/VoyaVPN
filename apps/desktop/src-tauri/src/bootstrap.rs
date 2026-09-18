@@ -86,19 +86,18 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         tracing::warn!(?error, "failed to seed the default routing profile");
     }
     tauri::async_runtime::block_on(services.initialize_profile_metrics())?;
-    // The macOS package carries no sing-box seed: the PacketTunnel extension
-    // links sing-box itself and is the only core that ever runs there.
-    let core_seed_resource_dir = (TargetOs::current() != TargetOs::Macos)
-        .then(|| app.path().resource_dir().map(core_seed_resources_dir))
-        .transpose()?;
-    if let Some(seed_dir) = core_seed_resource_dir.as_ref() {
-        if let Err(error) = copy_seed_core_asset(&runtime_paths, seed_dir) {
+    let seed_dir = core_seed_resources_dir(app.path().resource_dir()?);
+    // macOS launches the seed inside the signed bundle (only the disconnected
+    // speedtest does), so only Windows and Linux stage it into app data.
+    if TargetOs::current() != TargetOs::Macos {
+        if let Err(error) = copy_seed_core_asset(&runtime_paths, &seed_dir) {
             tracing::warn!(
                 ?error,
                 "failed to copy packaged core seed assets at startup"
             );
         }
     }
+    let core_seed_resource_dir = Some(seed_dir);
     let runner: Arc<dyn ProcessRunner> = Arc::new(StdProcessRunner::with_log_sink(Arc::new(
         TauriProcessLogSink {
             app: app.handle().clone(),

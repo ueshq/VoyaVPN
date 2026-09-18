@@ -27,8 +27,9 @@ const tunnelService = resolve(appContents, "MacOS", "voyavpn-tunnel-service");
 // A cargo example since the package stopped shipping it; a copy here means a
 // stale bin target is being bundled again.
 const exportBindings = resolve(appContents, "MacOS", "export-bindings");
-// macOS packages ship no sing-box seed: the PacketTunnel's Libbox is the core.
-const coreSeeds = resolve(appContents, "Resources", "core-seeds");
+// The PacketTunnel's Libbox runs the connection; this seed only measures nodes
+// while disconnected.
+const singBoxCoreSeed = resolve(appContents, "Resources", "core-seeds", "sing_box", "sing-box");
 // Only entry points the provider actually calls: the appex links with
 // `-dead_strip`, which drops Libbox exports nothing references.
 const libboxSymbols = ["_LibboxSetup", "_LibboxNewCommandServer", "_LibboxGetTunnelFileDescriptor"];
@@ -234,7 +235,7 @@ function main() {
   requirePath(appex, tunnelLayout.label);
   requirePath(appexBinary, "PacketTunnel binary");
   requireAbsent(exportBindings, "Export bindings development tool");
-  requireAbsent(coreSeeds, "sing-box core seed");
+  requirePath(singBoxCoreSeed, "sing-box core seed");
   verifyLibboxRuntime();
 
   const appProfile = verifyProvisioningProfile(appProvisioningProfile, "macOS app", appBundleIdentifier);
@@ -260,6 +261,7 @@ function main() {
   if (existsSync(tunnelService)) {
     verifySignature(tunnelService, "Tunnel service binary");
   }
+  verifySignature(singBoxCoreSeed, "sing-box core seed binary");
   verifySignature(appex, tunnelLayout.label, [
     "com.apple.developer.networking.networkextension",
     ...profileRequiredEntitlements(packetTunnelProfile),

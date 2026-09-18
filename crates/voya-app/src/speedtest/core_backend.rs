@@ -31,6 +31,7 @@ pub struct ProcessSpeedtestCoreBackend {
     paths: AppPaths,
     core_seed_resource_dir: Option<PathBuf>,
     runner: Arc<dyn ProcessRunner>,
+    target_os: TargetOs,
     live: LiveProbeCores,
 }
 
@@ -45,8 +46,15 @@ impl ProcessSpeedtestCoreBackend {
             paths,
             core_seed_resource_dir,
             runner,
+            target_os: TargetOs::current(),
             live: LiveProbeCores::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_target_os(mut self, target_os: TargetOs) -> Self {
+        self.target_os = target_os;
+        self
     }
 }
 
@@ -59,6 +67,7 @@ impl SpeedtestCoreBackend for ProcessSpeedtestCoreBackend {
         let paths = self.paths.clone();
         let core_seed_resource_dir = self.core_seed_resource_dir.clone();
         let runner = Arc::clone(&self.runner);
+        let target_os = self.target_os;
         let live = self.live.clone();
         Box::pin(async move {
             check_cancelled(&cancel)?;
@@ -72,6 +81,7 @@ impl SpeedtestCoreBackend for ProcessSpeedtestCoreBackend {
                     config_file_name: &config_file_name,
                     entries: &entries,
                     core_seed_resource_dir: core_seed_resource_dir.as_ref(),
+                    target_os,
                     runner: blocking_runner.as_ref(),
                 })
             })
@@ -201,6 +211,7 @@ struct StartProbeCoreRequest<'request> {
     config_file_name: &'request str,
     entries: &'request [SpeedtestConfigEntry],
     core_seed_resource_dir: Option<&'request PathBuf>,
+    target_os: TargetOs,
     runner: &'request dyn ProcessRunner,
 }
 
@@ -228,11 +239,12 @@ fn start_probe_core(request: StartProbeCoreRequest<'_>) -> Result<StartedProbeCo
 
 fn spawn_probe_core(request: &StartProbeCoreRequest<'_>) -> Result<ProcessHandle> {
     // A probe core must be the same binary the runtime would launch, so the
-    // resolution (stage the seed, then discover it) is shared with `runtime`
-    // rather than copied here.
+    // resolution (packaged macOS seed, else stage-then-discover) is shared with
+    // `runtime` rather than copied here.
     let executable = resolve_core_executable(
         request.paths,
         request.core_seed_resource_dir.map(PathBuf::as_path),
+        request.target_os,
     )?;
     let launch = core_launch(executable, request.paths, request.config_file_name);
     let spawn = ProcessSpawn::from_core_launch(ProcessRole::Probe, &launch, true)?;
@@ -377,8 +389,8 @@ mod tests {
         )
     }
 
-    /// Writes a fake packaged sing-box next to the app for the
-    /// copy-then-discover path to stage.
+    /// Writes a fake packaged sing-box next to the app so both the macOS
+    /// "run the seed directly" path and the copy-then-discover path resolve.
     fn seed_core_binary(paths: &AppPaths) -> (PathBuf, PathBuf) {
         let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
         let seed_exe = seed_root
@@ -444,7 +456,8 @@ mod tests {
             paths.clone(),
             Some(seed_root),
             Arc::new(runner.clone()),
-        );
+        )
+        .with_target_os(TargetOs::Linux);
 
         backend
             .start(Vec::new(), Arc::new(AtomicBool::new(false)))
@@ -457,6 +470,32 @@ mod tests {
         assert_eq!(spawns.len(), 1);
         assert_eq!(spawns[0].executable, app_data_exe);
         assert!(app_data_exe.exists());
+    }
+
+    /// macOS launches the seed inside the signed bundle instead of a copy.
+    #[tokio::test]
+    async fn process_speedtest_core_backend_uses_packaged_seed_directly_on_macos() {
+        let paths = test_paths();
+        let (seed_root, seed_exe) = seed_core_binary(&paths);
+        let runner = RecordingRunner::default();
+        let backend = ProcessSpeedtestCoreBackend::new(
+            paths.clone(),
+            Some(seed_root),
+            Arc::new(runner.clone()),
+        )
+        .with_target_os(TargetOs::Macos);
+
+        backend
+            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
+            .await
+            .expect("speedtest test operation should succeed");
+
+        let app_data_exe =
+            paths.core_bin_file(CORE_DIR_NAME, executable_name_for_current_os("sing-box"));
+        let spawns = runner.spawns();
+        assert_eq!(spawns.len(), 1);
+        assert_eq!(spawns[0].executable, seed_exe);
+        assert!(!app_data_exe.exists());
     }
 
     #[tokio::test]

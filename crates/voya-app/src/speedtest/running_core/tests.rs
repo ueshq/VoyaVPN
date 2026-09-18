@@ -3,6 +3,7 @@ use std::sync::Mutex as StdMutex;
 use voya_core::{ProfileExItem, ProfileProtocol, ServerEndpoint};
 
 use super::*;
+use crate::speedtest::tests::{RecordingCoreBackend, RecordingProbe};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RecordedDelay {
@@ -73,18 +74,32 @@ impl RunningCoreDelay for FakeDelay {
     }
 }
 
-fn manager(core: FakeCore) -> (SpeedtestManager, Arc<FakeCore>) {
+struct Harness {
+    manager: SpeedtestManager,
+    core: Arc<FakeCore>,
+    probe: Arc<RecordingProbe>,
+    probe_cores: Arc<RecordingCoreBackend>,
+}
+
+fn manager(core: FakeCore) -> Harness {
     let core = Arc::new(core);
+    let probe = Arc::new(RecordingProbe::default());
+    let probe_cores = Arc::new(RecordingCoreBackend::default());
     let paths = AppPaths::new(
         std::env::temp_dir().join(format!("voyavpn-running-core-{}", uuid::Uuid::new_v4())),
     );
-    (
-        SpeedtestManager::through_running_core(
-            paths,
-            Arc::clone(&core) as Arc<dyn RunningCoreProbe>,
-        ),
-        core,
+    let manager = SpeedtestManager::with_probe_and_backend(
+        paths,
+        Arc::clone(&probe) as Arc<dyn SpeedtestProbe>,
+        Arc::clone(&probe_cores) as Arc<dyn SpeedtestCoreBackend>,
     )
+    .with_running_core(Arc::clone(&core) as Arc<dyn RunningCoreProbe>);
+    Harness {
+        manager,
+        core,
+        probe,
+        probe_cores,
+    }
 }
 
 async fn database_with(profiles: &[ProfileItem]) -> Database {
@@ -153,33 +168,56 @@ fn outcome_of(run: &SpeedtestRunResult, index_id: &str) -> (SpeedtestOutcome, Op
     (result.outcome, result.delay)
 }
 
+/// Disconnected, nothing tunnels the probe's traffic, so the packaged seed
+/// measures every node directly.
 #[tokio::test]
-async fn running_core_speedtest_needs_a_connection() {
-    let database = database_with(&[vmess("a"), vmess("b")]).await;
-    let (manager, core) = manager(FakeCore::default());
+async fn running_core_speedtest_uses_probe_cores_while_disconnected() {
+    let database = database_with(&[vmess("a"), vmess("b"), wireguard("wg")]).await;
+    let Harness {
+        manager,
+        core,
+        probe,
+        probe_cores,
+    } = manager(FakeCore::default());
 
     let run = manager
-        .run_with_callback(&database, &AppConfig::default(), ids(&["a", "b"]), |_| {})
+        .run_with_callback(
+            &database,
+            &AppConfig::default(),
+            ids(&["a", "b", "wg"]),
+            |_| {},
+        )
         .await
         .expect("run");
 
     assert!(core.requests().is_empty());
-    assert_eq!(outcome_of(&run, "a").0, SpeedtestOutcome::NotConnected);
-    assert_eq!(outcome_of(&run, "b").0, SpeedtestOutcome::NotConnected);
+    assert_eq!(probe_cores.starts().len(), 1);
+    assert_eq!(probe.calls().len(), 3, "a probe core tests WireGuard too");
+    for id in ["a", "b", "wg"] {
+        assert_eq!(
+            outcome_of(&run, id),
+            (SpeedtestOutcome::Completed, Some(44))
+        );
+    }
     let stored = database
         .profile_exs()
         .get("a")
         .await
         .expect("read")
         .expect("row");
-    assert_eq!(stored.delay, -1);
+    assert_eq!(stored.delay, 44);
 }
 
 #[tokio::test]
 async fn running_core_speedtest_maps_the_core_answers() {
     let database =
         database_with(&[vmess("ok"), vmess("stale"), vmess("slow"), wireguard("wg")]).await;
-    let (manager, core) = manager(FakeCore {
+    let Harness {
+        manager,
+        core,
+        probe_cores,
+        ..
+    } = manager(FakeCore {
         connected: true,
         answers: vec![("ok", Ok(88)), ("stale", Err(404)), ("slow", Err(504))],
         ..FakeCore::default()
@@ -208,6 +246,10 @@ async fn running_core_speedtest_maps_the_core_answers() {
     );
     assert_eq!(outcome_of(&run, "slow").0, SpeedtestOutcome::TimedOut);
     assert_eq!(outcome_of(&run, "wg").0, SpeedtestOutcome::Skipped);
+    assert!(
+        probe_cores.starts().is_empty(),
+        "a connected tunnel would carry a probe core's traffic"
+    );
     let requests = core.requests();
     assert_eq!(
         requests.len(),
@@ -230,7 +272,7 @@ async fn running_core_speedtest_maps_the_core_answers() {
 async fn running_core_speedtest_stops_waiting_on_cancel() {
     let database = database_with(&[vmess("a"), vmess("b")]).await;
     let cancel_probe = Arc::new(AtomicBool::new(false));
-    let (manager, _core) = manager(FakeCore {
+    let Harness { manager, .. } = manager(FakeCore {
         connected: true,
         answers: vec![("a", Ok(10)), ("b", Ok(10))],
         block_until_cancelled: Some(Arc::clone(&cancel_probe)),

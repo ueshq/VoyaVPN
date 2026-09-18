@@ -861,31 +861,15 @@ describe("ProfilesScreen", () => {
     ).toBeInTheDocument();
   });
 
-  it("waits for a connection before testing on macOS, where the VPN measures nodes", async () => {
+  // The backend picks how to measure (probe cores, or the connected tunnel), so
+  // the page never waits for a connection.
+  it("tests on macOS without a connection", async () => {
     mockProfileList(makeProfiles(2));
     useRuntimeEventStore.setState({ tun: macosTun });
     try {
       renderProfiles();
       await screen.findByText("Server 0");
       const testAll = within(screen.getByRole("toolbar")).getByRole("button", { name: "Test all" });
-      expect(testAll).toBeDisabled();
-      expect(testAll.parentElement).toHaveAttribute(
-        "title",
-        "Connect first: on macOS, nodes are tested through the running VPN",
-      );
-
-      act(() => {
-        useRuntimeEventStore.setState({
-          coreState: {
-            activeProfileId: "profile-0",
-            activeTunBackend: "macosPacketTunnel",
-            mainPid: null,
-            prePid: null,
-            state: "connected",
-            connectedDurationMs: 0,
-          },
-        });
-      });
       expect(testAll).toBeEnabled();
       await userEvent.click(testAll);
       expect(ipcMocks.runSpeedtest).toHaveBeenCalledOnce();

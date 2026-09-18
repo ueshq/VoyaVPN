@@ -1,11 +1,10 @@
 # Bundled sing-box seed
 
-This directory holds the sing-box binary that ships inside the Windows and Linux
-packages as a **seed**. macOS packages carry none: the PacketTunnel extension
-links sing-box (Libbox) itself, so `scripts/tauri/core-seeds.mjs` skips the seed
-overlay for darwin targets. The seed is still staged here on macOS hosts for
-developer tooling such as `pnpm check:sing-box`. At startup the Windows/Linux
-app copies the seed into the per-user core dir:
+This directory holds the sing-box binary that ships inside every package as a
+**seed**. On macOS the connection runs in the PacketTunnel extension (Libbox),
+so the seed only backs speedtests while disconnected, and the app launches it in
+place from the signed bundle. At startup the Windows/Linux app copies the seed
+into the per-user core dir:
 
 ```
 resources/core-seeds/<core>/        ->  {appConfigDir}/bin/<core>/

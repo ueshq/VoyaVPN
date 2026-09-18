@@ -401,7 +401,6 @@
         "settingsDescription": "对所有延迟测试生效。",
         "nothingToTest": "暂无节点可测试",
         "runningElsewhere": "正在进行其他测速",
-        "connectFirst": "连接后才能测速：macOS 通过已连接的 VPN 测试节点",
         "saving": "正在保存…",
         "saved": "已保存，下次测速生效。"
       },
@@ -795,7 +794,6 @@
       "failed": "测试失败",
       "invalidProfile": "节点无效",
       "noAvailablePort": "没有空闲的本地端口",
-      "notConnected": "连接后可测速",
       "proxyConnectFailed": "代理连接失败",
       "proxyConnectionClosed": "代理连接已关闭",
       "proxyConnectionRefused": "代理连接被拒绝",

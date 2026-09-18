@@ -21,35 +21,28 @@ impl SpeedtestManager {
         )
     }
 
-    /// The macOS manager: nodes are measured by the running PacketTunnel core,
-    /// since the package ships no sing-box to launch a probe core with.
-    #[must_use]
-    pub fn through_running_core(paths: AppPaths, running_core: Arc<dyn RunningCoreProbe>) -> Self {
-        Self::with_backend(paths, SpeedtestBackend::RunningCore(running_core))
-    }
-
     #[must_use]
     pub(super) fn with_probe_and_backend(
         paths: AppPaths,
         probe: Arc<dyn SpeedtestProbe>,
         core_backend: Arc<dyn SpeedtestCoreBackend>,
     ) -> Self {
-        Self::with_backend(
-            paths,
-            SpeedtestBackend::ProbeCore {
-                probe,
-                core: core_backend,
-            },
-        )
-    }
-
-    fn with_backend(paths: AppPaths, backend: SpeedtestBackend) -> Self {
         Self {
-            backend,
+            probe,
+            core_backend,
+            running_core: None,
             paths,
             target_os: TargetOs::current(),
             active_cancel: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// macOS: while the PacketTunnel core is connected, measure through it.
+    /// The check runs per test, so a disconnected app still uses probe cores.
+    #[must_use]
+    pub fn with_running_core(mut self, running_core: Arc<dyn RunningCoreProbe>) -> Self {
+        self.running_core = Some(running_core);
+        self
     }
 
     #[must_use]
@@ -91,30 +84,23 @@ impl SpeedtestManager {
         let selected = select_test_items(database, config, &index_ids).await?;
         clear_previous_results(database, &selected, &on_result).await?;
 
-        let mut results = match &self.backend {
-            SpeedtestBackend::ProbeCore { probe, core } => {
-                self.run_batch_items(
-                    probe.as_ref(),
-                    core.as_ref(),
-                    database,
-                    config,
-                    &selected,
-                    Arc::clone(&cancel),
-                    &on_result,
-                )
+        let connected = match &self.running_core {
+            Some(running_core) => running_core.connect().await,
+            None => None,
+        };
+        let mut results = if let Some(core) = connected {
+            self.run_through_running_core(
+                core,
+                database,
+                config,
+                &selected,
+                Arc::clone(&cancel),
+                &on_result,
+            )
+            .await?
+        } else {
+            self.run_batch_items(database, config, &selected, Arc::clone(&cancel), &on_result)
                 .await?
-            }
-            SpeedtestBackend::RunningCore(running_core) => {
-                self.run_through_running_core(
-                    running_core.as_ref(),
-                    database,
-                    config,
-                    &selected,
-                    Arc::clone(&cancel),
-                    &on_result,
-                )
-                .await?
-            }
         };
         let completed_count = u32::try_from(results.len()).unwrap_or(u32::MAX);
 
@@ -144,9 +130,7 @@ impl SpeedtestManager {
         if let Err(error) = self.cancel() {
             tracing::warn!(?error, "failed to cancel speedtest during shutdown");
         }
-        if let SpeedtestBackend::ProbeCore { core, .. } = &self.backend {
-            core.stop_all();
-        }
+        self.core_backend.stop_all();
     }
 
     pub fn cancel(&self) -> Result<bool> {
@@ -172,11 +156,8 @@ impl SpeedtestManager {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     async fn run_batch_items<F>(
         &self,
-        probe: &dyn SpeedtestProbe,
-        core_backend: &dyn SpeedtestCoreBackend,
         database: &Database,
         config: &AppConfig,
         items: &[ServerTestItem],
@@ -201,7 +182,7 @@ impl SpeedtestManager {
                 .iter()
                 .map(|prepared| prepared.entry.clone())
                 .collect::<Vec<_>>();
-            let session = match core_backend.start(entries, Arc::clone(&cancel)).await {
+            let session = match self.core_backend.start(entries, Arc::clone(&cancel)).await {
                 Ok(session) => session,
                 Err(SpeedtestError::Cancelled) => break,
                 Err(error) => {
@@ -224,7 +205,7 @@ impl SpeedtestManager {
                     break;
                 }
                 let result = run_realping(
-                    probe,
+                    self.probe.as_ref(),
                     database,
                     config,
                     prepared.item.clone(),

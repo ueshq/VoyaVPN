@@ -59,9 +59,8 @@ pub async fn update_srs_assets(
 /// into `bin/<core>/`. This is the recovery action behind the missing-core prompt: the
 /// startup seed copy already runs automatically, but this lets the UI re-run it on demand
 /// when the binary is absent (e.g. cleared bin dir, antivirus removal, or a skipped first run).
-// `async` because it copies core binaries; done inline that filesystem work
-// would stall the webview's main thread. macOS has no seed (the PacketTunnel
-// extension carries sing-box), so there it always reports `SeedMissing`.
+// `async` because it copies (and on macOS, scans) core binaries; done inline
+// that filesystem work would stall the webview's main thread.
 #[tauri::command]
 #[specta::specta]
 pub async fn install_core_seed(
@@ -76,6 +75,18 @@ pub async fn install_core_seed(
     let runtime_paths = state.runtime_paths().clone();
 
     run_blocking("core seed install", move || {
+        // macOS launches the seed inside the signed bundle; nothing is copied.
+        if TargetOs::current() == TargetOs::Macos {
+            if let Some(executable) = discover_packaged_seed_executable(&seed_dir, TargetOs::Macos)
+                .map_err(core_seed_install_error)?
+            {
+                return Ok(CoreSeedInstallResult {
+                    status: CoreSeedInstallStatus::AlreadyInstalled,
+                    installed_files: vec![executable.to_string_lossy().into_owned()],
+                });
+            }
+        }
+
         let outcome =
             copy_seed_core_asset(&runtime_paths, &seed_dir).map_err(core_seed_install_error)?;
 

@@ -12,7 +12,10 @@ use voya_core::{
 };
 use voya_db::{Database, DbError};
 use voya_platform::{
-    coreinfo::{copy_seed_core_asset, core_launch, discover_executable, CoreInfoError, TargetOs},
+    coreinfo::{
+        copy_seed_core_asset, core_launch, discover_executable, discover_packaged_seed_executable,
+        CoreInfoError, TargetOs,
+    },
     filesystem,
     paths::{AppPaths, PathError},
 };
@@ -287,11 +290,14 @@ impl<'runtime> RuntimeManager<'runtime> {
     ) -> Result<CoreProcessSpec, RuntimeError> {
         let spec = if self.target_os == TargetOs::Macos {
             // The PacketTunnel extension runs sing-box through Libbox; the
-            // macOS package ships no executable for a child process.
+            // packaged seed only measures nodes while disconnected.
             CoreProcessSpec::native_tun()
         } else {
-            let executable =
-                resolve_core_executable(&self.paths, self.core_seed_resource_dir.as_deref())?;
+            let executable = resolve_core_executable(
+                &self.paths,
+                self.core_seed_resource_dir.as_deref(),
+                self.target_os,
+            )?;
             CoreProcessSpec::new(core_launch(executable, &self.paths, config_file_name))
         };
 
@@ -308,17 +314,41 @@ impl<'runtime> RuntimeManager<'runtime> {
 /// Locates the sing-box executable, staging the packaged seed if needed.
 ///
 /// Shared with the speedtest backend: a probe core has to resolve exactly the
-/// binary the runtime would launch. Windows and Linux only; the macOS package
-/// ships no executable (the PacketTunnel extension links sing-box instead).
+/// binary the runtime would launch.
 pub(crate) fn resolve_core_executable(
     paths: &AppPaths,
     core_seed_resource_dir: Option<&Path>,
+    target_os: TargetOs,
 ) -> Result<PathBuf, CoreInfoError> {
+    if let Some(executable) = packaged_seed_executable(core_seed_resource_dir, target_os)? {
+        return Ok(executable);
+    }
+
     if let Some(seed_resource_dir) = core_seed_resource_dir {
         copy_seed_core_asset(paths, seed_resource_dir)?;
     }
 
     discover_executable(paths)
+}
+
+/// On macOS the seed inside the app bundle is launched where it lies.
+///
+/// Copying it into app data would strip the bundle's code signature context and
+/// break the notarized launch, so the copy-then-discover path is Windows/Linux
+/// only.
+fn packaged_seed_executable(
+    core_seed_resource_dir: Option<&Path>,
+    target_os: TargetOs,
+) -> Result<Option<PathBuf>, CoreInfoError> {
+    if target_os != TargetOs::Macos {
+        return Ok(None);
+    }
+
+    let Some(seed_resource_dir) = core_seed_resource_dir else {
+        return Ok(None);
+    };
+
+    discover_packaged_seed_executable(seed_resource_dir, target_os)
 }
 
 /// Failure to write a generated core config, with the path that failed.
@@ -776,9 +806,10 @@ mod tests {
         assert!(contexts.main_result.context.is_tun_enabled);
     }
 
-    /// The macOS package ships no sing-box executable: connecting must not
-    /// look for one, and the config it hands the PacketTunnel carries a probe
-    /// outbound for every node so the speedtest can measure through it.
+    /// The PacketTunnel runs the macOS connection: connecting must not look
+    /// for a sing-box executable, and the config it hands the PacketTunnel
+    /// carries a probe outbound for every node so the speedtest can measure
+    /// through it while connected.
     #[tokio::test]
     async fn runtime_macos_native_tun_writes_single_tun_config() {
         let database = Database::connect_in_memory()

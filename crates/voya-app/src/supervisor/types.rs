@@ -86,8 +86,8 @@ impl ClashApiAccess {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CoreProcessSpec {
     /// How to start sing-box as a child process. `None` for a config only a
-    /// native TUN backend runs: the macOS PacketTunnel carries sing-box itself,
-    /// so that build ships no executable to point at.
+    /// native TUN backend runs: the macOS PacketTunnel carries sing-box itself
+    /// and the connection never launches a child core.
     pub launch: Option<CoreLaunch>,
     pub config_path: Option<PathBuf>,
     pub display_log: bool,
