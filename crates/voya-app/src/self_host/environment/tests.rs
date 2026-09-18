@@ -150,14 +150,7 @@ fn nat_without_a_forward_needs_one_when_unprobed() {
     );
     let report = classify_family(&evidence);
     assert_eq!(report.reachability, SelfHostReachability::NeedsPortForward);
-    assert_eq!(
-        report.reasons,
-        [
-            Reason::BehindNat,
-            Reason::UpnpUnavailable,
-            Reason::NodeNotRunning
-        ]
-    );
+    assert_eq!(report.reasons, [Reason::BehindNat, Reason::UpnpUnavailable]);
 }
 
 #[test]

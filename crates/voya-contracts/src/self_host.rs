@@ -173,6 +173,9 @@ pub struct SelfHostShareLink {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelfHostState {
     pub config: SelfHostConfig,
+    /// What every setting falls back to: the page shows these as placeholders
+    /// and saves them to reset the node.
+    pub defaults: SelfHostConfig,
     pub runtime: SelfHostRuntime,
     /// Links for every enabled protocol at every usable address.
     pub share_links: Vec<SelfHostShareLink>,
@@ -274,7 +277,6 @@ pub enum SelfHostReasonCode {
     NoPublicAddress,
     Ipv6FirewallUnknown,
     TunActive,
-    NodeNotRunning,
     FirewallRuleMissing,
 }
 

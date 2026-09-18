@@ -566,6 +566,7 @@ impl SelfHostManager {
     fn build_state(&self, record: &SelfHostRecordV1, node: &NodeState) -> SelfHostState {
         SelfHostState {
             config: record.config.clone(),
+            defaults: SelfHostConfig::default(),
             runtime: SelfHostRuntime {
                 status: node.status,
                 problem: node.problem,

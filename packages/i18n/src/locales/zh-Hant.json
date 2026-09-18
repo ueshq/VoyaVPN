@@ -606,22 +606,25 @@
     },
     "selfHost": {
       "enable": "託管節點",
-      "enableHint": "開啟託管後，本機會執行 VLESS 與 Shadowsocks 伺服器，其他裝置可將本機作為連上網際網路的出口。",
-      "exitWarning": "收到連結的裝置會透過本機的網路與公網位址連上網際網路。請只把連結分享給信任的人。",
+      "openSettings": "開啟節點設定",
       "actionFailed": "自建節點變更失敗",
       "status": {
-        "stopped": "未託管",
+        "stopped": "未開啟",
         "starting": "正在啟動…",
         "running": "託管中",
         "retrying": "正在重新啟動…",
-        "failed": "未執行"
+        "failed": "啟動失敗"
+      },
+      "statusHint": {
+        "running": "其他裝置可透過本機上網。",
+        "stopped": "開啟後，其他裝置可透過本機上網。"
       },
       "problem": {
-        "noProtocol": "請在下方至少開啟一種協定。",
-        "portInUse": "連接埠 {{port}} 已被其他程式使用，請在下方改用其他連接埠。",
+        "noProtocol": "請在節點設定中至少開啟一種協定。",
+        "portInUse": "連接埠 {{port}} 已被佔用，請在節點設定中更換。",
         "coreMissing": "缺少 sing-box 核心，請重新安裝 VoyaVPN。",
-        "coreExited": "伺服器意外停止。",
-        "startFailed": "伺服器無法啟動。"
+        "coreExited": "節點意外停止。",
+        "startFailed": "節點無法啟動。"
       },
       "stats": {
         "connections": "連線",
@@ -630,16 +633,19 @@
       },
       "links": {
         "title": "分享連結",
-        "hint": "在另一台裝置上掃描 QR 碼或貼上連結即可使用。VoyaVPN、v2rayN、Shadowrocket 等大多數用戶端都支援。",
-        "emptyHint": "尚無可用位址。請執行網路檢測以取得本機公網位址，或在下方設定中填寫固定位址。",
-        "notRunning": "只有在託管中時連結才可使用。",
+        "hint": "在另一台裝置上掃碼或貼上連結即可使用。",
+        "trustWarning": "請只分享給信任的人，對方會使用本機的網路和公網 IP。",
+        "emptyHint": "還沒有可用位址。先檢測網路，或在節點設定中填寫固定位址。",
+        "notRunning": "開啟託管後連結才能使用。",
+        "link": "連結",
         "copy": "複製",
-        "copyAll": "全部複製",
         "copied": "已複製",
-        "showQr": "顯示 QR 碼",
         "rotate": "重設金鑰",
-        "rotateTitle": "要重設節點金鑰嗎？",
-        "rotateDescription": "先前分享的所有連結都會失效，裝置需要使用新連結。",
+        "rotateTitle": "重設金鑰？",
+        "rotateDescription": "已分享的連結將全部失效。",
+        "summaryReady": "連結已就緒",
+        "summaryNotRunning": "開啟託管後可用",
+        "summaryEmpty": "暫無可用位址",
         "addressKind": {
           "custom": "固定位址",
           "ipv4": "IPv4",
@@ -647,23 +653,21 @@
         }
       },
       "network": {
-        "title": "網路檢測",
-        "run": "檢測網路",
+        "title": "檢測網路",
+        "run": "重新檢測",
         "checking": "正在檢測…",
-        "never": "尚未檢測。檢測會取得本機公網位址，並測試其他裝置能否連線到節點。",
+        "notChecked": "尚未檢測網路",
         "checkedAt": "檢測於 {{time}}",
         "none": "無",
-        "verified": "已從網際網路實測。",
-        "inferred": "依本機網路推測，未經外部實測。",
-        "localAddresses": "本機位址",
-        "probeNote": "測試從 Cloudflare 網路發起連線。通過測試不代表中國大陸到本機的線路快速或未被封鎖，請以實際使用節點的裝置連線結果為準。",
-        "nat": {
-          "none": "直接連上網際網路",
-          "nat": "位於路由器之後",
-          "carrierGrade": "電信商級 NAT",
-          "double": "位於兩層路由器之後",
-          "noConnectivity": "無連線",
-          "unknown": "未知"
+        "localAddress": "本機區域網路位址：{{addresses}}",
+        "probeNote": "檢測從 Cloudflare 發起，不代表中國大陸到本機的線路通暢。",
+        "verdict": {
+          "reachable": "其他裝置可以連線",
+          "likelyReachable": "其他裝置應該可以連線",
+          "needsPortForward": "本機在路由器後面，需要路由器轉送節點連接埠",
+          "unreachable": "其他裝置無法連線",
+          "noConnectivity": "本機沒有連網",
+          "unknown": "無法判斷"
         },
         "reachability": {
           "reachable": "可連線",
@@ -674,78 +678,59 @@
           "unknown": "未知"
         },
         "reasons": {
-          "publicAddressOnDevice": "本機直接持有公網位址，其他裝置可以直接連線。",
-          "behindNat": "本機與網際網路之間有路由器，需要路由器把節點連接埠轉送到本機。",
-          "carrierGradeNat": "電信商讓多位用戶共用一個公網位址，外部裝置無法連入。請向電信商申請公網 IP、改用 IPv6，或在雲端伺服器上託管。",
-          "doubleNat": "網路中串接了兩台路由器。請在兩台路由器上都設定連接埠轉送，或把數據機改為橋接模式。",
-          "portMapped": "路由器已自動把節點連接埠轉送到本機（UPnP）。",
-          "upnpUnavailable": "路由器不支援 UPnP。請在路由器設定中把節點的 TCP 與 UDP 連接埠轉送到本機。",
-          "upnpFailed": "路由器拒絕轉送連接埠。請手動設定轉送，或改用其他連接埠。",
-          "probeReachable": "測試服務從網際網路成功連線到所有節點連接埠。",
-          "probeTimedOut": "測試連線逾時：路由器或防火牆在連線抵達節點前將其丟棄。",
-          "probeRefused": "測試連線被拒絕：此位址上沒有程式接受連線。請檢查路由器把連接埠轉送到哪裡。",
-          "probeUnavailable": "可達性測試服務沒有回應，以上為推測結果。",
-          "noPublicAddress": "本機在此位址類型下沒有網際網路連線。",
-          "ipv6FirewallUnknown": "許多路由器預設封鎖 IPv6 連入連線。若裝置無法連線，請在路由器的 IPv6 防火牆中允許節點連接埠。",
-          "tunActive": "本機自身的 VPN 連線會遮蔽真實網路。請先中斷連線再重新檢測。",
-          "nodeNotRunning": "節點未在託管，無法測試。請開啟託管後重新檢測。",
-          "firewallRuleMissing": "Windows 防火牆可能會封鎖節點。請用下方按鈕允許。"
-        },
-        "upnp": {
-          "title": "路由器連接埠轉送",
-          "disabled": "關閉",
-          "noGateway": "路由器未回應 UPnP",
-          "mapped": "正在轉送 {{ports}}",
-          "failed": "路由器拒絕"
+          "publicAddressOnDevice": "本機有公網位址，可直接連線。",
+          "behindNat": "本機在路由器後面，需要路由器轉送節點連接埠。",
+          "carrierGradeNat": "電信業者讓多個使用者共用公網位址，外部無法連入。可申請公網 IP、改用 IPv6，或改在雲端伺服器上託管。",
+          "doubleNat": "網路裡串了兩台路由器。請在兩台上都轉送連接埠，或把數據機改為橋接。",
+          "portMapped": "路由器已自動轉送節點連接埠。",
+          "upnpUnavailable": "路由器不支援自動轉送，請手動把節點連接埠（TCP 和 UDP）轉送到本機。",
+          "upnpFailed": "路由器拒絕了自動轉送，請手動轉送或更換連接埠。",
+          "probeReachable": "已從網際網路連通全部節點連接埠。",
+          "probeTimedOut": "連線逾時：被路由器或防火牆攔截。",
+          "probeRefused": "連線被拒絕：請檢查連接埠轉送的目標是否為本機。",
+          "probeUnavailable": "檢測服務暫時無法使用，結果為推測。",
+          "noPublicAddress": "本機沒有此類型的公網連線。",
+          "ipv6FirewallUnknown": "很多路由器預設攔截 IPv6 連入。連不上時，請在路由器的 IPv6 防火牆中放行節點連接埠。",
+          "tunActive": "本機正連著 VPN，會干擾檢測。請中斷後重試。",
+          "firewallRuleMissing": "Windows 防火牆可能攔截節點，請點選「放行」。"
         },
         "firewall": {
-          "title": "Windows 防火牆",
-          "notManaged": "不受管理",
-          "rulePresent": "已允許",
-          "ruleMissing": "沒有 VoyaVPN 的規則",
-          "unknown": "無法讀取",
-          "allow": "允許"
+          "allow": "放行"
         },
         "selfTest": {
-          "title": "節點自我檢測",
-          "passed": "正常",
-          "failed": "失敗",
-          "skipped": "未測試",
-          "vlessFailed": "本機的測試用戶端無法登入 VLESS 節點。偽裝網站很可能不相容 REALITY，請改用其他網站，例如 www.apple.com。",
-          "shadowsocksFailed": "本機的測試用戶端無法使用 Shadowsocks 節點。請在執行記錄中查看節點的錯誤。"
+          "vlessFailed": "VLESS 無法使用：偽裝網站很可能不相容 REALITY。請在節點設定中清空它以使用預設值。",
+          "shadowsocksFailed": "Shadowsocks 無法使用，請在執行記錄中查看原因。"
         }
       },
       "config": {
         "title": "節點設定",
+        "description": "變更會自動儲存。修改協定、連接埠或偽裝網站會重新啟動節點。",
         "deviceLabel": "名稱",
-        "deviceLabelHint": "顯示在每條連結名稱的開頭。留空則使用 VoyaVPN。",
+        "deviceLabelHint": "顯示在連結名稱開頭。",
         "vless": "VLESS + REALITY",
-        "vlessHint": "推薦。流量看起來像在瀏覽下方的網站，最不容易被封鎖。",
+        "vlessHint": "推薦，最不易被封鎖。",
         "vlessPort": "VLESS 連接埠",
         "shadowsocks": "Shadowsocks 2022",
-        "shadowsocksHint": "輕量且支援 UDP，但比 REALITY 更容易被識別。",
+        "shadowsocksHint": "輕量，支援 UDP，但更容易被識別。",
         "shadowsocksPort": "Shadowsocks 連接埠",
-        "portAuto": "節點首次啟動時自動選擇。",
-        "portHint": "若路由器不支援 UPnP，請在路由器上轉送此 TCP 與 UDP 連接埠。",
+        "portAuto": "自動",
+        "portHint": "範圍 1024–65535。",
         "realityServer": "偽裝網站",
-        "realityServerHint": "一個支援 TLS 1.3 的大型 HTTPS 網站，最好離本機較近。未通過驗證的訪客會看到這個網站。",
-        "realityServerPort": "偽裝網站連接埠",
+        "realityServerHint": "支援 TLS 1.3 的大型 HTTPS 網站。可加連接埠，如 example.com:8443。",
         "customAddress": "固定位址",
-        "customAddressHint": "連結使用的 DDNS 網域名稱或固定 IP。留空則使用網路檢測找到的位址。",
+        "customAddressHint": "連結使用的網域（DDNS）或固定 IP。",
+        "customAddressAuto": "自動偵測",
+        "advanced": "進階選項",
+        "noProtocol": "未開啟協定",
         "upnp": "自動轉送連接埠",
-        "upnpHint": "節點執行時請求路由器轉送節點連接埠（UPnP）。",
+        "upnpHint": "透過 UPnP 請求路由器轉送節點連接埠。",
         "allowLan": "允許存取區域網路",
-        "allowLanHint": "讓連線的裝置可以存取本網路中的印表機等裝置。本機自身始終無法存取。",
+        "allowLanHint": "連線的裝置可存取本網路中的其他裝置，但始終無法存取本機。",
         "blockBittorrent": "封鎖 BitTorrent",
-        "blockBittorrentHint": "避免本機的網路服務供應商收到版權申訴。"
-      },
-      "connect": {
-        "title": "使用其他裝置的節點",
-        "description": "在託管節點的裝置上開啟「自建節點」，複製連結或顯示 QR 碼，然後在這裡新增。",
-        "paste": "貼上連結",
-        "scan": "掃描螢幕 QR 碼",
-        "more": "更多新增方式",
-        "goToNodes": "開啟節點頁"
+        "blockBittorrentHint": "避免收到版權投訴。",
+        "reset": "還原預設設定",
+        "resetTitle": "還原預設設定？",
+        "resetDescription": "所有選項還原預設，連接埠會重新自動選擇，已分享的連結需要重新分享。金鑰不變。"
       }
     }
   },

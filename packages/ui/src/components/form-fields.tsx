@@ -50,6 +50,7 @@ type TextFieldProps = FieldProps & {
   inputClassName?: string;
   inputMode?: "numeric";
   onBlur?: () => void;
+  placeholder?: string;
   required?: boolean;
   type?: "password" | "text";
   validate?: (value: string) => string | undefined;
@@ -61,7 +62,7 @@ function descriptionIds(id: string, description: ReactNode, error: string | unde
 }
 
 function TextInputField({
-  addon, className, commitOnBlur = false, description, disabled, error, id, inputClassName, inputMode, label, layout, multiline, onBlur, onChange, onInvalid, required, type, validate, value,
+  addon, className, commitOnBlur = false, description, disabled, error, id, inputClassName, inputMode, label, layout, multiline, onBlur, onChange, onInvalid, placeholder, required, type, validate, value,
 }: TextFieldProps & { multiline?: boolean }) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -83,6 +84,7 @@ function TextInputField({
         inputMode={inputMode}
         onChange={(event) => input.onChange(event.target.value)}
         onBlur={() => { input.onBlur(); onBlur?.(); }}
+        placeholder={placeholder}
         type={multiline ? undefined : type}
       />
     </FieldLayout>

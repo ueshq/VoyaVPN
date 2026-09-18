@@ -1278,21 +1278,23 @@ export async function installTauriSmokeMock(
     }
 
     function makeSelfHostState(): SelfHostState {
+      const config: SelfHostState["config"] = {
+        allowLanAccess: false,
+        blockBittorrent: true,
+        customAddress: null,
+        deviceLabel: "",
+        enabled: false,
+        realityServerName: "www.apple.com",
+        realityServerPort: 443,
+        shadowsocksEnabled: true,
+        shadowsocksPort: 0,
+        upnpEnabled: true,
+        vlessEnabled: true,
+        vlessPort: 0,
+      };
       return {
-        config: {
-          allowLanAccess: false,
-          blockBittorrent: true,
-          customAddress: null,
-          deviceLabel: "",
-          enabled: false,
-          realityServerName: "www.apple.com",
-          realityServerPort: 443,
-          shadowsocksEnabled: true,
-          shadowsocksPort: 0,
-          upnpEnabled: true,
-          vlessEnabled: true,
-          vlessPort: 0,
-        },
+        config,
+        defaults: { ...config },
         environment: null,
         firewallRuleSupported: false,
         runtime: { detail: null, port: null, problem: null, status: "stopped" },
@@ -1311,7 +1313,7 @@ export async function installTauriSmokeMock(
           reachability: running ? "reachable" : "needsPortForward",
           reasons: running
             ? ["behindNat", "portMapped", "probeReachable"]
-            : ["behindNat", "nodeNotRunning"],
+            : ["behindNat"],
           verifiedByProbe: running,
         },
         ipv6: {
@@ -1321,7 +1323,7 @@ export async function installTauriSmokeMock(
           reachability: running ? "unreachable" : "likelyReachable",
           reasons: running
             ? ["publicAddressOnDevice", "probeTimedOut", "ipv6FirewallUnknown"]
-            : ["publicAddressOnDevice", "ipv6FirewallUnknown", "nodeNotRunning"],
+            : ["publicAddressOnDevice", "ipv6FirewallUnknown"],
           verifiedByProbe: running,
         },
         localAddresses: [

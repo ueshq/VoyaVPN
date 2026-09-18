@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, QrCode } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -16,6 +16,7 @@ import {
 } from "@voya/ui/components/dialog";
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
+import { cn } from "@voya/ui/lib/utils";
 import { getErrorMessage } from "@voya/utils/error";
 import { generateQrCode } from "@/ipc/commands";
 import { profileShareQrQueryKey } from "@/ipc/query-keys";
@@ -26,15 +27,28 @@ type ShareQrDialogProps = {
   open: boolean;
 };
 
-export function ShareQrDialog({
+/**
+ * The QR code of `content`, drawn by the backend. Nothing is requested while
+ * `enabled` is false or the content is blank.
+ *
+ * The frame keeps its size from the first render, and a new `content` keeps
+ * the previous code up (dimmed) until its own arrives, so switching between
+ * links never empties the frame and the dialog around it never jumps.
+ */
+export function ShareQrImage({
+  className,
   content,
-  onOpenChange,
-  open,
-}: ShareQrDialogProps) {
+  enabled = true,
+}: {
+  className?: string;
+  content: string;
+  enabled?: boolean;
+}) {
   const { t } = useI18n();
   const qrCodeQuery = useQuery({
-    enabled: open && content.trim().length > 0,
+    enabled: enabled && content.trim().length > 0,
     gcTime: 0,
+    placeholderData: keepPreviousData,
     queryFn: () => generateQrCode(content),
     queryKey: profileShareQrQueryKey(content),
     refetchOnWindowFocus: false,
@@ -48,6 +62,44 @@ export function ShareQrDialog({
 
     return `data:${qrCodeQuery.data.mimeType};utf8,${encodeURIComponent(qrCodeQuery.data.svg)}`;
   }, [qrCodeQuery.data]);
+
+  if (qrCodeQuery.isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle aria-hidden="true" />
+        <AlertDescription>
+          {getErrorMessage(qrCodeQuery.error)}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const sizeClassName = cn("size-64 max-w-full", className);
+  return (
+    <div className="grid justify-items-center rounded-md border bg-background p-4">
+      {imageSource ? (
+        <img
+          alt={t("qr.generatedAlt")}
+          className={cn(
+            sizeClassName,
+            "transition-opacity duration-short",
+            qrCodeQuery.isPlaceholderData && "opacity-50",
+          )}
+          src={imageSource}
+        />
+      ) : (
+        <div aria-hidden="true" className={sizeClassName} />
+      )}
+    </div>
+  );
+}
+
+export function ShareQrDialog({
+  content,
+  onOpenChange,
+  open,
+}: ShareQrDialogProps) {
+  const { t } = useI18n();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -82,24 +134,7 @@ export function ShareQrDialog({
               />
             </div>
 
-            {imageSource ? (
-              <div className="grid justify-items-center rounded-md border bg-background p-4">
-                <img
-                  alt={t("qr.generatedAlt")}
-                  className="size-64 max-w-full"
-                  src={imageSource}
-                />
-              </div>
-            ) : null}
-
-            {qrCodeQuery.isError ? (
-              <Alert variant="destructive">
-                <AlertTriangle aria-hidden="true" />
-                <AlertDescription>
-                  {getErrorMessage(qrCodeQuery.error)}
-                </AlertDescription>
-              </Alert>
-            ) : null}
+            <ShareQrImage content={content} enabled={open} />
           </div>
         </DialogBody>
         <DialogFooter>

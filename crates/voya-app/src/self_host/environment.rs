@@ -88,14 +88,8 @@ pub fn classify_family(evidence: &FamilyEvidence) -> SelfHostFamilyReport {
             (probed(results, &mut reasons), true)
         }
         probe => {
-            match probe {
-                ProbeEvidence::NodeStopped => {
-                    reasons.insert(SelfHostReasonCode::NodeNotRunning);
-                }
-                ProbeEvidence::Unavailable => {
-                    reasons.insert(SelfHostReasonCode::ProbeUnavailable);
-                }
-                _ => {}
+            if *probe == ProbeEvidence::Unavailable {
+                reasons.insert(SelfHostReasonCode::ProbeUnavailable);
             }
             (inferred(evidence, nat), false)
         }

@@ -78,16 +78,43 @@ allows scripts only from its own origin.
 ## Screens
 
 **Self-hosted node**
-- The title row holds Check network and the Host a node switch, the switch
-  last as the page's primary control.
-- Cards in reading order: status (dot, state, live connections and traffic,
-  the "your address becomes their exit" warning), share links (one row per
-  protocol and address with QR and Copy; Copy all and Reset keys in the card
-  header), network check (one block per address family with public address,
-  NAT kind, a reachability badge, whether it was tested from the internet, and
-  every finding as a sentence that says what to do), node settings (settings
-  rows that save on change), and adding another device's node.
-- Reachability badges use the quiet status tints: success for tested
+- The title row is the `h1` alone: every control of this page lives in its
+  content.
+- The hosting card comes first and answers the page's two questions: is the
+  node on, and can other devices reach it. Its static title labels the Host a
+  node switch at the card's end; below it a dot and the state, with one
+  sentence on what that means for other devices. A problem replaces that
+  sentence in danger text, with an Open node settings button when the settings
+  can fix it. Live connections and traffic appear under a hairline only while
+  the node runs.
+- The network check closes the card, under another hairline: the overall
+  verdict (the better of the two address families) with its tint dot, the time
+  of the check and a Check network / Check again button, then one line per
+  family with its public address and reachability badge. Everything else shows
+  only when it matters: the steps to take (each finding once, good news left
+  out) and the local address to forward to when a peer cannot connect, a failed
+  self-test, the Windows Firewall row with Allow, and the Cloudflare caveat when
+  the verdict is reachable. The backend re-checks after start and every ten
+  minutes, so the button is rarely needed.
+- Two tiles follow in one row — Share links and Node settings. Each is a
+  button on a raised surface with an icon, its name and a one-line summary of
+  where things stand (whether links are ready, the enabled protocols), and
+  opens a 40 rem dialog that ends in Done. An empty Share links dialog offers
+  Check network in place, and the links appear as soon as an address is found.
+- Share links lists one row per protocol and address: a header that selects
+  it, then the link in a read-only field with Copy at its end. The selected
+  link's QR code sits alongside; the first is selected on open, and using a
+  row's field or Copy selects it too, so no second dialog is stacked. Switching
+  keeps the previous code up, dimmed, until the next is drawn, so the dialog
+  never changes size. The "only share with people you trust" warning sits here,
+  where the decision is made. Reset keys is the footer's only extra action.
+- Node settings saves on change. It shows Name, the two protocol switches and
+  Fixed address; ports, the disguise site (`host` or `host:port` in one field)
+  and the network switches sit under Advanced, which opens by itself when one
+  of its fields is rejected or a port is in use. An empty field means "use the
+  default", and its placeholder names that default. Restore defaults in the
+  footer asks first and leaves hosting and the keys alone.
+- Reachability badges and dots use the quiet status tints: success for tested
   reachable, warning for probably reachable or needs forwarding, danger for
   unreachable, secondary when unknown.
 

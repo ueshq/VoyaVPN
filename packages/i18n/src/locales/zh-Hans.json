@@ -606,22 +606,25 @@
     },
     "selfHost": {
       "enable": "托管节点",
-      "enableHint": "开启托管后，本机会运行 VLESS 和 Shadowsocks 服务端，其他设备可将本机作为访问互联网的出口。",
-      "exitWarning": "收到链接的设备会通过本机的网络和公网地址访问互联网。请只把链接分享给信任的人。",
+      "openSettings": "打开节点设置",
       "actionFailed": "自建节点更改失败",
       "status": {
-        "stopped": "未托管",
+        "stopped": "未开启",
         "starting": "正在启动…",
         "running": "托管中",
         "retrying": "正在重启…",
-        "failed": "未运行"
+        "failed": "启动失败"
+      },
+      "statusHint": {
+        "running": "其他设备可通过本机上网。",
+        "stopped": "开启后，其他设备可通过本机上网。"
       },
       "problem": {
-        "noProtocol": "请在下方至少开启一种协议。",
-        "portInUse": "端口 {{port}} 已被其他程序占用，请在下方换一个端口。",
+        "noProtocol": "请在节点设置中至少开启一种协议。",
+        "portInUse": "端口 {{port}} 已被占用，请在节点设置中更换。",
         "coreMissing": "缺少 sing-box 核心，请重新安装 VoyaVPN。",
-        "coreExited": "服务端意外停止。",
-        "startFailed": "服务端无法启动。"
+        "coreExited": "节点意外停止。",
+        "startFailed": "节点无法启动。"
       },
       "stats": {
         "connections": "连接",
@@ -630,16 +633,19 @@
       },
       "links": {
         "title": "分享链接",
-        "hint": "在另一台设备上扫描二维码或粘贴链接即可使用。VoyaVPN、v2rayN、Shadowrocket 等大多数客户端都支持。",
-        "emptyHint": "还没有可用地址。请运行网络检测以获取本机公网地址，或在下方设置中填写固定地址。",
-        "notRunning": "只有在托管中时链接才可用。",
+        "hint": "在另一台设备上扫码或粘贴链接即可使用。",
+        "trustWarning": "请只分享给信任的人，对方会使用本机的网络和公网 IP。",
+        "emptyHint": "还没有可用地址。先检测网络，或在节点设置中填写固定地址。",
+        "notRunning": "开启托管后链接才能使用。",
+        "link": "链接",
         "copy": "复制",
-        "copyAll": "全部复制",
         "copied": "已复制",
-        "showQr": "显示二维码",
         "rotate": "重置密钥",
-        "rotateTitle": "要重置节点密钥吗？",
-        "rotateDescription": "之前分享的所有链接都会失效，设备需要使用新链接。",
+        "rotateTitle": "重置密钥？",
+        "rotateDescription": "已分享的链接将全部失效。",
+        "summaryReady": "链接已就绪",
+        "summaryNotRunning": "开启托管后可用",
+        "summaryEmpty": "暂无可用地址",
         "addressKind": {
           "custom": "固定地址",
           "ipv4": "IPv4",
@@ -647,23 +653,21 @@
         }
       },
       "network": {
-        "title": "网络检测",
-        "run": "检测网络",
+        "title": "检测网络",
+        "run": "重新检测",
         "checking": "正在检测…",
-        "never": "尚未检测。检测会获取本机公网地址，并测试其他设备能否连接到节点。",
+        "notChecked": "尚未检测网络",
         "checkedAt": "检测于 {{time}}",
         "none": "无",
-        "verified": "已从互联网实测。",
-        "inferred": "根据本地网络推测，未经外部实测。",
-        "localAddresses": "本机地址",
-        "probeNote": "测试从 Cloudflare 网络发起连接。通过测试不代表中国大陆到本机的线路快速或未被封锁，请以实际使用节点的设备连接结果为准。",
-        "nat": {
-          "none": "直接连接互联网",
-          "nat": "位于路由器之后",
-          "carrierGrade": "运营商级 NAT",
-          "double": "位于两层路由器之后",
-          "noConnectivity": "无连接",
-          "unknown": "未知"
+        "localAddress": "本机局域网地址：{{addresses}}",
+        "probeNote": "检测从 Cloudflare 发起，不代表中国大陆到本机的线路通畅。",
+        "verdict": {
+          "reachable": "其他设备可以连接",
+          "likelyReachable": "其他设备应该可以连接",
+          "needsPortForward": "本机在路由器后面，需要路由器转发节点端口",
+          "unreachable": "其他设备无法连接",
+          "noConnectivity": "本机没有联网",
+          "unknown": "无法判断"
         },
         "reachability": {
           "reachable": "可访问",
@@ -674,78 +678,59 @@
           "unknown": "未知"
         },
         "reasons": {
-          "publicAddressOnDevice": "本机直接持有公网地址，其他设备可以直接连接。",
-          "behindNat": "本机与互联网之间有路由器，需要路由器把节点端口转发到本机。",
-          "carrierGradeNat": "运营商让多位用户共用一个公网地址，外部设备无法连入。请向运营商申请公网 IP、改用 IPv6，或在云服务器上托管。",
-          "doubleNat": "网络中串联了两台路由器。请在两台路由器上都设置端口转发，或把光猫改为桥接模式。",
-          "portMapped": "路由器已自动把节点端口转发到本机（UPnP）。",
-          "upnpUnavailable": "路由器不支持 UPnP。请在路由器设置中把节点的 TCP 和 UDP 端口转发到本机。",
-          "upnpFailed": "路由器拒绝转发端口。请手动设置转发，或换用其他端口。",
-          "probeReachable": "测试服务从互联网成功连接到了所有节点端口。",
-          "probeTimedOut": "测试连接超时：路由器或防火墙在连接到达节点前将其丢弃。",
-          "probeRefused": "测试连接被拒绝：该地址上没有程序接受连接。请检查路由器把端口转发到了哪里。",
-          "probeUnavailable": "可达性测试服务没有响应，以上为推测结果。",
-          "noPublicAddress": "本机在这种地址类型下没有互联网连接。",
-          "ipv6FirewallUnknown": "许多路由器默认阻止 IPv6 入站连接。若设备无法连接，请在路由器的 IPv6 防火墙中放行节点端口。",
-          "tunActive": "本机自身的 VPN 连接会掩盖真实网络。请先断开连接再重新检测。",
-          "nodeNotRunning": "节点未在托管，无法测试。请开启托管后重新检测。",
-          "firewallRuleMissing": "Windows 防火墙可能会阻止节点。请用下方按钮放行。"
-        },
-        "upnp": {
-          "title": "路由器端口转发",
-          "disabled": "关闭",
-          "noGateway": "路由器未响应 UPnP",
-          "mapped": "正在转发 {{ports}}",
-          "failed": "路由器拒绝"
+          "publicAddressOnDevice": "本机有公网地址，可直接连接。",
+          "behindNat": "本机在路由器后面，需要路由器转发节点端口。",
+          "carrierGradeNat": "运营商让多个用户共用公网地址，外部无法连入。可申请公网 IP、改用 IPv6，或改在云服务器上托管。",
+          "doubleNat": "网络里串了两台路由器。请在两台上都转发端口，或把光猫改为桥接。",
+          "portMapped": "路由器已自动转发节点端口。",
+          "upnpUnavailable": "路由器不支持自动转发，请手动把节点端口（TCP 和 UDP）转发到本机。",
+          "upnpFailed": "路由器拒绝了自动转发，请手动转发或更换端口。",
+          "probeReachable": "已从互联网连通全部节点端口。",
+          "probeTimedOut": "连接超时：被路由器或防火墙拦截。",
+          "probeRefused": "连接被拒绝：请检查端口转发的目标是否为本机。",
+          "probeUnavailable": "检测服务暂时不可用，结果为推测。",
+          "noPublicAddress": "本机没有此类型的公网连接。",
+          "ipv6FirewallUnknown": "很多路由器默认拦截 IPv6 入站。连不上时，请在路由器的 IPv6 防火墙中放行节点端口。",
+          "tunActive": "本机正连着 VPN，会干扰检测。请断开后重试。",
+          "firewallRuleMissing": "Windows 防火墙可能拦截节点，请点击“放行”。"
         },
         "firewall": {
-          "title": "Windows 防火墙",
-          "notManaged": "不受管理",
-          "rulePresent": "已放行",
-          "ruleMissing": "没有 VoyaVPN 的规则",
-          "unknown": "无法读取",
           "allow": "放行"
         },
         "selfTest": {
-          "title": "节点自检",
-          "passed": "正常",
-          "failed": "失败",
-          "skipped": "未测试",
-          "vlessFailed": "本机的测试客户端无法登录 VLESS 节点。伪装网站很可能不兼容 REALITY，请换一个，例如 www.apple.com。",
-          "shadowsocksFailed": "本机的测试客户端无法使用 Shadowsocks 节点。请在运行日志中查看节点的错误。"
+          "vlessFailed": "VLESS 无法使用：伪装网站很可能不兼容 REALITY。请在节点设置中清空它以使用默认值。",
+          "shadowsocksFailed": "Shadowsocks 无法使用，请在运行日志中查看原因。"
         }
       },
       "config": {
         "title": "节点设置",
+        "description": "更改会自动保存。修改协议、端口或伪装网站会重启节点。",
         "deviceLabel": "名称",
-        "deviceLabelHint": "显示在每条链接名称的开头。留空则使用 VoyaVPN。",
+        "deviceLabelHint": "显示在链接名称开头。",
         "vless": "VLESS + REALITY",
-        "vlessHint": "推荐。流量看起来像在访问下方的网站，最不容易被封锁。",
+        "vlessHint": "推荐，最不易被封锁。",
         "vlessPort": "VLESS 端口",
         "shadowsocks": "Shadowsocks 2022",
-        "shadowsocksHint": "轻量且支持 UDP，但比 REALITY 更容易被识别。",
+        "shadowsocksHint": "轻量，支持 UDP，但更容易被识别。",
         "shadowsocksPort": "Shadowsocks 端口",
-        "portAuto": "节点首次启动时自动选择。",
-        "portHint": "若路由器不支持 UPnP，请在路由器上转发此 TCP 和 UDP 端口。",
+        "portAuto": "自动",
+        "portHint": "范围 1024–65535。",
         "realityServer": "伪装网站",
-        "realityServerHint": "一个支持 TLS 1.3 的大型 HTTPS 网站，最好离本机较近。未通过验证的访问者会看到这个网站。",
-        "realityServerPort": "伪装网站端口",
+        "realityServerHint": "支持 TLS 1.3 的大型 HTTPS 网站。可加端口，如 example.com:8443。",
         "customAddress": "固定地址",
-        "customAddressHint": "链接使用的 DDNS 域名或固定 IP。留空则使用网络检测发现的地址。",
+        "customAddressHint": "链接使用的域名（DDNS）或固定 IP。",
+        "customAddressAuto": "自动检测",
+        "advanced": "高级选项",
+        "noProtocol": "未开启协议",
         "upnp": "自动转发端口",
-        "upnpHint": "节点运行时请求路由器转发节点端口（UPnP）。",
+        "upnpHint": "通过 UPnP 请求路由器转发节点端口。",
         "allowLan": "允许访问局域网",
-        "allowLanHint": "让连接的设备可以访问本网络中的打印机等设备。本机自身始终不可访问。",
+        "allowLanHint": "连接的设备可访问本网络中的其他设备，但始终无法访问本机。",
         "blockBittorrent": "阻止 BitTorrent",
-        "blockBittorrentHint": "避免本机的网络服务商收到版权投诉。"
-      },
-      "connect": {
-        "title": "使用其他设备的节点",
-        "description": "在托管节点的设备上打开“自建节点”，复制链接或显示二维码，然后在这里添加。",
-        "paste": "粘贴链接",
-        "scan": "扫描屏幕二维码",
-        "more": "更多添加方式",
-        "goToNodes": "打开节点页"
+        "blockBittorrentHint": "避免收到版权投诉。",
+        "reset": "恢复默认设置",
+        "resetTitle": "恢复默认设置？",
+        "resetDescription": "所有选项恢复默认，端口会重新自动选择，已分享的链接需要重新分享。密钥不变。"
       }
     }
   },

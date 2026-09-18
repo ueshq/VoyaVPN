@@ -9,7 +9,6 @@ import type {
   SelfHostShareLink,
   SelfHostState,
 } from "@/ipc/bindings";
-import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 
@@ -20,12 +19,9 @@ const ipc = vi.hoisted(() => ({
   generateQrCode: vi.fn(),
   getSelfHostState: vi.fn(),
   getSelfHostStats: vi.fn(),
-  importProfilesFromText: vi.fn(),
-  readClipboardText: vi.fn(),
   rotateSelfHostCredentials: vi.fn(),
   runSelfHostEnvironmentCheck: vi.fn(),
   saveSelfHostConfig: vi.fn(),
-  scanScreenQr: vi.fn(),
   setSelfHostEnabled: vi.fn(),
 }));
 vi.mock("@/ipc/commands", async (importOriginal) => {
@@ -60,17 +56,21 @@ describe("SelfHostScreen", () => {
     clients.clear();
   });
 
-  it("explains a node that is not hosting yet", async () => {
+  it("answers whether the node is hosting before anything else", async () => {
     renderScreen();
 
-    expect(await screen.findByText("Not hosting")).toBeInTheDocument();
+    expect(await screen.findByText("Off")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Self-hosted node" })).toBeInTheDocument();
-    expect(screen.getByText(/Turn on hosting to run a VLESS/)).toBeInTheDocument();
-    expect(screen.getByText(/No address yet/)).toBeInTheDocument();
-    expect(screen.getByText(/Not checked yet/)).toBeInTheDocument();
+    expect(screen.getByText(/Turn on to let other devices/)).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Host a node" })).not.toBeChecked();
-    expect(screen.getByLabelText("VLESS port")).toHaveValue("");
-    expect(screen.getAllByText(/Picked automatically/)).toHaveLength(2);
+    const status = screen.getByTestId("self-host-status");
+    expect(within(status).getByText("Network not checked yet")).toBeInTheDocument();
+    // Checking needs a running node, so the card offers it only while hosting is on.
+    expect(within(status).queryByRole("button", { name: /Check/ })).not.toBeInTheDocument();
+    expect(within(status).queryByTestId("self-host-family-ipv4")).not.toBeInTheDocument();
+    expect(tile("Share links")).toHaveTextContent("No address yet");
+    expect(tile("Node settings")).toHaveTextContent("VLESS · Shadowsocks");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(ipc.getSelfHostStats).not.toHaveBeenCalled();
   });
 
@@ -86,27 +86,86 @@ describe("SelfHostScreen", () => {
     const status = screen.getByTestId("self-host-status");
     expect(await within(status).findByText("3")).toBeInTheDocument();
     expect(within(status).getByText("1.0 KB")).toBeInTheDocument();
-    expect(screen.getAllByTestId("self-host-link")).toHaveLength(2);
+    expect(tile("Share links")).toHaveTextContent("Links ready");
   });
 
-  it("copies links and shows their QR code", async () => {
+  it("shows every link with its own Copy and the selected one's QR code", async () => {
     const user = setupUser();
     ipc.getSelfHostState.mockResolvedValue(runningState());
     renderScreen();
 
-    const rows = await screen.findAllByTestId("self-host-link");
+    await user.click(await findTile("Share links"));
+    const dialog = await screen.findByRole("dialog", { name: "Share links" });
+    const rows = within(dialog).getAllByTestId("self-host-link");
+    expect(rows).toHaveLength(2);
+    expect(within(rows[0]).getByRole("button", { pressed: true })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Share only with people you trust/)).toBeInTheDocument();
+    await waitFor(() => expect(ipc.generateQrCode).toHaveBeenCalledWith(vlessLink().link));
+    // Copying lives next to each link; there is no dialog-wide copy.
+    expect(within(dialog).queryByRole("button", { name: /Copy (all|link)/ })).not.toBeInTheDocument();
+
+    const [vlessField, ssField] = within(dialog).getAllByRole("textbox", { name: "Link" });
+    expect(vlessField).toHaveValue(vlessLink().link);
+    expect(vlessField).toHaveAttribute("readonly");
+    expect(ssField).toHaveValue(ssLink().link);
     expect(within(rows[1]).getByText("[2001:db8::7]:42444")).toBeInTheDocument();
+
     await user.click(within(rows[0]).getByRole("button", { name: "Copy" }));
     expect(writeText).toHaveBeenCalledWith(vlessLink().link);
     expect(await within(rows[0]).findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(within(rows[1]).getByRole("button", { name: "Copy" })).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Copy all" }));
-    expect(writeText).toHaveBeenLastCalledWith(`${vlessLink().link}\n${ssLink().link}`);
-
-    await user.click(within(rows[1]).getByRole("button", { name: "Show QR code" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("textbox")).toHaveValue(ssLink().link);
+    // Copying another link selects it, so its QR code comes up.
+    await user.click(within(rows[1]).getByRole("button", { name: "Copy" }));
+    expect(writeText).toHaveBeenLastCalledWith(ssLink().link);
+    expect(within(rows[1]).getByRole("button", { pressed: true })).toBeInTheDocument();
     await waitFor(() => expect(ipc.generateQrCode).toHaveBeenCalledWith(ssLink().link));
+
+    // So do its header and its field.
+    await user.click(within(rows[0]).getByRole("button", { pressed: false }));
+    expect(within(rows[0]).getByRole("button", { pressed: true })).toBeInTheDocument();
+    await user.click(ssField);
+    expect(within(rows[1]).getByRole("button", { pressed: true })).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("keeps the QR code up while the next link's code is drawn", async () => {
+    const user = setupUser();
+    ipc.getSelfHostState.mockResolvedValue(runningState());
+    ipc.generateQrCode.mockImplementation((content: string) =>
+      content === vlessLink().link
+        ? Promise.resolve({ mimeType: "image/svg+xml", svg: "<svg/>" })
+        : new Promise(() => {}),
+    );
+    renderScreen();
+
+    await user.click(await findTile("Share links"));
+    const dialog = await screen.findByRole("dialog", { name: "Share links" });
+    const code = await within(dialog).findByRole("img", { name: "Generated QR code" });
+
+    await user.click(within(within(dialog).getAllByTestId("self-host-link")[1]).getByRole("button", { pressed: false }));
+
+    await waitFor(() => expect(ipc.generateQrCode).toHaveBeenCalledWith(ssLink().link));
+    // The previous code stays, dimmed, instead of the frame emptying out.
+    expect(within(dialog).getByRole("img", { name: "Generated QR code" })).toBe(code);
+    expect(code).toHaveClass("opacity-50");
+  });
+
+  it("holds the QR code's place and reports a code that cannot be drawn", async () => {
+    const user = setupUser();
+    ipc.getSelfHostState.mockResolvedValue(runningState());
+    let fail: (error: Error) => void = () => {};
+    ipc.generateQrCode.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+    renderScreen();
+
+    await user.click(await findTile("Share links"));
+    const dialog = await screen.findByRole("dialog", { name: "Share links" });
+    expect(within(dialog).queryByRole("img")).not.toBeInTheDocument();
+
+    fail(new Error("QR failed"));
+    expect(await within(dialog).findByText("QR failed")).toBeInTheDocument();
   });
 
   it("resets the keys only after confirmation", async () => {
@@ -115,6 +174,7 @@ describe("SelfHostScreen", () => {
     ipc.rotateSelfHostCredentials.mockResolvedValue(runningState());
     renderScreen();
 
+    await user.click(await findTile("Share links"));
     await user.click(await screen.findByRole("button", { name: "Reset keys" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(within(dialog).getByText(/Every link shared so far stops working/)).toBeInTheDocument();
@@ -122,7 +182,24 @@ describe("SelfHostScreen", () => {
     await waitFor(() => expect(ipc.rotateSelfHostCredentials).toHaveBeenCalledOnce());
   });
 
-  it("runs the network check and explains every finding", async () => {
+  it("checks the network from an empty share dialog and shows the links it finds", async () => {
+    const user = setupUser();
+    ipc.getSelfHostState.mockResolvedValue({ ...runningState(), shareLinks: [] });
+    ipc.runSelfHostEnvironmentCheck.mockResolvedValue({ ...runningState(), environment: environment() });
+    renderScreen();
+
+    await user.click(await findTile("Share links"));
+    const dialog = await screen.findByRole("dialog", { name: "Share links" });
+    expect(within(dialog).getByText(/No address yet/)).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Reset keys" })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Check network" }));
+
+    expect(ipc.runSelfHostEnvironmentCheck).toHaveBeenCalledOnce();
+    // The dialog stays open and fills in.
+    expect(await within(dialog).findAllByTestId("self-host-link")).toHaveLength(2);
+  });
+
+  it("checks the network in the hosting card and keeps a good result short", async () => {
     const user = setupUser();
     ipc.getSelfHostState.mockResolvedValue(runningState());
     ipc.runSelfHostEnvironmentCheck.mockResolvedValue({
@@ -137,42 +214,157 @@ describe("SelfHostScreen", () => {
     });
     renderScreen();
 
-    await user.click(await screen.findByRole("button", { name: "Check network" }));
-    const ipv4 = await screen.findByTestId("self-host-family-ipv4");
-    expect(within(ipv4).getByText("203.0.113.7")).toBeInTheDocument();
-    expect(within(ipv4).getByText("Behind a router")).toBeInTheDocument();
-    expect(within(ipv4).getByText("Reachable")).toBeInTheDocument();
-    expect(within(ipv4).getByText("Tested from the internet.")).toBeInTheDocument();
-    expect(within(ipv4).getByText(/forwards the node's ports to this device automatically/)).toBeInTheDocument();
-    const ipv6 = screen.getByTestId("self-host-family-ipv6");
-    expect(within(ipv6).getByText("None")).toBeInTheDocument();
-    expect(within(ipv6).getByText(/Estimated from this network/)).toBeInTheDocument();
-    expect(screen.getByText("Forwarding 42443, 42444")).toBeInTheDocument();
-    expect(screen.getByText("en0 192.168.1.20")).toBeInTheDocument();
-    expect(screen.getByText(/Checked at/)).toBeInTheDocument();
-    const selfTest = screen.getByTestId("self-host-self-test");
-    expect(within(selfTest).getByText("VLESS + REALITY · Failed")).toBeInTheDocument();
-    expect(within(selfTest).getByText("Shadowsocks 2022 · Works")).toBeInTheDocument();
-    expect(within(selfTest).getByText(/could not sign in to the VLESS node/)).toBeInTheDocument();
-    expect(within(selfTest).queryByText(/could not use the Shadowsocks node/)).not.toBeInTheDocument();
+    const status = await screen.findByTestId("self-host-status");
+    await user.click(within(status).getByRole("button", { name: "Check network" }));
+    expect(ipc.runSelfHostEnvironmentCheck).toHaveBeenCalledOnce();
 
-    await user.click(screen.getByRole("button", { name: "Allow" }));
+    expect(await within(status).findByText("Other devices can connect")).toBeInTheDocument();
+    expect(within(status).getByText(/Checked at/)).toBeInTheDocument();
+    expect(within(status).getByRole("button", { name: "Check again" })).toBeInTheDocument();
+    const ipv4 = within(status).getByTestId("self-host-family-ipv4");
+    expect(within(ipv4).getByText("203.0.113.7")).toBeInTheDocument();
+    expect(within(ipv4).getByText("Reachable")).toBeInTheDocument();
+    const ipv6 = within(status).getByTestId("self-host-family-ipv6");
+    expect(within(ipv6).getByText("None")).toBeInTheDocument();
+    expect(within(ipv6).getByText("Unavailable")).toBeInTheDocument();
+    // A peer can connect, so there is no advice, only the caveat about the test.
+    expect(within(status).queryByText(/behind a router/)).not.toBeInTheDocument();
+    expect(within(status).queryByText(/local address/)).not.toBeInTheDocument();
+    expect(within(status).getByText(/The test connects from Cloudflare/)).toBeInTheDocument();
+    // A failed self-test is always said.
+    const selfTest = within(status).getByTestId("self-host-self-test");
+    expect(within(selfTest).getByText(/VLESS does not work/)).toBeInTheDocument();
+    expect(within(selfTest).queryByText(/Shadowsocks does not work/)).not.toBeInTheDocument();
+
+    await user.click(within(status).getByRole("button", { name: "Allow" }));
     expect(ipc.applySelfHostFirewallRule).toHaveBeenCalledOnce();
-    expect(await screen.findByText("Allowed")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Allow" })).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(status).queryByRole("button", { name: "Allow" })).not.toBeInTheDocument(),
+    );
+    expect(within(status).queryByText(/Windows Firewall may block/)).not.toBeInTheDocument();
   });
 
-  it("names the problem behind a node that failed to start", async () => {
+  it("says once what to do when other devices cannot connect", async () => {
+    ipc.getSelfHostState.mockResolvedValue({
+      ...runningState(),
+      environment: {
+        ...environment(),
+        checkedAtMs: null,
+        ipv4: family({
+          nat: "nat",
+          reachability: "needsPortForward",
+          reasons: ["behindNat", "upnpUnavailable"],
+          verifiedByProbe: false,
+        }),
+        ipv6: family({
+          family: "ipv6",
+          publicAddress: "2001:db8::7",
+          reachability: "unreachable",
+          reasons: ["behindNat", "probeTimedOut", "ipv6FirewallUnknown", "publicAddressOnDevice"],
+        }),
+        localAddresses: [
+          { address: "192.168.1.20", family: "ipv4", interface: "en0", scope: "private" },
+          { address: "2001:db8::7", family: "ipv6", interface: "en0", scope: "public" },
+        ],
+        selfTest: { shadowsocks: "skipped", vless: "passed" },
+      },
+    });
+    renderScreen();
+
+    const status = await screen.findByTestId("self-host-status");
+    // The verdict says the device is behind a router; the list does not repeat it.
+    expect(
+      await within(status).findByText("This device is behind a router, which has to forward the node's ports"),
+    ).toBeInTheDocument();
+    expect(within(status).getByRole("button", { name: "Check again" })).toBeInTheDocument();
+    expect(within(status).queryByText(/Checked at/)).not.toBeInTheDocument();
+    const findings = within(status).getAllByRole("listitem").map((item) => item.textContent);
+    expect(findings).toEqual([
+      "The router cannot forward automatically. Forward the node's ports (TCP and UDP) to this device by hand.",
+      "Timed out: a router or firewall blocks the connection.",
+      "Many routers block incoming IPv6 by default. If devices cannot connect, allow the node's ports in the router's IPv6 firewall.",
+    ]);
+    expect(within(status).getByText("This device's local address: 192.168.1.20")).toBeInTheDocument();
+    expect(within(status).queryByText(/Cloudflare/)).not.toBeInTheDocument();
+    expect(within(status).queryByTestId("self-host-self-test")).not.toBeInTheDocument();
+    expect(within(status).queryByRole("button", { name: "Allow" })).not.toBeInTheDocument();
+    expect(ipc.runSelfHostEnvironmentCheck).not.toHaveBeenCalled();
+  });
+
+  it("keeps the last result but offers no check while hosting is off", async () => {
+    ipc.getSelfHostState.mockResolvedValue({ ...stoppedState(), environment: environment() });
+    renderScreen();
+
+    const status = await screen.findByTestId("self-host-status");
+    expect(await within(status).findByText("Other devices can connect")).toBeInTheDocument();
+    expect(within(status).getByTestId("self-host-family-ipv4")).toHaveTextContent("Reachable");
+    expect(within(status).getByText(/Checked at/)).toBeInTheDocument();
+    expect(within(status).queryByRole("button", { name: /Check/ })).not.toBeInTheDocument();
+  });
+
+  it("still says the network was not checked when the check fails", async () => {
+    const user = setupUser();
+    ipc.getSelfHostState.mockResolvedValue({ ...runningState(), shareLinks: [] });
+    ipc.runSelfHostEnvironmentCheck.mockRejectedValue(new Error("offline"));
+    renderScreen();
+
+    const status = await screen.findByTestId("self-host-status");
+    await user.click(within(status).getByRole("button", { name: "Check network" }));
+
+    await waitFor(() => expect(useToastStore.getState().toasts).toHaveLength(1));
+    expect(within(status).getByText("Network not checked yet")).toBeInTheDocument();
+    expect(within(status).getByRole("button", { name: "Check network" })).toBeEnabled();
+  });
+
+  it("names the problem behind a node that failed to start and leads to its fix", async () => {
+    const user = setupUser();
     ipc.getSelfHostState.mockResolvedValue({
       ...runningState(),
       runtime: { detail: "address in use", port: 42443, problem: "portInUse", status: "failed" },
     });
     renderScreen();
 
-    expect(await screen.findByText("Not running")).toBeInTheDocument();
-    expect(screen.getByText(/Port 42443 is used by another program/)).toBeInTheDocument();
+    expect(await screen.findByText("Failed to start")).toBeInTheDocument();
+    expect(screen.getByText(/Port 42443 is in use/)).toBeInTheDocument();
     expect(screen.getByText("address in use")).toBeInTheDocument();
-    expect(screen.getByText("The links work only while the node is hosting.")).toBeInTheDocument();
+    expect(tile("Share links")).toHaveTextContent("Available once hosting is on");
+
+    await user.click(screen.getByRole("button", { name: "Open node settings" }));
+    const dialog = await screen.findByRole("dialog", { name: "Node settings" });
+    // The port to change sits under Advanced, so the dialog opens it.
+    await waitFor(() => expect(advanced(dialog).open).toBe(true));
+    expect(within(dialog).getByLabelText("VLESS port")).toHaveValue("42443");
+  });
+
+  it("offers no shortcut for a problem the settings cannot fix", async () => {
+    ipc.getSelfHostState.mockResolvedValue({
+      ...stoppedState(),
+      runtime: { detail: null, port: null, problem: "coreMissing", status: "failed" },
+    });
+    renderScreen();
+
+    expect(await screen.findByText(/sing-box core is missing/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open node settings" })).not.toBeInTheDocument();
+  });
+
+  it("names every default as a placeholder and keeps advanced settings folded", async () => {
+    const user = setupUser();
+    renderScreen();
+
+    await user.click(await findTile("Node settings"));
+    const dialog = await screen.findByRole("dialog", { name: "Node settings" });
+
+    expect(advanced(dialog).open).toBe(false);
+    expect(within(dialog).getByLabelText("Name")).toHaveAttribute("placeholder", "VoyaVPN");
+    expect(within(dialog).getByLabelText("Fixed address")).toHaveAttribute("placeholder", "Detected automatically");
+    const site = within(dialog).getByLabelText("Disguise site");
+    expect(site).toHaveValue("");
+    expect(site).toHaveAttribute("placeholder", "www.apple.com");
+    for (const label of ["VLESS port", "Shadowsocks port"]) {
+      expect(within(dialog).getByLabelText(label)).toHaveValue("");
+      expect(within(dialog).getByLabelText(label)).toHaveAttribute("placeholder", "Automatic");
+    }
+    expect(within(dialog).getByRole("button", { name: "Restore defaults" })).toBeDisabled();
   });
 
   it("saves each setting on change and composes quick changes", async () => {
@@ -181,7 +373,9 @@ describe("SelfHostScreen", () => {
     ipc.saveSelfHostConfig.mockImplementation(async (config) => ({ ...runningState(), config }));
     renderScreen();
 
-    await user.click(await screen.findByRole("switch", { name: "Block BitTorrent" }));
+    await user.click(await findTile("Node settings"));
+    await user.click(await screen.findByText("Advanced"));
+    await user.click(screen.getByRole("switch", { name: "Block BitTorrent" }));
     await user.click(screen.getByRole("switch", { name: "Allow access to the local network" }));
 
     await waitFor(() => expect(ipc.saveSelfHostConfig).toHaveBeenCalledTimes(2));
@@ -205,35 +399,87 @@ describe("SelfHostScreen", () => {
       await user.tab();
     }
 
-    await screen.findByLabelText("Name");
+    await user.click(await findTile("Node settings"));
+    await user.click(await screen.findByText("Advanced"));
     await replace("Name", "Tokyo");
-    await replace("Disguise site", "www.apple.com");
-    await replace("Disguise site port", "8443");
+    await replace("Disguise site", "www.example.org");
+    await replace("Disguise site", "www.example.org:8443");
+    await replace("Disguise site", "");
     await replace("Shadowsocks port", "45000");
     await replace("VLESS port", "");
     await replace("Fixed address", "node.example.org");
+    await user.click(screen.getByRole("switch", { name: "Forward ports automatically" }));
     await user.click(screen.getByRole("switch", { name: "VLESS + REALITY" }));
     await user.click(screen.getByRole("switch", { name: "Shadowsocks 2022" }));
-    await user.click(screen.getByRole("switch", { name: "Forward ports automatically" }));
     await replace("Fixed address", "");
 
-    await waitFor(() => expect(ipc.saveSelfHostConfig).toHaveBeenCalledTimes(10));
+    await waitFor(() => expect(ipc.saveSelfHostConfig).toHaveBeenCalledTimes(11));
     const saved = ipc.saveSelfHostConfig.mock.calls.map((call) => call[0]);
     expect(saved[0]).toMatchObject({ deviceLabel: "Tokyo" });
-    expect(saved[1]).toMatchObject({ realityServerName: "www.apple.com" });
-    expect(saved[2]).toMatchObject({ realityServerPort: 8443 });
-    expect(saved[3]).toMatchObject({ shadowsocksPort: 45000 });
-    expect(saved[4]).toMatchObject({ vlessPort: 0 });
-    expect(saved[5]).toMatchObject({ customAddress: "node.example.org" });
-    expect(saved[8]).toMatchObject({
+    expect(saved[1]).toMatchObject({ realityServerName: "www.example.org", realityServerPort: 443 });
+    expect(saved[2]).toMatchObject({ realityServerName: "www.example.org", realityServerPort: 8443 });
+    expect(saved[3]).toMatchObject({ realityServerName: "www.apple.com", realityServerPort: 443 });
+    expect(saved[4]).toMatchObject({ shadowsocksPort: 45000 });
+    expect(saved[5]).toMatchObject({ vlessPort: 0 });
+    expect(saved[6]).toMatchObject({ customAddress: "node.example.org" });
+    expect(saved[9]).toMatchObject({
       shadowsocksEnabled: false,
       upnpEnabled: false,
       vlessEnabled: false,
     });
-    expect(saved[9]).toMatchObject({ customAddress: null });
+    expect(saved[10]).toMatchObject({ customAddress: null });
+    // A protocol that is off has nothing to configure.
+    expect(screen.queryByLabelText("VLESS port")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Disguise site")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Shadowsocks port")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(tile("Node settings")).toHaveTextContent("No protocol on"));
   });
 
-  it("shows a rejected port next to its field", async () => {
+  it("shows a disguise site with its port and rejects a port that cannot exist", async () => {
+    const user = setupUser();
+    const state = runningState();
+    ipc.getSelfHostState.mockResolvedValue({
+      ...state,
+      config: { ...state.config, realityServerName: "www.example.org", realityServerPort: 8443 },
+    });
+    renderScreen();
+
+    await user.click(await findTile("Node settings"));
+    await user.click(await screen.findByText("Advanced"));
+    const site = screen.getByLabelText("Disguise site");
+    expect(site).toHaveValue("www.example.org:8443");
+
+    await user.clear(site);
+    await user.type(site, "www.example.org:70000");
+    await user.tab();
+
+    expect(await screen.findByText("This value is not valid")).toBeInTheDocument();
+    expect(ipc.saveSelfHostConfig).not.toHaveBeenCalled();
+  });
+
+  it("restores the defaults only after confirmation and leaves hosting on", async () => {
+    const user = setupUser();
+    const state = runningState();
+    ipc.getSelfHostState.mockResolvedValue({
+      ...state,
+      config: { ...state.config, customAddress: "node.example.org", deviceLabel: "Tokyo" },
+    });
+    ipc.saveSelfHostConfig.mockImplementation(async (config) => ({ ...runningState(), config }));
+    renderScreen();
+
+    await user.click(await findTile("Node settings"));
+    await user.click(await screen.findByRole("button", { name: "Restore defaults" }));
+    const confirm = await screen.findByRole("alertdialog");
+    expect(within(confirm).getByText(/the ports are picked again/)).toBeInTheDocument();
+    expect(ipc.saveSelfHostConfig).not.toHaveBeenCalled();
+    await user.click(within(confirm).getByRole("button", { name: "Restore defaults" }));
+
+    await waitFor(() => expect(ipc.saveSelfHostConfig).toHaveBeenCalledOnce());
+    expect(ipc.saveSelfHostConfig).toHaveBeenCalledWith({ ...stoppedState().defaults, enabled: true });
+  });
+
+  it("shows a rejected port next to its field and opens Advanced for it", async () => {
     const user = setupUser();
     const { IpcCommandError } = await import("@/ipc/commands");
     ipc.getSelfHostState.mockResolvedValue(runningState());
@@ -246,6 +492,7 @@ describe("SelfHostScreen", () => {
               field: "vlessPort",
               scope: [],
             },
+            { code: { code: "invalidPort" }, field: "realityServerPort", scope: [] },
           ],
           type: "validation",
         },
@@ -255,13 +502,18 @@ describe("SelfHostScreen", () => {
     );
     renderScreen();
 
-    const port = await screen.findByLabelText("VLESS port");
+    await user.click(await findTile("Node settings"));
+    const dialog = await screen.findByRole("dialog", { name: "Node settings" });
+    const port = within(dialog).getByLabelText("VLESS port");
     await user.clear(port);
     await user.type(port, "80");
     await user.tab();
 
     expect(await screen.findByText("The port must be between 1024 and 65535")).toBeInTheDocument();
     expect(ipc.saveSelfHostConfig).toHaveBeenCalledWith(expect.objectContaining({ vlessPort: 80 }));
+    await waitFor(() => expect(advanced(dialog).open).toBe(true));
+    // The disguise site's port has no field of its own; its error joins the site's.
+    expect(within(dialog).getByLabelText("Disguise site")).toHaveAttribute("aria-invalid", "true");
     expect(useToastStore.getState().toasts).toHaveLength(0);
   });
 
@@ -279,24 +531,20 @@ describe("SelfHostScreen", () => {
       title: "The self-hosted node could not be changed",
     });
   });
-
-  it("adds another device's node from the clipboard", async () => {
-    const user = setupUser();
-    ipc.readClipboardText.mockResolvedValue(vlessLink().link);
-    ipc.importProfilesFromText.mockResolvedValue(importResult());
-    renderScreen();
-
-    await user.click(await screen.findByRole("button", { name: "Paste link" }));
-
-    expect(ipc.importProfilesFromText).toHaveBeenCalledWith(vlessLink().link, null);
-    expect(await screen.findByText(/Imported 1 node/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Open Nodes" }));
-    expect(useShellStore.getState().activeTab).toBe("profiles");
-
-    await user.click(screen.getByRole("button", { name: "More ways to add" }));
-    expect(useShellStore.getState().profilesAddMenuOpen).toBe(true);
-  });
 });
+
+/** A tile's name is its title followed by its summary, so it is matched by prefix. */
+function tile(title: string) {
+  return screen.getByRole("button", { name: new RegExp(`^${title}`) });
+}
+
+function findTile(title: string) {
+  return screen.findByRole("button", { name: new RegExp(`^${title}`) });
+}
+
+function advanced(dialog: HTMLElement) {
+  return within(dialog).getByText("Advanced").closest("details") as HTMLDetailsElement;
+}
 
 /** user-event installs its own clipboard, so the spy goes in after it. */
 function setupUser() {
@@ -311,26 +559,27 @@ function setupUser() {
 function renderScreen() {
   const client = createTestQueryClient({ gcTime: 0 });
   clients.add(client);
-  useShellStore.setState({ activeTab: "selfHost", profilesAddMenuOpen: false });
   return renderWithQuery(<SelfHostScreen />, { queryClient: client });
 }
 
 function stoppedState(): SelfHostState {
+  const config: SelfHostState["config"] = {
+    allowLanAccess: false,
+    blockBittorrent: true,
+    customAddress: null,
+    deviceLabel: "",
+    enabled: false,
+    realityServerName: "www.apple.com",
+    realityServerPort: 443,
+    shadowsocksEnabled: true,
+    shadowsocksPort: 0,
+    upnpEnabled: true,
+    vlessEnabled: true,
+    vlessPort: 0,
+  };
   return {
-    config: {
-      allowLanAccess: false,
-      blockBittorrent: true,
-      customAddress: null,
-      deviceLabel: "",
-      enabled: false,
-      realityServerName: "www.apple.com",
-      realityServerPort: 443,
-      shadowsocksEnabled: true,
-      shadowsocksPort: 0,
-      upnpEnabled: true,
-      vlessEnabled: true,
-      vlessPort: 0,
-    },
+    config,
+    defaults: config,
     environment: null,
     firewallRuleSupported: false,
     runtime: { detail: null, port: null, problem: null, status: "stopped" },
@@ -406,25 +655,5 @@ function environment(): SelfHostEnvironmentReport {
     },
     probeAvailable: true,
     selfTest: { shadowsocks: "passed", vless: "failed" },
-  };
-}
-
-function importResult() {
-  return {
-    addedSubscriptionIds: [],
-    deduped: 0,
-    discardedNodeOverrides: 0,
-    failed: 0,
-    filtered: 0,
-    imported: 1,
-    importedProfileIds: ["node-1"],
-    lineIssues: [],
-    parsed: 1,
-    removedDuplicates: 0,
-    removedExisting: 0,
-    skipped: 0,
-    subscriptionId: null,
-    updated: 0,
-    updatedProfileIds: [],
   };
 }

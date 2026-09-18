@@ -96,11 +96,11 @@ export const runtimeModules = [
   // cards 90-100 lines and 75-92 branches.
   { path: "apps/desktop/src/features/self-host/use-self-host.ts", lines: 95, branches: 75 },
   { path: "apps/desktop/src/features/self-host/self-host-screen.tsx", lines: 95, branches: 75 },
-  { path: "apps/desktop/src/features/self-host/node-config-card.tsx", lines: 95, branches: 80 },
-  { path: "apps/desktop/src/features/self-host/share-links-card.tsx", lines: 90, branches: 85 },
-  { path: "apps/desktop/src/features/self-host/environment-card.tsx", lines: 95, branches: 75 },
-  { path: "apps/desktop/src/features/self-host/status-card.tsx", lines: 95, branches: 75 },
-  { path: "apps/desktop/src/features/self-host/connect-card.tsx", lines: 85, branches: 70 },
+  { path: "apps/desktop/src/features/self-host/node-settings-dialog.tsx", lines: 95, branches: 80 },
+  { path: "apps/desktop/src/features/self-host/share-links-dialog.tsx", lines: 90, branches: 85 },
+  { path: "apps/desktop/src/features/self-host/network-status.tsx", lines: 95, branches: 75 },
+  { path: "apps/desktop/src/features/self-host/hosting-card.tsx", lines: 95, branches: 75 },
+  { path: "apps/desktop/src/features/self-host/action-tile.tsx", lines: 95, branches: 75 },
 ];
 
 /**

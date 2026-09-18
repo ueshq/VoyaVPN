@@ -1087,7 +1087,7 @@ export type SelfHostReachability =
  *  One finding of the network check. Each code has its own explanation and
  *  suggestion in the locale files.
  */
-export type SelfHostReasonCode = "publicAddressOnDevice" | "behindNat" | "carrierGradeNat" | "doubleNat" | "portMapped" | "upnpUnavailable" | "upnpFailed" | "probeReachable" | "probeTimedOut" | "probeRefused" | "probeUnavailable" | "noPublicAddress" | "ipv6FirewallUnknown" | "tunActive" | "nodeNotRunning" | "firewallRuleMissing";
+export type SelfHostReasonCode = "publicAddressOnDevice" | "behindNat" | "carrierGradeNat" | "doubleNat" | "portMapped" | "upnpUnavailable" | "upnpFailed" | "probeReachable" | "probeTimedOut" | "probeRefused" | "probeUnavailable" | "noPublicAddress" | "ipv6FirewallUnknown" | "tunActive" | "firewallRuleMissing";
 
 export type SelfHostRuntime = {
 	status: SelfHostRuntimeStatus,
@@ -1134,6 +1134,11 @@ export type SelfHostShareLink = {
 /**  Everything the Self-hosted node page renders. */
 export type SelfHostState = {
 	config: SelfHostConfig,
+	/**
+	 *  What every setting falls back to: the page shows these as placeholders
+	 *  and saves them to reset the node.
+	 */
+	defaults: SelfHostConfig,
 	runtime: SelfHostRuntime,
 	/**  Links for every enabled protocol at every usable address. */
 	shareLinks: SelfHostShareLink[],

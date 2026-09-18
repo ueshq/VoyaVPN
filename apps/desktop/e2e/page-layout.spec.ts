@@ -21,21 +21,21 @@ async function openPage(page: Page, destination: (typeof destinations)[number]) 
 async function expectPageGeometry(section: Locator, inset: number) {
   await expect.poll(() => section.evaluate((element, inset) => {
     const title = element.querySelector<HTMLElement>("h1")!;
-    const actions = element.querySelector<HTMLElement>('[data-slot="page-title"] [data-slot="page-header-actions"]')!;
+    // A page whose controls all live in its content has a bare title row.
+    const actions = element.querySelector<HTMLElement>('[data-slot="page-title"] [data-slot="page-header-actions"]');
     const content = element.querySelector<HTMLElement>('[data-slot="page-content"]')!;
     const firstPanel = content.querySelector<HTMLElement>('[data-slot="page-surface"], .node-group-surface, [role="tabpanel"][data-state="active"] section[aria-labelledby]')!;
     const frame = element.getBoundingClientRect();
     const heading = title.getBoundingClientRect();
-    const trailing = actions.getBoundingClientRect();
     const panel = firstPanel.getBoundingClientRect();
     const body = content.getBoundingClientRect();
     const near = (a: number, b: number) => Math.abs(a - b) <= 1;
     const middle = (box: DOMRect) => box.y + box.height / 2;
     return {
       headingInset: near(heading.left - frame.left, inset),
-      actionInset: near(frame.right - trailing.right, inset),
+      actionInset: !actions || near(frame.right - actions.getBoundingClientRect().right, inset),
       panelInset: near(panel.left - frame.left, inset) && near(frame.right - panel.right, inset),
-      sameRow: [...actions.querySelectorAll("button")].every((button) => near(middle(button.getBoundingClientRect()), middle(heading))),
+      sameRow: [...(actions?.querySelectorAll("button") ?? [])].every((button) => near(middle(button.getBoundingClientRect()), middle(heading))),
       noPageOverflow: element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight,
       visiblePanel: body.height > 100 && body.bottom <= frame.bottom,
     };
