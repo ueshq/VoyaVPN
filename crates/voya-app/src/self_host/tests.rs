@@ -6,14 +6,15 @@ use std::{
     fs,
     net::IpAddr,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Condvar, Mutex},
     time::Duration,
 };
 
 use futures_util::future::BoxFuture;
+use tokio::sync::Notify;
 use voya_contracts::{
     AppNoticeLevel, LogCode, LogLevel, NoticeCode, SelfHostConfig, SelfHostPortMappingStatus,
-    SelfHostProblem, SelfHostReachability, SelfHostRuntimeStatus,
+    SelfHostProblem, SelfHostReachability, SelfHostRuntimeStatus, SelfHostState,
 };
 use voya_db::Database;
 use voya_net::{
@@ -28,7 +29,10 @@ use voya_platform::{
     firewall::FirewallService,
     netif::InterfaceAddress,
     paths::{core_seed_resources_dir, AppPaths},
-    process::{ProcessExit, ProcessRole},
+    process::{
+        ProcessError, ProcessExit, ProcessExitHandler, ProcessHandle, ProcessOutput, ProcessRole,
+        ProcessRunner, ProcessSpawn,
+    },
     test_support::RecordingRunner,
 };
 
@@ -139,10 +143,60 @@ impl ReachabilityProbe for FakeProbe {
     }
 }
 
+/// Holds `spawn` while closed, so a test can look at a start midway. It opens
+/// by itself after a while, so a failing test cannot hang on it.
+#[derive(Default)]
+struct SpawnGate {
+    closed: Mutex<bool>,
+    opened: Condvar,
+}
+
+impl SpawnGate {
+    fn set_closed(&self, closed: bool) {
+        *self.closed.lock().expect("gate") = closed;
+        self.opened.notify_all();
+    }
+
+    fn pass(&self) {
+        let closed = self.closed.lock().expect("gate");
+        let (_closed, _timeout) = self
+            .opened
+            .wait_timeout_while(closed, Duration::from_secs(5), |closed| *closed)
+            .expect("gate");
+    }
+}
+
+/// The recording runner behind a [`SpawnGate`].
+struct GatedRunner {
+    runner: RecordingRunner,
+    gate: Arc<SpawnGate>,
+}
+
+impl ProcessRunner for GatedRunner {
+    fn spawn(&self, request: ProcessSpawn) -> Result<ProcessHandle, ProcessError> {
+        self.gate.pass();
+        self.runner.spawn(request)
+    }
+
+    fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
+        self.runner.run_oneshot(request)
+    }
+
+    fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
+        self.runner.stop(handle)
+    }
+
+    fn set_exit_handler(&self, handler: Option<Arc<dyn ProcessExitHandler>>) {
+        self.runner.set_exit_handler(handler);
+    }
+}
+
 #[derive(Default)]
 struct FakeRouter {
     maps: Mutex<Vec<Vec<u16>>>,
     unmaps: Mutex<Vec<Vec<u16>>>,
+    /// While set, `map` answers only once this is notified.
+    held: Mutex<Option<Arc<Notify>>>,
 }
 
 impl PortMapper for FakeRouter {
@@ -152,7 +206,11 @@ impl PortMapper for FakeRouter {
         _lease_seconds: u32,
     ) -> BoxFuture<'static, Result<PortMappingResult, PortMappingError>> {
         self.maps.lock().expect("maps").push(ports.clone());
+        let held = self.held.lock().expect("held").clone();
         Box::pin(async move {
+            if let Some(release) = held {
+                release.notified().await;
+            }
             Ok(PortMappingResult {
                 external_address: "203.0.113.7".parse().ok(),
                 mapped: ports,
@@ -196,6 +254,7 @@ impl HostTunnelState for NoTunnel {
 struct Fixture {
     manager: SelfHostManager,
     runner: RecordingRunner,
+    spawn_gate: Arc<SpawnGate>,
     sink: Arc<RecordingSink>,
     probe: Arc<FakeProbe>,
     router: Arc<FakeRouter>,
@@ -214,6 +273,7 @@ impl Fixture {
         );
         let seed_root = seed_core(&paths);
         let runner = RecordingRunner::default();
+        let spawn_gate = Arc::new(SpawnGate::default());
         let sink = Arc::new(RecordingSink::default());
         let probe = Arc::new(FakeProbe {
             ipv4: Mutex::new("203.0.113.7".parse().ok()),
@@ -224,7 +284,10 @@ impl Fixture {
         let deps = SelfHostDeps {
             paths: paths.clone(),
             core_seed_resource_dir: Some(seed_root),
-            runner: Arc::new(runner.clone()),
+            runner: Arc::new(GatedRunner {
+                runner: runner.clone(),
+                gate: Arc::clone(&spawn_gate),
+            }),
             target_os: TargetOs::Linux,
             probe: Arc::clone(&probe) as Arc<dyn ReachabilityProbe>,
             port_mapper: Arc::clone(&router) as Arc<dyn PortMapper>,
@@ -243,6 +306,7 @@ impl Fixture {
         Self {
             manager: SelfHostManager::spawn(database, deps),
             runner,
+            spawn_gate,
             sink,
             probe,
             router,
@@ -265,6 +329,26 @@ impl Fixture {
 
     fn notices(&self) -> Vec<NoticeCode> {
         self.sink.notices.lock().expect("notices").clone()
+    }
+
+    fn map_calls(&self) -> usize {
+        self.router.maps.lock().expect("maps").len()
+    }
+
+    /// Reads the state until `done` holds. Every read must answer promptly:
+    /// the page polls it while the node starts and checks.
+    async fn wait_for_state(&self, done: impl Fn(&SelfHostState) -> bool) -> SelfHostState {
+        for _ in 0..500 {
+            let state = tokio::time::timeout(Duration::from_secs(1), self.manager.state())
+                .await
+                .expect("the state answers at once")
+                .expect("state");
+            if done(&state) {
+                return state;
+            }
+            tokio::time::sleep(Duration::from_millis(2)).await;
+        }
+        panic!("the state never reached the expected shape");
     }
 }
 
@@ -565,5 +649,66 @@ async fn stats_are_zero_while_stopped_and_shutdown_stops_the_core() {
     assert!(
         state.config.enabled,
         "quitting keeps the node enabled for next launch"
+    );
+}
+
+#[tokio::test]
+async fn the_state_reads_starting_while_the_core_spawns() {
+    let fixture = Fixture::new().await;
+    fixture.spawn_gate.set_closed(true);
+    let manager = fixture.manager.clone();
+    let enabling = tokio::spawn(async move { manager.set_enabled(true).await });
+
+    fixture
+        .wait_for_state(|state| state.runtime.status == SelfHostRuntimeStatus::Starting)
+        .await;
+    assert_eq!(fixture.self_host_spawns(), 0, "the spawn is still held");
+
+    fixture.spawn_gate.set_closed(false);
+    let running = enabling.await.expect("enable task").expect("enable");
+    assert_eq!(running.runtime.status, SelfHostRuntimeStatus::Running);
+    assert_eq!(fixture.self_host_spawns(), 1);
+}
+
+#[tokio::test]
+async fn a_check_request_during_a_check_shares_its_result() {
+    let fixture = Fixture::new().await;
+    fixture.manager.set_enabled(true).await.expect("enable");
+    // The start asks the watch loop for a check; let that one finish first.
+    fixture
+        .wait_for_state(|state| state.environment.is_some())
+        .await;
+    let before = fixture.map_calls();
+
+    let release = Arc::new(Notify::new());
+    *fixture.router.held.lock().expect("held") = Some(Arc::clone(&release));
+    let manager = fixture.manager.clone();
+    let first = tokio::spawn(async move { manager.run_environment_check().await });
+    for _ in 0..500 {
+        if fixture.map_calls() > before {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(2)).await;
+    }
+    assert_eq!(
+        fixture.map_calls(),
+        before + 1,
+        "the first check is running"
+    );
+
+    let manager = fixture.manager.clone();
+    let second = tokio::spawn(async move { manager.run_environment_check().await });
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    // A second check, if one ran, must not wait on the router too.
+    fixture.router.held.lock().expect("held").take();
+    release.notify_one();
+
+    first.await.expect("first task").expect("first check");
+    let shared = second.await.expect("second task").expect("second check");
+    assert!(shared.environment.is_some());
+    assert_eq!(
+        fixture.map_calls(),
+        before + 1,
+        "the second request waited for the first check instead of running its own"
     );
 }

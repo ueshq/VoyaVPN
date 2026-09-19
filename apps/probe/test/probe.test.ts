@@ -82,6 +82,24 @@ describe("probe handler", () => {
     expect(parsePorts(null)).toBeNull();
   });
 
+  it("stops reading a body without a declared length once it passes the cap", async () => {
+    let pulled = 0;
+    const chunk = new TextEncoder().encode(" ".repeat(64));
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(chunk);
+      },
+    });
+    // Node needs `duplex` for a streamed body; the Workers types do not name it.
+    const request = probeRequest("", {}, { body: endless, duplex: "half" } as RequestInit);
+    expect(request.headers.get("content-length")).toBeNull();
+
+    const response = await handleRequest(request, { dial: dialer({}) });
+    expect(response.status).toBe(400);
+    expect(pulled).toBeLessThan(10);
+  });
+
   it("rate limits per caller before dialing", async () => {
     const dial = dialer({});
     const limit = vi.fn(async () => ({ success: false }));

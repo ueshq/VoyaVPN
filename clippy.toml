@@ -1,2 +1,6 @@
 avoid-breaking-exported-api = false
 msrv = "1.94"
+# A failing assertion is how a test reports; production code gets no panics.
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true

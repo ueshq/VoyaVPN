@@ -1,3 +1,10 @@
+//! Test doubles for other crates' tests, behind the `test-support` feature.
+
+#![allow(
+    clippy::expect_used,
+    reason = "test doubles: a poisoned lock means a test has already failed"
+)]
+
 use std::sync::{Arc, Mutex};
 
 use crate::process::{

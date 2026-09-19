@@ -40,6 +40,11 @@ pub fn run() {
         }
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "only the Tauri runtime itself failing lands here; `initialize` reports \
+                  every failure the user can act on"
+    )]
     let app = tauri::Builder::default()
         // First, so a second launch hands over before anything else starts.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {

@@ -64,7 +64,7 @@ pub(super) fn pick_free_port(taken: &[u16], available: impl Fn(u16) -> bool) -> 
 
 fn random_bytes<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0_u8; N];
-    getrandom::fill(&mut bytes).map_err(|error| SelfHostError::Random(error.to_string()))?;
+    getrandom::fill(&mut bytes)?;
     Ok(bytes)
 }
 

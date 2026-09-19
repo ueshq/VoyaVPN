@@ -73,7 +73,7 @@ describe("i18n locales", () => {
     // sub-domain that previously leaked English values into zh-Hans/zh-Hant.
     const translatedKeys = [
       "actions.connect",
-      "actions.settings",
+      "actions.done",
       "nodeGroups.local",
       "nodeGroups.test",
       "subscriptions.edit",

@@ -1,6 +1,6 @@
-import type { Profile } from "@/ipc/bindings";
+import type { Profile, ProfileKind } from "@/ipc/bindings";
 import { trimToNull } from "@voya/utils/text";
-import { CONFIG_TYPES, type ProfileProtocol as ProfileKind } from "./profile-constants";
+import { CONFIG_TYPES } from "./profile-constants";
 import {
   profileFormSchema,
   activeProfileFormValues,

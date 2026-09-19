@@ -39,32 +39,30 @@ export function connectionSearchHay(connection: ProxyConnectionItem) {
 }
 
 /**
- * Filter and sort against precomputed, snapshot-scoped keys: `hays` parallel to
- * `connections` while searching, `routeTexts` while sorting by route. Passing
- * null when unused keeps the idle table free of per-row work, and the route
- * comparator never re-derives a chain per comparison.
+ * Filter and sort against precomputed, snapshot-scoped keys: `search.hays`
+ * parallel to `connections` while searching, `routeTexts` while sorting by
+ * route. Passing null when unused keeps the idle table free of per-row work,
+ * and the route comparator never re-derives a chain per comparison.
  */
 export function arrangeConnections(
   connections: ProxyConnectionItem[],
   {
-    hays,
-    needle,
     routeTexts,
+    search,
     sort,
   }: {
-    hays: readonly string[] | null;
-    needle: string;
     routeTexts: readonly string[] | null;
+    search: { hays: readonly string[]; needle: string } | null;
     sort: ConnectionSort | null;
   },
 ): ProxyConnectionItem[] {
-  if (!needle && !sort) return connections;
+  if (!search && !sort) return connections;
   const derived = connections.map((connection, index) => ({
     connection,
-    hay: hays?.[index],
+    hay: search?.hays[index] ?? "",
     routeText: routeTexts?.[index] ?? "",
   }));
-  const filtered = needle ? derived.filter((row) => row.hay?.includes(needle)) : derived;
+  const filtered = search ? derived.filter((row) => row.hay.includes(search.needle)) : derived;
   if (!sort) return filtered.map((row) => row.connection);
   return filtered
     .toSorted((a, b) => {

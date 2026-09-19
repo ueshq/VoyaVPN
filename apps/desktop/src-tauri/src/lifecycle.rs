@@ -43,6 +43,7 @@ pub(super) fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         );
     }
     restore_system_proxy_for_exit(app);
+    stop_monitoring_for_exit(app);
 }
 
 fn revoke_elevation_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
@@ -78,7 +79,16 @@ fn restore_system_proxy_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Err(error) = state.system_proxy_manager().restore(&config) {
         tracing::warn!(?error, "failed to restore system proxy on exit");
     }
-    state.statistics_manager().close();
+}
+
+/// Runs last, once the core is down, so the whole session's traffic counts.
+fn stop_monitoring_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    // Waits for the statistics loop's final flush: nothing is dropped on the
+    // way out, so buffered traffic would otherwise be lost.
+    tauri::async_runtime::block_on(state.statistics_manager().shutdown());
     if let Err(error) = state.proxy_monitor_controller().stop() {
         tracing::warn!(?error, "failed to stop proxy monitor on exit");
     }

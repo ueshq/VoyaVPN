@@ -14,12 +14,9 @@ import {
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { ProfileListEntry } from "@/ipc/bindings";
+import type { ProfileKind, ProfileListEntry } from "@/ipc/bindings";
 
-import {
-  localizeProfileProtocols,
-  type ProfileProtocol,
-} from "./profile-constants";
+import { localizeProfileProtocols } from "./profile-constants";
 import {
   Panel,
   ProfileFields,
@@ -103,7 +100,7 @@ function ProfileDialogForm({
   const configType = useWatch({
     control: form.control,
     name: "configType",
-  }) as ProfileProtocol;
+  }) as ProfileKind;
   const security =
     useWatch({ control: form.control, name: "streamSecurity" }) ?? "";
 

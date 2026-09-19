@@ -1,4 +1,5 @@
-import { CONFIG_TYPES, type ProfileProtocol } from "./profile-constants";
+import type { ProfileKind } from "@/ipc/bindings";
+import { CONFIG_TYPES } from "./profile-constants";
 import type { TranslationFunction } from "@voya/i18n";
 import { PROFILE_VALIDATION_CODES } from "./profile-form-schema";
 
@@ -10,7 +11,7 @@ export function optionalNumber(value: unknown) {
   return Number(value);
 }
 
-export function passwordLabel(configType: ProfileProtocol, t: TranslationFunction) {
+export function passwordLabel(configType: ProfileKind, t: TranslationFunction) {
   // TUIC is deliberately absent: it carries a UUID *and* a password, and the
   // UUID is edited through the username input (see `usernameLabel`).
   if (configType === CONFIG_TYPES.VMess || configType === CONFIG_TYPES.VLESS) {
@@ -23,7 +24,7 @@ export function passwordLabel(configType: ProfileProtocol, t: TranslationFunctio
   return t("panes.profiles.fields.password");
 }
 
-export function usernameLabel(configType: ProfileProtocol, t: TranslationFunction) {
+export function usernameLabel(configType: ProfileKind, t: TranslationFunction) {
   // The form's `username` field carries the TUIC contract's `uuid`, so it is
   // labelled UUID for that protocol.
   if (configType === CONFIG_TYPES.TUIC) {
@@ -33,7 +34,7 @@ export function usernameLabel(configType: ProfileProtocol, t: TranslationFunctio
   return t("panes.profiles.fields.username");
 }
 
-export function requiresUsername(configType: ProfileProtocol) {
+export function requiresUsername(configType: ProfileKind) {
   return configType === CONFIG_TYPES.SOCKS
     || configType === CONFIG_TYPES.HTTP
     || configType === CONFIG_TYPES.Naive

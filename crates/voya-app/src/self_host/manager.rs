@@ -1,10 +1,13 @@
 //! The node's lifecycle: settings, credentials, the core process, restarts
 //! after a crash, and the network check that feeds the links.
 //!
-//! One `tokio::sync::Mutex` serializes every change of the process, so a save
-//! arriving while a crash restart is pending cannot start two cores. A
-//! generation counter, bumped on every start and stop, lets a scheduled restart
-//! notice that the user changed something in the meantime.
+//! The `lifecycle` lock serializes every change of the process, so a save
+//! arriving while a crash restart is pending cannot start two cores. It is held
+//! across the slow parts (spawning, stopping, removing router forwards); the
+//! `node` lock beside it is only taken for short reads and writes, so the page
+//! never waits on a starting core. A generation counter, bumped on every start
+//! and stop, lets a scheduled restart notice that the user changed something in
+//! the meantime.
 
 use std::{
     sync::{Arc, Mutex as StdMutex},
@@ -12,7 +15,7 @@ use std::{
 };
 
 use tokio::{
-    sync::{mpsc, watch, Mutex, Notify},
+    sync::{mpsc, watch, Mutex, MutexGuard, Notify},
     task::{self, JoinHandle},
 };
 use voya_contracts::{
@@ -59,6 +62,9 @@ pub struct SelfHostManager {
 struct Inner {
     database: Database,
     deps: SelfHostDeps,
+    /// Serializes starts, stops and exit handling. The functions that need it
+    /// take its guard as a parameter.
+    lifecycle: Mutex<()>,
     node: Mutex<NodeState>,
     /// Serializes network checks; a check takes seconds and must not hold
     /// `node`, which every command reads.
@@ -124,6 +130,7 @@ impl SelfHostManager {
             inner: Arc::new(Inner {
                 database,
                 deps,
+                lifecycle: Mutex::new(()),
                 node: Mutex::new(NodeState::default()),
                 check_lock: Mutex::new(()),
                 shutdown,
@@ -177,9 +184,9 @@ impl SelfHostManager {
             return Ok(());
         }
         self.ensure_identity(&mut record).await?;
-        let mut node = self.inner.node.lock().await;
-        self.start_locked(&mut node, &record).await;
-        drop(node);
+        let lifecycle = self.inner.lifecycle.lock().await;
+        self.start_locked(&lifecycle, &record).await;
+        drop(lifecycle);
         self.after_change();
         Ok(())
     }
@@ -220,30 +227,39 @@ impl SelfHostManager {
     /// Stores `record` and brings the process in line with it.
     async fn apply(&self, mut record: SelfHostRecordV1, restart: bool) -> Result<SelfHostState> {
         if record.config.enabled {
-            self.assign_ports(&mut record)?;
+            self.assign_ports(&mut record).await?;
             if record.credentials.is_none() {
                 record.credentials = Some(mint_credentials()?);
             }
         }
+        // Taken before the save, so racing changes are stored and applied in
+        // the same order.
+        let lifecycle = self.inner.lifecycle.lock().await;
         self.inner.database.self_host().save(&record).await?;
 
-        let mut node = self.inner.node.lock().await;
-        node.restart_attempt = 0;
+        let running = {
+            let mut node = self.inner.node.lock().await;
+            node.restart_attempt = 0;
+            node.core.is_some()
+        };
         if !record.config.enabled {
-            self.stop_locked(&mut node).await;
-        } else if restart || node.core.is_none() {
-            self.stop_locked(&mut node).await;
-            self.start_locked(&mut node, &record).await;
+            self.stop_locked(&lifecycle).await;
+        } else if restart || !running {
+            self.stop_locked(&lifecycle).await;
+            self.start_locked(&lifecycle, &record).await;
         }
-        let state = self.build_state(&record, &node);
-        drop(node);
+        let state = {
+            let node = self.inner.node.lock().await;
+            self.build_state(&record, &node)
+        };
+        drop(lifecycle);
         self.after_change();
         Ok(state)
     }
 
     async fn ensure_identity(&self, record: &mut SelfHostRecordV1) -> Result<()> {
         let before = record.clone();
-        self.assign_ports(record)?;
+        self.assign_ports(record).await?;
         if record.credentials.is_none() {
             record.credentials = Some(mint_credentials()?);
         }
@@ -254,31 +270,47 @@ impl SelfHostManager {
     }
 
     /// Replaces a `0` port with a free random one. Chosen ports are kept, so
-    /// links stay valid across restarts.
-    fn assign_ports(&self, record: &mut SelfHostRecordV1) -> Result<()> {
+    /// links stay valid across restarts. Each probe binds sockets, so the draw
+    /// runs on the blocking pool.
+    async fn assign_ports(&self, record: &mut SelfHostRecordV1) -> Result<()> {
+        let (vless, shadowsocks) = (record.config.vless_port, record.config.shadowsocks_port);
+        if vless != 0 && shadowsocks != 0 {
+            return Ok(());
+        }
         let network = Arc::clone(&self.deps().network);
-        let config = &mut record.config;
-        if config.vless_port == 0 {
-            config.vless_port = pick_free_port(&[config.shadowsocks_port], |port| {
-                network.port_available(port)
-            })?;
-        }
-        if config.shadowsocks_port == 0 {
-            config.shadowsocks_port =
-                pick_free_port(&[config.vless_port], |port| network.port_available(port))?;
-        }
+        let available = move |port| network.port_available(port);
+        let (vless, shadowsocks) = task::spawn_blocking(move || {
+            let vless = match vless {
+                0 => pick_free_port(&[shadowsocks], &available)?,
+                port => port,
+            };
+            let shadowsocks = match shadowsocks {
+                0 => pick_free_port(&[vless], &available)?,
+                port => port,
+            };
+            Ok::<_, SelfHostError>((vless, shadowsocks))
+        })
+        .await??;
+        record.config.vless_port = vless;
+        record.config.shadowsocks_port = shadowsocks;
         Ok(())
     }
 
-    async fn start_locked(&self, node: &mut NodeState, record: &SelfHostRecordV1) {
-        node.generation += 1;
-        node.clear_problem();
+    /// Starts the core. `node` is only held to publish `Starting` and then the
+    /// outcome, so the page can read the state while the core spawns.
+    async fn start_locked(&self, _lifecycle: &MutexGuard<'_, ()>, record: &SelfHostRecordV1) {
         let ports = enabled_ports(&record.config);
-        if ports.is_empty() {
-            node.fail(SelfHostProblem::NoProtocol, None, None);
-            return;
+        {
+            let mut node = self.inner.node.lock().await;
+            node.generation += 1;
+            node.clear_problem();
+            if ports.is_empty() {
+                node.fail(SelfHostProblem::NoProtocol, None, None);
+                return;
+            }
+            node.status = SelfHostRuntimeStatus::Starting;
         }
-        node.status = SelfHostRuntimeStatus::Starting;
+        self.after_change();
 
         let deps = self.deps().clone();
         let record = record.clone();
@@ -315,6 +347,7 @@ impl SelfHostManager {
         .await
         .unwrap_or_else(|error| Err((SelfHostProblem::StartFailed, Some(error.to_string()), None)));
 
+        let mut node = self.inner.node.lock().await;
         match started {
             Ok(core) => {
                 node.core = Some(core);
@@ -335,16 +368,23 @@ impl SelfHostManager {
         }
     }
 
-    async fn stop_locked(&self, node: &mut NodeState) {
-        node.generation += 1;
-        if let Some(core) = node.core.take() {
+    /// Stops the core and removes the router forwards. The state reads
+    /// `Stopped` at once; the stop and the unmap run without `node`.
+    async fn stop_locked(&self, _lifecycle: &MutexGuard<'_, ()>) {
+        let (core, mapped) = {
+            let mut node = self.inner.node.lock().await;
+            node.generation += 1;
+            node.status = SelfHostRuntimeStatus::Stopped;
+            node.clear_problem();
+            (node.core.take(), std::mem::take(&mut node.mapped_ports))
+        };
+        if let Some(core) = core {
             let deps = self.deps().clone();
             if let Err(error) = task::spawn_blocking(move || stop_core(&deps, &core.handle)).await {
                 tracing::warn!(%error, "self-hosted stop task failed");
             }
             self.log(LogLevel::Info, LogCode::SelfHostStopped, None);
         }
-        let mapped = std::mem::take(&mut node.mapped_ports);
         if !mapped.is_empty() {
             let unmap = self.deps().port_mapper.unmap(mapped);
             if tokio::time::timeout(UNMAP_ON_STOP_TIMEOUT, unmap)
@@ -354,11 +394,12 @@ impl SelfHostManager {
                 tracing::debug!("timed out removing router forwards");
             }
         }
-        node.status = SelfHostRuntimeStatus::Stopped;
-        node.clear_problem();
     }
 
     pub(super) async fn handle_exit(&self, exit: ProcessExit) {
+        // Waits out a start still spawning: the core that exited may be the
+        // one it has not recorded yet.
+        let _lifecycle = self.inner.lifecycle.lock().await;
         let mut node = self.inner.node.lock().await;
         let Some(core) = node.core.as_ref() else {
             return;
@@ -410,18 +451,25 @@ impl SelfHostManager {
     }
 
     async fn restart_after_exit(&self, generation: u64) {
-        let mut node = self.inner.node.lock().await;
-        if node.generation != generation || node.core.is_some() {
-            return;
-        }
-        match self.inner.database.self_host().load().await {
-            Ok(record) if record.config.enabled => self.start_locked(&mut node, &record).await,
-            Ok(_) => return,
-            Err(error) => {
-                node.fail(SelfHostProblem::StartFailed, Some(error.to_string()), None);
+        let lifecycle = self.inner.lifecycle.lock().await;
+        {
+            let node = self.inner.node.lock().await;
+            if node.generation != generation || node.core.is_some() {
+                return;
             }
         }
-        drop(node);
+        match self.inner.database.self_host().load().await {
+            Ok(record) if record.config.enabled => self.start_locked(&lifecycle, &record).await,
+            Ok(_) => return,
+            Err(error) => {
+                self.inner.node.lock().await.fail(
+                    SelfHostProblem::StartFailed,
+                    Some(error.to_string()),
+                    None,
+                );
+            }
+        }
+        drop(lifecycle);
         self.deps().sink.state_changed();
     }
 
@@ -453,9 +501,14 @@ impl SelfHostManager {
         })
     }
 
-    /// Runs the network check now and returns the refreshed page state.
+    /// Runs the network check now and returns the refreshed page state. A
+    /// check already under way answers the request: queuing another would
+    /// repeat its router, probe and self-test round trips back to back.
     pub async fn run_environment_check(&self) -> Result<SelfHostState> {
-        self.check(false).await?;
+        match self.inner.check_lock.try_lock() {
+            Ok(serial) => self.check_locked(&serial, false).await?,
+            Err(_) => drop(self.inner.check_lock.lock().await),
+        }
         self.state().await
     }
 
@@ -466,7 +519,11 @@ impl SelfHostManager {
     }
 
     async fn check(&self, periodic: bool) -> Result<()> {
-        let _serial = self.inner.check_lock.lock().await;
+        let serial = self.inner.check_lock.lock().await;
+        self.check_locked(&serial, periodic).await
+    }
+
+    async fn check_locked(&self, _serial: &MutexGuard<'_, ()>, periodic: bool) -> Result<()> {
         let record = self.inner.database.self_host().load().await?;
         if periodic && !record.config.enabled {
             return Ok(());
@@ -536,8 +593,7 @@ impl SelfHostManager {
             deps.firewall.allow_program(&program)?;
             Ok::<_, SelfHostError>(())
         })
-        .await
-        .map_err(|error| SelfHostError::Task(error.to_string()))??;
+        .await??;
         self.check(false).await?;
         self.state().await
     }
@@ -548,8 +604,8 @@ impl SelfHostManager {
         // A closed channel only means the loops already left.
         let _ = self.inner.shutdown.send(true);
         {
-            let mut node = self.inner.node.lock().await;
-            self.stop_locked(&mut node).await;
+            let lifecycle = self.inner.lifecycle.lock().await;
+            self.stop_locked(&lifecycle).await;
         }
         self.deps().runner.set_exit_handler(None);
         let tasks = self

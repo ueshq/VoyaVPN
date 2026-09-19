@@ -1,7 +1,13 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { readJson, repoRootFromScript } from "../lib/common.mjs";
-import { inspectI18nSource, isKnownHardcodedText, KNOWN_HARDCODED_TEXT } from "./i18n-analyzer.mjs";
+import {
+  EXTERNAL_KEY_NAMESPACES,
+  inspectI18nSource,
+  isKnownHardcodedText,
+  KNOWN_HARDCODED_TEXT,
+  unusedTranslationKeys,
+} from "./i18n-analyzer.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const localesDir = resolve(repoRoot, "packages/i18n/src/locales");
@@ -34,6 +40,7 @@ const invalidKeys = [];
 const dynamicKeys = [];
 const hardcodedJsx = [];
 const usedHardcodedAllowlistEntries = new Set();
+const sourceLiterals = new Set();
 
 for (const root of productionSourceDirs) {
   for (const path of productionSourceFiles(root)) {
@@ -58,6 +65,26 @@ if (hardcodedJsx.length > 0) {
   throw new Error(`User-visible frontend text must use Voya locale resources:\n${formatList(hardcodedJsx)}`);
 }
 
+const staleNamespaces = EXTERNAL_KEY_NAMESPACES.filter(({ reader, marker }) => {
+  const path = resolve(repoRoot, reader);
+  return !existsSync(path) || !readFileSync(path, "utf8").includes(marker);
+});
+if (staleNamespaces.length > 0) {
+  throw new Error(
+    `External locale readers no longer read their namespace (update EXTERNAL_KEY_NAMESPACES in i18n-analyzer.mjs):\n${formatList(
+      staleNamespaces.map(({ prefix, reader }) => `${prefix}* in ${reader}`),
+    )}`,
+  );
+}
+const unusedKeys = unusedTranslationKeys({
+  keys: englishKeys,
+  literals: sourceLiterals,
+  externalPrefixes: EXTERNAL_KEY_NAMESPACES.map(({ prefix }) => prefix),
+});
+if (unusedKeys.length > 0) {
+  throw new Error(`Locale keys no production source uses (delete them from every locale):\n${formatList(unusedKeys)}`);
+}
+
 console.log(`i18n check passed: ${localeCodes.length} aligned Voya locales, ${englishKeys.length} keys.`);
 
 function inspectSource(path) {
@@ -67,6 +94,7 @@ function inspectSource(path) {
   const relativePath = relative(repoRoot, path).replaceAll("\\", "/");
   invalidKeys.push(...result.invalidKeys.map((item) => location(path, item)));
   dynamicKeys.push(...result.dynamicKeys.map((item) => location(path, item)));
+  for (const literal of result.literals) sourceLiterals.add(literal);
   for (const item of result.hardcodedText) {
     if (isKnownHardcodedText(relativePath, item.detail)) {
       usedHardcodedAllowlistEntries.add(`${relativePath}:${item.detail}`);

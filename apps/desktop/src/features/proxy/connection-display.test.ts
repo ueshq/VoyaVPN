@@ -67,27 +67,26 @@ describe("arrangeConnections", () => {
   it("returns the snapshot itself when neither searching nor sorting", () => {
     const connections = [alpha, beta];
 
-    expect(arrangeConnections(connections, { hays: null, needle: "", routeTexts: null, sort: null })).toBe(connections);
+    expect(arrangeConnections(connections, { routeTexts: null, search: null, sort: null })).toBe(connections);
   });
 
   it("filters against the precomputed haystacks", () => {
     const connections = [alpha, beta];
     const hays = connections.map(connectionSearchHay);
 
-    expect(arrangeConnections(connections, { hays, needle: "updater", routeTexts: null, sort: null })).toEqual([beta]);
-    expect(arrangeConnections(connections, { hays, needle: "alpha", routeTexts: null, sort: null })).toEqual([alpha]);
-    expect(arrangeConnections(connections, { hays, needle: "tokyo", routeTexts: null, sort: null })).toEqual([]);
+    expect(arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "updater" }, sort: null })).toEqual([beta]);
+    expect(arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "alpha" }, sort: null })).toEqual([alpha]);
+    expect(arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "tokyo" }, sort: null })).toEqual([]);
   });
 
   it("sorts by the precomputed route text and combined traffic in both directions", () => {
     const connections = [alpha, beta];
     const routeTexts = ["Alpha", "Direct"];
 
-    const byRoute = arrangeConnections(connections, { hays: null, needle: "", routeTexts, sort: { column: "route", ascending: true } });
+    const byRoute = arrangeConnections(connections, { routeTexts, search: null, sort: { column: "route", ascending: true } });
     const byTraffic = arrangeConnections(connections, {
-      hays: null,
-      needle: "",
       routeTexts: null,
+      search: null,
       sort: { column: "traffic", ascending: false },
     });
 
@@ -107,9 +106,8 @@ describe("arrangeConnections", () => {
     const hays = connections.map(connectionSearchHay);
 
     const rows = arrangeConnections(connections, {
-      hays,
-      needle: "example.com",
       routeTexts: null,
+      search: { hays, needle: "example.com" },
       sort: { column: "traffic", ascending: true },
     });
 
@@ -133,9 +131,8 @@ describe("arrangeConnections", () => {
     const started = performance.now();
     for (let round = 0; round < 10; round += 1) {
       arrangeConnections(connections, {
-        hays,
-        needle: "example.com",
         routeTexts,
+        search: { hays, needle: "example.com" },
         sort: { column: "route", ascending: true },
       });
     }

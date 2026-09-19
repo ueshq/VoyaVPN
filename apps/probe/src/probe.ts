@@ -96,11 +96,29 @@ export function parsePorts(body: string | null): number[] | null {
   return [...new Set(ports as number[])];
 }
 
+/**
+ * The body as text, or `null` past `MAX_BODY_BYTES`. The cap counts bytes as
+ * they arrive, so a chunked body or a false `content-length` cannot make the
+ * worker buffer more than one chunk beyond it.
+ */
 async function readBody(request: Request): Promise<string | null> {
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > MAX_BODY_BYTES) return null;
-  const text = await request.text();
-  return text.length > MAX_BODY_BYTES ? null : text;
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return text + decoder.decode();
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
 }
 
 function errorResponse(status: number, code: ErrorCode): Response {

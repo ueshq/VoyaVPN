@@ -50,14 +50,20 @@ export const criticalModules = [
   "packages/utils/src/formatting.ts",
   "packages/utils/src/operational-redaction.ts",
   "packages/utils/src/text.ts",
+  // The probe Worker: the only code that dials an address it was handed, and
+  // the screen that keeps that address the caller's own public one.
+  "apps/probe/src/address.ts",
+  "apps/probe/src/probe.ts",
 ];
 
 export const runtimeModules = [
-  // The single mounted bridge for all three ADR-0002 event channels.
-  { path: "apps/desktop/src/ipc/event-bridge.tsx", lines: 65, branches: 45 },
-  { path: "apps/desktop/src/ipc/runtime-event-store.ts", lines: 65, branches: 50 },
+  // The single mounted bridge for all three ADR-0002 event channels, and the
+  // store its streams land in. Measured 83/79 and 94/84 when the floors were
+  // last raised; the home hook at 100/95.
+  { path: "apps/desktop/src/ipc/event-bridge.tsx", lines: 75, branches: 70 },
+  { path: "apps/desktop/src/ipc/runtime-event-store.ts", lines: 85, branches: 75 },
   // Connect/disconnect on the home screen.
-  { path: "apps/desktop/src/features/home/use-home-runtime.ts", lines: 65, branches: 50 },
+  { path: "apps/desktop/src/features/home/use-home-runtime.ts", lines: 90, branches: 85 },
   // Runs every runtime action and node or group switch, with the shared guard
   // and the elevation and missing-core recovery paths. Measured 97/98 when
   // profile activation merged into it.
@@ -92,8 +98,9 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/routing/routing-screen.tsx", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/routing/traffic-mode-switcher.tsx", lines: 85, branches: 75 },
   { path: "apps/desktop/src/stores/modal-store.ts", lines: 75, branches: 90 },
-  // The Self-hosted node page, measured when it landed: controller 100/81,
-  // cards 90-100 lines and 75-92 branches.
+  // The Self-hosted node page after its redesign: controller 100/78, screen
+  // 100/92, settings dialog 100/96, share dialog 97/88, network status 100/95,
+  // hosting card and action tile 100/100.
   { path: "apps/desktop/src/features/self-host/use-self-host.ts", lines: 95, branches: 75 },
   { path: "apps/desktop/src/features/self-host/self-host-screen.tsx", lines: 95, branches: 75 },
   { path: "apps/desktop/src/features/self-host/node-settings-dialog.tsx", lines: 95, branches: 80 },
@@ -101,6 +108,16 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/self-host/network-status.tsx", lines: 95, branches: 75 },
   { path: "apps/desktop/src/features/self-host/hosting-card.tsx", lines: 95, branches: 75 },
   { path: "apps/desktop/src/features/self-host/action-tile.tsx", lines: 95, branches: 75 },
+  // State-bearing modules that sat under the global floor with nothing to
+  // stop them sliding further. Measured when listed: node-list-store 40/25,
+  // policy groups 53/44, DNS form schema 71/57, QR errors 63/17. The floors
+  // only keep today's tests; raise them as tests are added.
+  { path: "apps/desktop/src/stores/node-list-store.ts", lines: 30, branches: 15 },
+  { path: "apps/desktop/src/features/profiles/use-policy-groups.ts", lines: 45, branches: 35 },
+  { path: "apps/desktop/src/features/dns/dns-form-schema.ts", lines: 60, branches: 45 },
+  { path: "apps/desktop/src/features/profiles/qr-errors.ts", lines: 55, branches: 10 },
+  // Had no test at all; 100/100 once it got one.
+  { path: "apps/desktop/src/features/profiles/speedtest-settings-dialog.tsx", lines: 90, branches: 85 },
 ];
 
 /**

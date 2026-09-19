@@ -1,9 +1,12 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import type { ThemeMode } from "@/ipc/bindings";
+
 import { mergeValidated } from "./persisted";
 
-export type ThemeMode = "system" | "light" | "dark";
+/** Every mode the backend knows; a new one fails the typecheck here. */
+const THEME_MODES = { dark: true, light: true, system: true } satisfies Record<ThemeMode, true>;
 
 type PersistedPreferences = {
   /** When the rule library was last updated from this device; the backend keeps no date. */
@@ -66,5 +69,5 @@ export function resolveThemeMode(themeMode: ThemeMode) {
 }
 
 export function isThemeMode(value: unknown): value is ThemeMode {
-  return value === "system" || value === "light" || value === "dark";
+  return typeof value === "string" && Object.hasOwn(THEME_MODES, value);
 }

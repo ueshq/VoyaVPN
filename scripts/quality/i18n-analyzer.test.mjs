@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  EXTERNAL_KEY_NAMESPACES,
   inspectI18nSource,
   isKnownHardcodedText,
   isUserVisibleText,
   KNOWN_HARDCODED_TEXT,
+  unusedTranslationKeys,
 } from "./i18n-analyzer.mjs";
 
 const knownKeys = new Set(["actions.save", "form.placeholder"]);
@@ -123,5 +125,30 @@ describe("i18n AST analyzer", () => {
     // Every entry here is text a locale gate cannot see. Adding one is a
     // deliberate, temporary act; this assertion makes it visible in review.
     expect(KNOWN_HARDCODED_TEXT).toEqual([]);
+  });
+
+  it("counts a key as used from any string literal, including label maps", () => {
+    const { literals } = inspect(`
+      const labels = { running: "status.running" };
+      const title = t("actions.save");
+      const note = \`plain \${value}\`;
+    `);
+
+    expect(literals).toEqual(expect.arrayContaining(["status.running", "actions.save"]));
+    expect(
+      unusedTranslationKeys({
+        keys: ["actions.save", "status.running", "status.stale", "startupFailure.title"],
+        literals: new Set(literals),
+        externalPrefixes: ["startupFailure."],
+      }),
+    ).toEqual(["status.stale"]);
+  });
+
+  it("names a reader for every namespace read outside the frontend", () => {
+    for (const namespace of EXTERNAL_KEY_NAMESPACES) {
+      expect(namespace.prefix.endsWith("."), namespace.prefix).toBe(true);
+      expect(namespace.reader).toMatch(/^(crates|apps)\//);
+      expect(namespace.marker.length).toBeGreaterThan(0);
+    }
   });
 });

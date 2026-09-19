@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -143,7 +143,11 @@ impl StatisticsEventSink for NoopStatisticsEventSink {
 
 pub struct StatisticsManager {
     shutdown: watch::Sender<bool>,
-    handles: Vec<JoinHandle<()>>,
+    /// Writes the samples to SQLite. Taken by `shutdown`, which waits for its
+    /// final flush.
+    aggregator: Mutex<Option<JoinHandle<()>>>,
+    /// Reads the core's traffic stream; holds nothing worth waiting for.
+    collector: JoinHandle<()>,
 }
 
 impl StatisticsManager {
@@ -156,26 +160,42 @@ impl StatisticsManager {
         let (sample_tx, sample_rx) = mpsc::channel(STATISTICS_CHANNEL_SIZE);
         let (shutdown, shutdown_rx) = watch::channel(false);
 
-        let handles = vec![
-            tokio::spawn(run_statistics_aggregator(
-                database,
-                config,
-                event_sink,
-                sample_rx,
-                shutdown_rx.clone(),
-            )),
-            tokio::spawn(run_singbox_statistics_service(
-                supervisor,
-                sample_tx,
-                shutdown_rx,
-            )),
-        ];
+        let aggregator = tokio::spawn(run_statistics_aggregator(
+            database,
+            config,
+            event_sink,
+            sample_rx,
+            shutdown_rx.clone(),
+        ));
+        let collector = tokio::spawn(run_singbox_statistics_service(
+            supervisor,
+            sample_tx,
+            shutdown_rx,
+        ));
 
-        Self { shutdown, handles }
+        Self {
+            shutdown,
+            aggregator: Mutex::new(Some(aggregator)),
+            collector,
+        }
     }
 
-    pub fn close(&self) {
+    /// Stops both loops and returns once the aggregator has written the
+    /// traffic it still buffers. Tauri ends the process with
+    /// `std::process::exit`, so a flush that was only signalled would be lost.
+    pub async fn shutdown(&self) {
         let _ = self.shutdown.send(true);
+        // It may sit in a websocket connect for seconds; there is nothing to
+        // save there.
+        self.collector.abort();
+        // The guard is dropped before the await: holding a std lock across one
+        // would be a deadlock waiting to happen.
+        let aggregator = self.aggregator.lock().ok().and_then(|mut slot| slot.take());
+        if let Some(aggregator) = aggregator {
+            // A `JoinError` means the loop panicked or was aborted; either way
+            // it is no longer running, which is all this call promises.
+            let _ = aggregator.await;
+        }
     }
 
     async fn initialize_data(database: &Database, date_now: i64) -> Result<()> {
@@ -189,8 +209,9 @@ impl StatisticsManager {
 impl Drop for StatisticsManager {
     fn drop(&mut self) {
         let _ = self.shutdown.send(true);
-        for handle in &self.handles {
-            handle.abort();
+        self.collector.abort();
+        if let Ok(Some(aggregator)) = self.aggregator.get_mut() {
+            aggregator.abort();
         }
     }
 }
@@ -407,9 +428,9 @@ async fn run_statistics_aggregator(
         }
     }
 
-    // Best effort: `close()` only signals, so the process may still exit before
-    // this lands — but on the graceful path it saves up to a flush window of
-    // traffic that batching would otherwise have discarded.
+    // `StatisticsManager::shutdown` waits for this, so on the graceful path it
+    // saves up to a flush window of traffic that batching would otherwise have
+    // discarded.
     if let Err(error) = flush_traffic_buffer(&database, &mut buffer).await {
         tracing::warn!(?error, "failed to flush buffered statistics on shutdown");
     }

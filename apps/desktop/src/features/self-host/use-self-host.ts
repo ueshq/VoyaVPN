@@ -87,9 +87,13 @@ export function useSelfHost() {
   function saveConfig(patch: Partial<SelfHostConfig>) {
     const current = queryClient.getQueryData<SelfHostState>(queryKeys.selfHost);
     if (!current) return Promise.resolve(false);
-    const config = { ...current.config, ...patch };
-    publish({ ...current, config });
-    return enqueue("save", () => saveSelfHostConfig(config));
+    publish({ ...current, config: { ...current.config, ...patch } });
+    // Composed when it is sent, not now: a change queued ahead of it may fail,
+    // and then the cache holds the backend's config instead of the rejected one.
+    return enqueue("save", () => {
+      const latest = queryClient.getQueryData<SelfHostState>(queryKeys.selfHost) ?? current;
+      return saveSelfHostConfig({ ...latest.config, ...patch });
+    });
   }
 
   function setEnabled(enabled: boolean) {

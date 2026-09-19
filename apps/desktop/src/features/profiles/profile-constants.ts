@@ -23,35 +23,30 @@ export const MOVE_ACTIONS = {
   Position: "position",
 } as const satisfies Record<string, MoveAction>;
 
-export type ProfileProtocol = (typeof CONFIG_TYPES)[keyof typeof CONFIG_TYPES];
-
-type ProfileProtocolOption = {
-  label: string;
-  value: ProfileProtocol;
-};
-
-const PROFILE_PROTOCOLS: ProfileProtocolOption[] = [
-  { label: "VMess", value: CONFIG_TYPES.VMess },
-  { label: "Shadowsocks", value: CONFIG_TYPES.Shadowsocks },
-  { label: "SOCKS", value: CONFIG_TYPES.SOCKS },
-  { label: "VLESS", value: CONFIG_TYPES.VLESS },
-  { label: "Trojan", value: CONFIG_TYPES.Trojan },
-  { label: "Hysteria2", value: CONFIG_TYPES.Hysteria2 },
-  { label: "TUIC", value: CONFIG_TYPES.TUIC },
-  { label: "WireGuard", value: CONFIG_TYPES.WireGuard },
-  { label: "HTTP", value: CONFIG_TYPES.HTTP },
-  { label: "AnyTLS", value: CONFIG_TYPES.Anytls },
-  { label: "Naive", value: CONFIG_TYPES.Naive },
-];
+/** Every protocol's name, in picker order. A kind added in Rust fails the typecheck here. */
+const PROFILE_PROTOCOL_LABELS = {
+  vmess: "VMess",
+  shadowsocks: "Shadowsocks",
+  socks: "SOCKS",
+  vless: "VLESS",
+  trojan: "Trojan",
+  hysteria2: "Hysteria2",
+  tuic: "TUIC",
+  wireGuard: "WireGuard",
+  http: "HTTP",
+  anytls: "AnyTLS",
+  naive: "Naive",
+} satisfies Record<ProfileKind, string>;
 
 export function localizeProfileProtocols(t: TranslationFunction) {
-  return PROFILE_PROTOCOLS.map((option) => ({
-    ...option,
-    description: protocolDescription(option.value, t),
+  return (Object.keys(PROFILE_PROTOCOL_LABELS) as ProfileKind[]).map((value) => ({
+    description: protocolDescription(value, t),
+    label: PROFILE_PROTOCOL_LABELS[value],
+    value,
   }));
 }
 
-function protocolDescription(value: ProfileProtocol, t: TranslationFunction) {
+function protocolDescription(value: ProfileKind, t: TranslationFunction): string {
   switch (value) {
     case CONFIG_TYPES.VMess: return t("panes.profiles.protocolDescriptions.vmess");
     case CONFIG_TYPES.Shadowsocks: return t("panes.profiles.protocolDescriptions.shadowsocks");
@@ -66,14 +61,6 @@ function protocolDescription(value: ProfileProtocol, t: TranslationFunction) {
     case CONFIG_TYPES.Naive: return t("panes.profiles.protocolDescriptions.naive");
   }
 }
-
-const PROFILE_PROTOCOL_LABELS = PROFILE_PROTOCOLS.reduce<Partial<Record<ProfileKind, string>>>(
-  (labels, protocol) => {
-    labels[protocol.value] = protocol.label;
-    return labels;
-  },
-  {},
-);
 
 export const NETWORK_OPTIONS = [
   { label: "TCP / Raw", value: "tcp" },
@@ -91,7 +78,5 @@ export const SECURITY_OPTIONS = [
 ];
 
 export function getProtocolLabel(configType: ProfileKind | null | undefined) {
-  return configType == null
-    ? ""
-    : (PROFILE_PROTOCOL_LABELS[configType] ?? configType);
+  return configType == null ? "" : PROFILE_PROTOCOL_LABELS[configType];
 }

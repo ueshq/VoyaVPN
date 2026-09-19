@@ -19,7 +19,7 @@ use voya_core::{
     ProfileItem, SpeedTestItem, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
 };
 use voya_db::{Database, DbError};
-use voya_net::probe::{tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
+use voya_net::probe::{is_cancelled, tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
 use voya_platform::{
     coreinfo::{CoreInfoError, TargetOs},
     filesystem,
@@ -469,10 +469,6 @@ fn check_cancelled(cancel: &CancellationFlag) -> Result<()> {
     } else {
         Ok(())
     }
-}
-
-fn is_cancelled(cancel: &CancellationFlag) -> bool {
-    cancel.load(Ordering::SeqCst)
 }
 
 /// Resolves once `cancel` is set, for racing a run's result stream.

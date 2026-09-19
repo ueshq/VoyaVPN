@@ -103,6 +103,8 @@ export function inspectI18nSource({ path, source, knownKeys = new Set() }) {
   const invalidKeys = [];
   const dynamicKeys = [];
   const hardcodedText = [];
+  /** Every string in the file: keys reach `t` through label maps as well. */
+  const literals = [];
 
   function recordText(node, detail = textFromNode(node)) {
     const text = normalizeText(detail);
@@ -141,6 +143,9 @@ export function inspectI18nSource({ path, source, knownKeys = new Set() }) {
   }
 
   function visit(node) {
+    if (isTextLiteral(node)) {
+      literals.push(node.text);
+    }
     if (ts.isCallExpression(node) && isTranslationCall(node.expression) && node.arguments.length > 0) {
       const [key] = node.arguments;
       if (isTextLiteral(key)) {
@@ -187,7 +192,30 @@ export function inspectI18nSource({ path, source, knownKeys = new Set() }) {
   }
 
   visit(sourceFile);
-  return { dynamicKeys, hardcodedText, invalidKeys };
+  return { dynamicKeys, hardcodedText, invalidKeys, literals };
+}
+
+/**
+ * Locale namespaces read outside the frontend sources, each with the file that
+ * reads it and a string that file must still contain. A namespace whose reader
+ * no longer mentions it is stale and fails the check, like an unused key would.
+ */
+export const EXTERNAL_KEY_NAMESPACES = [
+  // The startup-failure dialog runs before the webview exists, so Rust reads
+  // the locale JSON itself.
+  { prefix: "startupFailure.", reader: "crates/voya-app/src/startup.rs", marker: "/startupFailure/" },
+];
+
+/**
+ * Locale keys that no production source names. A key counts as used when some
+ * string literal equals it — `t("a.b")` or a label map entry `"a.b"` alike,
+ * since dynamic keys are already rejected — or when its namespace is read
+ * outside the frontend.
+ */
+export function unusedTranslationKeys({ keys, literals, externalPrefixes = [] }) {
+  return keys.filter(
+    (key) => !literals.has(key) && !externalPrefixes.some((prefix) => key.startsWith(prefix)),
+  );
 }
 
 /**

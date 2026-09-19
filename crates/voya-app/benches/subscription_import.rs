@@ -2,6 +2,11 @@
 //! an empty database, and the steady state of an update, where every parsed
 //! node matches a stored one. Run with `pnpm bench:rust`.
 
+#![allow(
+    clippy::panic,
+    reason = "a benchmark that cannot set up has nothing to measure"
+)]
+
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};

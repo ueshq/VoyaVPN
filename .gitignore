@@ -93,3 +93,4 @@ __pycache__/
 # Local agent workspaces
 .agents/
 .claude/
+.zcode/

@@ -2,8 +2,9 @@
 import { Server } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
+import type { ProfileKind } from "@/ipc/bindings";
 
-import { CONFIG_TYPES, type ProfileProtocol } from "./profile-constants";
+import { CONFIG_TYPES } from "./profile-constants";
 import {
   CheckboxField,
   Panel,
@@ -14,7 +15,7 @@ import {
 import { passwordLabel, requiresUsername, optionalNumber, usernameLabel } from "./profile-form-utils";
 
 type ProtocolPanelProps = {
-  configType: ProfileProtocol;
+  configType: ProfileKind;
   control: ProfileFormControl;
   passwordError?: string;
   register: Register;

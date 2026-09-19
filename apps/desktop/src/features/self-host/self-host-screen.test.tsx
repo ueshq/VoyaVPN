@@ -386,6 +386,34 @@ describe("SelfHostScreen", () => {
     expect(screen.getByRole("switch", { name: "Block BitTorrent" })).not.toBeChecked();
   });
 
+  it("does not resend a change the backend rejected with the save queued behind it", async () => {
+    const user = setupUser();
+    let rejectFirst!: (error: Error) => void;
+    ipc.getSelfHostState.mockResolvedValue(runningState());
+    ipc.saveSelfHostConfig
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectFirst = reject;
+          }),
+      )
+      .mockImplementation(async (config) => ({ ...runningState(), config }));
+    renderScreen();
+
+    await user.click(await findTile("Node settings"));
+    await user.click(await screen.findByText("Advanced"));
+    await user.click(screen.getByRole("switch", { name: "Block BitTorrent" }));
+    await user.click(screen.getByRole("switch", { name: "Allow access to the local network" }));
+    await waitFor(() => expect(ipc.saveSelfHostConfig).toHaveBeenCalledTimes(1));
+    rejectFirst(new Error("disk full"));
+
+    await waitFor(() => expect(ipc.saveSelfHostConfig).toHaveBeenCalledTimes(2));
+    expect(ipc.saveSelfHostConfig.mock.calls[1][0]).toMatchObject({
+      allowLanAccess: true,
+      blockBittorrent: true,
+    });
+  });
+
   it("sends every edited setting in the saved config", async () => {
     const user = setupUser();
     ipc.getSelfHostState.mockResolvedValue(runningState());

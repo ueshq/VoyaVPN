@@ -3,8 +3,7 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
-import type { CloseAction } from "@/ipc/bindings";
-import type { ThemeMode } from "@/stores/preferences-store";
+import type { CloseAction, ThemeMode } from "@/ipc/bindings";
 
 import { SelectField, SettingsGroup, SettingsRow, SettingsSwitch } from "./settings-form";
 import type { AppSettingsFormController } from "./use-app-settings";

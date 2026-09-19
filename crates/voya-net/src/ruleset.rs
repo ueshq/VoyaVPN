@@ -315,7 +315,7 @@ impl StagingDir {
             if let Err(source) = tokio::fs::rename(&staged, &target).await {
                 let error = asset_io(&target, source);
                 if let Some(replaced) = replaced {
-                    let _ = tokio::fs::rename(&replaced, &target).await;
+                    restore(&replaced, &target).await;
                 }
                 rollback(&published).await;
                 return Err(error);
@@ -344,16 +344,34 @@ struct PublishedAsset {
     replaced: Option<PathBuf>,
 }
 
+/// Undoes a partly published batch. A step that fails leaves that asset as the
+/// new file or missing; the caller still gets the original error, so the
+/// failure is only logged.
 async fn rollback(published: &[PublishedAsset]) {
     for asset in published.iter().rev() {
         match &asset.replaced {
-            Some(replaced) => {
-                let _ = tokio::fs::rename(replaced, &asset.target).await;
-            }
+            Some(replaced) => restore(replaced, &asset.target).await,
             None => {
-                let _ = tokio::fs::remove_file(&asset.target).await;
+                if let Err(error) = tokio::fs::remove_file(&asset.target).await {
+                    tracing::warn!(
+                        path = %asset.target.display(),
+                        %error,
+                        "failed to remove a published asset while rolling back"
+                    );
+                }
             }
         }
+    }
+}
+
+/// Moves the file an asset replaced back onto its live path.
+async fn restore(replaced: &Path, target: &Path) {
+    if let Err(error) = tokio::fs::rename(replaced, target).await {
+        tracing::warn!(
+            path = %target.display(),
+            %error,
+            "failed to restore a replaced asset while rolling back"
+        );
     }
 }
 

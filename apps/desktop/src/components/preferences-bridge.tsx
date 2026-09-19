@@ -2,11 +2,8 @@ import { useEffect } from "react";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { applyUiPreferences, useUiPreferencesQuery } from "@/features/settings/ui-preferences";
-import {
-  resolveThemeMode,
-  type ThemeMode,
-  usePreferencesStore,
-} from "@/stores/preferences-store";
+import type { ThemeMode } from "@/ipc/bindings";
+import { resolveThemeMode, usePreferencesStore } from "@/stores/preferences-store";
 
 export function PreferencesBridge() {
   const preferencesQuery = useUiPreferencesQuery();

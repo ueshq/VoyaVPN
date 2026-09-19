@@ -10,8 +10,17 @@ export default defineConfig({
     // CI run does. Per-module floors are enforced afterwards by
     // scripts/quality/frontend-coverage.mjs from the json-summary report.
     coverage: {
-      include: ["apps/desktop/src/**/*.{ts,tsx}", "packages/*/src/**/*.{ts,tsx}"],
-      exclude: ["apps/desktop/src/ipc/bindings.ts"],
+      include: [
+        "apps/desktop/src/**/*.{ts,tsx}",
+        "apps/probe/src/**/*.ts",
+        "packages/*/src/**/*.{ts,tsx}",
+      ],
+      exclude: [
+        "apps/desktop/src/ipc/bindings.ts",
+        // The Worker entry only binds `cloudflare:sockets`, which exists in the
+        // Workers runtime alone; the handler it calls is covered in probe.ts.
+        "apps/probe/src/index.ts",
+      ],
       reporter: ["text-summary", "json-summary"],
       thresholds: globalMinimums,
     },

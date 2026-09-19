@@ -11,12 +11,8 @@ import {
 import { loadUiPreferences } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 import { toastError, useToastStore } from "@/stores/toast-store";
-import type { AppearanceSettings } from "@/ipc/bindings";
-import {
-  isThemeMode,
-  type ThemeMode,
-  usePreferencesStore,
-} from "@/stores/preferences-store";
+import type { AppearanceSettings, ThemeMode } from "@/ipc/bindings";
+import { isThemeMode, usePreferencesStore } from "@/stores/preferences-store";
 
 type NormalizedUiPreferences = AppearanceSettings & {
   language: Locale;

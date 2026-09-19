@@ -76,4 +76,8 @@ all = { level = "warn", priority = -1 }
 dbg_macro = "warn"
 todo = "warn"
 unwrap_used = "warn"
+# `unwrap_used` alone only renamed the panics: `expect` and `panic!` are the
+# same crash with a message. Tests may use all three (see clippy.toml).
+expect_used = "warn"
+panic = "warn"
 undocumented_unsafe_blocks = "warn"

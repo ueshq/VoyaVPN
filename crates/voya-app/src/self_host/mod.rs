@@ -205,7 +205,7 @@ pub enum SelfHostError {
     #[error(transparent)]
     Database(#[from] DbError),
     #[error("could not draw random bytes for the node's keys: {0}")]
-    Random(String),
+    Random(#[from] getrandom::Error),
     #[error("no free port was found for the self-hosted node")]
     NoFreePort,
     #[error(transparent)]
@@ -228,7 +228,7 @@ pub enum SelfHostError {
     #[error("the self-hosted node is not running")]
     NotRunning,
     #[error("background task failed: {0}")]
-    Task(String),
+    Task(#[from] tokio::task::JoinError),
 }
 
 pub type Result<T> = std::result::Result<T, SelfHostError>;

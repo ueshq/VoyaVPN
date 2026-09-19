@@ -1,7 +1,9 @@
 use thiserror::Error;
 use voya_contracts::ValidationCode;
 pub use voya_contracts::ValidationIssue;
-use voya_core::{SimpleDnsItem, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS};
+use voya_core::{
+    first_dns_address, SimpleDnsItem, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
+};
 
 pub type Result<T> = std::result::Result<T, DnsSettingsError>;
 
@@ -74,6 +76,8 @@ fn validate_dns_address(value: Option<&str>, field: &str, issues: &mut Vec<Valid
     let Some(value) = value.map(str::trim).filter(|value| !value.is_empty()) else {
         return;
     };
+    // Only the entry generation uses: validating the rest of a list would
+    // reject values the core never looks at.
     let Some(address) = first_dns_address(value) else {
         issues.push(ValidationIssue::new(field, ValidationCode::DnsAddressEmpty));
         return;
@@ -91,17 +95,6 @@ fn validate_dns_address(value: Option<&str>, field: &str, issues: &mut Vec<Valid
             ));
         }
     }
-}
-
-/// The entry config generation actually uses: `voya_core` keeps only the first
-/// item of a comma- or semicolon-separated address list, so validating the rest
-/// would reject values the core never looks at.
-fn first_dns_address(address: &str) -> Option<&str> {
-    let delimiter = if address.contains(',') { ',' } else { ';' };
-    address
-        .split(delimiter)
-        .map(str::trim)
-        .find(|item| !item.is_empty())
 }
 
 /// The explicit port of a DNS address, when it carries one. Mirrors the

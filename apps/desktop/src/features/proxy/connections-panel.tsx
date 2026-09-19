@@ -110,7 +110,12 @@ export function ConnectionsPanel({
     [snapshot.connections, sortingByRoute, t],
   );
   const rows = useMemo(
-    () => arrangeConnections(snapshot.connections, { hays: searchHays, needle, routeTexts, sort }),
+    () =>
+      arrangeConnections(snapshot.connections, {
+        routeTexts,
+        search: searchHays ? { hays: searchHays, needle } : null,
+        sort,
+      }),
     [snapshot.connections, searchHays, needle, routeTexts, sort],
   );
 

@@ -13,6 +13,7 @@ use std::{
 };
 
 use futures_util::future::BoxFuture;
+use tokio::task;
 use voya_contracts::{SelfHostRecordV1, SelfHostSelfTest, SelfHostSelfTestResult};
 use voya_core::{
     selfhost_share_profiles, AppConfig, ConfigType, CoreConfigContext, ProfileItem,
@@ -79,20 +80,31 @@ async fn run_self_test(deps: &SelfHostDeps, record: &SelfHostRecordV1) -> SelfHo
         return SKIPPED;
     }
 
-    let mut taken = Vec::new();
-    let mut entries = Vec::new();
-    for profile in &profiles {
-        let network = Arc::clone(&deps.network);
-        let Ok(port) = pick_free_port(&taken, |port| network.port_available(port)) else {
-            return failed_for(&profiles);
-        };
-        taken.push(port);
-        entries.push(SpeedtestConfigEntry {
-            index_id: format!("self-test-{}", entries.len()),
-            port: i32::from(port),
+    // Each probe binds sockets, so the draw runs on the blocking pool.
+    let network = Arc::clone(&deps.network);
+    let count = profiles.len();
+    let reserved = task::spawn_blocking(move || {
+        let mut taken = Vec::with_capacity(count);
+        for _ in 0..count {
+            let port = pick_free_port(&taken, |port| network.port_available(port)).ok()?;
+            taken.push(port);
+        }
+        Some(taken)
+    })
+    .await;
+    let Ok(Some(ports)) = reserved else {
+        return failed_for(&profiles);
+    };
+    let entries: Vec<_> = profiles
+        .iter()
+        .zip(&ports)
+        .enumerate()
+        .map(|(index, (profile, port))| SpeedtestConfigEntry {
+            index_id: format!("self-test-{index}"),
+            port: i32::from(*port),
             context: client_context(profile.clone(), deps.target_os),
-        });
-    }
+        })
+        .collect();
 
     let backend = ProcessSpeedtestCoreBackend::new(
         deps.paths.clone(),
@@ -109,7 +121,7 @@ async fn run_self_test(deps: &SelfHostDeps, record: &SelfHostRecordV1) -> SelfHo
         }
     };
 
-    let checks = profiles.iter().zip(&taken).map(|(profile, port)| {
+    let checks = profiles.iter().zip(&ports).map(|(profile, port)| {
         let cancel = Arc::clone(&cancel);
         async move {
             let passed = match SocksHttpProbe::new(*port) {
