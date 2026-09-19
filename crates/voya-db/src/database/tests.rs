@@ -378,6 +378,20 @@ async fn profile_repository_orders_by_profile_ex_sort() {
         .items;
     assert_eq!(ordered[0].0.index_id, "second");
     assert_eq!(ordered[0].1.sort, 10);
+
+    // The tray's names follow the same order without decoding the payloads.
+    let names = database
+        .profiles()
+        .list_names()
+        .await
+        .expect("database test operation should succeed");
+    assert_eq!(
+        names,
+        ordered
+            .iter()
+            .map(|(profile, _)| (profile.index_id.clone(), profile.remarks.clone()))
+            .collect::<Vec<_>>()
+    );
 }
 
 #[tokio::test]

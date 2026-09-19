@@ -37,7 +37,7 @@ pub struct SocksHttpProbe {
 
 impl SocksHttpProbe {
     pub fn new(socks_port: u16) -> Result<Self> {
-        let client = reqwest::Client::builder()
+        let client = crate::tls_roots::client_builder()
             .proxy(reqwest::Proxy::all(format!(
                 "socks5h://{LOOPBACK}:{socks_port}"
             ))?)

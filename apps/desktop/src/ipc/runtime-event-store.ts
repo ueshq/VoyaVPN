@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { z } from "zod";
 
 import type {
   ProxyConnectionsSnapshot,
@@ -88,30 +87,17 @@ let pendingLogLinesFrame: FrameHandle | null = null;
 let pendingSpeedtestResults: Record<string, SpeedtestResult> = {};
 let pendingSpeedtestResultsFrame: FrameHandle | null = null;
 
-const payloadStringSchema = z.string().max(4096);
-const nullablePayloadStringSchema = payloadStringSchema.nullable();
-const nonnegativeFiniteNumberSchema = z.number().finite().nonnegative();
-const nullableNonnegativeFiniteNumberSchema = nonnegativeFiniteNumberSchema.nullable();
+const MAX_PAYLOAD_STRING_LENGTH = 4096;
 
-const serverStatItemSchema: z.ZodType<ServerStatItem> = z.object({
-  dateNow: nullableNonnegativeFiniteNumberSchema,
-  indexId: payloadStringSchema,
-  todayDown: nullableNonnegativeFiniteNumberSchema,
-  todayUp: nullableNonnegativeFiniteNumberSchema,
-  totalDown: nullableNonnegativeFiniteNumberSchema,
-  totalUp: nullableNonnegativeFiniteNumberSchema,
-});
-
-const statisticsSnapshotSchema: z.ZodType<StatisticsSnapshot> = z.object({
-  activeProfileId: nullablePayloadStringSchema,
-  directDownloadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
-  directUploadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
-  downloadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
-  proxyDownloadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
-  proxyUploadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
-  serverStat: serverStatItemSchema.nullable(),
-  uploadBytesPerSecond: nullableNonnegativeFiniteNumberSchema,
-});
+const SERVER_STAT_NUMBER_KEYS = ["dateNow", "todayDown", "todayUp", "totalDown", "totalUp"] as const;
+const STATISTICS_NUMBER_KEYS = [
+  "directDownloadBytesPerSecond",
+  "directUploadBytesPerSecond",
+  "downloadBytesPerSecond",
+  "proxyDownloadBytesPerSecond",
+  "proxyUploadBytesPerSecond",
+  "uploadBytesPerSecond",
+] as const;
 
 const initialProxyMonitorStatus: RuntimeProxyMonitorStatus = {
   message: null,
@@ -188,12 +174,15 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       return;
     }
 
-    // A speedtest run reports one result per node as each probe completes, and
-    // every stored result rebuilds the node table (overlay remap, regroup,
-    // per-group sort). Buffer them and apply one `set` per frame (the log-line
-    // treatment) so a burst of results costs one rebuild.
-    if (event.kind === "speedtestResult") {
-      pendingSpeedtestResults[event.payload.indexId] = event.payload;
+    // A speedtest run reports results as probes complete (and a start or a
+    // cancel settles the whole selection in one event), and every stored result
+    // rebuilds the node table (overlay remap, regroup, per-group sort). Buffer
+    // them and apply one `set` per frame (the log-line treatment) so a burst of
+    // results costs one rebuild.
+    if (event.kind === "speedtestResults") {
+      for (const result of event.payload) {
+        pendingSpeedtestResults[result.indexId] = result;
+      }
       if (pendingSpeedtestResultsFrame === null) {
         pendingSpeedtestResultsFrame = scheduleFrame(() => {
           const batch = pendingSpeedtestResults;
@@ -317,9 +306,61 @@ function parseProxyConnectionsSnapshot(payload: unknown): ProxyConnectionsSnapsh
   return payload as ProxyConnectionsSnapshot;
 }
 
+/**
+ * Checked by hand rather than with a schema library: the snapshot arrives once
+ * a second for as long as traffic flows, and this is the only payload the
+ * shell validates field by field, so keeping it here keeps the form library
+ * off the startup path. Only the known fields are kept.
+ */
 function parseStatisticsSnapshot(payload: unknown): StatisticsSnapshot | null {
-  const result = statisticsSnapshotSchema.safeParse(payload);
-  return result.success ? result.data : null;
+  if (!isRecord(payload) || !isNullablePayloadString(payload.activeProfileId)) {
+    return null;
+  }
+  if (!STATISTICS_NUMBER_KEYS.every((key) => isNullableNonnegativeFinite(payload[key]))) {
+    return null;
+  }
+  const serverStat = payload.serverStat === null ? null : parseServerStatItem(payload.serverStat);
+  if (serverStat === undefined) {
+    return null;
+  }
+
+  return {
+    activeProfileId: payload.activeProfileId,
+    directDownloadBytesPerSecond: payload.directDownloadBytesPerSecond,
+    directUploadBytesPerSecond: payload.directUploadBytesPerSecond,
+    downloadBytesPerSecond: payload.downloadBytesPerSecond,
+    proxyDownloadBytesPerSecond: payload.proxyDownloadBytesPerSecond,
+    proxyUploadBytesPerSecond: payload.proxyUploadBytesPerSecond,
+    serverStat,
+    uploadBytesPerSecond: payload.uploadBytesPerSecond,
+  } as StatisticsSnapshot;
+}
+
+/** The item, or `undefined` when it is not one. */
+function parseServerStatItem(payload: unknown): ServerStatItem | undefined {
+  if (!isRecord(payload) || !isPayloadString(payload.indexId)) {
+    return undefined;
+  }
+  if (!SERVER_STAT_NUMBER_KEYS.every((key) => isNullableNonnegativeFinite(payload[key]))) {
+    return undefined;
+  }
+
+  return {
+    dateNow: payload.dateNow,
+    indexId: payload.indexId,
+    todayDown: payload.todayDown,
+    todayUp: payload.todayUp,
+    totalDown: payload.totalDown,
+    totalUp: payload.totalUp,
+  } as ServerStatItem;
+}
+
+function isPayloadString(value: unknown): value is string {
+  return typeof value === "string" && value.length <= MAX_PAYLOAD_STRING_LENGTH;
+}
+
+function isNullablePayloadString(value: unknown): value is string | null {
+  return value === null || isPayloadString(value);
 }
 
 function isNullableNonnegativeFinite(value: unknown): boolean {

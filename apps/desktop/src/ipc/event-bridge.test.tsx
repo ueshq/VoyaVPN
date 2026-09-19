@@ -107,7 +107,7 @@ describe("EventBridge", () => {
     await waitFor(() => expect(bridgeMocks.transientStreamEventListen).toHaveBeenCalledOnce());
     vi.useFakeTimers();
     const emit = (outcome: string) => bridgeMocks.listeners.transientStreamEvent[0]?.({ payload: {
-      kind: "speedtestResult", payload: { indexId: "node", delay: 42, ipInfo: null, countryCode: "US", detail: null, outcome },
+      kind: "speedtestResults", payload: [{ indexId: "node", delay: 42, ipInfo: null, countryCode: "US", detail: null, outcome }],
     } });
     act(() => { emit("testing"); emit("waiting"); });
     expect(vi.getTimerCount()).toBe(0);

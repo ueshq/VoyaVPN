@@ -58,14 +58,14 @@ impl SpeedtestManager {
         database: &Database,
         config: &AppConfig,
         index_ids: Vec<String>,
-        on_result: F,
+        on_results: F,
     ) -> Result<SpeedtestRunResult>
     where
-        F: Fn(SpeedtestResult) + Send + Sync,
+        F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
         let cancel = self.begin_job();
         let result = self
-            .run_inner(database, config, index_ids, Arc::clone(&cancel), on_result)
+            .run_inner(database, config, index_ids, Arc::clone(&cancel), on_results)
             .await;
         self.finish_job(&cancel);
 
@@ -78,13 +78,13 @@ impl SpeedtestManager {
         config: &AppConfig,
         index_ids: Vec<String>,
         cancel: CancellationFlag,
-        on_result: F,
+        on_results: F,
     ) -> Result<SpeedtestRunResult>
     where
-        F: Fn(SpeedtestResult) + Send + Sync,
+        F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
         let selected = select_test_items(database, config, &index_ids).await?;
-        clear_previous_results(database, &selected, &on_result).await?;
+        clear_previous_results(database, &selected, &on_results).await?;
 
         let connected = match &self.running_core {
             Some(running_core) => running_core.connect().await,
@@ -97,12 +97,18 @@ impl SpeedtestManager {
                 config,
                 &selected,
                 Arc::clone(&cancel),
-                &on_result,
+                &on_results,
             )
             .await?
         } else {
-            self.run_batch_items(database, config, &selected, Arc::clone(&cancel), &on_result)
-                .await?
+            self.run_batch_items(
+                database,
+                config,
+                &selected,
+                Arc::clone(&cancel),
+                &on_results,
+            )
+            .await?
         };
         let completed_count = u32::try_from(results.len()).unwrap_or(u32::MAX);
 
@@ -111,7 +117,7 @@ impl SpeedtestManager {
         // anything the run never reached has to be written back to a terminal
         // state or it stays pending forever, including across restarts.
         let pending =
-            finalize_pending_results(database, &selected, &results, cancelled, &on_result).await?;
+            finalize_pending_results(database, &selected, &results, cancelled, &on_results).await?;
         results.extend(pending);
 
         Ok(SpeedtestRunResult {
@@ -156,15 +162,15 @@ impl SpeedtestManager {
         config: &AppConfig,
         items: &[ServerTestItem],
         cancel: CancellationFlag,
-        on_result: &F,
+        on_results: &F,
     ) -> Result<Vec<SpeedtestResult>>
     where
-        F: Fn(SpeedtestResult) + Send + Sync,
+        F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
         let batch = self
             .prepare_speedtest_items(database, config, items)
             .await?;
-        let mut results = record_item_failures(database, batch.failures, items, on_result).await?;
+        let mut results = record_item_failures(database, batch.failures, items, on_results).await?;
         let prepared = batch.prepared;
         let page_size = speedtest_page_size(config, prepared.len());
         let batch_count = prepared.chunks(page_size).len();
@@ -190,7 +196,7 @@ impl SpeedtestManager {
                         })
                         .collect::<Vec<_>>();
                     results
-                        .extend(record_item_failures(database, failures, items, on_result).await?);
+                        .extend(record_item_failures(database, failures, items, on_results).await?);
                     continue;
                 }
             };
@@ -244,7 +250,7 @@ impl SpeedtestManager {
                 if persist_speedtest_result_with_retry(database, &result, &prepared.item.profile)
                     .await?
                 {
-                    on_result(result.clone());
+                    on_results(vec![result.clone()]);
                     results.push(result);
                 }
             }
@@ -265,7 +271,7 @@ impl SpeedtestManager {
         items: &[ServerTestItem],
     ) -> Result<PreparedSpeedtestBatch> {
         let env = load_runtime_core_gen_env(database, &self.paths, config, self.target_os).await?;
-        let builder = CoreConfigContextBuilder::new(&env);
+        let contexts = CoreConfigContextBuilder::new(&env).prepare(config);
         let reserved = reserve_speedtest_ports(
             items
                 .iter()
@@ -286,7 +292,9 @@ impl SpeedtestManager {
                 }
             };
             item.socks_port = socks_port;
-            let build = builder.build(config, &item.profile);
+            // A probe core only carries each node's own outbound, so the
+            // entry's context leaves the routing rules' outbounds out.
+            let build = contexts.build_node_outbound(&item.profile);
             if !build.success() {
                 // One unusable profile in the selection must not cancel the
                 // profiles that are still testable.
@@ -388,28 +396,39 @@ fn realping_result(index_id: String, probed: Result<RealPingProbeResult>) -> Spe
 /// Persists and reports a terminal result for profiles that could not be
 /// tested, so a bad profile or a core that refuses to start is a per-item
 /// failure instead of an aborted run.
+///
+/// A cancelled run hands every untested node in here at once. They are written
+/// in one transaction and reported in one delivery: per node, that was a
+/// commit, a linear search of the selection and an IPC event each.
 pub(super) async fn record_item_failures<F>(
     database: &Database,
     failures: Vec<SpeedtestItemFailure>,
     selected: &[ServerTestItem],
-    on_result: &F,
+    on_results: &F,
 ) -> Result<Vec<SpeedtestResult>>
 where
-    F: Fn(SpeedtestResult) + Send + Sync,
+    F: Fn(Vec<SpeedtestResult>) + Send + Sync,
 {
-    let mut results = Vec::with_capacity(failures.len());
-    for failure in failures {
-        let result = make_failure_result(failure.index_id, failure.outcome, failure.detail);
-        let Some(item) = selected
-            .iter()
-            .find(|item| item.index_id == result.index_id)
-        else {
-            continue;
-        };
-        if persist_speedtest_result_with_retry(database, &result, &item.profile).await? {
-            on_result(result.clone());
-            results.push(result);
-        }
+    if failures.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut by_id = HashMap::with_capacity(selected.len());
+    for item in selected {
+        by_id.entry(item.index_id.as_str()).or_insert(&item.profile);
+    }
+    let writes = failures
+        .into_iter()
+        .filter_map(|failure| {
+            let profile = by_id.get(failure.index_id.as_str()).copied()?;
+            Some((
+                profile,
+                make_failure_result(failure.index_id, failure.outcome, failure.detail),
+            ))
+        })
+        .collect::<Vec<_>>();
+    let results = persist_speedtest_results_with_retry(database, writes).await?;
+    if !results.is_empty() {
+        on_results(results.clone());
     }
 
     Ok(results)
@@ -423,10 +442,10 @@ async fn finalize_pending_results<F>(
     selected: &[ServerTestItem],
     results: &[SpeedtestResult],
     cancelled: bool,
-    on_result: &F,
+    on_results: &F,
 ) -> Result<Vec<SpeedtestResult>>
 where
-    F: Fn(SpeedtestResult) + Send + Sync,
+    F: Fn(Vec<SpeedtestResult>) + Send + Sync,
 {
     let tested = results
         .iter()
@@ -443,7 +462,7 @@ where
         .map(|item| SpeedtestItemFailure::new(item.index_id.clone(), outcome))
         .collect::<Vec<_>>();
 
-    record_item_failures(database, untested, selected, on_result).await
+    record_item_failures(database, untested, selected, on_results).await
 }
 
 /// Longest a contended write is retried before the result is given up on.
@@ -466,12 +485,54 @@ pub(super) async fn persist_speedtest_result_with_retry(
     result: &SpeedtestResult,
     profile: &ProfileItem,
 ) -> Result<bool> {
+    retry_contended_write(&result.index_id, || {
+        persist_speedtest_result(database, result, profile)
+    })
+    .await
+}
+
+/// [`persist_speedtest_result_with_retry`] for several nodes in one
+/// transaction; a contended attempt rolls back and is retried whole. Returns
+/// the results whose rows were written, in order.
+async fn persist_speedtest_results_with_retry(
+    database: &Database,
+    writes: Vec<(&ProfileItem, SpeedtestResult)>,
+) -> Result<Vec<SpeedtestResult>> {
+    let pending = &writes;
+    let written = retry_contended_write("batch", || async move {
+        let unit_of_work = database.begin().await?;
+        let mut written = Vec::with_capacity(pending.len());
+        for (profile, result) in pending {
+            written.push(
+                unit_of_work
+                    .profile_exs()
+                    .set_probe_result(profile, result)
+                    .await?,
+            );
+        }
+        unit_of_work.commit().await?;
+        Ok(written)
+    })
+    .await?;
+
+    Ok(writes
+        .into_iter()
+        .zip(written)
+        .filter_map(|((_, result), written)| written.then_some(result))
+        .collect())
+}
+
+async fn retry_contended_write<T, W, Fut>(what: &str, mut write: W) -> Result<T>
+where
+    W: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T>>,
+{
     let mut delay = PERSIST_RETRY_INITIAL_DELAY;
     for attempt in 1..PERSIST_RETRY_MAX_ATTEMPTS {
-        match persist_speedtest_result(database, result, profile).await {
+        match write().await {
             Err(error) if is_database_contention(&error) => {
                 tracing::debug!(
-                    index_id = %result.index_id,
+                    write = %what,
                     attempt,
                     "speedtest result write contended; retrying"
                 );
@@ -486,7 +547,7 @@ pub(super) async fn persist_speedtest_result_with_retry(
         }
     }
 
-    persist_speedtest_result(database, result, profile).await
+    write().await
 }
 
 /// Whether a persistence failure is SQLite telling us to come back later.

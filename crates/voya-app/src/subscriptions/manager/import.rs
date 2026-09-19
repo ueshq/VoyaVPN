@@ -135,8 +135,11 @@ impl SubscriptionManager<'_> {
                     .collect::<Vec<_>>();
 
                 profile.index_id.clone_from(&canonical_index_id);
+                let stored = existing_profiles
+                    .get(&canonical_index_id)
+                    .map(|(stored, stored_ex)| (stored, stored_ex));
                 let (saved, saved_ex) = profile_manager
-                    .write_imported_profile(profile, &mut new_sort)
+                    .write_imported_profile(profile, stored, &mut new_sort)
                     .await?;
                 updated_index_ids.push(saved.index_id.clone());
                 imported_index_ids.push(saved.index_id.clone());
@@ -146,7 +149,7 @@ impl SubscriptionManager<'_> {
                 // External bundle IDs cannot overwrite another source's node.
                 profile.index_id.clear();
                 let (saved, saved_ex) = profile_manager
-                    .write_imported_profile(profile, &mut new_sort)
+                    .write_imported_profile(profile, None, &mut new_sort)
                     .await?;
                 imported_index_ids.push(saved.index_id.clone());
                 existing_profiles.store(saved, saved_ex, &[]);
@@ -310,6 +313,13 @@ impl ExistingProfiles {
     /// The live entry at `index`; `None` once it was removed.
     fn entry(&self, index: usize) -> Option<&(ProfileItem, ProfileExItem)> {
         self.entries.get(index)?.as_ref()
+    }
+
+    /// The live entry stored under `index_id`. It is what the database holds
+    /// for that row inside the import's transaction, because every write goes
+    /// through [`Self::store`] as well.
+    fn get(&self, index_id: &str) -> Option<&(ProfileItem, ProfileExItem)> {
+        self.entry(*self.by_index_id.get(index_id)?)
     }
 
     /// Records a saved profile, replacing its stored copy, and drops the

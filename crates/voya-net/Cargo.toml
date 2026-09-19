@@ -14,7 +14,13 @@ futures-util = "0.3"
 igd-next = { version = "0.17", default-features = false, features = ["aio_tokio"] }
 percent-encoding = "2.3"
 # `rustls-tls-native-roots` trusts the bundled webpki roots plus the OS trust store.
-reqwest = { version = "0.12", default-features = false, features = ["charset", "http2", "json", "rustls-tls", "rustls-tls-native-roots", "socks"] }
+# Clients are built through `tls_roots::client_builder`, which reads the OS store
+# once per process; `rustls` and `rustls-native-certs` are the versions reqwest
+# already uses. `gzip` lets subscription servers compress their base64 bodies;
+# the response limits count decoded bytes, so it cannot slip past them.
+reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-tls", "rustls-tls-native-roots", "socks"] }
+rustls = { version = "0.23", default-features = false, features = ["std"] }
+rustls-native-certs = "0.8"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

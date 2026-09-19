@@ -97,8 +97,9 @@ impl ReachabilityProbe for ReachabilityProbeClient {
 }
 
 /// The probe service at `base_url`, reached directly per address family.
-pub fn probe_service(base_url: &str) -> Result<Arc<dyn ReachabilityProbe>> {
-    Ok(Arc::new(ReachabilityProbeClient::new(base_url)?))
+#[must_use]
+pub fn probe_service(base_url: &str) -> Arc<dyn ReachabilityProbe> {
+    Arc::new(ReachabilityProbeClient::new(base_url))
 }
 
 /// The home router, asked over UPnP IGD.

@@ -1,4 +1,5 @@
-//! What a failed launch can offer, decided without Tauri.
+//! Launch concerns decided without Tauri: work a launch starts early, and what
+//! a failed launch can offer.
 
 use std::{
     error::Error,
@@ -9,6 +10,19 @@ use std::{
 use voya_contracts::DatabaseErrorCode;
 use voya_db::DbError;
 pub use voya_db::{manual_database_reset_command, DatabaseBackup, DATABASE_NAME};
+
+/// Reads the OS trust store every HTTPS client shares on a thread of its own.
+///
+/// The first client a process builds would otherwise read it on the spot,
+/// over 100 ms on macOS, and one is built while the window is still hidden.
+pub fn preload_tls_roots_in_background() {
+    if let Err(error) = std::thread::Builder::new()
+        .name("voya-tls-roots".to_string())
+        .spawn(voya_net::preload_tls_roots)
+    {
+        tracing::debug!(%error, "TLS roots will load with the first HTTPS client");
+    }
+}
 
 /// Whether moving the database aside would let the next launch succeed.
 ///

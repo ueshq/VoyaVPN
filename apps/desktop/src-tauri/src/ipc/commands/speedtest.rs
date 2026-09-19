@@ -21,9 +21,9 @@ pub async fn run_speedtest<R: tauri::Runtime>(
     let emit_app = app.clone();
     let result = state
         .services()
-        .run_speedtest(&manager, &config, index_ids, move |result| {
-            if let Err(error) = emit_speedtest_result(&emit_app, &result) {
-                tracing::warn!(?error, "failed to emit speedtest result");
+        .run_speedtest(&manager, &config, index_ids, move |results| {
+            if let Err(error) = emit_speedtest_results(&emit_app, results) {
+                tracing::warn!(?error, "failed to emit speedtest results");
             }
         })
         .await

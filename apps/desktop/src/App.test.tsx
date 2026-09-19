@@ -590,6 +590,48 @@ describe("App", () => {
     );
   });
 
+  it("stops the monitor while the window is hidden into the tray and resumes when shown", async () => {
+    await import("@/features/proxy/connections-screen");
+    vi.useFakeTimers();
+    (
+      window as typeof window & { __TAURI_INTERNALS__?: unknown }
+    ).__TAURI_INTERNALS__ = {};
+    runtimeStoreMock.getState().coreState = connectedCore();
+    let visibility: DocumentVisibilityState = "visible";
+    const visibilityState = vi
+      .spyOn(document, "visibilityState", "get")
+      .mockImplementation(() => visibility);
+    const setVisibility = async (next: DocumentVisibilityState) => {
+      visibility = next;
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    };
+
+    try {
+      renderApp();
+      await activateTab(/Network activity/);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
+
+      await setVisibility("hidden");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
+      expect(proxyStopMonitor).toHaveBeenCalledTimes(1);
+
+      await setVisibility("visible");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      expect(proxyStartMonitor).toHaveBeenCalledTimes(2);
+    } finally {
+      visibilityState.mockRestore();
+    }
+  });
+
   it("does not start the proxy monitor on Nodes even when connected", async () => {
     vi.useFakeTimers();
     (

@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
 
@@ -30,6 +30,14 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * Sizes recorded then: index 43.1 KiB, locales 40.0 KiB, zh-Hans 39.3 KiB,
  * zh-Hant 39.8 KiB, server-table 129.4 KiB, settings-screen 64.2 KiB; total
  * emitted JS 1677 KiB; whole `dist` 3475 KiB.
+ *
+ * 2026-09-19, later: the vendor groups only capture modules the entry loads
+ * (`startupGroup` in `vite.config.ts`). The form library and the menus' Radix
+ * packages had been riding in startup chunks; they are `vendor-forms` and
+ * `vendor-menus` now, loaded with the first screen that uses them, and the
+ * startup path has its own budget. Sizes recorded then: vendor-data 78.6 KiB,
+ * vendor-radix 59.0 KiB, vendor-forms 96.9 KiB, vendor-menus 96.3 KiB;
+ * startup JavaScript 501.3 KiB (724.8 KiB before).
  */
 const budgets = [
   { label: "application entry", maxKiB: 60, prefix: "index-" },
@@ -39,12 +47,21 @@ const budgets = [
   { label: "profiles screen", maxKiB: 170, prefix: "server-table-" },
   { label: "settings screen", maxKiB: 85, prefix: "settings-screen-" },
   { label: "QR decoder", maxKiB: 500, prefix: "vendor-qr-" },
-  { label: "data vendor chunk", maxKiB: 320, prefix: "vendor-data-" },
+  { label: "data vendor chunk", maxKiB: 110, prefix: "vendor-data-" },
   { label: "React vendor chunk", maxKiB: 240, prefix: "vendor-react-" },
-  { label: "Radix vendor chunk", maxKiB: 210, prefix: "vendor-radix-" },
+  { label: "Radix vendor chunk", maxKiB: 85, prefix: "vendor-radix-" },
+  { label: "form vendor chunk", maxKiB: 135, prefix: "vendor-forms-" },
+  { label: "menu vendor chunk", maxKiB: 135, prefix: "vendor-menus-" },
 ];
 
 const totalBudgetKiB = 1900;
+/**
+ * Every script `index.html` loads before the first paint. Tighter than the
+ * per-chunk ratchet on purpose: an accidental startup import is exactly what
+ * this line exists to catch, and 1.3x of the whole path would let a form
+ * library through unnoticed.
+ */
+const startupBudgetKiB = 575;
 const cssBudgetKiB = 120;
 const distBudgetKiB = 4000;
 
@@ -100,6 +117,25 @@ export function checkDistBudgets(files, { cssKiB = cssBudgetKiB, distKiB = distB
   return { failures, report };
 }
 
+/** The scripts `html` loads before the first paint: its entry and preloads. */
+export function startupScripts(html) {
+  return [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="\/?(assets\/[^"]+\.js)"/g)].map((match) => match[1]);
+}
+
+export function checkStartupBudget(scripts, sizeOf, { startupKiB = startupBudgetKiB } = {}) {
+  const actualKiB = scripts.reduce((sum, script) => sum + sizeOf(script), 0) / 1024;
+  if (scripts.length === 0) {
+    return { failures: ["index.html loads no script from assets/"], report: [] };
+  }
+  if (actualKiB > startupKiB) {
+    return {
+      failures: [`startup JavaScript (${scripts.length} files) is ${actualKiB.toFixed(1)} KiB; budget is ${startupKiB} KiB`],
+      report: [],
+    };
+  }
+  return { failures: [], report: [`startup JavaScript: ${actualKiB.toFixed(1)} KiB / ${startupKiB} KiB`] };
+}
+
 function listFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const path = join(dir, entry.name);
@@ -115,9 +151,13 @@ if (isCliEntrypoint(import.meta.url)) {
     .map((name) => ({ bytes: statSync(join(assetsDir, name)).size, name }));
 
   const js = checkBundleBudgets(assets);
+  const startup = checkStartupBudget(
+    startupScripts(readFileSync(join(distDir, "index.html"), "utf8")),
+    (script) => statSync(join(distDir, script)).size,
+  );
   const dist = checkDistBudgets(listFiles(distDir));
-  const failures = [...js.failures, ...dist.failures];
-  const report = [...js.report, ...dist.report];
+  const failures = [...js.failures, ...startup.failures, ...dist.failures];
+  const report = [...js.report, ...startup.report, ...dist.report];
   for (const line of report) console.log(`✓ ${line}`);
 
   if (failures.length > 0) {

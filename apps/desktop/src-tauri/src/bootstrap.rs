@@ -50,6 +50,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // Installed before the first `tracing::warn!` below so the startup
     // recovery paths are captured too.
     logging::install(app.handle().clone(), runtime_paths.log_dir());
+    voya_app::startup::preload_tls_roots_in_background();
     let services = timed("open database", || {
         tauri::async_runtime::block_on(AppServices::connect(
             &database_path(app)?,
@@ -140,6 +141,9 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         })),
         &PlatformProcessJobFactory,
     );
+    // One step for the managers below, which used to go unlogged: the ~400 ms a
+    // launch spent building HTTPS clients hid here.
+    let background_started = Instant::now();
     let runtime_handle = tauri::async_runtime::handle();
     let runtime_guard = runtime_handle.inner().enter();
     let supervisor = CoreSupervisor::spawn(
@@ -171,13 +175,14 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         supervisor.clone(),
         Arc::clone(&shared_config),
         config.core_basic_item.loglevel.clone(),
-    )?;
+    );
     drop(runtime_guard);
     let speedtest_manager = services.speedtest_manager(
         core_seed_resource_dir.clone(),
         Arc::new(speedtest_runner),
         supervisor.clone(),
     );
+    log_step("start background services", background_started);
     app.manage(AppState {
         services,
         config_mutations,
@@ -216,7 +221,7 @@ fn spawn_self_host(
     supervisor: CoreSupervisor,
     shared_config: voya_app::config_mutation::SharedAppConfig,
     log_level: String,
-) -> Result<SelfHostManager, Box<dyn Error>> {
+) -> SelfHostManager {
     let runner = JobAssignedRunner::new(
         StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
             app: app.handle().clone(),
@@ -227,12 +232,12 @@ fn spawn_self_host(
         .ok()
         .filter(|url| !url.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_PROBE_BASE_URL.to_string());
-    Ok(services.spawn_self_host(SelfHostDeps {
+    services.spawn_self_host(SelfHostDeps {
         paths: runtime_paths.clone(),
         core_seed_resource_dir,
         runner: Arc::new(runner),
         target_os: TargetOs::current(),
-        probe: probe_service(&probe_url)?,
+        probe: probe_service(&probe_url),
         port_mapper: router_port_mapper(),
         firewall: FirewallService::new(Arc::new(StdProcessRunner::new()), TargetOs::current()),
         network: Arc::new(SystemLocalNetwork),
@@ -246,7 +251,7 @@ fn spawn_self_host(
         self_tester: Arc::new(ProbeCoreSelfTester),
         log_level,
         restart_backoff: RestartBackoff::default(),
-    }))
+    })
 }
 
 /// Runs one startup step and logs how long it took, so a slow launch can be
@@ -254,12 +259,16 @@ fn spawn_self_host(
 fn timed<T>(step: &'static str, run: impl FnOnce() -> T) -> T {
     let started = Instant::now();
     let value = run();
+    log_step(step, started);
+    value
+}
+
+fn log_step(step: &'static str, started: Instant) {
     tracing::info!(
         step,
         elapsed_ms = started.elapsed().as_millis(),
         "startup step"
     );
-    value
 }
 
 /// Where this launch keeps its database and runtime files.

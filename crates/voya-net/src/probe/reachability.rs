@@ -8,6 +8,7 @@
 
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
@@ -85,27 +86,38 @@ pub enum ReachabilityProbeError {
 }
 
 /// Two direct HTTP clients, each pinned to one address family.
+///
+/// Each is built on first use, and clones share them. The app creates this
+/// client at startup, and the first HTTP client a process builds reads the OS
+/// trust store, which the window should not wait for.
 #[derive(Clone)]
 pub struct ReachabilityProbeClient {
     base_url: String,
-    ipv4: reqwest::Client,
-    ipv6: reqwest::Client,
+    ipv4: Arc<OnceLock<reqwest::Client>>,
+    ipv6: Arc<OnceLock<reqwest::Client>>,
 }
 
 impl ReachabilityProbeClient {
-    pub fn new(base_url: &str) -> Result<Self, ReachabilityProbeError> {
-        Ok(Self {
+    #[must_use]
+    pub fn new(base_url: &str) -> Self {
+        Self {
             base_url: base_url.trim_end_matches('/').to_string(),
-            ipv4: family_client(ProbeFamily::Ipv4)?,
-            ipv6: family_client(ProbeFamily::Ipv6)?,
-        })
+            ipv4: Arc::default(),
+            ipv6: Arc::default(),
+        }
     }
 
-    fn client(&self, family: ProbeFamily) -> &reqwest::Client {
-        match family {
+    fn client(&self, family: ProbeFamily) -> Result<&reqwest::Client, ReachabilityProbeError> {
+        let slot = match family {
             ProbeFamily::Ipv4 => &self.ipv4,
             ProbeFamily::Ipv6 => &self.ipv6,
+        };
+        if let Some(client) = slot.get() {
+            return Ok(client);
         }
+        // Two first uses may both build one; either is as good as the other.
+        let client = family_client(family)?;
+        Ok(slot.get_or_init(|| client))
     }
 
     /// Has the service connect back to `ports` over `family`.
@@ -118,7 +130,7 @@ impl ReachabilityProbeClient {
             return Err(ReachabilityProbeError::TooManyPorts(ports.len()));
         }
         let response = self
-            .client(family)
+            .client(family)?
             .post(format!("{}/v1/probe", self.base_url))
             .json(&ReachabilityProbeRequest {
                 ports: ports.to_vec(),
@@ -144,7 +156,7 @@ impl ReachabilityProbeClient {
         family: ProbeFamily,
     ) -> Result<IpAddr, ReachabilityProbeError> {
         let response = self
-            .client(family)
+            .client(family)?
             .get(TRACE_URL)
             .timeout(PUBLIC_ADDRESS_TIMEOUT)
             .send()
@@ -168,7 +180,7 @@ fn family_client(family: ProbeFamily) -> Result<reqwest::Client, ReachabilityPro
         ProbeFamily::Ipv4 => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
         ProbeFamily::Ipv6 => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
     };
-    Ok(reqwest::Client::builder()
+    Ok(crate::tls_roots::client_builder()
         .no_proxy()
         .local_address(local)
         .connect_timeout(PROBE_CONNECT_TIMEOUT)
@@ -250,7 +262,7 @@ mod tests {
             println!("live public address test skipped: set VOYA_LIVE_NETWORK=1");
             return;
         }
-        let client = ReachabilityProbeClient::new(DEFAULT_PROBE_BASE_URL).expect("client");
+        let client = ReachabilityProbeClient::new(DEFAULT_PROBE_BASE_URL);
         let ipv4 = client
             .public_address(ProbeFamily::Ipv4)
             .await
@@ -264,7 +276,7 @@ mod tests {
 
     #[tokio::test]
     async fn at_most_four_ports_are_sent() {
-        let client = ReachabilityProbeClient::new("https://probe.example/").expect("client");
+        let client = ReachabilityProbeClient::new("https://probe.example/");
         assert_eq!(client.base_url, "https://probe.example");
         let error = client
             .probe(ProbeFamily::Ipv4, &[1, 2, 3, 4, 5])

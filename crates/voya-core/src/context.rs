@@ -325,9 +325,16 @@ where
 
     #[must_use]
     pub fn build(&self, config: &AppConfig, node: &ProfileItem) -> CoreConfigContextBuilderResult {
-        let mut context = CoreConfigContext {
-            node: node.clone(),
-            routing_item: self.env.get_default_routing(config),
+        self.prepare(config).build(node)
+    }
+
+    /// Resolves the node-independent part of [`Self::build`] once; a run that
+    /// builds a context per node builds each from the result.
+    #[must_use]
+    pub fn prepare(&self, config: &AppConfig) -> PreparedContextBuilder {
+        let base = CoreConfigContext {
+            node: ProfileItem::default(),
+            routing_item: None,
             simple_dns_item: config.simple_dns_item.clone(),
             all_proxies_map: BTreeMap::new(),
             app_config: config.clone(),
@@ -340,22 +347,25 @@ where
             rule_policy_groups: Vec::new(),
             latency_probe_nodes: Vec::new(),
         };
+        let routing_item = self.env.get_default_routing(config);
 
-        let node_result = self.resolve_node(&mut context, node);
-        if !node_result.success() {
-            return CoreConfigContextBuilderResult {
-                context,
-                validator_result: node_result,
-            };
+        // Rule outbounds are registered into a scratch context and merged into
+        // each node's context afterwards; nothing they register depends on
+        // the node.
+        let mut resolved = CoreConfigContext::default();
+        let mut result = NodeValidatorResult::default();
+        if let Some(routing_item) = &routing_item {
+            self.resolve_rule_outbounds(routing_item, &mut resolved, &mut result);
         }
-
-        let mut validator_result = NodeValidatorResult::default();
-        validator_result.warnings.extend(node_result.warnings);
-        self.resolve_rule_outbounds(&mut context, &mut validator_result);
-
-        CoreConfigContextBuilderResult {
-            context,
-            validator_result,
+        PreparedContextBuilder {
+            base,
+            routing_item,
+            rules: prepared::RuleOutbounds {
+                all_proxies_map: resolved.all_proxies_map,
+                protect_domain_list: resolved.protect_domain_list,
+                policy_groups: resolved.rule_policy_groups,
+                result,
+            },
         }
     }
 
@@ -467,27 +477,12 @@ where
         Some(pre_socks_result)
     }
 
-    fn resolve_node(
-        &self,
-        context: &mut CoreConfigContext,
-        node: &ProfileItem,
-    ) -> NodeValidatorResult {
-        if node.index_id.trim().is_empty() {
-            return NodeValidatorResult::default();
-        }
-
-        register_single_node(context, node)
-    }
-
     fn resolve_rule_outbounds(
         &self,
+        routing_item: &RoutingItem,
         context: &mut CoreConfigContext,
         validator_result: &mut NodeValidatorResult,
     ) {
-        let Some(routing_item) = context.routing_item.clone() else {
-            return;
-        };
-
         for rule_item in routing_item
             .rule_set
             .iter()
@@ -526,7 +521,7 @@ where
             return;
         };
 
-        let rule_result = self.resolve_node(context, &rule_outbound_node);
+        let rule_result = resolve_node(context, &rule_outbound_node);
         let scope = ValidationScope::RoutingRuleOutbound {
             rule: rule_name.to_string(),
             outbound: outbound_tag.to_string(),
@@ -583,9 +578,19 @@ where
     }
 }
 
+mod prepared;
 mod validation;
+pub use prepared::PreparedContextBuilder;
 pub(crate) use validation::validate_node;
 use validation::*;
+
+fn resolve_node(context: &mut CoreConfigContext, node: &ProfileItem) -> NodeValidatorResult {
+    if node.index_id.trim().is_empty() {
+        return NodeValidatorResult::default();
+    }
+
+    register_single_node(context, node)
+}
 
 fn pre_socks_item<E: CoreGenEnv>(config: &AppConfig, env: &E) -> Option<ProfileItem> {
     // The topology is an injected platform fact, not something derived from
@@ -961,6 +966,88 @@ mod tests {
             .context
             .clash_api_port();
         assert_eq!(pre_port, main_port + 1);
+    }
+
+    #[test]
+    fn prepared_context_registers_the_node_before_the_rule_outbounds() {
+        // The rule node shares the first node's address, so the merged domain
+        // list must keep the node's copy and drop the rule's duplicate.
+        let first = vless_profile("first", "First", "shared.example.com");
+        let second = vless_profile("second", "Second", "second.example.com");
+        let rule_node = vless_profile("rule", "RuleNode", "shared.example.com");
+        let env = MemoryEnv {
+            profiles: vec![first.clone(), second.clone(), rule_node],
+            routings: vec![routing_with_outbound_tag("RuleNode")],
+            ..MemoryEnv::default()
+        };
+        let prepared = CoreConfigContextBuilder::new(&env).prepare(&app_config("first"));
+
+        let first_context = prepared.build(&first).context;
+        let second_context = prepared.build(&second).context;
+
+        assert_eq!(first_context.protect_domain_list, ["shared.example.com"]);
+        assert_eq!(
+            second_context.protect_domain_list,
+            ["second.example.com", "shared.example.com"]
+        );
+        assert_eq!(
+            second_context
+                .all_proxies_map
+                .keys()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            ["remark:RuleNode", "rule", "second"]
+        );
+        assert_eq!(second_context.node.index_id, "second");
+        assert!(second_context.routing_item.is_some());
+    }
+
+    #[test]
+    fn prepared_node_outbound_context_keeps_the_verdict_but_not_the_rules() {
+        let active = vless_profile("active", "Active", "active.example.com");
+        let rule_node = vless_profile("rule", "RuleNode", "rule.example.com");
+        let env = MemoryEnv {
+            profiles: vec![active.clone(), rule_node],
+            routings: vec![routing_with_outbound_tag("RuleNode")],
+            ..MemoryEnv::default()
+        };
+        let prepared = CoreConfigContextBuilder::new(&env).prepare(&app_config("active"));
+
+        let full = prepared.build(&active);
+        let outbound_only = prepared.build_node_outbound(&active);
+
+        assert!(outbound_only.success());
+        assert_eq!(outbound_only.validator_result, full.validator_result);
+        assert_eq!(outbound_only.context.node, full.context.node);
+        assert_eq!(outbound_only.context.app_config, full.context.app_config);
+        assert!(outbound_only.context.routing_item.is_none());
+        assert!(outbound_only.context.rule_policy_groups.is_empty());
+        assert_eq!(
+            outbound_only
+                .context
+                .all_proxies_map
+                .keys()
+                .collect::<Vec<_>>(),
+            ["active"]
+        );
+        assert_eq!(
+            outbound_only.context.protect_domain_list,
+            ["active.example.com"]
+        );
+
+        // A rule the generator cannot resolve still fails every node, exactly
+        // as a full build does.
+        let broken_env = MemoryEnv {
+            profiles: vec![active.clone()],
+            routings: vec![routing_with_outbound_tag("RenamedNode")],
+            ..MemoryEnv::default()
+        };
+        let broken = CoreConfigContextBuilder::new(&broken_env).prepare(&app_config("active"));
+        assert!(!broken.build_node_outbound(&active).success());
+        assert_eq!(
+            broken.build_node_outbound(&active).validator_result,
+            broken.build(&active).validator_result
+        );
     }
 
     fn routing_with_outbound_tag(outbound_tag: &str) -> RoutingItem {

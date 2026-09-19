@@ -313,14 +313,14 @@ where
     )
 }
 
-pub(super) fn emit_speedtest_result<R>(
+pub(super) fn emit_speedtest_results<R>(
     app: &tauri::AppHandle<R>,
-    result: &SpeedtestResult,
+    results: Vec<SpeedtestResult>,
 ) -> Result<(), AppError>
 where
     R: tauri::Runtime,
 {
-    emit_event(app, TransientStreamEvent::SpeedtestResult(result.clone()))
+    emit_event(app, TransientStreamEvent::SpeedtestResults(results))
 }
 
 /// A change that was already committed, whose follow-up work failed.

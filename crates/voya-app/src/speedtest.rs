@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     io,
     net::TcpListener,
     path::PathBuf,
@@ -397,10 +397,10 @@ async fn clear_previous_results<F>(
     database: &Database,
 
     selected: &[ServerTestItem],
-    on_result: &F,
+    on_results: &F,
 ) -> Result<()>
 where
-    F: Fn(SpeedtestResult) + Send + Sync,
+    F: Fn(Vec<SpeedtestResult>) + Send + Sync,
 {
     let unit_of_work = database.begin().await?;
     let mut pending = Vec::new();
@@ -415,8 +415,8 @@ where
         }
     }
     unit_of_work.commit().await?;
-    for result in pending {
-        on_result(result);
+    if !pending.is_empty() {
+        on_results(pending);
     }
 
     Ok(())
@@ -677,7 +677,7 @@ mod tests {
                     &database,
                     &AppConfig::default(),
                     vec!["a".into()],
-                    |result| events.lock().expect("events").push(result),
+                    |results| events.lock().expect("events").extend(results),
                 )
                 .await
                 .expect("run");
@@ -960,9 +960,17 @@ mod tests {
         });
         let manager =
             SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+        let deliveries = StdMutex::new(Vec::<Vec<(String, SpeedtestOutcome)>>::new());
 
         let run = manager
-            .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
+            .run_with_callback(&database, &AppConfig::default(), Vec::new(), |results| {
+                deliveries.lock().expect("deliveries").push(
+                    results
+                        .into_iter()
+                        .map(|result| (result.index_id, result.outcome))
+                        .collect(),
+                );
+            })
             .await
             .expect("a core that will not start must not abort the run");
 
@@ -972,6 +980,18 @@ mod tests {
             "no profile can be probed without a core"
         );
         assert_eq!(run.results.len(), 2);
+        // The pending markers arrive together, and so does the failed page:
+        // one delivery each, not one event per node.
+        let pending = SpeedtestOutcome::Testing;
+        // The fake backend fails with an I/O `NotFound`.
+        let failed = SpeedtestOutcome::ProxyConnectFailed;
+        assert_eq!(
+            deliveries.into_inner().expect("deliveries"),
+            [
+                vec![("a".to_string(), pending), ("b".to_string(), pending)],
+                vec![("a".to_string(), failed), ("b".to_string(), failed)],
+            ]
+        );
         for index_id in ["a", "b"] {
             let profile_ex = profile_ex_row(&database, index_id).await;
             assert_eq!(profile_ex.delay, -1);

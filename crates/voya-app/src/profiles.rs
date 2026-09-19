@@ -87,15 +87,7 @@ impl<'db> ProfileManager<'db> {
     /// menu, which needs neither traffic stats nor the list items built from
     /// them.
     pub async fn list_names(&self) -> Result<Vec<(String, String)>> {
-        Ok(self
-            .database
-            .profiles()
-            .list_with_profile_ex(None)
-            .await?
-            .items
-            .into_iter()
-            .map(|(profile, _)| (profile.index_id, profile.remarks))
-            .collect())
+        Ok(self.database.profiles().list_names().await?)
     }
 
     /// The listing behind every profile view, with the undecodable-row count
@@ -117,14 +109,17 @@ impl<'db> ProfileManager<'db> {
             .list_with_profile_ex(subscription_id)
             .await?;
         let stats = self.server_stats_by_index_id().await?;
-        let filter = filter.map(str::trim).filter(|value| !value.is_empty());
+        let filter = filter
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_lowercase);
 
         Ok(ProfileListing {
             items: listing
                 .items
                 .into_iter()
                 .filter(|(profile, _)| {
-                    filter.is_none_or(|filter| {
+                    filter.as_deref().is_none_or(|filter| {
                         contains_case_insensitive(&profile.remarks, filter)
                             || contains_case_insensitive(profile.address(), filter)
                     })
@@ -161,7 +156,7 @@ impl<'db> ProfileManager<'db> {
         profile: ProfileItem,
     ) -> Result<ProfileListItem> {
         let (profile, profile_ex) = self
-            .write_imported_profile(profile, &mut NewProfileSort::default())
+            .write_imported_profile(profile, None, &mut NewProfileSort::default())
             .await?;
         self.ensure_active_profile(config).await?;
 
@@ -184,18 +179,25 @@ impl<'db> ProfileManager<'db> {
     /// profile check or the stats lookup a single save reports back.
     ///
     /// A subscription update calls this once per node inside one transaction,
-    /// so it reads the stored row once and leaves the final active-profile
-    /// check to the caller.
+    /// and leaves the final active-profile check to the caller. It already
+    /// holds every stored row, so it passes the one `profile` replaces as
+    /// `stored`; reading it again cost two queries per node. `None` reads the
+    /// stored row, if there is one.
     pub(crate) async fn write_imported_profile(
         &self,
         mut profile: ProfileItem,
+        stored: Option<(&ProfileItem, &ProfileExItem)>,
         new_sort: &mut NewProfileSort,
     ) -> Result<(ProfileItem, ProfileExItem)> {
-        let previous = if profile.index_id.trim().is_empty() {
+        let fetched;
+        let previous = if let Some((previous, previous_ex)) = stored {
+            Some((previous, Some(previous_ex.clone())))
+        } else if profile.index_id.trim().is_empty() {
             profile.index_id = uuid::Uuid::new_v4().simple().to_string();
             None
         } else {
-            self.database.profiles().get(&profile.index_id).await?
+            fetched = self.database.profiles().get(&profile.index_id).await?;
+            fetched.as_ref().map(|previous| (previous, None))
         };
 
         normalize_profile(&mut profile);
@@ -206,15 +208,18 @@ impl<'db> ProfileManager<'db> {
                 sort: new_sort.next(self.database).await?,
                 ..ProfileExItem::default()
             },
-            Some(previous) => {
-                let mut existing = self
-                    .database
-                    .profile_exs()
-                    .get(&profile.index_id)
-                    .await?
-                    .unwrap_or_default();
+            Some((previous, previous_ex)) => {
+                let mut existing = match previous_ex {
+                    Some(previous_ex) => previous_ex,
+                    None => self
+                        .database
+                        .profile_exs()
+                        .get(&profile.index_id)
+                        .await?
+                        .unwrap_or_default(),
+                };
                 existing.index_id.clone_from(&profile.index_id);
-                if !voya_core::profile_items_match(&previous, &profile, false) {
+                if !voya_core::profile_items_match(previous, &profile, false) {
                     existing.country_code = None;
                     existing.delay = 0;
                     existing.message = None;
@@ -587,8 +592,10 @@ fn trim_string(value: &mut String) {
     *value = value.trim().to_string();
 }
 
+/// `needle` is already lowercase: a filter is lowercased once per listing, not
+/// once per field of every node.
 fn contains_case_insensitive(value: &str, needle: &str) -> bool {
-    value.to_lowercase().contains(&needle.to_lowercase())
+    value.to_lowercase().contains(needle)
 }
 
 fn to_list_item(

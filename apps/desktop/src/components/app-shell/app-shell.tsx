@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useSyncExternalStore } from "react";
 
 import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
 import { CloseRequestDialog } from "@/components/app-shell/close-request-dialog";
@@ -130,12 +130,25 @@ function ScreenFallback() {
   );
 }
 
+function subscribeToVisibility(onChange: () => void) {
+  document.addEventListener("visibilitychange", onChange);
+  return () => document.removeEventListener("visibilitychange", onChange);
+}
+
+function isDocumentVisible() {
+  return document.visibilityState !== "hidden";
+}
+
 /**
  * Binds the proxy-monitor controller to the shell: the tab decides whether a
  * proxy-runtime surface is on screen, the controller owns everything else.
+ * A window hidden into the tray shows nothing either, so the monitor also
+ * stops then: the backend otherwise kept serializing the whole connection
+ * table every second for a webview nobody was looking at.
  */
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
   const coreConnected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
+  const visible = useSyncExternalStore(subscribeToVisibility, isDocumentVisible);
   const { t } = useI18n();
   // The controller is created once; this ref keeps its error path pointing at
   // the current locale without recreating the state machine.
@@ -166,7 +179,7 @@ function useProxyMonitorLifecycle(activeTab: ShellTab) {
 
   useEffect(() => {
     controllerRef.current?.setWanted(
-      coreConnected && activeTab === "connections",
+      coreConnected && activeTab === "connections" && visible,
     );
-  }, [activeTab, coreConnected]);
+  }, [activeTab, coreConnected, visible]);
 }

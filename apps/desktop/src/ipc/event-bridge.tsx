@@ -89,8 +89,8 @@ export function EventBridge() {
           // overlay), and a full refetch of it per result was the dominant
           // cost of a long run, so results coalesce into one list refresh per
           // COUNTRY_REFRESH_MS. The run's closing invalidation covers the tail.
-          if (event.payload.kind === "speedtestResult"
-            && !["waiting", "testing"].includes(event.payload.payload.outcome)
+          if (event.payload.kind === "speedtestResults"
+            && event.payload.payload.some((result) => !["waiting", "testing"].includes(result.outcome))
             && countryRefresh === undefined) {
             countryRefresh = setTimeout(() => {
               countryRefresh = undefined;

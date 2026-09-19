@@ -10,7 +10,10 @@ version.workspace = true
 test-support = []
 
 [dependencies]
-arboard = "3.6"
+# Text only: the default `image-data` feature was the one thing pulling the
+# TIFF and JPEG decoders into the app, for a clipboard read that never asks
+# for an image.
+arboard = { version = "3.6", default-features = false }
 libc.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

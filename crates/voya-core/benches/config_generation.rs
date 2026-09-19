@@ -134,13 +134,16 @@ fn speedtest_page_config(criterion: &mut Criterion) {
         let all = nodes(count);
         group.bench_with_input(BenchmarkId::from_parameter(count), &all, |bench, all| {
             bench.iter(|| {
+                // What a speedtest run does: resolve once, then build each
+                // node's outbound-only context from that.
+                let contexts = builder.prepare(&config);
                 let entries = all
                     .iter()
                     .zip(20_000..)
                     .map(|(node, port)| SpeedtestConfigEntry {
                         index_id: node.index_id.clone(),
                         port,
-                        context: builder.build(&config, node).context,
+                        context: contexts.build_node_outbound(node).context,
                     })
                     .collect::<Vec<_>>();
                 black_box(generate_singbox_speedtest_config_json(&entries))

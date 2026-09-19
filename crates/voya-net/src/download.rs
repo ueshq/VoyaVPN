@@ -382,12 +382,21 @@ impl DownloadClient {
 
 /// Builds the client used outside the download stack (currently the Clash REST transport), which
 /// only ever exchanges small payloads and therefore keeps a whole-request deadline.
+///
+/// The Clash API is plain HTTP on loopback, so this client trusts the bundled roots only: it never
+/// waits for the OS store, which the app builds one of these before its window shows.
 pub(crate) fn build_http_client(
     proxy_url: Option<&str>,
 ) -> std::result::Result<Client, reqwest::Error> {
-    http_client_builder(proxy_url, HTTP_READ_TIMEOUT)?
-        .timeout(HTTP_REQUEST_TIMEOUT)
-        .build()
+    configure_http_client(
+        Client::builder()
+            .tls_built_in_webpki_certs(true)
+            .tls_built_in_native_certs(false),
+        proxy_url,
+        HTTP_READ_TIMEOUT,
+    )?
+    .timeout(HTTP_REQUEST_TIMEOUT)
+    .build()
 }
 
 /// Builds a download client without a whole-request deadline: `download_text` applies its own
@@ -404,14 +413,19 @@ fn http_client_builder(
     proxy_url: Option<&str>,
     read_timeout: Duration,
 ) -> std::result::Result<reqwest::ClientBuilder, reqwest::Error> {
-    // Trust policy: the bundled webpki roots plus the roots the operating system trusts, so
-    // self-hosted servers behind a private CA the OS already trusts work too. Both flags default to true; setting them keeps the
-    // policy explicit and fails the build if the reqwest root features are ever dropped.
-    let builder = Client::builder()
+    // Trust policy: the bundled webpki roots plus the roots the operating system trusts (see
+    // `tls_roots`), so self-hosted servers behind a private CA the OS already trusts work too.
+    configure_http_client(crate::tls_roots::client_builder(), proxy_url, read_timeout)
+}
+
+fn configure_http_client(
+    builder: reqwest::ClientBuilder,
+    proxy_url: Option<&str>,
+    read_timeout: Duration,
+) -> std::result::Result<reqwest::ClientBuilder, reqwest::Error> {
+    let builder = builder
         .connect_timeout(HTTP_CONNECT_TIMEOUT)
         .read_timeout(read_timeout)
-        .tls_built_in_webpki_certs(true)
-        .tls_built_in_native_certs(true)
         .redirect(redirect_policy());
 
     Ok(if let Some(proxy_url) = proxy_url {
@@ -951,6 +965,50 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn download_text_decodes_gzip_and_limits_the_decoded_size() {
+        // `vless://node-1\n` 64 times (960 bytes), gzip-compressed to 44.
+        const GZIPPED: [u8; 44] = [
+            0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x2b, 0xcb, 0x49, 0x2d,
+            0x2e, 0xb6, 0xd2, 0xd7, 0xcf, 0xcb, 0x4f, 0x49, 0xd5, 0x35, 0xe4, 0x2a, 0x1b, 0xe5,
+            0x8e, 0x72, 0x47, 0xb9, 0x43, 0x87, 0x0b, 0x00, 0xf7, 0x23, 0x21, 0xbc, 0xc0, 0x03,
+            0x00, 0x00,
+        ];
+        let gzipped = RawFixtureResponse {
+            status: "200 OK".to_string(),
+            content_length: Some(GZIPPED.len()),
+            extra_headers: vec![("Content-Encoding".to_string(), "gzip".to_string())],
+            body: GZIPPED.to_vec(),
+        };
+        let base = spawn_raw_http_fixture(
+            HashMap::from([
+                ("/sub".to_string(), gzipped.clone()),
+                ("/limited".to_string(), gzipped),
+            ]),
+            2,
+        )
+        .await;
+
+        let response = DownloadClient::new()
+            .download_text(DownloadRequest::direct(format!("{base}/sub")))
+            .await
+            .expect("a gzip body should decode");
+        assert_eq!(response.body, "vless://node-1\n".repeat(64));
+
+        // A body far below the limit on the wire still fails once decoded
+        // past it: the limit guards memory, which the decoded size fills.
+        let error = DownloadClient::new()
+            .download_text(
+                DownloadRequest::direct(format!("{base}/limited")).with_response_body_limit(100),
+            )
+            .await
+            .expect_err("the decoded body is over the limit");
+        assert!(
+            matches!(error, DownloadError::ResponseTooLarge { limit: 100, .. }),
+            "{error:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn download_text_captures_allowlisted_headers_case_insensitively() {
         let base = spawn_raw_http_fixture(
             HashMap::from([(
@@ -1066,9 +1124,11 @@ mod tests {
 
     #[test]
     fn download_clients_build_with_webpki_and_native_trust_roots() {
-        build_http_client(None).expect("direct client trusts webpki and native roots");
-        build_http_client(Some("socks5://127.0.0.1:1080"))
+        build_download_http_client(None, HTTP_READ_TIMEOUT)
+            .expect("direct client trusts webpki and native roots");
+        build_download_http_client(Some("socks5://127.0.0.1:1080"), HTTP_READ_TIMEOUT)
             .expect("proxy client trusts webpki and native roots");
+        build_http_client(None).expect("the loopback Clash client trusts webpki roots");
     }
 
     #[tokio::test]

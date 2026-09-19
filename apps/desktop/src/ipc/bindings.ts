@@ -1378,7 +1378,13 @@ export type TransientStreamEvent =
  *  Logs-panel lines in the order they were written, delivered at most
  *  once per batch window instead of one event per line.
  */
-{ kind: "logLines"; payload: LogLineEvent[] } | { kind: "coreState"; payload: RuntimeStatusResponse } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SystemProxyStatusResponse } | { kind: "tunChanged"; payload: TunStatus } | { kind: "proxyMonitorStatus"; payload: ProxyMonitorStatus } | { kind: "proxyConnections"; payload: ProxyConnectionsSnapshot } | { kind: "speedtestResult"; payload: SpeedtestResult };
+{ kind: "logLines"; payload: LogLineEvent[] } | { kind: "coreState"; payload: RuntimeStatusResponse } | { kind: "statistics"; payload: StatisticsSnapshot } | { kind: "sysProxyChanged"; payload: SystemProxyStatusResponse } | { kind: "tunChanged"; payload: TunStatus } | { kind: "proxyMonitorStatus"; payload: ProxyMonitorStatus } | { kind: "proxyConnections"; payload: ProxyConnectionsSnapshot } | 
+/**
+ *  Speedtest results in the order they were reached. A run's start and a
+ *  cancel settle every selected node at once and arrive as one event; a
+ *  measured node arrives on its own.
+ */
+{ kind: "speedtestResults"; payload: SpeedtestResult[] };
 
 export type TunBackend = "process" | "macosPacketTunnel" | "windowsService" | "unsupported";
 

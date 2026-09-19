@@ -5,7 +5,7 @@
 //! order, followed by every node of the bound subscription, resolved when the
 //! config is built so a subscription update never leaves a group stale.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{ProfileItem, DEFAULT_SPEED_PING_TEST_URL};
 
@@ -89,15 +89,25 @@ pub struct PolicyGroupItem {
 
 /// The group's members as nodes: explicit members first (skipping ones that
 /// no longer exist), then the bound subscription's nodes, each node once.
+///
+/// Explicit members are looked up by id through a map: a scan of `nodes` per
+/// member made a group spanning a large subscription quadratic.
 #[must_use]
 pub fn resolve_group_members<'nodes>(
     group: &PolicyGroupItem,
     nodes: &'nodes [ProfileItem],
 ) -> Vec<&'nodes ProfileItem> {
+    let mut by_id = BTreeMap::new();
+    if !group.member_ids.is_empty() {
+        // The first node with an id wins, as the scan it replaced found it.
+        for node in nodes {
+            by_id.entry(node.index_id.as_str()).or_insert(node);
+        }
+    }
     let explicit = group
         .member_ids
         .iter()
-        .filter_map(|id| nodes.iter().find(|node| &node.index_id == id));
+        .filter_map(|id| by_id.get(id.as_str()).copied());
     let bound = group
         .source_subscription_id
         .iter()
@@ -122,11 +132,16 @@ pub fn unique_member_tags(members: &[&ProfileItem]) -> Vec<String> {
         .iter()
         .map(|member| member_tag(member, Some(MEMBER_TAG_ID_CHARS)))
         .collect();
+    // Counted once up front; counting per member made large groups quadratic.
+    let mut uses = BTreeMap::<&str, usize>::new();
+    for tag in &short {
+        *uses.entry(tag.as_str()).or_default() += 1;
+    }
     short
         .iter()
         .zip(members)
         .map(|(tag, member)| {
-            if short.iter().filter(|other| *other == tag).count() > 1 {
+            if uses.get(tag.as_str()).copied().unwrap_or_default() > 1 {
                 member_tag(member, None)
             } else {
                 tag.clone()

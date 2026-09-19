@@ -72,8 +72,8 @@ describe("runtime event store", () => {
 
     useRuntimeEventStore.getState().setSpeedtestRunning(true);
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "speedtestResult",
-      payload: result,
+      kind: "speedtestResults",
+      payload: [result],
     });
 
     // One `set` per frame, not one per node: a run reports a result each time
@@ -96,16 +96,16 @@ describe("runtime event store", () => {
     vi.useFakeTimers();
 
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "speedtestResult",
-      payload: speedtestResult("profile-a", "testing"),
+      kind: "speedtestResults",
+      payload: [speedtestResult("profile-a", "testing")],
     });
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "speedtestResult",
-      payload: speedtestResult("profile-b", "completed", 42),
+      kind: "speedtestResults",
+      payload: [speedtestResult("profile-b", "completed", 42)],
     });
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "speedtestResult",
-      payload: speedtestResult("profile-a", "completed", 12),
+      kind: "speedtestResults",
+      payload: [speedtestResult("profile-a", "completed", 12)],
     });
 
     expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({});
@@ -120,8 +120,8 @@ describe("runtime event store", () => {
     // Results arriving after a flush schedule a new frame and merge on top of
     // what is already stored.
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "speedtestResult",
-      payload: speedtestResult("profile-c", "timedOut"),
+      kind: "speedtestResults",
+      payload: [speedtestResult("profile-c", "timedOut")],
     });
     await vi.advanceTimersByTimeAsync(20);
 
@@ -132,12 +132,31 @@ describe("runtime event store", () => {
     ]);
   });
 
+  it("stores every result of a batched speedtest event, the later one per node winning", async () => {
+    vi.useFakeTimers();
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "speedtestResults",
+      payload: [
+        speedtestResult("profile-a", "testing"),
+        speedtestResult("profile-b", "testing"),
+        speedtestResult("profile-a", "cancelled"),
+      ],
+    });
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toEqual({
+      "profile-a": speedtestResult("profile-a", "cancelled"),
+      "profile-b": speedtestResult("profile-b", "testing"),
+    });
+  });
+
   it("drops buffered speedtest results when the overlay is cleared before the frame runs", async () => {
     vi.useFakeTimers();
 
     useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "speedtestResult",
-      payload: speedtestResult("profile-a", "completed", 42),
+      kind: "speedtestResults",
+      payload: [speedtestResult("profile-a", "completed", 42)],
     });
     useRuntimeEventStore.getState().clearSpeedtestResults();
     await vi.advanceTimersByTimeAsync(20);
@@ -359,6 +378,36 @@ describe("runtime event store", () => {
     await vi.advanceTimersByTimeAsync(20);
 
     expect(useRuntimeEventStore.getState().proxyConnections).toBeNull();
+  });
+
+  it("stores a valid statistics payload with only its known fields", () => {
+    const statistics: StatisticsSnapshot = {
+      activeProfileId: "profile-a",
+      directDownloadBytesPerSecond: 1,
+      directUploadBytesPerSecond: 2,
+      downloadBytesPerSecond: 3,
+      proxyDownloadBytesPerSecond: null,
+      proxyUploadBytesPerSecond: 4,
+      serverStat: {
+        dateNow: 5,
+        indexId: "profile-a",
+        todayDown: 6,
+        todayUp: 7,
+        totalDown: null,
+        totalUp: 8,
+      },
+      uploadBytesPerSecond: 0,
+    };
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "statistics",
+      payload: { ...statistics, extra: "dropped" } as StatisticsSnapshot,
+    });
+
+    expect(useRuntimeEventStore.getState().statistics).toEqual(statistics);
+    expect(useRuntimeEventStore.getState().serverStatsByProfileId).toEqual({
+      "profile-a": statistics.serverStat,
+    });
   });
 
   it("rejects invalid statistics payloads before storing them", () => {

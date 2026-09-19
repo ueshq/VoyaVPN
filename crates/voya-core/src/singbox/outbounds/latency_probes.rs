@@ -39,7 +39,10 @@ pub fn latency_probe_tag(context: &CoreConfigContext, node: &ProfileItem) -> Str
 fn tag_for_outbound(outbound: &SingboxOutbound, node: &ProfileItem) -> String {
     // `SingboxOutbound` serializes in declaration order, so the bytes are
     // stable for one build of the app, which is all a running core needs.
-    let fingerprint = serde_json::to_vec(outbound).map_or(0, |bytes| fnv1a64(&bytes));
+    // They are hashed as they are written: a connect with thousands of probe
+    // nodes used to allocate a JSON buffer per node just to hash it.
+    let mut hasher = Fnv1a64::default();
+    let fingerprint = serde_json::to_writer(&mut hasher, outbound).map_or(0, |()| hasher.0);
     format!(
         "{LATENCY_PROBE_TAG_PREFIX}{}:{fingerprint:016x}",
         node.index_id
@@ -63,12 +66,50 @@ pub(in crate::singbox) fn gen_latency_probes(
     }
 }
 
-/// FNV-1a, 64-bit. Written out because `std`'s hasher is not stable across
-/// Rust releases and a fingerprint needs no more than this.
-fn fnv1a64(bytes: &[u8]) -> u64 {
-    const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-    bytes.iter().fold(OFFSET_BASIS, |hash, byte| {
-        (hash ^ u64::from(*byte)).wrapping_mul(PRIME)
-    })
+/// FNV-1a, 64-bit, fed by `io::Write`. Written out because `std`'s hasher is
+/// not stable across Rust releases and a fingerprint needs no more than this.
+struct Fnv1a64(u64);
+
+impl Default for Fnv1a64 {
+    fn default() -> Self {
+        const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+        Self(OFFSET_BASIS)
+    }
+}
+
+impl std::io::Write for Fnv1a64 {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        const PRIME: u64 = 0x0000_0100_0000_01b3;
+        self.0 = bytes.iter().fold(self.0, |hash, byte| {
+            (hash ^ u64::from(*byte)).wrapping_mul(PRIME)
+        });
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use super::Fnv1a64;
+
+    #[test]
+    fn fnv1a64_matches_the_reference_vectors_however_the_bytes_arrive() {
+        // A running core only matches a probe tag computed the same way, so the
+        // hash must not depend on how serde chunks its writes.
+        let mut whole = Fnv1a64::default();
+        whole.write_all(b"foobar").expect("hashing never fails");
+        let mut chunked = Fnv1a64::default();
+        for chunk in [&b"fo"[..], b"", b"oba", b"r"] {
+            chunked.write_all(chunk).expect("hashing never fails");
+        }
+
+        assert_eq!(Fnv1a64::default().0, 0xcbf2_9ce4_8422_2325);
+        assert_eq!(whole.0, 0x8594_4171_f739_67e8);
+        assert_eq!(chunked.0, whole.0);
+    }
 }

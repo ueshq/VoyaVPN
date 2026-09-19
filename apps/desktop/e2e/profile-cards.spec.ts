@@ -160,9 +160,9 @@ test("measured flags replace the name's flag on both screens and old events cann
   await page.evaluate(() => {
     const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles[0]!;
     entry.metrics.countryCode = "US";
-    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "speedtestResult", payload: {
+    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "speedtestResults", payload: [{
       indexId: entry.profile.id, delay: 42, outcome: "completed", detail: null, ipInfo: null, countryCode: "US",
-    } });
+    }] });
   });
   await expect(page.locator(".node-card-icon .fi-us")).toBeVisible();
   await page.getByRole("tab", { name: "Home", exact: true }).click();
@@ -172,9 +172,9 @@ test("measured flags replace the name's flag on both screens and old events cann
     entry.metrics.countryCode = null;
     entry.profile.protocol.server.address = "changed.example.test";
     window.__VOYA_SMOKE__.emit("invalidate-event", { keys: [{ reason: "profile-saved", scope: { kind: "profiles" } }] });
-    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "speedtestResult", payload: {
+    window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "speedtestResults", payload: [{
       indexId: entry.profile.id, delay: 42, outcome: "completed", detail: null, ipInfo: null, countryCode: "US",
-    } });
+    }] });
   });
   await expect(page.locator(".home-node-icon .fi-jp")).toBeVisible();
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();

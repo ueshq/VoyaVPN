@@ -96,13 +96,13 @@ impl SpeedtestManager {
         config: &AppConfig,
         items: &[ServerTestItem],
         cancel: CancellationFlag,
-        on_result: &F,
+        on_results: &F,
     ) -> Result<Vec<SpeedtestResult>>
     where
-        F: Fn(SpeedtestResult) + Send + Sync,
+        F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
         let env = load_runtime_core_gen_env(database, &self.paths, config, self.target_os).await?;
-        let builder = CoreConfigContextBuilder::new(&env);
+        let contexts = CoreConfigContextBuilder::new(&env).prepare(config);
         let mut failures = Vec::new();
         let mut measurable = Vec::new();
         for (index, item) in items.iter().enumerate() {
@@ -116,7 +116,7 @@ impl SpeedtestManager {
                 ));
                 continue;
             }
-            let build = builder.build(config, &item.profile);
+            let build = contexts.build_node_outbound(&item.profile);
             if !build.success() || !is_latency_probe_candidate(&item.profile) {
                 failures.push(SpeedtestItemFailure::new(
                     item.index_id.clone(),
@@ -126,7 +126,7 @@ impl SpeedtestManager {
             }
             measurable.push((index, latency_probe_tag(&build.context, &item.profile)));
         }
-        let mut results = record_item_failures(database, failures, items, on_result).await?;
+        let mut results = record_item_failures(database, failures, items, on_results).await?;
 
         let test_url = latency_test_url(&config.speed_test_item).to_string();
         let timeout_ms = running_core_timeout_ms(&config.speed_test_item);
@@ -162,7 +162,7 @@ impl SpeedtestManager {
             };
             let result = running_core_result(item.index_id.clone(), measured);
             if persist_speedtest_result_with_retry(database, &result, &item.profile).await? {
-                on_result(result.clone());
+                on_results(vec![result.clone()]);
                 results.push(result);
             }
         }

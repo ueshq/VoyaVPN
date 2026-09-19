@@ -40,7 +40,10 @@ pub enum TransientStreamEvent {
     TunChanged(TunStatus),
     ProxyMonitorStatus(ProxyMonitorStatus),
     ProxyConnections(ProxyConnectionsSnapshot),
-    SpeedtestResult(SpeedtestResult),
+    /// Speedtest results in the order they were reached. A run's start and a
+    /// cancel settle every selected node at once and arrive as one event; a
+    /// measured node arrives on its own.
+    SpeedtestResults(Vec<SpeedtestResult>),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Type, Event)]

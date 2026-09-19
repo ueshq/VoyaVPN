@@ -8,25 +8,39 @@ use crate::{
     DbError, ProfileExRepository, Result,
 };
 
-/// The one listing query behind every profile list path.
+/// The join and sort behind every profile list path, around `$columns` and an
+/// optional `$filter`.
 ///
 /// `list`, `list_by_subscription_id` and `list_with_profile_ex` used to repeat
 /// this join and sort five times, so a sort fix or a new column had to be
-/// applied in five places. The subscription filter is expressed as a nullable
-/// bind instead of a second query string: passing `NULL` selects everything.
-const PROFILE_LIST_QUERY: &str = r#"
-    SELECT
-        p.*,
-        COALESCE(e.delay, 0) AS ex_delay,
-        COALESCE(e.sort, 0) AS ex_sort,
-        e.message AS ex_message,
-        e.ip_info AS ex_ip_info,
-        e.country_code AS ex_country_code
-    FROM profile_items p
-    LEFT JOIN profile_ex_items e ON p.index_id = e.index_id
-    WHERE (? IS NULL OR p.subscription_id = ?)
-    ORDER BY COALESCE(e.sort, 0), p.index_id
-"#;
+/// applied in five places.
+macro_rules! profile_list_query {
+    ($columns:literal, $filter:literal) => {
+        concat!(
+            "SELECT ",
+            $columns,
+            " FROM profile_items p",
+            " LEFT JOIN profile_ex_items e ON p.index_id = e.index_id ",
+            $filter,
+            " ORDER BY COALESCE(e.sort, 0), p.index_id"
+        )
+    };
+}
+
+/// The full listing. The subscription filter is expressed as a nullable bind
+/// instead of a second query string: passing `NULL` selects everything.
+const PROFILE_LIST_QUERY: &str = profile_list_query!(
+    "p.*, \
+     COALESCE(e.delay, 0) AS ex_delay, \
+     COALESCE(e.sort, 0) AS ex_sort, \
+     e.message AS ex_message, \
+     e.ip_info AS ex_ip_info, \
+     e.country_code AS ex_country_code",
+    "WHERE (? IS NULL OR p.subscription_id = ?)"
+);
+
+/// Ids and remarks only, in list order.
+const PROFILE_NAMES_QUERY: &str = profile_list_query!("p.index_id, p.remarks", "");
 
 /// A profile listing together with the rows this build had to skip.
 ///
@@ -173,6 +187,21 @@ impl<'executor> ProfileRepository<'executor> {
             items,
             undecodable_rows,
         })
+    }
+
+    /// Every node's id and remarks, in list order, without decoding the stored
+    /// payloads. The tray rebuilds its node menu on every show, hide and
+    /// connection change, and decoding three JSON blobs per node for two
+    /// columns made that cost grow with the whole subscription.
+    ///
+    /// Unlike the listings, a row this build cannot decode is not skipped:
+    /// nothing here is decoded. Activating such a node reports the failure.
+    pub async fn list_names(&self) -> Result<Vec<(String, String)>> {
+        let rows = run_query!(self.executor, sqlx::query(PROFILE_NAMES_QUERY), fetch_all)?;
+
+        rows.iter()
+            .map(|row| Ok((row.try_get("index_id")?, row.try_get("remarks")?)))
+            .collect()
     }
 
     pub async fn exists(&self, index_id: &str) -> Result<bool> {
