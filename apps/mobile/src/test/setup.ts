@@ -12,6 +12,15 @@ jest.mock("react-native-safe-area-context", () => ({
   ...require("react-native-safe-area-context/jest/mock").default,
 }));
 
+// The clipboard is a TurboModule, and `getEnforcing` throws on import when the
+// native binary is not there. The seam in `@voya/client/platform` is what app
+// code actually reaches, so a test that cares replaces that instead; this only
+// has to keep the import from exploding.
+jest.mock("@react-native-clipboard/clipboard", () => ({
+  __esModule: true,
+  default: { getString: async () => "", setString: () => {} },
+}));
+
 // MMKV is a JSI module with no JavaScript fallback, so a Jest run has to stand
 // one in. An in-memory map matches the real synchronous semantics, which is
 // what the persisted stores depend on.

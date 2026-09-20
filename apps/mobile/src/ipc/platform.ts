@@ -1,3 +1,5 @@
+import Clipboard from "@react-native-clipboard/clipboard";
+import { setClipboard } from "@voya/client/platform";
 import { setVoyaCommands } from "@voya/client/transport";
 
 import { createTransport, type VoyaTransport } from "./transport";
@@ -15,6 +17,14 @@ let transport: VoyaTransport | null = null;
 export function registerMobileBackend() {
   transport = createTransport();
   setVoyaCommands(transport.commands);
+
+  // Both halves are native here. The desktop reads through the backend because
+  // a WebView read needs a user gesture; React Native has no such restriction,
+  // so `use-node-import` reaches the same clipboard either way.
+  setClipboard({
+    readText: () => Clipboard.getString(),
+    writeText: async (text) => Clipboard.setString(text),
+  });
 }
 
 export function voyaTransport(): VoyaTransport {

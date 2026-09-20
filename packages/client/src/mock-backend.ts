@@ -306,8 +306,19 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
   };
 }
 
+/**
+ * Answers a command with a copy, the way a transport does.
+ *
+ * Every real transport serializes: Tauri IPC and the native module both hand
+ * the frontend a value built from JSON, so no two responses ever share a
+ * reference with each other or with backend state. Returning the live objects
+ * instead made a mutation *invisible* — React Query's structural sharing sees
+ * the array it already holds, keeps the old reference, and every `useMemo`
+ * keyed on it skips the rebuild. That is a difference a screen can see, so the
+ * mock has to cross the same boundary.
+ */
 function resolve<T>(value: T): Promise<T> {
-  return Promise.resolve(value);
+  return Promise.resolve(value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T));
 }
 
 function reject(entity: AppErrorEntity, id: string, message: string): Promise<never> {

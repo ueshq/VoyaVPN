@@ -6,6 +6,8 @@ import { Suspense, use } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { HomeScreen } from "~/features/home/home-screen";
+import { NodesScreen } from "~/features/profiles/nodes-screen";
 import { EventBridge } from "~/ipc/event-bridge";
 import { localeReady } from "~/native/platform-boot";
 
@@ -42,6 +44,18 @@ function PendingScreen({ tab }: { tab: ShellTab }) {
  * the registered component immediately instead, so the gate has to live here.
  * Without it a non-English launch paints English first and then swaps.
  */
+/** The screen behind one tab; the rest are still placeholders. */
+function TabScreen({ tab }: { tab: ShellTab }) {
+  switch (tab) {
+    case "home":
+      return <HomeScreen />;
+    case "profiles":
+      return <NodesScreen />;
+    default:
+      return <PendingScreen tab={tab} />;
+  }
+}
+
 function Shell() {
   use(localeReady);
 
@@ -54,7 +68,7 @@ function Shell() {
       <Tab.Navigator>
         {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => (
           <Tab.Screen key={tab} name={tab} options={{ title: t(SHELL_TABS[tab].titleKey) }}>
-            {() => <PendingScreen tab={tab} />}
+            {() => <TabScreen tab={tab} />}
           </Tab.Screen>
         ))}
       </Tab.Navigator>
