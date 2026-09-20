@@ -57,6 +57,8 @@
     "native:windows:tunnel:status": "node scripts/native/windows/tunnel-service.mjs status",
     "native:mobile:rust:ios": "node scripts/native/mobile/build-rust-ios.mjs",
     "native:mobile:rust:android": "node scripts/native/mobile/build-rust-android.mjs",
+    "native:mobile:libbox:ios": "node scripts/native/mobile/build-libbox-ios.mjs",
+    "native:mobile:libbox:android": "node scripts/native/mobile/build-libbox-android.mjs",
     "check:mobile:test": "pnpm --filter @voya/mobile test",
     "check:mobile:bundle": "node scripts/quality/mobile-bundle.mjs"
   },

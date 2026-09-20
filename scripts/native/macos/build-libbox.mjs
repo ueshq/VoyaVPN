@@ -2,40 +2,20 @@ import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "no
 import { dirname, join, resolve } from "node:path";
 import {
   capture,
-  checkedCapture,
   isCliEntrypoint,
   repoRootFromScript,
   requireDarwin,
   run,
-  truthy,
 } from "../../lib/common.mjs";
 import { libboxBinaryPath } from "./tunnel-layout.mjs";
-import { DEFAULT_SING_BOX_VERSION } from "../../core/sing-box-installer.mjs";
+import { ensureSingBoxSource, singBoxSourceDir } from "../sing-box-source.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
-const sourceDir = resolve(process.env.VOYAVPN_SING_BOX_SOURCE_DIR || resolve(repoRoot, "target", "native", "sing-box"));
-const singBoxRef = process.env.VOYAVPN_SING_BOX_REF || process.env.SING_BOX_VERSION || DEFAULT_SING_BOX_VERSION;
+const sourceDir = singBoxSourceDir(repoRoot);
 const frameworkRoot = resolve(repoRoot, "apps", "desktop", "src-tauri", "native", "macos", "Frameworks");
 const targetFramework = resolve(
   process.env.VOYAVPN_LIBBOX_FRAMEWORK || resolve(frameworkRoot, "Libbox.framework"),
 );
-
-function ensureSource() {
-  if (!existsSync(sourceDir)) {
-    mkdirSync(dirname(sourceDir), { recursive: true });
-    run("git", ["clone", "https://github.com/SagerNet/sing-box.git", sourceDir], { cwd: repoRoot });
-  }
-
-  const status = checkedCapture("git", ["status", "--porcelain"], { cwd: sourceDir }).stdout.trim();
-  if (status && !truthy(process.env.VOYAVPN_SING_BOX_ALLOW_DIRTY)) {
-    throw new Error(
-      `sing-box source checkout has local changes: ${sourceDir}\nSet VOYAVPN_SING_BOX_ALLOW_DIRTY=1 if you intentionally want to build from this checkout.`,
-    );
-  }
-
-  run("git", ["fetch", "--tags", "--force"], { cwd: sourceDir });
-  run("git", ["checkout", singBoxRef], { cwd: sourceDir });
-}
 
 function buildLibbox() {
   rmSync(resolve(sourceDir, "Libbox.xcframework"), { force: true, recursive: true });
@@ -100,7 +80,7 @@ export function stageLibbox({
 
 export function main() {
   requireDarwin("Libbox.framework must be built on macOS with Xcode command line tools.");
-  ensureSource();
+  ensureSingBoxSource({ repoRoot, sourceDir });
   buildLibbox();
   stageLibbox();
   console.log(`Universal macOS Libbox.framework staged at ${targetFramework}`);
