@@ -23,9 +23,9 @@ import {
   SelectField,
   TextField,
 } from "./profile-form-fields";
-import { profileValidationMessage } from "./profile-form-utils";
-import { profileFormSchema, activeProfileFormValues, type ParsedProfileFormValues, type ProfileFormValues } from "./profile-form-schema";
-import { createDefaultProfile, normalizeProfileForForm, prepareProfileForSave } from "./profile-form-values";
+import { profileValidationMessage } from "@voya/features/profiles/profile-form-utils";
+import { profileFormSchema, activeProfileFormValues, type ParsedProfileFormValues, type ProfileFormValues } from "@voya/features/profiles/profile-form-schema";
+import { createDefaultProfile, normalizeProfileForForm, prepareProfileForSave } from "@voya/features/profiles/profile-form-values";
 import { ProtocolPanel } from "./profile-protocol-panel";
 import { SecurityPanel } from "./profile-security-panel";
 import { TransportPanel } from "./profile-transport-panel";

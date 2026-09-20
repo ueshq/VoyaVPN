@@ -5,7 +5,13 @@ const plugin = vi.hoisted(() => ({
   requestPermission: vi.fn(),
   sendNotification: vi.fn(),
 }));
-const windowApi = vi.hoisted(() => ({ isWindowVisible: vi.fn() }));
+// `isTauriRuntime` is not this module's business, but the shared backend
+// registration the test setup runs imports it from here; an absent export
+// would throw there rather than fail a test.
+const windowApi = vi.hoisted(() => ({
+  isTauriRuntime: vi.fn(() => true),
+  isWindowVisible: vi.fn(),
+}));
 
 vi.mock("@tauri-apps/plugin-notification", () => plugin);
 vi.mock("@/ipc/window", () => windowApi);

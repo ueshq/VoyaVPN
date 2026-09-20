@@ -32,12 +32,12 @@ import {
   type FieldErrorMap,
 } from "@voya/features/forms/zod-errors";
 
-import { OUTBOUND_LABEL_KEYS, type RuleGroupOutbound, appendMatcherLine, describeOutbound, groupOutboundValue } from "./rule-outbound";
-import { RULE_SCOPE_LABEL_KEYS } from "./routing-constants";
-import { routingRuleSchema, type RoutingRulePayload } from "./routing-form-schema";
-import { formToRule, ruleToForm, type RuleFormState } from "./routing-form-values";
-import { sentinelLabelKey } from "./sentinel-rules";
-import type { RuleSaveError } from "./use-routing-screen";
+import { OUTBOUND_LABEL_KEYS, type RuleGroupOutbound, appendMatcherLine, describeOutbound, groupOutboundValue } from "@voya/features/routing/rule-outbound";
+import { RULE_SCOPE_LABEL_KEYS } from "@voya/features/routing/routing-constants";
+import { routingRuleSchema, type RoutingRulePayload } from "@voya/features/routing/routing-form-schema";
+import { formToRule, ruleToForm, type RuleFormState } from "@voya/features/routing/routing-form-values";
+import { sentinelLabelKey } from "@voya/features/routing/sentinel-rules";
+import type { RuleSaveError } from "@voya/features/routing/use-routing-screen";
 
 /** Fields with an inline error slot; any other issue is reported above the footer. */
 const RENDERED_FIELDS = new Set([

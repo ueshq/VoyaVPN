@@ -4,7 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
+import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 import type { CoreState, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
@@ -170,7 +170,7 @@ describe("RoutingScreen", () => {
     await waitFor(() => expect(rule).toBeEnabled());
     await user.click(rule);
 
-    await waitFor(() => expect(ipc.proxySetTrafficMode).toHaveBeenCalledWith("rule", expect.anything()));
+    await waitFor(() => expect(ipc.proxySetTrafficMode).toHaveBeenCalledWith("rule"));
     await waitFor(() => expect(screen.getByRole("button", { name: "Add rule" })).toBeEnabled());
     expect(screen.getByRole("button", { name: "Add rule" }).parentElement).not.toHaveAttribute("title");
     expect(screen.getByRole("switch", { name: "Enable Office" })).toBeEnabled();

@@ -33,8 +33,11 @@
       "entry": ["src/**/*.{test,spec}.{ts,tsx}"],
       "project": ["src/**/*.{ts,tsx,css}", "e2e/**/*.ts"],
       // flag-icons ships only SVG files, reached through `import.meta.glob`
-      // in node-country-icon.tsx, which knip cannot follow.
-      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
+      // in node-country-icon.tsx, which knip cannot follow. `zod` is named by
+      // no desktop source any more — the schemas live in `@voya/features` —
+      // but `zodResolver` checks them with `instanceof`, so the app has to
+      // resolve the same copy the schemas were built with.
+      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons", "zod"],
       "ignoreBinaries": ["tauri-driver"],
       "ignoreIssues": {
         "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],

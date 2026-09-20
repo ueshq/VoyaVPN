@@ -14,7 +14,7 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { DnsPane } from "@/features/dns/dns-pane";
-import { useDnsSettings } from "@/features/dns/use-dns-settings";
+import { useDnsSettings } from "@voya/features/dns/use-dns-settings";
 import { UpdatesPanel } from "@/features/updates/updates-panel";
 import { useShellStore, type SettingsTab } from "@/stores/shell-store";
 
@@ -23,7 +23,7 @@ import { ConnectionTab } from "./connection-tab";
 import { GeneralTab } from "./general-tab";
 import { SettingsApplyStatus } from "./settings-apply-status";
 import { SettingsFields } from "./settings-form";
-import { useAppSettings, type AppSettingsController } from "./use-app-settings";
+import { useAppSettings, type AppSettingsController } from "@voya/features/settings/use-app-settings";
 
 // Everyday choices first; anything that needs networking knowledge waits under
 // Advanced.

@@ -1,7 +1,13 @@
-import { setAppVisibility, setClipboard, setElevationHandler } from "@voya/client/platform";
+import {
+  setAppVisibility,
+  setBackendAvailable,
+  setClipboard,
+  setElevationHandler,
+} from "@voya/client/platform";
 import { setVoyaCommands } from "@voya/client/transport";
 
 import * as commands from "@/ipc/commands";
+import { isTauriRuntime } from "@/ipc/window";
 import { writeClipboard } from "@/lib/clipboard";
 import { isDocumentVisible, subscribeToDocumentVisible } from "@/lib/document-visible";
 
@@ -29,6 +35,10 @@ export function registerDesktopBackend() {
   });
 
   setAppVisibility({ isVisible: isDocumentVisible, subscribe: subscribeToDocumentVisible });
+
+  // The frontend-only dev server (`pnpm dev:web`) has no backend behind it, so
+  // anything that would start a stream the backend must later stop asks first.
+  setBackendAvailable(isTauriRuntime);
 }
 
 // Declared locally so the assertion reads as one line above; `VoyaCommands`

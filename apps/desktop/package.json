@@ -33,7 +33,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-hook-form": "^7.76.1",
-    "zod": "^4.4.3",
+    "zod": "catalog:",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ import { getErrorMessage } from "@voya/utils/error";
 
 import { PageSurface } from "@/components/app-shell/page-section";
 
-import { useSavedTrafficMode } from "./use-traffic-mode";
+import { useSavedTrafficMode } from "@voya/features/routing/use-traffic-mode";
 
 /**
  * Global mode sends all captured traffic through the proxy ahead of every rule

@@ -8,7 +8,7 @@ import type { ConnectionMode } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { SettingsGroup } from "./settings-form";
-import { useCaptureMode } from "./use-capture-mode";
+import { useCaptureMode } from "@voya/features/settings/use-capture-mode";
 
 const OPTIONS = [
   {

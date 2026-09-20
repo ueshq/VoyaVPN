@@ -7,9 +7,9 @@ import {
   SettingsSwitch,
   TextField,
 } from "./settings-form";
-import { SETTING_DEFAULTS } from "./settings-values";
+import { SETTING_DEFAULTS } from "@voya/features/settings/settings-values";
 import { CaptureModeSetting } from "./capture-mode-setting";
-import type { AppSettingsFormController } from "./use-app-settings";
+import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
 
 /**
  * Connection choices an ordinary user makes: the kill switch and the local

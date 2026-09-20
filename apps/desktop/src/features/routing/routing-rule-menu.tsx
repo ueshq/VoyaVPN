@@ -17,7 +17,7 @@ import {
   type MenuPrimitives,
 } from "@/components/app-shell/menu-primitives";
 
-import type { RuleMoveAction } from "./use-routing-screen";
+import type { RuleMoveAction } from "@voya/features/routing/use-routing-screen";
 
 export type RuleMenuActions = {
   canMoveDown: boolean;

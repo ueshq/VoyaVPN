@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { AppSettingsV1, AppearanceSettings, TunStatus } from "@/ipc/bindings";
 
-import { makeAppSettings } from "./app-settings.test-fixture";
+import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 import { CoreTab } from "./core-tab";
 import { GeneralTab } from "./general-tab";
 import { AdvancedTab } from "./advanced-tab";
@@ -15,7 +15,7 @@ import { TestsTab } from "./tests-tab";
 import type {
   AppSettingsController,
   AppSettingsFormController,
-} from "./use-app-settings";
+} from "@voya/features/settings/use-app-settings";
 
 type SettingsTab = (props: {
   controller: AppSettingsFormController;

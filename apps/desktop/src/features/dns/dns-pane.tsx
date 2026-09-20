@@ -13,8 +13,8 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { SettingsGroup } from "@/features/settings/settings-form";
 import type { DnsSettings } from "@/ipc/bindings";
 
-import { DNS_STRATEGIES } from "./dns-form-schema";
-import type { useDnsSettings } from "./use-dns-settings";
+import { DNS_STRATEGIES } from "@voya/features/dns/dns-form-schema";
+import type { useDnsSettings } from "@voya/features/dns/use-dns-settings";
 
 // "AsIs" and "UseIP" generate no strategy at all, exactly like the default, so
 // the list offers the default once and shows either stored value as it.

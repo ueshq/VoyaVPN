@@ -6,7 +6,7 @@ import type { TranslationKey } from "@voya/i18n";
 import type { CloseAction, ThemeMode } from "@/ipc/bindings";
 
 import { SelectField, SettingsGroup, SettingsRow, SettingsSwitch } from "./settings-form";
-import type { AppSettingsFormController } from "./use-app-settings";
+import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
 
 const themeOptions: Array<{
   icon: typeof Monitor;

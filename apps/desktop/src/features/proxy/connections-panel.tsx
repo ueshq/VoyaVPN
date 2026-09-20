@@ -28,10 +28,10 @@ import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 import { PageHeader } from "@/components/app-shell/page-section";
 import { ConnectionDetails } from "./connection-details";
-import { arrangeConnections, connectionBytes, connectionKey, connectionSearchHay } from "./connection-display";
-import type { ConnectionSort } from "./connection-display";
-import { outboundLabelKey } from "@/features/routing/rule-outbound";
-import { connectionRoute, type ConnectionRoute } from "./connection-route";
+import { arrangeConnections, connectionBytes, connectionKey, connectionSearchHay } from "@voya/features/proxy/connection-display";
+import type { ConnectionSort } from "@voya/features/proxy/connection-display";
+import { outboundLabelKey } from "@voya/features/routing/rule-outbound";
+import { connectionRoute, type ConnectionRoute } from "@voya/features/proxy/connection-route";
 
 type SortColumn = ConnectionSort["column"];
 type Selection = { connection: ProxyConnectionItem; ended: boolean };

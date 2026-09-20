@@ -9,11 +9,11 @@ import {
   resetSettingsBackend,
   serverSettings,
   settingsIpc,
-} from "@/features/settings/settings-backend.test-fixture";
+} from "@voya/features/settings/settings-backend.test-fixture";
 import { DnsPane } from "./dns-pane";
-import { useDnsSettings } from "./use-dns-settings";
+import { useDnsSettings } from "@voya/features/dns/use-dns-settings";
 
-vi.mock("@/ipc/commands", async () => (await import("@/features/settings/settings-backend.test-fixture")).settingsIpc);
+vi.mock("@/ipc/commands", async () => (await import("@voya/features/settings/settings-backend.test-fixture")).settingsIpc);
 beforeEach(async () => { resetSettingsBackend(); await changeLocale("en"); });
 afterEach(cleanup);
 function mount() {

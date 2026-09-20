@@ -148,3 +148,23 @@ export function setAppVisibility(adapter: AppVisibilityAdapter) {
 export function appVisibilityAdapter(): AppVisibilityAdapter {
   return appVisibility;
 }
+
+/**
+ * Whether there is a backend to talk to at all.
+ *
+ * The desktop can run its frontend against a plain Vite dev server with no
+ * Tauri runtime behind it, and a command there would throw on every call; a
+ * React Native build always has one, mock or native. Only code that *starts*
+ * something the backend has to stop — the log stream, the proxy monitor —
+ * needs to ask, so the default is the honest one for every platform that
+ * cannot be half-wired.
+ */
+let backendPresent: () => boolean = () => true;
+
+export function setBackendAvailable(available: () => boolean) {
+  backendPresent = available;
+}
+
+export function backendAvailable(): boolean {
+  return backendPresent();
+}

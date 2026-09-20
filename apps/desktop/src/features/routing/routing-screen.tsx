@@ -25,12 +25,12 @@ import { PerAppProxyDialog } from "./per-app-proxy-dialog";
 import { PerAppSummaryCard } from "./per-app-summary-card";
 import { RoutingRuleDialog } from "./routing-rule-dialog";
 import { RoutingRuleList } from "./routing-rule-list";
-import { ruleDisplayName } from "./sentinel-rules";
+import { ruleDisplayName } from "@voya/features/routing/sentinel-rules";
 import { TrafficModeBanner } from "./traffic-mode-banner";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
-import { useProcessRulesSupported } from "./use-process-rules-supported";
-import { useRoutingScreen, type RoutingScreenController } from "./use-routing-screen";
-import { useSavedTrafficMode } from "./use-traffic-mode";
+import { useProcessRulesSupported } from "@voya/features/routing/use-process-rules-supported";
+import { useRoutingScreen, type RoutingScreenController } from "@voya/features/routing/use-routing-screen";
+import { useSavedTrafficMode } from "@voya/features/routing/use-traffic-mode";
 
 export function RoutingScreen() {
   const { t } = useI18n();

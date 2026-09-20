@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { profileValidationMessage } from "./profile-form-utils";
+import { profileValidationMessage } from "@voya/features/profiles/profile-form-utils";
 import { createContext, useContext, useId } from "react";
 import type * as React from "react";
 import { Controller } from "react-hook-form";
@@ -34,7 +34,7 @@ import type { LucideIcon } from "lucide-react";
 import type {
   ParsedProfileFormValues,
   ProfileFormValues,
-} from "./profile-form-schema";
+} from "@voya/features/profiles/profile-form-schema";
 
 const FieldErrorsContext = createContext<FieldErrors<ProfileFormValues>>({});
 

@@ -20,8 +20,12 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * `QueryClient` travels through a module-level React context, so a hook from a
  * second copy throws "No QueryClient set" inside a provider that is right
  * there. Both workspaces take it from the catalog to stay on one version.
+ *
+ * `zod` joins them because the schemas are built in `@voya/features` and
+ * resolved in `apps/desktop`: `zodResolver` checks a schema with `instanceof`,
+ * and a schema from a second copy is simply not one.
  */
-const singleVersionPackages = ["@tanstack/react-query", "react", "react-dom"];
+const singleVersionPackages = ["@tanstack/react-query", "react", "react-dom", "zod"];
 
 /**
  * Scopes where *every* package must be single-version.

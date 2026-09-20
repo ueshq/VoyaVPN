@@ -6,6 +6,9 @@ import { TitleBar } from "./title-bar";
 
 const windowMocks = vi.hoisted(() => ({
   closeWindow: vi.fn(),
+  // Not this component's business; the shared backend registration the test
+  // setup runs reads it from the same module.
+  isTauriRuntime: vi.fn(() => true),
   isWindowMaximized: vi.fn(),
   minimizeWindow: vi.fn(),
   onWindowResized: vi.fn(),

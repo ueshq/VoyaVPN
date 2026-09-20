@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { createAppQueryClient } from "@/components/app-shell/query-client";
 import { renderWithQuery } from "@/test/render";
-import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
+import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 import type { AppSettingsV1, CoreState, TrafficModeResponse } from "@/ipc/bindings";
 import { queryKeys } from "@voya/client/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
@@ -122,7 +122,10 @@ describe("rules traffic mode", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "Global" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toHaveAttribute("aria-pressed", "true"));
-    expect(mocks.save).toHaveBeenCalledWith("global", expect.anything());
+    // Exactly the argument the command declares: the hook now calls it
+    // itself rather than handing React Query the function, which used to pass
+    // its own second argument straight through.
+    expect(mocks.save).toHaveBeenCalledWith("global");
     expect(client.getQueryData<AppSettingsV1>(queryKeys.appSettings)?.proxy.trafficMode).toBe("global");
     expect(runtimeActionPending()).toBe(false);
   });

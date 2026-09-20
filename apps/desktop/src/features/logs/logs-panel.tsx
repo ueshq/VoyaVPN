@@ -46,7 +46,7 @@ import { writeClipboard } from "@/lib/clipboard";
 import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { toastError, useToastStore } from "@voya/client/toast-store";
 
-import { useLogStream } from "./use-log-stream";
+import { useLogStream } from "@voya/features/logs/use-log-stream";
 
 export type LogFilter = "standard" | "issues" | "all";
 const ROW_HEIGHT = 36;

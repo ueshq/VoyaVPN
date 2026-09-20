@@ -15,7 +15,8 @@
     "@voya/client": "workspace:*",
     "@voya/contracts": "workspace:*",
     "@voya/i18n": "workspace:*",
-    "@voya/utils": "workspace:*"
+    "@voya/utils": "workspace:*",
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@tanstack/react-query": "catalog:",
@@ -30,7 +31,6 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "zod": "^4.4.3"
+    "vitest": "catalog:"
   }
 }

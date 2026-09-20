@@ -20,7 +20,7 @@ import { saveSubscription, updateSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
 import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
 import { assertSubscriptionUpdated } from "@voya/features/subscriptions/subscription-update-result";
-import { subscriptionFormSchema } from "./subscriptions-form-schema";
+import { subscriptionFormSchema } from "@voya/features/subscriptions/subscriptions-form-schema";
 
 /** Fields the dialog validates; also the suffixes of the input ids. */
 type SubscriptionField = "hours" | "remarks" | "url";

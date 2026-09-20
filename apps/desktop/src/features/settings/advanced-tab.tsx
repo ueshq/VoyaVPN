@@ -15,9 +15,9 @@ import {
   SettingsSwitch,
   TextField,
 } from "./settings-form";
-import { SETTING_DEFAULTS } from "./settings-values";
+import { SETTING_DEFAULTS } from "@voya/features/settings/settings-values";
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
-import type { AppSettingsFormController } from "./use-app-settings";
+import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
 
 // Both are closed sets in sing-box, and neither is validated on save: an unknown
 // stack only fails when the core is next started, and an unknown ICMP policy is

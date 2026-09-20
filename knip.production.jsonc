@@ -27,9 +27,9 @@
       "entry": ["src/main.tsx!"],
       "project": ["src/**/*.{ts,tsx,css}!"],
       "ignore": ["e2e/**", "src/**/*.{test,spec}.{ts,tsx}", "src/**/*.test-fixture.ts", "src/test/**"],
-      // flag-icons ships only SVG files, reached through `import.meta.glob`
-      // in node-country-icon.tsx, which knip cannot follow.
-      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
+      // See knip.jsonc for `zod`: the schemas live in `@voya/features` and
+      // `zodResolver` checks them with `instanceof`.
+      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons", "zod"],
       "ignoreIssues": {
         "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],
       // `commands.ts` is the desktop's implementation of the whole
@@ -82,9 +82,9 @@
     "packages/features": {
       "entry": ["src/*/*.{ts,tsx}!"],
       "project": ["src/**/*.{ts,tsx}!"],
-      // `src/test` is the package's own harness and fixtures, deliberately not
-      // reachable from a shipped path.
-      "ignore": ["src/**/*.test.{ts,tsx}", "src/test/**"]
+      // The package's own harness and fixtures, deliberately not reachable
+      // from a shipped path.
+      "ignore": ["src/**/*.test.{ts,tsx}", "src/**/*.test-fixture.ts", "src/test/**"]
     }
   }
 }

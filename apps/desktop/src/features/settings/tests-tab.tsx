@@ -1,8 +1,8 @@
 import { NumberField, TextField, SettingsGroup } from "./settings-form";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { SETTING_DEFAULTS } from "./settings-values";
-import type { AppSettingsFormController } from "./use-app-settings";
+import { SETTING_DEFAULTS } from "@voya/features/settings/settings-values";
+import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
 
 export function TestsTab({ controller }: { controller: AppSettingsFormController }) {
   const { t } = useI18n();

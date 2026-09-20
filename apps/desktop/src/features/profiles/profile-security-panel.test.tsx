@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { useForm, useWatch } from "react-hook-form";
 import { describe, expect, it } from "vitest";
 
-import { type ParsedProfileFormValues, type ProfileFormValues } from "./profile-form-schema";
-import { createDefaultProfile } from "./profile-form-values";
+import { type ParsedProfileFormValues, type ProfileFormValues } from "@voya/features/profiles/profile-form-schema";
+import { createDefaultProfile } from "@voya/features/profiles/profile-form-values";
 import { SecurityPanel } from "./profile-security-panel";
 
 function SecurityPanelHarness({ security }: { security: string }) {

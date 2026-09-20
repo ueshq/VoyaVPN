@@ -8,7 +8,7 @@ import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
-import { useSavedTrafficMode } from "@/features/routing/use-traffic-mode";
+import { useSavedTrafficMode } from "@voya/features/routing/use-traffic-mode";
 
 /** Capture uses runtime evidence. Routing is explicitly a saved setting: IPC has no live read. */
 export function HomeModeSummary() {

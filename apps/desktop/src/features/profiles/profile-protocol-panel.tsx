@@ -12,7 +12,7 @@ import {
   type ProfileFormControl,
   type Register,
 } from "./profile-form-fields";
-import { passwordLabel, requiresUsername, optionalNumber, usernameLabel } from "./profile-form-utils";
+import { passwordLabel, requiresUsername, optionalNumber, usernameLabel } from "@voya/features/profiles/profile-form-utils";
 
 type ProtocolPanelProps = {
   configType: ProfileKind;

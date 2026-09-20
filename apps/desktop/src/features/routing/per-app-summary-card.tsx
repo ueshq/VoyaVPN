@@ -8,9 +8,9 @@ import { cn } from "@voya/ui/lib/utils";
 import { PageSurface } from "@/components/app-shell/page-section";
 import type { Routing_Serialize } from "@/ipc/bindings";
 
-import { PER_APP_MODE_LABEL_KEYS, readPerAppRule } from "./per-app-proxy-rule";
-import { useProcessRulesSupported } from "./use-process-rules-supported";
-import { useConnectionModeStatus } from "./use-connection-mode-status";
+import { PER_APP_MODE_LABEL_KEYS, readPerAppRule } from "@voya/features/routing/per-app-proxy-rule";
+import { useProcessRulesSupported } from "@voya/features/routing/use-process-rules-supported";
+import { useConnectionModeStatus } from "@voya/features/routing/use-connection-mode-status";
 
 const VISIBLE_APPS = 4;
 

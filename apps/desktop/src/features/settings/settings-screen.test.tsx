@@ -17,13 +17,13 @@ import {
   resetSettingsBackend,
   serverSettings,
   settingsIpc,
-} from "./settings-backend.test-fixture";
+} from "@voya/features/settings/settings-backend.test-fixture";
 import { SettingsScreen } from "./settings-screen";
 import { saveQueue } from "@voya/features/forms/save-queue";
 
 vi.mock(
   "@/ipc/commands",
-  async () => (await import("./settings-backend.test-fixture")).settingsIpc,
+  async () => (await import("@voya/features/settings/settings-backend.test-fixture")).settingsIpc,
 );
 vi.mock("@/ipc/tauri-plugins", () => ({
   check: vi.fn(),

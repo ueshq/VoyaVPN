@@ -2,7 +2,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
 
 import { ModeInfo } from "./mode-info";
-import { useTrafficMode } from "./use-traffic-mode";
+import { useTrafficMode } from "@voya/features/routing/use-traffic-mode";
 
 const MODES = [
   { value: "rule", labelKey: "panes.routing.trafficModeRule" },

@@ -5,11 +5,11 @@ import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeListVirtual } from "./use-node-list-virtual";
 import { useNodeEditor } from "./use-node-editor";
-import { useNodeSubscriptions } from "./use-node-subscriptions";
-import { useNodeExport } from "./use-node-export";
+import { useNodeSubscriptions } from "@voya/features/profiles/use-node-subscriptions";
+import { useNodeExport } from "@voya/features/profiles/use-node-export";
 import { useNodeImport } from "@voya/features/profiles/use-node-import";
 import { useNodeSpeedtest } from "./use-node-speedtest";
-import { usePolicyGroups } from "./use-policy-groups";
+import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 
 /** Compose page capabilities; individual components consume only their own facet. */
 export function useServerTable() {
@@ -19,7 +19,8 @@ export function useServerTable() {
   const data = useNodeListData(nodeGroups, t);
   const listView = useNodeListVirtual(data.rows, data.search);
   const editor = useNodeEditor(operation, listView.viewportRef, t);
-  const subscriptions = useNodeSubscriptions(operation, t);
+  // The desktop restores focus to the control that opened a dialog.
+  const subscriptions = useNodeSubscriptions<HTMLElement>(operation, t);
   const exports = useNodeExport(operation, t);
   // A subscription URL only creates the source; updating it straight away is
   // what brings its nodes in, so the user never meets an empty group.

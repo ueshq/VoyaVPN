@@ -7,7 +7,7 @@ import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { RuntimeStatusResponse } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
+import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 
 import { ExitIpMetric } from "./exit-ip-metric";
 

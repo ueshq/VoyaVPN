@@ -1,6 +1,6 @@
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { trimToNull } from "@voya/utils/text";
-import { SETTING_DEFAULTS } from "./settings-values";
+import { SETTING_DEFAULTS } from "@voya/features/settings/settings-values";
 import {
   NumberField,
   SelectField,
@@ -13,7 +13,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 
 import type { TlsFragmentMode } from "@/ipc/bindings";
 
-import type { AppSettingsFormController } from "./use-app-settings";
+import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
 
 const TLS_FRAGMENT_MODES = ["off", "tlsHello", "record"] as const satisfies readonly TlsFragmentMode[];
 const TLS_FRAGMENT_LABELS: Record<TlsFragmentMode, TranslationKey> = {

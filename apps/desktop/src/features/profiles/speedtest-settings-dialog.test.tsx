@@ -6,13 +6,13 @@ import {
   deferred,
   resetSettingsBackend,
   settingsIpc,
-} from "@/features/settings/settings-backend.test-fixture";
+} from "@voya/features/settings/settings-backend.test-fixture";
 import type { AppSettingsV1 } from "@/ipc/bindings";
 import { renderWithQuery } from "@/test/render";
 
 import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
 
-vi.mock("@/ipc/commands", async () => (await import("@/features/settings/settings-backend.test-fixture")).settingsIpc);
+vi.mock("@/ipc/commands", async () => (await import("@voya/features/settings/settings-backend.test-fixture")).settingsIpc);
 beforeEach(async () => {
   resetSettingsBackend();
   await changeLocale("en");

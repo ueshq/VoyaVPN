@@ -11,7 +11,7 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 import { SettingsFields } from "@/features/settings/settings-form";
 import { TestsTab } from "@/features/settings/tests-tab";
-import { useAppSettings } from "@/features/settings/use-app-settings";
+import { useAppSettings } from "@voya/features/settings/use-app-settings";
 
 /**
  * The latency test's own settings, next to the tests they change. They save

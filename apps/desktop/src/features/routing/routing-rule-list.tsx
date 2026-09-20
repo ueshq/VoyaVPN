@@ -52,17 +52,17 @@ import {
 } from "@/components/app-shell/data-table-surface";
 import type { RoutingRule } from "@/ipc/bindings";
 
-import { OUTBOUND_LABEL_KEYS, describeOutbound, type RuleGroupOutbound } from "./rule-outbound";
+import { OUTBOUND_LABEL_KEYS, describeOutbound, type RuleGroupOutbound } from "@voya/features/routing/rule-outbound";
 import {
   ruleHasMatcher,
   ruleMatchChips,
   type MatchChip,
   type MatchListField,
-} from "./rule-match-summary";
-import { RULE_SCOPE_LABEL_KEYS } from "./routing-constants";
+} from "@voya/features/routing/rule-match-summary";
+import { RULE_SCOPE_LABEL_KEYS } from "@voya/features/routing/routing-constants";
 import { RuleRowContextMenu, RuleRowMenuButton, type RuleMenuActions } from "./routing-rule-menu";
-import { ruleDisplayName, sentinelLabelKey } from "./sentinel-rules";
-import type { RuleMoveAction } from "./use-routing-screen";
+import { ruleDisplayName, sentinelLabelKey } from "@voya/features/routing/sentinel-rules";
+import type { RuleMoveAction } from "@voya/features/routing/use-routing-screen";
 
 type RoutingRuleListProps = {
   /** Policy groups a rule can target; `null` while the list loads. */
