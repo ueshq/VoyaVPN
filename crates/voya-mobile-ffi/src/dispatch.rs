@@ -16,7 +16,12 @@ use voya_contracts::{AppError, AppErrorKind, AppErrorSubsystem};
 
 use crate::app::MobileState;
 
+mod assets;
+mod dns;
+mod policy_groups;
 mod profiles;
+mod proxy;
+mod routing;
 mod runtime;
 mod settings;
 mod subscriptions;
@@ -76,50 +81,10 @@ pub const UNSUPPORTED_ON_MOBILE: &[&str] = &[
 ///
 /// This list shrinks to empty as the screens land, one feature at a time.
 pub const NOT_YET_DISPATCHED: &[&str] = &[
-    // Settings, DNS and the routing screens.
-    "apply_pending_settings",
-    "get_settings_apply_status",
-    "save_app_settings",
-    "load_dns_settings",
-    "save_dns_settings",
-    "list_routings",
-    "save_routing",
-    "set_active_routing",
-    "delete_routings",
-    "save_routing_rule",
-    "delete_routing_rules",
-    "move_routing_rule",
-    "reset_routing_rules",
-    "connection_mode_status",
-    "set_connection_mode",
-    "set_tun_enabled",
-    // The node editor, its QR export and the per-node menu.
-    "get_profile",
-    "save_profile",
-    "delete_profiles",
-    "move_profile",
-    "export_profile_share_links",
-    "generate_qr_code",
-    "save_subscription",
-    "delete_subscriptions",
-    // Policy groups beyond reading them.
-    "save_policy_group",
-    "delete_policy_groups",
-    "set_active_policy_group",
-    "select_policy_group_member",
-    "test_policy_group_delay",
-    // Speedtest: needs the in-process probe core (`ProbeCoreHost`).
+    // Both need the in-process probe core (`ProbeCoreHost`), which is the
+    // remaining piece of the disconnected speedtest.
     "run_speedtest",
     "cancel_speedtest",
-    // The network-activity screen.
-    "proxy_list_connections",
-    "proxy_close_connection",
-    "proxy_start_monitor",
-    "proxy_stop_monitor",
-    "proxy_set_traffic_mode",
-    // The rule-library updater.
-    "update_geo_assets",
-    "update_srs_assets",
 ];
 
 /// Runs one command.
@@ -147,16 +112,54 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
     match command {
         "load_ui_preferences" => settings::load_ui_preferences(state).await,
         "load_app_settings" => settings::load_app_settings(state).await,
+        "save_app_settings" => settings::save_app_settings(state, args).await,
+        "get_settings_apply_status" => settings::settings_apply_status(state).await,
+        "apply_pending_settings" => settings::apply_pending_settings(state).await,
         "set_log_streaming" => settings::set_log_streaming(state, args),
 
+        "load_dns_settings" => dns::load(state).await,
+        "save_dns_settings" => dns::save(state, args).await,
+
         "list_profile_summaries" => profiles::list_summaries(state).await,
+        "get_profile" => profiles::get(state, args).await,
+        "save_profile" => profiles::save(state, args).await,
+        "delete_profiles" => profiles::delete(state, args).await,
+        "move_profile" => profiles::move_profile(state, args).await,
         "set_active_profile" => profiles::set_active(state, args).await,
         "import_profiles_from_text" => profiles::import_from_text(state, args).await,
+        "export_profile_share_links" => profiles::export_share_links(state, args).await,
+        "generate_qr_code" => profiles::generate_qr_code(args),
+
         "list_policy_groups" => profiles::list_policy_groups(state).await,
         "policy_group_runtime" => profiles::policy_group_runtime(state).await,
+        "save_policy_group" => policy_groups::save(state, args).await,
+        "delete_policy_groups" => policy_groups::delete(state, args).await,
+        "set_active_policy_group" => policy_groups::set_active(state, args).await,
+        "select_policy_group_member" => policy_groups::select_member(state, args).await,
+        "test_policy_group_delay" => policy_groups::test_delay(state).await,
+
+        "list_routings" => routing::list(state).await,
+        "save_routing" => routing::save(state, args).await,
+        "delete_routings" => routing::delete(state, args).await,
+        "set_active_routing" => routing::set_active(state, args).await,
+        "save_routing_rule" => routing::save_rule(state, args).await,
+        "delete_routing_rules" => routing::delete_rules(state, args).await,
+        "move_routing_rule" => routing::move_rule(state, args).await,
+        "reset_routing_rules" => routing::reset_rules(state, args).await,
+
+        "proxy_list_connections" => proxy::list_connections(state).await,
+        "proxy_close_connection" => proxy::close_connection(state, args).await,
+        "proxy_set_traffic_mode" => proxy::set_traffic_mode(state, args).await,
+        "proxy_start_monitor" => proxy::start_monitor(state).await,
+        "proxy_stop_monitor" => proxy::stop_monitor(state).await,
+
+        "update_geo_assets" => assets::update_geo(state).await,
+        "update_srs_assets" => assets::update_srs(state).await,
 
         "list_subscriptions" => subscriptions::list(state).await,
         "list_subscription_metadata" => subscriptions::list_metadata(state).await,
+        "save_subscription" => subscriptions::save(state, args).await,
+        "delete_subscriptions" => subscriptions::delete(state, args).await,
         "update_subscriptions" => subscriptions::update(state, args).await,
 
         "connect_active_profile" => runtime::connect(state).await,
@@ -164,6 +167,9 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
         "restart_core" => runtime::restart(state).await,
         "runtime_status" => runtime::status(state).await,
         "tun_status" => runtime::tun_status(state).await,
+        "set_tun_enabled" => runtime::set_tun_enabled(state, args).await,
+        "connection_mode_status" => runtime::connection_mode_status(state).await,
+        "set_connection_mode" => runtime::set_connection_mode(state, args).await,
         "speedtest_status" => runtime::speedtest_status(state).await,
         "check_connection_ip" => runtime::check_connection_ip(state).await,
 

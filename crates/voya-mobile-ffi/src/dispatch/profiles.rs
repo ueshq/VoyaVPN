@@ -4,8 +4,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
     contract_map::{
-        import_profiles_to_contract, policy_group_entry_to_contract,
-        policy_group_runtime_to_contract, profile_details_to_contract,
+        import_profiles_to_contract, move_action_from_contract, policy_group_entry_to_contract,
+        policy_group_runtime_to_contract, profile_details_to_contract, profile_from_contract,
         profile_summary_listing_to_contract,
     },
     invalidation,
@@ -125,5 +125,146 @@ pub(super) async fn policy_group_runtime(state: &MobileState) -> Result<Value, A
     answer(
         "policy_group_runtime",
         &Some(policy_group_runtime_to_contract(group_id, runtime)),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileId {
+    index_id: String,
+}
+
+pub(super) async fn get(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+    let ProfileId { index_id } = arguments("get_profile", args)?;
+    let config = state.config_mutations.current_config();
+    let details = state
+        .services
+        .profiles()
+        .get_profile(&config, &index_id)
+        .await?;
+
+    answer("get_profile", &profile_details_to_contract(details))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveProfile {
+    profile: voya_contracts::Profile,
+}
+
+pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+    let SaveProfile { profile } = arguments("save_profile", args)?;
+    let saved = state
+        .config_mutations
+        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
+            Ok(ProfileManager::new_in(unit_of_work)
+                .save_profile(config, profile_from_contract(profile))
+                .await?)
+        })
+        .await?;
+    state.sinks.invalidate(
+        "profile-saved",
+        invalidation::profile_scopes(saved.config_changed),
+    );
+
+    answer("save_profile", &profile_details_to_contract(saved.value))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProfileIds {
+    index_ids: Vec<String>,
+}
+
+pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+    let ProfileIds { index_ids } = arguments("delete_profiles", args)?;
+    let deleted = state
+        .config_mutations
+        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
+            Ok(ProfileManager::new_in(unit_of_work)
+                .delete_profiles(config, &index_ids)
+                .await?)
+        })
+        .await?;
+    state.sinks.invalidate(
+        "profiles-deleted",
+        invalidation::profile_scopes(deleted.config_changed),
+    );
+    // Deleting the node the core is running leaves it pointing at nothing.
+    super::runtime::disconnect_removed_profile(state).await?;
+
+    answer(
+        "delete_profiles",
+        &u32::try_from(deleted.value).unwrap_or(u32::MAX),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MoveProfile {
+    subscription_id: Option<String>,
+    index_id: String,
+    action: voya_contracts::MoveAction,
+    position: Option<i32>,
+}
+
+pub(super) async fn move_profile(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+    let MoveProfile {
+        subscription_id,
+        index_id,
+        action,
+        position,
+    } = arguments("move_profile", args)?;
+    state
+        .config_mutations
+        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
+            Ok(ProfileManager::new_in(unit_of_work)
+                .move_profile(
+                    subscription_id.as_deref(),
+                    &index_id,
+                    move_action_from_contract(action),
+                    position,
+                )
+                .await?)
+        })
+        .await?;
+    // Order lives in the profile rows, not in the persisted config.
+    state
+        .sinks
+        .invalidate("profile-moved", invalidation::profile_scopes(false));
+
+    Ok(Value::Null)
+}
+
+pub(super) async fn export_share_links(
+    state: &MobileState,
+    args: &Value,
+) -> Result<Value, AppError> {
+    let ProfileIds { index_ids } = arguments("export_profile_share_links", args)?;
+    let config = state.config_mutations.current_config();
+
+    answer(
+        "export_profile_share_links",
+        &state
+            .services
+            .exports()
+            .export_profiles(&config, &index_ids)
+            .await?,
+    )
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct QrContent {
+    content: String,
+}
+
+/// The share QR, rendered as SVG so the view scales it rather than a bitmap.
+pub(super) fn generate_qr_code(args: &Value) -> Result<Value, AppError> {
+    let QrContent { content } = arguments("generate_qr_code", args)?;
+
+    answer(
+        "generate_qr_code",
+        &voya_app::qr::QrCodeManager.generate_svg(&content)?,
     )
 }

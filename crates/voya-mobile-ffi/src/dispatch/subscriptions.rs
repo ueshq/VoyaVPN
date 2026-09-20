@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
     contract_map::{
-        subscription_metadata_to_contract, subscription_to_contract,
+        subscription_from_contract, subscription_metadata_to_contract, subscription_to_contract,
         subscription_update_to_contract,
     },
     invalidation,
@@ -97,4 +97,56 @@ pub(super) async fn update(state: &MobileState, args: &Value) -> Result<Value, A
         "update_subscriptions",
         &subscription_update_to_contract(updated.value),
     )
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveSubscription {
+    item: voya_contracts::Subscription,
+}
+
+pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+    let SaveSubscription { item } = arguments("save_subscription", args)?;
+    let saved = state
+        .config_mutations
+        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
+            Ok(SubscriptionManager::new_in(unit_of_work)
+                .save_subscription(subscription_from_contract(item))
+                .await?)
+        })
+        .await?;
+    // Saving writes the subscription row only: no node is imported and the
+    // persisted config is untouched.
+    state.sinks.invalidate(
+        "subscription-saved",
+        invalidation::subscription_scopes(false, false),
+    );
+
+    answer("save_subscription", &subscription_to_contract(saved.value))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Ids {
+    ids: Vec<String>,
+}
+
+pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+    let Ids { ids } = arguments("delete_subscriptions", args)?;
+    let deleted = state
+        .config_mutations
+        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
+            Ok(SubscriptionManager::new_in(unit_of_work)
+                .delete_subscriptions(config, &ids)
+                .await?)
+        })
+        .await?;
+    state.sinks.invalidate(
+        "subscriptions-deleted",
+        invalidation::subscription_scopes(true, deleted.config_changed),
+    );
+    // Deleting a source deletes its nodes, which may include the running one.
+    super::runtime::disconnect_removed_profile(state).await?;
+
+    answer("delete_subscriptions", &deleted.value)
 }

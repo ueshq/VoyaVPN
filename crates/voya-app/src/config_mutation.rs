@@ -2,7 +2,12 @@ use std::sync::{Arc, RwLock};
 
 use thiserror::Error;
 use tokio::sync::{Mutex, MutexGuard};
-use voya_core::AppConfig;
+/// The in-memory configuration every mutation works on.
+///
+/// Re-exported because a host takes one by reference — to restart a connected
+/// core for a committed change, say — and both hosts are barred from depending
+/// on `voya-core` directly (ADR 0012, and `pnpm run check:architecture`).
+pub use voya_core::AppConfig;
 /// Re-exported so shells can name the handle [`ConfigMutationGuard::split`]
 /// already hands them without reaching into `voya-db` themselves — the facade
 /// is the only persistence boundary a shell is allowed to see.

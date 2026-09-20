@@ -21,6 +21,7 @@ pub mod lifecycle;
 pub mod log_batch;
 pub mod logging;
 pub mod policy_groups;
+pub mod post_commit;
 pub mod profiles;
 pub mod proxy_runtime;
 pub mod qr;

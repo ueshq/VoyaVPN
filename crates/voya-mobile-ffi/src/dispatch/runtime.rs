@@ -96,7 +96,43 @@ pub(super) async fn check_connection_ip(state: &MobileState) -> Result<Value, Ap
     )
 }
 
-fn core_flow(state: &MobileState) -> CoreFlow<'_> {
+/// The tail every committed configuration change shares: announce the caches,
+/// then restart a connected core for the change. The change is already
+/// persisted by the time this runs, so a failed restart is a warning notice
+/// rather than a command error.
+pub(super) async fn finish_config_change(
+    state: &MobileState,
+    reason: &str,
+    scopes: Vec<voya_contracts::InvalidationScope>,
+    config: &voya_app::config_mutation::AppConfig,
+    change: voya_app::post_commit::ConfigChange,
+) {
+    state.sinks.invalidate(reason, scopes);
+
+    if let Err(error) = core_flow(state)
+        .restart_if_connected(config, change.reason)
+        .await
+    {
+        state.sinks.notice(
+            AppNoticeLevel::Warning,
+            change.restart_failed_code,
+            Some(format!("{error:?}")),
+        );
+    }
+}
+
+/// Disconnects the core if the node or group it is running no longer exists.
+///
+/// Every path that can delete or replace the running target ends here, or the
+/// core stays connected to a profile that is gone.
+pub(super) async fn disconnect_removed_profile(state: &MobileState) -> Result<(), AppError> {
+    let config = state.config_mutations.current_config();
+    core_flow(state).disconnect_removed_profile(&config).await?;
+
+    Ok(())
+}
+
+pub(super) fn core_flow(state: &MobileState) -> CoreFlow<'_> {
     CoreFlow::new(
         runtime_manager(state),
         system_proxy_manager(state),
@@ -226,5 +262,121 @@ fn zero_statistics() -> voya_contracts::StatisticsSnapshot {
         upload_bytes_per_second: 0.0,
         download_bytes_per_second: 0.0,
         server_stat: None,
+    }
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TunEnabled {
+    enabled: bool,
+}
+
+pub(super) async fn set_tun_enabled(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+    let TunEnabled { enabled } = super::arguments("set_tun_enabled", args)?;
+    let planned = state
+        .config_mutations
+        .mutate(async |_unit_of_work, config| -> Result<_, AppError> {
+            let status = tun_manager(state).plan_set_enabled(config, enabled)?;
+            TunManager::apply_enabled(config, enabled);
+            Ok(status)
+        })
+        .await?;
+
+    state.sinks.emit(
+        EventChannel::TransientStream,
+        &TransientStreamEvent::TunChanged(planned.value.clone()),
+    );
+    // `enable_tun` is committed, and the settings bundle mirrors it; without
+    // this a stale bundle would rewrite the flag back on the next save.
+    finish_config_change(
+        state,
+        "tun-enabled-changed",
+        voya_app::invalidation::connection_mode_scopes(),
+        &planned.config,
+        voya_app::post_commit::ConfigChange::TUN,
+    )
+    .await;
+
+    answer("set_tun_enabled", &planned.value)
+}
+
+pub(super) async fn connection_mode_status(state: &MobileState) -> Result<Value, AppError> {
+    let config = state.config_mutations.current_config();
+    let status = tun_manager(state).status(&config)?;
+
+    answer(
+        "connection_mode_status",
+        &voya_app::connection_mode::connection_mode_status(&config, &status),
+    )
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SetMode {
+    mode: voya_contracts::ConnectionMode,
+}
+
+/// A phone captures traffic only through its tunnel provider, so the manager
+/// refuses to leave VPN mode here exactly as it does on macOS. The command
+/// stays wired because the frontend shares one settings surface.
+pub(super) async fn set_connection_mode(
+    state: &MobileState,
+    args: &Value,
+) -> Result<Value, AppError> {
+    let SetMode { mode } = super::arguments("set_connection_mode", args)?;
+    let connected = state.supervisor.status().await?.state;
+    let outcome = voya_app::connection_mode::ConnectionModeManager::new(
+        system_proxy_manager(state),
+        tun_manager(state),
+        Arc::new(HostConnectionModeSink {
+            sinks: Arc::clone(&state.sinks),
+        }),
+    )
+    .set_connection_mode(&state.config_mutations, mode, connected)
+    .await?;
+
+    state.sinks.invalidate(
+        "connection-mode-changed",
+        voya_app::invalidation::connection_mode_scopes(),
+    );
+
+    if outcome.tun_flag_changed {
+        finish_config_change(
+            state,
+            "connection-mode-restart",
+            Vec::new(),
+            &outcome.config,
+            voya_app::post_commit::ConfigChange::CONNECTION_MODE,
+        )
+        .await;
+    }
+
+    answer("set_connection_mode", &outcome.status)
+}
+
+struct HostConnectionModeSink {
+    sinks: Arc<HostSinks>,
+}
+
+impl voya_app::connection_mode::ConnectionModeSink for HostConnectionModeSink {
+    fn system_proxy_changed(&self, status: &SystemProxyStatus) {
+        self.sinks.emit(
+            EventChannel::TransientStream,
+            &TransientStreamEvent::SysProxyChanged(
+                voya_app::contract_map::system_proxy_status_to_contract(status.clone()),
+            ),
+        );
+    }
+
+    fn tun_changed(&self, status: &TunStatus) {
+        self.sinks.emit(
+            EventChannel::TransientStream,
+            &TransientStreamEvent::TunChanged(status.clone()),
+        );
+    }
+
+    fn tray_refresh(&self) {
+        // No tray on a phone; the tab bar is rendered from the same stores the
+        // events above already move.
     }
 }

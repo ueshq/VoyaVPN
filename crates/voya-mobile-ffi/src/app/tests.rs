@@ -272,7 +272,12 @@ fn the_clash_api_the_config_declares_is_the_one_the_supervisor_reports() {
 fn a_command_this_platform_cannot_answer_fails_with_the_typed_kind() {
     let harness = start_app();
 
-    for command in ["scan_screen_qr", "system_proxy_status", "save_profile"] {
+    // `save_profile` is answered now; these three never will be.
+    for command in [
+        "scan_screen_qr",
+        "system_proxy_status",
+        "get_self_host_state",
+    ] {
         let error = harness.invoke_err(command, serde_json::json!({}));
         assert_eq!(
             error["kind"]["type"], "unsupported",
@@ -310,4 +315,180 @@ fn settings_load_in_the_capture_mode_a_phone_actually_has() {
     assert_eq!(settings["appearance"]["language"], "en");
 
     harness.app.shutdown();
+}
+
+#[test]
+fn a_routing_rule_survives_the_round_trip_through_the_dispatchers() {
+    let harness = start_app();
+
+    // A fresh install seeds the default routing profile.
+    let routings = harness.invoke("list_routings", serde_json::json!({}));
+    let routing = routings.as_array().expect("routings").first().cloned();
+    let routing_id = routing
+        .as_ref()
+        .and_then(|item| item["id"].as_str())
+        .expect("a default routing profile is seeded")
+        .to_string();
+
+    let saved = harness.invoke(
+        "save_routing_rule",
+        serde_json::json!({
+            "routingId": routing_id,
+            "rule": {
+                "id": "",
+                "kind": Value::Null,
+                "port": Value::Null,
+                "network": Value::Null,
+                "inboundTags": Value::Null,
+                "outbound": "proxy",
+                "ip": Value::Null,
+                "domain": ["example.test"],
+                "protocol": Value::Null,
+                "process": Value::Null,
+                "enabled": true,
+                "remarks": "Office",
+                "scope": Value::Null,
+            },
+        }),
+    );
+
+    let rules = saved["rules"].as_array().expect("rules");
+    assert!(
+        rules.iter().any(|rule| rule["remarks"] == "Office"),
+        "the saved rule is not in the returned routing: {saved}"
+    );
+
+    harness.app.shutdown();
+}
+
+#[test]
+fn saving_dns_settings_validates_before_it_commits() {
+    let harness = start_app();
+
+    let loaded = harness.invoke("load_dns_settings", serde_json::json!({}));
+    assert!(loaded.is_object(), "DNS settings: {loaded}");
+
+    let saved = harness.invoke("save_dns_settings", dns_args(&loaded, "1.1.1.1"));
+    assert_eq!(saved["direct"], "1.1.1.1");
+
+    // A resolver with a port config generation would silently drop is refused
+    // instead, and nothing is written.
+    let error = harness.invoke_err("save_dns_settings", dns_args(&loaded, "1.1.1.1:not-a-port"));
+    assert_eq!(error["kind"]["type"], "validation", "{error}");
+    assert_eq!(
+        harness.invoke("load_dns_settings", serde_json::json!({}))["direct"],
+        "1.1.1.1",
+        "a refused save must not reach the database"
+    );
+
+    harness.app.shutdown();
+}
+
+#[test]
+fn a_policy_group_can_be_saved_listed_and_deleted() {
+    let harness = start_app();
+    harness.invoke(
+        "import_profiles_from_text",
+        serde_json::json!({
+            "text": "vless://11111111-1111-1111-1111-111111111111@example.test:443?security=tls#Tokyo",
+            "subscriptionId": Value::Null,
+        }),
+    );
+    let node_id = harness.invoke("list_profile_summaries", serde_json::json!({}))["entries"][0]
+        ["profile"]["id"]
+        .as_str()
+        .expect("id")
+        .to_string();
+
+    let saved = harness.invoke(
+        "save_policy_group",
+        serde_json::json!({
+            "group": {
+                "id": "",
+                "name": "Work",
+                "strategy": "urlTest",
+                "sourceSubscriptionId": Value::Null,
+                "autoCreated": false,
+                "selectedProfileId": Value::Null,
+                "testUrl": Value::Null,
+                "intervalSeconds": Value::Null,
+                "toleranceMs": Value::Null,
+                "memberIds": [node_id],
+            },
+        }),
+    );
+    let group_id = saved["id"].as_str().expect("id").to_string();
+
+    let listing = harness.invoke("list_policy_groups", serde_json::json!({}));
+    assert_eq!(listing["entries"][0]["group"]["name"], "Work");
+    assert_eq!(
+        listing["entries"][0]["members"][0]["profileId"],
+        node_id.as_str()
+    );
+
+    assert_eq!(
+        harness.invoke(
+            "delete_policy_groups",
+            serde_json::json!({ "ids": [group_id] })
+        ),
+        1
+    );
+    assert_eq!(
+        harness.invoke("list_policy_groups", serde_json::json!({}))["entries"]
+            .as_array()
+            .expect("entries")
+            .len(),
+        0
+    );
+
+    harness.app.shutdown();
+}
+
+#[test]
+fn the_capture_mode_a_phone_offers_is_the_tunnel_and_only_the_tunnel() {
+    let harness = start_app();
+
+    let status = harness.invoke("connection_mode_status", serde_json::json!({}));
+    assert_eq!(status["mode"], "vpn");
+    // Neither OS lets an app point the system at a local proxy, so the screen
+    // must not offer it.
+    assert_eq!(status["systemProxyAvailable"], false);
+    assert_eq!(status["vpnAvailable"], true);
+
+    // And the manager refuses to leave it, exactly as it does on macOS.
+    let error = harness.invoke_err(
+        "set_connection_mode",
+        serde_json::json!({ "mode": "systemProxy" }),
+    );
+    assert_eq!(error["kind"]["type"], "unsupported", "{error}");
+
+    harness.app.shutdown();
+}
+
+#[test]
+fn a_share_qr_is_rendered_as_scalable_svg() {
+    let harness = start_app();
+
+    let image = harness.invoke(
+        "generate_qr_code",
+        serde_json::json!({ "content": "vless://token@example.test:443#Tokyo" }),
+    );
+
+    let svg = image["svg"].as_str().expect("an SVG image");
+    assert!(
+        svg.contains("<svg"),
+        "not an SVG: {}",
+        &svg[..40.min(svg.len())]
+    );
+
+    harness.app.shutdown();
+}
+
+/// The loaded DNS settings with one resolver replaced, as the command's
+/// named-argument object.
+fn dns_args(loaded: &Value, direct: &str) -> Value {
+    let mut settings = loaded.as_object().expect("an object").clone();
+    settings.insert("direct".to_string(), Value::String(direct.to_string()));
+
+    serde_json::json!({ "settings": Value::Object(settings) })
 }

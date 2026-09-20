@@ -28,8 +28,8 @@ use voya_app::sysproxy::runtime_proxy_url as app_runtime_proxy_url;
 use voya_app::tun::TunManager;
 use voya_contracts::{
     AppError, AppErrorSubsystem, AppNotice, AppNoticeLevel, AppSettingsV1, AppUpdaterState,
-    AppUpdaterStatus, AppearanceSettings, CoreFlowReason, CoreSeedInstallResult,
-    CoreSeedInstallStatus, DnsSettings as DnsSettingsContract, ExportProfilesResult,
+    AppUpdaterStatus, AppearanceSettings, CoreSeedInstallResult, CoreSeedInstallStatus,
+    DnsSettings as DnsSettingsContract, ExportProfilesResult,
     ImportProfilesResult as ImportProfilesContract, InvalidationScope, LogCode,
     MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract, ProfileDetails,
     ProfileSummaryListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,

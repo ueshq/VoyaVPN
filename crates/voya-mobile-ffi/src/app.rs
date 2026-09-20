@@ -17,6 +17,7 @@ use std::{
 
 use voya_app::{
     config_mutation::ConfigMutationCoordinator,
+    proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
     services::AppServices,
     supervisor::{CoreSupervisor, SupervisorDeps},
 };
@@ -67,6 +68,11 @@ pub struct MobileState {
     pub(crate) supervisor: CoreSupervisor,
     pub(crate) sinks: Arc<HostSinks>,
     pub(crate) elevation: Arc<ElevationState>,
+    /// One manager — and therefore one HTTP client, TLS config and keep-alive
+    /// pool — for every proxy command, so the loopback connection into the
+    /// running core survives between them.
+    pub(crate) proxy_runtime: ProxyRuntimeManager,
+    pub(crate) proxy_monitor: ProxyMonitorController,
 }
 
 #[derive(uniffi::Object)]
@@ -162,6 +168,16 @@ async fn connect(
             .config_mutations(Arc::new(RwLock::new(config)))
             .with_target_os(TargetOs::current()),
     );
+    // A fresh install starts with the default routing profile rather than an
+    // empty Rules screen. A failure costs only the seed, never startup — the
+    // same choice `apps/desktop/src-tauri/src/bootstrap.rs` makes.
+    if let Err(error) = services.ensure_default_routing(&config_mutations).await {
+        tracing::warn!(?error, "failed to seed the default routing profile");
+    }
+    if let Err(error) = services.initialize_profile_metrics().await {
+        tracing::warn!(?error, "failed to sweep orphaned node metrics");
+    }
+
     let sinks = Arc::new(HostSinks::new(events));
     let elevation = Arc::new(ElevationState::new());
     let supervisor = CoreSupervisor::spawn(
@@ -176,6 +192,8 @@ async fn connect(
     Ok(MobileState {
         config_mutations,
         elevation,
+        proxy_monitor: ProxyMonitorController::new(),
+        proxy_runtime: ProxyRuntimeManager::new(),
         services,
         sinks,
         supervisor,

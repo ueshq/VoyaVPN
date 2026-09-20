@@ -1,6 +1,8 @@
 //! What follows a committed change: cache invalidation, the core restart it
 //! may need, and the status events it changes.
 
+pub(super) use voya_app::post_commit::ConfigChange;
+
 use super::{support::*, *};
 
 /// Broadcasts one invalidation bundle and reports a failed emit as a notice.
@@ -192,55 +194,6 @@ where
 ///
 /// Every mutating command used to spell both strings out inline around an
 /// identical eight-line `if let Err(..) { report_post_commit_error(..) }`
-/// block; the label was the only thing that varied.
-#[derive(Clone)]
-pub(super) struct ConfigChange {
-    /// Reason the core flow's log line names.
-    reason: CoreFlowReason,
-    /// Notice raised when the follow-up restart fails.
-    restart_failed_code: NoticeCode,
-}
-
-impl ConfigChange {
-    /// Every routing mutation shares the same core-flow reason and only differs
-    /// in which operation the failure notice names.
-    const fn routing(restart_failed_code: NoticeCode) -> Self {
-        Self {
-            reason: CoreFlowReason::RoutingChanged,
-            restart_failed_code,
-        }
-    }
-
-    pub(super) const ROUTING_SAVED: Self = Self::routing(NoticeCode::RoutingSavedRestartFailed);
-    pub(super) const ROUTING_DELETED: Self = Self::routing(NoticeCode::RoutingDeletedRestartFailed);
-    pub(super) const ROUTING_SELECTED: Self =
-        Self::routing(NoticeCode::RoutingSelectedRestartFailed);
-    pub(super) const ROUTING_RULE_SAVED: Self =
-        Self::routing(NoticeCode::RoutingRuleSavedRestartFailed);
-    pub(super) const ROUTING_RULES_DELETED: Self =
-        Self::routing(NoticeCode::RoutingRulesDeletedRestartFailed);
-    pub(super) const ROUTING_RULE_MOVED: Self =
-        Self::routing(NoticeCode::RoutingRuleMovedRestartFailed);
-    pub(super) const ROUTING_RULES_RESET: Self =
-        Self::routing(NoticeCode::RoutingRulesResetRestartFailed);
-    pub(super) const TUN: Self = Self {
-        reason: CoreFlowReason::TunChanged,
-        restart_failed_code: NoticeCode::TunSavedRestartFailed,
-    };
-    pub(super) const CONNECTION_MODE: Self = Self {
-        reason: CoreFlowReason::ConnectionModeChanged,
-        restart_failed_code: NoticeCode::ConnectionModeSavedRestartFailed,
-    };
-    pub(super) const ACTIVE_PROFILE: Self = Self {
-        reason: CoreFlowReason::ActiveProfileChanged,
-        restart_failed_code: NoticeCode::ActiveProfileRestartFailed,
-    };
-    pub(super) const POLICY_GROUP: Self = Self {
-        reason: CoreFlowReason::PolicyGroupChanged,
-        restart_failed_code: NoticeCode::PolicyGroupSavedRestartFailed,
-    };
-}
-
 /// Restarts the core after a committed configuration change, if it is running.
 ///
 /// The whole sequence — the connecting/connected events, the system proxy, the
