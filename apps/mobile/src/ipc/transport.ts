@@ -1,4 +1,5 @@
 import { createMockBackend } from "@voya/client/mock-backend";
+import { NativeEventEmitter, TurboModuleRegistry } from "react-native";
 import {
   makeConnection,
   makeProfileEntry,
@@ -8,6 +9,12 @@ import {
   makeSubscriptionMetadata,
 } from "@voya/client/mock-seed";
 import type { VoyaCommands, VoyaEventName, VoyaEventPayload } from "@voya/contracts";
+
+import {
+  createNativeTransport,
+  type VoyaNativeEvents,
+  type VoyaNativeModule,
+} from "./native-transport";
 
 /**
  * What this app needs of a backend: the command surface and the three channels.
@@ -24,14 +31,45 @@ export type VoyaTransport = {
 };
 
 /**
+ * The name the native module registers itself under, on both platforms.
+ *
+ * `TurboModuleRegistry.get` rather than `getEnforcing`: a development build
+ * has no native module and must fall back to the mock rather than throw at
+ * import time.
+ */
+const NATIVE_MODULE_NAME = "VoyaNative";
+
+/**
  * The backend this build talks to.
  *
- * There is only one today: the shared in-memory mock. The native module that
- * fronts the Rust host is not built yet, and when it is, this is the single
- * place that chooses between them — nothing downstream of `setVoyaCommands`
- * can tell which one answered.
+ * The native module when this build has one, and the shared in-memory mock
+ * when it does not. This is the only place that chooses — nothing downstream
+ * of `setVoyaCommands` can tell which one answered, which is what makes a
+ * development build a rehearsal for a device build rather than a separate app.
  */
 export function createTransport(): VoyaTransport {
+  const native = TurboModuleRegistry.get<VoyaNativeModule>(NATIVE_MODULE_NAME);
+
+  return native ? createNativeTransport(native, nativeEvents(native)) : createMockTransport();
+}
+
+/**
+ * The host publishes all three channels as one native event with the channel
+ * in its payload, so there is one listener rather than three registrations to
+ * keep in step.
+ */
+function nativeEvents(native: VoyaNativeModule): VoyaNativeEvents {
+  const emitter = new NativeEventEmitter(native);
+
+  return {
+    addListener: (name, listener) =>
+      emitter.addListener(name, (payload) =>
+        listener(payload as { channel: string; payloadJson: string }),
+      ),
+  };
+}
+
+function createMockTransport(): VoyaTransport {
   return createMockBackend({
     // Live connections only show while connected, which is exactly when this
     // seed is on screen: connect in a development build and the Activity list
