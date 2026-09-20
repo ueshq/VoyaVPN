@@ -26,6 +26,7 @@ async function renderNodes() {
 }
 
 const readText = jest.fn<Promise<string>, []>();
+const writeText = jest.fn<Promise<void>, [string]>();
 
 function backend() {
   return voyaTransport() as MockBackend;
@@ -40,7 +41,8 @@ beforeEach(() => {
   // The screen reads the clipboard through the shared seam, so the test
   // replaces the seam rather than the native module behind it.
   readText.mockReset();
-  setClipboard({ readText, writeText: jest.fn() });
+  writeText.mockReset().mockResolvedValue(undefined);
+  setClipboard({ readText, writeText });
   useNodeListStore.setState(useNodeListStore.getInitialState());
   useRuntimeActionStore.setState(useRuntimeActionStore.getInitialState());
   useRuntimeEventStore.setState({ coreState: null });
@@ -148,6 +150,55 @@ describe("NodesScreen", () => {
       expect(backendInstance.state.calls.map((call) => call.command)).toContain(
         "setActivePolicyGroup",
       ),
+    );
+  });
+
+  it("offers share, QR and delete behind a long press", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+
+    await user.longPress(await screen.findByText("🇯🇵 Tokyo"));
+
+    await user.press(await screen.findByText("Share links"));
+
+    // The link the backend exported, handed straight to the system clipboard.
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("#🇯🇵 Tokyo"));
+  });
+
+  it("shows a node as a QR code rendered by the backend", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+
+    await user.longPress(await screen.findByText("🇯🇵 Tokyo"));
+    await user.press(await screen.findByText("Show QR"));
+
+    expect(await screen.findByLabelText("Generated QR code")).toBeOnTheScreen();
+    expect(backend().state.calls.map((call) => call.command)).toContain("generateQrCode");
+  });
+
+  it("will not offer to delete a node the subscription owns", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+
+    await user.longPress(await screen.findByText("🇺🇸 Los Angeles"));
+
+    expect(
+      await screen.findByText(
+        "Subscription nodes come from their subscription and cannot be edited, moved or deleted",
+      ),
+    ).toBeOnTheScreen();
+    expect(screen.queryByText("Delete")).toBeNull();
+  });
+
+  it("deletes a local node from the sheet", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+
+    await user.longPress(await screen.findByText("🇸🇬 Singapore"));
+    await user.press(await screen.findByText("Delete"));
+
+    await waitFor(() =>
+      expect(backend().state.profiles.map((entry) => entry.profile.id)).not.toContain("profile-1"),
     );
   });
 

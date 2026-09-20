@@ -216,6 +216,45 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       return resolve(record("importProfilesFromText", [text, subscriptionId], result));
     },
 
+    /** Share links for the named nodes, in the order they were asked for. */
+    exportProfileShareLinks: (indexIds) => {
+      const links = indexIds.flatMap((indexId) => {
+        const entry = state.profiles.find((item) => item.profile.id === indexId);
+        return entry
+          ? [`vless://token@${entry.profile.address}:${entry.profile.port}#${entry.profile.remarks}`]
+          : [];
+      });
+
+      return resolve(
+        record("exportProfileShareLinks", [indexIds], {
+          count: links.length,
+          text: links.join("\n"),
+        }),
+      );
+    },
+
+    deleteProfiles: (indexIds) => {
+      const before = state.profiles.length;
+      state.profiles = state.profiles.filter((item) => !indexIds.includes(item.profile.id));
+      invalidate("deleteProfiles", "profiles");
+      return resolve(record("deleteProfiles", [indexIds], before - state.profiles.length));
+    },
+
+    /**
+     * A QR code shaped like one without being one.
+     *
+     * The real command renders through `rqrr`; nothing on the frontend reads
+     * the modules back, so what matters here is that it is SVG and that it
+     * carries the content it was given.
+     */
+    generateQrCode: (content) =>
+      resolve(
+        record("generateQrCode", [content], {
+          mimeType: "image/svg+xml",
+          svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"><title>${content.length} bytes</title><rect width="1" height="1" fill="#000"/></svg>`,
+        }),
+      ),
+
     listPolicyGroups: () =>
       resolve(record("listPolicyGroups", [], { entries: state.policyGroups })),
 

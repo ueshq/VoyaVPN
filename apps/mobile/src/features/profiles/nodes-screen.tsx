@@ -1,15 +1,17 @@
 import { useProfileActivation } from "@voya/client/runtime-action";
 import type { NodeListRow } from "@voya/features/profiles/node-list-rows";
+import type { ProfileSummaryEntry } from "@voya/contracts";
 import { profileLatency, profileTitle } from "@voya/features/profiles/profile-display";
 import { useNodeImport } from "@voya/features/profiles/use-node-import";
 import { useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
+import { useNodeExport } from "@voya/features/profiles/use-node-export";
 import { useNodeSubscriptions } from "@voya/features/profiles/use-node-subscriptions";
 import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
 
 import { Button, ButtonSpinner, ButtonText } from "~/components/ui/button";
@@ -17,6 +19,7 @@ import { Input, InputField } from "~/components/ui/input";
 import { Pressable } from "~/components/ui/pressable";
 import { Text } from "~/components/ui/text";
 
+import { NodeActionsSheet } from "./node-actions-sheet";
 import { useNodeSelection } from "./use-node-selection";
 
 /**
@@ -52,6 +55,8 @@ export function NodesScreen() {
   // The subscriptions a group could be refreshed from; the same list the
   // policy-group editor offers, so both read one query rather than two.
   const subscriptionRows = groups.policyGroupSubscriptions;
+  const exports = useNodeExport(operation, t);
+  const [actionsFor, setActionsFor] = useState<ProfileSummaryEntry | null>(null);
 
   const renderRow = useCallback(
     ({ item }: { item: NodeListRow }) =>
@@ -71,7 +76,11 @@ export function NodesScreen() {
           className="flex-row items-center justify-between border-b border-border-subtle bg-surface px-4 py-3"
           disabled={activation.busy}
           onPress={() => void activation.activateProfile(item.item.profile.id)}
+          // A phone has no right-click, so the desktop's row menu is a long
+          // press; the sheet says what it offers.
+          onLongPress={() => setActionsFor(item.item)}
           accessibilityRole="button"
+          accessibilityActions={[{ label: actionsLabel(item.item, t), name: "longpress" }]}
         >
           <View className="flex-1 gap-0.5 pr-3">
             <Text className="text-body text-foreground" numberOfLines={1}>
@@ -232,6 +241,20 @@ export function NodesScreen() {
           </View>
         }
       />
+
+      <NodeActionsSheet
+        entry={actionsFor}
+        exports={exports}
+        onClose={() => setActionsFor(null)}
+        operation={operation}
+      />
     </View>
   );
+}
+
+/** What the long press does, for a screen reader that cannot long-press. */
+function actionsLabel(entry: ProfileSummaryEntry, t: ReturnType<typeof useI18n>["t"]) {
+  return t("panes.profiles.menu.actionsFor", {
+    name: profileTitle(entry.profile.remarks, t),
+  });
 }
