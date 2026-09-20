@@ -458,7 +458,8 @@
         "empty": "沒有相符的節點",
         "emptyHint": "嘗試其他名稱，或清除搜尋。",
         "expanded": "搜尋時展開相符的群組。"
-      }
+      },
+      "subscriptionSources": "訂閱"
     },
     "proxyConnections": {
       "empty": "目前沒有活動連線"

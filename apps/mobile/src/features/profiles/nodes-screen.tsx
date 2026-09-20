@@ -5,6 +5,8 @@ import { useNodeImport } from "@voya/features/profiles/use-node-import";
 import { useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
+import { useNodeSubscriptions } from "@voya/features/profiles/use-node-subscriptions";
+import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
@@ -45,6 +47,11 @@ export function NodesScreen() {
     await queryClient.invalidateQueries();
   }, [queryClient]);
   const imports = useNodeImport(operation, onImported, t);
+  const groups = usePolicyGroups(operation, t);
+  const subscriptions = useNodeSubscriptions(operation, t);
+  // The subscriptions a group could be refreshed from; the same list the
+  // policy-group editor offers, so both read one query rather than two.
+  const subscriptionRows = groups.policyGroupSubscriptions;
 
   const renderRow = useCallback(
     ({ item }: { item: NodeListRow }) =>
@@ -133,6 +140,77 @@ export function NodesScreen() {
         </View>
         {operation.operationError ? (
           <Text className="text-caption text-danger">{operation.operationError}</Text>
+        ) : null}
+
+        {/* A group replaces the single selected node, so it sits above the
+            list rather than in it: picking one is picking *instead* of a row.
+            Editing a group is a desktop job; a phone uses what is there. */}
+        {groups.policyGroupEntries.length > 0 ? (
+          <View className="gap-2">
+            <Text className="text-caption uppercase text-subtle">{t("policyGroups.title")}</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {groups.policyGroupEntries.map((entry) => (
+                <Pressable
+                  key={entry.group.id}
+                  className={`rounded-control border px-3 py-2 ${
+                    entry.isActive ? "border-brand bg-brand-tint" : "border-border bg-surface"
+                  }`}
+                  disabled={groups.switchingPolicyGroupId !== null}
+                  onPress={() => void groups.activatePolicyGroup(entry.group.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: entry.isActive }}
+                >
+                  <Text className="text-body text-foreground">{entry.group.name}</Text>
+                  {entry.isActive ? (
+                    <Text className="text-caption text-brand">
+                      {t(groups.coreConnected ? "policyGroups.inUse" : "policyGroups.active")}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* Refreshing a source, not managing one: adding and editing
+            subscriptions stays on the desktop, where the form belongs. */}
+        {subscriptionRows.length > 0 ? (
+          <View className="gap-2">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-caption uppercase text-subtle">
+                {t("panes.profiles.subscriptionSources")}
+              </Text>
+              <Pressable
+                disabled={subscriptions.updatingAllSubscriptions}
+                onPress={() => void subscriptions.updateAllSubscriptions()}
+                accessibilityRole="button"
+              >
+                <Text className="text-caption text-brand">
+                  {t("panes.profiles.toolbar.updateAllSubscriptions")}
+                </Text>
+              </Pressable>
+            </View>
+            {subscriptionRows.map((subscription) => (
+              <View
+                key={subscription.id}
+                className="flex-row items-center justify-between rounded-control bg-surface px-3 py-2"
+              >
+                <Text className="flex-1 pr-3 text-body text-foreground" numberOfLines={1}>
+                  {subscription.remarks}
+                </Text>
+                <Pressable
+                  disabled={subscriptions.updatingSubscriptions.has(subscription.id)}
+                  onPress={() => void subscriptions.updateSubscription(subscription.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t("home.subscriptionCard.update")} ${subscription.remarks}`}
+                >
+                  <Text className="text-caption text-brand">
+                    {t("home.subscriptionCard.update")}
+                  </Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
         ) : null}
       </View>
 

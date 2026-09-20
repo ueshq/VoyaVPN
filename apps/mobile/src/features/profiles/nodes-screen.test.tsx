@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, userEvent } from "@testing-library/react-native";
+import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import type { MockBackend } from "@voya/client/mock-backend";
+import { makePolicyGroupEntry } from "@voya/client/mock-seed";
 import { useNodeListStore } from "@voya/client/node-list-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
@@ -26,6 +27,10 @@ async function renderNodes() {
 
 const readText = jest.fn<Promise<string>, []>();
 
+function backend() {
+  return voyaTransport() as MockBackend;
+}
+
 beforeAll(async () => {
   await localeReady;
 });
@@ -50,7 +55,9 @@ describe("NodesScreen", () => {
   it("groups nodes by source, local last, with each group's size", async () => {
     await renderNodes();
 
-    expect(await screen.findByText("Example provider")).toBeOnTheScreen();
+    // Twice on purpose: the group header over its nodes, and the row in the
+    // subscriptions section that refreshes it.
+    expect(await screen.findAllByText("Example provider")).toHaveLength(2);
     expect(screen.getByText("Local nodes")).toBeOnTheScreen();
     expect(screen.getByText("🇯🇵 Tokyo")).toBeOnTheScreen();
     expect(screen.getByText("🇺🇸 Los Angeles")).toBeOnTheScreen();
@@ -114,6 +121,34 @@ describe("NodesScreen", () => {
     // The measurement lands on the row it belongs to, off the streamed results
     // rather than a refetch.
     expect(await screen.findByText("40 ms")).toBeOnTheScreen();
+  });
+
+  it("refreshes a subscription without leaving the list", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+
+    await user.press(await screen.findByLabelText("Update subscription Example provider"));
+
+    await waitFor(() =>
+      expect(backend().state.calls.map((call) => call.command)).toContain("updateSubscriptions"),
+    );
+  });
+
+  it("uses a policy group instead of the selected node", async () => {
+    const backendInstance = backend();
+    backendInstance.state.policyGroups = [
+      makePolicyGroupEntry(0, { name: "Fastest" }),
+    ];
+    await renderNodes();
+    const user = userEvent.setup();
+
+    await user.press(await screen.findByRole("button", { name: /Fastest/ }));
+
+    await waitFor(() =>
+      expect(backendInstance.state.calls.map((call) => call.command)).toContain(
+        "setActivePolicyGroup",
+      ),
+    );
   });
 
   it("reports a clipboard that holds nothing importable", async () => {

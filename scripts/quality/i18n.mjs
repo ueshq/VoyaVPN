@@ -20,6 +20,10 @@ const productionSourceDirs = [
   // Shared feature logic and controllers; the desktop screens that used to hold
   // these keys now import them from here.
   resolve(repoRoot, "packages/features/src"),
+  // The React Native app. Its screens are the second reader of most of these
+  // keys, and the only reader of a few — a key a phone alone shows would read
+  // as unused without this entry.
+  resolve(repoRoot, "apps/mobile/src"),
 ];
 const localeCodes = ["en", "zh-Hans", "zh-Hant"];
 

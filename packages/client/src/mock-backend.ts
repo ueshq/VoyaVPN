@@ -219,6 +219,20 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
     listPolicyGroups: () =>
       resolve(record("listPolicyGroups", [], { entries: state.policyGroups })),
 
+    setActivePolicyGroup: (id) => {
+      const entry = state.policyGroups.find((item) => item.group.id === id);
+      if (!entry) return reject("profile", id, `no policy group with id ${id}`);
+      // A group replaces the node used on its own, the way the backend does.
+      state.policyGroups = state.policyGroups.map((item) => ({
+        ...item,
+        isActive: item.group.id === id,
+      }));
+      state.profiles = state.profiles.map((item) => ({ ...item, isActive: false }));
+      invalidate("setActivePolicyGroup", "policyGroups", "profiles");
+      return resolve(record("setActivePolicyGroup", [id], entry.group));
+    },
+
+
     listRoutings: () => resolve(record("listRoutings", [], state.routings)),
 
     loadDnsSettings: () => resolve(record("loadDnsSettings", [], state.settings.dns)),

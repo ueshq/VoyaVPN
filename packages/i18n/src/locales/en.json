@@ -458,7 +458,8 @@
         "empty": "No matching nodes",
         "emptyHint": "Try another name or clear the search.",
         "expanded": "Matching groups stay expanded while searching."
-      }
+      },
+      "subscriptionSources": "Subscriptions"
     },
     "proxyConnections": {
       "empty": "No active connections"

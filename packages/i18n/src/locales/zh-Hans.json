@@ -458,7 +458,8 @@
         "empty": "没有匹配节点",
         "emptyHint": "尝试其他名称，或清除搜索。",
         "expanded": "搜索时展开匹配分组。"
-      }
+      },
+      "subscriptionSources": "订阅"
     },
     "proxyConnections": {
       "empty": "暂无活动连接"
