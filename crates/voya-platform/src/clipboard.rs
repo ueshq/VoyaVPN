@@ -17,10 +17,24 @@ pub enum ClipboardFailure {
 }
 
 /// Returns `Ok(None)` when the clipboard holds no text.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 pub fn read_text() -> Result<Option<String>, ClipboardFailure> {
     present(open()?.get_text(), "text")
 }
 
+/// Always `Unsupported` on a phone.
+///
+/// iOS and Android give the clipboard to the app process through a framework
+/// call, not to a library linked into a background core, and the host reads it
+/// there — `@voya/client/platform`'s clipboard seam is what the frontend
+/// actually goes through. Answering a typed failure keeps the command present
+/// and honest rather than absent.
+#[cfg(any(target_os = "ios", target_os = "android"))]
+pub fn read_text() -> Result<Option<String>, ClipboardFailure> {
+    Err(ClipboardFailure::Unsupported)
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn open() -> Result<arboard::Clipboard, ClipboardFailure> {
     arboard::Clipboard::new().map_err(|error| {
         tracing::warn!(%error, "could not open the clipboard");
@@ -28,6 +42,7 @@ fn open() -> Result<arboard::Clipboard, ClipboardFailure> {
     })
 }
 
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn present<T>(
     read: Result<T, arboard::Error>,
     content: &'static str,
@@ -43,6 +58,7 @@ fn present<T>(
     }
 }
 
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn failure(error: &arboard::Error) -> ClipboardFailure {
     match error {
         arboard::Error::ClipboardNotSupported => ClipboardFailure::Unsupported,
@@ -51,7 +67,7 @@ fn failure(error: &arboard::Error) -> ClipboardFailure {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(any(target_os = "ios", target_os = "android"))))]
 mod tests {
     use super::*;
 

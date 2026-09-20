@@ -28,7 +28,11 @@ pub enum SystemProxyManagement {
 pub const fn system_proxy_management(os: TargetOs) -> SystemProxyManagement {
     match os {
         TargetOs::Windows | TargetOs::Linux => SystemProxyManagement::Automatic,
-        TargetOs::Macos | TargetOs::Other => SystemProxyManagement::Unsupported,
+        // macOS and both phones capture traffic only through their tunnel
+        // provider, so there is no system-proxy mode to manage at all.
+        TargetOs::Macos | TargetOs::Ios | TargetOs::Android | TargetOs::Other => {
+            SystemProxyManagement::Unsupported
+        }
     }
 }
 
@@ -162,7 +166,7 @@ pub(crate) fn plan_system_proxy(
     );
     let action = match (effective_type, request.target_os) {
         // No mode to apply: the PacketTunnel VPN is the only capture path.
-        (_, TargetOs::Macos) => {
+        (_, TargetOs::Macos | TargetOs::Ios | TargetOs::Android) => {
             status.effective_type = SysProxyType::Unchanged;
             SystemProxyAction::Noop
         }

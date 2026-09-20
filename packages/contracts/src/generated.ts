@@ -338,7 +338,7 @@ export type AppearanceSettings = {
 	theme: ThemeMode,
 };
 
-export type AutostartPlatform = "windows" | "linux" | "macos" | "other";
+export type AutostartPlatform = "windows" | "linux" | "macos" | "ios" | "android" | "other";
 
 export type AutostartStatus = {
 	enabled: boolean,
@@ -1448,9 +1448,9 @@ export type TransientStreamEvent =
  */
 { kind: "speedtestResults"; payload: SpeedtestResult[] };
 
-export type TunBackend = "process" | "macosPacketTunnel" | "windowsService" | "unsupported";
+export type TunBackend = "process" | "macosPacketTunnel" | "windowsService" | "iosPacketTunnel" | "androidVpnService" | "unsupported";
 
-export type TunPlatform = "windows" | "linux" | "macos" | "other";
+export type TunPlatform = "windows" | "linux" | "macos" | "ios" | "android" | "other";
 
 export type TunPreflight = {
 	platform: TunPlatform,

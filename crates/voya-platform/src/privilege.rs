@@ -66,7 +66,7 @@ pub fn elevate_launcher_dir(os: TargetOs) -> Option<PathBuf> {
     match os {
         TargetOs::Macos => Some(PathBuf::from(MACOS_LAUNCHER_DIR)),
         TargetOs::Linux => Some(PathBuf::from(LINUX_LAUNCHER_DIR)),
-        TargetOs::Windows | TargetOs::Other => None,
+        TargetOs::Windows | TargetOs::Ios | TargetOs::Android | TargetOs::Other => None,
     }
 }
 
@@ -334,7 +334,9 @@ fn elevated_install_command(
                 install_script_path.to_string_lossy().into_owned(),
             ])
             .with_display_log(false)),
-        TargetOs::Windows | TargetOs::Other => Err(PrivilegeError::UnsupportedOs),
+        TargetOs::Windows | TargetOs::Ios | TargetOs::Android | TargetOs::Other => {
+            Err(PrivilegeError::UnsupportedOs)
+        }
     }
 }
 

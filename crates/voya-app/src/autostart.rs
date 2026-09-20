@@ -147,6 +147,8 @@ const fn autostart_platform(os: TargetOs) -> AutostartPlatform {
         TargetOs::Windows => AutostartPlatform::Windows,
         TargetOs::Linux => AutostartPlatform::Linux,
         TargetOs::Macos => AutostartPlatform::Macos,
+        TargetOs::Ios => AutostartPlatform::Ios,
+        TargetOs::Android => AutostartPlatform::Android,
         TargetOs::Other => AutostartPlatform::Other,
     }
 }

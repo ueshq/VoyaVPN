@@ -15,6 +15,16 @@ use rustls::pki_types::CertificateDer;
 /// trusted from the next launch.
 static NATIVE_ROOTS: LazyLock<Vec<reqwest::Certificate>> = LazyLock::new(load_native_roots);
 
+/// Empty on a phone: the bundled webpki roots are the whole trust policy there.
+///
+/// See `Cargo.toml` — neither mobile OS exposes its trust store to a library,
+/// and the private-CA case these roots exist for is a self-hosted desktop node.
+#[cfg(any(target_os = "ios", target_os = "android"))]
+fn load_native_roots() -> Vec<reqwest::Certificate> {
+    Vec::new()
+}
+
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn load_native_roots() -> Vec<reqwest::Certificate> {
     let loaded = rustls_native_certs::load_native_certs();
     for error in &loaded.errors {
@@ -26,6 +36,7 @@ fn load_native_roots() -> Vec<reqwest::Certificate> {
 /// reqwest fails a whole client build on one root it cannot parse, while its
 /// own OS-store loading skips such roots. Native stores do carry ancient or
 /// malformed roots, so they are dropped here the same way.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn parseable_roots(roots: Vec<CertificateDer<'static>>) -> Vec<reqwest::Certificate> {
     let mut parseable = rustls::RootCertStore::empty();
     roots
@@ -40,18 +51,32 @@ pub fn preload_tls_roots() {
     LazyLock::force(&NATIVE_ROOTS);
 }
 
+/// The bundled webpki roots, and nothing reqwest would read for itself.
+///
+/// Turning the OS store off is what stops reqwest re-reading it per client;
+/// `tls_built_in_native_certs` exists only with `rustls-tls-native-roots`, and
+/// mobile does not enable that feature because it has no store to read. There
+/// the builder already trusts the bundled roots alone.
+pub(crate) fn built_in_roots_only(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
+    let builder = builder.tls_built_in_webpki_certs(true);
+
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    let builder = builder.tls_built_in_native_certs(false);
+
+    builder
+}
+
 /// `reqwest::Client::builder()` with this crate's trust policy and the OS roots
 /// read once instead of per client.
 pub(crate) fn client_builder() -> reqwest::ClientBuilder {
     NATIVE_ROOTS.iter().cloned().fold(
-        reqwest::Client::builder()
-            .tls_built_in_webpki_certs(true)
-            .tls_built_in_native_certs(false),
+        built_in_roots_only(reqwest::Client::builder()),
         reqwest::ClientBuilder::add_root_certificate,
     )
 }
 
-#[cfg(test)]
+// The OS trust store is the subject here, and mobile has none of its own.
+#[cfg(all(test, not(any(target_os = "ios", target_os = "android"))))]
 mod tests {
     use super::*;
 

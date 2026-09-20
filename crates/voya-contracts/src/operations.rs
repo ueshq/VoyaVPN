@@ -7,6 +7,8 @@ pub enum AutostartPlatform {
     Windows,
     Linux,
     Macos,
+    Ios,
+    Android,
     Other,
 }
 

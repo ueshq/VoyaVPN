@@ -13,14 +13,11 @@ test-utils = []
 futures-util = "0.3"
 igd-next = { version = "0.17", default-features = false, features = ["aio_tokio"] }
 percent-encoding = "2.3"
-# `rustls-tls-native-roots` trusts the bundled webpki roots plus the OS trust store.
-# Clients are built through `tls_roots::client_builder`, which reads the OS store
-# once per process; `rustls` and `rustls-native-certs` are the versions reqwest
-# already uses. `gzip` lets subscription servers compress their base64 bodies;
-# the response limits count decoded bytes, so it cannot slip past them.
-reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-tls", "rustls-tls-native-roots", "socks"] }
+# `gzip` lets subscription servers compress their base64 bodies; the response
+# limits count decoded bytes, so it cannot slip past them. Which roots are
+# trusted is a per-target decision; see the two blocks at the bottom.
+reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-tls", "socks"] }
 rustls = { version = "0.23", default-features = false, features = ["std"] }
-rustls-native-certs = "0.8"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -30,6 +27,22 @@ tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "time"
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect"] }
 tracing.workspace = true
 voya-core.workspace = true
+
+# Desktop: the bundled webpki roots *plus* the OS trust store, so a self-hosted
+# server behind a private CA the machine already trusts works too. Clients are
+# built through `tls_roots::client_builder`, which reads that store once per
+# process instead of once per client.
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
+rustls-native-certs = "0.8"
+
+# Mobile: the bundled webpki roots only. Neither OS lets a library read the
+# system trust store the way `rustls-native-certs` does — iOS keeps it behind
+# Security.framework APIs that are not available to a static library, and
+# Android's is a Java `KeyStore` — and the private-CA case that motivates the
+# native roots is a self-hosted desktop node, which mobile does not run.
+[target.'cfg(any(target_os = "ios", target_os = "android"))'.dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots"] }
 
 [dev-dependencies]
 base64 = "0.22"

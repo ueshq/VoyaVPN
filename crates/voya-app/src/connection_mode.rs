@@ -77,7 +77,10 @@ pub fn connection_mode_status(config: &AppConfig, tun_status: &TunStatus) -> Con
     let mode = derive_connection_mode(config);
     // The macOS NetworkExtension tunnel is the only capture path there, and it
     // cannot match traffic by process.
-    let packet_tunnel = tun_status.backend == TunBackend::MacosPacketTunnel;
+    let packet_tunnel = matches!(
+        tun_status.backend,
+        TunBackend::MacosPacketTunnel | TunBackend::IosPacketTunnel | TunBackend::AndroidVpnService
+    );
 
     ConnectionModeStatus {
         mode,
@@ -88,16 +91,25 @@ pub fn connection_mode_status(config: &AppConfig, tun_status: &TunStatus) -> Con
     }
 }
 
-/// Whether `target_os` offers the system proxy mode. macOS only captures
-/// traffic through its PacketTunnel VPN.
+/// Whether `target_os` offers the system proxy mode.
+///
+/// macOS captures traffic only through its PacketTunnel VPN, and both phones
+/// are the same shape: the tunnel provider is the only capture path, and
+/// neither OS lets an app point the system at a local proxy.
 #[must_use]
 fn system_proxy_mode_available(target_os: TargetOs) -> bool {
-    tun_backend(target_os) != PlatformTunBackend::MacosPacketTunnel
+    !matches!(
+        tun_backend(target_os),
+        PlatformTunBackend::MacosPacketTunnel
+            | PlatformTunBackend::IosPacketTunnel
+            | PlatformTunBackend::AndroidVpnService
+    )
 }
 
 /// The capture mode a fresh install starts in: the native VPN where the app
-/// ships one (the Windows service, the macOS PacketTunnel). Linux keeps the
-/// system proxy, because its process TUN needs a root launcher installed first.
+/// ships one (the Windows service, the macOS PacketTunnel, either phone's
+/// tunnel provider). Linux keeps the system proxy, because its process TUN
+/// needs a root launcher installed first.
 pub fn seed_platform_connection_defaults(config: &mut AppConfig, target_os: TargetOs) {
     if tun_backend(target_os).is_native() {
         config.tun_mode_item.enable_tun = true;

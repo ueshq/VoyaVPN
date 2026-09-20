@@ -37,6 +37,7 @@ pub trait ScreenCaptureWindow: Send {
 
 pub struct NativeScreenCapture;
 
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 impl ScreenCaptureAdapter for NativeScreenCapture {
     fn preflight(&self) -> Result<(), ScreenCaptureFailure> {
         check_permission()
@@ -79,6 +80,23 @@ impl ScreenCaptureAdapter for NativeScreenCapture {
     }
 }
 
+/// A phone has no second window to photograph.
+///
+/// The whole screen belongs to one app, and the QR a user wants to import is on
+/// somebody else's screen; a camera scan is what replaces this there, and it
+/// runs in the host app. The adapter stays present so the command keeps its
+/// shape and answers a typed failure.
+#[cfg(any(target_os = "ios", target_os = "android"))]
+impl ScreenCaptureAdapter for NativeScreenCapture {
+    fn preflight(&self) -> Result<(), ScreenCaptureFailure> {
+        Err(ScreenCaptureFailure::Unsupported)
+    }
+
+    fn capture(&self) -> Result<ScreenCaptureBatch, ScreenCaptureFailure> {
+        Err(ScreenCaptureFailure::Unsupported)
+    }
+}
+
 /// Rec. 601 greyscale, composited over white so a transparent QR image keeps
 /// its contrast. Opaque pixels (every screen capture) are unaffected.
 pub(crate) fn rgba_to_luma(rgba: &[u8]) -> Vec<u8> {
@@ -95,6 +113,7 @@ pub(crate) fn rgba_to_luma(rgba: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn capture_failure(error: xcap::XCapError) -> ScreenCaptureFailure {
     match error {
         xcap::XCapError::NotSupported => ScreenCaptureFailure::Unsupported,
@@ -119,7 +138,7 @@ fn check_permission() -> Result<(), ScreenCaptureFailure> {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
 fn check_permission() -> Result<(), ScreenCaptureFailure> {
     Ok(())
 }

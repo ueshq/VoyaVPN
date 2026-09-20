@@ -244,7 +244,9 @@ pub(crate) fn plan_autostart(request: &AutostartRequest) -> AutostartPlan {
         TargetOs::Windows => windows_actions(request),
         TargetOs::Linux => linux_actions(request),
         TargetOs::Macos => macos_actions(request),
-        TargetOs::Other => vec![AutostartAction::Noop],
+        // Nothing launches at login on a phone: the OS owns the lifecycle,
+        // and an always-on VPN is a system setting, not an app one.
+        TargetOs::Ios | TargetOs::Android | TargetOs::Other => vec![AutostartAction::Noop],
     };
 
     AutostartPlan {
@@ -341,7 +343,7 @@ fn autostart_artifact(request: &AutostartRequest) -> Option<AutostartArtifact> {
             path: macos_launch_agent_path(&request.home_dir, &request.app_name),
             label: macos_label(&request.app_name),
         }),
-        TargetOs::Other => None,
+        TargetOs::Ios | TargetOs::Android | TargetOs::Other => None,
     }
 }
 

@@ -30,6 +30,15 @@ pub const WINDOWS_TUN_DEVICES: &[WindowsTunDevice] = &[WindowsTunDevice {
     guid: "b738a021-9842-444c-10b0-a4e3f65ab5b6",
 }];
 
+/// Why this crate's controller refuses a mobile backend.
+///
+/// On a phone the tunnel provider is the host app's — `NETunnelProviderManager`
+/// on iOS, `VpnService` on Android — so `voya-mobile-ffi` installs its own
+/// `NativeTunController` that delegates to the host. Reaching this one there is
+/// a wiring mistake, and it says so rather than pretending the tunnel is down.
+const HOST_OWNED_TUNNEL: &str =
+    "the tunnel on this platform is owned by the host app, not by voya-platform";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WindowsTunDevice {
     pub name: &'static str,
@@ -41,13 +50,28 @@ pub enum TunBackend {
     Process,
     MacosPacketTunnel,
     WindowsService,
+    IosPacketTunnel,
+    AndroidVpnService,
     Unsupported,
 }
 
 impl TunBackend {
+    /// Whether the core runs inside a process we already have, rather than as a
+    /// child the supervisor spawns.
+    ///
+    /// `SupervisorActor::plan_start` branches on this *before* it tears the old
+    /// core down, and the native arm never touches `ProcessRunner`,
+    /// `core_launch` or elevation. Both mobile backends are native for the same
+    /// reason the macOS one is: the tunnel provider owns the core.
     #[must_use]
     pub const fn is_native(self) -> bool {
-        matches!(self, Self::MacosPacketTunnel | Self::WindowsService)
+        matches!(
+            self,
+            Self::MacosPacketTunnel
+                | Self::WindowsService
+                | Self::IosPacketTunnel
+                | Self::AndroidVpnService
+        )
     }
 }
 
@@ -57,6 +81,8 @@ pub const fn tun_backend(os: TargetOs) -> TunBackend {
         TargetOs::Windows => TunBackend::WindowsService,
         TargetOs::Linux => TunBackend::Process,
         TargetOs::Macos => TunBackend::MacosPacketTunnel,
+        TargetOs::Ios => TunBackend::IosPacketTunnel,
+        TargetOs::Android => TunBackend::AndroidVpnService,
         TargetOs::Other => TunBackend::Unsupported,
     }
 }
@@ -86,7 +112,12 @@ pub struct TunPreflightReport {
 pub const fn allow_enable_tun(os: TargetOs, elevation_granted: bool) -> bool {
     match tun_backend(os) {
         TunBackend::Process => elevation_granted,
-        TunBackend::MacosPacketTunnel | TunBackend::WindowsService => true,
+        // The system asks for consent once, at connect time, and the host app
+        // answers it; nothing here has to be granted in advance.
+        TunBackend::MacosPacketTunnel
+        | TunBackend::WindowsService
+        | TunBackend::IosPacketTunnel
+        | TunBackend::AndroidVpnService => true,
         TunBackend::Unsupported => false,
     }
 }
@@ -99,7 +130,10 @@ pub fn tun_preflight(os: TargetOs, elevation_granted: bool) -> TunPreflightRepor
     let state = match backend {
         TunBackend::Process if elevation_granted => TunPreflightState::Ready,
         TunBackend::Process => TunPreflightState::NeedsElevation,
-        TunBackend::MacosPacketTunnel | TunBackend::WindowsService => TunPreflightState::Ready,
+        TunBackend::MacosPacketTunnel
+        | TunBackend::WindowsService
+        | TunBackend::IosPacketTunnel
+        | TunBackend::AndroidVpnService => TunPreflightState::Ready,
         TunBackend::Unsupported => TunPreflightState::Unsupported,
     };
 
@@ -144,6 +178,18 @@ fn tun_preflight_notes(os: TargetOs, elevation_granted: bool) -> Vec<String> {
             "Unix TUN start requires a one-time native authorization before enabling TUN; no admin password is stored."
                 .to_string(),
         ],
+        TunBackend::IosPacketTunnel => vec![
+            "iOS traffic is captured by a NetworkExtension PacketTunnel provider running Libbox, the same model as macOS."
+                .to_string(),
+            "The app only hands the provider its runtime config and asks iOS to start or stop the VPN profile."
+                .to_string(),
+        ],
+        TunBackend::AndroidVpnService => vec![
+            "Android traffic is captured by a foreground VpnService that hands its tun descriptor to Libbox."
+                .to_string(),
+            "The first connection asks for VPN consent; Android shows the prompt and remembers the answer."
+                .to_string(),
+        ],
         TunBackend::Unsupported => {
             vec!["TUN mode is not supported on this platform yet.".to_string()]
         }
@@ -160,6 +206,12 @@ fn route_restore_note(os: TargetOs) -> &'static str {
         }
         TunBackend::Process => {
             "Disconnect runs sudo kill for elevated TUN cores before normal teardown so core-owned routes can be restored by process exit."
+        }
+        TunBackend::IosPacketTunnel => {
+            "Disconnect asks iOS to stop the PacketTunnel provider, and NetworkExtension tears its routes and DNS down with it."
+        }
+        TunBackend::AndroidVpnService => {
+            "Disconnect stops the VpnService, and Android closes the tun descriptor and restores routes with it."
         }
         TunBackend::Unsupported => "No route mutation is attempted on unsupported platforms.",
     }
@@ -355,6 +407,12 @@ fn platform_native_tun_status(backend: TunBackend) -> NativeTunStatus {
         TunBackend::Process => NativeTunStatus::not_applicable(backend),
         TunBackend::MacosPacketTunnel => macos_packet_tunnel_status(),
         TunBackend::WindowsService => windows_service_status(),
+        // The host app owns the tunnel on a phone — `NETunnelProviderManager`
+        // or `VpnService` — so `voya-mobile-ffi` supplies its own controller
+        // and this one is never the answer there.
+        TunBackend::IosPacketTunnel | TunBackend::AndroidVpnService => {
+            NativeTunStatus::missing_component(backend, HOST_OWNED_TUNNEL)
+        }
         TunBackend::Unsupported => NativeTunStatus::missing_component(
             backend,
             "no native TUN backend is available for this platform",
@@ -378,6 +436,12 @@ fn platform_native_tun_start(request: NativeTunStartRequest) -> Result<(), Nativ
         TunBackend::Process => Ok(()),
         TunBackend::MacosPacketTunnel => start_macos_packet_tunnel(&request),
         TunBackend::WindowsService => start_windows_tun_service(&request),
+        TunBackend::IosPacketTunnel | TunBackend::AndroidVpnService => {
+            Err(NativeTunError::ControllerUnavailable {
+                backend: request.backend,
+                message: HOST_OWNED_TUNNEL.to_string(),
+            })
+        }
         TunBackend::Unsupported => Err(NativeTunError::UnsupportedBackend(request.backend)),
     }
 }
@@ -422,6 +486,12 @@ fn platform_native_tun_stop(backend: TunBackend) -> Result<(), NativeTunError> {
         TunBackend::Process => Ok(()),
         TunBackend::MacosPacketTunnel => stop_macos_packet_tunnel(),
         TunBackend::WindowsService => stop_windows_tun_service(),
+        TunBackend::IosPacketTunnel | TunBackend::AndroidVpnService => {
+            Err(NativeTunError::ControllerUnavailable {
+                backend,
+                message: HOST_OWNED_TUNNEL.to_string(),
+            })
+        }
         TunBackend::Unsupported => Err(NativeTunError::UnsupportedBackend(backend)),
     }
 }

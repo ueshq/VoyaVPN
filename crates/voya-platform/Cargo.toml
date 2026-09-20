@@ -10,19 +10,26 @@ version.workspace = true
 test-support = []
 
 [dependencies]
-# Text only: the default `image-data` feature was the one thing pulling the
-# TIFF and JPEG decoders into the app, for a clipboard read that never asks
-# for an image.
-arboard = { version = "3.6", default-features = false }
 libc.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 voya-core.workspace = true
-xcap = "=0.9.8"
 sys-locale = "0.3"
 if-addrs = "0.15"
 base64 = "0.22"
+
+# Desktop-only. Neither crate builds for iOS or Android — they are written
+# against X11/Wayland, Win32 and AppKit — and neither has anything to do on a
+# phone: there is no second window to screenshot, and the clipboard is a
+# framework call the host app makes for itself. `clipboard.rs` and
+# `screen_capture.rs` answer `Unsupported` there instead.
+[target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
+# Text only: the default `image-data` feature was the one thing pulling the
+# TIFF and JPEG decoders into the app, for a clipboard read that never asks
+# for an image.
+arboard = { version = "3.6", default-features = false }
+xcap = "=0.9.8"
 
 [build-dependencies]
 cc = "1.2"

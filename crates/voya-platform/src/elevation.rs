@@ -85,7 +85,11 @@ pub fn unix_sudo_kill_body(os: TargetOs) -> Result<String, ElevationError> {
     let child_lookup = match os {
         TargetOs::Linux => "ps -o pid= --ppid \"$parent\"",
         TargetOs::Macos => "ps -axo pid=,ppid= | awk -v ppid=\"$parent\" '$2==ppid {print $1}'",
-        TargetOs::Windows | TargetOs::Other => return Err(ElevationError::UnsupportedOs),
+        // No core runs as a child process on a phone, so nothing has to be
+        // killed with privilege.
+        TargetOs::Windows | TargetOs::Ios | TargetOs::Android | TargetOs::Other => {
+            return Err(ElevationError::UnsupportedOs)
+        }
     };
 
     Ok(format!(

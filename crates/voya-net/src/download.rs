@@ -389,9 +389,7 @@ pub(crate) fn build_http_client(
     proxy_url: Option<&str>,
 ) -> std::result::Result<Client, reqwest::Error> {
     configure_http_client(
-        Client::builder()
-            .tls_built_in_webpki_certs(true)
-            .tls_built_in_native_certs(false),
+        crate::tls_roots::built_in_roots_only(Client::builder()),
         proxy_url,
         HTTP_READ_TIMEOUT,
     )?

@@ -215,7 +215,13 @@ impl TunManager {
             provider_path_mismatch: registration.path_mismatch,
             resolved_provider_path: registration.resolved_provider_path,
             expected_provider_path: registration.expected_provider_path,
-            restore_on_disconnect: self.target_os != TargetOs::Other,
+            // Nothing to restore where nothing was mutated. On a phone the
+            // OS tears the tunnel's routes down with the provider, so the app
+            // has no restore step of its own either.
+            restore_on_disconnect: !matches!(
+                self.target_os,
+                TargetOs::Other | TargetOs::Ios | TargetOs::Android
+            ),
             preflight: tun_preflight_response(&report),
         };
 
@@ -342,6 +348,8 @@ pub(crate) const fn tun_backend(backend: PlatformTunBackend) -> TunBackend {
         PlatformTunBackend::Process => TunBackend::Process,
         PlatformTunBackend::MacosPacketTunnel => TunBackend::MacosPacketTunnel,
         PlatformTunBackend::WindowsService => TunBackend::WindowsService,
+        PlatformTunBackend::IosPacketTunnel => TunBackend::IosPacketTunnel,
+        PlatformTunBackend::AndroidVpnService => TunBackend::AndroidVpnService,
         PlatformTunBackend::Unsupported => TunBackend::Unsupported,
     }
 }
@@ -413,6 +421,8 @@ const fn tun_platform(os: TargetOs) -> TunPlatform {
         TargetOs::Windows => TunPlatform::Windows,
         TargetOs::Linux => TunPlatform::Linux,
         TargetOs::Macos => TunPlatform::Macos,
+        TargetOs::Ios => TunPlatform::Ios,
+        TargetOs::Android => TunPlatform::Android,
         TargetOs::Other => TunPlatform::Other,
     }
 }

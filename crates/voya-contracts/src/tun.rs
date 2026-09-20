@@ -7,6 +7,8 @@ pub enum TunPlatform {
     Windows,
     Linux,
     Macos,
+    Ios,
+    Android,
     Other,
 }
 
@@ -16,6 +18,8 @@ pub enum TunBackend {
     Process,
     MacosPacketTunnel,
     WindowsService,
+    IosPacketTunnel,
+    AndroidVpnService,
     Unsupported,
 }
 

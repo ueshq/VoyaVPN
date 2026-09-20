@@ -470,8 +470,11 @@ pub(crate) async fn load_runtime_core_gen_env(
 pub(crate) const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {
     match target_os {
         TargetOs::Windows => CoreGenPlatform::Windows,
-        TargetOs::Macos => CoreGenPlatform::MacOS,
-        TargetOs::Linux | TargetOs::Other => CoreGenPlatform::Linux,
+        // iOS runs the same Darwin core as macOS; Android is Linux. The
+        // generator only uses this to pick platform defaults in the config, so
+        // each phone takes the kernel it actually has.
+        TargetOs::Macos | TargetOs::Ios => CoreGenPlatform::MacOS,
+        TargetOs::Linux | TargetOs::Android | TargetOs::Other => CoreGenPlatform::Linux,
     }
 }
 

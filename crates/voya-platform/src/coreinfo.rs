@@ -56,6 +56,8 @@ pub enum TargetOs {
     Windows,
     Linux,
     Macos,
+    Ios,
+    Android,
     Other,
 }
 
@@ -64,13 +66,31 @@ impl TargetOs {
     pub const fn current() -> Self {
         if cfg!(target_os = "windows") {
             Self::Windows
+        } else if cfg!(target_os = "android") {
+            // Checked before Linux: Android *is* Linux to `target_family`, and
+            // `cfg!(target_os = "linux")` is false there, but the order states
+            // the intent rather than relying on that.
+            Self::Android
         } else if cfg!(target_os = "linux") {
             Self::Linux
+        } else if cfg!(target_os = "ios") {
+            // Likewise before macOS: they share frameworks, not behaviour.
+            Self::Ios
         } else if cfg!(target_os = "macos") {
             Self::Macos
         } else {
             Self::Other
         }
+    }
+
+    /// Whether this is a phone.
+    ///
+    /// Several decisions turn on it at once: the tunnel is the only capture
+    /// path, there is no system proxy to set, nothing launches at login, and no
+    /// core runs as a child process.
+    #[must_use]
+    pub const fn is_mobile(self) -> bool {
+        matches!(self, Self::Ios | Self::Android)
     }
 }
 
