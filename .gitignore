@@ -64,6 +64,14 @@ dist-pack/
 target/
 *.tgz
 apps/desktop/src-tauri/native/macos/Frameworks/
+# Mobile native build outputs. All four are produced by
+# `scripts/native/mobile/build-rust-*.mjs` from the crate beside them, so a
+# committed copy could only ever be a stale one; the release runbooks say to
+# run the script before an Xcode or Gradle build.
+apps/mobile/ios/Frameworks/
+apps/mobile/ios/VoyaVPN/Generated/
+apps/mobile/android/app/libs/
+apps/mobile/android/app/src/main/jniLibs/
 
 # Test and coverage output
 coverage/

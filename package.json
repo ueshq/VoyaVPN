@@ -55,6 +55,8 @@
     "native:windows:tunnel:install": "node scripts/native/windows/tunnel-service.mjs install",
     "native:windows:tunnel:uninstall": "node scripts/native/windows/tunnel-service.mjs uninstall",
     "native:windows:tunnel:status": "node scripts/native/windows/tunnel-service.mjs status",
+    "native:mobile:rust:ios": "node scripts/native/mobile/build-rust-ios.mjs",
+    "native:mobile:rust:android": "node scripts/native/mobile/build-rust-android.mjs",
     "check:mobile:test": "pnpm --filter @voya/mobile test",
     "check:mobile:bundle": "node scripts/quality/mobile-bundle.mjs"
   },

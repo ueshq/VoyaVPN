@@ -21,7 +21,7 @@ pub mod handoff;
 pub mod sinks;
 pub mod tunnel;
 
-pub use app::{StartupError, VoyaApp};
+pub use app::{CommandError, StartupError, VoyaApp};
 pub use events::{AppEvent, EventChannel, InvalidateEvent, TransientStreamEvent};
 pub use sinks::EventListener;
 pub use tunnel::{HostTunController, TunnelError, TunnelHost};

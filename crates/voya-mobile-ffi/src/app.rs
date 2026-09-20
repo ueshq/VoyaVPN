@@ -33,6 +33,22 @@ use crate::{
     tunnel::{HostTunController, TunnelHost},
 };
 
+/// A command the backend rejected.
+///
+/// The payload is a serialized `AppError` — the very value the Tauri transport
+/// rejects with — so the frontend branches on the typed `kind` rather than on a
+/// message, on both platforms. uniffi wants an error *type* here; making it
+/// carry JSON rather than modelling every `AppErrorKind` variant is the same
+/// envelope choice ADR 0012 makes for the arguments and the answer.
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum CommandError {
+    #[error("{app_error_json}")]
+    Rejected { app_error_json: String },
+}
+
+/// The one failure that cannot be reported as itself.
+const UNENCODABLE_FAILURE: &str = r#"{"kind":{"type":"internal"},"subsystem":"app","message":"the failure could not be encoded"}"#;
+
 /// A startup that never produced an app.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum StartupError {
@@ -103,16 +119,16 @@ impl VoyaApp {
     /// answer is the command's return value as JSON. A failure comes back as a
     /// serialized `AppError`, so the frontend branches on the same typed `kind`
     /// it does on the desktop rather than on a message.
-    pub async fn invoke(&self, command: String, args_json: String) -> Result<String, String> {
+    pub async fn invoke(&self, command: String, args_json: String) -> Result<String, CommandError> {
         dispatch::invoke(&self.state, &command, &args_json)
             .await
-            .map_err(|error| {
-                serde_json::to_string(&error).unwrap_or_else(|_| {
+            .map_err(|error| CommandError::Rejected {
+                app_error_json: serde_json::to_string(&error).unwrap_or_else(|_| {
                     // An AppError that will not serialize is a bug in the
                     // contract, not a reason to drop the failure.
                     tracing::error!(?error, "an AppError could not be serialized");
-                    r#"{"kind":{"type":"internal"},"subsystem":"app","message":"the failure could not be encoded"}"#.to_string()
-                })
+                    UNENCODABLE_FAILURE.to_string()
+                }),
             })
     }
 

@@ -296,6 +296,61 @@ jobs:
       - name: Bundle the mobile app for both platforms
         run: pnpm run check:mobile:bundle
 
+  mobile-rust:
+    # The mobile host has to *cross-compile*, which the Linux baseline cannot
+    # prove: `baseline-rust` builds for the host, and every blocker this job
+    # exists to catch — a desktop-only crate that is not target-gated, a TLS
+    # feature that needs a trust store a phone does not expose — only appears
+    # when the target changes. The host-side tests themselves run in
+    # `baseline-rust` with the rest of the workspace, so this job checks, it
+    # does not test.
+    name: Mobile host cross-compile (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The device and the simulator are both arm64 but different targets,
+          # and a build has to work on both.
+          - platform: iOS
+            os: macos-15
+            targets: aarch64-apple-ios,aarch64-apple-ios-sim
+          - platform: Android
+            os: ubuntu-latest
+            targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          targets: ${{ matrix.targets }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+          key: mobile-${{ matrix.platform }}
+
+      # `cargo-ndk` is what turns a Rust target triple into the NDK's clang and
+      # sysroot; without it every Android link fails on a missing libc.
+      - name: Install cargo-ndk
+        if: ${{ matrix.platform == 'Android' }}
+        uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
+        with:
+          tool: cargo-ndk@3.5.4
+
+      - name: Check the mobile host for iOS
+        if: ${{ matrix.platform == 'iOS' }}
+        run: |
+          for target in aarch64-apple-ios aarch64-apple-ios-sim; do
+            cargo check -p voya-mobile-ffi --target "$target" --locked
+          done
+
+      - name: Check the mobile host for Android
+        if: ${{ matrix.platform == 'Android' }}
+        run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 check -p voya-mobile-ffi --locked
+
   desktop-smoke:
     name: Linux native desktop smoke
     runs-on: ubuntu-24.04

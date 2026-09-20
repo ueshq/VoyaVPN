@@ -109,13 +109,13 @@ impl Harness {
     }
 
     fn invoke_err(&self, command: &str, args: Value) -> Value {
-        let error = self
+        let CommandError::Rejected { app_error_json } = self
             .app
             .runtime
             .block_on(self.app.invoke(command.to_string(), args.to_string()))
             .expect_err("expected a failure");
 
-        serde_json::from_str(&error).expect("a failure is a serialized AppError")
+        serde_json::from_str(&app_error_json).expect("a failure is a serialized AppError")
     }
 }
 

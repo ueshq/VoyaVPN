@@ -17,7 +17,9 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing.workspace = true
-uniffi = { version = "0.32", features = ["tokio"] }
+# `cli` carries the bindings generator, which `src/bin/uniffi-bindgen.rs`
+# exposes for the two mobile build scripts.
+uniffi = { version = "0.32", features = ["cli", "tokio"] }
 voya-app.workspace = true
 voya-contracts.workspace = true
 voya-platform.workspace = true
