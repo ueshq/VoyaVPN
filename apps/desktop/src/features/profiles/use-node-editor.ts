@@ -1,8 +1,8 @@
 import { useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { restoreFocus } from "@voya/ui/lib/focus";
-import { deleteProfiles, listProfiles, saveProfile } from "@/ipc/commands";
-import type { ImportProfilesResult, Profile, ProfileListEntry } from "@/ipc/bindings";
+import { deleteProfiles, getProfile, listProfileSummaries, saveProfile } from "@/ipc/commands";
+import type { ImportProfilesResult, Profile } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { useProfileActivation } from "@/stores/runtime-action";
 import { formatImportSummary } from "./server-table-actions";
@@ -11,7 +11,7 @@ import type { TranslationFunction } from "@voya/i18n";
 import type { NodeOperation } from "./use-node-operation";
 type DialogState =
   | { mode: "create"; profile?: null }
-  | { mode: "edit"; profile: ProfileListEntry }
+  | { mode: "edit"; profile: Profile }
   | null;
 
 export function useNodeEditor(
@@ -23,6 +23,7 @@ export function useNodeEditor(
   const [importMethod, setImportMethod] = useState<DialogImportMethod | null>(null);
   const profileDialogTriggerRef = useRef<HTMLElement | null>(null);
   const addTriggerRef = useRef<HTMLButtonElement>(null);
+  const openEditorRequestRef = useRef(0);
   const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
@@ -37,17 +38,29 @@ export function useNodeEditor(
     restoreFocus(detailsTriggerRef.current, viewportRef.current);
   }
   // Opening or closing the editor drops the previous rejection message.
-  function setDialogState(next: DialogState) {
+  function setDialogState(next: DialogState, trigger: HTMLElement | null = focusedElement()) {
     if (next) {
-      profileDialogTriggerRef.current =
-        next.mode === "create"
-          ? addTriggerRef.current
-          : document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
+      profileDialogTriggerRef.current = next.mode === "create" ? addTriggerRef.current : trigger;
     }
     setSaveError(null);
     setDialogStateInternal(next);
+  }
+
+  // The list carries summaries, so the node is read in full first. The menu
+  // item that asked has focus now and may not by the time the read returns,
+  // so it is kept for the editor to hand focus back to.
+  //
+  // Two reads can overlap (a row menu, then another node's before the first
+  // answers) and they can answer in either order, so only the newest one is
+  // allowed to open the editor: otherwise the user asks for B and gets A.
+  async function openEditor(indexId: string) {
+    const request = ++openEditorRequestRef.current;
+    const trigger = focusedElement();
+    const details = getProfile(indexId);
+    if (await runOperation(() => details)) {
+      if (request !== openEditorRequestRef.current) return;
+      setDialogState({ mode: "edit", profile: (await details).profile }, trigger);
+    }
   }
 
   // Destructive: route deletions through a confirmation gate instead of firing
@@ -83,7 +96,7 @@ export function useNodeEditor(
     if (importedIndexIds.length > 0) {
       // Refresh the complete list after import. `import_profiles_from_text` still emits profiles +
       // subscriptions + subscriptionMetadata for every other cache.
-      const refreshedProfiles = await listProfiles(null, null);
+      const refreshedProfiles = await listProfileSummaries();
       if (isActive()) queryClient.setQueryData(queryKeys.profileList, refreshedProfiles);
     }
   }
@@ -95,6 +108,7 @@ export function useNodeEditor(
   return {
     dialogState,
     setDialogState,
+    openEditor,
     importMethod,
     setImportMethod,
     addTriggerRef,
@@ -112,4 +126,8 @@ export function useNodeEditor(
     handleDialogImport,
     restoreProfileDialogFocus,
   };
+}
+
+function focusedElement() {
+  return document.activeElement instanceof HTMLElement ? document.activeElement : null;
 }

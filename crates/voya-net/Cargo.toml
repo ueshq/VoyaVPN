@@ -25,7 +25,9 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "time"] }
-tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# Only sing-box's loopback Clash API is dialled, always over plain `ws://`, so
+# the websocket client carries no TLS of its own (and no second root store).
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect"] }
 tracing.workspace = true
 voya-core.workspace = true
 

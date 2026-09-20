@@ -8,9 +8,13 @@ on:
     branches:
       - main
 
+# A superseded PR or push run is worth cancelling; a release's quality gate is
+# not. This group is evaluated in the caller's context, so every channel's
+# `quality-gate` call resolves to the same `Release-<ref>` group: cancelling
+# would let a stable dispatch kill the beta release already running on that ref.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 permissions:
   contents: read

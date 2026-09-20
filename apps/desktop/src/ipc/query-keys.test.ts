@@ -4,6 +4,7 @@ import type { InvalidationScope } from "@/ipc/bindings";
 import {
   connectionIpQueryKey,
   invalidationQueryKey,
+  profileDetailsQueryKey,
   profileShareQrQueryKey,
   queryKeys,
 } from "@/ipc/query-keys";
@@ -47,6 +48,7 @@ const productionSources = Object.entries(sources).filter(
 /** Parameterised keys, mapped back to the root a scope can invalidate. */
 const keyFactories = {
   connectionIpQueryKey: () => connectionIpQueryKey("profile:1"),
+  profileDetailsQueryKey: () => profileDetailsQueryKey("profile-1"),
   profileShareQrQueryKey: () => profileShareQrQueryKey("share-link"),
 };
 
@@ -163,6 +165,9 @@ describe("query key registry", () => {
     // A `profiles` invalidation has to reach the node list and the groups.
     expect(queryKeys.profileList[0]).toBe(queryKeys.profiles[0]);
     expect(queryKeys.policyGroups[0]).toBe(queryKeys.profiles[0]);
+    // So is an open details dialog, which reads one node in full.
+    expect(profileDetailsQueryKey("node-1")).toEqual([...queryKeys.profileDetails, "node-1"]);
+    expect(queryKeys.profileDetails[0]).toBe(queryKeys.profiles[0]);
     expect(profileShareQrQueryKey("vmess://x")).toEqual([queryKeys.profileShareQr[0], "vmess://x"]);
     expect(connectionIpQueryKey("tokyo:42")).toEqual([queryKeys.connectionIp[0], "tokyo:42"]);
   });

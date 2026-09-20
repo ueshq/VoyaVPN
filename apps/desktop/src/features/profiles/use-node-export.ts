@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { exportProfileShareLinks, listProfiles } from "@/ipc/commands";
+import { exportProfileShareLinks, listProfileSummaries } from "@/ipc/commands";
 import { writeClipboard } from "@/lib/clipboard";
 import { profilesByNodeGroup, type NodeSourceKey } from "./node-list-rows";
 import {
@@ -48,10 +48,10 @@ export function useNodeExport(
     destination: ProfileExportDestination = "clipboard",
   ) {
     await runOperation(async () => {
-      const listing = await listProfiles(null, null);
+      const listing = await listProfileSummaries();
       const entries = profilesByNodeGroup(listing.entries).get(groupKey) ?? [];
       const exportable = entries.filter((item) =>
-        supportsShareLinkExport(item.profile.protocol.kind),
+        supportsShareLinkExport(item.profile.kind),
       );
       if (!exportable.length) {
         setOperationError(t("panes.profiles.export.noProfiles"));

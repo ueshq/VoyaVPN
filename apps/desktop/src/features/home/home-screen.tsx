@@ -206,12 +206,12 @@ export function HomeScreen() {
                   <>
                     <span
                       className="home-node-address"
-                      title={profile ? profile.protocol.server.address : undefined}
+                      title={profile ? profile.address : undefined}
                     >
-                      {profile ? profile.protocol.server.address || "—" : "—"}
+                      {profile ? profile.address || "—" : "—"}
                     </span>
                     <span>
-                      {profile ? getProtocolLabel(profile.protocol.kind) : "—"}
+                      {profile ? getProtocolLabel(profile.kind) : "—"}
                     </span>
                   </>
                 )}

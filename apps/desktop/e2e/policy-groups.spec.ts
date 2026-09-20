@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import type { PolicyGroup, ProfileListEntry } from "../src/ipc/bindings";
+import type { PolicyGroup, ProfileDetails } from "../src/ipc/bindings";
 import { savedNodeFixture } from "./fixtures/saved-node";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
@@ -8,7 +8,7 @@ type SmokeCall = { command: string; args: Record<string, unknown> };
 type State = {
   calls: SmokeCall[];
   policyGroups: PolicyGroup[];
-  profiles: ProfileListEntry[];
+  profiles: ProfileDetails[];
 };
 
 async function openNodes(page: Page) {

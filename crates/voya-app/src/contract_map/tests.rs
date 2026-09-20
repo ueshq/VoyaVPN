@@ -603,12 +603,12 @@ fn every_move_action_maps_to_its_domain_action() {
     }
 }
 
-/// `profile_list_to_contract` has no inverse, so the pairing is asserted
+/// `profile_details_to_contract` has no inverse, so the pairing is asserted
 /// directly: four `i64` traffic counters and an `i32`/`f64` metrics pair are
 /// exactly the shape a swap hides in.
 #[test]
-fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
-    let entry = profile_list_to_contract(ProfileListItem {
+fn profile_details_keep_metrics_and_traffic_in_their_own_fields() {
+    let entry = profile_details_to_contract(ProfileListItem {
         profile: ProfileItem {
             index_id: "profile-index-id".to_string(),
             subscription_id: None,
@@ -651,6 +651,69 @@ fn profile_list_entry_keeps_metrics_and_traffic_in_their_own_fields() {
     assert_eq!(entry.traffic.today_download, 44);
     assert_eq!(entry.traffic.date, 45);
     assert!(entry.is_active);
+}
+
+/// A summary row pairs a node's kind, address and port from its protocol and
+/// keeps the metrics of the full shape; the kind table is exhaustive.
+#[test]
+fn profile_summaries_carry_kind_address_and_port() {
+    let entry = profile_summary_to_contract(ProfileSummaryItem {
+        profile: ProfileItem {
+            index_id: "summary-id".to_string(),
+            subscription_id: Some("sub-1".to_string()),
+            display_log: false,
+            remarks: "Tokyo".to_string(),
+            protocol: CoreProfileProtocol::Socks {
+                server: endpoint("node.example", 1080),
+                username: String::new(),
+                password: String::new(),
+            },
+            transport: None,
+            tls: None,
+        },
+        profile_ex: ProfileExItem {
+            index_id: "summary-id".to_string(),
+            delay: 77,
+            sort: 20,
+            message: Some("completed".to_string()),
+            ip_info: None,
+            country_code: Some("JP".to_string()),
+        },
+        is_active: true,
+    });
+
+    assert_eq!(entry.profile.id, "summary-id");
+    assert_eq!(entry.profile.subscription_id.as_deref(), Some("sub-1"));
+    assert_eq!(entry.profile.remarks, "Tokyo");
+    assert_eq!(entry.profile.kind, ProfileKind::Socks);
+    assert_eq!(
+        (entry.profile.address.as_str(), entry.profile.port),
+        ("node.example", 1080)
+    );
+    assert_eq!(entry.metrics.delay_ms, 77);
+    assert_eq!(entry.metrics.sort, 20);
+    assert_eq!(entry.metrics.outcome, Some(SpeedtestOutcome::Completed));
+    assert_eq!(entry.metrics.country_code.as_deref(), Some("JP"));
+    assert!(entry.is_active);
+
+    // The same kind the full profile's protocol reports, for every kind.
+    for config_type in [
+        ConfigType::VMess,
+        ConfigType::Shadowsocks,
+        ConfigType::SOCKS,
+        ConfigType::VLESS,
+        ConfigType::Trojan,
+        ConfigType::Hysteria2,
+        ConfigType::TUIC,
+        ConfigType::WireGuard,
+        ConfigType::HTTP,
+        ConfigType::Anytls,
+        ConfigType::Naive,
+    ] {
+        let kind = serde_json::to_value(profile_kind_to_contract(config_type))
+            .expect("the kind serializes");
+        assert_eq!(kind.as_str(), Some(config_type.as_str()), "{config_type:?}");
+    }
 }
 
 #[test]

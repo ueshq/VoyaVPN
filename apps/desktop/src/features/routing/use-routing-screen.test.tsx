@@ -3,7 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProfileListEntry, RoutingRule, Routing_Serialize, ValidationIssue } from "@/ipc/bindings";
+import type { ProfileSummaryEntry, RoutingRule, Routing_Serialize, ValidationIssue } from "@/ipc/bindings";
 import { IpcCommandError } from "@/ipc/commands";
 import { queryKeys } from "@/ipc/query-keys";
 import { useToastStore } from "@/stores/toast-store";
@@ -13,7 +13,7 @@ import { useRoutingScreen } from "./use-routing-screen";
 const ipcMocks = vi.hoisted(() => ({
   deleteRoutingRules: vi.fn(),
   listPolicyGroups: vi.fn(),
-  listProfiles: vi.fn(),
+  listProfileSummaries: vi.fn(),
   listRoutings: vi.fn(),
   moveRoutingRule: vi.fn(),
   resetRoutingRules: vi.fn(),
@@ -32,7 +32,7 @@ describe("useRoutingScreen", () => {
   beforeEach(() => {
     Object.values(ipcMocks).forEach((mock) => mock.mockReset());
     ipcMocks.listRoutings.mockResolvedValue([active(), inactive()]);
-    ipcMocks.listProfiles.mockResolvedValue({
+    ipcMocks.listProfileSummaries.mockResolvedValue({
       entries: [entry("Tokyo"), entry("Tokyo"), entry("Osaka")],
       undecodableProfiles: 0,
     });
@@ -369,6 +369,6 @@ function rule(id: string): RoutingRule {
   };
 }
 
-function entry(remarks: string): ProfileListEntry {
-  return { profile: { remarks } } as ProfileListEntry;
+function entry(remarks: string): ProfileSummaryEntry {
+  return { profile: { remarks } } as ProfileSummaryEntry;
 }

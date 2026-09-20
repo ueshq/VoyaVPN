@@ -1,22 +1,33 @@
 use super::{post_commit::*, support::*, *};
 
+/// Every node as the node table shows it; `get_profile` has one in full.
 #[tauri::command]
 #[specta::specta]
-pub async fn list_profiles(
+pub async fn list_profile_summaries(
     state: tauri::State<'_, AppState>,
-    subscription_id: Option<String>,
-    filter: Option<String>,
-) -> Result<ProfileListing, AppError> {
-    validate_present_ipc_text(
-        subscription_id.as_deref(),
-        "subscription id",
+) -> Result<ProfileSummaryListing, AppError> {
+    let config = current_config(&state);
+
+    state
+        .services()
+        .profiles()
+        .list_summaries(&config)
+        .await
+        .map(profile_summary_listing_to_contract)
+        .map_err(AppError::from)
+}
+
+/// One node in full, for the editor and the details dialog.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_profile(
+    state: tauri::State<'_, AppState>,
+    index_id: String,
+) -> Result<ProfileDetails, AppError> {
+    validate_required_ipc_text(
+        &index_id,
+        "node id",
         IPC_ID_MAX_CHARS,
-        AppErrorSubsystem::Profile,
-    )?;
-    validate_optional_ipc_text(
-        filter.as_deref(),
-        "node filter",
-        IPC_FILTER_MAX_CHARS,
         AppErrorSubsystem::Profile,
     )?;
     let config = current_config(&state);
@@ -24,9 +35,9 @@ pub async fn list_profiles(
     state
         .services()
         .profiles()
-        .list_profiles(&config, subscription_id.as_deref(), filter.as_deref())
+        .get_profile(&config, &index_id)
         .await
-        .map(profile_listing_to_contract)
+        .map(profile_details_to_contract)
         .map_err(AppError::from)
 }
 
@@ -36,7 +47,7 @@ pub async fn save_profile<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
     profile: ProfileContract,
-) -> Result<ProfileListEntry, AppError> {
+) -> Result<ProfileDetails, AppError> {
     let saved = mutate_config(&state, async |unit_of_work, config| {
         Ok(ProfileManager::new_in(unit_of_work)
             .save_profile(config, profile_from_contract(profile))
@@ -45,7 +56,7 @@ pub async fn save_profile<R: tauri::Runtime>(
     .await?;
     emit_profile_invalidation(&app, "profile-saved", saved.config_changed);
 
-    Ok(profile_list_to_contract(saved.value))
+    Ok(profile_details_to_contract(saved.value))
 }
 
 #[tauri::command]
@@ -103,7 +114,7 @@ pub async fn set_active_profile<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
     index_id: String,
-) -> Result<ProfileListEntry, AppError> {
+) -> Result<ProfileDetails, AppError> {
     validate_required_ipc_text(
         &index_id,
         "node id",
@@ -120,7 +131,7 @@ pub async fn set_active_profile<R: tauri::Runtime>(
     // bundle projected from it is refreshed too.
     emit_profile_invalidation(&app, "active-profile-changed", true);
 
-    Ok(profile_list_to_contract(active.value))
+    Ok(profile_details_to_contract(active.value))
 }
 
 #[tauri::command]
@@ -132,7 +143,7 @@ pub async fn move_profile<R: tauri::Runtime>(
     index_id: String,
     action: ContractMoveAction,
     position: Option<i32>,
-) -> Result<Vec<ProfileListEntry>, AppError> {
+) -> Result<(), AppError> {
     validate_present_ipc_text(
         subscription_id.as_deref(),
         "subscription id",
@@ -145,10 +156,9 @@ pub async fn move_profile<R: tauri::Runtime>(
         IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Profile,
     )?;
-    let profiles = mutate_config(&state, async |unit_of_work, config| {
+    mutate_config(&state, async |unit_of_work, _config| {
         Ok(ProfileManager::new_in(unit_of_work)
             .move_profile(
-                config,
                 subscription_id.as_deref(),
                 &index_id,
                 move_action_from_contract(action),
@@ -160,9 +170,5 @@ pub async fn move_profile<R: tauri::Runtime>(
 
     emit_profile_invalidation(&app, "profile-moved", false);
 
-    Ok(profiles
-        .value
-        .into_iter()
-        .map(profile_list_to_contract)
-        .collect())
+    Ok(())
 }

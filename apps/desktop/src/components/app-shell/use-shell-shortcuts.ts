@@ -4,7 +4,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { runRuntimeAction, runtimeBusy } from "@/stores/runtime-action";
-import type { ProfileListing } from "@/ipc/bindings";
+import type { ProfileSummaryListing } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { coreStateOf, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { SHELL_TABS, useShellStore } from "@/stores/shell-store";
@@ -65,7 +65,7 @@ async function toggleConnection(t: TranslationFunction, queryClient: QueryClient
   const state = coreStateOf(useRuntimeEventStore.getState().coreState);
   if (runtimeBusy(state)) return;
   const action = state === "connected" || state === "cleanupPending" ? "disconnect" : "connect";
-  const profiles = queryClient.getQueryData<ProfileListing>(queryKeys.profileList);
+  const profiles = queryClient.getQueryData<ProfileSummaryListing>(queryKeys.profileList);
   if (action === "connect" && profiles?.entries.length === 0) {
     // Nothing to connect with: go where a node gets added, as Home's button does.
     useShellStore.getState().openProfilesAddMenu();

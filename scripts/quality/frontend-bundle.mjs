@@ -38,6 +38,11 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * startup path has its own budget. Sizes recorded then: vendor-data 78.6 KiB,
  * vendor-radix 59.0 KiB, vendor-forms 96.9 KiB, vendor-menus 96.3 KiB;
  * startup JavaScript 501.3 KiB (724.8 KiB before).
+ *
+ * 2026-09-20: a picked QR image is decoded by the backend's decoder (the one
+ * behind the screen scan), so the 456.8 KiB `vendor-qr` chunk and its budget
+ * line are gone, and the world map's path data was rounded to one decimal.
+ * Sizes recorded then: total emitted JS 1275.9 KiB, whole `dist` 3039.9 KiB.
  */
 const budgets = [
   { label: "application entry", maxKiB: 60, prefix: "index-" },
@@ -46,7 +51,6 @@ const budgets = [
   { label: "Traditional Chinese locale", maxKiB: 55, prefix: "zh-Hant-" },
   { label: "profiles screen", maxKiB: 170, prefix: "server-table-" },
   { label: "settings screen", maxKiB: 85, prefix: "settings-screen-" },
-  { label: "QR decoder", maxKiB: 500, prefix: "vendor-qr-" },
   { label: "data vendor chunk", maxKiB: 110, prefix: "vendor-data-" },
   { label: "React vendor chunk", maxKiB: 240, prefix: "vendor-react-" },
   { label: "Radix vendor chunk", maxKiB: 85, prefix: "vendor-radix-" },
@@ -54,7 +58,7 @@ const budgets = [
   { label: "menu vendor chunk", maxKiB: 135, prefix: "vendor-menus-" },
 ];
 
-const totalBudgetKiB = 1900;
+const totalBudgetKiB = 1650;
 /**
  * Every script `index.html` loads before the first paint. Tighter than the
  * per-chunk ratchet on purpose: an accidental startup import is exactly what
@@ -63,7 +67,7 @@ const totalBudgetKiB = 1900;
  */
 const startupBudgetKiB = 575;
 const cssBudgetKiB = 120;
-const distBudgetKiB = 4000;
+const distBudgetKiB = 3500;
 
 export function checkBundleBudgets(assets, { budgets: budgetList = budgets, totalKiB = totalBudgetKiB } = {}) {
   const failures = [];

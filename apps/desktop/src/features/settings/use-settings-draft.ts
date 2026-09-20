@@ -12,6 +12,7 @@ import { translateFieldErrors, zodIssuesToErrorMap } from "@/lib/zod-errors";
 import { i18next, type TranslationFunction } from "@voya/i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
+import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { toastError } from "@/stores/toast-store";
 
 import {
@@ -37,6 +38,7 @@ export function useSettingsDraft<T>({
 }) {
   const client = useQueryClient();
   const queue = saveQueue(client);
+  const writeRef = useLatestRef(write);
   const [draft] = useState(() => {
     const key = JSON.stringify(queryKey);
     const drafts = draftsByClient.get(client) ?? new Map<string, unknown>();
@@ -79,9 +81,11 @@ export function useSettingsDraft<T>({
   );
 
   useEffect(() => {
-    draft.attach();
+    // The draft outlives this pane, so it gets a writer that reads this
+    // mount's latest `write` rather than keeping the first mount's closure.
+    draft.attach((change) => writeRef.current(change));
     return draft.detach;
-  }, [draft]);
+  }, [draft, writeRef]);
 
   const failures = Object.values(snapshot.failures);
   return {

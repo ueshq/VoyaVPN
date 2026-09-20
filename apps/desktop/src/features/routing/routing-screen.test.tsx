@@ -15,7 +15,7 @@ const ipc = vi.hoisted(() => ({
   deleteRoutingRules: vi.fn(),
   listPolicyGroups: vi.fn(),
   listProcessCandidates: vi.fn(),
-  listProfiles: vi.fn(),
+  listProfileSummaries: vi.fn(),
   listRoutings: vi.fn(),
   loadAppSettings: vi.fn(),
   moveRoutingRule: vi.fn(),
@@ -42,7 +42,7 @@ describe("RoutingScreen", () => {
     Object.values(ipc).forEach((mock) => mock.mockReset());
     runtime.state = "disconnected";
     ipc.listRoutings.mockResolvedValue([activeRouting(), otherRouting()]);
-    ipc.listProfiles.mockResolvedValue({ entries: [], undecodableProfiles: 0 });
+    ipc.listProfileSummaries.mockResolvedValue({ entries: [], undecodableProfiles: 0 });
     ipc.listPolicyGroups.mockResolvedValue({ entries: [] });
     ipc.connectionModeStatus.mockResolvedValue({
       mode: "systemProxy",

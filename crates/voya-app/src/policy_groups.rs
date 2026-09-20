@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use thiserror::Error;
 use voya_core::{
-    resolve_group_members, AppConfig, GroupStrategy, PolicyGroupItem, ProfileItem,
+    resolve_group_members, AppConfig, GroupStrategy, PolicyGroupItem, ProfileIdentity,
     GROUP_INTERVAL_SECONDS_RANGE, GROUP_TOLERANCE_MS_RANGE,
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
@@ -54,10 +54,15 @@ pub enum PolicyGroupManagerError {
 }
 
 /// A group with its members resolved against the current node list.
+///
+/// Members are resolved from [`ProfileIdentity`] rows, which are read without
+/// decoding the stored payloads. A node this build cannot decode therefore
+/// still counts as a member here although the node list and a generated config
+/// leave it out; such rows exist only after a downgrade.
 #[derive(Debug, Clone)]
 pub struct PolicyGroupEntry {
     pub group: PolicyGroupItem,
-    pub members: Vec<ProfileItem>,
+    pub members: Vec<ProfileIdentity>,
     pub is_active: bool,
 }
 
@@ -90,7 +95,7 @@ impl<'db> PolicyGroupManager<'db> {
 
     /// Every group in display order with its resolved members.
     pub async fn list(&self, config: &AppConfig) -> Result<Vec<PolicyGroupEntry>> {
-        let nodes = self.database.profiles().list().await?;
+        let nodes = self.database.profiles().list_identities().await?;
         let groups = self.database.policy_groups().list().await?;
         Ok(groups
             .into_iter()
@@ -105,10 +110,11 @@ impl<'db> PolicyGroupManager<'db> {
             .collect())
     }
 
-    /// The group and its members, in the order connecting uses them.
-    pub async fn resolve(&self, id: &str) -> Result<(PolicyGroupItem, Vec<ProfileItem>)> {
+    /// The group and its members, in the order connecting uses them: what the
+    /// running group's status, selection and delay test are spoken in.
+    pub async fn resolve(&self, id: &str) -> Result<(PolicyGroupItem, Vec<ProfileIdentity>)> {
         let group = self.get(id).await?;
-        let nodes = self.database.profiles().list().await?;
+        let nodes = self.database.profiles().list_identities().await?;
         let members = resolve_group_members(&group, &nodes)
             .into_iter()
             .cloned()
@@ -124,20 +130,19 @@ impl<'db> PolicyGroupManager<'db> {
     pub async fn save(&self, draft: PolicyGroupItem) -> Result<PolicyGroupItem> {
         let mut group = normalized(draft);
         validate(&group)?;
-        // One listing answers for every member instead of a query each; an id
-        // it lacks is asked for directly, since the listing leaves out rows it
-        // cannot decode and those still exist.
-        let nodes = self.database.profiles().list().await?;
+        // One listing answers for every member instead of a query each. It
+        // decodes nothing, so it also holds rows the node list cannot show.
+        let nodes = self.database.profiles().list_identities().await?;
         let listed = nodes
             .iter()
             .map(|node| node.index_id.as_str())
             .collect::<BTreeSet<_>>();
-        for member_id in &group.member_ids {
-            if !listed.contains(member_id.as_str())
-                && !self.database.profiles().exists(member_id).await?
-            {
-                return Err(PolicyGroupManagerError::MemberNotFound(member_id.clone()));
-            }
+        if let Some(missing) = group
+            .member_ids
+            .iter()
+            .find(|member_id| !listed.contains(member_id.as_str()))
+        {
+            return Err(PolicyGroupManagerError::MemberNotFound(missing.clone()));
         }
         if let Some(subscription_id) = &group.source_subscription_id {
             if self
@@ -403,7 +408,7 @@ fn validate(group: &PolicyGroupItem) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use voya_core::{ActiveTarget, SubItem};
+    use voya_core::{ActiveTarget, ProfileItem, SubItem};
 
     use super::*;
     use crate::profiles::ProfileManager;
@@ -591,6 +596,43 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["b"]
         );
+    }
+
+    /// A row this build cannot decode is skipped by the node listings but is
+    /// still a node: it has an id, it counts as a member, and a downgrade must
+    /// not make every group holding one unsavable. Validating against
+    /// `list_identities` (which decodes nothing) is what makes this work — it
+    /// is why the extra per-member `exists()` query could go.
+    #[tokio::test]
+    async fn a_member_that_only_exists_as_an_undecodable_row_is_accepted() {
+        let database = database_with_nodes(&["a"]).await;
+        // A `config_type` this build has no enum value for, as a row written by
+        // a newer build would look.
+        sqlx::query(
+            r#"INSERT INTO profile_items (index_id, config_type, remarks, protocol)
+               VALUES ('from-the-future', 'quantum', 'From the future',
+                       '{"kind":"trojan","server":{"address":"t.example.com","port":443},"password":"secret"}')"#,
+        )
+        .execute(database.pool())
+        .await
+        .expect("the raw row should be stored");
+        assert!(
+            database
+                .profiles()
+                .list()
+                .await
+                .expect("listing")
+                .iter()
+                .all(|node| node.index_id != "from-the-future"),
+            "the row has to be undecodable for this test to mean anything"
+        );
+
+        let saved = PolicyGroupManager::new(&database)
+            .save(draft(&["a", "from-the-future"]))
+            .await
+            .expect("an undecodable member must not block the save");
+
+        assert_eq!(saved.member_ids, ["a", "from-the-future"]);
     }
 
     #[tokio::test]

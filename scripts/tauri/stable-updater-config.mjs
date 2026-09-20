@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
 import { truthy } from "../lib/common.mjs";
-import { approvedUpdaterPublicKeyFromEnv } from "../release/updater-signatures.mjs";
+import { resolveApprovedUpdaterPublicKey } from "../release/updater-signatures.mjs";
 import { normalizeReleaseUrl, sha256Text } from "../release/validation.mjs";
 
 function falsey(value) {
@@ -28,11 +28,14 @@ function stableUpdaterBaseUrl(env) {
   return normalizeReleaseUrl(value, { label: "VOYAVPN_UPDATES_BASE_URL" });
 }
 
-// One resolver for the approved updater public key, shared with readiness and
-// the updater metadata command, so all three accept the variable names the
-// release docs promise and reject a VOYAVPN/TAURI mismatch identically.
+// One resolver for the approved updater public key, shared with the staging
+// verifier and the updater metadata command, so all three accept the variable
+// names the release docs promise, reject a VOYAVPN/TAURI mismatch identically,
+// and refuse a key that does not decode to a minisign public key. Checking only
+// its length here let a malformed key be baked into a stable build, which then
+// could never verify an update.
 function stableUpdaterPublicKey(env) {
-  return approvedUpdaterPublicKeyFromEnv(env);
+  return resolveApprovedUpdaterPublicKey(env);
 }
 
 export function requestedStableUpdaterConfig(env = process.env) {

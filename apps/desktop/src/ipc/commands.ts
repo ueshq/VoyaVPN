@@ -38,10 +38,16 @@ export const generateQrCode = wrapCommand(commands.generateQrCode);
 
 export const scanScreenQr = wrapCommand(commands.scanScreenQr);
 
+/** Decodes the QR codes in a picture already turned into grey pixels. */
+export const decodeQrImage = wrapCommand(commands.decodeQrImage);
+
 export const readClipboardText = wrapCommand(commands.readClipboardText);
 
 /** Asks where to save log text; `false` when the save dialog is cancelled. */
 export const exportLogs = wrapCommand(commands.exportLogs);
+
+/** Whether the Logs panel is showing, and so wants log lines delivered. */
+export const setLogStreaming = wrapCommand(commands.setLogStreaming);
 
 export const connectActiveProfile = wrapCommand(commands.connectActiveProfile);
 
@@ -63,7 +69,11 @@ export const loadDnsSettings = wrapCommand(commands.loadDnsSettings);
 
 export const saveDnsSettings = wrapCommand(commands.saveDnsSettings);
 
-export const listProfiles = wrapCommand(commands.listProfiles);
+/** Every node as the node table shows it; `getProfile` has one in full. */
+export const listProfileSummaries = wrapCommand(commands.listProfileSummaries);
+
+/** One node in full: credentials, transport, TLS and traffic. */
+export const getProfile = wrapCommand(commands.getProfile);
 
 export const saveProfile = wrapCommand(commands.saveProfile);
 

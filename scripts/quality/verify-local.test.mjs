@@ -15,7 +15,16 @@ const gates = steps.map(([, , args]) => args[1]);
 const packageScripts = JSON.parse(read("package.json")).scripts;
 
 /**
- * The `pnpm run check:*` gates each top-level ci.yml job runs, keyed by job id.
+ * The `check:*` gates one workflow line runs. pnpm runs a package script with
+ * or without `run`, so both spellings count; otherwise a step written
+ * `pnpm check:x` would be invisible to the parity test below.
+ */
+function gatesInLine(line) {
+  return [...line.matchAll(/\bpnpm (?:run )?(check:[\w:-]+)/gu)].map((match) => match[1]);
+}
+
+/**
+ * The `check:*` gates each top-level ci.yml job runs, keyed by job id.
  * Comment lines are skipped so a comment that names a gate cannot count as
  * running it.
  */
@@ -29,13 +38,25 @@ function ciGatesByJob() {
       current = header[1];
       jobs.set(current, []);
     } else if (current && !line.trim().startsWith("#")) {
-      jobs.get(current).push(...[...line.matchAll(/pnpm run (check:[\w:-]+)/gu)].map((match) => match[1]));
+      jobs.get(current).push(...gatesInLine(line));
     }
   }
   return jobs;
 }
 
 const baselineJobs = [...ciGatesByJob()].filter(([job]) => job.startsWith("baseline"));
+
+describe("CI gate discovery", () => {
+  it.each([
+    ["        run: pnpm run check:architecture", ["check:architecture"]],
+    ["        run: pnpm check:architecture", ["check:architecture"]],
+    ["        run: pnpm run check:rust:fmt && pnpm check:rust:clippy", ["check:rust:fmt", "check:rust:clippy"]],
+    ["        run: pnpm --filter @voya/desktop build", []],
+    ["        run: xpnpm check:architecture", []],
+  ])("reads the gates of %j", (line, expected) => {
+    expect(gatesInLine(line)).toEqual(expected);
+  });
+});
 
 describe("verify:local is the single source of truth for the gate list", () => {
   it("runs only scripts that package.json actually defines", () => {

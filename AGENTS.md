@@ -17,12 +17,13 @@ The package manager is **pnpm 11.5.0** (pinned via Corepack). Rust toolchain is 
 - `packages/ui/` — `@voya/ui`, source-only shadcn primitives, design tokens, shared CSS, fonts, and `cn()`.
 - `packages/i18n/` — `@voya/i18n`, source-only i18next setup and imported locale JSON.
 - `packages/utils/` — `@voya/utils`, source-only shared formatting/redaction/error helpers.
+- `tools/skills/` — tracked agent skills that are not part of the product build: `rollout/` plans multi-phase refactors and generates a resumable `rollout.py` runner (Python; its output goes to the untracked `.agents/rollouts/`).
 - `crates/`, `tests/`, `docs/`, and `scripts/` remain rooted at the workspace.
 - `docs/` is tracked and holds only what governs or ships with the product: ADRs, release runbooks and legal notices, and design references. `docs/release/THIRD_PARTY_NOTICES.md` is a Tauri bundle resource, so an untracked copy breaks every clean build (`scripts/tauri/core-seeds.test.mjs` guards this). Development-process notes — verification logs, before/after screenshots, usability checks — go in the untracked `.agents/docs/`.
 
 Package scope is always `@voya/*`. The `@/*` alias is desktop-private and resolves to `apps/desktop/src`; shared imports use `@voya/*`.
 
-Version authority: the root `package.json` `version` is the release-artifact version read by `pnpm release -- artifacts`. Keep root, desktop package, Tauri config, and Cargo package versions aligned when doing an intentional version bump.
+Version authority: the root `package.json` `version` is the release-artifact version read by `pnpm release -- artifacts`. Keep root, desktop package, Tauri config, and Cargo package versions aligned when doing an intentional version bump; `pnpm run check:architecture` fails when they drift.
 
 ## Commands
 
@@ -118,18 +119,24 @@ so read it before moving code between crates:
   first top-level `#[cfg(test)]` must be `#[cfg(test)] mod …` declarations, so
   the production/test split is decidable without compiling.
 - **`unsafe` needs a `SAFETY:` comment** within the three preceding lines.
-  This covers `unsafe {`, `unsafe impl`, `unsafe extern`, and `unsafe fn`.
+  This covers `unsafe {`, `unsafe impl`, `unsafe extern`, and `unsafe fn`, in
+  test code too. Declared test module files (`#[cfg(test)] mod x;`) are
+  otherwise exempt from the source rules, which are about shipped code; the
+  reason for each exemption is in `architecture.mjs`.
 - **`voya-core` must be OS independent and deterministic:** no `#[cfg]` on
   `target_os`/`target_family`/`windows`/`unix`, no `cfg!()` on those, no
   `std::fs`/`std::process`/`std::env`, no `std::net` socket types
-  (`TcpStream`/`TcpListener`/`UdpSocket`/`ToSocketAddrs`; address value types
-  such as `IpAddr` stay allowed), no `SystemTime::now`, `Instant::now`, or
+  (`TcpStream`/`TcpListener`/`UdpSocket`/`ToSocketAddrs`, matched by name so
+  grouped imports are caught; address value types such as `IpAddr` stay
+  allowed), no `SystemTime::now`, `Instant::now`, or
   `rand`. Inject clocks, randomness, ports, and platform facts.
 - **`voya-app` reaches the network and filesystem through adapters:** no
   `reqwest`, `tokio_tungstenite`, `tokio::net`, `tokio::fs`, `tokio::process`,
   `std::fs`, or `std::process::{Command, Stdio}` (grouped imports such as
-  `use std::{fs, io};` are matched too; a `std::process::id()` read and
-  `std::net` address types stay allowed), and no `specta`.
+  `use std::{fs, io};`, and imports of the `process` module itself such as
+  `use std::process;` or `use std::{io, process};`, are matched too;
+  `std::process::id()`/`exit` and `std::net` address types stay allowed), and
+  no `specta`.
 - **The Tauri shell has no tests, no direct domain access, and no DTOs:** no
   `#[cfg(…)]` that enables code under `test` (its lib test harness is disabled),
   no `voya_core::`/`voya_db::`, and no `derive(… Type …)`, plain or inside
@@ -138,7 +145,10 @@ so read it before moving code between crates:
   tests, which `check:rust:test` builds as a separate target.
 - **Manifest checks** reject a direct, renamed (`x = { package = "…" }`), or
   `[dependencies.…]`-table dependency on `voya-core`/`voya-db` in the shell, and
-  on `specta`, `reqwest`, or `tokio-tungstenite` in `voya-app`.
+  on `specta`, `reqwest`, or `tokio-tungstenite` in `voya-app`. They also require
+  one release version across the root `package.json`, `apps/desktop/package.json`,
+  `apps/desktop/src-tauri/tauri.conf.json`, and every Cargo workspace member
+  (all inherit `[workspace.package] version`).
 - **Retired v2rayN compatibility stays retired:** no `serde(alias = …)` or
   `rename_all = "PascalCase"` outside `crates/voya-net/src/clash.rs`, no
   `v2rayn://`, and no retired config-compat identifiers. Every `rename_all` and
@@ -153,7 +163,7 @@ Config generation correctness is judged by the **generated sing-box JSON**, not 
 
 - Golden fixtures live in `tests/golden/`: `singbox/` is driven by `matrix.json`; `voya-core` canonicalizes JSON and diffs against this corpus.
 - Fixtures must cover ordinary protocols, DNS final/direct detection, TUN, platform pre-socks forwarding, and per-rule outbounds.
-- Where the `sing-box` binary exists, generated configs must pass `sing-box check -c`; when absent, acceptance is skipped with explicit evidence but JSON golden parity still runs.
+- Core acceptance is opt-in: without `VOYA_GOLDEN_ACCEPTANCE` the check is skipped with explicit evidence and JSON golden parity still runs. Once opted in nothing may be skipped — a missing binary panics (set `VOYA_SINGBOX_BIN`), and `pnpm check:sing-box`, which stages the seed and opts in for you, additionally fails unless the libtest summary proves the acceptance test actually ran.
 - Raw JSON is allowed only at defined rule-set boundaries — normal profile/DNS/routing/transport/protocol data must be typed.
 
 ## Cores and i18n

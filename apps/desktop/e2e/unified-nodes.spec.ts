@@ -1,10 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
-import type { ProfileListEntry, Subscription } from "../src/ipc/bindings";
+import type { ProfileDetails, Subscription } from "../src/ipc/bindings";
 import { savedNodeFixture } from "./fixtures/saved-node";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 type State = {
-  profiles: ProfileListEntry[];
+  profiles: ProfileDetails[];
   subscriptions: Subscription[];
   calls: { command: string; args: Record<string, unknown> }[];
   failNextCommand: string | null;

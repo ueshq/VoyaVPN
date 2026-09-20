@@ -127,3 +127,28 @@ pub fn generate_qr_code(content: String) -> Result<QrCodeImage, AppError> {
 pub async fn scan_screen_qr(window: tauri::WebviewWindow) -> Result<QrScanResult, AppError> {
     screen_qr::scan(window).await
 }
+
+/// Decodes the QR codes in a picture the user picked. The webview decodes the
+/// file and sends grey pixels (base64, one byte each), so no image decoder
+/// ships in either the bundle or the binary; locating codes in a large
+/// picture takes long enough to keep off the async workers.
+#[tauri::command]
+#[specta::specta]
+pub async fn decode_qr_image(
+    width: u32,
+    height: u32,
+    luma_base64: String,
+) -> Result<QrScanResult, AppError> {
+    validate_required_ipc_text(
+        &luma_base64,
+        "QR image data",
+        IPC_QR_IMAGE_MAX_BASE64_CHARS,
+        AppErrorSubsystem::Qr,
+    )?;
+
+    run_blocking("QR image decode", move || {
+        QrCodeManager.decode_image(width, height, &luma_base64)
+    })
+    .await?
+    .map_err(AppError::from)
+}

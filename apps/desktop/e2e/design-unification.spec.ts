@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type {
   AppSettingsV1,
-  ProfileListEntry,
+  ProfileDetails,
   RuntimeStatusResponse,
   Subscription,
 } from "../src/ipc/bindings";
@@ -26,7 +26,7 @@ test("switch-node navigation transfers keyboard focus without starting a connect
 }) => {
   await installTauriSmokeMock(page);
   await page.addInitScript((profile) => {
-    (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles =
+    (window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[] }).profiles =
       [profile];
   }, savedNodeFixture);
   await page.goto("/");
@@ -104,7 +104,7 @@ test("deleting the connected subscription stops it and retains manual nodes", as
   await page.addInitScript(
     ({ profile, source }) => {
       const state = window.__VOYA_SMOKE__.state as {
-        profiles: ProfileListEntry[];
+        profiles: ProfileDetails[];
         subscriptions: Subscription[];
         runtime: RuntimeStatusResponse;
       };
@@ -158,7 +158,7 @@ test("deleting the connected subscription stops it and retains manual nodes", as
   expect(
     await page.evaluate(() => {
       const state = window.__VOYA_SMOKE__.state as {
-        profiles: ProfileListEntry[];
+        profiles: ProfileDetails[];
         subscriptions: Subscription[];
         runtime: RuntimeStatusResponse;
       };
@@ -177,7 +177,7 @@ test("saving during a connection waits for apply and failed apply remains retrya
   await installTauriSmokeMock(page);
   await page.addInitScript((profile) => {
     const state = window.__VOYA_SMOKE__.state as {
-      profiles: ProfileListEntry[];
+      profiles: ProfileDetails[];
       runtime: RuntimeStatusResponse;
     };
     state.profiles = [profile];
@@ -241,7 +241,7 @@ for (const viewport of [
         await page.addInitScript(
           ({ profile, source, language }) => {
             const state = window.__VOYA_SMOKE__.state as {
-              profiles: ProfileListEntry[];
+              profiles: ProfileDetails[];
               subscriptions: Subscription[];
               settings: AppSettingsV1;
             };

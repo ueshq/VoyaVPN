@@ -13,8 +13,10 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::save_app_settings::<tauri::Wry>,
         commands::generate_qr_code,
         commands::scan_screen_qr,
+        commands::decode_qr_image,
         commands::read_clipboard_text,
         commands::export_logs::<tauri::Wry>,
+        commands::set_log_streaming,
         commands::tun_request_elevation,
         commands::connect_active_profile::<tauri::Wry>,
         commands::disconnect_core::<tauri::Wry>,
@@ -30,7 +32,8 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::set_tun_enabled::<tauri::Wry>,
         commands::load_dns_settings,
         commands::save_dns_settings::<tauri::Wry>,
-        commands::list_profiles,
+        commands::list_profile_summaries,
+        commands::get_profile,
         commands::save_profile::<tauri::Wry>,
         commands::delete_profiles::<tauri::Wry>,
         commands::export_profile_share_links,
@@ -89,8 +92,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::ProfileProtocol>()
         .typ::<voya_contracts::ProfileTransport>()
         .typ::<voya_contracts::TlsSettings>()
-        .typ::<voya_contracts::ProfileListEntry>()
-        .typ::<voya_contracts::ProfileListing>()
+        .typ::<voya_contracts::ProfileDetails>()
+        .typ::<voya_contracts::ProfileSummaryListing>()
         .typ::<voya_contracts::Subscription>()
         .typ::<voya_contracts::SubscriptionMetadata>()
         .typ::<voya_contracts::ImportProfilesResult>()

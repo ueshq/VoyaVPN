@@ -1,70 +1,98 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { scanQrBlob } from "./qr-scanner";
-
-const zxingMocks = vi.hoisted(() => ({
-  decodeFromImageUrl: vi.fn(),
+const ipcMocks = vi.hoisted(() => ({
+  decodeQrImage: vi.fn(),
 }));
 
-vi.mock("@zxing/browser", () => ({
-  BrowserQRCodeReader: class {
-    decodeFromImageUrl = zxingMocks.decodeFromImageUrl;
-  },
-}));
+vi.mock("@/ipc/commands", () => ipcMocks);
 
-const originalCreateObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
-const originalRevokeObjectUrlDescriptor = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+import { bytesToBase64, fitWithin, rgbaToLuma, scanQrBlob } from "./qr-scanner";
 
-let createObjectUrl: ReturnType<typeof vi.fn>;
-let revokeObjectUrl: ReturnType<typeof vi.fn>;
+let closeBitmap: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
-  zxingMocks.decodeFromImageUrl.mockReset();
-  createObjectUrl = vi.fn(() => "blob:voya-qr");
-  revokeObjectUrl = vi.fn();
-  Object.defineProperty(URL, "createObjectURL", { configurable: true, value: createObjectUrl });
-  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: revokeObjectUrl });
+  ipcMocks.decodeQrImage.mockReset();
+  closeBitmap = vi.fn();
+  vi.stubGlobal(
+    "createImageBitmap",
+    vi.fn(async () => ({ close: closeBitmap, height: 1600, width: 3200 })),
+  );
+  const context = {
+    drawImage: vi.fn(),
+    fillRect: vi.fn(),
+    fillStyle: "",
+    getImageData: vi.fn((_x: number, _y: number, width: number, height: number) => ({
+      data: new Uint8ClampedArray(width * height * 4).fill(255),
+    })),
+  };
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
+    context as unknown as CanvasRenderingContext2D,
+  );
 });
 
 afterEach(() => {
-  vi.useRealTimers();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  restoreProperty(URL, "createObjectURL", originalCreateObjectUrlDescriptor);
-  restoreProperty(URL, "revokeObjectURL", originalRevokeObjectUrlDescriptor);
 });
 
 describe("profile QR scanner", () => {
-  it("decodes an image blob and always revokes its object URL", async () => {
-    const blob = new Blob(["qr"], { type: "image/png" });
-    zxingMocks.decodeFromImageUrl.mockResolvedValue({ getText: () => "  vless://decoded  " });
+  it("sends a picked image as grey pixels scaled to the decoder's limit", async () => {
+    ipcMocks.decodeQrImage.mockResolvedValue(scanResult("found", ["  vless://one  ", "trojan://two"]));
 
-    await expect(scanQrBlob(blob)).resolves.toBe("vless://decoded");
+    // Several codes in one picture become one line each, as the import box takes them.
+    await expect(scanQrBlob(new Blob(["qr"]))).resolves.toBe("vless://one\ntrojan://two");
 
-    expect(createObjectUrl).toHaveBeenCalledWith(blob);
-    expect(zxingMocks.decodeFromImageUrl).toHaveBeenCalledWith("blob:voya-qr");
-    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:voya-qr");
+    const [width, height, pixels] = ipcMocks.decodeQrImage.mock.calls[0] as [number, number, string];
+    expect([width, height]).toEqual([1600, 800]);
+    expect(pixels).toBe(bytesToBase64(new Uint8Array(1600 * 800).fill(255)));
+    expect(closeBitmap).toHaveBeenCalledOnce();
   });
 
-  it("reports a missing QR code and still revokes its object URL", async () => {
-    zxingMocks.decodeFromImageUrl.mockRejectedValue(new Error("not found"));
+  it("reports a picture without a code and still releases the bitmap", async () => {
+    ipcMocks.decodeQrImage.mockResolvedValue(scanResult("notFound", []));
 
     await expect(scanQrBlob(new Blob(["not-a-qr"]))).rejects.toMatchObject({
       name: "QrNotFoundError",
     });
+    expect(closeBitmap).toHaveBeenCalledOnce();
+  });
 
-    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:voya-qr");
+  it("reports a file the webview cannot decode, or a failed decode, as no code found", async () => {
+    vi.mocked(createImageBitmap).mockRejectedValueOnce(new DOMException("unreadable"));
+    await expect(scanQrBlob(new Blob(["pdf"]))).rejects.toMatchObject({ name: "QrNotFoundError" });
+
+    const failure = new Error("IPC transport unavailable");
+    ipcMocks.decodeQrImage.mockRejectedValue(failure);
+    await expect(scanQrBlob(new Blob(["qr"]))).rejects.toMatchObject({
+      cause: failure,
+      name: "QrNotFoundError",
+    });
+    expect(closeBitmap).toHaveBeenCalledOnce();
   });
 });
 
-function restoreProperty(
-  target: object,
-  property: PropertyKey,
-  descriptor: PropertyDescriptor | undefined,
-) {
-  if (descriptor) {
-    Object.defineProperty(target, property, descriptor);
-    return;
-  }
+describe("QR image helpers", () => {
+  it("scales down to the longest side and never up", () => {
+    expect(fitWithin(3200, 1600, 1600)).toEqual({ height: 800, width: 1600 });
+    expect(fitWithin(900, 1800, 1600)).toEqual({ height: 1600, width: 800 });
+    expect(fitWithin(100, 50, 1600)).toEqual({ height: 50, width: 100 });
+    expect(fitWithin(1, 8000, 1600)).toEqual({ height: 1600, width: 1 });
+  });
 
-  Reflect.deleteProperty(target, property);
+  it("weighs channels into one grey byte per pixel and ignores alpha", () => {
+    const rgba = new Uint8ClampedArray([255, 255, 255, 0, 0, 0, 0, 255, 255, 0, 0, 255]);
+
+    expect(Array.from(rgbaToLuma(rgba))).toEqual([255, 0, 76]);
+  });
+
+  it("encodes past a chunk boundary as one padded string", () => {
+    const bytes = Uint8Array.from({ length: 0x8000 * 2 + 1 }, (_, index) => index % 251);
+
+    // A byte at a time: slow, but independent of the chunking under test.
+    expect(bytesToBase64(bytes)).toBe(btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join("")));
+  });
+});
+
+function scanResult(status: "found" | "notFound", texts: string[]) {
+  return { failureReason: null, message: null, source: "image", status, texts };
 }

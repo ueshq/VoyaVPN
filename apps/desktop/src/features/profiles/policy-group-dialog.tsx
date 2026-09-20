@@ -16,7 +16,7 @@ import {
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { SelectField, TextField } from "@voya/ui/components/form-fields";
 import { Spinner } from "@voya/ui/components/spinner";
-import type { PolicyGroup, ProfileListEntry, Subscription } from "@/ipc/bindings";
+import type { PolicyGroup, ProfileSummaryEntry, Subscription } from "@/ipc/bindings";
 import { VirtualScrollList } from "@/components/virtual-scroll-list";
 import { savePolicyGroup } from "@/ipc/commands";
 import { useDialogSubmit } from "@/lib/use-dialog-submit";
@@ -30,7 +30,7 @@ import { profileMemberName } from "./profile-display";
 
 type Props = {
   group: PolicyGroup | null;
-  nodes: readonly ProfileListEntry[];
+  nodes: readonly ProfileSummaryEntry[];
   onOpenChange: (open: boolean) => void;
   open: boolean;
   subscriptions: readonly Subscription[];

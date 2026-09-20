@@ -1,25 +1,39 @@
-import type { ProfileListEntry, Subscription } from "@/ipc/bindings";
+import type { ProfileSummaryEntry, Subscription } from "@/ipc/bindings";
 
 export const LOCAL_GROUP_KEY = "local";
 export type NodeSourceKey = typeof LOCAL_GROUP_KEY | `subscription:${string}`;
 type GroupBoundary = { groupKey: NodeSourceKey; last: boolean };
 export type NodeListRow = GroupBoundary &
   (
-    | { kind: "profile"; key: string; item: ProfileListEntry }
+    | { kind: "profile"; key: string; item: ProfileSummaryEntry }
     | {
         kind: "group";
         key: NodeSourceKey;
         subscription: Subscription | null;
         name: string;
         /** The members the list shows, after the view's order and filter. */
-        members: ProfileListEntry[];
+        members: ProfileSummaryEntry[];
         /** Every member, so a group test also retries hidden unreachable nodes. */
-        allMembers: ProfileListEntry[];
+        allMembers: ProfileSummaryEntry[];
         expanded: boolean;
       }
   );
 
-export type NodeListView = { hideUnreachable?: boolean; sortByLatency?: boolean; search?: string };
+export type NodeListView = {
+  hideUnreachable?: boolean;
+  sortByLatency?: boolean;
+  search?: string;
+  /**
+   * {@link nodeSearchText} of every node by id, built once per listing. Without
+   * it each keystroke lowercases every node's text again.
+   */
+  searchHays?: ReadonlyMap<string, string>;
+};
+
+/** The text a search matches a node against, lowercased once. */
+export function nodeSearchText(item: ProfileSummaryEntry) {
+  return `${item.profile.remarks} ${item.profile.address}`.toLocaleLowerCase();
+}
 
 // Outcomes that mean the node could not be reached when last tested.
 const UNREACHABLE_OUTCOMES: ReadonlySet<string> = new Set([
@@ -30,14 +44,14 @@ const UNREACHABLE_OUTCOMES: ReadonlySet<string> = new Set([
   "invalidProfile",
 ]);
 
-function measuredLatency(item: ProfileListEntry) {
+function measuredLatency(item: ProfileSummaryEntry) {
   return item.metrics.outcome === "completed" && item.metrics.delayMs > 0
     ? item.metrics.delayMs
     : Number.POSITIVE_INFINITY;
 }
 
 /** Untested nodes stay visible; sorting puts measured nodes first, fastest first. */
-function arrangeMembers(members: ProfileListEntry[], view: NodeListView) {
+function arrangeMembers(members: ProfileSummaryEntry[], view: NodeListView) {
   const shown = view.hideUnreachable
     ? members.filter((item) => !UNREACHABLE_OUTCOMES.has(item.metrics.outcome ?? ""))
     : members;
@@ -50,8 +64,8 @@ function arrangeMembers(members: ProfileListEntry[], view: NodeListView) {
 }
 
 /** Source ownership is the only grouping authority. Names never identify groups. */
-export function profilesByNodeGroup(profiles: readonly ProfileListEntry[]) {
-  const byGroup = new Map<NodeSourceKey, ProfileListEntry[]>();
+export function profilesByNodeGroup(profiles: readonly ProfileSummaryEntry[]) {
+  const byGroup = new Map<NodeSourceKey, ProfileSummaryEntry[]>();
   for (const item of profiles) {
     const key: NodeSourceKey = item.profile.subscriptionId
       ? `subscription:${item.profile.subscriptionId}`
@@ -64,7 +78,7 @@ export function profilesByNodeGroup(profiles: readonly ProfileListEntry[]) {
 }
 
 export function nodeListRows(
-  profiles: ProfileListEntry[],
+  profiles: ProfileSummaryEntry[],
   collapsed: ReadonlySet<string>,
   localName: string,
   subscriptions: readonly Subscription[] = [],
@@ -80,10 +94,12 @@ export function nodeListRows(
     subscription: Subscription | null,
   ) {
     const allMembers = byGroup.get(groupKey) ?? [];
-    const matched = needle
-      ? allMembers.filter(({ profile }) => [profile.remarks, profile.protocol.server.address, name]
-        .join(" ").toLocaleLowerCase().includes(needle))
-      : allMembers;
+    // A search naming the group shows all of it; otherwise each node matches
+    // on its own name and address.
+    const matched = !needle || name.toLocaleLowerCase().includes(needle)
+      ? allMembers
+      : allMembers.filter((item) =>
+        (view.searchHays?.get(item.profile.id) ?? nodeSearchText(item)).includes(needle));
     const members = arrangeMembers(matched, view);
     byGroup.delete(groupKey);
     if (needle && !members.length) return;

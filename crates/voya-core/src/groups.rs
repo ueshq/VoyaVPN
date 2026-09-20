@@ -87,21 +87,68 @@ pub struct PolicyGroupItem {
     pub member_ids: Vec<String>,
 }
 
+/// What member resolution and member tags read from a node. A caller that
+/// needs only a group's members, such as the running group's status polled
+/// every few seconds, resolves them from [`ProfileIdentity`] rows instead of
+/// decoding every stored profile.
+pub trait GroupNode {
+    fn index_id(&self) -> &str;
+    fn remarks(&self) -> &str;
+    fn subscription_id(&self) -> Option<&str>;
+}
+
+impl GroupNode for ProfileItem {
+    fn index_id(&self) -> &str {
+        &self.index_id
+    }
+
+    fn remarks(&self) -> &str {
+        &self.remarks
+    }
+
+    fn subscription_id(&self) -> Option<&str> {
+        self.subscription_id.as_deref()
+    }
+}
+
+/// A node as a policy group sees it: who it is, what it is called, and which
+/// subscription owns it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ProfileIdentity {
+    pub index_id: String,
+    pub remarks: String,
+    pub subscription_id: Option<String>,
+}
+
+impl GroupNode for ProfileIdentity {
+    fn index_id(&self) -> &str {
+        &self.index_id
+    }
+
+    fn remarks(&self) -> &str {
+        &self.remarks
+    }
+
+    fn subscription_id(&self) -> Option<&str> {
+        self.subscription_id.as_deref()
+    }
+}
+
 /// The group's members as nodes: explicit members first (skipping ones that
 /// no longer exist), then the bound subscription's nodes, each node once.
 ///
 /// Explicit members are looked up by id through a map: a scan of `nodes` per
 /// member made a group spanning a large subscription quadratic.
 #[must_use]
-pub fn resolve_group_members<'nodes>(
+pub fn resolve_group_members<'nodes, N: GroupNode>(
     group: &PolicyGroupItem,
-    nodes: &'nodes [ProfileItem],
-) -> Vec<&'nodes ProfileItem> {
+    nodes: &'nodes [N],
+) -> Vec<&'nodes N> {
     let mut by_id = BTreeMap::new();
     if !group.member_ids.is_empty() {
         // The first node with an id wins, as the scan it replaced found it.
         for node in nodes {
-            by_id.entry(node.index_id.as_str()).or_insert(node);
+            by_id.entry(node.index_id()).or_insert(node);
         }
     }
     let explicit = group
@@ -114,12 +161,12 @@ pub fn resolve_group_members<'nodes>(
         .flat_map(|subscription| {
             nodes
                 .iter()
-                .filter(move |node| node.subscription_id.as_deref() == Some(subscription.as_str()))
+                .filter(move |node| node.subscription_id() == Some(subscription.as_str()))
         });
     let mut seen = BTreeSet::new();
     explicit
         .chain(bound)
-        .filter(|node| seen.insert(node.index_id.as_str()))
+        .filter(|node| seen.insert(node.index_id()))
         .collect()
 }
 
@@ -127,10 +174,10 @@ pub fn resolve_group_members<'nodes>(
 /// brackets, so a tag can never equal a reserved tag such as `proxy`. A short
 /// tag two members would share falls back to the full id.
 #[must_use]
-pub fn unique_member_tags(members: &[&ProfileItem]) -> Vec<String> {
+pub fn unique_member_tags<N: GroupNode>(members: &[&N]) -> Vec<String> {
     let short: Vec<String> = members
         .iter()
-        .map(|member| member_tag(member, Some(MEMBER_TAG_ID_CHARS)))
+        .map(|member| member_tag(*member, Some(MEMBER_TAG_ID_CHARS)))
         .collect();
     // Counted once up front; counting per member made large groups quadratic.
     let mut uses = BTreeMap::<&str, usize>::new();
@@ -142,7 +189,7 @@ pub fn unique_member_tags(members: &[&ProfileItem]) -> Vec<String> {
         .zip(members)
         .map(|(tag, member)| {
             if uses.get(tag.as_str()).copied().unwrap_or_default() > 1 {
-                member_tag(member, None)
+                member_tag(*member, None)
             } else {
                 tag.clone()
             }
@@ -150,8 +197,8 @@ pub fn unique_member_tags(members: &[&ProfileItem]) -> Vec<String> {
         .collect()
 }
 
-fn member_tag(node: &ProfileItem, id_chars: Option<usize>) -> String {
-    name_id_tag(&node.remarks, &node.index_id, id_chars)
+fn member_tag(node: &impl GroupNode, id_chars: Option<usize>) -> String {
+    name_id_tag(node.remarks(), node.index_id(), id_chars)
 }
 
 /// `name [id]`, or `[id]` for a blank name, keeping the first `id_chars`
@@ -231,6 +278,49 @@ mod tests {
             ["Tokyo [12345678aaaa]", "Tokyo [12345678bbbb]", "[99999999]"]
         );
         assert_eq!(unique_member_tags(&[&first]), ["Tokyo [12345678]"]);
+    }
+
+    /// The running group's status resolves members from identity rows while
+    /// the generator uses full profiles; both must land on the same tags, or
+    /// the status would look up delays and selections under the wrong names.
+    #[test]
+    fn identity_rows_resolve_and_tag_members_exactly_as_profiles_do() {
+        let nodes = vec![
+            node("12345678aaaa", "Tokyo", Some("sub")),
+            node("12345678bbbb", "Tokyo", Some("sub")),
+            node("99999999", "Osaka", None),
+            node("elsewhere", "Seoul", Some("other")),
+        ];
+        let identities: Vec<ProfileIdentity> = nodes
+            .iter()
+            .map(|node| ProfileIdentity {
+                index_id: node.index_id.clone(),
+                remarks: node.remarks.clone(),
+                subscription_id: node.subscription_id.clone(),
+            })
+            .collect();
+        let group = PolicyGroupItem {
+            member_ids: vec!["99999999".to_string()],
+            source_subscription_id: Some("sub".to_string()),
+            ..PolicyGroupItem::default()
+        };
+
+        let from_profiles = resolve_group_members(&group, &nodes);
+        let from_identities = resolve_group_members(&group, &identities);
+        assert_eq!(
+            from_profiles
+                .iter()
+                .map(|node| node.index_id.as_str())
+                .collect::<Vec<_>>(),
+            from_identities
+                .iter()
+                .map(|node| node.index_id.as_str())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            unique_member_tags(&from_profiles),
+            unique_member_tags(&from_identities)
+        );
     }
 
     #[test]

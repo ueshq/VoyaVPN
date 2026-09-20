@@ -560,6 +560,12 @@ fn qr_and_dns_failures_are_classified() {
             "internal",
             AppErrorSubsystem::Qr,
         ),
+        (
+            "picked image",
+            QrCodeError::InvalidImage("the pixel data is not base64"),
+            "validation",
+            AppErrorSubsystem::Qr,
+        ),
     ]);
 
     let dns: AppError = DnsSettingsError::Validation(vec![ValidationIssue::new(
@@ -788,7 +794,8 @@ mod guards {
 
     const fn qr(error: &QrCodeError) {
         match error {
-            QrCodeError::EmptyContent | QrCodeError::Generate(_) => (),
+            QrCodeError::EmptyContent | QrCodeError::Generate(_) | QrCodeError::InvalidImage(_) => {
+            }
         }
     }
 

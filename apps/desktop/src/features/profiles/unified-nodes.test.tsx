@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/components/app-shell/query-client";
 import { renderWithQuery } from "@/test/render";
 import type {
-  ProfileListEntry,
+  ProfileSummaryEntry,
   Subscription,
   RuntimeStatusResponse,
 } from "@/ipc/bindings";
@@ -22,12 +22,12 @@ import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useNodeListStore } from "@/stores/node-list-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 import { ProfilesScreen } from "./server-table";
-import { nodeListRows, LOCAL_GROUP_KEY } from "./node-list-rows";
+import { nodeListRows, nodeSearchText, LOCAL_GROUP_KEY } from "./node-list-rows";
 
 const mocks = vi.hoisted(() => ({
   exportProfileShareLinks: vi.fn(),
   generateQrCode: vi.fn(),
-  listProfiles: vi.fn(),
+  listProfileSummaries: vi.fn(),
   listSubscriptions: vi.fn(),
   listSubscriptionMetadata: vi.fn(),
   runSpeedtest: vi.fn(),
@@ -101,7 +101,7 @@ beforeEach(() => {
     speedtestResultsByProfileId: {},
     speedtestRunning: false,
   });
-  mocks.listProfiles.mockResolvedValue({
+  mocks.listProfileSummaries.mockResolvedValue({
     entries: profiles,
     undecodableProfiles: 0,
   });
@@ -160,7 +160,7 @@ describe("source-derived node groups", () => {
   });
 
   it("shows only populated local groups and retains empty subscriptions", async () => {
-    mocks.listProfiles.mockResolvedValue({ entries: [], undecodableProfiles: 0 });
+    mocks.listProfileSummaries.mockResolvedValue({ entries: [], undecodableProfiles: 0 });
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
     expect(screen.queryByRole("button", { name: "Local nodes" })).not.toBeInTheDocument();
@@ -191,7 +191,7 @@ describe("source-derived node groups", () => {
   it("hides the local group when its final node is removed", async () => {
     renderScreen();
     await screen.findByRole("button", { name: "Local nodes" });
-    mocks.listProfiles.mockResolvedValue({ entries: profiles.filter((p) => p.profile.subscriptionId), undecodableProfiles: 0 });
+    mocks.listProfileSummaries.mockResolvedValue({ entries: profiles.filter((p) => p.profile.subscriptionId), undecodableProfiles: 0 });
     await act(async () => changed());
     await waitFor(() => expect(screen.queryByRole("button", { name: "Local nodes" })).not.toBeInTheDocument());
     expect(screen.getAllByTestId("node-group-card")).toHaveLength(2);
@@ -259,7 +259,7 @@ describe("group panels and scoped export", () => {
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
     await userEvent.click(screen.getByRole("button", { name: "Asia" }));
-    mocks.listProfiles.mockResolvedValue({ entries: profiles.map((p) => p.profile.id === "profile-2" ? { ...p, profile: { ...p.profile, subscriptionId: "a" } } : p), undecodableProfiles: 0 });
+    mocks.listProfileSummaries.mockResolvedValue({ entries: profiles.map((p) => p.profile.id === "profile-2" ? { ...p, profile: { ...p.profile, subscriptionId: "a" } } : p), undecodableProfiles: 0 });
     await exportGroup("Asia", "Share links");
     await waitFor(() =>
       expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith([
@@ -314,8 +314,8 @@ describe("group panels and scoped export", () => {
       renderScreen();
       await screen.findByRole("button", { name: "Asia" });
       if (failure === "load failed")
-        mocks.listProfiles.mockRejectedValue(new Error("Profiles unavailable"));
-      else mocks.listProfiles.mockResolvedValue({ entries: profiles.filter((p) => p.profile.subscriptionId !== "a"), undecodableProfiles: 0 });
+        mocks.listProfileSummaries.mockRejectedValue(new Error("Profiles unavailable"));
+      else mocks.listProfileSummaries.mockResolvedValue({ entries: profiles.filter((p) => p.profile.subscriptionId !== "a"), undecodableProfiles: 0 });
       await exportGroup("Asia", "Share links");
       expect(await screen.findByRole("alert")).toBeInTheDocument();
       expect(mocks.exportProfileShareLinks).not.toHaveBeenCalled();
@@ -332,7 +332,7 @@ describe("group panels and scoped export", () => {
         password: "",
       },
     });
-    mocks.listProfiles.mockResolvedValue({
+    mocks.listProfileSummaries.mockResolvedValue({
       entries: [...profiles, http],
       undecodableProfiles: 0,
     });
@@ -358,7 +358,7 @@ describe("group panels and scoped export", () => {
     expect(screen.getByText("1 of 4 nodes")).toBeInTheDocument();
     fireEvent.change(search, { target: { value: "ASIA" } });
     expect(screen.getAllByTestId("server-row")).toHaveLength(2);
-    fireEvent.change(search, { target: { value: profiles[2]!.profile.protocol.server.address } });
+    fireEvent.change(search, { target: { value: profiles[2]!.profile.address } });
     expect(screen.getByText("Paris")).toBeInTheDocument();
     fireEvent.change(search, { target: { value: "missing-node" } });
     expect(screen.getByText("No matching nodes")).toBeInTheDocument();
@@ -370,12 +370,12 @@ describe("group panels and scoped export", () => {
   });
 
   it("sorts measured nodes by latency and hides unreachable ones on request", () => {
-    const measured = (id: string, delayMs: number, outcome: NonNullable<ProfileListEntry["metrics"]["outcome"]> | null) =>
+    const measured = (id: string, delayMs: number, outcome: NonNullable<ProfileSummaryEntry["metrics"]["outcome"]> | null) =>
       ({
         isActive: false,
         metrics: { countryCode: null, delayMs, ipInfo: null, outcome, sort: 0 },
         profile: { id, remarks: id, subscriptionId: null },
-      }) as unknown as ProfileListEntry;
+      }) as unknown as ProfileSummaryEntry;
     const nodes = [
       measured("slow", 300, "completed"),
       measured("untested", 0, null),
@@ -397,5 +397,25 @@ describe("group panels and scoped export", () => {
     const [group] = nodeListRows(nodes, new Set(), "Local nodes", [], "Unknown", { hideUnreachable: true });
     expect(group).toMatchObject({ kind: "group" });
     expect(group?.kind === "group" ? group.allMembers : []).toHaveLength(4);
+  });
+
+  it("searches names and addresses from precomputed text, or a whole group by its name", () => {
+    const nodes = [
+      makeProfileFixture(0, { remarks: "Tokyo Edge" }),
+      makeProfileFixture(1, { remarks: "Osaka" }),
+    ];
+    const hays = new Map(nodes.map((item) => [item.profile.id, nodeSearchText(item)]));
+    const ids = (search: string, searchHays?: ReadonlyMap<string, string>) =>
+      nodeListRows(nodes, new Set(), "Local nodes", [], "Unknown", { search, searchHays })
+        .filter((row) => row.kind === "profile")
+        .map((row) => row.key);
+
+    // The precomputed text answers exactly as computing it on the spot does.
+    expect(ids("TOKYO", hays)).toEqual(["profile:profile-0"]);
+    expect(ids("tokyo")).toEqual(["profile:profile-0"]);
+    expect(ids("node-1.example", hays)).toEqual(["profile:profile-1"]);
+    // Naming the group shows every node in it.
+    expect(ids("local", hays)).toEqual(["profile:profile-0", "profile:profile-1"]);
+    expect(ids("nowhere", hays)).toEqual([]);
   });
 });

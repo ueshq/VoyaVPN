@@ -453,14 +453,22 @@ export async function installTauriSmokeMock(
           }
           return Promise.resolve(connectionModeStatus());
         }
-        case "list_profiles":
+        case "list_profile_summaries":
           // The real command answers with the rows plus the number of stored
           // profiles the build could not decode; the fixture never seeds an
-          // unreadable row, so the count is always zero here.
+          // unreadable row, so the count is always zero here. Rows are kept in
+          // full so `get_profile` can answer; the listing projects them.
           return Promise.resolve({
-            entries: filterProfiles(state.profiles, args.filter),
+            entries: state.profiles.map(toSummary),
             undecodableProfiles: 0,
           });
+        case "get_profile": {
+          const row = state.profiles.find((item) => item.profile.id === String(args.indexId ?? ""));
+          if (!row) {
+            throw { kind: { entity: "profile", id: String(args.indexId ?? ""), type: "notFound" }, message: "node not found", subsystem: "profile" } satisfies AppError;
+          }
+          return Promise.resolve(clone(row));
+        }
         case "save_profile": {
           const row = upsertProfile(readRecord(args, "profile"));
           return Promise.resolve(clone(row));
@@ -482,7 +490,7 @@ export async function installTauriSmokeMock(
           return Promise.resolve(ids.length);
         }
         case "move_profile":
-          return Promise.resolve(clone(state.profiles));
+          return Promise.resolve(null);
         case "list_subscriptions":
           return Promise.resolve(clone(state.subscriptions));
         case "list_subscription_metadata":
@@ -818,8 +826,15 @@ export async function installTauriSmokeMock(
             texts: ["vless://00000000-0000-0000-0000-000000000001@screen.example.test:443#Screen%20node"],
             status: "found", source: "screen", message: null, failureReason: null,
           } satisfies QrScanResult);
+        // The smoke's picked image holds no code; the mock cannot run the decoder.
+        case "decode_qr_image":
+          return Promise.resolve({
+            texts: [], status: "notFound", source: "image", message: null, failureReason: null,
+          } satisfies QrScanResult);
         case "export_logs":
           return Promise.resolve(true);
+        case "set_log_streaming":
+          return Promise.resolve(null);
         case "read_clipboard_text":
           return Promise.resolve(
             " vless://00000000-0000-0000-0000-000000000002@clipboard.example.test:443#Clipboard%20direct ",
@@ -1069,32 +1084,21 @@ export async function installTauriSmokeMock(
       });
     }
 
-    function filterProfiles(rows: ProfileRow[], filter: unknown) {
-      const needle = String(filter ?? "")
-        .trim()
-        .toLowerCase();
-      if (!needle) {
-        return clone(rows);
-      }
-
-      return clone(
-        rows.filter((row) =>
-          [
-            row.profile.remarks,
-            profileAddress(row.profile),
-            row.profile.subscriptionId,
-          ]
-            .join(" ")
-            .toLowerCase()
-            .includes(needle),
-        ),
-      );
-    }
-
-    function profileAddress(profile: Profile) {
-      const protocol = readRecord(profile, "protocol");
+    function toSummary(row: ProfileRow) {
+      const protocol = readRecord(row.profile, "protocol");
       const server = readRecord(protocol, "server");
-      return String(server.address ?? protocol.source ?? "");
+      return clone({
+        isActive: row.isActive,
+        metrics: row.metrics,
+        profile: {
+          address: String(server.address ?? ""),
+          id: row.profile.id,
+          kind: protocol.kind,
+          port: Number(server.port ?? 0),
+          remarks: row.profile.remarks,
+          subscriptionId: row.profile.subscriptionId,
+        },
+      });
     }
 
     function upsertRouting(input: Record<string, unknown>): Routing {

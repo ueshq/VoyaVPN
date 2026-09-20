@@ -78,6 +78,10 @@ pub enum LogLevel {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LogLineEvent {
     pub id: u32,
+    /// When the app queued the line, in milliseconds since the Unix epoch.
+    /// Lines are held back while no Logs panel is open, so the time they
+    /// reach the webview says nothing about when they happened.
+    pub logged_at_ms: f64,
     pub level: LogLevel,
     pub body: LogLineBody,
 }

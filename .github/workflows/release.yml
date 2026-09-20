@@ -30,6 +30,18 @@ on:
         default: true
         type: boolean
 
+# One release per channel at a time. A second dispatch queues behind the running
+# one instead of cancelling it (a later dispatch replaces a queued run, never a
+# running one): cancelling mid-publication could leave a channel with some
+# artifacts or updater metadata uploaded and the rest missing. The
+# group must differ from ci.yml's `<workflow>-<ref>` group, which the
+# quality-gate call evaluates in this workflow's context; equal groups deadlock.
+# Differing is not enough on its own: two channels dispatched on one ref share
+# that inner group, so ci.yml turns cancellation off for a dispatched run.
+concurrency:
+  group: ${{ github.workflow }}-channel-${{ inputs.channel }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -111,7 +123,10 @@ jobs:
           HAS_WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
           HAS_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
         run: |
-          node <<'NODE'
+          node --input-type=module <<'NODE'
+          import { resolve } from "node:path";
+          import { pathToFileURL } from "node:url";
+
           const placeholder = /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i;
 
           function requireValue(name) {
@@ -182,10 +197,14 @@ jobs:
 
           requireHttpsUrl("VOYAVPN_CDN_BASE_URL");
           requireHttpsUrl("VOYAVPN_UPDATES_BASE_URL");
-          const publicKey = requireValue("VOYAVPN_UPDATER_PUBLIC_KEY");
-          if (publicKey.length < 32) {
-            throw new Error("VOYAVPN_UPDATER_PUBLIC_KEY must be the approved Tauri updater public key.");
-          }
+          requireValue("VOYAVPN_UPDATER_PUBLIC_KEY");
+          // The same resolver the overlay generator and the staging verifier
+          // use, so a key that cannot decode fails here rather than hours
+          // later in the build that was supposed to ship it.
+          const { resolveApprovedUpdaterPublicKey } = await import(
+            pathToFileURL(resolve("scripts/release/updater-signatures.mjs")).href
+          );
+          resolveApprovedUpdaterPublicKey(process.env);
           const coreAssets = JSON.parse(requireValue("VOYAVPN_CORE_ASSETS_JSON"));
           if (!Array.isArray(coreAssets.assets) || coreAssets.assets.length === 0) {
             throw new Error("VOYAVPN_CORE_ASSETS_JSON must contain a non-empty assets array.");

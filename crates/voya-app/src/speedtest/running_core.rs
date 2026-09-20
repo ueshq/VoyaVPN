@@ -12,7 +12,7 @@ use futures_util::{stream, StreamExt};
 use voya_core::{is_latency_probe_candidate, latency_probe_tag, ConfigType};
 use voya_net::clash::{ClashError, ClashRestClient};
 
-use super::manager::{persist_speedtest_result_with_retry, record_item_failures};
+use super::manager::{next_ready_batch, persist_and_report, record_item_failures};
 use super::*;
 use crate::proxy_runtime::proxy_runtime_endpoint;
 use crate::supervisor::{CoreSupervisor, SupervisorConnectionState};
@@ -149,22 +149,18 @@ impl SpeedtestManager {
         }))
         .buffer_unordered(SPEEDTEST_CONCURRENCY);
 
-        loop {
-            let next = tokio::select! {
-                next = pending.next() => next,
-                () = cancelled(&cancel) => break,
-            };
-            let Some((index, measured)) = next else {
-                break;
-            };
-            let (Some(item), Some(measured)) = (items.get(index), measured) else {
-                continue;
-            };
-            let result = running_core_result(item.index_id.clone(), measured);
-            if persist_speedtest_result_with_retry(database, &result, &item.profile).await? {
-                on_results(vec![result.clone()]);
-                results.push(result);
-            }
+        while let Some(ready) = next_ready_batch(&mut pending, &cancel).await {
+            let writes = ready
+                .into_iter()
+                .filter_map(|(index, measured)| {
+                    let item = items.get(index)?;
+                    Some((
+                        &item.profile,
+                        running_core_result(item.index_id.clone(), measured?),
+                    ))
+                })
+                .collect();
+            results.extend(persist_and_report(database, writes, on_results).await?);
         }
 
         Ok(results)

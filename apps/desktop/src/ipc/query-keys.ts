@@ -42,6 +42,8 @@ export const queryKeys = {
   processCandidates: ["process-candidates"],
   /** The complete node list, shared by every screen that shows or resolves nodes. */
   profileList: ["profiles", "list"],
+  /** One node in full, for the details dialog; refreshed with the node list. */
+  profileDetails: ["profiles", "details"],
   profileShareQr: ["profile-share-qr"],
   profiles: ["profiles"],
   proxyConnections: ["proxy-connections"],
@@ -60,6 +62,11 @@ export type QueryKeyRoot = (typeof queryKeys)[keyof typeof queryKeys];
 /** The exit address of one connection (active node plus core process). */
 export function connectionIpQueryKey(connection: string | null) {
   return [...queryKeys.connectionIp, connection] as const;
+}
+
+/** One node's full profile and traffic. */
+export function profileDetailsQueryKey(indexId: string) {
+  return [...queryKeys.profileDetails, indexId] as const;
 }
 
 /** The rendered QR for one share link. */

@@ -1,10 +1,9 @@
 /**
  * Locale-independent failure codes for the QR scanner.
  *
- * `qr-scanner.ts` is loaded lazily (it pulls in `@zxing/browser`), so the codes
- * and the error class live in this dependency-free module: the import dialog can
- * import it statically to map a rejection onto a translated message without
- * dragging the decoder into the main chunk.
+ * `qr-scanner.ts` is loaded only when a picture is picked, so the codes and the
+ * error class live in this dependency-free module: the import dialog imports it
+ * statically to map a rejection onto a translated message.
  */
 type QrScanErrorCode = "notFound";
 

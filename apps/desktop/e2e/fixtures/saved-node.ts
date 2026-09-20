@@ -1,6 +1,6 @@
-import type { ProfileListEntry } from "../../src/ipc/bindings";
+import type { ProfileDetails } from "../../src/ipc/bindings";
 
-export const savedNodeFixture: ProfileListEntry = {
+export const savedNodeFixture: ProfileDetails = {
   isActive: true,
   profile: {
     id: "profile-0",

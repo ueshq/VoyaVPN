@@ -178,8 +178,9 @@ mod windows_job {
         handle: Handle,
     }
 
-    // SAFETY: the job handle is an owned kernel handle. Access is synchronized
-    // by the owning supervisor and Windows permits handles to cross threads.
+    // SAFETY: `handle` is a kernel handle owned by this value alone (closed once,
+    // in `Drop`), not memory, and Win32 handles are valid on any thread. `Send`
+    // needs no more; the type stays `!Sync`, so use is never shared.
     unsafe impl Send for WindowsProcessJob {}
 
     impl WindowsProcessJob {

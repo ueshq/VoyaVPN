@@ -25,10 +25,10 @@ vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: storeMock })
 
 // 2026-06-01T08:09:10 local time; the panel renders the store's receipt stamp,
 // not a render-time clock read.
-const RECEIVED_AT = new Date(2026, 5, 1, 8, 9, 10).getTime();
+const LOGGED_AT = new Date(2026, 5, 1, 8, 9, 10).getTime();
 
-function line(id: number, level: LogLevel, text: string, receivedAt = RECEIVED_AT): StoredLogLine {
-  return { body: { line: text, source: "core" }, id, level, receivedAt };
+function line(id: number, level: LogLevel, text: string, loggedAt = LOGGED_AT): StoredLogLine {
+  return { body: { line: text, source: "core" }, id, level, loggedAt };
 }
 
 beforeEach(() => {
@@ -120,12 +120,12 @@ describe("LogsPanel", () => {
 
   it("translates an app-authored line and passes core output through", () => {
     storeMock.state.logLines = [
-      { body: { line: "inbound/mixed started", source: "core" }, id: 1, level: "info", receivedAt: RECEIVED_AT },
+      { body: { line: "inbound/mixed started", source: "core" }, id: 1, level: "info", loggedAt: LOGGED_AT },
       {
         body: { code: { code: "connecting" }, detail: null, source: "app" },
         id: 2,
         level: "info",
-        receivedAt: RECEIVED_AT,
+        loggedAt: LOGGED_AT,
       },
       {
         body: {
@@ -135,19 +135,19 @@ describe("LogsPanel", () => {
         },
         id: 3,
         level: "info",
-        receivedAt: RECEIVED_AT,
+        loggedAt: LOGGED_AT,
       },
       {
         body: { code: { code: "coreExitGaveUp" }, detail: "exit code 1", source: "app" },
         id: 4,
         level: "error",
-        receivedAt: RECEIVED_AT,
+        loggedAt: LOGGED_AT,
       },
       {
         body: { line: "voyavpn::runtime: spawn failed", source: "diagnostic" },
         id: 5,
         level: "warn",
-        receivedAt: RECEIVED_AT,
+        loggedAt: LOGGED_AT,
       },
     ];
 
@@ -166,12 +166,12 @@ describe("LogsPanel", () => {
   it("searches the translated text of an app-authored line", async () => {
     const user = userEvent.setup();
     storeMock.state.logLines = [
-      { body: { line: "inbound/mixed started", source: "core" }, id: 1, level: "info", receivedAt: RECEIVED_AT },
+      { body: { line: "inbound/mixed started", source: "core" }, id: 1, level: "info", loggedAt: LOGGED_AT },
       {
         body: { code: { code: "speedtestCancellationRequested" }, detail: null, source: "app" },
         id: 2,
         level: "info",
-        receivedAt: RECEIVED_AT,
+        loggedAt: LOGGED_AT,
       },
     ];
 

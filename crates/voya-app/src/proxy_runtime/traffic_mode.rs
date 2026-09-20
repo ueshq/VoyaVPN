@@ -126,7 +126,6 @@ fn mode_timeout() -> ProxyRuntimeError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::Value;
     use std::{future::Future, pin::Pin, sync::RwLock};
     use voya_core::AppConfig;
     use voya_db::Database;
@@ -148,10 +147,10 @@ mod tests {
     }
 
     impl ClashHttpTransport for ModeTransport {
-        fn send_json<'a>(
+        fn send<'a>(
             &'a self,
             request: ClashHttpRequest,
-        ) -> Pin<Box<dyn Future<Output = voya_net::clash::Result<Value>> + Send + 'a>> {
+        ) -> Pin<Box<dyn Future<Output = voya_net::clash::Result<String>> + Send + 'a>> {
             let (hang, fail) = {
                 let mut state = self.0.lock().expect("state");
                 state.requests.push(request.clone());
@@ -182,7 +181,7 @@ mod tests {
                 if fail {
                     Err(ClashError::Request("not listening yet".into()))
                 } else {
-                    Ok(Value::Null)
+                    Ok(String::new())
                 }
             })
         }

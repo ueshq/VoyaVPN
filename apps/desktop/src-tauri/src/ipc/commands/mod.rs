@@ -7,9 +7,9 @@ use voya_app::autostart::AutostartManager;
 use voya_app::config_mutation::{CommittedMutation, UnitOfWork};
 use voya_app::contract_map::{
     core_info_error, core_seed_install_result, import_profiles_to_contract, input_text_error,
-    move_action_from_contract, profile_from_contract, profile_list_to_contract,
-    profile_listing_to_contract, routing_from_contract, routing_to_contract, rule_from_contract,
-    runtime_status_event, runtime_status_response, simple_dns_from_contract,
+    move_action_from_contract, profile_details_to_contract, profile_from_contract,
+    profile_summary_listing_to_contract, routing_from_contract, routing_to_contract,
+    rule_from_contract, runtime_status_event, runtime_status_response, simple_dns_from_contract,
     simple_dns_to_contract, statistics_snapshot_to_contract, subscription_from_contract,
     subscription_metadata_to_contract, subscription_to_contract, subscription_update_to_contract,
     system_proxy_status_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
@@ -31,8 +31,8 @@ use voya_contracts::{
     AppUpdaterStatus, AppearanceSettings, CoreFlowReason, CoreSeedInstallResult,
     CoreSeedInstallStatus, DnsSettings as DnsSettingsContract, ExportProfilesResult,
     ImportProfilesResult as ImportProfilesContract, InvalidationScope, LogCode,
-    MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract, ProfileListEntry,
-    ProfileListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,
+    MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract, ProfileDetails,
+    ProfileSummaryListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,
     ResourceUpdateFile, Routing as RoutingContract, RoutingRule as RoutingRuleContract,
     RuntimeStatusResponse, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus,
     Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
@@ -51,9 +51,16 @@ use super::events::{
 use crate::AppState;
 
 const IPC_ID_MAX_CHARS: usize = 128;
-const IPC_FILTER_MAX_CHARS: usize = 256;
 const IPC_PROXY_URL_MAX_CHARS: usize = 2048;
 const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;
+/// The base64 of one grey pixel per byte at the largest picture voya-app will
+/// decode. `decode_image` rejects a payload that disagrees with the width and
+/// height it was given, but only after Tauri has already materialized the
+/// whole string, so the ceiling is enforced here as well as there.
+const IPC_QR_IMAGE_MAX_BASE64_CHARS: usize = (voya_app::qr::QR_IMAGE_MAX_SIDE as usize)
+    .pow(2)
+    .div_ceil(3)
+    * 4;
 const IPC_LIST_MAX_ITEMS: usize = 1024;
 
 mod app;

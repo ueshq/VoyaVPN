@@ -2,13 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 import type {
   AppSettingsV1,
-  ProfileListEntry,
+  ProfileDetails,
   RuntimeStatusResponse,
   TunStatus,
 } from "../src/ipc/bindings";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
-const tokyo: ProfileListEntry = {
+const tokyo: ProfileDetails = {
   isActive: true,
   profile: {
     id: "design-tokyo",
@@ -69,7 +69,7 @@ for (const { layout, language } of [
     await installTauriSmokeMock(page, layout);
     await page.addInitScript(({ profile, language }) => {
       const state = window.__VOYA_SMOKE__.state as {
-        profiles: ProfileListEntry[];
+        profiles: ProfileDetails[];
         settings: AppSettingsV1;
         runtime: RuntimeStatusResponse;
         tun: TunStatus;
@@ -191,7 +191,7 @@ for (const { layout, language } of [
     );
     await page.evaluate(() => {
       const state = window.__VOYA_SMOKE__.state as {
-        profiles: ProfileListEntry[];
+        profiles: ProfileDetails[];
       };
       state.profiles[0]!.profile.remarks = "A very long server name ".repeat(
         20,
@@ -214,7 +214,7 @@ for (const { layout, language } of [
     await page.screenshot({ path: testInfo.outputPath("home-long-name.png") });
     await page.evaluate(() => {
       const state = window.__VOYA_SMOKE__.state as {
-        profiles: ProfileListEntry[];
+        profiles: ProfileDetails[];
         runtime: RuntimeStatusResponse;
       };
       state.profiles = [];
@@ -258,7 +258,7 @@ test("home points at the Rules page while global mode skips every rule", async (
   await installTauriSmokeMock(page, "none");
   await page.addInitScript((profile) => {
     const state = window.__VOYA_SMOKE__.state as {
-      profiles: ProfileListEntry[];
+      profiles: ProfileDetails[];
       settings: AppSettingsV1;
     };
     state.profiles = [profile];

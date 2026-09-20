@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use thiserror::Error;
 pub use voya_contracts::ExportProfilesResult;
 use voya_core::{
@@ -48,18 +50,25 @@ impl<'db> ExportManager<'db> {
             return Err(ExportManagerError::EmptySelection);
         }
 
-        let mut profiles = Vec::with_capacity(index_ids.len());
-        for index_id in index_ids {
-            let profile = self
-                .database
-                .profiles()
-                .get(index_id)
-                .await?
-                .ok_or_else(|| ExportManagerError::ProfileNotFound(index_id.clone()))?;
-            profiles.push(profile);
-        }
-
-        Ok(profiles)
+        // One query for the whole selection rather than one per node; the
+        // links still come out in selection order.
+        let by_id = self
+            .database
+            .profiles()
+            .list_by_ids(index_ids)
+            .await?
+            .into_iter()
+            .map(|profile| (profile.index_id.clone(), profile))
+            .collect::<HashMap<_, _>>();
+        index_ids
+            .iter()
+            .map(|index_id| {
+                by_id
+                    .get(index_id)
+                    .cloned()
+                    .ok_or_else(|| ExportManagerError::ProfileNotFound(index_id.clone()))
+            })
+            .collect()
     }
 }
 

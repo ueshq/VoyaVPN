@@ -216,12 +216,38 @@ pub struct ProfileTraffic {
     pub date: i64,
 }
 
+/// One node in full: what the editor, the details dialog and the calls that
+/// save or activate a node return. Lists carry [`ProfileSummaryEntry`]
+/// instead, so credentials, transport and TLS settings of every node do not
+/// cross IPC and sit in the renderer's cache on every refresh.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProfileListEntry {
+pub struct ProfileDetails {
     pub profile: Profile,
     pub metrics: ProfileMetrics,
     pub traffic: ProfileTraffic,
+    pub is_active: bool,
+}
+
+/// What the node table shows of a node.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileSummary {
+    pub id: String,
+    pub subscription_id: Option<String>,
+    pub remarks: String,
+    pub kind: ProfileKind,
+    pub address: String,
+    pub port: i32,
+}
+
+/// One row of a node listing. `profile` keeps the nesting of
+/// [`ProfileDetails`], so a row reads the same way either shape does.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProfileSummaryEntry {
+    pub profile: ProfileSummary,
+    pub metrics: ProfileMetrics,
     pub is_active: bool,
 }
 
@@ -238,8 +264,8 @@ pub struct ProfileListEntry {
 /// shortfall once, quietly, beside the list it belongs to.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProfileListing {
-    pub entries: Vec<ProfileListEntry>,
+pub struct ProfileSummaryListing {
+    pub entries: Vec<ProfileSummaryEntry>,
     pub undecodable_profiles: u32,
 }
 

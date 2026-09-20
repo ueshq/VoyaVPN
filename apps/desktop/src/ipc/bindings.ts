@@ -20,6 +20,13 @@ export const commands = {
 	saveAppSettings: (settings: AppSettingsV1) => typedError<AppSettingsV1, AppError>(__TAURI_INVOKE("save_app_settings", { settings })),
 	generateQrCode: (content: string) => typedError<QrCodeImage, AppError>(__TAURI_INVOKE("generate_qr_code", { content })),
 	scanScreenQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_screen_qr")),
+	/**
+	 *  Decodes the QR codes in a picture the user picked. The webview decodes the
+	 *  file and sends grey pixels (base64, one byte each), so no image decoder
+	 *  ships in either the bundle or the binary; locating codes in a large
+	 *  picture takes long enough to keep off the async workers.
+	 */
+	decodeQrImage: (width: number, height: number, lumaBase64: string) => typedError<QrScanResult, AppError>(__TAURI_INVOKE("decode_qr_image", { width, height, lumaBase64 })),
 	/**  Returns an empty string when the clipboard holds no text. */
 	readClipboardText: () => typedError<string, AppError>(__TAURI_INVOKE("read_clipboard_text")),
 	/**
@@ -27,6 +34,14 @@ export const commands = {
 	 *  user cancels the save dialog.
 	 */
 	exportLogs: (contents: string) => typedError<boolean, AppError>(__TAURI_INVOKE("export_logs", { contents })),
+	/**
+	 *  Whether the Logs panel is on screen to receive log lines. While it is not,
+	 *  the lines queue (the newest few hundred) instead of each batch being
+	 *  serialized into a webview that discards it. Idempotent, and synchronous so
+	 *  calls apply in the order they were made. It cannot fail; the `Result` keeps
+	 *  it on the same typed-error facade as every other command.
+	 */
+	setLogStreaming: (enabled: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_log_streaming", { enabled })),
 	/**
 	 *  Trigger the one-time native authorization dialog and, on success, install
 	 *  the passwordless elevation launcher. No admin password is stored.
@@ -60,12 +75,15 @@ export const commands = {
 	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
 	loadDnsSettings: () => typedError<DnsSettings, AppError>(__TAURI_INVOKE("load_dns_settings")),
 	saveDnsSettings: (settings: DnsSettings) => typedError<DnsSettings, AppError>(__TAURI_INVOKE("save_dns_settings", { settings })),
-	listProfiles: (subscriptionId: string | null, filter: string | null) => typedError<ProfileListing, AppError>(__TAURI_INVOKE("list_profiles", { subscriptionId, filter })),
-	saveProfile: (profile: Profile) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("save_profile", { profile })),
+	/**  Every node as the node table shows it; `get_profile` has one in full. */
+	listProfileSummaries: () => typedError<ProfileSummaryListing, AppError>(__TAURI_INVOKE("list_profile_summaries")),
+	/**  One node in full, for the editor and the details dialog. */
+	getProfile: (indexId: string) => typedError<ProfileDetails, AppError>(__TAURI_INVOKE("get_profile", { indexId })),
+	saveProfile: (profile: Profile) => typedError<ProfileDetails, AppError>(__TAURI_INVOKE("save_profile", { profile })),
 	deleteProfiles: (indexIds: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_profiles", { indexIds })),
 	exportProfileShareLinks: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links", { indexIds })),
-	setActiveProfile: (indexId: string) => typedError<ProfileListEntry, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
-	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<ProfileListEntry[], AppError>(__TAURI_INVOKE("move_profile", { subscriptionId, indexId, action, position })),
+	setActiveProfile: (indexId: string) => typedError<ProfileDetails, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
+	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<null, AppError>(__TAURI_INVOKE("move_profile", { subscriptionId, indexId, action, position })),
 	listPolicyGroups: () => typedError<PolicyGroupListing, AppError>(__TAURI_INVOKE("list_policy_groups")),
 	/**
 	 *  Saves a group. Editing the group a running core uses restarts the core so
@@ -626,6 +644,12 @@ export type LogLineBody =
  */
 export type LogLineEvent = {
 	id: number,
+	/**
+	 *  When the app queued the line, in milliseconds since the Unix epoch.
+	 *  Lines are held back while no Logs panel is open, so the time they
+	 *  reach the webview says nothing about when they happened.
+	 */
+	loggedAtMs: number | null,
 	level: LogLevel,
 	body: LogLineBody,
 };
@@ -748,12 +772,52 @@ export type Profile = {
 	tls: TlsSettings | null,
 };
 
-export type ProfileKind = "vmess" | "shadowsocks" | "socks" | "vless" | "trojan" | "hysteria2" | "tuic" | "wireGuard" | "http" | "anytls" | "naive";
-
-export type ProfileListEntry = {
+/**
+ *  One node in full: what the editor, the details dialog and the calls that
+ *  save or activate a node return. Lists carry [`ProfileSummaryEntry`]
+ *  instead, so credentials, transport and TLS settings of every node do not
+ *  cross IPC and sit in the renderer's cache on every refresh.
+ */
+export type ProfileDetails = {
 	profile: Profile,
 	metrics: ProfileMetrics,
 	traffic: ProfileTraffic,
+	isActive: boolean,
+};
+
+export type ProfileKind = "vmess" | "shadowsocks" | "socks" | "vless" | "trojan" | "hysteria2" | "tuic" | "wireGuard" | "http" | "anytls" | "naive";
+
+export type ProfileMetrics = {
+	delayMs: number,
+	sort: number,
+	/**
+	 *  The last probe's outcome, decoded from the persisted `profile_ex`
+	 *  column. `None` means the profile has never been tested.
+	 */
+	outcome: SpeedtestOutcome | null,
+	ipInfo: string | null,
+	countryCode: string | null,
+};
+
+export type ProfileProtocol = { kind: "vmess"; server: ServerEndpoint; uuid: string; cipher: string | null } | { kind: "shadowsocks"; server: ServerEndpoint; password: string; method: string; udpOverTcp: boolean } | { kind: "socks"; server: ServerEndpoint; username: string; password: string } | { kind: "vless"; server: ServerEndpoint; uuid: string; flow: string | null; encryption: string | null } | { kind: "trojan"; server: ServerEndpoint; password: string } | { kind: "hysteria2"; server: ServerEndpoint; password: string; portHops: string | null; obfuscationPassword: string | null } | { kind: "tuic"; server: ServerEndpoint; uuid: string; password: string; congestionControl: string | null } | { kind: "wireGuard"; server: ServerEndpoint; privateKey: string; peerPublicKey: string | null; presharedKey: string | null; interfaceAddress: string | null; allowedIps: string | null; reserved: string | null; mtu: number | null } | { kind: "http"; server: ServerEndpoint; username: string; password: string } | { kind: "anytls"; server: ServerEndpoint; password: string } | { kind: "naive"; server: ServerEndpoint; username: string; password: string; quic: boolean; congestionControl: string | null; insecureConcurrency: number | null; udpOverTcp: boolean };
+
+/**  What the node table shows of a node. */
+export type ProfileSummary = {
+	id: string,
+	subscriptionId: string | null,
+	remarks: string,
+	kind: ProfileKind,
+	address: string,
+	port: number,
+};
+
+/**
+ *  One row of a node listing. `profile` keeps the nesting of
+ *  [`ProfileDetails`], so a row reads the same way either shape does.
+ */
+export type ProfileSummaryEntry = {
+	profile: ProfileSummary,
+	metrics: ProfileMetrics,
 	isActive: boolean,
 };
 
@@ -770,24 +834,10 @@ export type ProfileListEntry = {
  *  repeat without end, while a field on the response lets the screen state the
  *  shortfall once, quietly, beside the list it belongs to.
  */
-export type ProfileListing = {
-	entries: ProfileListEntry[],
+export type ProfileSummaryListing = {
+	entries: ProfileSummaryEntry[],
 	undecodableProfiles: number,
 };
-
-export type ProfileMetrics = {
-	delayMs: number,
-	sort: number,
-	/**
-	 *  The last probe's outcome, decoded from the persisted `profile_ex`
-	 *  column. `None` means the profile has never been tested.
-	 */
-	outcome: SpeedtestOutcome | null,
-	ipInfo: string | null,
-	countryCode: string | null,
-};
-
-export type ProfileProtocol = { kind: "vmess"; server: ServerEndpoint; uuid: string; cipher: string | null } | { kind: "shadowsocks"; server: ServerEndpoint; password: string; method: string; udpOverTcp: boolean } | { kind: "socks"; server: ServerEndpoint; username: string; password: string } | { kind: "vless"; server: ServerEndpoint; uuid: string; flow: string | null; encryption: string | null } | { kind: "trojan"; server: ServerEndpoint; password: string } | { kind: "hysteria2"; server: ServerEndpoint; password: string; portHops: string | null; obfuscationPassword: string | null } | { kind: "tuic"; server: ServerEndpoint; uuid: string; password: string; congestionControl: string | null } | { kind: "wireGuard"; server: ServerEndpoint; privateKey: string; peerPublicKey: string | null; presharedKey: string | null; interfaceAddress: string | null; allowedIps: string | null; reserved: string | null; mtu: number | null } | { kind: "http"; server: ServerEndpoint; username: string; password: string } | { kind: "anytls"; server: ServerEndpoint; password: string } | { kind: "naive"; server: ServerEndpoint; username: string; password: string; quic: boolean; congestionControl: string | null; insecureConcurrency: number | null; udpOverTcp: boolean };
 
 export type ProfileTraffic = {
 	totalUpload: number | null,

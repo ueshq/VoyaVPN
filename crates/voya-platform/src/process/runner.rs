@@ -7,7 +7,7 @@ use super::{
 use std::{
     collections::HashMap,
     process::{Child, Command, Stdio},
-    sync::{mpsc, Arc, Mutex, Weak},
+    sync::{mpsc, Arc, Mutex, MutexGuard, Weak},
     thread,
     time::Duration,
 };
@@ -76,20 +76,13 @@ impl ProcessRunner for StdProcessRunner {
             );
         }
 
+        // The child is running from here on, so nothing below may return early:
+        // dropping a `Child` neither kills nor reaps it, and an elevated core
+        // left that way holds the TUN device with no stop path.
         let handle = ProcessHandle::new(child.id(), request.role);
-        let exit_handler = self
-            .exit_handler
-            .lock()
-            .map_err(|_| ProcessError::LockPoisoned("exit_handler"))?
-            .clone();
+        let exit_handler = lock_ignoring_poison(&self.exit_handler).clone();
         let (stop_tx, stop_rx) = mpsc::channel();
-        {
-            let mut children = self
-                .children
-                .lock()
-                .map_err(|_| ProcessError::LockPoisoned("children"))?;
-            children.insert(handle.id(), ChildControl { stop_tx });
-        }
+        lock_ignoring_poison(&self.children).insert(handle.id(), ChildControl { stop_tx });
         spawn_child_reaper(
             handle.clone(),
             child,
@@ -118,13 +111,7 @@ impl ProcessRunner for StdProcessRunner {
     }
 
     fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError> {
-        let child = {
-            let mut children = self
-                .children
-                .lock()
-                .map_err(|_| ProcessError::LockPoisoned("children"))?;
-            children.remove(&handle.id())
-        };
+        let child = lock_ignoring_poison(&self.children).remove(&handle.id());
         let Some(child) = child else {
             return Ok(());
         };
@@ -133,23 +120,27 @@ impl ProcessRunner for StdProcessRunner {
     }
 
     fn set_exit_handler(&self, handler: Option<Arc<dyn ProcessExitHandler>>) {
-        let Ok(mut exit_handler) = self.exit_handler.lock() else {
-            tracing::warn!("failed to register process exit handler: exit handler lock poisoned");
-            return;
-        };
-        *exit_handler = handler;
+        let mut slot = lock_ignoring_poison(&self.exit_handler);
+        if let (Some(current), Some(next)) = (slot.as_ref(), handler.as_ref()) {
+            // Replacing a live handler silently takes process exits away from
+            // its owner — the supervisor's crash restart, typically. A second
+            // subsystem needs a runner of its own, as bootstrap gives the
+            // speedtest and the self-hosted node.
+            let same = Arc::ptr_eq(current, next);
+            if !same {
+                tracing::error!(
+                    "process exit handler replaced; give each subsystem its own runner"
+                );
+            }
+            debug_assert!(same, "a runner has one exit-handler slot and it is taken");
+        }
+        *slot = handler;
     }
 }
 
 impl Drop for StdProcessRunner {
     fn drop(&mut self) {
-        let children = {
-            let mut children = match self.children.lock() {
-                Ok(children) => children,
-                Err(poisoned) => poisoned.into_inner(),
-            };
-            std::mem::take(&mut *children)
-        };
+        let children = std::mem::take(&mut *lock_ignoring_poison(&self.children));
 
         for (pid, child) in children {
             if let Err(error) = child.stop(pid) {
@@ -161,6 +152,15 @@ impl Drop for StdProcessRunner {
             }
         }
     }
+}
+
+/// Both guarded values stay consistent through a panic: the child map still
+/// holds the controls it exists to stop, and the handler slot is one `Option`.
+/// Refusing the lock would strand running children instead.
+fn lock_ignoring_poison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 struct ChildControl {
@@ -212,11 +212,20 @@ const CHILD_REAPER_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Upper bound on [`ProcessRunner::stop`].
 ///
-/// The reaper picks the stop request up within one poll interval and then only
-/// has to `kill()` and `wait()`, so a healthy stop finishes in milliseconds.
-/// The budget exists so a child stuck in an uninterruptible state surfaces as
-/// [`ProcessError::StopTimeout`] instead of blocking the caller forever.
+/// The reaper picks the stop request up within one poll interval, and a
+/// healthy child exits on `SIGTERM` in milliseconds; one that ignores it is
+/// killed after `CHILD_TERM_GRACE` (unix). The budget exists so a child stuck in an
+/// uninterruptible state surfaces as [`ProcessError::StopTimeout`] instead of
+/// blocking the caller forever.
 const CHILD_STOP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// How long a child gets to exit on `SIGTERM` before it is killed: sing-box
+/// closes its inbounds and cache file on the way out, which a kill leaves to
+/// the next start. The launcher's kill verb gives elevated cores the same.
+#[cfg(unix)]
+const CHILD_TERM_GRACE: Duration = Duration::from_millis(1500);
+#[cfg(unix)]
+const CHILD_TERM_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 fn spawn_child_reaper(
     handle: ProcessHandle,
@@ -290,13 +299,39 @@ fn run_child_reaper(
 }
 
 fn stop_child(child: &mut Child) -> Result<(), ProcessError> {
-    match child.try_wait().map_err(ProcessError::Wait)? {
-        Some(_) => Ok(()),
-        None => {
-            child.kill().map_err(ProcessError::Stop)?;
-            let _ = child.wait().map_err(ProcessError::Wait)?;
-            Ok(())
+    if child.try_wait().map_err(ProcessError::Wait)?.is_some() {
+        return Ok(());
+    }
+    #[cfg(unix)]
+    if terminate(child)? {
+        return Ok(());
+    }
+    child.kill().map_err(ProcessError::Stop)?;
+    child.wait().map_err(ProcessError::Wait)?;
+    Ok(())
+}
+
+/// Sends `SIGTERM` and waits up to [`CHILD_TERM_GRACE`]; returns whether the
+/// child exited (and was reaped) in time.
+#[cfg(unix)]
+fn terminate(child: &mut Child) -> Result<bool, ProcessError> {
+    let Ok(pid) = libc::pid_t::try_from(child.id()) else {
+        return Ok(false);
+    };
+    // SAFETY: `kill` takes no pointers. The child is unreaped (only this
+    // thread waits it), so `pid` still names it and cannot have been reused.
+    if unsafe { libc::kill(pid, libc::SIGTERM) } != 0 {
+        return Ok(false);
+    }
+    let deadline = std::time::Instant::now() + CHILD_TERM_GRACE;
+    loop {
+        if child.try_wait().map_err(ProcessError::Wait)?.is_some() {
+            return Ok(true);
         }
+        if std::time::Instant::now() >= deadline {
+            return Ok(false);
+        }
+        thread::sleep(CHILD_TERM_POLL_INTERVAL);
     }
 }
 
@@ -304,14 +339,7 @@ fn remove_child_control(children: &Weak<Mutex<HashMap<u32, ChildControl>>>, proc
     let Some(children) = children.upgrade() else {
         return;
     };
-    let Ok(mut children) = children.lock() else {
-        tracing::warn!(
-            pid = process_id,
-            "failed to remove exited child process: children lock poisoned"
-        );
-        return;
-    };
-    children.remove(&process_id);
+    lock_ignoring_poison(&children).remove(&process_id);
 }
 
 fn build_command(request: &ProcessSpawn) -> Command {

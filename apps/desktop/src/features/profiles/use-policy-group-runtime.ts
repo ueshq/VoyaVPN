@@ -50,26 +50,42 @@ export function usePolicyGroupMemberSwitch() {
         queryKeys.policyGroupRuntime,
       );
       const previousGroups = queryClient.getQueryData<PolicyGroupListing>(queryKeys.policyGroups);
-      if (previousRuntime?.groupId === groupId) {
-        queryClient.setQueryData(queryKeys.policyGroupRuntime, {
-          ...previousRuntime,
-          nowProfileId: profileId,
-        });
-      }
-      if (previousGroups) {
-        queryClient.setQueryData<PolicyGroupListing>(queryKeys.policyGroups, {
-          ...previousGroups,
-          entries: previousGroups.entries.map((entry) =>
-            entry.group.id === groupId
-              ? { ...entry, group: { ...entry.group, selectedProfileId: profileId } }
-              : entry,
-          ),
-        });
-      }
+      // Kept as the cache stored them (structural sharing may store a copy),
+      // so a rollback can tell whether anything replaced them since.
+      const optimisticRuntime =
+        previousRuntime?.groupId === groupId
+          ? queryClient.setQueryData(queryKeys.policyGroupRuntime, {
+              ...previousRuntime,
+              nowProfileId: profileId,
+            })
+          : undefined;
+      const optimisticGroups = previousGroups
+        ? queryClient.setQueryData<PolicyGroupListing>(queryKeys.policyGroups, {
+            ...previousGroups,
+            entries: previousGroups.entries.map((entry) =>
+              entry.group.id === groupId
+                ? { ...entry, group: { ...entry.group, selectedProfileId: profileId } }
+                : entry,
+            ),
+          })
+        : undefined;
       const saved = await commit();
       if (!saved) {
-        queryClient.setQueryData(queryKeys.policyGroupRuntime, previousRuntime);
-        queryClient.setQueryData(queryKeys.policyGroups, previousGroups);
+        // A runtime poll or an invalidation refetch can land during the
+        // commit, and it is newer than the snapshot taken above: only a cache
+        // still holding the optimistic value goes back.
+        if (
+          optimisticRuntime &&
+          queryClient.getQueryData(queryKeys.policyGroupRuntime) === optimisticRuntime
+        ) {
+          queryClient.setQueryData(queryKeys.policyGroupRuntime, previousRuntime);
+        }
+        if (
+          optimisticGroups &&
+          queryClient.getQueryData(queryKeys.policyGroups) === optimisticGroups
+        ) {
+          queryClient.setQueryData(queryKeys.policyGroups, previousGroups);
+        }
       }
       return saved;
     },

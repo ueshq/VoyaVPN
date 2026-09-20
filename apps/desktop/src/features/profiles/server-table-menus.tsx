@@ -34,7 +34,7 @@ import {
   type MenuPrimitives,
 } from "@/components/app-shell/menu-primitives";
 import { moveProfile } from "@/ipc/commands";
-import type { ProfileListEntry, SpeedtestTarget } from "@/ipc/bindings";
+import type { ProfileSummaryEntry, SpeedtestTarget } from "@/ipc/bindings";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
@@ -114,7 +114,7 @@ export function ProfileRowContextMenu({
 }: {
   children: ReactElement;
   controller: ServerTableController;
-  item: ProfileListEntry;
+  item: ProfileSummaryEntry;
 }) {
   return (
     <RowContextMenu
@@ -157,7 +157,7 @@ export function ProfileCardMenu({
   item,
 }: {
   controller: ServerTableController;
-  item: ProfileListEntry;
+  item: ProfileSummaryEntry;
 }) {
   return (
     <MoreMenu
@@ -181,15 +181,15 @@ function ProfileMenuItems({
   primitives: { Item, Separator, Sub, SubContent, SubTrigger },
 }: {
   controller: ServerTableController;
-  item: ProfileListEntry;
+  item: ProfileSummaryEntry;
   primitives: ActionMenuPrimitives;
 }) {
   const {
     handleExport,
     handleSpeedtest,
     requestDelete,
+    openEditor,
     runOperation,
-    setDialogState,
     speedtestRunning,
     t,
   } = controller;
@@ -201,7 +201,7 @@ function ProfileMenuItems({
       {manual ? (
         <>
           <Item
-            onSelect={() => setDialogState({ mode: "edit", profile: item })}
+            onSelect={() => void openEditor(indexId)}
           >
             <Pencil className="size-4" aria-hidden="true" />
             {t("panes.profiles.toolbar.edit")}

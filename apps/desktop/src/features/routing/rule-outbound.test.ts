@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ProfileListEntry } from "@/ipc/bindings";
+import type { ProfileSummaryEntry } from "@/ipc/bindings";
 
 import { appendMatcherLine, describeOutbound, nodeOutboundNames } from "./rule-outbound";
 
@@ -53,6 +53,6 @@ describe("rule outbounds", () => {
   });
 });
 
-function entry(remarks: string): ProfileListEntry {
-  return { profile: { remarks } } as ProfileListEntry;
+function entry(remarks: string): ProfileSummaryEntry {
+  return { profile: { remarks } } as ProfileSummaryEntry;
 }

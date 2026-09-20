@@ -1,6 +1,6 @@
 import type { TranslationKey } from "@voya/i18n";
 
-import type { ProfileListEntry } from "@/ipc/bindings";
+import type { ProfileSummaryEntry } from "@/ipc/bindings";
 
 /**
  * The outbound tags every generated config defines, with their labels. Any
@@ -45,7 +45,7 @@ export function groupOutboundValue(id: string) {
  * built-in tag are not separate targets. A set, because every rule row looks
  * its outbound up in it.
  */
-export function nodeOutboundNames(entries: readonly ProfileListEntry[]): ReadonlySet<string> {
+export function nodeOutboundNames(entries: readonly ProfileSummaryEntry[]): ReadonlySet<string> {
   const names = new Set<string>();
   for (const { profile } of entries) {
     if (

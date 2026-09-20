@@ -58,12 +58,15 @@ pub struct StartupFailureText {
 /// The startup failure dialog in the language closest to `locale`, read from the
 /// locale files the renderer uses. A failed launch may have no readable
 /// settings, so the caller passes the system locale.
+///
+/// `build.rs` copies only the `startupFailure` object out of each locale file;
+/// embedding the files whole would carry every UI string in the binary.
 #[must_use]
 pub fn startup_failure_text(locale: &str) -> StartupFailureText {
     let source = match crate::language::ui_language_for_locale(locale) {
-        "zh-Hant" => include_str!("../../../packages/i18n/src/locales/zh-Hant.json"),
-        "zh-Hans" => include_str!("../../../packages/i18n/src/locales/zh-Hans.json"),
-        _ => include_str!("../../../packages/i18n/src/locales/en.json"),
+        "zh-Hant" => include_str!(concat!(env!("OUT_DIR"), "/startup-failure.zh-Hant.json")),
+        "zh-Hans" => include_str!(concat!(env!("OUT_DIR"), "/startup-failure.zh-Hans.json")),
+        _ => include_str!(concat!(env!("OUT_DIR"), "/startup-failure.en.json")),
     };
     // The i18n gate validates these JSON sources; still avoid panicking here.
     let strings: serde_json::Value = serde_json::from_str(source).unwrap_or_default();

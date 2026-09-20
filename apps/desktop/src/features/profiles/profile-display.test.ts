@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TranslationFunction } from "@voya/i18n";
-import type { ProfileListEntry, ProfileTransport } from "@/ipc/bindings";
+import type { ProfileSummaryEntry, ProfileTransport } from "@/ipc/bindings";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
 import {
@@ -14,7 +14,7 @@ import {
   profileTransportName,
 } from "./profile-display";
 
-function withMetrics(metrics: Partial<ProfileListEntry["metrics"]>): ProfileListEntry {
+function withMetrics(metrics: Partial<ProfileSummaryEntry["metrics"]>): ProfileSummaryEntry {
   const entry = makeProfileFixture(0, {}, false);
   return { ...entry, metrics: { ...entry.metrics, ...metrics } };
 }
@@ -38,7 +38,7 @@ describe("profile display projections", () => {
     [{ delayMs: 400, outcome: null }, "fair"],
     [{ delayMs: 0, outcome: null }, "unknown"],
     [{ delayMs: 0, outcome: "timeout" }, "poor"],
-  ] as Array<[Partial<ProfileListEntry["metrics"]>, string]>)(
+  ] as Array<[Partial<ProfileSummaryEntry["metrics"]>, string]>)(
     "bands %j as %s",
     (metrics, expected) => {
       expect(profileLatencyTone(withMetrics(metrics))).toBe(expected);

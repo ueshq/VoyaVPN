@@ -105,6 +105,14 @@ function stopDoubleClick(event: MouseEvent) {
  * The rules of the active rule set in evaluation order. Rows reorder by drag
  * and drop (pointer or keyboard, from the grip handle) or through the row menu,
  * and switch on and off in place.
+ *
+ * Unlike the node and connection tables, every row is rendered, deliberately:
+ * dnd-kit's sortable measures each row's node for drop targets and keyboard
+ * moves, and a virtualizer would unmount the rows a drag travels over. Rules
+ * are added one at a time in the rule dialog (there is no bulk import, and the
+ * default set has six), with long domain or IP lists living inside one rule, so
+ * a rule set stays in the tens. Nothing caps the count; revisit this if one
+ * ever grows to hundreds.
  */
 export function RoutingRuleList({
   groupOutbounds = [],

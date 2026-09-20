@@ -101,15 +101,9 @@ struct PreparedSpeedtestItem {
     entry: SpeedtestConfigEntry,
 }
 
-/// Outcome of preparing a selection. One unusable profile must not abort the
-/// run, so validation and port-reservation failures travel alongside the items
-/// that are ready to test and are reported as per-item results instead.
-#[derive(Debug, Clone, Default)]
-struct PreparedSpeedtestBatch {
-    prepared: Vec<PreparedSpeedtestItem>,
-    failures: Vec<SpeedtestItemFailure>,
-}
-
+/// A selected profile the run could not test. One unusable profile must not
+/// abort the run, so validation and port-reservation failures are reported as
+/// per-item results instead.
 #[derive(Debug, Clone)]
 struct SpeedtestItemFailure {
     index_id: String,
@@ -223,6 +217,11 @@ pub struct SpeedtestManager {
     paths: AppPaths,
     target_os: TargetOs,
     active_cancel: Arc<Mutex<Option<CancellationFlag>>>,
+    /// Held for a run's whole database work. Cancelling a superseded run only
+    /// sets its flag; it still writes its untested nodes back as `Cancelled`
+    /// on the way out, and without this that write can land on top of the
+    /// `Testing` markers and results of the run that replaced it.
+    run_lock: Arc<tokio::sync::Mutex<()>>,
 }
 
 /// Lock a speedtest mutex even after a panicking holder poisoned it. Both
@@ -249,17 +248,11 @@ async fn select_test_items(
     config: &AppConfig,
     index_ids: &[String],
 ) -> Result<Vec<ServerTestItem>> {
+    // Both come back in list order, which the port assignment below relies on.
     let profiles = if index_ids.is_empty() {
         database.profiles().list().await?
     } else {
-        let ids = index_ids.iter().collect::<HashSet<_>>();
-        let mut selected = Vec::new();
-        for profile in database.profiles().list().await? {
-            if ids.contains(&profile.index_id) {
-                selected.push(profile);
-            }
-        }
-        selected
+        database.profiles().list_by_ids(index_ids).await?
     };
 
     let base_port = config
@@ -452,17 +445,6 @@ fn make_failure_result(
     }
 }
 
-async fn persist_speedtest_result(
-    database: &Database,
-    result: &SpeedtestResult,
-    profile: &ProfileItem,
-) -> Result<bool> {
-    Ok(database
-        .profile_exs()
-        .set_probe_result(profile, result)
-        .await?)
-}
-
 fn check_cancelled(cancel: &CancellationFlag) -> Result<()> {
     if is_cancelled(cancel) {
         Err(SpeedtestError::Cancelled)
@@ -558,6 +540,10 @@ mod tests {
         /// Cancels from inside `start`, the way the real backend does while it
         /// waits for the probe core's SOCKS ports.
         cancel_in_start: bool,
+        /// Binds the port after a page's last one and keeps it, the way some
+        /// other program could while the page runs.
+        occupy_next_port: bool,
+        occupied: Arc<StdMutex<Vec<StdTcpListener>>>,
     }
 
     impl RecordingCoreBackend {
@@ -583,6 +569,17 @@ mod tests {
             let active = Arc::clone(&self.active);
             let start_failure = self.start_failure;
             let cancel_in_start = self.cancel_in_start;
+            if self.occupy_next_port {
+                let next = entries
+                    .iter()
+                    .map(|entry| entry.port)
+                    .max()
+                    .and_then(|port| u16::try_from(port + 1).ok())
+                    .expect("a page has ports");
+                if let Ok(listener) = StdTcpListener::bind((LOOPBACK_ADDR, next)) {
+                    self.occupied.lock().expect("occupied").push(listener);
+                }
+            }
             Box::pin(async move {
                 starts
                     .lock()
@@ -801,7 +798,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn speedtest_manager_prepare_reserves_ports_across_batch() {
+    async fn speedtest_manager_reserves_each_page_ports_when_the_page_starts() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        insert_profile(&database, "b", 8443).await;
+        let backend = Arc::new(RecordingCoreBackend {
+            occupy_next_port: true,
+            ..RecordingCoreBackend::default()
+        });
+        let manager = SpeedtestManager::with_probe_and_backend(
+            test_paths(),
+            Arc::new(RecordingProbe::default()),
+            backend.clone(),
+        );
+        let mut config = AppConfig::default();
+        config.speed_test_item.speed_test_page_size = Some(1);
+
+        manager
+            .run_with_callback(&database, &config, Vec::new(), |_| {})
+            .await
+            .expect("speedtest test operation should succeed");
+
+        let starts = backend.starts();
+        assert_eq!(starts.len(), 2, "one core per page");
+        let taken_while_first_page_ran = starts[0].ports[0] + 1;
+        assert_ne!(
+            starts[1].ports[0], taken_while_first_page_ran,
+            "the second page must not reuse a port taken while the first ran"
+        );
+    }
+
+    #[tokio::test]
+    async fn speedtest_manager_reserves_unique_free_ports_within_a_page() {
         let database = Database::connect_in_memory()
             .await
             .expect("speedtest test operation should succeed");
@@ -1070,6 +1100,54 @@ mod tests {
         );
     }
 
+    /// Pages are built as they come up, and an unusable profile does not take
+    /// one of a page's slots: page one is `a`, page two skips `b` for `c`.
+    #[tokio::test]
+    async fn speedtest_manager_reports_an_invalid_profile_when_its_page_comes_up() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        insert_profile_with_uuid(&database, "b", 8443, "not-a-guid").await;
+        insert_profile(&database, "c", 9443).await;
+        let probe = Arc::new(RecordingProbe::default());
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager =
+            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+        let mut config = AppConfig::default();
+        config.speed_test_item.speed_test_page_size = Some(1);
+        config.speed_test_item.speed_test_delay_interval_seconds = Some(1);
+        let deliveries = StdMutex::new(Vec::<Vec<(String, SpeedtestOutcome)>>::new());
+
+        let run = manager
+            .run_with_callback(&database, &config, Vec::new(), |results| {
+                deliveries.lock().expect("deliveries").push(
+                    results
+                        .into_iter()
+                        .map(|result| (result.index_id, result.outcome))
+                        .collect(),
+                );
+            })
+            .await
+            .expect("an invalid profile must not abort the run");
+
+        assert_eq!(run.selected_count, 3);
+        let starts = backend.starts();
+        assert_eq!(starts.len(), 2, "the invalid profile does not get a page");
+        assert!(starts.iter().all(|start| start.ports.len() == 1));
+        assert_eq!(probe.calls().len(), 2);
+        // After the pending markers: `a`'s result, then `b` with `c`'s page.
+        let deliveries = deliveries.into_inner().expect("deliveries");
+        assert_eq!(
+            deliveries[1..],
+            [
+                vec![("a".to_string(), SpeedtestOutcome::Completed)],
+                vec![("b".to_string(), SpeedtestOutcome::InvalidProfile)],
+                vec![("c".to_string(), SpeedtestOutcome::Completed)],
+            ]
+        );
+    }
+
     #[tokio::test]
     async fn speedtest_manager_pages_batches_and_waits_between_them_in_seconds() {
         let database = Database::connect_in_memory()
@@ -1164,6 +1242,52 @@ mod tests {
         assert!(
             !manager.status().running,
             "only the run that owns the slot may release it"
+        );
+        // The superseded run writes its untested node back as cancelled on the
+        // way out; that must land before the new run's result, not over it.
+        let stored = profile_ex_row(&database, "a").await;
+        assert_eq!(stored.delay, 44);
+        assert_eq!(second.results.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn speedtest_manager_skips_a_run_superseded_while_queued() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "a", 443).await;
+        let backend = Arc::new(RecordingCoreBackend::default());
+        let manager = SpeedtestManager::with_probe_and_backend(
+            test_paths(),
+            Arc::new(RecordingProbe::default()),
+            backend.clone(),
+        );
+        // Hold the run slot so the next run queues behind it.
+        let held = Arc::clone(&manager.run_lock).lock_owned().await;
+
+        let queued_manager = manager.clone();
+        let queued_database = database.clone();
+        let queued = tokio::spawn(async move {
+            queued_manager
+                .run_with_callback(&queued_database, &AppConfig::default(), Vec::new(), |_| {})
+                .await
+                .expect("a superseded run is not an error")
+        });
+        while !manager.status().running {
+            time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(manager.cancel());
+        drop(held);
+
+        let run = queued
+            .await
+            .expect("speedtest test operation should succeed");
+        assert!(run.cancelled);
+        assert!(run.results.is_empty());
+        assert!(backend.starts().is_empty(), "a skipped run starts no core");
+        assert!(
+            profile_ex_row(&database, "a").await.message.is_none(),
+            "a skipped run leaves no pending marker to clean up"
         );
     }
 

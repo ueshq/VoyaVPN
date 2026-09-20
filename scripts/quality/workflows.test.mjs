@@ -57,6 +57,17 @@ function workflowJobs(text) {
   return jobs;
 }
 
+/** The lines of one top-level key (`concurrency:`, `permissions:`, ...). */
+function topLevelBlock(text, key) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.indexOf(`${key}:`);
+  if (start < 0) {
+    return [];
+  }
+  const end = lines.findIndex((line, index) => index > start && /^[A-Za-z]/.test(line));
+  return lines.slice(start + 1, end < 0 ? undefined : end).filter((line) => line.trim() && !line.trim().startsWith("#"));
+}
+
 function invokesPnpm(body) {
   return body.some((line) => {
     const trimmed = line.trim();
@@ -159,6 +170,32 @@ describe("GitHub Actions workflows", () => {
         expect(step, secret).not.toMatch(new RegExp(`^\\s+${secret}: `, "m"));
       }
     }
+  });
+
+  // Two release dispatches for the same channel used to run side by side, and
+  // cancelling one mid-upload would leave a half-published channel.
+  it("serializes releases per channel without cancelling one in progress", () => {
+    const concurrency = topLevelBlock(readWorkflow("release.yml"), "concurrency").map((line) => line.trim());
+    const group = concurrency.find((line) => line.startsWith("group:"));
+
+    expect(group).toBeDefined();
+    expect(group).toContain("${{ github.workflow }}");
+    expect(group).toContain("${{ inputs.channel }}");
+    expect(concurrency).toContain("cancel-in-progress: false");
+
+    // The quality-gate job calls ci.yml, whose own group is evaluated in the
+    // caller's context; the same group in caller and callee deadlocks.
+    const ciConcurrency = topLevelBlock(readWorkflow("ci.yml"), "concurrency").map((line) => line.trim());
+    const ciGroup = ciConcurrency.find((line) => line.startsWith("group:"));
+    expect(ciGroup).toBeDefined();
+    expect(group).not.toBe(ciGroup);
+
+    // That inner group carries no channel, so beta's and stable's quality gates
+    // land in the same one on a shared ref: cancelling there would take the
+    // running release's gate down with it, whatever the outer group says.
+    const ciCancel = ciConcurrency.find((line) => line.startsWith("cancel-in-progress:"));
+    expect(ciGroup).not.toContain("${{ inputs.channel }}");
+    expect(ciCancel).toBe("cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}");
   });
 
   it("pins every third-party action to a full commit SHA", () => {

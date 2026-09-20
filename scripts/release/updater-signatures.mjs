@@ -224,7 +224,6 @@ async function verifyTauriUpdaterSignatureFile(payloadPath, signatureBase64, pub
 }
 
 export {
-  approvedUpdaterPublicKeyFromEnv,
   resolveApprovedUpdaterPublicKey,
   verifyTauriUpdaterSignature,
   verifyTauriUpdaterSignatureFile,

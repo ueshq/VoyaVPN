@@ -4,7 +4,7 @@ import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 import { i18next } from "@voya/i18n";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProfileListing, RuntimeStatusResponse } from "@/ipc/bindings";
+import type { ProfileSummaryListing, RuntimeStatusResponse } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
@@ -40,8 +40,8 @@ function press(init: KeyboardEventInit) {
 
 function renderShortcuts(entries: number) {
   const client = createTestQueryClient();
-  client.setQueryData<ProfileListing>(queryKeys.profileList, {
-    entries: Array.from({ length: entries }, () => ({}) as ProfileListing["entries"][number]),
+  client.setQueryData<ProfileSummaryListing>(queryKeys.profileList, {
+    entries: Array.from({ length: entries }, () => ({}) as ProfileSummaryListing["entries"][number]),
     undecodableProfiles: 0,
   });
   return renderHookWithQuery(() => useShellShortcuts(), { queryClient: client });

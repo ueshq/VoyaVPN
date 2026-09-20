@@ -46,6 +46,8 @@ import { writeClipboard } from "@/lib/clipboard";
 import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { toastError, useToastStore } from "@/stores/toast-store";
 
+import { useLogStream } from "./use-log-stream";
+
 export type LogFilter = "standard" | "issues" | "all";
 const ROW_HEIGHT = 36;
 const STICK_THRESHOLD = 24;
@@ -83,6 +85,7 @@ export function LogsPanel({
   onFilterChange: (value: LogFilter) => void;
 }) {
   const { t } = useI18n();
+  useLogStream();
   const clearLogs = useRuntimeEventStore((state) => state.clearLogs);
   const logLines = useRuntimeEventStore((state) => state.logLines);
   const [selected, setSelected] = useState<StoredLogLine | null>(null);
@@ -113,7 +116,7 @@ export function LogsPanel({
     filtered
       .map(
         (line) =>
-          `${formatTimeOfDay(line.receivedAt)} [${line.level}] ${line.text}`,
+          `${formatTimeOfDay(line.loggedAt)} [${line.level}] ${line.text}`,
       )
       .join("\n");
 
@@ -296,7 +299,7 @@ export function LogsPanel({
                       }}
                     >
                       <time className="tabular-nums text-muted-foreground">
-                        {formatTimeOfDay(line.receivedAt)}
+                        {formatTimeOfDay(line.loggedAt)}
                       </time>
                       <Badge
                         className={cn(
@@ -353,7 +356,7 @@ export function LogsPanel({
             <DialogTitle>{t("panes.logs.details")}</DialogTitle>
             <DialogDescription>
               {selected
-                ? `${formatTimeOfDay(selected.receivedAt)} · ${levels[selected.level]}`
+                ? `${formatTimeOfDay(selected.loggedAt)} · ${levels[selected.level]}`
                 : ""}
             </DialogDescription>
           </DialogHeader>

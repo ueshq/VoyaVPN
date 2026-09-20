@@ -1003,7 +1003,7 @@ mod tests {
     }
 
     #[test]
-    fn prepared_node_outbound_context_keeps_the_verdict_but_not_the_rules() {
+    fn prepared_node_outbound_context_has_the_node_verdict_but_not_the_rules() {
         let active = vless_profile("active", "Active", "active.example.com");
         let rule_node = vless_profile("rule", "RuleNode", "rule.example.com");
         let env = MemoryEnv {
@@ -1035,19 +1035,26 @@ mod tests {
             ["active.example.com"]
         );
 
-        // A rule the generator cannot resolve still fails every node, exactly
-        // as a full build does.
+        // A rule the generator cannot resolve fails connecting, but a config
+        // with only the node's outbound never reads it: measuring the node
+        // still works.
         let broken_env = MemoryEnv {
             profiles: vec![active.clone()],
             routings: vec![routing_with_outbound_tag("RenamedNode")],
             ..MemoryEnv::default()
         };
         let broken = CoreConfigContextBuilder::new(&broken_env).prepare(&app_config("active"));
-        assert!(!broken.build_node_outbound(&active).success());
-        assert_eq!(
-            broken.build_node_outbound(&active).validator_result,
-            broken.build(&active).validator_result
-        );
+        assert!(!broken.build(&active).success());
+        let measured = broken.build_node_outbound(&active);
+        assert!(measured.success(), "{:?}", measured.validator_result);
+        assert!(measured.validator_result.warnings.is_empty());
+
+        // The node's own findings still decide.
+        let mut invalid = active.clone();
+        if let ProfileProtocol::Vless { server, .. } = &mut invalid.protocol {
+            server.port = 0;
+        }
+        assert!(!broken.build_node_outbound(&invalid).success());
     }
 
     fn routing_with_outbound_tag(outbound_tag: &str) -> RoutingItem {

@@ -137,15 +137,11 @@ struct ModeTransport {
 }
 
 impl ClashHttpTransport for ModeTransport {
-    fn send_json<'transport>(
+    fn send<'transport>(
         &'transport self,
         request: voya_net::clash::ClashHttpRequest,
     ) -> std::pin::Pin<
-        Box<
-            dyn std::future::Future<Output = voya_net::clash::Result<serde_json::Value>>
-                + Send
-                + 'transport,
-        >,
+        Box<dyn std::future::Future<Output = voya_net::clash::Result<String>> + Send + 'transport>,
     > {
         Box::pin(async move {
             if let Some(sink) = &self.observe_sink {
@@ -160,7 +156,7 @@ impl ClashHttpTransport for ModeTransport {
                     "mode unavailable".into(),
                 ));
             }
-            Ok(serde_json::Value::Null)
+            Ok(String::new())
         })
     }
 }

@@ -239,7 +239,11 @@ pub struct TrayMenuInput<'input> {
     pub language: &'input str,
     pub connected: bool,
     pub traffic_mode: TrafficMode,
+    /// The start of the node list: at least the first [`TRAY_NODE_LIMIT`]
+    /// nodes, plus the active one when it sits further down.
     pub nodes: &'input [TrayNode],
+    /// How many nodes there are in all, which decides the "All Nodes" entry.
+    pub total_nodes: usize,
     pub active_node_id: Option<&'input str>,
     pub groups: &'input [TrayGroup],
     pub active_group_id: Option<&'input str>,
@@ -368,7 +372,7 @@ fn node_entries(input: &TrayMenuInput<'_>, labels: &TrayLabels) -> Vec<TrayEntry
             }
         }
     }
-    let hidden = input.nodes.len() > shown.len();
+    let hidden = input.total_nodes.max(input.nodes.len()) > shown.len();
     let mut entries: Vec<TrayEntry> = shown
         .into_iter()
         .map(|node| TrayEntry::Check {
@@ -500,6 +504,7 @@ mod tests {
             connected: false,
             traffic_mode: TrafficMode::Rule,
             nodes,
+            total_nodes: nodes.len(),
             active_node_id: active,
             groups: &[],
             active_group_id: None,
@@ -654,6 +659,27 @@ mod tests {
         assert_eq!(checks.iter().filter(|(_, checked)| *checked).count(), 1);
         assert_eq!(
             entries.last(),
+            Some(&item(TrayItemId::AllNodes, "All Nodes…", true))
+        );
+
+        // The tray is handed only the start of the list; the total still
+        // decides whether "All Nodes" appears.
+        let head = nodes
+            .iter()
+            .take(TRAY_NODE_LIMIT)
+            .cloned()
+            .collect::<Vec<_>>();
+        let menu = tray_menu(&TrayMenuInput {
+            total_nodes: nodes.len(),
+            ..input(&head, None)
+        });
+        assert_eq!(
+            submenu(&menu, "Nodes").last(),
+            Some(&item(TrayItemId::AllNodes, "All Nodes…", true))
+        );
+        let menu = tray_menu(&input(&head, None));
+        assert_ne!(
+            submenu(&menu, "Nodes").last(),
             Some(&item(TrayItemId::AllNodes, "All Nodes…", true))
         );
     }

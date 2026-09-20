@@ -197,11 +197,13 @@ for (const viewport of [
           payload: [
             {
               id: 1,
+              loggedAtMs: null,
               level: "info",
               body: { source: "core", line: "core started" },
             },
             {
               id: 2,
+              loggedAtMs: null,
               level: "error",
               body: { source: "core", line: longMessage },
             },

@@ -1,13 +1,21 @@
-use std::collections::HashMap;
-
 use thiserror::Error;
 use voya_core::{
     AppConfig, MoveAction, ProfileExItem, ProfileItem, ProfileListItem, ProfileProtocol,
     ProfileTransport, ServerEndpoint, ServerStatItem,
 };
-use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
+use voya_db::{Database, DatabaseSession, DbError, ProfileNamesHead, UnitOfWork};
 
 const DEFAULT_PROFILE_SORT_STEP: i32 = 10;
+
+/// A node as the node table shows it: the profile, its last measurement, and
+/// whether it is the active node. Traffic totals are left out; only the
+/// details dialog shows them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProfileSummaryItem {
+    pub profile: ProfileItem,
+    pub profile_ex: ProfileExItem,
+    pub is_active: bool,
+}
 
 /// A profile listing plus the count of stored profiles this build could not
 /// read.
@@ -17,8 +25,8 @@ const DEFAULT_PROFILE_SORT_STEP: i32 = 10;
 /// count rides along with the rows so the profiles screen can state it: a list
 /// that is quietly short otherwise looks like data loss.
 #[derive(Debug, Clone, Default, PartialEq)]
-pub struct ProfileListing {
-    pub items: Vec<ProfileListItem>,
+pub struct ProfileSummaryListing {
+    pub items: Vec<ProfileSummaryItem>,
     pub undecodable_profiles: usize,
 }
 
@@ -83,57 +91,70 @@ impl<'db> ProfileManager<'db> {
         Self { database }
     }
 
-    /// Every listed node's id and remarks, in list order: the tray's node
-    /// menu, which needs neither traffic stats nor the list items built from
-    /// them.
-    pub async fn list_names(&self) -> Result<Vec<(String, String)>> {
-        Ok(self.database.profiles().list_names().await?)
-    }
-
-    /// The listing behind every profile view, with the undecodable-row count
-    /// the storage layer reported.
-    ///
-    /// The count is deliberately *not* narrowed by `filter`: a row that could
-    /// not be decoded has no remarks or address to match a filter against, so
-    /// hiding the count while a filter is typed would make the statement blink
-    /// out exactly when the list gets shorter.
-    pub async fn list_profiles(
+    /// The first `limit` nodes' ids and remarks in list order, plus `pinned`
+    /// when it sits further down, and the node count: the tray's node menu,
+    /// which needs neither traffic stats nor the list items built from them.
+    pub async fn list_names_head(
         &self,
-        config: &AppConfig,
-        subscription_id: Option<&str>,
-        filter: Option<&str>,
-    ) -> Result<ProfileListing> {
-        let listing = self
+        limit: usize,
+        pinned: Option<&str>,
+    ) -> Result<ProfileNamesHead> {
+        Ok(self
             .database
             .profiles()
-            .list_with_profile_ex(subscription_id)
-            .await?;
-        let stats = self.server_stats_by_index_id().await?;
-        let filter = filter
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_lowercase);
+            .list_names_head(limit, pinned)
+            .await?)
+    }
 
-        Ok(ProfileListing {
+    /// The listing behind every node view, with the undecodable-row count the
+    /// storage layer reported. Each node's details, traffic included, come
+    /// from [`Self::get_profile`] when one is opened.
+    pub async fn list_summaries(&self, config: &AppConfig) -> Result<ProfileSummaryListing> {
+        let listing = self.database.profiles().list_with_profile_ex(None).await?;
+
+        Ok(ProfileSummaryListing {
             items: listing
                 .items
                 .into_iter()
-                .filter(|(profile, _)| {
-                    filter.as_deref().is_none_or(|filter| {
-                        contains_case_insensitive(&profile.remarks, filter)
-                            || contains_case_insensitive(profile.address(), filter)
-                    })
-                })
-                .map(|(profile, profile_ex)| {
-                    let server_stat = stats
-                        .get(&profile.index_id)
-                        .cloned()
-                        .unwrap_or_else(|| empty_server_stat(&profile.index_id));
-                    to_list_item(profile, profile_ex, server_stat, &config.index_id)
+                .map(|(profile, profile_ex)| ProfileSummaryItem {
+                    is_active: is_active(&profile, &config.index_id),
+                    profile,
+                    profile_ex,
                 })
                 .collect(),
             undecodable_profiles: listing.undecodable_rows,
         })
+    }
+
+    /// One node in full, for the editor and the details dialog. Strict like
+    /// the lookup behind it: a node whose stored payload cannot be decoded is
+    /// an error here rather than absent. Reading it writes nothing.
+    pub async fn get_profile(&self, config: &AppConfig, index_id: &str) -> Result<ProfileListItem> {
+        let Some(profile) = self.database.profiles().get(index_id).await? else {
+            return Err(ProfileManagerError::ProfileNotFound(index_id.to_string()));
+        };
+        let profile_ex = self
+            .database
+            .profile_exs()
+            .get(index_id)
+            .await?
+            .unwrap_or_else(|| ProfileExItem {
+                index_id: index_id.to_string(),
+                ..ProfileExItem::default()
+            });
+        let server_stat = self
+            .database
+            .server_stats()
+            .get(index_id)
+            .await?
+            .unwrap_or_else(|| empty_server_stat(index_id));
+
+        Ok(to_list_item(
+            profile,
+            profile_ex,
+            server_stat,
+            &config.index_id,
+        ))
     }
 
     pub async fn save_profile(
@@ -277,14 +298,15 @@ impl<'db> ProfileManager<'db> {
         ))
     }
 
+    /// Moves a manual node within its list. The caller refetches the listing
+    /// through the invalidation this causes, so nothing is returned.
     pub async fn move_profile(
         &self,
-        config: &AppConfig,
         subscription_id: Option<&str>,
         index_id: &str,
         action: MoveAction,
         position: Option<i32>,
-    ) -> Result<Vec<ProfileListItem>> {
+    ) -> Result<()> {
         self.require_manual(&[index_id.to_string()]).await?;
         let items = self
             .database
@@ -335,10 +357,7 @@ impl<'db> ProfileManager<'db> {
             })
             .collect::<Vec<_>>();
         self.database.profile_exs().set_sort_many(&updates).await?;
-        Ok(self
-            .list_profiles(config, subscription_id, None)
-            .await?
-            .items)
+        Ok(())
     }
 
     /// Rewrites the gap-based sort keys so the list reads `10, 20, 30, …`.
@@ -405,17 +424,6 @@ impl<'db> ProfileManager<'db> {
         let changed = !config.index_id.is_empty();
         config.index_id.clear();
         Ok(changed)
-    }
-
-    async fn server_stats_by_index_id(&self) -> Result<HashMap<String, ServerStatItem>> {
-        Ok(self
-            .database
-            .server_stats()
-            .list()
-            .await?
-            .into_iter()
-            .map(|item| (item.index_id.clone(), item))
-            .collect())
     }
 }
 
@@ -592,10 +600,8 @@ fn trim_string(value: &mut String) {
     *value = value.trim().to_string();
 }
 
-/// `needle` is already lowercase: a filter is lowercased once per listing, not
-/// once per field of every node.
-fn contains_case_insensitive(value: &str, needle: &str) -> bool {
-    value.to_lowercase().contains(needle)
+fn is_active(profile: &ProfileItem, active_index_id: &str) -> bool {
+    !active_index_id.is_empty() && profile.index_id == active_index_id
 }
 
 fn to_list_item(
@@ -605,7 +611,7 @@ fn to_list_item(
     active_index_id: &str,
 ) -> ProfileListItem {
     ProfileListItem {
-        is_active: !active_index_id.is_empty() && profile.index_id == active_index_id,
+        is_active: is_active(&profile, active_index_id),
         profile,
         profile_ex,
         server_stat,
@@ -650,13 +656,33 @@ mod tests {
         assert!(first.profile_ex.sort < second.profile_ex.sort);
 
         let listed = manager
-            .list_profiles(&config, None, None)
+            .list_summaries(&config)
             .await
             .expect("profile manager test operation should succeed")
             .items;
         assert_eq!(listed.len(), 2);
         assert!(!listed[0].is_active);
         assert_eq!(listed[1].profile.remarks, "B");
+
+        // One node in full, and a read leaves no extension row behind.
+        config.index_id = "second".to_string();
+        let details = manager
+            .get_profile(&config, "second")
+            .await
+            .expect("profile manager test operation should succeed");
+        assert_eq!(details.profile.remarks, "B");
+        assert!(details.is_active);
+        assert_eq!(details.server_stat.index_id, "second");
+        assert!(matches!(
+            manager.get_profile(&config, "deleted").await,
+            Err(ProfileManagerError::ProfileNotFound(_))
+        ));
+        assert!(database
+            .profile_exs()
+            .get("deleted")
+            .await
+            .expect("profile manager test operation should succeed")
+            .is_none());
     }
 
     #[tokio::test]
@@ -709,11 +735,11 @@ mod tests {
 
         config.index_id = "a".to_string();
         manager
-            .move_profile(&config, None, &c.profile.index_id, MoveAction::Top, None)
+            .move_profile(None, &c.profile.index_id, MoveAction::Top, None)
             .await
             .expect("profile manager test operation should succeed");
         let moved = manager
-            .list_profiles(&config, None, None)
+            .list_summaries(&config)
             .await
             .expect("profile manager test operation should succeed")
             .items;
@@ -767,13 +793,7 @@ mod tests {
         ));
         assert!(matches!(
             manager
-                .move_profile(
-                    &config,
-                    Some("sub-scope"),
-                    "s3",
-                    MoveAction::Position,
-                    Some(0)
-                )
+                .move_profile(Some("sub-scope"), "s3", MoveAction::Position, Some(0))
                 .await,
             Err(ProfileManagerError::SubscriptionReadOnly(_))
         ));
@@ -836,7 +856,7 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
         let renumbered = manager
-            .list_profiles(&config, None, None)
+            .list_summaries(&config)
             .await
             .expect("profile manager test operation should succeed")
             .items;
@@ -873,7 +893,7 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
         let renumbered_again = manager
-            .list_profiles(&config, None, None)
+            .list_summaries(&config)
             .await
             .expect("profile manager test operation should succeed")
             .items;

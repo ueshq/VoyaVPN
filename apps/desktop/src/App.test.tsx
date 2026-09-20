@@ -215,7 +215,7 @@ vi.mock("@/ipc/commands", () => ({
   listPolicyGroups: vi.fn(() => Promise.resolve({ entries: [] })),
   policyGroupRuntime: vi.fn(() => Promise.resolve(null)),
   listRoutings: vi.fn(() => Promise.resolve([])),
-  listProfiles: vi.fn(() =>
+  listProfileSummaries: vi.fn(() =>
     Promise.resolve({ entries: [], undecodableProfiles: 0 }),
   ),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),

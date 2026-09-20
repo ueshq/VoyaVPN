@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Zap } from "lucide-react";
 import type { TranslationKey } from "@voya/i18n";
 import { Button } from "@voya/ui/components/button";
@@ -12,20 +13,24 @@ import {
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { formatBytes } from "@voya/utils/formatting";
+import { getProfile } from "@/ipc/commands";
+import { profileDetailsQueryKey } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import type { ProfileListEntry } from "@/ipc/bindings";
+import type { ProfileSummaryEntry } from "@/ipc/bindings";
 
 import { getProtocolLabel } from "./profile-constants";
 import { profileLatency, profileTitle, profileTransportName } from "./profile-display";
 import type { ServerTableController } from "./use-server-table";
 
 // Mounted only while open; the statistics selector watches this node alone.
+// The list carries summaries, so transport, security and stored traffic are
+// read in full here and show "—" for the moment that takes.
 export function ProfileDetailsDialog({
   controller,
   item,
 }: {
   controller: ServerTableController;
-  item: ProfileListEntry;
+  item: ProfileSummaryEntry;
 }) {
   const {
     activation,
@@ -39,40 +44,35 @@ export function ProfileDetailsDialog({
   const stat = useRuntimeEventStore(
     (state) => state.serverStatsByProfileId[item.profile.id],
   );
-  const { profile, traffic } = item;
+  const { profile } = item;
+  const details = useQuery({
+    queryFn: () => getProfile(profile.id),
+    queryKey: profileDetailsQueryKey(profile.id),
+  }).data;
+  const transport = details?.profile.transport;
+  const traffic = details?.traffic;
+  const bytes = (live: number | null | undefined, stored: number | null | undefined) => {
+    const value = live ?? stored;
+    return value == null ? "—" : formatBytes(value);
+  };
   const running = activation.runningId === profile.id;
   const rows: [TranslationKey, string | number][] = [
     ["panes.profiles.cardFields.remarks", profileTitle(profile.remarks, t)],
-    ["panes.profiles.cardFields.address", profile.protocol.server.address || "—"],
-    ["panes.profiles.cardFields.port", profile.protocol.server.port || "—"],
-    [
-      "panes.profiles.cardFields.protocol",
-      getProtocolLabel(profile.protocol.kind),
-    ],
+    ["panes.profiles.cardFields.address", profile.address || "—"],
+    ["panes.profiles.cardFields.port", profile.port || "—"],
+    ["panes.profiles.cardFields.protocol", getProtocolLabel(profile.kind)],
     ["panes.profiles.cardFields.group", subscriptionName(item)],
     [
       "panes.profiles.cardFields.transport",
-      profile.transport ? profileTransportName(profile.transport) : "—",
+      transport ? profileTransportName(transport) : "—",
     ],
-    ["panes.profiles.cardFields.security", profile.tls?.mode ?? "—"],
+    ["panes.profiles.cardFields.security", details?.profile.tls?.mode ?? "—"],
     ["panes.profiles.cardFields.delay", profileLatency(item, t)],
     ["panes.profiles.cardFields.ipInfo", item.metrics.ipInfo || "—"],
-    [
-      "panes.profiles.cardFields.todayUp",
-      formatBytes(stat?.todayUp ?? traffic.todayUpload),
-    ],
-    [
-      "panes.profiles.cardFields.todayDown",
-      formatBytes(stat?.todayDown ?? traffic.todayDownload),
-    ],
-    [
-      "panes.profiles.cardFields.totalUp",
-      formatBytes(stat?.totalUp ?? traffic.totalUpload),
-    ],
-    [
-      "panes.profiles.cardFields.totalDown",
-      formatBytes(stat?.totalDown ?? traffic.totalDownload),
-    ],
+    ["panes.profiles.cardFields.todayUp", bytes(stat?.todayUp, traffic?.todayUpload)],
+    ["panes.profiles.cardFields.todayDown", bytes(stat?.todayDown, traffic?.todayDownload)],
+    ["panes.profiles.cardFields.totalUp", bytes(stat?.totalUp, traffic?.totalUpload)],
+    ["panes.profiles.cardFields.totalDown", bytes(stat?.totalDown, traffic?.totalDownload)],
   ];
   return (
     <Dialog

@@ -1,6 +1,9 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    LazyLock,
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        LazyLock,
+    },
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use voya_app::{
@@ -260,6 +263,12 @@ where
     queue_log_line(app, level, LogLineBody::Core { line });
 }
 
+/// Starts or pauses delivering Logs-panel lines to the webview; see
+/// [`voya_app::log_batch`]. The rotating file log is unaffected.
+pub(crate) fn stream_log_lines(streaming: bool) {
+    LOG_LINES.set_streaming(streaming);
+}
+
 /// Queues one Logs-panel line; the flusher delivers queued lines as a single
 /// `LogLines` event per [`LOG_BATCH_WINDOW`]. Never blocks and never fails,
 /// so the core's pipe reader and the `tracing` layer can call it directly.
@@ -281,6 +290,9 @@ where
     }
     LOG_LINES.push(LogLineEvent {
         id: next_log_line_id(),
+        logged_at_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0.0, |elapsed| elapsed.as_secs_f64() * 1000.0),
         level,
         body,
     });

@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { repoRootFromScript } from "../lib/common.mjs";
 import {
   normalizeCiEnv,
   requestedStableUpdaterConfig,
@@ -10,7 +12,10 @@ import {
 } from "./stable-updater-config.mjs";
 
 const temporaryDirectories = [];
-const publicKey = "approved-updater-public-key-material-0123456789";
+const publicKey = readFileSync(
+  join(repoRootFromScript(import.meta.url), "tests/fixtures/release/updater-signing/public.key"),
+  "utf8",
+).trim();
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((path) => rm(path, { force: true, recursive: true })));
@@ -52,6 +57,7 @@ describe("stable updater config", () => {
     ));
     expect(overlay.bundle.createUpdaterArtifacts).toBe(true);
     expect(overlay.plugins.updater.endpoints).toEqual(["https://updates.voyavpn.dev/stable/latest.json"]);
+    expect(overlay.plugins.updater.pubkey).toBe(publicKey);
     expect(metadata.createUpdaterArtifacts).toBe(true);
     expect(metadata.sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(metadata.pubkeySha256).toMatch(/^[a-f0-9]{64}$/);
@@ -79,5 +85,27 @@ describe("stable updater config", () => {
       repoRoot,
       env: { ...baseEnv, VOYAVPN_UPDATER_PUBLIC_KEY: "placeholder" },
     })).toThrow(/non-placeholder/);
+  });
+
+  // Long enough and no placeholder word, so only structural decoding catches it.
+  it.each([
+    ["not base64", "approved-updater-public-key-material-0123456789"],
+    ["base64 of plain text", Buffer.from("approved updater public key material").toString("base64")],
+    [
+      "a minisign key with a truncated packet",
+      Buffer.from("untrusted comment: minisign public key\nRWSw1t07ojiA3yM4oxhVV/s63a5K\n").toString("base64"),
+    ],
+  ])("rejects a malformed updater public key (%s)", async (_label, malformedKey) => {
+    const repoRoot = await mkdtemp(join(tmpdir(), "voyavpn-updater-config-malformed-"));
+    temporaryDirectories.push(repoRoot);
+
+    expect(() => writeStableUpdaterOverlay({
+      repoRoot,
+      env: {
+        TAURI_SIGNING_PRIVATE_KEY: "private",
+        VOYAVPN_UPDATER_PUBLIC_KEY: malformedKey,
+        VOYAVPN_UPDATES_BASE_URL: "https://updates.voyavpn.dev/stable",
+      },
+    })).toThrow(/approved updater public key/);
   });
 });

@@ -620,6 +620,23 @@ mod tests {
             .is_empty());
     }
 
+    /// Trimming `regex`'s Unicode features looks like a binary-size win but is
+    /// not one (tauri-utils enables them anyway), and it would reject filters
+    /// users already saved. These are the shapes subscription filters take.
+    #[test]
+    fn subscription_filters_accept_cjk_case_insensitive_and_unicode_classes() {
+        for (filter, remarks) in [
+            ("香港|台湾|HK", "🇭🇰 香港 01"),
+            ("(?i)hk", "HK-02"),
+            (r"\p{Han}", "日本 03"),
+        ] {
+            let regex = compile_filter(Some(filter))
+                .unwrap_or_else(|error| panic!("{filter} should compile: {error}"))
+                .expect("a non-empty filter compiles to a regex");
+            assert!(regex.is_match(remarks), "{filter} should match {remarks}");
+        }
+    }
+
     #[tokio::test]
     async fn an_invalid_filter_skips_only_its_own_subscription() {
         let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
@@ -939,7 +956,7 @@ mod tests {
         assert_eq!(profiles.len(), 7);
 
         let visible_profiles = ProfileManager::new(&database)
-            .list_profiles(&config, None, None)
+            .list_summaries(&config)
             .await
             .expect("subscription manager test operation should succeed")
             .items;

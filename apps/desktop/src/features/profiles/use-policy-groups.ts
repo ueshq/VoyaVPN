@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
-import type { PolicyGroup, PolicyGroupEntry, ProfileListing } from "@/ipc/bindings";
+import type { PolicyGroup, PolicyGroupEntry, ProfileSummaryListing } from "@/ipc/bindings";
 import {
   deletePolicyGroups,
   listPolicyGroups,
@@ -66,7 +66,7 @@ export function usePolicyGroups(
       const replacedNode = policyGroupEntries.some((entry) => entry.isActive)
         ? null
         : queryClient
-            .getQueryData<ProfileListing>(queryKeys.profileList)
+            .getQueryData<ProfileSummaryListing>(queryKeys.profileList)
             ?.entries.find((entry) => entry.isActive)?.profile;
       await setActivePolicyGroup(id);
       if (replacedNode) {

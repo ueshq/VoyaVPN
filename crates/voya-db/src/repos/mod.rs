@@ -11,7 +11,7 @@ mod subscription_metadata;
 
 pub use policy_group::PolicyGroupRepository;
 pub(crate) use profile::normalize_retired_profile_blobs;
-pub use profile::{ProfileListing, ProfileRepository};
+pub use profile::{ProfileListing, ProfileNamesHead, ProfileRepository};
 pub use profile_ex::ProfileExRepository;
 pub use routing::RoutingRepository;
 pub use self_host::SelfHostRepository;

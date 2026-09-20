@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
 import { CloseRequestDialog } from "@/components/app-shell/close-request-dialog";
@@ -23,6 +23,7 @@ import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { isTauriRuntime } from "@/ipc/window";
+import { useDocumentVisible } from "@/lib/use-document-visible";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 import { toastError } from "@/stores/toast-store";
 
@@ -130,15 +131,6 @@ function ScreenFallback() {
   );
 }
 
-function subscribeToVisibility(onChange: () => void) {
-  document.addEventListener("visibilitychange", onChange);
-  return () => document.removeEventListener("visibilitychange", onChange);
-}
-
-function isDocumentVisible() {
-  return document.visibilityState !== "hidden";
-}
-
 /**
  * Binds the proxy-monitor controller to the shell: the tab decides whether a
  * proxy-runtime surface is on screen, the controller owns everything else.
@@ -148,7 +140,7 @@ function isDocumentVisible() {
  */
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
   const coreConnected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
-  const visible = useSyncExternalStore(subscribeToVisibility, isDocumentVisible);
+  const visible = useDocumentVisible();
   const { t } = useI18n();
   // The controller is created once; this ref keeps its error path pointing at
   // the current locale without recreating the state machine.

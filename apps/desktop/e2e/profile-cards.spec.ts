@@ -1,8 +1,8 @@
 import { expect, test } from "@playwright/test";
-import type { AppSettingsV1, ProfileListEntry } from "../src/ipc/bindings";
+import type { AppSettingsV1, ProfileDetails } from "../src/ipc/bindings";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
-const profiles: ProfileListEntry[] = Array.from({ length: 5000 }, (_, index) => ({
+const profiles: ProfileDetails[] = Array.from({ length: 5000 }, (_, index) => ({
   isActive: index === 0,
   profile: {
     id: `profile-${index}`,
@@ -18,7 +18,7 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await installTauriSmokeMock(page, "macos");
   await page.addInitScript((entries) => {
-    const state = window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[]; settings: AppSettingsV1 };
+    const state = window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[]; settings: AppSettingsV1 };
     state.profiles = entries;
     state.settings.appearance.language = "zh-Hans";
     localStorage.setItem("voyavpn.profileColumns", JSON.stringify({ state: { columnVisibility: { remarks: false, delay: false } } }));
@@ -112,7 +112,7 @@ test("profile cards show a loading skeleton while the profile query is pending",
   await installTauriSmokeMock(page, "macos");
   await page.addInitScript(() => {
     const invoke = window.__TAURI_INTERNALS__.invoke;
-    window.__TAURI_INTERNALS__.invoke = (command, args) => command === "list_profiles" ? new Promise(() => {}) : invoke(command, args);
+    window.__TAURI_INTERNALS__.invoke = (command, args) => command === "list_profile_summaries" ? new Promise(() => {}) : invoke(command, args);
   });
   await page.goto("/");
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
@@ -138,7 +138,7 @@ test("profile cards show a loading skeleton while the profile query is pending",
 
 test("profile list shows its empty state when no saved nodes exist", async ({ page }, testInfo) => {
   await installTauriSmokeMock(page);
-  await page.addInitScript(() => { (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles = []; });
+  await page.addInitScript(() => { (window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[] }).profiles = []; });
   await page.goto("/");
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
   await expect(page.getByTestId("server-row")).toHaveCount(0);
@@ -150,7 +150,7 @@ test("profile list shows its empty state when no saved nodes exist", async ({ pa
 test("measured flags replace the name's flag on both screens and old events cannot restore cleared ones", async ({ page }) => {
   await installTauriSmokeMock(page);
   await page.addInitScript((profile) => {
-    (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles = [{ ...profile, metrics: { ...profile.metrics, countryCode: null } }];
+    (window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[] }).profiles = [{ ...profile, metrics: { ...profile.metrics, countryCode: null } }];
   }, profiles[0]!);
   await page.goto("/");
   // Unmeasured, the JP flag in the node name is the provisional country.
@@ -158,7 +158,7 @@ test("measured flags replace the name's flag on both screens and old events cann
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
   await expect(page.locator(".node-card-icon .fi-jp")).toBeVisible();
   await page.evaluate(() => {
-    const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles[0]!;
+    const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[] }).profiles[0]!;
     entry.metrics.countryCode = "US";
     window.__VOYA_SMOKE__.emit("transient-stream-event", { kind: "speedtestResults", payload: [{
       indexId: entry.profile.id, delay: 42, outcome: "completed", detail: null, ipInfo: null, countryCode: "US",
@@ -168,7 +168,7 @@ test("measured flags replace the name's flag on both screens and old events cann
   await page.getByRole("tab", { name: "Home", exact: true }).click();
   await expect(page.locator(".home-node-icon .fi-us")).toBeVisible();
   await page.evaluate(() => {
-    const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[] }).profiles[0]!;
+    const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[] }).profiles[0]!;
     entry.metrics.countryCode = null;
     entry.profile.protocol.server.address = "changed.example.test";
     window.__VOYA_SMOKE__.emit("invalidate-event", { keys: [{ reason: "profile-saved", scope: { kind: "profiles" } }] });

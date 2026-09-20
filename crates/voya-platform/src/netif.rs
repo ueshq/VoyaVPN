@@ -76,15 +76,12 @@ mod tests {
 
     #[test]
     fn a_released_port_is_available_again() {
-        let port = {
-            let listener =
-                TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).expect("bind an ephemeral port");
-            listener.local_addr().expect("local address").port()
-        };
-        // Another process could take the port in between; retry a few picks
-        // so the test only fails when the probe itself is wrong.
-        let available = (0..5).any(|_| wildcard_port_available(port))
-            || wildcard_port_available(ephemeral_port());
+        // Anything else on the machine — including the tests sharing this
+        // binary's thread pool — can take the port between the release and the
+        // probe, and it keeps holding it. Retrying the same port is therefore
+        // no retry at all: every attempt picks a fresh one, so this fails only
+        // when the probe is wrong about every freshly released port.
+        let available = (0..8).any(|_| wildcard_port_available(ephemeral_port()));
         assert!(available);
     }
 

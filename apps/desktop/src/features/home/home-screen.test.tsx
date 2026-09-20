@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 import type {
-  ProfileListEntry,
+  ProfileSummaryEntry,
   RuntimeStatusResponse,
   StatisticsSnapshot,
   SystemProxyStatusResponse,
@@ -58,7 +58,7 @@ const ipcMock = vi.hoisted(() => {
     getSettingsApplyStatus: vi.fn(),
     disconnectCore: vi.fn(),
     listPolicyGroups: vi.fn(),
-    listProfiles: vi.fn(),
+    listProfileSummaries: vi.fn(),
     policyGroupRuntime: vi.fn(),
     restartCore: vi.fn(),
     runtimeStatus: vi.fn(),
@@ -138,7 +138,7 @@ vi.mock("@/ipc/commands", async (importOriginal) => {
     disconnectCore: ipcMock.disconnectCore,
     IpcCommandError: actual.IpcCommandError,
     listPolicyGroups: ipcMock.listPolicyGroups,
-    listProfiles: ipcMock.listProfiles,
+    listProfileSummaries: ipcMock.listProfileSummaries,
     policyGroupRuntime: ipcMock.policyGroupRuntime,
     restartCore: ipcMock.restartCore,
     runtimeStatus: ipcMock.runtimeStatus,
@@ -154,10 +154,10 @@ vi.mock("@/ipc/runtime-event-store", async (importOriginal) => ({
   useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
 }));
 
-// `listProfiles` answers with the rows plus the number of stored profiles this
+// `listProfileSummaries` answers with the rows plus the number of stored profiles this
 // build could not decode; Home only reads the rows.
-function mockProfileList(entries: ProfileListEntry[], undecodableProfiles = 0) {
-  ipcMock.listProfiles.mockResolvedValue({ entries, undecodableProfiles });
+function mockProfileList(entries: ProfileSummaryEntry[], undecodableProfiles = 0) {
+  ipcMock.listProfileSummaries.mockResolvedValue({ entries, undecodableProfiles });
 }
 
 function renderHome() {
@@ -586,7 +586,7 @@ describe("HomeScreen", () => {
   });
 
   it("explains a node list that could not be read and retries it", async () => {
-    ipcMock.listProfiles.mockRejectedValueOnce(new Error("Profiles unavailable"));
+    ipcMock.listProfileSummaries.mockRejectedValueOnce(new Error("Profiles unavailable"));
     renderHome();
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -605,7 +605,7 @@ describe("HomeScreen", () => {
   });
 
   it("does not offer the empty-node guide while profiles are loading", async () => {
-    ipcMock.listProfiles.mockImplementation(() => new Promise<never>(() => {}));
+    ipcMock.listProfileSummaries.mockImplementation(() => new Promise<never>(() => {}));
     renderHome();
     expect(connectButton()).toBeDisabled();
     await userEvent.click(connectButton());
@@ -614,7 +614,7 @@ describe("HomeScreen", () => {
   });
 
   it.each(["query error", "no selection"])("navigates to Nodes without the empty-node guide for %s", async (state) => {
-    if (state === "query error") ipcMock.listProfiles.mockRejectedValue(new Error("Profiles unavailable"));
+    if (state === "query error") ipcMock.listProfileSummaries.mockRejectedValue(new Error("Profiles unavailable"));
     else mockProfileList([{ ...makeActiveProfile({ id: "saved" }), isActive: false }]);
     renderHome();
     await waitFor(() => expect(connectButton()).toBeEnabled());
@@ -761,13 +761,13 @@ describe("HomeScreen", () => {
 
 function makeActiveProfile(
   overrides: Parameters<typeof makeProfileFixture>[1] = {},
-): ProfileListEntry {
+): ProfileSummaryEntry {
   return { ...makeProfile(0, overrides), isActive: true };
 }
 
 function makeProfile(
   index: number,
   overrides: Parameters<typeof makeProfileFixture>[1] = {},
-): ProfileListEntry {
+): ProfileSummaryEntry {
   return makeProfileFixture(index, overrides, false);
 }

@@ -6,10 +6,17 @@
 //! could slow the reader enough to back up the child's stderr. Producers now
 //! only queue a line; one task delivers whatever queued up at most once per
 //! window, and sleeps while nothing is logged.
+//!
+//! Only the Logs panel shows these lines, so nothing is delivered while it is
+//! closed or the window is hidden: the queue then holds the newest lines, and
+//! the panel receives them the moment it streams again.
 
 use std::{
     collections::VecDeque,
-    sync::{Mutex, MutexGuard, PoisonError},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex, MutexGuard, PoisonError,
+    },
     time::Duration,
 };
 
@@ -25,6 +32,8 @@ pub struct LogBatcher<T> {
     pending: Mutex<VecDeque<T>>,
     capacity: usize,
     wake: Notify,
+    /// Whether anything shows the lines; off until something asks for them.
+    streaming: AtomicBool,
 }
 
 impl<T> LogBatcher<T> {
@@ -34,6 +43,17 @@ impl<T> LogBatcher<T> {
             pending: Mutex::new(VecDeque::new()),
             capacity: capacity.max(1),
             wake: Notify::new(),
+            streaming: AtomicBool::new(false),
+        }
+    }
+
+    /// Starts or pauses delivery. Paused, lines keep queueing (the newest
+    /// `capacity` of them) and the flusher parks after its first wake; started
+    /// again, whatever queued is delivered within one window. Idempotent.
+    pub fn set_streaming(&self, streaming: bool) {
+        self.streaming.store(streaming, Ordering::Release);
+        if streaming && !self.lock().is_empty() {
+            self.wake.notify_one();
         }
     }
 
@@ -60,7 +80,7 @@ impl<T> LogBatcher<T> {
     }
 
     /// Delivers queued lines at most once per `window`, and not at all while
-    /// nothing is queued. Runs until the task is dropped.
+    /// nothing is queued or delivery is paused. Runs until the task is dropped.
     pub async fn run<F>(&self, window: Duration, mut deliver: F)
     where
         F: FnMut(Vec<T>),
@@ -68,6 +88,11 @@ impl<T> LogBatcher<T> {
         loop {
             self.wake.notified().await;
             time::sleep(window).await;
+            // Paused: the lines stay queued, and a push onto a non-empty queue
+            // does not wake this again, so it parks until `set_streaming`.
+            if !self.streaming.load(Ordering::Acquire) {
+                continue;
+            }
             let batch = self.take();
             if !batch.is_empty() {
                 deliver(batch);
@@ -102,6 +127,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn log_batcher_delivers_a_burst_as_one_batch() {
         let batcher = Arc::new(LogBatcher::new(LOG_BATCH_CAPACITY));
+        batcher.set_streaming(true);
         let delivered = Arc::new(StdMutex::new(Vec::<Vec<u32>>::new()));
         let task = tokio::spawn({
             let batcher = Arc::clone(&batcher);
@@ -133,6 +159,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn log_batcher_keeps_lines_queued_before_the_flusher_starts() {
         let batcher = Arc::new(LogBatcher::new(LOG_BATCH_CAPACITY));
+        batcher.set_streaming(true);
         batcher.push("early");
         let delivered = Arc::new(StdMutex::new(Vec::<Vec<&str>>::new()));
         let task = tokio::spawn({
@@ -153,6 +180,52 @@ mod tests {
         assert_eq!(
             *delivered.lock().expect("delivered lock"),
             vec![vec!["early"]]
+        );
+    }
+
+    /// Nothing reaches the webview while no panel shows the lines; the newest
+    /// ones are still there, in order, the moment one does.
+    #[tokio::test(start_paused = true)]
+    async fn log_batcher_holds_lines_while_paused_and_delivers_them_on_resume() {
+        let batcher = Arc::new(LogBatcher::new(3));
+        let delivered = Arc::new(StdMutex::new(Vec::<Vec<u32>>::new()));
+        let task = tokio::spawn({
+            let batcher = Arc::clone(&batcher);
+            let delivered = Arc::clone(&delivered);
+            async move {
+                batcher
+                    .run(LOG_BATCH_WINDOW, |batch| {
+                        delivered.lock().expect("delivered lock").push(batch);
+                    })
+                    .await;
+            }
+        });
+
+        for line in 0..5 {
+            batcher.push(line);
+        }
+        time::sleep(LOG_BATCH_WINDOW * 5).await;
+        assert!(delivered.lock().expect("delivered lock").is_empty());
+
+        batcher.set_streaming(true);
+        time::sleep(LOG_BATCH_WINDOW * 2).await;
+        assert_eq!(
+            *delivered.lock().expect("delivered lock"),
+            vec![vec![2, 3, 4]]
+        );
+
+        // Paused and resumed again: a line queued in between is not lost.
+        batcher.set_streaming(false);
+        batcher.push(5);
+        time::sleep(LOG_BATCH_WINDOW * 2).await;
+        batcher.set_streaming(true);
+        batcher.set_streaming(true);
+        time::sleep(LOG_BATCH_WINDOW * 2).await;
+        task.abort();
+
+        assert_eq!(
+            *delivered.lock().expect("delivered lock"),
+            vec![vec![2, 3, 4], vec![5]]
         );
     }
 }

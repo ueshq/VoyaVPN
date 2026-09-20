@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import type { ProfileListEntry, ProxyConnectionsSnapshot, Routing_Serialize, RoutingRule, RuntimeStatusResponse } from "../src/ipc/bindings";
+import type { ProfileDetails, ProxyConnectionsSnapshot, Routing_Serialize, RoutingRule, RuntimeStatusResponse } from "../src/ipc/bindings";
 import { savedNodeFixture } from "./fixtures/saved-node";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
@@ -99,7 +99,7 @@ test("populated pages keep scrolling inside panels and errors inside the page in
   await openPage(page, "settings");
   await page.evaluate((fixture) => {
     const state = window.__VOYA_SMOKE__.state as {
-      profiles: ProfileListEntry[];
+      profiles: ProfileDetails[];
       routings: Routing_Serialize[];
       connections: ProxyConnectionsSnapshot;
       runtime: RuntimeStatusResponse;

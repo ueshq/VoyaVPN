@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
-import type { PolicyGroup, ProfileListEntry } from "@/ipc/bindings";
+import type { PolicyGroup, ProfileSummaryEntry } from "@/ipc/bindings";
 
 import { PolicyGroupDialog } from "./policy-group-dialog";
 
@@ -14,7 +14,7 @@ vi.mock("@/ipc/commands", async (importOriginal) => ({
 }));
 
 function node(id: string, remarks: string) {
-  return { isActive: false, profile: { id, remarks, subscriptionId: null } } as unknown as ProfileListEntry;
+  return { isActive: false, profile: { id, remarks, subscriptionId: null } } as unknown as ProfileSummaryEntry;
 }
 
 const nodes = [node("a", "Tokyo"), node("b", "Osaka")];

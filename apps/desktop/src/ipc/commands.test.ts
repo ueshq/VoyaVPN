@@ -27,7 +27,9 @@ const wrapperNames = [
   "saveAppSettings",
   "generateQrCode",
   "scanScreenQr",
+  "decodeQrImage",
   "readClipboardText",
+  "setLogStreaming",
   "connectActiveProfile",
   "disconnectCore",
   "restartCore",
@@ -42,7 +44,8 @@ const wrapperNames = [
   "tunRequestElevation",
   "loadDnsSettings",
   "saveDnsSettings",
-  "listProfiles",
+  "listProfileSummaries",
+  "getProfile",
   "saveProfile",
   "deleteProfiles",
   "exportProfileShareLinks",
@@ -165,7 +168,7 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
   const rule = { id: "rule-1", remarks: "Managed" };
 
   return [
-    ["listProfiles", ["sub-1", "tokyo"], ["sub-1", "tokyo"]],
+    ["getProfile", ["index-1"], ["index-1"]],
     ["proxyCloseConnection", [null], [null]],
     ["updateSubscriptions", ["sub-1", false, "http://proxy.test"], ["sub-1", false, "http://proxy.test"]],
     ["importProfilesFromText", ["vmess://link", null], ["vmess://link", null]],
@@ -186,6 +189,9 @@ function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
     ["setSelfHostEnabled", [true], [true]],
     ["setWindowAcrylic", [true], [true]],
     ["generateQrCode", ["vmess://link"], ["vmess://link"]],
+    // Width and height share a type: a swap would decode a transposed image.
+    ["decodeQrImage", [640, 480, "AAAA"], [640, 480, "AAAA"]],
+    ["setLogStreaming", [false], [false]],
   ];
 }
 

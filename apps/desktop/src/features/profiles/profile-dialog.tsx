@@ -14,7 +14,7 @@ import {
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { ProfileKind, ProfileListEntry } from "@/ipc/bindings";
+import type { Profile, ProfileKind } from "@/ipc/bindings";
 
 import { localizeProfileProtocols } from "./profile-constants";
 import {
@@ -38,7 +38,7 @@ type ProfileDialogProps = {
     profile: ReturnType<typeof prepareProfileForSave>,
   ) => Promise<void>;
   open: boolean;
-  profile?: ProfileListEntry | null;
+  profile?: Profile | null;
   // Backend rejection of the last save. The dialog stays open on failure so the
   // in-progress edits survive, and the message is shown here instead of behind
   // the modal.
@@ -54,7 +54,7 @@ export function ProfileDialog({
   profile,
   saveError,
 }: ProfileDialogProps) {
-  const formKey = `${mode}:${profile?.profile.id ?? "new"}:${open ? "open" : "closed"}`;
+  const formKey = `${mode}:${profile?.id ?? "new"}:${open ? "open" : "closed"}`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -82,7 +82,7 @@ function ProfileDialogForm({
   const { t } = useI18n();
   const form = useForm<ProfileFormValues, unknown, ParsedProfileFormValues>({
     defaultValues: profile
-      ? normalizeProfileForForm(profile.profile)
+      ? normalizeProfileForForm(profile)
       : createDefaultProfile(),
     mode: "onBlur",
     resolver: (values, context, options) =>

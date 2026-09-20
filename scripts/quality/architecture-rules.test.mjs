@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cargoPackageVersion,
+  cargoWorkspaceMembers,
   clashBoundaryRules,
   contractsCasingRule,
   findUndocumentedUnsafe,
@@ -12,6 +14,7 @@ import {
   shellDtoRule,
   shellRules,
   untranslatedMessageRule,
+  versionAlignmentProblem,
   voyaAppRules,
   voyaCoreRules,
 } from "./architecture-rules.mjs";
@@ -41,6 +44,11 @@ describe("voya-core OS independence", () => {
     ["let value = std::env::var(\"HOME\");", "core-os-api"],
     ["std::process::Command::new(\"sing-box\")", "core-os-api"],
     ["let listener = std::net::TcpListener::bind(addr)?;", "core-os-api"],
+    // Grouped and module-relative socket imports never spell `std::net::TcpStream`.
+    ["use std::net::{TcpStream, UdpSocket};", "core-os-api"],
+    ["use std::{collections::BTreeMap, net::{IpAddr, TcpListener}};", "core-os-api"],
+    ["use std::net;\nlet stream = net::TcpStream::connect(addr)?;", "core-os-api"],
+    ["use std::net::*;\nlet addrs = host.to_socket_addrs()?;", "core-os-api"],
     ["use tokio::fs;", "core-os-api"],
     ["use reqwest::Client;", "core-os-api"],
     ["use std::{collections::BTreeMap, fs};", "core-os-api-grouped"],
@@ -57,6 +65,7 @@ describe("voya-core OS independence", () => {
     for (const source of [
       "use std::{collections::BTreeMap, net::IpAddr};",
       "use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};",
+      "use std::net::{IpAddr, SocketAddrV4};",
       "use std::time::Duration;",
       "#[cfg(test)]\nmod tests;",
       "#[cfg_attr(test, derive(Debug))]",
@@ -78,6 +87,17 @@ describe("voya-app adapter boundary", () => {
     ["use std::{\n    fs,\n    path::PathBuf,\n};", "app-io-adapters-grouped"],
     ["use std::{sync::Arc, fs::File};", "app-io-adapters-grouped"],
     ["use tokio::{sync::Mutex, fs};", "app-io-adapters-grouped-tokio"],
+    // Spawning through an import that never spells `std::process::Command`.
+    ["use std::process::{Command, Stdio};", "app-io-adapters-process-import"],
+    ["use std::{io, process::Command};", "app-io-adapters-process-import"],
+    ["use std::{\n    io,\n    process::{Command, Stdio},\n};", "app-io-adapters-process-import"],
+    ["use std::process::Command as Spawn;", "app-io-adapters-process-import"],
+    ["use std::process;\nprocess::Command::new(\"sudo\")", "app-io-adapters-process-import"],
+    ["use std::{process, io};\nprocess::Command::new(\"sudo\")", "app-io-adapters-process-import"],
+    ["use std::{io, process};", "app-io-adapters-process-import"],
+    ["use std::{io::{self, Write}, process};", "app-io-adapters-process-import"],
+    ["use std::process::{self, ExitCode};", "app-io-adapters-process-import"],
+    ["use std::process as proc;", "app-io-adapters-process-import"],
     ["use specta::Type;", "app-specta"],
   ])("rejects %s", (source, id) => {
     expect(violates(voyaAppRules, source)).toContain(id);
@@ -86,6 +106,14 @@ describe("voya-app adapter boundary", () => {
   it("allows PID reads, address value types, and unrelated grouped imports", () => {
     for (const source of [
       "let pid = u128::from(std::process::id());",
+      "std::process::exit(0);",
+      "use std::process::id;",
+      "use std::{io, process::ExitCode};",
+      "use std::os::unix::process::CommandExt;",
+      "use std::{io, os::unix::process::CommandExt};",
+      // voya-app's own adapters live in modules that are also called `process`.
+      "use voya_platform::{coreinfo::TargetOs, process::{ProcessError, ProcessRunner}};",
+      "use super::{process::core_executable, SelfHostDeps};",
       "use std::net::{SocketAddr, TcpListener};",
       "use std::{sync::Arc, time::Duration};",
       "use tokio::{sync::Mutex, time::sleep};",
@@ -245,6 +273,50 @@ describe("manifest dependency rules", () => {
     );
     expect(violates(networkRules, "[dependencies.tokio-tungstenite]")).toContain("manifest-table");
     expect(violates(networkRules, "voya-net.workspace = true")).toEqual([]);
+  });
+});
+
+describe("release version alignment", () => {
+  const workspaceManifest = [
+    "[workspace]",
+    "members = [",
+    '    "crates/voya-core",',
+    '    "apps/desktop/src-tauri",',
+    "]",
+    "",
+    "[workspace.package]",
+    'edition = "2021"',
+    'version = "0.4.0"',
+    "",
+    "[workspace.dependencies]",
+    'serde = { version = "1.0" }',
+  ].join("\n");
+
+  it("lists the workspace members", () => {
+    expect(cargoWorkspaceMembers(workspaceManifest)).toEqual(["crates/voya-core", "apps/desktop/src-tauri"]);
+  });
+
+  it("resolves an inherited or an own Cargo package version", () => {
+    expect(cargoPackageVersion('[package]\nname = "voyavpn"\nversion.workspace = true\n', workspaceManifest)).toBe(
+      "0.4.0",
+    );
+    expect(cargoPackageVersion('[package]\nversion = { workspace = true }\n', workspaceManifest)).toBe("0.4.0");
+    expect(cargoPackageVersion('[package]\nname = "voyavpn"\nversion = "0.3.9"\n', workspaceManifest)).toBe("0.3.9");
+    // A dependency's `version` is not the package's.
+    expect(cargoPackageVersion('[package]\nname = "x"\n\n[dependencies]\nserde = { version = "1" }\nversion = "9"\n', workspaceManifest))
+      .toBeUndefined();
+  });
+
+  it("accepts one version everywhere", () => {
+    expect(versionAlignmentProblem([["package.json", "0.4.0"], ["tauri.conf.json", "0.4.0"], ["Cargo", "0.4.0"]])).toBeNull();
+  });
+
+  it("names every location when one of them drifts or is missing", () => {
+    const drift = versionAlignmentProblem([["package.json", "0.4.0"], ["tauri.conf.json", "0.3.9"]]);
+    expect(drift).toContain("package.json = 0.4.0");
+    expect(drift).toContain("tauri.conf.json = 0.3.9");
+    expect(versionAlignmentProblem([["package.json", "0.4.0"], ["Cargo", undefined]])).toContain("Cargo = missing");
+    expect(versionAlignmentProblem([["package.json", undefined]])).toContain("missing");
   });
 });
 

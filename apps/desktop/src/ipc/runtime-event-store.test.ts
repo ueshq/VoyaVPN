@@ -7,7 +7,12 @@ const ipcCommandMocks = vi.hoisted(() => ({
 vi.mock("@/ipc/commands", () => ipcCommandMocks);
 
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import type { ProxyConnectionsSnapshot, SpeedtestResult, StatisticsSnapshot } from "@/ipc/bindings";
+import type {
+  ProxyConnectionsSnapshot,
+  RuntimeStatusResponse,
+  SpeedtestResult,
+  StatisticsSnapshot,
+} from "@/ipc/bindings";
 
 const initialMonitorStatus = {
   message: null,
@@ -256,6 +261,53 @@ describe("runtime event store", () => {
     });
   });
 
+  it.each([
+    [
+      "a core-state event",
+      (status: RuntimeStatusResponse) =>
+        useRuntimeEventStore.getState().pushTransientEvent({ kind: "coreState", payload: status }),
+    ],
+    ["a status read", (status: RuntimeStatusResponse) => useRuntimeEventStore.getState().setCoreState(status)],
+  ])("drops the previous session's connections when %s says the core disconnected", async (_source, apply) => {
+    vi.useFakeTimers();
+    apply(coreStatus("connected"));
+    useRuntimeEventStore.getState().setProxyConnections(
+      makeConnectionsSnapshot("connection-1", "old.example.com:443", 200, 100),
+    );
+    // A push still queued for the old core must not land after the disconnect.
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "proxyConnections",
+      payload: makeConnectionsSnapshot("connection-2", "late.example.com:443", 300, 100),
+    });
+
+    apply(coreStatus("disconnected"));
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().proxyConnections).toBeNull();
+
+    // The next session's first push schedules a frame of its own.
+    apply(coreStatus("connected"));
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "proxyConnections",
+      payload: makeConnectionsSnapshot("connection-3", "new.example.com:443", 10, 5),
+    });
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().proxyConnections?.connections[0]?.id).toBe("connection-3");
+  });
+
+  it("keeps the connection table while the core stays connected", () => {
+    useRuntimeEventStore.getState().setCoreState(coreStatus("connected"));
+    useRuntimeEventStore.getState().setProxyConnections(cachedConnections);
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "coreState",
+      payload: { ...coreStatus("connected"), connectedDurationMs: 5_000 },
+    });
+
+    expect(useRuntimeEventStore.getState().proxyConnections).toBe(cachedConnections);
+  });
+
   it("coalesces proxy connection websocket events into the next frame", async () => {
     vi.useFakeTimers();
 
@@ -287,25 +339,23 @@ describe("runtime event store", () => {
     });
   });
 
-  it("coalesces log batches into one frame and stamps each at receipt", async () => {
+  it("coalesces log batches into one frame and keeps when each line was logged", async () => {
     vi.useFakeTimers();
-    // Drive the receipt clock with a `Date.now` spy rather than `setSystemTime`:
+    // Drive the arrival clock with a `Date.now` spy rather than `setSystemTime`:
     // moving the fake system clock after a frame is already scheduled stops that
     // frame from ever firing, which would make this assert a timer quirk instead
     // of the coalescing behaviour.
-    const firstAt = Date.parse("2026-06-01T08:09:10.000Z");
-    const secondAt = Date.parse("2026-06-01T08:10:30.000Z");
-    const now = vi.spyOn(Date, "now");
+    const loggedAt = Date.parse("2026-06-01T08:05:00.000Z");
+    const arrivedAt = Date.parse("2026-06-01T08:09:10.000Z");
+    vi.spyOn(Date, "now").mockReturnValue(arrivedAt);
 
-    now.mockReturnValue(firstAt);
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "logLines",
       payload: [
-        { body: { line: "core started", source: "core" }, id: 1, level: "info" },
-        { body: { line: "inbound/mixed started", source: "core" }, id: 2, level: "info" },
+        { body: { line: "core started", source: "core" }, id: 1, level: "info", loggedAtMs: loggedAt },
+        { body: { line: "inbound/mixed started", source: "core" }, id: 2, level: "info", loggedAtMs: null },
       ],
     });
-    now.mockReturnValue(secondAt);
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "logLines",
       payload: [
@@ -313,6 +363,7 @@ describe("runtime event store", () => {
           body: { code: { code: "connected" }, detail: null, source: "app" },
           id: 3,
           level: "warn",
+          loggedAtMs: loggedAt + 1000,
         },
       ],
     });
@@ -323,24 +374,40 @@ describe("runtime event store", () => {
 
     await vi.advanceTimersByTimeAsync(20);
 
-    // Each line keeps the moment it arrived, so lines buffered while the Logs
-    // panel was unmounted do not all read as the panel-open time.
+    // Lines the backend held back while no Logs panel was open keep the time
+    // they were logged, not the panel-open time; arrival time only stands in
+    // for a missing stamp.
     expect(useRuntimeEventStore.getState().logLines).toEqual([
-      { body: { line: "core started", source: "core" }, id: 1, level: "info", receivedAt: firstAt },
+      { body: { line: "core started", source: "core" }, id: 1, level: "info", loggedAt },
       {
         body: { line: "inbound/mixed started", source: "core" },
         id: 2,
         level: "info",
-        receivedAt: firstAt,
+        loggedAt: arrivedAt,
       },
       {
         body: { code: { code: "connected" }, detail: null, source: "app" },
         id: 3,
         level: "warn",
-        receivedAt: secondAt,
+        loggedAt: loggedAt + 1000,
       },
     ]);
-    now.mockRestore();
+  });
+
+  it("does not notify subscribers for an empty batch", async () => {
+    vi.useFakeTimers();
+    const before = useRuntimeEventStore.getState();
+    const listener = vi.fn();
+    const unsubscribe = useRuntimeEventStore.subscribe(listener);
+
+    useRuntimeEventStore.getState().pushTransientEvent({ kind: "logLines", payload: [] });
+    useRuntimeEventStore.getState().pushTransientEvent({ kind: "speedtestResults", payload: [] });
+    await vi.advanceTimersByTimeAsync(20);
+    unsubscribe();
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(useRuntimeEventStore.getState().logLines).toBe(before.logLines);
+    expect(useRuntimeEventStore.getState().speedtestResultsByProfileId).toBe(before.speedtestResultsByProfileId);
   });
 
   it("drops buffered log lines when the log is cleared before the frame runs", async () => {
@@ -348,7 +415,7 @@ describe("runtime event store", () => {
 
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "logLines",
-      payload: [{ body: { line: "core started", source: "core" }, id: 1, level: "info" }],
+      payload: [{ body: { line: "core started", source: "core" }, id: 1, level: "info", loggedAtMs: null }],
     });
     useRuntimeEventStore.getState().clearLogs();
     await vi.advanceTimersByTimeAsync(20);
@@ -380,29 +447,19 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().proxyConnections).toBeNull();
   });
 
-  it("stores a valid statistics payload with only its known fields", () => {
-    const statistics: StatisticsSnapshot = {
-      activeProfileId: "profile-a",
-      directDownloadBytesPerSecond: 1,
-      directUploadBytesPerSecond: 2,
-      downloadBytesPerSecond: 3,
-      proxyDownloadBytesPerSecond: null,
-      proxyUploadBytesPerSecond: 4,
-      serverStat: {
-        dateNow: 5,
-        indexId: "profile-a",
-        todayDown: 6,
-        todayUp: 7,
-        totalDown: null,
-        totalUp: 8,
-      },
-      uploadBytesPerSecond: 0,
-    };
+  it("stores a valid statistics payload with only its known fields", async () => {
+    vi.useFakeTimers();
+    const statistics = statisticsSnapshot("profile-a", 3);
 
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "statistics",
       payload: { ...statistics, extra: "dropped" } as StatisticsSnapshot,
     });
+
+    // Applied on the next frame, like the other once-a-second streams.
+    expect(useRuntimeEventStore.getState().statistics).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(20);
 
     expect(useRuntimeEventStore.getState().statistics).toEqual(statistics);
     expect(useRuntimeEventStore.getState().serverStatsByProfileId).toEqual({
@@ -410,7 +467,61 @@ describe("runtime event store", () => {
     });
   });
 
-  it("rejects invalid statistics payloads before storing them", () => {
+  it("applies statistics samples that share a frame once, keeping the latest", async () => {
+    vi.useFakeTimers();
+    const notify = vi.fn();
+    const unsubscribe = useRuntimeEventStore.subscribe(notify);
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "statistics",
+      payload: statisticsSnapshot("profile-a", 3),
+    });
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "statistics",
+      payload: statisticsSnapshot("profile-a", 9),
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    unsubscribe();
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(useRuntimeEventStore.getState().statistics?.downloadBytesPerSecond).toBe(9);
+  });
+
+  it("keeps each node's totals when samples for two nodes share a frame", async () => {
+    vi.useFakeTimers();
+    const first = statisticsSnapshot("profile-a", 3);
+    const second = statisticsSnapshot("profile-b", 4);
+
+    useRuntimeEventStore.getState().pushTransientEvent({ kind: "statistics", payload: first });
+    useRuntimeEventStore.getState().pushTransientEvent({ kind: "statistics", payload: second });
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().serverStatsByProfileId).toEqual({
+      "profile-a": first.serverStat,
+      "profile-b": second.serverStat,
+    });
+    expect(useRuntimeEventStore.getState().statistics).toEqual(second);
+  });
+
+  it("lets the zero sample after traffic stops land last", async () => {
+    vi.useFakeTimers();
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "statistics",
+      payload: statisticsSnapshot("profile-a", 7),
+    });
+    await vi.advanceTimersByTimeAsync(20);
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "statistics",
+      payload: statisticsSnapshot("profile-a", 0),
+    });
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().statistics?.downloadBytesPerSecond).toBe(0);
+  });
+
+  it("rejects invalid statistics payloads before storing them", async () => {
+    vi.useFakeTimers();
     const invalidStatistics = {
       activeProfileId: "profile-a",
       directDownloadBytesPerSecond: 0,
@@ -426,6 +537,7 @@ describe("runtime event store", () => {
       kind: "statistics",
       payload: invalidStatistics,
     });
+    await vi.advanceTimersByTimeAsync(20);
 
     expect(useRuntimeEventStore.getState().statistics).toBeNull();
     expect(useRuntimeEventStore.getState().serverStatsByProfileId).toEqual({});
@@ -453,6 +565,17 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().proxyConnections?.downloadTotal).toBe(200);
   });
 });
+
+function coreStatus(state: RuntimeStatusResponse["state"]): RuntimeStatusResponse {
+  return {
+    activeProfileId: state === "connected" ? "profile-a" : null,
+    activeTunBackend: null,
+    connectedDurationMs: state === "connected" ? 0 : null,
+    mainPid: null,
+    prePid: null,
+    state,
+  };
+}
 
 function speedtestResult(
   indexId: string,
@@ -497,5 +620,25 @@ function makeConnectionsSnapshot(
     ],
     downloadTotal,
     uploadTotal,
+  };
+}
+
+function statisticsSnapshot(indexId: string, downloadBytesPerSecond: number): StatisticsSnapshot {
+  return {
+    activeProfileId: indexId,
+    directDownloadBytesPerSecond: 1,
+    directUploadBytesPerSecond: 2,
+    downloadBytesPerSecond,
+    proxyDownloadBytesPerSecond: null,
+    proxyUploadBytesPerSecond: 4,
+    serverStat: {
+      dateNow: 5,
+      indexId,
+      todayDown: 6,
+      todayUp: 7,
+      totalDown: null,
+      totalUp: 8,
+    },
+    uploadBytesPerSecond: 0,
   };
 }

@@ -1,9 +1,9 @@
 import type { TranslationFunction } from "@voya/i18n";
-import type { ProfileListEntry, ProfileTransport } from "@/ipc/bindings";
+import type { ProfileSummaryEntry, ProfileTransport } from "@/ipc/bindings";
 import { speedtestOutcomeText } from "@/ipc/messages";
 import { formatDelay } from "@voya/utils/formatting";
 
-export function profileLatency(item: ProfileListEntry, t: TranslationFunction) {
+export function profileLatency(item: ProfileSummaryEntry, t: TranslationFunction) {
   const { delayMs, outcome } = item.metrics;
   return outcome && outcome !== "completed" ? speedtestOutcomeText(t, outcome) : delayMs > 0 ? formatDelay(delayMs) : t("panes.profiles.card.untested");
 }
@@ -11,7 +11,7 @@ export function profileLatency(item: ProfileListEntry, t: TranslationFunction) {
 type LatencyTone = "good" | "fair" | "poor" | "unknown";
 
 /** Slow but reachable nodes are a warning; only failed tests use danger. */
-export function profileLatencyTone(item: ProfileListEntry): LatencyTone {
+export function profileLatencyTone(item: ProfileSummaryEntry): LatencyTone {
   const { delayMs, outcome } = item.metrics;
   if (outcome && outcome !== "completed") return "poor";
   if (!delayMs || delayMs <= 0) return "unknown";
@@ -57,6 +57,6 @@ export function profileFlagCountryCode(name: string | null | undefined) {
 }
 
 /** A measured country first; a flag in the node name is only a provisional hint. */
-export function entryCountry(entry: ProfileListEntry | null | undefined) {
+export function entryCountry(entry: ProfileSummaryEntry | null | undefined) {
   return entry ? (entry.metrics.countryCode ?? profileFlagCountryCode(entry.profile.remarks)) : null;
 }

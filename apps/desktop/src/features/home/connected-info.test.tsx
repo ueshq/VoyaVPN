@@ -52,6 +52,23 @@ describe("backend connection duration", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("keeps its tick schedule when samples arrive between ticks", () => {
+    useRuntimeEventStore.getState().setCoreState(connected);
+    render(<Metrics />);
+    act(() => { vi.advanceTimersByTime(600); });
+    act(() => useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "coreState",
+      payload: { ...connected, connectedDurationMs: 1458600 },
+    }));
+    expect(vi.getTimerCount()).toBe(1);
+
+    // The timer started with the first sample still fires at the one-second
+    // mark: 1458.6 s sampled plus 0.4 s since. A timer restarted by the sample
+    // would not fire until 1.6 s, and never at all under a faster stream.
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:24:19");
+  });
+
   it("stops ticking while the window is hidden and resumes on the right second", () => {
     const visibility = vi.spyOn(document, "visibilityState", "get");
     useRuntimeEventStore.getState().setCoreState(connected);

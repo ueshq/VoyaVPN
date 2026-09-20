@@ -368,6 +368,82 @@ fn std_process_runner_drop_kills_tracked_children() {
 }
 
 #[cfg(unix)]
+#[test]
+fn std_process_runner_stop_lets_the_child_exit_on_sigterm() {
+    let root = unique_temp_root("sigterm");
+    fs::create_dir_all(&root).expect("temp root");
+    let marker = root.join("terminated");
+    let script = format!(
+        "trap 'touch \"{}\"; exit 0' TERM; while :; do sleep 0.05; done",
+        marker.display()
+    );
+    let runner = StdProcessRunner::new();
+    let handle = runner
+        .spawn(
+            ProcessSpawn::new(ProcessRole::Probe, "/bin/sh")
+                .with_arguments(["-c".to_string(), script])
+                .with_display_log(false),
+        )
+        .expect("spawn shell");
+    // The trap is only installed once the shell has read the script.
+    thread::sleep(Duration::from_millis(200));
+
+    runner.stop(&handle).expect("stop");
+
+    assert!(marker.exists(), "the child ran its SIGTERM handler");
+    assert!(!process_is_running(handle.id()));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(unix)]
+#[test]
+fn std_process_runner_stop_kills_a_child_that_ignores_sigterm() {
+    let runner = StdProcessRunner::new();
+    let handle = runner
+        .spawn(
+            ProcessSpawn::new(ProcessRole::Probe, "/bin/sh")
+                .with_arguments([
+                    "-c".to_string(),
+                    "trap '' TERM; while :; do sleep 0.05; done".to_string(),
+                ])
+                .with_display_log(false),
+        )
+        .expect("spawn shell");
+    thread::sleep(Duration::from_millis(200));
+
+    let started = std::time::Instant::now();
+    runner.stop(&handle).expect("stop");
+
+    assert!(started.elapsed() >= CHILD_TERM_GRACE);
+    assert!(started.elapsed() < CHILD_STOP_TIMEOUT);
+    assert!(!process_is_running(handle.id()));
+}
+
+struct NoopExitHandler;
+
+impl ProcessExitHandler for NoopExitHandler {
+    fn process_exited(&self, _exit: ProcessExit) {}
+}
+
+#[test]
+fn std_process_runner_exit_handler_slot_can_be_cleared_and_retaken() {
+    let runner = StdProcessRunner::new();
+    let handler: Arc<dyn ProcessExitHandler> = Arc::new(NoopExitHandler);
+    runner.set_exit_handler(Some(Arc::clone(&handler)));
+    runner.set_exit_handler(Some(handler));
+    runner.set_exit_handler(None);
+    runner.set_exit_handler(Some(Arc::new(NoopExitHandler)));
+}
+
+#[test]
+#[should_panic(expected = "one exit-handler slot")]
+fn std_process_runner_refuses_a_second_exit_handler_in_debug_builds() {
+    let runner = StdProcessRunner::new();
+    runner.set_exit_handler(Some(Arc::new(NoopExitHandler)));
+    runner.set_exit_handler(Some(Arc::new(NoopExitHandler)));
+}
+
+#[cfg(unix)]
 fn process_is_running(pid: u32) -> bool {
     let pid = pid.to_string();
     Command::new("kill")

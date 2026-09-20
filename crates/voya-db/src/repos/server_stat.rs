@@ -52,16 +52,6 @@ impl<'executor> ServerStatRepository<'executor> {
         row.map(row_to_server_stat).transpose()
     }
 
-    pub async fn list(&self) -> Result<Vec<ServerStatItem>> {
-        let rows = run_query!(
-            self.executor,
-            sqlx::query("SELECT * FROM server_stat_items ORDER BY index_id"),
-            fetch_all
-        )?;
-
-        rows.into_iter().map(row_to_server_stat).collect()
-    }
-
     pub async fn delete_orphans(&self) -> Result<u64> {
         let result = run_query!(
             self.executor,

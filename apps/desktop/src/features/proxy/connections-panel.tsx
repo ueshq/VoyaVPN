@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Activity, ArrowDown, ArrowUp, Inbox, LoaderCircle, RefreshCw, Unplug } from "lucide-react";
@@ -77,6 +77,10 @@ export function ConnectionsPanel({
   const connected = coreState?.state === "connected";
   const connectionsQuery = useQuery({
     enabled: connected,
+    // A table read on an earlier visit is never worth showing on the next one:
+    // the store keeps the session's latest snapshot, and a cached copy that
+    // outlived a disconnect would show the previous core's rows.
+    gcTime: 0,
     queryFn: async () => {
       const before = useRuntimeEventStore.getState().proxyConnections;
       const next = await proxyListConnections();
@@ -90,6 +94,14 @@ export function ConnectionsPanel({
     queryKey: queryKeys.proxyConnections,
     staleTime: 3_000,
   });
+  // The store drops its snapshot when the core disconnects. While the panel
+  // stays mounted the cached read survives `gcTime`, so it is dropped here too,
+  // or a reconnect would fall back to the old session's rows.
+  useEffect(() => {
+    if (!connected) {
+      void queryClient.resetQueries({ exact: true, queryKey: queryKeys.proxyConnections });
+    }
+  }, [connected, queryClient]);
   const snapshot = storeSnapshot ?? connectionsQuery.data ?? emptySnapshot;
   const hasSnapshot = Boolean(storeSnapshot ?? connectionsQuery.data);
   const updateFailed =
@@ -121,8 +133,16 @@ export function ConnectionsPanel({
 
   // Keep the last received details when a connection ends. Search results do
   // not determine liveness, and a missing ID still supports read-only details.
-  const current =
-    selection && snapshot.connections.find((item) => connectionKey(item) === connectionKey(selection.connection));
+  // Looked up once per push, not per render: an ID-less row's key is a JSON
+  // string built for every item scanned.
+  const selectedKey = selection ? connectionKey(selection.connection) : null;
+  const current = useMemo(
+    () =>
+      selectedKey === null
+        ? undefined
+        : snapshot.connections.find((item) => connectionKey(item) === selectedKey),
+    [snapshot.connections, selectedKey],
+  );
   if (selection && !selection.ended) {
     if (coreState?.state === "disconnected" || (hasSnapshot && !current)) {
       setSelection({ ...selection, ended: true });

@@ -109,13 +109,13 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/self-host/hosting-card.tsx", lines: 95, branches: 75 },
   { path: "apps/desktop/src/features/self-host/action-tile.tsx", lines: 95, branches: 75 },
   // State-bearing modules that sat under the global floor with nothing to
-  // stop them sliding further. Measured when listed: node-list-store 40/25,
-  // policy groups 53/44, DNS form schema 71/57, QR errors 63/17. The floors
-  // only keep today's tests; raise them as tests are added.
-  { path: "apps/desktop/src/stores/node-list-store.ts", lines: 30, branches: 15 },
-  { path: "apps/desktop/src/features/profiles/use-policy-groups.ts", lines: 45, branches: 35 },
-  { path: "apps/desktop/src/features/dns/dns-form-schema.ts", lines: 60, branches: 45 },
-  { path: "apps/desktop/src/features/profiles/qr-errors.ts", lines: 55, branches: 10 },
+  // stop them sliding further (listed at node-list-store 40/25, policy groups
+  // 53/44, DNS form schema 71/57, QR errors 63/17). All four measured 100/100
+  // once they got behavioural tests of their own or through the DNS pane.
+  { path: "apps/desktop/src/stores/node-list-store.ts", lines: 90, branches: 90 },
+  { path: "apps/desktop/src/features/profiles/use-policy-groups.ts", lines: 90, branches: 90 },
+  { path: "apps/desktop/src/features/dns/dns-form-schema.ts", lines: 90, branches: 90 },
+  { path: "apps/desktop/src/features/profiles/qr-errors.ts", lines: 90, branches: 90 },
   // Had no test at all; 100/100 once it got one.
   { path: "apps/desktop/src/features/profiles/speedtest-settings-dialog.tsx", lines: 90, branches: 85 },
 ];

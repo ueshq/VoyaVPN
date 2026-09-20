@@ -86,11 +86,6 @@ export default defineConfig({
               test: /node_modules[\\/](react|react-dom)[\\/]/,
             },
             {
-              name: "vendor-qr",
-              priority: 35,
-              test: /node_modules[\\/]@zxing[\\/]/,
-            },
-            {
               // The dialog, toast and checkbox primitives the shell renders.
               name: startupGroup("vendor-radix"),
               priority: 34,

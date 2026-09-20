@@ -6,7 +6,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, watch};
 use voya_platform::{
     coreinfo::TargetOs,
     elevation::{
@@ -23,6 +23,9 @@ use voya_platform::{
 #[derive(Clone)]
 pub struct CoreSupervisor {
     tx: mpsc::Sender<SupervisorCommand>,
+    /// Bumped after every command that can change the snapshot (anything but
+    /// `Status`), so a watcher can wait for a start or stop instead of polling.
+    changes: watch::Receiver<u64>,
 }
 
 impl CoreSupervisor {
@@ -42,11 +45,16 @@ impl CoreSupervisor {
     #[must_use]
     pub fn spawn(deps: SupervisorDeps) -> Self {
         let (tx, mut rx) = mpsc::channel(16);
-        let supervisor = Self { tx: tx.clone() };
+        let (changes_tx, changes) = watch::channel(0_u64);
+        let supervisor = Self {
+            tx: tx.clone(),
+            changes: changes.clone(),
+        };
         let runtime = tokio::runtime::Handle::current();
         deps.runner
             .set_exit_handler(Some(Arc::new(SupervisorProcessExitHandler {
                 tx: tx.downgrade(),
+                changes,
                 runtime: runtime.clone(),
             })));
         // Only the returned `CoreSupervisor` holds a strong sender, so the loop
@@ -59,7 +67,13 @@ impl CoreSupervisor {
             .spawn(move || {
                 let mut actor = SupervisorActor::new(deps, actor_tx, Some(runtime));
                 while let Some(command) = rx.blocking_recv() {
+                    let may_change = !matches!(command, SupervisorCommand::Status(_));
                     actor.handle(command);
+                    // After the handler, so a watcher woken by this reads the
+                    // snapshot the command produced.
+                    if may_change {
+                        changes_tx.send_modify(|tick| *tick = tick.wrapping_add(1));
+                    }
                 }
             })
         {
@@ -98,6 +112,15 @@ impl CoreSupervisor {
         self.request(SupervisorCommand::Status).await
     }
 
+    /// A tick that moves after every command that may have changed the
+    /// snapshot. Mark it seen *before* reading [`Self::status`], so a change
+    /// landing in between still wakes the next `changed()`. It closes when the
+    /// supervisor's actor ends.
+    #[must_use]
+    pub fn subscribe_changes(&self) -> watch::Receiver<u64> {
+        self.changes.clone()
+    }
+
     async fn request<F>(&self, build: F) -> Result<SupervisorSnapshot, SupervisorError>
     where
         F: FnOnce(
@@ -117,6 +140,7 @@ impl CoreSupervisor {
 
 struct SupervisorProcessExitHandler {
     tx: mpsc::WeakSender<SupervisorCommand>,
+    changes: watch::Receiver<u64>,
     runtime: tokio::runtime::Handle,
 }
 
@@ -125,7 +149,10 @@ impl ProcessExitHandler for SupervisorProcessExitHandler {
         let Some(tx) = self.tx.upgrade() else {
             return;
         };
-        let supervisor = CoreSupervisor { tx };
+        let supervisor = CoreSupervisor {
+            tx,
+            changes: self.changes.clone(),
+        };
         self.runtime.spawn(async move {
             if let Err(error) = supervisor
                 .process_exited(exit.process_id, exit.exit_code)

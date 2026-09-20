@@ -3,31 +3,38 @@ all-features = true
 
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
+# Every ignored advisory is `informational = "unmaintained"`: none reports a
+# vulnerability, and each crate is a transitive dependency this workspace cannot
+# replace on its own. Drop an entry as soon as the upstream edge goes away;
+# `cargo deny check advisories` warns `advisory-not-detected` for a stale one.
+# (The gtk-rs GTK3 advisories RUSTSEC-2024-0411..0420 were withdrawn from the
+# advisory database on 2026-08-14, so they need no entry.)
 ignore = [
-    { id = "RUSTSEC-2024-0370", reason = "Existing transitive GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0411", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0412", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0413", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0414", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0415", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0416", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0417", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0418", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0419", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0420", reason = "Existing transitive Tauri GTK3 stack advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2024-0436", reason = "Existing transitive Specta advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2025-0075", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2025-0080", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2025-0081", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2025-0098", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
-    { id = "RUSTSEC-2025-0100", reason = "Existing transitive Tauri URL pattern advisory; tracked outside CI-2 dependency gate wiring." },
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error: unmaintained build-time proc macro, pulled in only by glib-macros 0.18 and gtk3-macros 0.18 of the Linux GTK3 stack under tauri (tao, wry, muda, tray-icon); no runtime code. Clears when those macros drop it." },
+    { id = "RUSTSEC-2024-0436", reason = "paste: unmaintained build-time proc macro used by specta (IPC binding generation); no runtime code. Clears when specta drops it." },
+    { id = "RUSTSEC-2025-0075", reason = "unic-char-range: unmaintained Unicode tables behind unic-ucd-ident, reached only through urlpattern 0.3 in tauri-utils, which matches capability URLs against fixed patterns from our own config; clears when tauri-utils moves to a urlpattern release without unic-*." },
+    { id = "RUSTSEC-2025-0080", reason = "unic-common: unmaintained Unicode tables behind unic-ucd-ident, reached only through urlpattern 0.3 in tauri-utils, which matches capability URLs against fixed patterns from our own config; clears when tauri-utils moves to a urlpattern release without unic-*." },
+    { id = "RUSTSEC-2025-0081", reason = "unic-char-property: unmaintained Unicode tables behind unic-ucd-ident, reached only through urlpattern 0.3 in tauri-utils, which matches capability URLs against fixed patterns from our own config; clears when tauri-utils moves to a urlpattern release without unic-*." },
+    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version: unmaintained Unicode tables behind unic-ucd-ident, reached only through urlpattern 0.3 in tauri-utils, which matches capability URLs against fixed patterns from our own config; clears when tauri-utils moves to a urlpattern release without unic-*." },
+    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident: unmaintained Unicode identifier tables, reached only through urlpattern 0.3 in tauri-utils, which matches capability URLs against fixed patterns from our own config; clears when tauri-utils moves to a urlpattern release without unic-*." },
 ]
 
 [bans]
 multiple-versions = "warn"
+# `wildcards = "deny"` cannot be turned on yet: the workspace crates are not
+# `publish = false`, and cargo-deny treats their versionless path dependencies
+# as wildcards even with `allow-wildcard-paths = true`.
 wildcards = "allow"
 highlight = "all"
-deny = []
+# TLS is rustls-only (voya-net builds reqwest with `default-features = false`
+# and rustls features; tokio-tungstenite only speaks loopback `ws://` and has no
+# TLS feature at all). A dependency that re-enables
+# a default TLS feature would silently add a second TLS stack with its own trust
+# roots, and on Linux a runtime dependency on the system OpenSSL.
+deny = [
+    { crate = "native-tls", reason = "TLS is rustls-only; native-tls is a second TLS stack and links OpenSSL on Linux.", use-instead = "rustls" },
+    { crate = "openssl-sys", reason = "TLS is rustls-only; the Linux packages must not depend on the system OpenSSL.", use-instead = "rustls" },
+]
 skip = []
 skip-tree = []
 

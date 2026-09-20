@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@/components/app-shell/query-client";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot, Routing_Serialize, RuntimeStatusResponse } from "@/ipc/bindings";
+import { queryKeys } from "@/ipc/query-keys";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@/stores/toast-store";
@@ -301,6 +302,42 @@ describe("ConnectionsPanel", () => {
     await waitFor(() => expect(ipc.proxyListConnections).toHaveBeenCalledTimes(1));
     await act(async () => finish(empty));
     expect(await screen.findByText("No active connections")).toBeInTheDocument();
+  });
+
+  it("starts a reconnected session empty instead of showing the previous core's rows", async () => {
+    seed([connection(0)]);
+    renderConnections();
+    expect(await screen.findByText("host-0.example.test")).toBeInTheDocument();
+    await waitFor(() => expect(ipc.proxyListConnections).toHaveBeenCalledTimes(1));
+
+    act(() => useRuntimeEventStore.getState().setCoreState({ ...core, state: "disconnected" }));
+    ipc.proxyListConnections.mockReturnValue(new Promise(() => {}));
+    act(() => useRuntimeEventStore.getState().setCoreState(core));
+
+    expect(screen.queryByTestId("connection-row")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading connections" })).toBeInTheDocument();
+    await waitFor(() => expect(ipc.proxyListConnections).toHaveBeenCalledTimes(2));
+  });
+
+  it("does not bring back a table read before a disconnect that happened off screen", async () => {
+    // The app's own gcTime, not the harness's zero, so the query has to drop
+    // its cache by itself.
+    const client = createTestQueryClient();
+    seed([connection(0)]);
+    const first = renderConnections(client);
+    expect(await screen.findByText("host-0.example.test")).toBeInTheDocument();
+    await waitFor(() => expect(ipc.proxyListConnections).toHaveBeenCalledTimes(1));
+    first.unmount();
+    // Garbage collection runs on a timer, long before anyone could navigate back.
+    await waitFor(() => expect(client.getQueryData(queryKeys.proxyConnections)).toBeUndefined());
+
+    useRuntimeEventStore.getState().setCoreState({ ...core, state: "disconnected" });
+    useRuntimeEventStore.getState().setCoreState(core);
+    ipc.proxyListConnections.mockReturnValue(new Promise(() => {}));
+    renderConnections(client);
+
+    expect(screen.queryByTestId("connection-row")).not.toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Loading connections" })).toBeInTheDocument();
   });
 
   it("shows a search empty state and clears the search", async () => {

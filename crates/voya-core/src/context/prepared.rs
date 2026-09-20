@@ -41,26 +41,7 @@ impl PreparedContextBuilder {
     pub fn build(&self, node: &ProfileItem) -> CoreConfigContextBuilderResult {
         let mut context = self.base.clone();
         context.routing_item.clone_from(&self.routing_item);
-        self.finish(context, node, true)
-    }
-
-    /// [`Self::build`] for a config that holds only `node`'s own outbound, a
-    /// speedtest page or a latency probe tag: the same validation outcome,
-    /// but the context carries neither the routing nor the outbounds its rules
-    /// resolved, which such a config never reads.
-    #[must_use]
-    pub fn build_node_outbound(&self, node: &ProfileItem) -> CoreConfigContextBuilderResult {
-        self.finish(self.base.clone(), node, false)
-    }
-
-    fn finish(
-        &self,
-        mut context: CoreConfigContext,
-        node: &ProfileItem,
-        with_rules: bool,
-    ) -> CoreConfigContextBuilderResult {
-        context.node = node.clone();
-        let node_result = resolve_node(&mut context, node);
+        let node_result = resolve(&mut context, node);
         if !node_result.success() {
             return CoreConfigContextBuilderResult {
                 context,
@@ -77,27 +58,46 @@ impl PreparedContextBuilder {
         validator_result
             .warnings
             .extend_from_slice(&self.rules.result.warnings);
-        if with_rules {
-            // A rule outbound replaces an entry the node registered under the
-            // same key, as registering it after the node did.
-            context.all_proxies_map.extend(
-                self.rules
-                    .all_proxies_map
-                    .iter()
-                    .map(|(tag, outbound)| (tag.clone(), outbound.clone())),
-            );
-            merge_protect_domains(
-                &mut context.protect_domain_list,
-                &self.rules.protect_domain_list,
-            );
-            context
-                .rule_policy_groups
-                .clone_from(&self.rules.policy_groups);
-        }
+        // A rule outbound replaces an entry the node registered under the
+        // same key, as registering it after the node did.
+        context.all_proxies_map.extend(
+            self.rules
+                .all_proxies_map
+                .iter()
+                .map(|(tag, outbound)| (tag.clone(), outbound.clone())),
+        );
+        merge_protect_domains(
+            &mut context.protect_domain_list,
+            &self.rules.protect_domain_list,
+        );
+        context
+            .rule_policy_groups
+            .clone_from(&self.rules.policy_groups);
 
         CoreConfigContextBuilderResult {
             context,
             validator_result,
         }
     }
+
+    /// [`Self::build`] for a config that holds only `node`'s own outbound, a
+    /// speedtest page or a latency probe tag. The context carries neither the
+    /// routing nor the outbounds its rules resolved, which such a config never
+    /// reads, and the verdict is the node's own: a rule naming a deleted node
+    /// breaks connecting, not measuring, so it must not fail every node in a
+    /// speedtest as `InvalidProfile`.
+    #[must_use]
+    pub fn build_node_outbound(&self, node: &ProfileItem) -> CoreConfigContextBuilderResult {
+        let mut context = self.base.clone();
+        let validator_result = resolve(&mut context, node);
+        CoreConfigContextBuilderResult {
+            context,
+            validator_result,
+        }
+    }
+}
+
+fn resolve(context: &mut CoreConfigContext, node: &ProfileItem) -> NodeValidatorResult {
+    context.node = node.clone();
+    resolve_node(context, node)
 }

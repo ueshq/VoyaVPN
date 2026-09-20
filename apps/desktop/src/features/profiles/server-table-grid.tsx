@@ -26,6 +26,7 @@ import {
 import { getProtocolLabel } from "./profile-constants";
 
 import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
+import { overlaySpeedtestResult } from "./use-node-list-data";
 import type { ServerTableController } from "./use-server-table";
 
 export function ProfileCardList({
@@ -41,6 +42,7 @@ export function ProfileCardList({
     rows,
     renderedRows,
     rowVirtualizer,
+    speedtestResultsByProfileId,
     t,
     viewportRef,
   } = controller;
@@ -127,14 +129,19 @@ export function ProfileCardList({
                     <NodeGroupCard row={row} controller={controller} />
                   </li>
                 );
-              const item = row.item;
+              // Rows are laid out from the listing while nothing sorts or
+              // filters by latency; live results land on the rendered few.
+              const item = overlaySpeedtestResult(
+                row.item,
+                speedtestResultsByProfileId[row.item.profile.id],
+              );
               const { profile } = item;
               const id = profile.id;
               const running = activation.runningId === id;
               const switching = activation.switchingId === id;
               const rawName = profileTitle(profile.remarks, t);
               const name = profileNameWithoutFlag(rawName);
-              const address = profile.protocol.server.address || "—";
+              const address = profile.address || "—";
               const tone = profileLatencyTone(item);
               return (
                 <li key={row.key} {...rowProps}>
@@ -192,7 +199,7 @@ export function ProfileCardList({
                             <span className="node-card-address" title={address}>
                               {address}
                             </span>
-                            <span>{getProtocolLabel(profile.protocol.kind)}</span>
+                            <span>{getProtocolLabel(profile.kind)}</span>
                           </div>
                         </div>
                         <div className="profile-node-actions">

@@ -80,20 +80,45 @@ pub fn elevate_launcher_path(os: TargetOs) -> Option<PathBuf> {
 #[cfg(unix)]
 #[must_use]
 pub fn current_username() -> Option<String> {
-    use std::ffi::CStr;
+    use std::{ffi::CStr, mem::MaybeUninit, ptr};
 
-    // SAFETY: `getpwuid` returns a pointer into static storage that we copy out
-    // immediately; `geteuid` has no preconditions.
-    unsafe {
-        let entry = libc::getpwuid(libc::geteuid());
-        if entry.is_null() {
+    // The name ends up in a root-owned sudoers rule. `getpwuid` returns a
+    // shared static that any other passwd lookup in the process (WebKit, a
+    // plugin) may overwrite before it is copied; `getpwuid_r` fills only the
+    // buffers passed to it.
+    let mut buffer: Vec<libc::c_char> = vec![0; 1024];
+    loop {
+        let mut entry = MaybeUninit::<libc::passwd>::uninit();
+        let mut found: *mut libc::passwd = ptr::null_mut();
+        // SAFETY: `geteuid` has no preconditions; every pointer names storage
+        // owned by this frame, and `buffer.len()` is the buffer's real size.
+        let status = unsafe {
+            libc::getpwuid_r(
+                libc::geteuid(),
+                entry.as_mut_ptr(),
+                buffer.as_mut_ptr(),
+                buffer.len(),
+                &mut found,
+            )
+        };
+        if status == libc::ERANGE && buffer.len() < 1 << 20 {
+            buffer.resize(buffer.len() * 2, 0);
+            continue;
+        }
+        if status != 0 || found.is_null() {
             return None;
         }
-        let name = (*entry).pw_name;
+        // SAFETY: success with a non-null `found` means `entry` is initialised
+        // and `pw_name` is null or a C string inside `buffer`, still alive here.
+        let name = unsafe { (*found).pw_name };
         if name.is_null() {
             return None;
         }
-        CStr::from_ptr(name).to_str().ok().map(str::to_owned)
+        // SAFETY: as above, `name` is a NUL-terminated string in `buffer`.
+        return unsafe { CStr::from_ptr(name) }
+            .to_str()
+            .ok()
+            .map(str::to_owned);
     }
 }
 
@@ -354,6 +379,18 @@ pub enum PrivilegeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn privilege_current_username_matches_the_effective_user() {
+        let expected = std::process::Command::new("id")
+            .arg("-un")
+            .output()
+            .expect("id -un");
+        let expected = String::from_utf8_lossy(&expected.stdout).trim().to_string();
+
+        assert_eq!(current_username(), Some(expected));
+    }
 
     #[test]
     fn privilege_elevation_state_tracks_grant() {

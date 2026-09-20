@@ -19,12 +19,12 @@ pub use policy_groups::{
 pub use profiles::{profile_from_contract, profile_to_contract};
 
 use voya_contracts::{
-    MoveAction, ProfileListEntry, ProfileListing as ProfileListingContract, ProfileMetrics,
-    ProfileTraffic, SpeedtestOutcome,
+    MoveAction, ProfileDetails, ProfileKind, ProfileMetrics, ProfileSummary, ProfileSummaryEntry,
+    ProfileSummaryListing as ProfileSummaryListingContract, ProfileTraffic, SpeedtestOutcome,
 };
-use voya_core::{MoveAction as CoreMoveAction, ProfileListItem};
+use voya_core::{ConfigType, MoveAction as CoreMoveAction, ProfileExItem, ProfileListItem};
 
-use crate::profiles::ProfileListing;
+use crate::profiles::{ProfileSummaryItem, ProfileSummaryListing};
 
 #[must_use]
 pub const fn sysproxy_type_to_contract(
@@ -277,20 +277,40 @@ pub fn system_proxy_status_to_contract(
 }
 
 #[must_use]
-pub fn profile_list_to_contract(item: ProfileListItem) -> ProfileListEntry {
-    ProfileListEntry {
+pub const fn profile_kind_to_contract(config_type: ConfigType) -> ProfileKind {
+    match config_type {
+        ConfigType::VMess => ProfileKind::Vmess,
+        ConfigType::Shadowsocks => ProfileKind::Shadowsocks,
+        ConfigType::SOCKS => ProfileKind::Socks,
+        ConfigType::VLESS => ProfileKind::Vless,
+        ConfigType::Trojan => ProfileKind::Trojan,
+        ConfigType::Hysteria2 => ProfileKind::Hysteria2,
+        ConfigType::TUIC => ProfileKind::Tuic,
+        ConfigType::WireGuard => ProfileKind::WireGuard,
+        ConfigType::HTTP => ProfileKind::Http,
+        ConfigType::Anytls => ProfileKind::Anytls,
+        ConfigType::Naive => ProfileKind::Naive,
+    }
+}
+
+fn metrics_to_contract(profile_ex: ProfileExItem) -> ProfileMetrics {
+    ProfileMetrics {
+        delay_ms: profile_ex.delay,
+        sort: profile_ex.sort,
+        outcome: profile_ex
+            .message
+            .as_deref()
+            .and_then(SpeedtestOutcome::from_stored),
+        ip_info: profile_ex.ip_info,
+        country_code: profile_ex.country_code,
+    }
+}
+
+#[must_use]
+pub fn profile_details_to_contract(item: ProfileListItem) -> ProfileDetails {
+    ProfileDetails {
         profile: profile_to_contract(item.profile),
-        metrics: ProfileMetrics {
-            delay_ms: item.profile_ex.delay,
-            sort: item.profile_ex.sort,
-            outcome: item
-                .profile_ex
-                .message
-                .as_deref()
-                .and_then(SpeedtestOutcome::from_stored),
-            ip_info: item.profile_ex.ip_info,
-            country_code: item.profile_ex.country_code,
-        },
+        metrics: metrics_to_contract(item.profile_ex),
         traffic: ProfileTraffic {
             total_upload: item.server_stat.total_up,
             total_download: item.server_stat.total_down,
@@ -302,18 +322,37 @@ pub fn profile_list_to_contract(item: ProfileListItem) -> ProfileListEntry {
     }
 }
 
+#[must_use]
+pub fn profile_summary_to_contract(item: ProfileSummaryItem) -> ProfileSummaryEntry {
+    let profile = item.profile;
+    ProfileSummaryEntry {
+        profile: ProfileSummary {
+            kind: profile_kind_to_contract(profile.config_type()),
+            address: profile.address().to_owned(),
+            port: profile.port(),
+            id: profile.index_id,
+            subscription_id: profile.subscription_id,
+            remarks: profile.remarks,
+        },
+        metrics: metrics_to_contract(item.profile_ex),
+        is_active: item.is_active,
+    }
+}
+
 /// The listing plus the count of rows the storage layer had to skip.
 ///
 /// `usize` saturates into the contract's `u32`: a count that large is already
 /// nonsense to show, and clamping it keeps the listing renderable instead of
 /// failing the command over a number the user only reads as "a lot".
 #[must_use]
-pub fn profile_listing_to_contract(listing: ProfileListing) -> ProfileListingContract {
-    ProfileListingContract {
+pub fn profile_summary_listing_to_contract(
+    listing: ProfileSummaryListing,
+) -> ProfileSummaryListingContract {
+    ProfileSummaryListingContract {
         entries: listing
             .items
             .into_iter()
-            .map(profile_list_to_contract)
+            .map(profile_summary_to_contract)
             .collect(),
         undecodable_profiles: u32::try_from(listing.undecodable_profiles).unwrap_or(u32::MAX),
     }

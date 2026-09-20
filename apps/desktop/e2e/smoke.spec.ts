@@ -506,7 +506,7 @@ test("keeps the simplified navigation usable at desktop and minimum sizes", asyn
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.evaluate((profile) => {
     const state = window.__VOYA_SMOKE__.state as {
-      profiles: import("../src/ipc/bindings").ProfileListEntry[];
+      profiles: import("../src/ipc/bindings").ProfileDetails[];
     };
     state.profiles = [profile];
     window.__VOYA_SMOKE__.emit("invalidate-event", {
@@ -723,7 +723,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
     page.getByRole("menuitem", { exact: true, name: "Add" }),
   ).toBeVisible();
   const before = (await smokeCalls(page)).filter(
-    (call) => call.command === "list_profiles",
+    (call) => call.command === "list_profile_summaries",
   ).length;
 
   await page.evaluate(() => {
@@ -736,7 +736,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
     .poll(
       async () =>
         (await smokeCalls(page)).filter(
-          (call) => call.command === "list_profiles",
+          (call) => call.command === "list_profile_summaries",
         ).length,
     )
     .toBeGreaterThan(before);

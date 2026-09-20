@@ -5,7 +5,7 @@ import {
   appErrorOfKind,
   deleteRoutingRules,
   listPolicyGroups,
-  listProfiles,
+  listProfileSummaries,
   listRoutings,
   moveRoutingRule,
   resetRoutingRules,
@@ -73,7 +73,7 @@ export function useRoutingScreen() {
     queryKey: queryKeys.routings,
   });
   const profilesQuery = useQuery({
-    queryFn: () => listProfiles(null, null),
+    queryFn: () => listProfileSummaries(),
     queryKey: queryKeys.profileList,
   });
   const policyGroupsQuery = useQuery({

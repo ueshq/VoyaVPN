@@ -10,6 +10,14 @@ import ipv6Fixture from "../../../tests/probe-contract/probe.response.ipv6.json"
 import responseFixture from "../../../tests/probe-contract/probe.response.json";
 import { handleRequest, parsePorts, type ProbeOutcome } from "../src/probe";
 
+// The fixtures carry documentation addresses (RFC 5737, RFC 3849), which the
+// handler refuses to dial, so each request comes from a routable caller of the
+// same family.
+const ROUTABLE_CALLER: Record<string, string> = {
+  "203.0.113.7": "104.16.0.7",
+  "2001:db8::7": "2606:4700::7",
+};
+
 function shape(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(shape);
   if (value && typeof value === "object") {
@@ -30,7 +38,7 @@ describe("probe wire contract", () => {
         new Request("https://probe.example/v1/probe", {
           method: "POST",
           body: JSON.stringify({ ports: fixture.results.map((result) => result.port) }),
-          headers: { "CF-Connecting-IP": fixture.ip === "2001:db8::7" ? "2606:4700::7" : fixture.ip },
+          headers: { "CF-Connecting-IP": ROUTABLE_CALLER[fixture.ip] ?? fixture.ip },
         }),
         { dial: async (_address, port) => outcomes.get(port) ?? "error" },
       );
@@ -48,7 +56,7 @@ describe("probe wire contract", () => {
       new Request("https://probe.example/v1/probe", {
         method: "POST",
         body: "{}",
-        headers: { "CF-Connecting-IP": "203.0.113.7" },
+        headers: { "CF-Connecting-IP": ROUTABLE_CALLER["203.0.113.7"] },
       }),
       { dial: async () => "error" },
     );

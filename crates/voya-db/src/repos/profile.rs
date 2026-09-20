@@ -1,5 +1,5 @@
 use sqlx::{sqlite::SqliteRow, Row};
-use voya_core::{ConfigType, ProfileExItem, ProfileItem};
+use voya_core::{ConfigType, ProfileExItem, ProfileIdentity, ProfileItem};
 
 use super::decode_rows;
 use crate::{
@@ -39,8 +39,19 @@ const PROFILE_LIST_QUERY: &str = profile_list_query!(
     "WHERE (? IS NULL OR p.subscription_id = ?)"
 );
 
-/// Ids and remarks only, in list order.
-const PROFILE_NAMES_QUERY: &str = profile_list_query!("p.index_id, p.remarks", "");
+/// Ids and remarks only, in list order, for the first `?` nodes.
+const PROFILE_NAMES_HEAD_QUERY: &str =
+    concat!(profile_list_query!("p.index_id, p.remarks", ""), " LIMIT ?");
+
+/// What a policy group reads from each node, in list order.
+const PROFILE_IDENTITIES_QUERY: &str =
+    profile_list_query!("p.index_id, p.remarks, p.subscription_id", "");
+
+/// The profiles named in a JSON array of ids, in list order.
+const PROFILE_BY_IDS_QUERY: &str = profile_list_query!(
+    "p.*",
+    "WHERE p.index_id IN (SELECT value FROM json_each(?))"
+);
 
 /// A profile listing together with the rows this build had to skip.
 ///
@@ -52,6 +63,16 @@ const PROFILE_NAMES_QUERY: &str = profile_list_query!("p.index_id, p.remarks", "
 pub struct ProfileListing {
     pub items: Vec<(ProfileItem, ProfileExItem)>,
     pub undecodable_rows: usize,
+}
+
+/// The start of the node list by name, for a menu that shows only that much.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProfileNamesHead {
+    /// `(index_id, remarks)` of the first nodes in list order, then the pinned
+    /// node when it sits further down.
+    pub names: Vec<(String, String)>,
+    /// How many nodes there are in all.
+    pub total: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -189,19 +210,102 @@ impl<'executor> ProfileRepository<'executor> {
         })
     }
 
-    /// Every node's id and remarks, in list order, without decoding the stored
-    /// payloads. The tray rebuilds its node menu on every show, hide and
-    /// connection change, and decoding three JSON blobs per node for two
-    /// columns made that cost grow with the whole subscription.
+    /// The profiles among `index_ids`, in list order. Unknown ids are ignored
+    /// and undecodable rows skipped, as in [`Self::list`].
+    ///
+    /// The ids travel as one JSON array, so the statement stays the same size
+    /// however many are asked for, and a selection is read without decoding
+    /// every other stored node.
+    pub async fn list_by_ids(&self, index_ids: &[String]) -> Result<Vec<ProfileItem>> {
+        if index_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids = serde_json::Value::from(index_ids.to_vec()).to_string();
+        let rows = run_query!(
+            self.executor,
+            sqlx::query(PROFILE_BY_IDS_QUERY).bind(ids),
+            fetch_all
+        )?;
+
+        let (items, _) = decode_rows(
+            &rows,
+            "index_id",
+            "skipping a stored node this build cannot decode",
+            "some nodes were hidden because their stored payload could not be decoded",
+            row_to_profile,
+        )?;
+        Ok(items)
+    }
+
+    /// Every node's id, remarks and owning subscription, in list order, without
+    /// decoding the stored payloads: all that policy group members are
+    /// resolved and tagged from. The running group's status reads this every
+    /// few seconds, and three JSON blobs per node made that cost grow with the
+    /// whole node list.
+    ///
+    /// Nothing is decoded, so a row this build cannot read is listed too; the
+    /// listings skip it, which is the only way the two can differ.
+    pub async fn list_identities(&self) -> Result<Vec<ProfileIdentity>> {
+        let rows = run_query!(
+            self.executor,
+            sqlx::query(PROFILE_IDENTITIES_QUERY),
+            fetch_all
+        )?;
+
+        rows.iter()
+            .map(|row| {
+                Ok(ProfileIdentity {
+                    index_id: row.try_get("index_id")?,
+                    remarks: row.try_get("remarks")?,
+                    subscription_id: row.try_get("subscription_id")?,
+                })
+            })
+            .collect()
+    }
+
+    /// The first `limit` nodes' ids and remarks in list order, plus `pinned`
+    /// when it sits further down, and the node count, without decoding the
+    /// stored payloads. The tray rebuilds its node menu on every show, hide
+    /// and connection change, and shows only the start of the list; reading
+    /// every row for it made that cost grow with the whole subscription.
     ///
     /// Unlike the listings, a row this build cannot decode is not skipped:
     /// nothing here is decoded. Activating such a node reports the failure.
-    pub async fn list_names(&self) -> Result<Vec<(String, String)>> {
-        let rows = run_query!(self.executor, sqlx::query(PROFILE_NAMES_QUERY), fetch_all)?;
-
-        rows.iter()
+    pub async fn list_names_head(
+        &self,
+        limit: usize,
+        pinned: Option<&str>,
+    ) -> Result<ProfileNamesHead> {
+        let rows = run_query!(
+            self.executor,
+            sqlx::query(PROFILE_NAMES_HEAD_QUERY).bind(i64::try_from(limit).unwrap_or(i64::MAX)),
+            fetch_all
+        )?;
+        let mut names = rows
+            .iter()
             .map(|row| Ok((row.try_get("index_id")?, row.try_get("remarks")?)))
-            .collect()
+            .collect::<Result<Vec<(String, String)>>>()?;
+        if let Some(pinned) = pinned.filter(|id| !names.iter().any(|(name, _)| name == id)) {
+            let row = run_query!(
+                self.executor,
+                sqlx::query("SELECT index_id, remarks FROM profile_items WHERE index_id = ?")
+                    .bind(pinned),
+                fetch_optional
+            )?;
+            if let Some(row) = row {
+                names.push((row.try_get("index_id")?, row.try_get("remarks")?));
+            }
+        }
+        let total: i64 = run_query!(
+            self.executor,
+            sqlx::query_scalar("SELECT COUNT(*) FROM profile_items"),
+            fetch_one
+        )?;
+
+        Ok(ProfileNamesHead {
+            names,
+            total: usize::try_from(total).unwrap_or(0),
+        })
     }
 
     pub async fn exists(&self, index_id: &str) -> Result<bool> {

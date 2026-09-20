@@ -26,11 +26,14 @@ export function ConnectedInfo({
   const [now, setNow] = useState(() => performance.now());
   const connected = status?.state === "connected";
   const duration = connected ? status.connectedDurationMs : null;
+  const hasDuration = duration != null;
 
   // Ticks only while the window is visible: elapsed time is re-derived from
-  // `receivedAt` on every tick, so a paused clock resumes exactly.
+  // `receivedAt` on every tick, so a paused clock resumes exactly. The timer
+  // restarts only when a duration appears or goes away, not per sample: a
+  // restart per push would never tick if pushes came faster than once a second.
   useEffect(() => {
-    if (!connected || duration == null) return;
+    if (!hasDuration) return;
     let timer: number | undefined;
     function schedule() {
       window.clearInterval(timer);
@@ -49,7 +52,7 @@ export function ConnectedInfo({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.clearInterval(timer);
     };
-  }, [connected, duration]);
+  }, [hasDuration]);
 
   const elapsed = duration == null ? null : duration + Math.max(0, now - (receivedAt ?? now));
   return (

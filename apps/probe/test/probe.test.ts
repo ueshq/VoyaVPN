@@ -3,11 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { addressFamily, isPublicAddress } from "../src/address";
 import { handleRequest, parsePorts, type Dialer, type ProbeOutcome } from "../src/probe";
 
+// A routable caller. The documentation ranges (RFC 5737) are exactly what the
+// screening refuses to dial, so they cannot stand in for one.
+const CALLER = "104.16.0.7";
+
 function probeRequest(body: unknown, headers: Record<string, string> = {}, init: RequestInit = {}) {
   return new Request("https://probe.example/v1/probe", {
     method: "POST",
     body: typeof body === "string" ? body : JSON.stringify(body),
-    headers: { "CF-Connecting-IP": "203.0.113.7", ...headers },
+    headers: { "CF-Connecting-IP": CALLER, ...headers },
     ...init,
   });
 }
@@ -31,9 +35,9 @@ describe("probe handler", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(dial).toHaveBeenCalledWith("203.0.113.7", 42443, 4000);
+    expect(dial).toHaveBeenCalledWith(CALLER, 42443, 4000);
     expect(await body(response)).toEqual({
-      ip: "203.0.113.7",
+      ip: CALLER,
       family: "ipv4",
       results: [
         { port: 42443, reachable: true, reason: "connected", elapsedMs: expect.any(Number) },
@@ -105,7 +109,7 @@ describe("probe handler", () => {
     const limit = vi.fn(async () => ({ success: false }));
     const response = await handleRequest(probeRequest({ ports: [42443] }), { dial, limiter: { limit } });
     expect(response.status).toBe(429);
-    expect(limit).toHaveBeenCalledWith({ key: "203.0.113.7" });
+    expect(limit).toHaveBeenCalledWith({ key: CALLER });
     expect(dial).not.toHaveBeenCalled();
   });
 
@@ -121,12 +125,28 @@ describe("probe handler", () => {
 
 describe("caller address screening", () => {
   it("accepts only globally routable unicast", () => {
-    for (const address of ["203.0.113.7", "8.8.8.8", "2606:4700::1111", "2001:4860::8888", "::ffff:8.8.8.8"]) {
+    for (const address of [
+      CALLER, "8.8.8.8", "2606:4700::1111", "2001:4860::8888", "::ffff:8.8.8.8",
+      // Neighbours of the special-purpose blocks below stay public.
+      "192.0.1.1", "192.0.3.1", "198.17.255.255", "198.20.0.1", "198.51.101.1", "203.0.112.1", "203.0.114.1",
+      "192.88.98.1", "192.88.100.1",
+      "223.255.255.254", "2001:200::1", "3fff:1000::1",
+    ]) {
       expect(isPublicAddress(address), address).toBe(true);
     }
     for (const address of [
       "0.1.2.3", "10.1.2.3", "100.100.100.200", "169.254.169.254", "172.20.0.1", "192.168.0.1", "224.0.0.1",
       "::", "fe80::1", "fc00::1", "ff02::1", "2001:db8::1", "2001::1", "2002::1", "1:2:3:4:5:6:7:8:9", "1::2::3",
+    ]) {
+      expect(isPublicAddress(address), address).toBe(false);
+    }
+    // Reserved, documentation and benchmarking space, IPv4-mapped included.
+    for (const address of [
+      "192.0.0.9", "192.0.2.7", "198.18.0.1", "198.19.255.254", "198.51.100.7", "203.0.113.7",
+      "240.0.0.1", "255.255.255.255", "::ffff:203.0.113.7",
+      // 6to4 relay anycast, the IPv4 half of the excluded `2002::/16`.
+      "192.88.99.1",
+      "2001:2::1", "2001:10::1", "2001:1ff:ffff::1", "3fff::1", "3fff:fff::1",
     ]) {
       expect(isPublicAddress(address), address).toBe(false);
     }

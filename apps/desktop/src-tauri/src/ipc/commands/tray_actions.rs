@@ -5,7 +5,7 @@
 
 use tauri::Manager;
 use voya_app::services::TrafficMode;
-use voya_app::tray::{TrayGroup, TrayMenuInput, TrayNode};
+use voya_app::tray::{TrayGroup, TrayMenuInput, TrayNode, TRAY_NODE_LIMIT};
 use voya_contracts::{AppErrorKind, CloseRequestAction};
 
 use super::{post_commit::*, support::*, *};
@@ -44,6 +44,7 @@ pub(crate) struct TraySnapshot {
     connected: bool,
     traffic_mode: TrafficMode,
     nodes: Vec<TrayNode>,
+    total_nodes: usize,
     active_node_id: Option<String>,
     groups: Vec<TrayGroup>,
     active_group_id: Option<String>,
@@ -56,6 +57,7 @@ impl TraySnapshot {
             connected: self.connected,
             traffic_mode: self.traffic_mode,
             nodes: &self.nodes,
+            total_nodes: self.total_nodes,
             active_node_id: self.active_node_id.as_deref(),
             groups: &self.groups,
             active_group_id: self.active_group_id.as_deref(),
@@ -104,6 +106,7 @@ pub(crate) fn initial_tray_snapshot(state: &AppState) -> TraySnapshot {
         connected: false,
         traffic_mode: config.proxy_ui_item.traffic_mode,
         nodes: Vec::new(),
+        total_nodes: 0,
         active_node_id: None,
         groups: Vec::new(),
         active_group_id: None,
@@ -116,21 +119,27 @@ pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
         state.supervisor().status().await,
         Ok(snapshot) if snapshot.state == SupervisorConnectionState::Connected
     );
-    let (nodes, active_node_id) = match state.services().profiles().list_names().await {
-        Ok(names) => {
-            let active = (!config.index_id.is_empty())
-                .then(|| names.iter().find(|(id, _)| *id == config.index_id))
-                .flatten()
-                .map(|(id, _)| id.clone());
-            let nodes = names
+    let pinned = Some(config.index_id.as_str()).filter(|id| !id.is_empty());
+    let (nodes, total_nodes, active_node_id) = match state
+        .services()
+        .profiles()
+        .list_names_head(TRAY_NODE_LIMIT, pinned)
+        .await
+    {
+        Ok(head) => {
+            let active = pinned
+                .filter(|active| head.names.iter().any(|(id, _)| id == active))
+                .map(str::to_string);
+            let nodes = head
+                .names
                 .into_iter()
                 .map(|(id, remarks)| TrayNode { id, remarks })
                 .collect();
-            (nodes, active)
+            (nodes, head.total, active)
         }
         Err(error) => {
             tracing::warn!(?error, "failed to list nodes for the tray menu");
-            (Vec::new(), None)
+            (Vec::new(), 0, None)
         }
     };
 
@@ -160,6 +169,7 @@ pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
         connected,
         traffic_mode: config.proxy_ui_item.traffic_mode,
         nodes,
+        total_nodes,
         active_node_id,
         groups,
         active_group_id,

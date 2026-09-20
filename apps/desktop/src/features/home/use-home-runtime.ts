@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { listPolicyGroups, listProfiles } from "@/ipc/commands";
+import { listPolicyGroups, listProfileSummaries } from "@/ipc/commands";
 import { coreStateOf, runningProfileId, useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type { TunStatus } from "@/ipc/bindings";
 import { queryKeys } from "@/ipc/query-keys";
@@ -30,7 +30,7 @@ export function useHomeRuntime() {
   // Shares the ProfilesScreen query cache (same key) so resolving the active
   // node's name here costs no extra fetch and stays in sync after a switch.
   const profilesQuery = useQuery({
-    queryFn: () => listProfiles(null, null),
+    queryFn: () => listProfileSummaries(),
     queryKey: queryKeys.profileList,
   });
 

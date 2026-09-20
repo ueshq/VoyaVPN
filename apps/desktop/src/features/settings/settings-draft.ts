@@ -34,6 +34,7 @@ export function applyChanges<T>(original: T, changes: SettingsChange[]): T {
 }
 
 type Edit = SettingsChange & { revision: number };
+type Writer<T> = (change: SettingsChange) => Promise<T>;
 export type SaveFailure = { message: string; fields: Record<string, string> };
 type DraftSnapshot = {
   changes: SettingsChange[];
@@ -49,16 +50,19 @@ export class SettingsDraft<T> {
   private active = false;
   private revision = 0;
   private snapshot: DraftSnapshot = { changes: [], failures: {}, saved: false };
+  private write: Writer<T>;
 
   constructor(
     private readonly options: {
       read: () => T | undefined;
-      write: (change: SettingsChange) => Promise<T>;
+      write: Writer<T>;
       enqueue: (key: object, job: () => Promise<void>) => void;
       failure: (error: unknown) => SaveFailure;
       report: (failure: SaveFailure) => void;
     },
-  ) {}
+  ) {
+    this.write = options.write;
+  }
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -67,8 +71,14 @@ export class SettingsDraft<T> {
     };
   };
   getSnapshot = () => this.snapshot;
-  attach = () => {
+  /**
+   * A pane is showing the draft. A draft outlives its pane and is reused by
+   * every later mount, so the pane's writer replaces the one it had: saves,
+   * including ones still queued, go through the newest pane's closure.
+   */
+  attach = (write: Writer<T>) => {
     this.active = true;
+    this.write = write;
   };
   detach = () => {
     this.active = false;
@@ -103,7 +113,7 @@ export class SettingsDraft<T> {
     this.publish(failures, false);
     this.options.enqueue(key, async () => {
       try {
-        await this.options.write(edit);
+        await this.write(edit);
         if (this.edits.get(edit.path)?.revision === edit.revision)
           this.edits.delete(edit.path);
         this.publish(this.snapshot.failures, true);

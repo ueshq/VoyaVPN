@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
-import type { ProfileListEntry, Subscription } from "../src/ipc/bindings";
+import type { ProfileDetails, Subscription } from "../src/ipc/bindings";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 import { savedNodeFixture } from "./fixtures/saved-node";
 
 test("a failed connection opens logs in view with keyboard focus at 960 by 640", async ({ page }, testInfo) => {
   await installTauriSmokeMock(page);
   await page.addInitScript((profile) => {
-    const state = window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[]; failNextCommand: string | null };
+    const state = window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[]; failNextCommand: string | null };
     state.profiles = [profile];
     state.failNextCommand = "connect_active_profile";
   }, savedNodeFixture);
@@ -24,7 +24,7 @@ test("a failed connection opens logs in view with keyboard focus at 960 by 640",
 test("search finds collapsed source nodes and restores the previous grouping on Escape", async ({ page }) => {
   await installTauriSmokeMock(page);
   await page.addInitScript((base) => {
-    const state = window.__VOYA_SMOKE__.state as { profiles: ProfileListEntry[]; subscriptions: Subscription[] };
+    const state = window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[]; subscriptions: Subscription[] };
     state.subscriptions = [{ id: "travel", remarks: "Travel", url: "https://example.test/sub", additionalUrl: "", userAgent: "", enabled: false, sort: 0, filter: null, converterTarget: null, autoUpdateIntervalMinutes: null }];
     state.profiles = Array.from({ length: 36 }, (_, index) => ({
       ...base, isActive: index === 0,

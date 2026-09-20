@@ -44,10 +44,14 @@ export const voyaCoreRules = [
   },
   {
     // `std::net::IpAddr` and friends are plain value types a pure domain crate
-    // may parse and compare; only the socket I/O types are banned.
+    // may parse and compare; only the socket I/O types are banned. They are
+    // banned by name, not as `std::net::TcpStream`, because the grouped
+    // `use std::net::{TcpStream, UdpSocket};` never spells that path, and a
+    // domain crate has no other reason to name them. `to_socket_addrs` is the
+    // resolver a glob import reaches without naming its trait.
     id: "core-os-api",
     pattern:
-      /\bstd::(?:fs|env|process)\b|\bstd::net::(?:TcpStream|TcpListener|UdpSocket|ToSocketAddrs)\b|\btokio::(?:fs|net|process|time)\b|\breqwest\b/u,
+      /\bstd::(?:fs|env|process)\b|\b(?:TcpStream|TcpListener|UdpSocket|ToSocketAddrs|to_socket_addrs)\b|\btokio::(?:fs|net|process|time)\b|\breqwest\b/u,
     message: "voya-core must not touch the filesystem, network, environment, or processes",
   },
   {
@@ -79,6 +83,20 @@ export const voyaAppRules = [
   {
     id: "app-io-adapters-grouped",
     pattern: groupedImport("std", "fs"),
+    message: "voya-app must use network and filesystem adapters",
+  },
+  {
+    // `std::process` cannot be banned wholesale like `fs`: its `id()` and
+    // `exit` stay allowed. What has to go is every import that lets code spawn
+    // without spelling `std::process::Command`: `Command`/`Stdio` named anywhere
+    // in a `use std::…;` statement (`use std::process::{Command, Stdio};`,
+    // `use std::{io, process::Command};`), and the module itself brought into
+    // scope (`use std::process;`, `use std::{io, process};`,
+    // `use std::process::{self, …};`), after which `process::Command::new`
+    // follows. `CommandExt` and `voya_platform::process` are other names.
+    id: "app-io-adapters-process-import",
+    pattern:
+      /\buse\s+std::[^;]*\b(?:Command|Stdio)\b|\buse\s+std::(?:[^;]*?[{,]\s*)?process\s*(?:[;,}]|as\b|::\s*\{[^;}]*\bself\b)/u,
     message: "voya-app must use network and filesystem adapters",
   },
   {
@@ -189,6 +207,50 @@ export function manifestDependencyRules(cratePattern, message) {
       message,
     },
   ];
+}
+
+/** The body of one `[table]` in a TOML document, up to the next table header. */
+function tomlTable(source, table) {
+  const lines = source.split(/\r?\n/u);
+  const start = lines.findIndex((line) => line.trim() === `[${table}]`);
+  if (start === -1) return "";
+  const end = lines.findIndex((line, index) => index > start && /^\s*\[/u.test(line));
+  return lines.slice(start + 1, end === -1 ? undefined : end).join("\n");
+}
+
+function tomlString(body, key) {
+  return new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, "mu").exec(body)?.[1];
+}
+
+/** `[workspace] members = [...]` of the root Cargo.toml. */
+export function cargoWorkspaceMembers(workspaceManifest) {
+  const members = /^\s*members\s*=\s*\[([^\]]*)\]/mu.exec(tomlTable(workspaceManifest, "workspace"))?.[1] ?? "";
+  return [...members.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
+}
+
+/**
+ * A Cargo package's effective version: its own `version = "…"`, or the
+ * `[workspace.package]` one when it says `version.workspace = true`.
+ */
+export function cargoPackageVersion(manifest, workspaceManifest) {
+  const body = tomlTable(manifest, "package");
+  if (/^\s*version\s*(?:\.\s*workspace\s*=\s*true|=\s*\{\s*workspace\s*=\s*true\s*\})/mu.test(body)) {
+    return tomlString(tomlTable(workspaceManifest, "workspace.package"), "version");
+  }
+  return tomlString(body, "version");
+}
+
+/**
+ * The release version lives in four places (root package.json, the desktop
+ * package.json, tauri.conf.json, and the Cargo packages), and a bump that
+ * misses one ships an app whose About box, updater metadata, and artifact
+ * names disagree. Takes `[label, version]` pairs; returns a failure message or
+ * `null` when they all name the same version.
+ */
+export function versionAlignmentProblem(versions) {
+  const distinct = new Set(versions.map(([, version]) => version));
+  if (distinct.size === 1 && !distinct.has(undefined) && !distinct.has("")) return null;
+  return `release versions must match: ${versions.map(([label, version]) => `${label} = ${version || "missing"}`).join(", ")}`;
 }
 
 /**

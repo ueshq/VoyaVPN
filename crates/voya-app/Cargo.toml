@@ -27,6 +27,9 @@ voya-platform.workspace = true
 # Self-hosted node REALITY keypairs; the private key never leaves the backend.
 x25519-dalek = { version = "3", default-features = false, features = ["static_secrets", "zeroize"] }
 
+[build-dependencies]
+serde_json.workspace = true
+
 [dev-dependencies]
 criterion.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

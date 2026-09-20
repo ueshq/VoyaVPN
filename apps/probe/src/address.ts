@@ -3,8 +3,8 @@
  *
  * `CF-Connecting-IP` is set by Cloudflare's edge and is always the caller's
  * public address, but the check is repeated here so that no header, proxy or
- * test double can ever point the probe at a private network, loopback or
- * shared address space.
+ * test double can ever point the probe at a private network, loopback, shared
+ * address space or a reserved, documentation or benchmarking range.
  */
 
 export type AddressFamily = "ipv4" | "ipv6";
@@ -27,17 +27,30 @@ export function isPublicAddress(address: string): boolean {
   }
   // Only global unicast (2000::/3) is public.
   if ((ipv6[0] & 0xe000) !== 0x2000) return false;
-  // 2001::/32 is Teredo and 2001:db8::/32 documentation; 2002::/16 is 6to4.
-  if (ipv6[0] === 0x2001) return ipv6[1] !== 0 && ipv6[1] !== 0x0db8;
+  // 2001::/23 holds IETF protocol assignments (Teredo, benchmarking, ORCHID)
+  // and 2001:db8::/32 is documentation; 2002::/16 is 6to4, and 3fff::/20 is
+  // documentation too (RFC 9637).
+  if (ipv6[0] === 0x2001) return ipv6[1] >= 0x0200 && ipv6[1] !== 0x0db8;
+  if (ipv6[0] === 0x3fff) return ipv6[1] >= 0x1000;
   return ipv6[0] !== 0x2002;
 }
 
-function isPublicIpv4([a, b]: number[]): boolean {
+function isPublicIpv4([a, b, c]: number[]): boolean {
+  // 224.0.0.0/4 multicast, 240.0.0.0/4 reserved and the broadcast address.
   if (a === 0 || a === 10 || a === 127 || a >= 224) return false;
   if (a === 100 && b >= 64 && b <= 127) return false;
   if (a === 169 && b === 254) return false;
   if (a === 172 && b >= 16 && b <= 31) return false;
   if (a === 192 && b === 168) return false;
+  // 192.0.0.0/24 protocol assignments; 192.0.2.0/24, 198.51.100.0/24 and
+  // 203.0.113.0/24 documentation; 198.18.0.0/15 benchmarking;
+  // 192.88.99.0/24 the deprecated 6to4 relay anycast (RFC 7526), whose IPv6
+  // half `2002::/16` is already excluded.
+  if (a === 192 && b === 0 && (c === 0 || c === 2)) return false;
+  if (a === 192 && b === 88 && c === 99) return false;
+  if (a === 198 && (b === 18 || b === 19)) return false;
+  if (a === 198 && b === 51 && c === 100) return false;
+  if (a === 203 && b === 0 && c === 113) return false;
   return true;
 }
 

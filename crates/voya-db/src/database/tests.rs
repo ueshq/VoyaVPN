@@ -380,18 +380,100 @@ async fn profile_repository_orders_by_profile_ex_sort() {
     assert_eq!(ordered[0].1.sort, 10);
 
     // The tray's names follow the same order without decoding the payloads.
-    let names = database
+    let head = database
         .profiles()
-        .list_names()
+        .list_names_head(10, None)
         .await
         .expect("database test operation should succeed");
     assert_eq!(
-        names,
+        head.names,
         ordered
             .iter()
             .map(|(profile, _)| (profile.index_id.clone(), profile.remarks.clone()))
             .collect::<Vec<_>>()
     );
+    assert_eq!(head.total, 2);
+
+    // A selection comes back in list order whatever order its ids arrive in,
+    // and an id that names nothing is ignored.
+    let selected = database
+        .profiles()
+        .list_by_ids(&[
+            "first".to_string(),
+            "deleted-meanwhile".to_string(),
+            "second".to_string(),
+        ])
+        .await
+        .expect("database test operation should succeed");
+    assert_eq!(
+        selected
+            .iter()
+            .map(|profile| profile.index_id.as_str())
+            .collect::<Vec<_>>(),
+        ["second", "first"]
+    );
+    assert!(database
+        .profiles()
+        .list_by_ids(&[])
+        .await
+        .expect("database test operation should succeed")
+        .is_empty());
+}
+
+/// The tray reads only the start of the list, plus the active node when it
+/// sits further down, and the count that decides its "All Nodes" entry.
+#[tokio::test]
+async fn profile_names_head_reads_the_start_plus_the_pinned_node() {
+    let database = Database::connect_in_memory()
+        .await
+        .expect("database test operation should succeed");
+    for index in 0..25 {
+        let mut profile = sample_profile();
+        profile.index_id = format!("node-{index:02}");
+        profile.remarks = format!("Node {index}");
+        database
+            .profiles()
+            .upsert(&profile)
+            .await
+            .expect("database test operation should succeed");
+    }
+    let ids = |head: &crate::ProfileNamesHead| {
+        head.names
+            .iter()
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>()
+    };
+    let first_five = (0..5)
+        .map(|index| format!("node-{index:02}"))
+        .collect::<Vec<_>>();
+
+    let within = database
+        .profiles()
+        .list_names_head(5, Some("node-03"))
+        .await
+        .expect("database test operation should succeed");
+    assert_eq!(ids(&within), first_five);
+    assert_eq!(within.total, 25);
+
+    let beyond = database
+        .profiles()
+        .list_names_head(5, Some("node-23"))
+        .await
+        .expect("database test operation should succeed");
+    assert_eq!(ids(&beyond)[..5], first_five);
+    assert_eq!(
+        beyond.names.last(),
+        Some(&("node-23".to_string(), "Node 23".to_string()))
+    );
+    assert_eq!(beyond.names.len(), 6);
+
+    let missing = database
+        .profiles()
+        .list_names_head(5, Some("deleted-meanwhile"))
+        .await
+        .expect("database test operation should succeed");
+    assert_eq!(ids(&missing), first_five);
+    assert_eq!(missing.total, 25);
 }
 
 #[tokio::test]

@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use voya_core::{unique_member_tags, ProfileItem, PROXY_TAG};
+use voya_core::{unique_member_tags, ProfileIdentity, PROXY_TAG};
 use voya_net::clash::ClashHttpTransport;
 
 use super::{ProxyRuntimeError, ProxyRuntimeManager, Result};
@@ -34,7 +34,7 @@ where
     pub async fn group_state(
         &self,
         access: &ClashApiAccess,
-        members: &[ProfileItem],
+        members: &[ProfileIdentity],
     ) -> Result<RuntimeGroupState> {
         let tags = member_tags(members);
         let proxies = self.client(access)?.get_proxies().await?.proxies;
@@ -68,7 +68,7 @@ where
     pub async fn select_group_member(
         &self,
         access: &ClashApiAccess,
-        members: &[ProfileItem],
+        members: &[ProfileIdentity],
         profile_id: &str,
     ) -> Result<()> {
         let tag = member_tags(members)
@@ -88,7 +88,7 @@ where
     pub async fn test_group_delay(
         &self,
         access: &ClashApiAccess,
-        members: &[ProfileItem],
+        members: &[ProfileIdentity],
         test_url: &str,
         timeout_ms: u32,
     ) -> Result<BTreeMap<String, u32>> {
@@ -108,6 +108,6 @@ where
     }
 }
 
-fn member_tags(members: &[ProfileItem]) -> Vec<String> {
+fn member_tags(members: &[ProfileIdentity]) -> Vec<String> {
     unique_member_tags(&members.iter().collect::<Vec<_>>())
 }

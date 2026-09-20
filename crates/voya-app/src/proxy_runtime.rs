@@ -420,10 +420,10 @@ mod tests {
     }
 
     impl ClashHttpTransport for MockTransport {
-        fn send_json<'transport>(
+        fn send<'transport>(
             &'transport self,
             request: ClashHttpRequest,
-        ) -> Pin<Box<dyn Future<Output = voya_net::clash::Result<Value>> + Send + 'transport>>
+        ) -> Pin<Box<dyn Future<Output = voya_net::clash::Result<String>> + Send + 'transport>>
         {
             Box::pin(async move {
                 self.requests
@@ -434,7 +434,7 @@ mod tests {
                     .lock()
                     .expect("responses lock")
                     .get(&request.url)
-                    .cloned()
+                    .map(Value::to_string)
                     .ok_or_else(|| ClashError::Request(format!("no response for {}", request.url)))
             })
         }
@@ -869,15 +869,15 @@ mod tests {
         );
         let manager = ProxyRuntimeManager::with_transport(transport.clone());
         let members = vec![
-            voya_core::ProfileItem {
+            voya_core::ProfileIdentity {
                 index_id: "tokyo".to_string(),
                 remarks: "Tokyo".to_string(),
-                ..voya_core::ProfileItem::default()
+                subscription_id: None,
             },
-            voya_core::ProfileItem {
+            voya_core::ProfileIdentity {
                 index_id: "osaka".to_string(),
                 remarks: "Osaka".to_string(),
-                ..voya_core::ProfileItem::default()
+                subscription_id: None,
             },
         ];
 

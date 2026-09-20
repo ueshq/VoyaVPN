@@ -1,8 +1,10 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
 import { productionLineCount, splitRustProduction } from "./architecture-analyzer.mjs";
 import {
+  cargoPackageVersion,
+  cargoWorkspaceMembers,
   clashBoundaryRules,
   contractsCasingRule,
   findUndocumentedUnsafe,
@@ -13,6 +15,7 @@ import {
   shellDtoRule,
   shellRules,
   untranslatedMessageRule,
+  versionAlignmentProblem,
   voyaAppRules,
   voyaCoreRules,
 } from "./architecture-rules.mjs";
@@ -25,8 +28,8 @@ const rustSources = ["crates", "apps/desktop/src-tauri/src"]
   .filter((path) => path.endsWith(".rs"))
   .filter((path) => !path.includes("/migrations/"));
 
-// Exempt the modules that are actually declared `#[cfg(test)] mod <name>;`
-// instead of every file that happens to be named tests.rs or golden.rs.
+// The modules that are actually declared `#[cfg(test)] mod <name>;`, instead
+// of every file that happens to be named tests.rs or golden.rs.
 const testModuleFiles = resolveTestModuleFiles({
   files: rustSources,
   read: (path) => readFileSync(path, "utf8"),
@@ -34,6 +37,27 @@ const testModuleFiles = resolveTestModuleFiles({
 const rustFiles = rustSources.filter((path) => !testModuleFiles.has(path));
 const usedUnsafeAllowlistEntries = new Set();
 
+// Every file, test modules and inline `mod tests { … }` included, needs its
+// SAFETY comments: an undocumented `unsafe` block is just as unsound in a test.
+for (const path of rustSources) {
+  requireSafetyComments(path, readFileSync(path, "utf8"));
+}
+
+// Everything below is about the code that ships, so test code (declared test
+// module files, and the terminal test modules `splitRustProduction` strips) is
+// exempt from it:
+// - the 800-line cap and the terminal-`#[cfg(test)]` layout describe production
+//   modules; a test file has no production part to separate;
+// - voya-core determinism/OS rules and voya-app adapter rules keep the shipped
+//   domain pure and I/O behind adapters, while tests legitimately use tempdirs,
+//   std::fs, clocks, and processes to exercise it;
+// - the shell rules and DTO rule cannot meet a test file: declaring
+//   `#[cfg(test)] mod …` in the shell already fails `shell-tests`;
+// - retired v2rayN compatibility and the Clash serde boundary constrain what
+//   production parses and serializes, and tests assert the rejection by
+//   spelling the retired form (crates/voya-core/src/fmt/tests.rs has
+//   `v2rayn://` share links);
+// - the untranslated-message hatch is about strings that reach the screen.
 for (const path of rustFiles) {
   const source = readFileSync(path, "utf8");
   const { layoutError, production } = splitRustProduction(source);
@@ -59,8 +83,6 @@ for (const path of rustFiles) {
       applyRules(path, source, production, [shellDtoRule]);
     }
   }
-
-  requireSafetyComments(path, production);
 
   if (!path.endsWith("/crates/voya-net/src/clash.rs")) {
     applyRules(path, source, production, clashBoundaryRules);
@@ -101,6 +123,8 @@ applyManifestRules(
   ),
 );
 
+checkReleaseVersionAlignment();
+
 for (const path of walk(resolve(root, "crates/voya-contracts/src")).filter((item) => item.endsWith(".rs"))) {
   const source = readFileSync(path, "utf8");
   applyRules(path, source, source, [contractsCasingRule]);
@@ -113,7 +137,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `Architecture checks passed (${rustFiles.length} Rust production files, ${testModuleFiles.size} declared test modules exempt).`,
+  `Architecture checks passed (${rustFiles.length} Rust production files, ${testModuleFiles.size} declared test modules checked for SAFETY comments only).`,
 );
 
 function applyRules(path, raw, production, rules) {
@@ -129,6 +153,28 @@ function applyManifestRules(relativePath, rules) {
   const path = resolve(root, relativePath);
   const source = readFileSync(path, "utf8");
   applyRules(path, source, source, rules);
+}
+
+function checkReleaseVersionAlignment() {
+  const readText = (relativePath) => readFileSync(resolve(root, relativePath), "utf8");
+  const workspaceManifest = readText("Cargo.toml");
+  const tauriConfigPath = "apps/desktop/src-tauri/tauri.conf.json";
+  let tauriVersion = JSON.parse(readText(tauriConfigPath)).version;
+  // Tauri also accepts a path to a package.json whose version it should use.
+  if (typeof tauriVersion === "string" && tauriVersion.endsWith(".json")) {
+    tauriVersion = JSON.parse(readFileSync(resolve(root, dirname(tauriConfigPath), tauriVersion), "utf8")).version;
+  }
+
+  const problem = versionAlignmentProblem([
+    ["package.json", JSON.parse(readText("package.json")).version],
+    ["apps/desktop/package.json", JSON.parse(readText("apps/desktop/package.json")).version],
+    [tauriConfigPath, tauriVersion],
+    ...cargoWorkspaceMembers(workspaceManifest).map((member) => [
+      `${member}/Cargo.toml`,
+      cargoPackageVersion(readText(`${member}/Cargo.toml`), workspaceManifest),
+    ]),
+  ]);
+  if (problem) failures.push(problem);
 }
 
 function requireSafetyComments(path, source) {

@@ -1,7 +1,20 @@
-//! Saving the runtime log the user is looking at to a file of their choice.
+//! The Logs panel's stream, and saving the runtime log the user is looking at
+//! to a file of their choice.
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_dialog::DialogExt;
 use voya_contracts::{AppError, AppErrorKind, AppErrorSubsystem};
+
+/// Whether the Logs panel is on screen to receive log lines. While it is not,
+/// the lines queue (the newest few hundred) instead of each batch being
+/// serialized into a webview that discards it. Idempotent, and synchronous so
+/// calls apply in the order they were made. It cannot fail; the `Result` keeps
+/// it on the same typed-error facade as every other command.
+#[tauri::command]
+#[specta::specta]
+pub fn set_log_streaming(enabled: bool) -> Result<(), AppError> {
+    super::support::stream_log_lines(enabled);
+    Ok(())
+}
 
 /// Asks where to save `contents` and writes it there. Returns `false` when the
 /// user cancels the save dialog.

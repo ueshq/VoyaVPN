@@ -172,6 +172,9 @@ pub trait ProcessRunner: Send + Sync {
     fn spawn(&self, request: ProcessSpawn) -> Result<ProcessHandle, ProcessError>;
     fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError>;
     fn stop(&self, handle: &ProcessHandle) -> Result<(), ProcessError>;
+    /// Installs (or with `None`, clears) the one handler told about children
+    /// that exit on their own. A runner has a single slot: a subsystem that
+    /// needs exit events gets its own runner rather than sharing one.
     fn set_exit_handler(&self, _handler: Option<Arc<dyn ProcessExitHandler>>) {}
 }
 
@@ -226,8 +229,6 @@ pub enum ProcessError {
     InsecureGeneratedScriptDirectory { path: PathBuf, reason: &'static str },
     #[error("failed to parse command line: {0}")]
     ArgumentParse(String),
-    #[error("process lock poisoned: {0}")]
-    LockPoisoned(&'static str),
     #[error("process job error: {0}")]
     Job(String),
 }

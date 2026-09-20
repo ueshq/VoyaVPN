@@ -1,12 +1,18 @@
-import type { Profile, ProfileListEntry, ProfileProtocol } from "@/ipc/bindings";
+import type {
+  Profile,
+  ProfileDetails,
+  ProfileProtocol,
+  ProfileSummaryEntry,
+} from "@/ipc/bindings";
 
 type FixtureOverrides = Partial<Profile>;
 
-export function makeProfileFixture(
+/** A node in full, as `get_profile` returns it. */
+export function makeProfileDetailsFixture(
   index = 0,
   overrides: FixtureOverrides = {},
   isActive = index === 0,
-): ProfileListEntry {
+): ProfileDetails {
   const id = overrides.id ?? `profile-${index}`;
   const protocol: ProfileProtocol = overrides.protocol ?? {
     cipher: "auto",
@@ -39,6 +45,32 @@ export function makeProfileFixture(
       todayUpload: index * 1024,
       totalDownload: index * 8192,
       totalUpload: index * 4096,
+    },
+  };
+}
+
+/** A node as the list carries it, for the same arguments. */
+export function makeProfileFixture(
+  index = 0,
+  overrides: FixtureOverrides = {},
+  isActive = index === 0,
+): ProfileSummaryEntry {
+  return toProfileSummaryEntry(makeProfileDetailsFixture(index, overrides, isActive));
+}
+
+/** What `list_profile_summaries` makes of a node's details. */
+export function toProfileSummaryEntry({ isActive, metrics, profile }: ProfileDetails): ProfileSummaryEntry {
+  const server = "server" in profile.protocol ? profile.protocol.server : { address: "", port: 0 };
+  return {
+    isActive,
+    metrics,
+    profile: {
+      address: server.address,
+      id: profile.id,
+      kind: profile.protocol.kind,
+      port: server.port,
+      remarks: profile.remarks,
+      subscriptionId: profile.subscriptionId,
     },
   };
 }

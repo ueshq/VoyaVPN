@@ -545,6 +545,7 @@ impl From<QrCodeError> for AppError {
     fn from(error: QrCodeError) -> Self {
         match error {
             QrCodeError::EmptyContent => invalid(Sub::Qr, "content", &error),
+            QrCodeError::InvalidImage(_) => invalid(Sub::Qr, "image", &error),
             QrCodeError::Generate(_) => internal(Sub::Qr, &error),
         }
     }

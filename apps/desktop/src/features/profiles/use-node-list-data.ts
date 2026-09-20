@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { listProfiles, listSubscriptions, listSubscriptionMetadata } from "@/ipc/commands";
+import { listProfileSummaries, listSubscriptions, listSubscriptionMetadata } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { queryKeys } from "@/ipc/query-keys";
-import type { ProfileListEntry, SpeedtestResult } from "@/ipc/bindings";
+import type { ProfileSummaryEntry, SpeedtestResult } from "@/ipc/bindings";
 import type { TranslationFunction } from "@voya/i18n";
 import { metadataBySubscriptionId } from "@/features/subscriptions/subscription-usage";
-import { nodeListRows } from "./node-list-rows";
+import { nodeListRows, nodeSearchText } from "./node-list-rows";
 import type { useNodeGroups } from "./use-node-groups";
 
 export function useNodeListData(
@@ -41,16 +41,27 @@ export function useNodeListData(
     (state) => state.speedtestResultsByProfileId,
   );
   const profilesQuery = useQuery({
-    queryFn: () => listProfiles(null, null),
+    queryFn: () => listProfileSummaries(),
     queryKey: queryKeys.profileList,
   });
+  const base = profilesQuery.data?.entries ?? NO_PROFILES;
   const profiles = useMemo(
-    () =>
-      applySpeedtestResults(
-        profilesQuery.data?.entries ?? [],
-        speedtestResultsByProfileId,
-      ),
-    [profilesQuery.data, speedtestResultsByProfileId],
+    () => applySpeedtestResults(base, speedtestResultsByProfileId),
+    [base, speedtestResultsByProfileId],
+  );
+  // A speedtest delivers results many times a second. While neither the sort
+  // nor the filter reads them, the rows are laid out from the listing alone,
+  // so a result frame rebuilds no groups; the grid overlays the few rows it
+  // renders instead.
+  const metricsDriveLayout = nodeGroups.sortByLatency || nodeGroups.hideUnreachable;
+  const layoutProfiles = metricsDriveLayout ? profiles : base;
+  // Typing stays responsive in a large list: the rows follow a step behind.
+  const search = useDeferredValue(nodeGroups.search);
+  const searching = search.trim() !== "";
+  // Each node's text is lowercased once per listing, not once per keystroke.
+  const searchHays = useMemo(
+    () => (searching ? new Map(base.map((item) => [item.profile.id, nodeSearchText(item)])) : undefined),
+    [base, searching],
   );
   // Stored servers this build could not read. The backend skips those rows so
   // one of them cannot hide every other server, and reports how many it
@@ -61,25 +72,27 @@ export function useNodeListData(
   const viewportRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (viewportRef.current) viewportRef.current.scrollTop = 0;
-  }, [nodeGroups.search]);
+  }, [search]);
   const rows = useMemo(
     () =>
       nodeListRows(
-        profiles,
+        layoutProfiles,
         nodeGroups.collapsed,
         t("nodeGroups.local"),
         subscriptionsQuery.data,
         t("panes.subscriptions.untitled"),
         {
-          search: nodeGroups.search,
+          search,
+          searchHays,
           hideUnreachable: nodeGroups.hideUnreachable,
           sortByLatency: nodeGroups.sortByLatency,
         },
       ),
     [
-      profiles,
+      layoutProfiles,
       nodeGroups.collapsed,
-      nodeGroups.search,
+      search,
+      searchHays,
       nodeGroups.hideUnreachable,
       nodeGroups.sortByLatency,
       subscriptionsQuery.data,
@@ -103,7 +116,7 @@ export function useNodeListData(
     15,
     (index) => rows[index]!.key,
   );
-  function subscriptionName(item: ProfileListEntry) {
+  function subscriptionName(item: ProfileSummaryEntry) {
     return item.profile.subscriptionId
       ? (subscriptionNames.get(item.profile.subscriptionId) ??
           t("panes.subscriptions.untitled"))
@@ -115,6 +128,7 @@ export function useNodeListData(
     profiles,
     profilesQuery,
     rows,
+    speedtestResultsByProfileId,
     renderedRows,
     rowVirtualizer,
     viewportRef,
@@ -125,29 +139,58 @@ export function useNodeListData(
   };
 }
 
+const NO_PROFILES: ProfileSummaryEntry[] = [];
+
 export function applySpeedtestResults(
-  profiles: ProfileListEntry[],
+  profiles: ProfileSummaryEntry[],
   speedtestResults: Record<string, SpeedtestResult>,
 ) {
   if (Object.keys(speedtestResults).length === 0) return profiles;
 
   let changed = false;
   const nextProfiles = profiles.map((item) => {
-    const result = speedtestResults[item.profile.id];
-    if (!result) return item;
-
-    changed = true;
-    return {
-      ...item,
-      metrics: {
-        ...item.metrics,
-        // Country stays on the query snapshot; cached events may outlive edits.
-        delayMs: result.delay ?? item.metrics.delayMs,
-        ipInfo: result.ipInfo ?? item.metrics.ipInfo,
-        outcome: result.outcome,
-      },
-    };
+    const next = overlaySpeedtestResult(item, speedtestResults[item.profile.id]);
+    changed ||= next !== item;
+    return next;
   });
 
   return changed ? nextProfiles : profiles;
+}
+
+/**
+ * Overlays built so far, by result. The store keeps a result's object until a
+ * newer one replaces it, so each result is overlaid once however many frames
+ * follow, and the row keeps its identity between them.
+ */
+const overlays = new WeakMap<
+  SpeedtestResult,
+  { entry: ProfileSummaryEntry; item: ProfileSummaryEntry }
+>();
+
+/**
+ * `item` with a live speedtest result on top. Idempotent: `item` itself when
+ * there is no result or it already reads as one, and the same object for the
+ * same pair.
+ */
+export function overlaySpeedtestResult(
+  item: ProfileSummaryEntry,
+  result: SpeedtestResult | undefined,
+): ProfileSummaryEntry {
+  if (!result) return item;
+  const cached = overlays.get(result);
+  if (cached?.item === item) return cached.entry;
+  // Country stays on the query snapshot; cached events may outlive edits.
+  const delayMs = result.delay ?? item.metrics.delayMs;
+  const ipInfo = result.ipInfo ?? item.metrics.ipInfo;
+  const { outcome } = result;
+  if (
+    delayMs === item.metrics.delayMs &&
+    ipInfo === item.metrics.ipInfo &&
+    outcome === item.metrics.outcome
+  ) {
+    return item;
+  }
+  const entry = { ...item, metrics: { ...item.metrics, delayMs, ipInfo, outcome } };
+  overlays.set(result, { entry, item });
+  return entry;
 }

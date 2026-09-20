@@ -8,17 +8,20 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
-import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderHookWithQuery, renderWithQuery } from "@/test/render";
 import { afterEach, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
+import { useI18n } from "@voya/i18n/use-i18n";
+import { useNodeListStore } from "@/stores/node-list-store";
 
 import { IpcCommandError } from "@/ipc/commands";
 import { useModalStore } from "@/stores/modal-store";
 import type {
   ImportProfilesResult,
   Profile,
-  ProfileListEntry,
+  ProfileDetails,
+  ProfileSummaryEntry,
   RuntimeStatusResponse,
   SpeedtestResult,
   TunStatus,
@@ -26,11 +29,12 @@ import type {
 import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import { useRuntimeActionStore } from "@/stores/runtime-action-store";
 import { useToastStore } from "@/stores/toast-store";
-import { makeProfileFixture } from "@/test/profile-fixture";
+import { makeProfileDetailsFixture, toProfileSummaryEntry } from "@/test/profile-fixture";
 
 import { MOVE_ACTIONS } from "./profile-constants";
 import { ProfilesScreen } from "./server-table";
-import { applySpeedtestResults } from "./use-node-list-data";
+import { applySpeedtestResults, overlaySpeedtestResult, useNodeListData } from "./use-node-list-data";
+import { useNodeGroups } from "./use-node-groups";
 
 const ipcMocks = vi.hoisted(() => ({
   connectActiveProfile: vi.fn(),
@@ -43,9 +47,10 @@ const ipcMocks = vi.hoisted(() => ({
   deleteProfiles: vi.fn(),
   exportProfileShareLinks: vi.fn(),
   generateQrCode: vi.fn(),
+  getProfile: vi.fn(),
   importProfilesFromText: vi.fn(),
   readClipboardText: vi.fn(),
-  listProfiles: vi.fn(),
+  listProfileSummaries: vi.fn(),
   listPolicyGroups: vi.fn(),
   policyGroupRuntime: vi.fn(),
   deletePolicyGroups: vi.fn(),
@@ -71,24 +76,24 @@ vi.mock("@/ipc/commands", async (importOriginal) => {
   return { ...ipcMocks, appErrorOfKind: actual.appErrorOfKind, IpcCommandError: actual.IpcCommandError };
 });
 
-// `listProfiles` answers with the rows plus the number of stored profiles this
+// `listProfileSummaries` answers with the rows plus the number of stored profiles this
 // build could not decode. Tests that only care about the rows go through these
 // helpers, so the shape lives in one place instead of every mock.
-function listing(entries: ProfileListEntry[], undecodableProfiles = 0) {
+function listing(entries: ProfileSummaryEntry[], undecodableProfiles = 0) {
   return { entries, undecodableProfiles };
 }
 
-function mockProfileList(entries: ProfileListEntry[], undecodableProfiles = 0) {
-  ipcMocks.listProfiles.mockResolvedValue(
+function mockProfileList(entries: ProfileSummaryEntry[], undecodableProfiles = 0) {
+  ipcMocks.listProfileSummaries.mockResolvedValue(
     listing(entries, undecodableProfiles),
   );
 }
 
 function mockProfileListOnce(
-  entries: ProfileListEntry[],
+  entries: ProfileSummaryEntry[],
   undecodableProfiles = 0,
 ) {
-  ipcMocks.listProfiles.mockResolvedValueOnce(
+  ipcMocks.listProfileSummaries.mockResolvedValueOnce(
     listing(entries, undecodableProfiles),
   );
 }
@@ -180,6 +185,12 @@ describe("ProfilesScreen", () => {
       }
     });
     ipcMocks.listPolicyGroups.mockResolvedValue({ entries: [] });
+    // The list carries summaries; the editor reads the node it opens in full.
+    detailsById.clear();
+    ipcMocks.getProfile.mockImplementation((id: string) => {
+      const details = detailsById.get(id);
+      return details ? Promise.resolve(details) : Promise.reject(new Error(`node ${id} not found`));
+    });
     window.localStorage.removeItem("voyavpn.profileColumns");
     useToastStore.setState({ toasts: [] });
     useModalStore.setState({ missingCore: null });
@@ -287,7 +298,7 @@ describe("ProfilesScreen", () => {
     expect(performance.now() - startedAt).toBeLessThan(1000);
     expect(updated).toHaveLength(500);
     expect(updated[499].metrics.delayMs).toBe(499 + 59);
-    expect(updated[499].traffic).toBe(profiles[499].traffic);
+    expect(updated[499].profile).toBe(profiles[499].profile);
   });
 
   it("preserves unmatched rows, missing measurements and authoritative country data", () => {
@@ -308,6 +319,65 @@ describe("ProfilesScreen", () => {
       [original.profile.id]: { ...result, delay: 0, ipInfo: "new IP", outcome: "completed" },
     });
     expect(measured[0].metrics).toMatchObject({ delayMs: 0, ipInfo: "new IP", outcome: "completed" });
+  });
+
+  it("overlays a live result once and keeps the row's identity across frames", () => {
+    const [item] = makeProfiles(1);
+    const result: SpeedtestResult = {
+      indexId: item!.profile.id, delay: 55, ipInfo: null,
+      countryCode: null, outcome: "completed", detail: null,
+    };
+
+    const overlaid = overlaySpeedtestResult(item!, result);
+    expect(overlaid).not.toBe(item);
+    expect(overlaid.metrics).toMatchObject({ delayMs: 55, outcome: "completed" });
+    // The same pair on a later frame is the same object, and a row that
+    // already reads as the result is left alone.
+    expect(overlaySpeedtestResult(item!, result)).toBe(overlaid);
+    expect(overlaySpeedtestResult(overlaid, result)).toBe(overlaid);
+    expect(overlaySpeedtestResult(item!, undefined)).toBe(item);
+  });
+
+  it("lays rows out from the listing until the view sorts by latency", async () => {
+    useNodeListStore.setState({ hideUnreachable: false, sortByLatency: false });
+    mockProfileList(makeProfiles(3));
+    const { result } = renderHookWithQuery(() => {
+      const { t } = useI18n();
+      return useNodeListData(useNodeGroups(), t);
+    });
+    await waitFor(() => expect(result.current.rows).toHaveLength(4));
+    const before = result.current.rows;
+
+    act(() =>
+      useRuntimeEventStore.setState({
+        speedtestResultsByProfileId: {
+          "profile-2": {
+            indexId: "profile-2", delay: 77, ipInfo: null,
+            countryCode: null, outcome: "completed", detail: null,
+          },
+        },
+      }),
+    );
+
+    // A result frame reaches the node, not the layout: the rendered row
+    // overlays it.
+    expect(result.current.rows).toBe(before);
+    expect(result.current.profiles[2]!.metrics.delayMs).toBe(77);
+    const row = before.find((entry) => entry.kind === "profile" && entry.item.profile.id === "profile-2");
+    expect(row?.kind).toBe("profile");
+    if (row?.kind === "profile") {
+      const live = result.current.speedtestResultsByProfileId["profile-2"];
+      expect(overlaySpeedtestResult(row.item, live).metrics.delayMs).toBe(77);
+    }
+
+    act(() => {
+      useNodeListStore.setState({ sortByLatency: true });
+    });
+    const order = result.current.rows.flatMap((entry) => (entry.kind === "profile" ? [entry.item.profile.id] : []));
+    expect(order[0]).toBe("profile-2");
+
+    useNodeListStore.setState({ sortByLatency: false });
+    useRuntimeEventStore.setState({ speedtestResultsByProfileId: {} });
   });
 
   it.each([
@@ -383,6 +453,46 @@ describe("ProfilesScreen", () => {
     expect(await screen.findByText("Server 0")).toBeInTheDocument();
     const menu = await openRowContextMenu(1);
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Edit" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Edit node" });
+    expect(within(dialog).getByLabelText("Remarks")).toHaveValue("Server 1");
+  });
+
+  it("reports a failed node read instead of opening an empty editor", async () => {
+    mockProfileList(makeProfiles(2));
+    ipcMocks.getProfile.mockRejectedValue(new Error("node profile-1 not found"));
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    const menu = await openRowContextMenu(1);
+    await userEvent.click(within(menu).getByRole("menuitem", { name: "Edit" }));
+
+    expect(await screen.findByText("node profile-1 not found")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Edit node" })).not.toBeInTheDocument();
+  });
+
+  it("opens the node asked for last when two reads overlap", async () => {
+    mockProfileList(makeProfiles(2));
+    // Node 0's read answers after node 1's, as a slower first request would.
+    const pending = new Map<string, (details: ProfileDetails) => void>();
+    ipcMocks.getProfile.mockImplementation(
+      (id: string) => new Promise<ProfileDetails>((resolve) => pending.set(id, resolve)),
+    );
+
+    renderProfiles();
+
+    expect(await screen.findByText("Server 0")).toBeInTheDocument();
+    const first = await openRowContextMenu(0);
+    await userEvent.click(within(first).getByRole("menuitem", { name: "Edit" }));
+    const second = await openRowContextMenu(1);
+    await userEvent.click(within(second).getByRole("menuitem", { name: "Edit" }));
+
+    await waitFor(() => expect(pending.size).toBe(2));
+    act(() => {
+      pending.get("profile-1")?.(detailsById.get("profile-1") as ProfileDetails);
+      pending.get("profile-0")?.(detailsById.get("profile-0") as ProfileDetails);
+    });
 
     const dialog = await screen.findByRole("dialog", { name: "Edit node" });
     expect(within(dialog).getByLabelText("Remarks")).toHaveValue("Server 1");
@@ -562,6 +672,35 @@ describe("ProfilesScreen", () => {
     expect(dialog).toHaveTextContent("Travel");
     await userEvent.keyboard("{Escape}");
     expect(name).toHaveFocus();
+  });
+
+  it("reads transport, security and stored traffic in full when details open", async () => {
+    mockProfileList([
+      makeProfile(3, {
+        tls: {
+          alpn: [],
+          certificatePem: null,
+          echConfig: [],
+          mode: "tls",
+          realityPublicKey: null,
+          realityShortId: null,
+          serverName: null,
+        },
+        transport: { host: null, kind: "websocket", path: "/ws" },
+      }),
+    ]);
+    renderProfiles();
+    await screen.findByText("Server 3");
+    // The list alone never asks for a node's credentials.
+    expect(ipcMocks.getProfile).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: "Details for Server 3" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Node details" });
+    await waitFor(() => expect(dialog).toHaveTextContent("24.0 KB"));
+    expect(dialog).toHaveTextContent("Transportws");
+    expect(dialog).toHaveTextContent("Securitytls");
+    expect(ipcMocks.getProfile).toHaveBeenCalledWith("profile-3");
   });
 
   it("subscribes to live traffic only in the open node details", async () => {
@@ -890,7 +1029,7 @@ describe("ProfilesScreen", () => {
   });
 
   it("shows profile query errors instead of silently presenting an empty table", async () => {
-    ipcMocks.listProfiles.mockRejectedValue(new Error("profile list failed"));
+    ipcMocks.listProfileSummaries.mockRejectedValue(new Error("profile list failed"));
 
     renderProfiles();
 
@@ -1121,7 +1260,7 @@ describe("ProfilesScreen", () => {
     const pendingImport = new Promise<void>((resolve) => {
       finishImport = resolve;
     });
-    ipcMocks.listProfiles.mockImplementation(
+    ipcMocks.listProfileSummaries.mockImplementation(
       async (_subscription_id: string | null, filter: string | null) =>
         listing(imported && !filter ? [importedProfile] : []),
     );
@@ -1670,8 +1809,13 @@ function makeProfiles(count: number) {
   return Array.from({ length: count }, (_, index) => makeProfile(index));
 }
 
+/** Every node a test built, in full, for `getProfile` to answer with. */
+const detailsById = new Map<string, ProfileDetails>();
+
 function makeProfile(index: number, overrides: Partial<Profile> = {}) {
-  return makeProfileFixture(index, overrides);
+  const details = makeProfileDetailsFixture(index, overrides);
+  detailsById.set(details.profile.id, details);
+  return toProfileSummaryEntry(details);
 }
 
 function makeSubscription() {

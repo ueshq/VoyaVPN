@@ -423,6 +423,49 @@ async fn supervisor_stop_teardown_order_is_sudo_kill_main_pre() {
     );
 }
 
+/// Statistics waits on this tick instead of polling `status` every second
+/// while the core is stopped, so a start and a stop must move it and a status
+/// read must not.
+#[tokio::test]
+async fn supervisor_change_tick_moves_on_start_and_stop_but_not_on_status() {
+    let events = SharedEvents::default();
+    let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::new(ElevationState::new()));
+    let mut changes = supervisor.subscribe_changes();
+    changes.borrow_and_update();
+
+    // The tick moves after a command's reply, so the second read proves the
+    // first one's turn of the actor loop has finished.
+    supervisor.status().await.expect("status");
+    supervisor.status().await.expect("status");
+    assert!(!changes.has_changed().expect("the supervisor is running"));
+
+    supervisor
+        .start(SupervisorStartRequest {
+            active_profile_id: Some("active".to_string()),
+            active_group_id: None,
+            main: CoreProcessSpec::new(launch("/tmp/sing-box", "run -c config.json")),
+            pre: None,
+            tun_enabled: false,
+            kill_switch: false,
+            sudo_script_dir: "/tmp/voya/scripts".into(),
+            restart_on_crash: false,
+            clash_api_port: 0,
+            clash_api_secret: None,
+        })
+        .await
+        .expect("start");
+    tokio::time::timeout(Duration::from_secs(5), changes.changed())
+        .await
+        .expect("a start moves the tick")
+        .expect("the supervisor is running");
+
+    supervisor.stop().await.expect("stop");
+    tokio::time::timeout(Duration::from_secs(5), changes.changed())
+        .await
+        .expect("a stop moves the tick")
+        .expect("the supervisor is running");
+}
+
 #[tokio::test]
 async fn supervisor_sudo_kill_passes_expected_core_name_for_pid_validation() {
     let events = SharedEvents::default();

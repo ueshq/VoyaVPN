@@ -1,4 +1,9 @@
-use std::{collections::BTreeSet, env, fs, path::PathBuf, process::Command};
+use std::{
+    collections::BTreeSet,
+    env, fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -1007,18 +1012,26 @@ fn golden_core_acceptance_checks_are_opt_in() {
         return;
     }
 
+    // Opted in, nothing may be skipped: `pnpm check:sing-box` only proves the
+    // configs are accepted if every one of them reached the core.
+    let binary = find_binary("VOYA_SINGBOX_BIN", "sing-box").unwrap_or_else(|| {
+        panic!("VOYA_GOLDEN_ACCEPTANCE is set but sing-box was not found; set VOYA_SINGBOX_BIN")
+    });
     let matrix = load_matrix();
+    let mut checked = 0_usize;
     for case in matrix.cases.iter().filter(|case| case.core_acceptance) {
         for (index, config) in acceptance_configs_for_case(case).iter().enumerate() {
-            run_optional_core_check(
+            run_core_check(
                 &format!("{}-{index}", case.id),
-                "VOYA_SINGBOX_BIN",
-                "sing-box",
+                &binary,
                 &["check", "-c"],
                 config,
             );
+            checked += 1;
         }
     }
+    assert!(checked > 0, "no golden case is marked core_acceptance");
+    println!("golden core acceptance: sing-box accepted {checked} configs");
 }
 
 fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
@@ -1081,20 +1094,9 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
     }
 }
 
-fn run_optional_core_check(
-    label: &str,
-    env_var: &str,
-    binary_name: &str,
-    args_before_config: &[&str],
-    config: &Value,
-) {
-    let Some(binary) = find_binary(env_var, binary_name) else {
-        println!("golden core acceptance skipped for {label}: {binary_name} not found");
-        return;
-    };
-
+fn run_core_check(label: &str, binary: &Path, args_before_config: &[&str], config: &Value) {
     let config_path = write_temp_config(label, &canonical_json_string(config));
-    let mut command = Command::new(&binary);
+    let mut command = Command::new(binary);
     for arg in args_before_config {
         command.arg(arg);
     }

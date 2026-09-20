@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex, PoisonError, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -189,8 +189,13 @@ impl StatisticsManager {
         // save there.
         self.collector.abort();
         // The guard is dropped before the await: holding a std lock across one
-        // would be a deadlock waiting to happen.
-        let aggregator = self.aggregator.lock().ok().and_then(|mut slot| slot.take());
+        // would be a deadlock waiting to happen. A poisoned slot still holds
+        // the handle, and skipping it would drop the buffered traffic.
+        let aggregator = self
+            .aggregator
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take();
         if let Some(aggregator) = aggregator {
             // A `JoinError` means the loop panicked or was aborted; either way
             // it is no longer running, which is all this call promises.
@@ -210,7 +215,11 @@ impl Drop for StatisticsManager {
     fn drop(&mut self) {
         let _ = self.shutdown.send(true);
         self.collector.abort();
-        if let Ok(Some(aggregator)) = self.aggregator.get_mut() {
+        if let Some(aggregator) = self
+            .aggregator
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+        {
             aggregator.abort();
         }
     }
@@ -454,12 +463,14 @@ async fn run_singbox_statistics_service(
     let mut reconnect_backoff =
         WebSocketReconnectBackoff::new(WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY);
     let mut active_identity = None;
+    let mut changes = supervisor.subscribe_changes();
 
     loop {
         if *shutdown.borrow() {
             break;
         }
 
+        changes.borrow_and_update();
         let snapshot = supervisor.status().await.ok();
         // The supervisor reports the port the running main config actually
         // listens on, and the bearer token that config demands. Recomputing the
@@ -475,7 +486,7 @@ async fn run_singbox_statistics_service(
         let Some(identity) = snapshot.and_then(core_process_identity) else {
             active_identity = None;
             reconnect_backoff.reset();
-            if sleep_or_shutdown(WS_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
+            if wait_for_core_change(&mut changes, &mut shutdown).await {
                 break;
             }
             continue;
@@ -487,7 +498,7 @@ async fn run_singbox_statistics_service(
             active_identity = None;
             reconnect_backoff.reset();
             tracing::debug!("skipping sing-box statistics because state port is unavailable");
-            if sleep_or_shutdown(WS_RECONNECT_INITIAL_DELAY, &mut shutdown).await {
+            if wait_for_core_change(&mut changes, &mut shutdown).await {
                 break;
             }
             continue;
@@ -501,15 +512,21 @@ async fn run_singbox_statistics_service(
         .await
         {
             Ok(Ok(mut session)) => loop {
-                match singbox_process_identity(&supervisor).await {
-                    Some(current_identity) if current_identity == identity => {}
-                    Some(_) | None => break,
-                }
-
                 tokio::select! {
                     changed = shutdown.changed() => {
                         if changed.is_err() || *shutdown.borrow() {
                             return;
+                        }
+                    }
+                    // Keep reading only while the core is the one this socket
+                    // was opened against; a restart reuses the port.
+                    changed = changes.changed() => {
+                        if changed.is_err() {
+                            break;
+                        }
+                        match singbox_process_identity(&supervisor).await {
+                            Some(current_identity) if current_identity == identity => {}
+                            Some(_) | None => break,
                         }
                     }
                     message = time::timeout(COALESCE_INTERVAL, session.next_event()) => {
@@ -558,6 +575,26 @@ async fn roll_over_statistics_day(database: &Database, previous: i64, current: i
     }
 
     current
+}
+
+/// Waits for the supervisor to start or stop something; `true` when shutdown
+/// was requested instead. Every state change passes through the supervisor's
+/// actor, so nothing is polled once a second while the core is stopped; the
+/// long fallback is a safety net, and the only wake left once the supervisor
+/// itself is gone.
+async fn wait_for_core_change(
+    changes: &mut watch::Receiver<u64>,
+    shutdown: &mut watch::Receiver<bool>,
+) -> bool {
+    tokio::select! {
+        changed = changes.changed() => {
+            if changed.is_err() {
+                return sleep_or_shutdown(WS_RECONNECT_MAX_DELAY, shutdown).await;
+            }
+            *shutdown.borrow()
+        }
+        stopped = sleep_or_shutdown(WS_RECONNECT_MAX_DELAY, shutdown) => stopped,
+    }
 }
 
 async fn singbox_process_identity(supervisor: &CoreSupervisor) -> Option<CoreProcessIdentity> {
@@ -709,6 +746,63 @@ mod tests {
             core_process_identity(restarted)
         );
         assert_eq!(core_process_identity(disconnected), None);
+    }
+
+    /// The statistics loop parks here whenever no core is running. Waking on
+    /// the supervisor's change tick is what replaced a once-a-second
+    /// `status()` poll, so the wake has to be prompt and the fallback has to
+    /// stay a fallback.
+    #[tokio::test(start_paused = true)]
+    async fn statistics_core_wait_wakes_on_a_supervisor_change() {
+        let (changes_tx, mut changes) = watch::channel(0_u64);
+        let (_shutdown_tx, mut shutdown) = watch::channel(false);
+
+        // What the supervisor's actor does after it starts or stops a core.
+        changes_tx.send_modify(|tick| *tick += 1);
+
+        let started = time::Instant::now();
+        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
+
+        assert!(!stopped, "a core change is not a shutdown");
+        assert_eq!(
+            started.elapsed(),
+            Duration::ZERO,
+            "the change must wake the loop, not the fallback timer"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn statistics_core_wait_returns_promptly_on_shutdown() {
+        let (_changes_tx, mut changes) = watch::channel(0_u64);
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+
+        shutdown_tx.send_replace(true);
+
+        let started = time::Instant::now();
+        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
+
+        assert!(stopped, "shutdown must break the loop");
+        assert_eq!(started.elapsed(), Duration::ZERO);
+    }
+
+    /// Once the supervisor is gone the tick can never arrive again, so the
+    /// only thing left to do is wait — not spin on a closed channel.
+    #[tokio::test(start_paused = true)]
+    async fn statistics_core_wait_falls_back_when_the_supervisor_is_gone() {
+        let (changes_tx, mut changes) = watch::channel(0_u64);
+        let (_shutdown_tx, mut shutdown) = watch::channel(false);
+
+        drop(changes_tx);
+
+        let started = time::Instant::now();
+        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
+
+        assert!(!stopped);
+        assert!(
+            started.elapsed() >= WS_RECONNECT_MAX_DELAY,
+            "a closed change channel must wait, not busy-loop: {:?}",
+            started.elapsed()
+        );
     }
 
     #[test]
