@@ -15,3 +15,4 @@ These ADRs are baseline contracts for the VoyaVPN full rewrite, based on the ini
 - [0009 - Default Routing Seed and Managed Rules](0009-default-routing-seed-and-managed-rules.md)
 - [0010 - Policy Groups](0010-policy-groups.md)
 - [0011 - Self-Hosted Node](0011-self-hosted-node.md)
+- [0012 - Mobile Host and the FFI Boundary](0012-mobile-host-and-ffi-boundary.md)

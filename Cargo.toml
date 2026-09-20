@@ -4,6 +4,7 @@ members = [
     "crates/voya-contracts",
     "crates/voya-core",
     "crates/voya-db",
+    "crates/voya-mobile-ffi",
     "crates/voya-net",
     "crates/voya-platform",
     "apps/desktop/src-tauri",
@@ -39,6 +40,7 @@ voya-app = { path = "crates/voya-app" }
 voya-contracts = { path = "crates/voya-contracts" }
 voya-core = { path = "crates/voya-core" }
 voya-db = { path = "crates/voya-db" }
+voya-mobile-ffi = { path = "crates/voya-mobile-ffi" }
 voya-net = { path = "crates/voya-net" }
 voya-platform = { path = "crates/voya-platform" }
 

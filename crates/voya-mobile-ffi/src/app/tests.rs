@@ -1,0 +1,313 @@
+//! The vertical slice, with no mobile toolchain in sight.
+//!
+//! A fake `TunnelHost` and `EventListener` stand in for the two things only a
+//! device has. Everything between them — the database, config generation, the
+//! supervisor, the handshake — is the real thing, which is the point: this is
+//! the test that says the host works before anyone builds an `.ipa`.
+
+use std::sync::{Arc, Mutex};
+
+use serde_json::Value;
+use tempfile::TempDir;
+
+use super::*;
+use crate::{events::EventChannel, sinks::EventListener, tunnel::TunnelError};
+
+#[derive(Default)]
+struct RecordingListener {
+    events: Mutex<Vec<(String, Value)>>,
+}
+
+impl RecordingListener {
+    fn on_channel(&self, channel: EventChannel) -> Vec<Value> {
+        self.events
+            .lock()
+            .expect("lock")
+            .iter()
+            .filter(|(name, _)| name == channel.wire_name())
+            .map(|(_, payload)| payload.clone())
+            .collect()
+    }
+}
+
+impl EventListener for RecordingListener {
+    fn on_event(&self, channel: String, payload_json: String) {
+        let payload = serde_json::from_str(&payload_json).expect("events are valid JSON");
+        self.events.lock().expect("lock").push((channel, payload));
+    }
+}
+
+#[derive(Default)]
+struct RecordingTunnel {
+    handoffs: Mutex<Vec<Value>>,
+    stops: Mutex<u32>,
+    running: Mutex<bool>,
+}
+
+impl TunnelHost for RecordingTunnel {
+    fn start(&self, handoff_json: String, _include_all_networks: bool) -> Result<(), TunnelError> {
+        self.handoffs
+            .lock()
+            .expect("lock")
+            .push(serde_json::from_str(&handoff_json).expect("a handshake is valid JSON"));
+        *self.running.lock().expect("lock") = true;
+        Ok(())
+    }
+
+    fn stop(&self) -> Result<(), TunnelError> {
+        *self.stops.lock().expect("lock") += 1;
+        *self.running.lock().expect("lock") = false;
+        Ok(())
+    }
+
+    fn status(&self) -> String {
+        if *self.running.lock().expect("lock") {
+            "running".to_string()
+        } else {
+            "stopped".to_string()
+        }
+    }
+}
+
+struct Harness {
+    app: Arc<VoyaApp>,
+    listener: Arc<RecordingListener>,
+    tunnel: Arc<RecordingTunnel>,
+    _dir: TempDir,
+}
+
+fn start_app() -> Harness {
+    let dir = TempDir::new().expect("temp dir");
+    let listener = Arc::new(RecordingListener::default());
+    let tunnel = Arc::new(RecordingTunnel::default());
+    let app = VoyaApp::new(
+        dir.path().display().to_string(),
+        Some("en-US".to_string()),
+        Arc::clone(&listener) as Arc<dyn EventListener>,
+        Arc::clone(&tunnel) as Arc<dyn TunnelHost>,
+    )
+    .expect("the host starts on an empty directory");
+
+    Harness {
+        app,
+        listener,
+        tunnel,
+        _dir: dir,
+    }
+}
+
+impl Harness {
+    /// Runs one command the way the platform does, and unwraps the answer.
+    fn invoke(&self, command: &str, args: Value) -> Value {
+        let json = self
+            .app
+            .runtime
+            .block_on(self.app.invoke(command.to_string(), args.to_string()))
+            .unwrap_or_else(|error| panic!("{command} failed: {error}"));
+
+        serde_json::from_str(&json).expect("a command answers with JSON")
+    }
+
+    fn invoke_err(&self, command: &str, args: Value) -> Value {
+        let error = self
+            .app
+            .runtime
+            .block_on(self.app.invoke(command.to_string(), args.to_string()))
+            .expect_err("expected a failure");
+
+        serde_json::from_str(&error).expect("a failure is a serialized AppError")
+    }
+}
+
+#[test]
+fn a_share_link_becomes_a_node_that_can_be_connected_and_disconnected() {
+    let harness = start_app();
+
+    // Nothing to start from.
+    let listing = harness.invoke("list_profile_summaries", serde_json::json!({}));
+    assert_eq!(listing["entries"].as_array().expect("entries").len(), 0);
+
+    let imported = harness.invoke(
+        "import_profiles_from_text",
+        serde_json::json!({
+            "text": "vless://11111111-1111-1111-1111-111111111111@example.test:443?security=tls&sni=example.test&type=ws&path=%2Fws#Tokyo",
+            "subscriptionId": Value::Null,
+        }),
+    );
+    assert_eq!(imported["imported"], 1, "import result: {imported}");
+
+    let listing = harness.invoke("list_profile_summaries", serde_json::json!({}));
+    let entries = listing["entries"].as_array().expect("entries");
+    assert_eq!(entries.len(), 1);
+    let node_id = entries[0]["profile"]["id"]
+        .as_str()
+        .expect("id")
+        .to_string();
+    assert_eq!(entries[0]["profile"]["remarks"], "Tokyo");
+
+    // The import announced itself, the way a committed mutation must.
+    let invalidations = harness.listener.on_channel(EventChannel::Invalidate);
+    assert!(
+        invalidations.iter().any(|event| {
+            event["keys"]
+                .as_array()
+                .is_some_and(|keys| keys.iter().any(|key| key["scope"]["kind"] == "profiles"))
+        }),
+        "no profile invalidation was published: {invalidations:?}"
+    );
+
+    let active = harness.invoke(
+        "set_active_profile",
+        serde_json::json!({ "indexId": node_id }),
+    );
+    assert_eq!(active["isActive"], true);
+
+    let status = harness.invoke("connect_active_profile", serde_json::json!({}));
+    assert_eq!(status["state"], "connected", "connect answered: {status}");
+    assert_eq!(status["activeProfileId"], node_id.as_str());
+
+    let handoffs = harness.tunnel.handoffs.lock().expect("lock");
+    assert_eq!(handoffs.len(), 1, "the provider is started exactly once");
+    let handoff = &handoffs[0];
+    assert_eq!(handoff["version"], 1);
+    assert_eq!(handoff["activeProfileId"], node_id.as_str());
+
+    // The handshake carries a real generated configuration, not a path.
+    let config: Value = serde_json::from_str(
+        handoff["singboxConfigJson"]
+            .as_str()
+            .expect("the config travels as text"),
+    )
+    .expect("the inlined config is valid JSON");
+    assert!(
+        config["outbounds"]
+            .as_array()
+            .expect("outbounds")
+            .iter()
+            .any(|outbound| outbound["server"] == "example.test"),
+        "the imported node is not in the generated config: {config}"
+    );
+    // The tunnel inbound is what makes it a tunnel rather than a local proxy.
+    assert!(
+        config["inbounds"]
+            .as_array()
+            .expect("inbounds")
+            .iter()
+            .any(|inbound| inbound["type"] == "tun"),
+        "the generated config has no tun inbound: {config}"
+    );
+    drop(handoffs);
+
+    let status = harness.invoke("runtime_status", serde_json::json!({}));
+    assert_eq!(status["state"], "connected");
+
+    let status = harness.invoke("disconnect_core", serde_json::json!({}));
+    assert_eq!(status["state"], "disconnected", "disconnect: {status}");
+    assert_eq!(*harness.tunnel.stops.lock().expect("lock"), 1);
+
+    // The whole run reached the frontend as core-state events too.
+    let transient = harness.listener.on_channel(EventChannel::TransientStream);
+    let states: Vec<&str> = transient
+        .iter()
+        .filter(|event| event["kind"] == "coreState")
+        .filter_map(|event| event["payload"]["state"].as_str())
+        .collect();
+    assert!(
+        states.contains(&"connecting") && states.contains(&"connected"),
+        "core state was not announced as it changed: {states:?}"
+    );
+
+    harness.app.shutdown();
+}
+
+#[test]
+fn the_clash_api_the_config_declares_is_the_one_the_supervisor_reports() {
+    let harness = start_app();
+    harness.invoke(
+        "import_profiles_from_text",
+        serde_json::json!({
+            "text": "vless://11111111-1111-1111-1111-111111111111@example.test:443?security=tls#Tokyo",
+            "subscriptionId": Value::Null,
+        }),
+    );
+    let listing = harness.invoke("list_profile_summaries", serde_json::json!({}));
+    let node_id = listing["entries"][0]["profile"]["id"]
+        .as_str()
+        .expect("id")
+        .to_string();
+    harness.invoke(
+        "set_active_profile",
+        serde_json::json!({ "indexId": node_id }),
+    );
+    harness.invoke("connect_active_profile", serde_json::json!({}));
+
+    let handoffs = harness.tunnel.handoffs.lock().expect("lock");
+    let config: Value =
+        serde_json::from_str(handoffs[0]["singboxConfigJson"].as_str().expect("text"))
+            .expect("JSON");
+
+    // The app process reads the Clash API of the core inside the provider over
+    // loopback, so the port and the token the config declares are the only
+    // authority for both (ADR 0012).
+    let clash = &config["experimental"]["clash_api"];
+    let listen = clash["external_controller"]
+        .as_str()
+        .expect("the generated config declares a Clash API");
+    assert!(
+        listen.starts_with("127.0.0.1:"),
+        "the Clash API must stay on loopback: {listen}"
+    );
+    assert!(
+        clash["secret"]
+            .as_str()
+            .is_some_and(|secret| !secret.is_empty()),
+        "the Clash API must demand a token: {clash}"
+    );
+
+    drop(handoffs);
+    harness.app.shutdown();
+}
+
+#[test]
+fn a_command_this_platform_cannot_answer_fails_with_the_typed_kind() {
+    let harness = start_app();
+
+    for command in ["scan_screen_qr", "system_proxy_status", "save_profile"] {
+        let error = harness.invoke_err(command, serde_json::json!({}));
+        assert_eq!(
+            error["kind"]["type"], "unsupported",
+            "{command} answered with {error}"
+        );
+    }
+
+    harness.app.shutdown();
+}
+
+#[test]
+fn arguments_that_do_not_match_a_command_are_rejected_before_it_runs() {
+    let harness = start_app();
+
+    let error = harness.invoke_err("set_active_profile", serde_json::json!({ "wrong": 1 }));
+    assert_eq!(error["subsystem"], "app");
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("set_active_profile")),
+        "the failure should name the command: {error}"
+    );
+
+    harness.app.shutdown();
+}
+
+#[test]
+fn settings_load_in_the_capture_mode_a_phone_actually_has() {
+    let harness = start_app();
+
+    let settings = harness.invoke("load_app_settings", serde_json::json!({}));
+    // Seeded, not defaulted: a phone captures traffic only through its tunnel
+    // provider, so a fresh install is already in VPN mode.
+    assert_eq!(settings["network"]["tun"]["enabled"], true);
+    assert_eq!(settings["appearance"]["language"], "en");
+
+    harness.app.shutdown();
+}

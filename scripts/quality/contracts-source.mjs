@@ -20,11 +20,14 @@
  * - Event channels become a `VoyaEventChannels` map keyed by the same names the
  *   backend emits, so a non-Tauri transport has one decoder per channel.
  *
- * Two further artifacts come out of the same parse, for the transports that are
- * not Tauri: `commands.ts` (the wire name and argument names behind each
+ * Three further artifacts come out of the same parse, for the transports that
+ * are not Tauri: `commands.ts` (the wire name and argument names behind each
  * command, so a generic transport can rebuild Tauri's named-argument object
- * from a positional call) and `commands.json` (the wire names alone, which the
- * Rust mobile host reads to prove it has taken a decision about every one).
+ * from a positional call), `commands.json` (the wire names alone, which the
+ * Rust mobile host reads to prove it has taken a decision about every one) and
+ * `events.json` (each channel's wire name and the `kind` discriminants its
+ * payload can carry, which the mobile host's own event enums are checked
+ * against — it cannot depend on the Tauri shell where they are declared).
  */
 
 const COMMANDS_MARKER = "/** Commands */";
@@ -327,6 +330,48 @@ function renderCommandNames(commands) {
 
 export function generateCommandWire(bindingsSource) {
   return renderCommandWire(parseCommands(sliceBetween(bindingsSource, COMMANDS_MARKER, EVENTS_MARKER)));
+}
+
+const KIND_PATTERN = /\{\s*kind:\s*"([A-Za-z0-9]+)"/g;
+
+/**
+ * Each channel's wire name and the `kind` values its payload can take.
+ *
+ * `crates/voya-mobile-ffi` declares the same three payload enums — it cannot
+ * reuse the shell's, which carry `tauri_specta::Event` and live behind an
+ * orphan rule — and reads this file to prove neither side has drifted. A
+ * payload that is a plain struct rather than a tagged union has no kinds, and
+ * says so with an empty list.
+ */
+function renderEventShapes(events, typesBlock) {
+  const shapes = Object.fromEntries(
+    events.map((event) => {
+      const declaration = new RegExp(
+        `export type ${event.payloadType}\\s*=([\\s\\S]*?);\\n`,
+      ).exec(typesBlock);
+      if (!declaration) {
+        throw new Error(`Event payload ${event.payloadType} is not declared in bindings.ts`);
+      }
+
+      return [
+        event.key,
+        {
+          channel: event.channel,
+          kinds: [...declaration[1].matchAll(KIND_PATTERN)].map((match) => match[1]),
+          payload: event.payloadType,
+        },
+      ];
+    }),
+  );
+
+  return `${JSON.stringify(shapes, null, 2)}\n`;
+}
+
+export function generateEventShapes(bindingsSource) {
+  return renderEventShapes(
+    parseEvents(sliceBetween(bindingsSource, EVENTS_MARKER, TYPES_MARKER)),
+    sliceBetween(bindingsSource, TYPES_MARKER, RUNTIME_MARKER),
+  );
 }
 
 export function generateCommandNames(bindingsSource) {

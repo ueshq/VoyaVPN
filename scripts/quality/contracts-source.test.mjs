@@ -7,6 +7,7 @@ import {
   generateCommandNames,
   generateCommandWire,
   generateContractsSource,
+  generateEventShapes,
   parseCommands,
   parseEvents,
 } from "./contracts-source.mjs";
@@ -190,5 +191,52 @@ describe("generateCommandNames", () => {
     expect(generateCommandNames(bindings)).toBe(committed);
     expect(names).toEqual([...names].sort());
     expect(names).toHaveLength(bindings.split("__TAURI_INVOKE(").length - 1);
+  });
+});
+
+describe("generateEventShapes", () => {
+  it("names each channel and the kinds its payload can carry", () => {
+    const shapes = JSON.parse(
+      generateEventShapes(
+        fixture({
+          commands: '\trestartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),',
+          events: '\tappEvent: makeEvent<AppEvent>("app-event"),',
+          types: 'export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "closeRequested" };\n',
+        }),
+      ),
+    );
+
+    expect(shapes.appEvent).toEqual({
+      channel: "app-event",
+      kinds: ["notice", "closeRequested"],
+      payload: "AppEvent",
+    });
+  });
+
+  it("refuses an event whose payload type it cannot find", () => {
+    expect(() =>
+      generateEventShapes(
+        fixture({
+          commands: '\trestartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),',
+          events: '\tappEvent: makeEvent<AppEvent>("app-event"),',
+          types: "export type Something = string;\n",
+        }),
+      ),
+    ).toThrow(/AppEvent is not declared/);
+  });
+
+  it("reproduces the checked-in event shapes, covering every channel", () => {
+    const committed = readFileSync(resolve(repoRoot, "packages/contracts/events.json"), "utf8");
+
+    expect(generateEventShapes(bindings)).toBe(committed);
+    // Counted inside the events block: the runtime section below it declares
+    // `makeEvent` itself, which is not a channel.
+    const eventsBlock = bindings.slice(
+      bindings.indexOf("/** Events */"),
+      bindings.indexOf("/* Types */"),
+    );
+    expect(Object.keys(JSON.parse(committed))).toHaveLength(
+      eventsBlock.split("makeEvent<").length - 1,
+    );
   });
 });

@@ -7,6 +7,7 @@ import {
   generateCommandNames,
   generateCommandWire,
   generateContractsSource,
+  generateEventShapes,
 } from "./contracts-source.mjs";
 
 const check = process.argv.includes("--check");
@@ -21,11 +22,15 @@ const contractsPath = resolve(repoRoot, "packages/contracts/src/generated.ts");
 // against. Both come out of the same parse as the contract itself.
 const commandWirePath = resolve(repoRoot, "packages/contracts/src/commands.ts");
 const commandNamesPath = resolve(repoRoot, "packages/contracts/commands.json");
+// The three event channels and the `kind` values each payload can carry, for
+// the Rust mobile host's own copy of those enums.
+const eventShapesPath = resolve(repoRoot, "packages/contracts/events.json");
 
 const derived = [
   { path: contractsPath, render: generateContractsSource },
   { path: commandWirePath, render: generateCommandWire },
   { path: commandNamesPath, render: generateCommandNames },
+  { path: eventShapesPath, render: generateEventShapes },
 ];
 
 function runExport(outputPath) {

@@ -129,6 +129,23 @@ export const shellRules = [
   },
 ];
 
+/**
+ * The mobile host is a peer of the Tauri shell (ADR 0012), so it keeps the same
+ * discipline: it reaches domain and persistence through `voya-app`, and it
+ * declares no DTO of its own.
+ *
+ * It *does* carry tests, unlike the shell — its lib harness is not disabled —
+ * and they are the only thing standing in for the types uniffi does not check,
+ * so the shell's test ban is deliberately not repeated here.
+ */
+export const mobileHostRules = [
+  {
+    id: "mobile-host-domain",
+    pattern: /\bvoya_(?:core|db)::/u,
+    message: "the mobile host must reach domain and persistence through voya-app facades",
+  },
+];
+
 /** A plain `#[derive(...)]` or one wrapped in `#[cfg_attr(..., derive(...))]`. */
 export const shellDtoRule = {
   id: "shell-dto",

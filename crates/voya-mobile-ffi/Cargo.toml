@@ -1,0 +1,34 @@
+[package]
+name = "voya-mobile-ffi"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+# `lib` for the host-side tests, `staticlib` for the iOS xcframework and
+# `cdylib` for the Android `.so`.
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+tracing.workspace = true
+uniffi = { version = "0.32", features = ["tokio"] }
+voya-app.workspace = true
+voya-contracts.workspace = true
+voya-platform.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true
+
+# uniffi is reached through its macros, which expand into paths in this crate
+# rather than into a named import cargo-machete can see.
+[package.metadata.cargo-machete]
+ignored = ["uniffi"]

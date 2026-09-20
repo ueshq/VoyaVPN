@@ -12,6 +12,7 @@ import {
   manifestDependencyRules,
   resolveTestModuleFiles,
   retiredCompatibilityRules,
+  mobileHostRules,
   shellDtoRule,
   shellRules,
   untranslatedMessageRule,
@@ -84,6 +85,11 @@ for (const path of rustFiles) {
     }
   }
 
+  if (path.includes("/crates/voya-mobile-ffi/src/")) {
+    applyRules(path, source, production, mobileHostRules);
+    applyRules(path, source, production, [shellDtoRule]);
+  }
+
   if (!path.endsWith("/crates/voya-net/src/clash.rs")) {
     applyRules(path, source, production, clashBoundaryRules);
   }
@@ -112,6 +118,22 @@ applyManifestRules(
 applyManifestRules(
   "crates/voya-app/Cargo.toml",
   manifestDependencyRules("specta", "voya-app must not depend on Specta"),
+);
+// Same discipline as the shell, for the same reason: a second host that
+// reached into voya-core or voya-db would fork the decisions voya-app owns.
+applyManifestRules(
+  "crates/voya-mobile-ffi/Cargo.toml",
+  manifestDependencyRules(
+    "voya-(?:core|db)",
+    "the mobile host must not depend directly on voya-core or voya-db",
+  ),
+);
+// The uniffi surface is an envelope, not a model (ADR 0012): the contract is
+// `@voya/contracts`, generated from specta in voya-contracts, and a second
+// generator over the same types would make it exist twice.
+applyManifestRules(
+  "crates/voya-mobile-ffi/Cargo.toml",
+  manifestDependencyRules("specta", "the mobile host must not depend on Specta"),
 );
 // The source rules match crate names, so a renamed dependency
 // (`http = { package = "reqwest" }`) would slip past them; ban the edge itself.
