@@ -4,6 +4,32 @@ import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
+// The `globals` package has no React Native set. These are the globals the RN
+// runtime actually injects: the shared timer/console/fetch family plus RN's own
+// `__DEV__`. Notably absent are `document` and `window`, so DOM code fails lint
+// in apps/mobile instead of failing on a device.
+const reactNativeGlobals = {
+  ...globals["shared-node-browser"],
+  __DEV__: "readonly",
+  AbortController: "readonly",
+  AbortSignal: "readonly",
+  Blob: "readonly",
+  ErrorUtils: "readonly",
+  FormData: "readonly",
+  Headers: "readonly",
+  Request: "readonly",
+  Response: "readonly",
+  WebSocket: "readonly",
+  XMLHttpRequest: "readonly",
+  cancelAnimationFrame: "readonly",
+  clearImmediate: "readonly",
+  fetch: "readonly",
+  performance: "readonly",
+  queueMicrotask: "readonly",
+  requestAnimationFrame: "readonly",
+  setImmediate: "readonly",
+};
+
 const tauriBoundaryMessage = "ADR-0002: only apps/desktop/src/ipc may import Tauri APIs.";
 const tauriGlobalsMessage = "ADR-0002: only apps/desktop/src/ipc may touch the Tauri runtime globals.";
 
@@ -61,6 +87,35 @@ export default tseslint.config(
     ],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
+    },
+  },
+  {
+    // React Native tooling: CommonJS Node scripts. Metro and Babel load their
+    // configs with `require`, so CommonJS is the required format here, not a
+    // style choice.
+    files: ["apps/mobile/*.js"],
+    languageOptions: {
+      globals: { ...globals.node },
+      sourceType: "commonjs",
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    // The Metro entry is ESM even though the configs beside it are CommonJS.
+    files: ["apps/mobile/index.js"],
+    languageOptions: {
+      globals: { ...globals.node },
+      sourceType: "module",
+    },
+  },
+  {
+    // React Native has no DOM. `globals.browser` would let `document` and
+    // `window` pass lint here and fail at runtime; the RN globals replace it.
+    files: ["apps/mobile/src/**/*.{ts,tsx}"],
+    languageOptions: {
+      globals: { ...reactNativeGlobals, ...globals.jest },
     },
   },
   {

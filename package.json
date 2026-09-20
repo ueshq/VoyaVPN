@@ -54,7 +54,9 @@
     "native:windows:tunnel:build": "node scripts/native/windows/tunnel-service.mjs build",
     "native:windows:tunnel:install": "node scripts/native/windows/tunnel-service.mjs install",
     "native:windows:tunnel:uninstall": "node scripts/native/windows/tunnel-service.mjs uninstall",
-    "native:windows:tunnel:status": "node scripts/native/windows/tunnel-service.mjs status"
+    "native:windows:tunnel:status": "node scripts/native/windows/tunnel-service.mjs status",
+    "check:mobile:test": "pnpm --filter @voya/mobile test",
+    "check:mobile:bundle": "node scripts/quality/mobile-bundle.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

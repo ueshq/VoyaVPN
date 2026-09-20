@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./core": "./src/core.ts",
+    "./native": "./src/native.ts",
     "./use-i18n": "./src/use-i18n.ts"
   },
   "scripts": {

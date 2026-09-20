@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The base config targets the DOM. React Native has no DOM, and letting
+    // `document`/`window` typecheck here would hide real portability bugs until
+    // runtime.
+    "lib": ["ES2023"],
+    "jsx": "react-jsx",
+    "types": ["jest", "react-native"],
+    "paths": {
+      "~/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

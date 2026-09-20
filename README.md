@@ -9,7 +9,7 @@ TypeScript, Tailwind v4, and shadcn/ui foundations.
 - `apps/desktop/src-tauri`: Tauri shell, commands, tray, capabilities, and packaging.
 - `apps/desktop/src`: React desktop frontend. Only `apps/desktop/src/ipc` may import `@tauri-apps/api`.
 - `apps/web`: `@voya/web`, placeholder for a future web management surface.
-- `apps/mobile`: `@voya/mobile`, placeholder for a future bare React Native app.
+- `apps/mobile`: `@voya/mobile`, the bare React Native app (RN 0.87, no Expo).
 - `packages/ui`: source-only shadcn/ui primitives, design tokens, CSS, fonts, and `cn()`.
 - `packages/i18n`: source-only i18next setup and Voya-maintained locale JSON.
 - `packages/utils`: source-only shared formatting, redaction, mounted-ref, and error helpers.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "includeEntryExports": true,
-  "ignoreWorkspaces": ["apps/mobile", "apps/web"],
+  "ignoreWorkspaces": ["apps/web"],
   "workspaces": {
     ".": {
       "ignoreBinaries": [
@@ -10,6 +10,13 @@
         "system_profiler",
         "xcode-select"
       ]
+    },
+    "apps/mobile": {
+      "entry": ["src/**/*.test.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}"],
+      // Babel rewrites helper calls into `@babel/runtime` imports, so no
+      // source file names it.
+      "ignoreDependencies": ["@babel/runtime"]
     },
     "apps/desktop": {
       "entry": ["src/**/*.{test,spec}.{ts,tsx}"],

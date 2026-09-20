@@ -265,6 +265,37 @@ jobs:
       - name: Check dead code and dependency usage
         run: pnpm run check:dead-code
 
+  # The React Native app's own gates. They are deliberately outside
+  # `verify:local`: Jest and a Metro bundle are a separate toolchain from the
+  # Vitest/Playwright suite the `baseline-*` jobs split between them.
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.5.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run mobile tests
+        run: pnpm run check:mobile:test
+
+      # Typecheck and lint resolve modules the Node way; the app is built by
+      # Metro, whose resolver is configured separately. This is the only gate
+      # that exercises it, and a workspace package that imports fine in an
+      # editor can still fail to bundle for a device.
+      - name: Bundle the mobile app for both platforms
+        run: pnpm run check:mobile:bundle
+
   desktop-smoke:
     name: Linux native desktop smoke
     runs-on: ubuntu-24.04

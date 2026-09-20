@@ -45,6 +45,11 @@ apps/web/.output/
 .parcel-cache/
 .gradle/
 .cxx/
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+apps/mobile/android/.kotlin/
+apps/mobile/.bundle-check/
+apps/mobile/vendor/
 .eslintcache
 .stylelintcache
 *.tsbuildinfo
