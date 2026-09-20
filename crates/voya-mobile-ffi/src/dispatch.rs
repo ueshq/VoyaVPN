@@ -24,6 +24,7 @@ mod proxy;
 mod routing;
 mod runtime;
 mod settings;
+mod speedtest;
 mod subscriptions;
 
 /// Commands this platform will never answer.
@@ -79,13 +80,8 @@ pub const UNSUPPORTED_ON_MOBILE: &[&str] = &[
 /// and conflating the two would make the unsupported list a lie. Both lists are
 /// checked, so a command cannot quietly fall out of either.
 ///
-/// This list shrinks to empty as the screens land, one feature at a time.
-pub const NOT_YET_DISPATCHED: &[&str] = &[
-    // Both need the in-process probe core (`ProbeCoreHost`), which is the
-    // remaining piece of the disconnected speedtest.
-    "run_speedtest",
-    "cancel_speedtest",
-];
+/// Empty: every command a phone can answer now has a dispatcher.
+pub const NOT_YET_DISPATCHED: &[&str] = &[];
 
 /// Runs one command.
 pub async fn invoke(
@@ -170,7 +166,9 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
         "set_tun_enabled" => runtime::set_tun_enabled(state, args).await,
         "connection_mode_status" => runtime::connection_mode_status(state).await,
         "set_connection_mode" => runtime::set_connection_mode(state, args).await,
-        "speedtest_status" => runtime::speedtest_status(state).await,
+        "run_speedtest" => speedtest::run(state, args).await,
+        "cancel_speedtest" => speedtest::cancel(state),
+        "speedtest_status" => speedtest::status(state),
         "check_connection_ip" => runtime::check_connection_ip(state).await,
 
         _ if UNSUPPORTED_ON_MOBILE.contains(&command) => Err(unsupported(command)),

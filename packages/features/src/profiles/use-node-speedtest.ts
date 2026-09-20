@@ -1,9 +1,10 @@
 import { useState } from "react";
 
-import { cancelSpeedtest, runSpeedtest } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { SpeedtestResult, SpeedtestTarget } from "@/ipc/bindings";
-import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
+import type { SpeedtestResult, SpeedtestTarget } from "@voya/contracts";
+
+import type { NodeOperation } from "./use-node-operation";
 
 /** `source` names the button that started the run, so only it offers Stop. */
 type SpeedtestRun = { ids: string[]; before: Record<string, SpeedtestResult>; source: string };
@@ -32,11 +33,7 @@ export function useNodeSpeedtest({ runOperation }: NodeOperation) {
       source,
     });
     try {
-      await runOperation(() =>
-        runSpeedtest({
-          target,
-        }),
-      );
+      await runOperation(() => voyaCommands().runSpeedtest({ target }));
     } finally {
       setSpeedtestRunning(false);
       setRun(null);
@@ -45,7 +42,7 @@ export function useNodeSpeedtest({ runOperation }: NodeOperation) {
 
   async function handleCancelSpeedtest() {
     await runOperation(async () => {
-      const status = await cancelSpeedtest();
+      const status = await voyaCommands().cancelSpeedtest();
       setSpeedtestRunning(status.running);
     });
   }

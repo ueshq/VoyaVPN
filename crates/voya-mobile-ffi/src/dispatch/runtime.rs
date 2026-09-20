@@ -67,20 +67,6 @@ pub(super) async fn tun_status(state: &MobileState) -> Result<Value, AppError> {
     answer("tun_status", &tun_manager(state).status(&config)?)
 }
 
-/// Whether a speedtest run is in flight.
-///
-/// Always "no" until the probe core lands: nothing can start a run on a phone
-/// yet (`run_speedtest` is on `NOT_YET_DISPATCHED`), and the frontend reads
-/// this on every mount, so answering honestly beats refusing.
-pub(super) async fn speedtest_status(state: &MobileState) -> Result<Value, AppError> {
-    let _ = state;
-
-    answer(
-        "speedtest_status",
-        &voya_contracts::SpeedtestStatus { running: false },
-    )
-}
-
 /// The exit address of the running connection, looked up through its own proxy.
 pub(super) async fn check_connection_ip(state: &MobileState) -> Result<Value, AppError> {
     let config = state.config_mutations.current_config();

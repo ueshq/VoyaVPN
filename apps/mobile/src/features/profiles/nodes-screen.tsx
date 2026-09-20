@@ -4,9 +4,10 @@ import { profileLatency, profileTitle } from "@voya/features/profiles/profile-di
 import { useNodeImport } from "@voya/features/profiles/use-node-import";
 import { useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
+import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { FlatList, View } from "react-native";
 
 import { Button, ButtonSpinner, ButtonText } from "~/components/ui/button";
@@ -30,8 +31,15 @@ export function NodesScreen() {
   const selection = useNodeSelection();
   const data = useNodeListData(selection, t);
   const operation = useNodeOperation();
+  const speedtest = useNodeSpeedtest(operation);
   const activation = useProfileActivation(t);
   const queryClient = useQueryClient();
+
+  // Groups are headers, not nodes; a run tests what the list is showing.
+  const testableIds = useMemo(
+    () => data.rows.flatMap((row) => (row.kind === "group" ? [] : [row.item.profile.id])),
+    [data.rows],
+  );
 
   const onImported = useCallback(async () => {
     await queryClient.invalidateQueries();
@@ -91,14 +99,38 @@ export function NodesScreen() {
             autoCorrect={false}
           />
         </Input>
-        <Button
-          variant="outline"
-          isDisabled={imports.directImportPending !== null}
-          onPress={() => void imports.handleDirectImport("clipboard")}
-        >
-          {imports.directImportPending ? <ButtonSpinner /> : null}
-          <ButtonText>{t("panes.profiles.import.clipboard")}</ButtonText>
-        </Button>
+        <View className="flex-row gap-2">
+          <Button
+            className="flex-1"
+            variant="outline"
+            isDisabled={imports.directImportPending !== null}
+            onPress={() => void imports.handleDirectImport("clipboard")}
+          >
+            {imports.directImportPending ? <ButtonSpinner /> : null}
+            <ButtonText>{t("panes.profiles.import.clipboard")}</ButtonText>
+          </Button>
+          {/* One button, two jobs: while a run is in flight it is the way to
+              stop it, and it counts the nodes that have answered. */}
+          <Button
+            className="flex-1"
+            variant="outline"
+            isDisabled={testableIds.length === 0}
+            onPress={() =>
+              speedtest.speedtestRunning
+                ? void speedtest.handleCancelSpeedtest()
+                : void speedtest.handleSpeedtest({ profileIds: testableIds, scope: "profiles" })
+            }
+          >
+            {speedtest.speedtestRunning ? <ButtonSpinner /> : null}
+            <ButtonText>
+              {speedtest.speedtestRunning
+                ? speedtest.speedtestProgress
+                  ? t("panes.profiles.speedtest.stopProgress", speedtest.speedtestProgress)
+                  : t("panes.profiles.speedtest.stop")
+                : t("panes.profiles.speedtest.testAll")}
+            </ButtonText>
+          </Button>
+        </View>
         {operation.operationError ? (
           <Text className="text-caption text-danger">{operation.operationError}</Text>
         ) : null}

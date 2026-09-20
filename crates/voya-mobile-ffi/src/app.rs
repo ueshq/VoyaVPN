@@ -19,6 +19,7 @@ use voya_app::{
     config_mutation::ConfigMutationCoordinator,
     proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
     services::AppServices,
+    speedtest::SpeedtestManager,
     supervisor::{CoreSupervisor, SupervisorDeps},
 };
 use voya_platform::{
@@ -30,6 +31,7 @@ use voya_platform::{
 
 use crate::{
     dispatch,
+    probe::{HostProbeCoreLauncher, ProbeCoreHost},
     sinks::{EventListener, HostSinks},
     tunnel::{HostTunController, TunnelHost},
 };
@@ -73,6 +75,7 @@ pub struct MobileState {
     /// running core survives between them.
     pub(crate) proxy_runtime: ProxyRuntimeManager,
     pub(crate) proxy_monitor: ProxyMonitorController,
+    pub(crate) speedtest: SpeedtestManager,
 }
 
 #[derive(uniffi::Object)]
@@ -97,6 +100,7 @@ impl VoyaApp {
         locale: Option<String>,
         events: Arc<dyn EventListener>,
         tunnel: Arc<dyn TunnelHost>,
+        probe_core: Arc<dyn ProbeCoreHost>,
     ) -> Result<Arc<Self>, StartupError> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -110,8 +114,14 @@ impl VoyaApp {
             message: error.to_string(),
         })?;
 
-        let state =
-            runtime.block_on(connect(&data_dir, paths, locale.as_deref(), events, tunnel))?;
+        let state = runtime.block_on(connect(
+            &data_dir,
+            paths,
+            locale.as_deref(),
+            events,
+            tunnel,
+            probe_core,
+        ))?;
 
         Ok(Arc::new(Self {
             runtime,
@@ -140,6 +150,10 @@ impl VoyaApp {
 
     /// Stops what the app started. Safe to call more than once.
     pub fn shutdown(&self) {
+        // Probe cores belong to the app process, not to the supervisor, and an
+        // abandoned run leaves one listening; the desktop shell reaps them the
+        // same way in `lifecycle.rs`.
+        self.state.speedtest.shutdown();
         self.runtime.block_on(async {
             if let Err(error) = self.state.supervisor.stop().await {
                 tracing::warn!(?error, "the core did not stop cleanly during shutdown");
@@ -154,6 +168,7 @@ async fn connect(
     locale: Option<&str>,
     events: Arc<dyn EventListener>,
     tunnel: Arc<dyn TunnelHost>,
+    probe_core: Arc<dyn ProbeCoreHost>,
 ) -> Result<MobileState, StartupError> {
     let database_path = data_dir.join(voya_app::startup::DATABASE_NAME);
     let services = AppServices::connect(&database_path, paths)
@@ -189,6 +204,13 @@ async fn connect(
             .with_event_sink(Arc::clone(&sinks) as Arc<_>),
     );
 
+    // While connected the test goes through the provider's own core, so this
+    // launcher only ever starts the in-app instance a disconnected run needs.
+    let speedtest = services.speedtest_manager_with_launcher(
+        Arc::new(HostProbeCoreLauncher::new(probe_core)),
+        supervisor.clone(),
+    );
+
     Ok(MobileState {
         config_mutations,
         elevation,
@@ -196,6 +218,7 @@ async fn connect(
         proxy_runtime: ProxyRuntimeManager::new(),
         services,
         sinks,
+        speedtest,
         supervisor,
     })
 }

@@ -18,10 +18,12 @@ pub mod app;
 pub mod dispatch;
 pub mod events;
 pub mod handoff;
+pub mod probe;
 pub mod sinks;
 pub mod tunnel;
 
 pub use app::{CommandError, StartupError, VoyaApp};
 pub use events::{AppEvent, EventChannel, InvalidateEvent, TransientStreamEvent};
+pub use probe::{ProbeCoreError, ProbeCoreHost};
 pub use sinks::EventListener;
 pub use tunnel::{HostTunController, TunnelError, TunnelHost};

@@ -11,7 +11,12 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use super::*;
-use crate::{events::EventChannel, sinks::EventListener, tunnel::TunnelError};
+use crate::{
+    events::EventChannel,
+    probe::{ProbeCoreError, ProbeCoreHost},
+    sinks::EventListener,
+    tunnel::TunnelError,
+};
 
 #[derive(Default)]
 struct RecordingListener {
@@ -69,10 +74,33 @@ impl TunnelHost for RecordingTunnel {
     }
 }
 
+/// A host with no Libbox behind it.
+///
+/// Refusing rather than pretending: a probe core that answers nothing would
+/// have every run wait out the readiness budget, and what these tests are
+/// about is that the run reaches the host at all and reports what it said.
+#[derive(Default)]
+struct RecordingProbeCore {
+    configs: Mutex<Vec<String>>,
+}
+
+impl ProbeCoreHost for RecordingProbeCore {
+    fn start(&self, config_json: String) -> Result<String, ProbeCoreError> {
+        self.configs.lock().expect("lock").push(config_json);
+
+        Err(ProbeCoreError::Unsupported)
+    }
+
+    fn stop(&self, _core_id: String) -> Result<(), ProbeCoreError> {
+        Ok(())
+    }
+}
+
 struct Harness {
     app: Arc<VoyaApp>,
     listener: Arc<RecordingListener>,
     tunnel: Arc<RecordingTunnel>,
+    probe_core: Arc<RecordingProbeCore>,
     _dir: TempDir,
 }
 
@@ -80,11 +108,13 @@ fn start_app() -> Harness {
     let dir = TempDir::new().expect("temp dir");
     let listener = Arc::new(RecordingListener::default());
     let tunnel = Arc::new(RecordingTunnel::default());
+    let probe_core = Arc::new(RecordingProbeCore::default());
     let app = VoyaApp::new(
         dir.path().display().to_string(),
         Some("en-US".to_string()),
         Arc::clone(&listener) as Arc<dyn EventListener>,
         Arc::clone(&tunnel) as Arc<dyn TunnelHost>,
+        Arc::clone(&probe_core) as Arc<dyn ProbeCoreHost>,
     )
     .expect("the host starts on an empty directory");
 
@@ -92,6 +122,7 @@ fn start_app() -> Harness {
         app,
         listener,
         tunnel,
+        probe_core,
         _dir: dir,
     }
 }
@@ -491,4 +522,76 @@ fn dns_args(loaded: &Value, direct: &str) -> Value {
     settings.insert("direct".to_string(), Value::String(direct.to_string()));
 
     serde_json::json!({ "settings": Value::Object(settings) })
+}
+
+#[test]
+fn a_latency_test_asks_the_host_for_a_probe_core_and_reports_what_it_said() {
+    let harness = start_app();
+    harness.invoke(
+        "import_profiles_from_text",
+        serde_json::json!({
+            "text": "vless://11111111-1111-1111-1111-111111111111@example.test:443?security=tls&sni=example.test&type=ws&path=%2Fws#Tokyo",
+            "subscriptionId": Value::Null,
+        }),
+    );
+    let listing = harness.invoke("list_profile_summaries", serde_json::json!({}));
+    let node_id = listing["entries"][0]["profile"]["id"]
+        .as_str()
+        .expect("id")
+        .to_string();
+
+    assert_eq!(
+        harness.invoke("speedtest_status", serde_json::json!({}))["running"],
+        false
+    );
+
+    let result = harness.invoke(
+        "run_speedtest",
+        serde_json::json!({
+            "request": { "target": { "scope": "profiles", "profileIds": [node_id.as_str()] } },
+        }),
+    );
+
+    // The core a disconnected run needs comes from the host, and the config it
+    // is handed is the generated sing-box one, not the entries.
+    let configs = harness.probe_core.configs.lock().expect("lock");
+    assert_eq!(configs.len(), 1, "one probe core per run");
+    assert!(
+        configs[0].contains("\"inbounds\""),
+        "the host was handed a sing-box config: {}",
+        configs[0]
+    );
+    drop(configs);
+
+    // This host refuses, so the node is reported as untestable rather than the
+    // run failing as a whole.
+    assert_eq!(result["selectedCount"], 1, "run result: {result}");
+    assert_eq!(result["cancelled"], false);
+    let results = result["results"].as_array().expect("results");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["indexId"], node_id.as_str());
+    assert_eq!(results[0]["outcome"], "coreUnavailable");
+
+    // The measurements ride the transient channel as well as the answer, so a
+    // long run fills the list in as it goes.
+    let streamed = harness.listener.on_channel(EventChannel::TransientStream);
+    assert!(
+        streamed
+            .iter()
+            .any(|event| event["kind"] == "speedtestResults"),
+        "no speedtest results were streamed: {streamed:?}"
+    );
+}
+
+#[test]
+fn a_latency_test_without_a_selection_is_rejected_before_the_host_is_asked() {
+    let harness = start_app();
+
+    let error = harness.invoke_err(
+        "run_speedtest",
+        serde_json::json!({ "request": { "target": { "scope": "profiles", "profileIds": [] } } }),
+    );
+
+    assert_eq!(error["kind"]["type"], "validation", "error: {error}");
+    assert!(harness.probe_core.configs.lock().expect("lock").is_empty());
 }

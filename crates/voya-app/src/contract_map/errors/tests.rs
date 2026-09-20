@@ -694,6 +694,7 @@ mod guards {
             | SpeedtestError::NoAvailablePort(_)
             | SpeedtestError::InvalidSocksPort(_)
             | SpeedtestError::EmptySelection
+            | SpeedtestError::ProbeCoreHost(_)
             | SpeedtestError::BackgroundTask(_) => (),
         }
     }

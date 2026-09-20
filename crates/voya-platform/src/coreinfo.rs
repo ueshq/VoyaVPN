@@ -92,6 +92,18 @@ impl TargetOs {
     pub const fn is_mobile(self) -> bool {
         matches!(self, Self::Ios | Self::Android)
     }
+
+    /// Whether the core runs inside a tunnel provider rather than as a child
+    /// of the app.
+    ///
+    /// macOS's PacketTunnel and both phones answer yes, and the same two
+    /// things follow on all three: the runtime config carries an unrouted
+    /// probe outbound per node, and a latency test while connected goes
+    /// through that core's Clash API instead of launching one of its own.
+    #[must_use]
+    pub const fn runs_core_in_tunnel_provider(self) -> bool {
+        matches!(self, Self::Macos | Self::Ios | Self::Android)
+    }
 }
 
 #[derive(Debug, Error)]

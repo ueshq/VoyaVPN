@@ -1,9 +1,15 @@
-//! Temporary sing-box processes that back profile speed tests.
+//! The throwaway cores that back profile speed tests while disconnected.
+//!
+//! Split in two along the one line that is not portable. [`LauncherCoreBackend`]
+//! generates the config, waits for the SOCKS ports and tears the core down; a
+//! [`ProbeCoreLauncher`] starts it. [`ProcessProbeCoreLauncher`] is the desktop
+//! one, and the mobile host's is a callback into Libbox running in the app
+//! process, because a phone may not spawn a child at all.
 //!
 //! Starting a probe core writes a config file, may copy the packaged seed
 //! binary and spawns a child process — all blocking syscalls — so the sequence
 //! runs on `spawn_blocking` instead of parking one Tokio worker per concurrent
-//! probe. Every live child is also registered with the backend: Tauri ends the
+//! probe. Every live child is also registered with the launcher: Tauri ends the
 //! process through `std::process::exit`, so neither `Drop` nor the pending
 //! `run_speedtest` future ever reaps a probe core, and `SpeedtestManager`
 //! has to kill them synchronously on shutdown.
@@ -26,8 +32,80 @@ const SPEEDTEST_READY_TIMEOUT_MAX: Duration = Duration::from_secs(15);
 const SPEEDTEST_READY_INTERVAL: Duration = Duration::from_millis(50);
 const SPEEDTEST_CONFIG_PREFIX: &str = "configTest";
 
+/// The portable half: config, readiness and teardown around a launcher.
+///
+/// Everything a probe run needs of a core except starting it, which is what
+/// [`ProbeCoreLauncher`] exists for.
+pub struct LauncherCoreBackend {
+    launcher: Arc<dyn ProbeCoreLauncher>,
+}
+
+impl LauncherCoreBackend {
+    #[must_use]
+    pub fn new(launcher: Arc<dyn ProbeCoreLauncher>) -> Self {
+        Self { launcher }
+    }
+}
+
+impl SpeedtestCoreBackend for LauncherCoreBackend {
+    fn start(
+        &self,
+        entries: Vec<SpeedtestConfigEntry>,
+        cancel: CancellationFlag,
+    ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
+        let launcher = Arc::clone(&self.launcher);
+        Box::pin(async move {
+            check_cancelled(&cancel)?;
+            let ports = entries.iter().map(|entry| entry.port).collect::<Vec<_>>();
+            let config_json = generate_singbox_speedtest_config_json(&entries)?;
+            let core = task::spawn_blocking(move || launcher.start(config_json))
+                .await
+                .map_err(background_task_failed)??;
+            // Bind the session before waiting so an unready core is still torn
+            // down by the `?` below.
+            let session = LauncherCoreSession { core: Some(core) };
+            wait_for_speedtest_ports(&ports, &cancel).await?;
+
+            Ok(Box::new(session) as Box<dyn SpeedtestCoreSession>)
+        })
+    }
+
+    fn stop_all(&self) {
+        self.launcher.stop_all();
+    }
+}
+
+struct LauncherCoreSession {
+    core: Option<Box<dyn ProbeCore>>,
+}
+
+impl SpeedtestCoreSession for LauncherCoreSession {
+    fn close(mut self: Box<Self>) -> BoxFuture<'static, ()> {
+        let core = self.core.take();
+        Box::pin(async move {
+            let Some(core) = core else { return };
+            // Stopping blocks until the child has been killed and waited, so it
+            // must not run on a Tokio worker.
+            if let Err(error) = task::spawn_blocking(move || core.stop()).await {
+                tracing::warn!(?error, "failed to close speedtest core session");
+            }
+        })
+    }
+}
+
+impl Drop for LauncherCoreSession {
+    fn drop(&mut self) {
+        // Best-effort fallback for panics and `?` returns; the happy path goes
+        // through `close`, which does the same work off the Tokio workers.
+        if let Some(core) = self.core.take() {
+            core.stop();
+        }
+    }
+}
+
+/// The desktop's launcher: a sing-box child process per probe run.
 #[derive(Clone)]
-pub struct ProcessSpeedtestCoreBackend {
+pub struct ProcessProbeCoreLauncher {
     paths: AppPaths,
     core_seed_resource_dir: Option<PathBuf>,
     runner: Arc<dyn ProcessRunner>,
@@ -35,13 +113,16 @@ pub struct ProcessSpeedtestCoreBackend {
     live: LiveProbeCores,
 }
 
-impl ProcessSpeedtestCoreBackend {
+impl ProcessProbeCoreLauncher {
     #[must_use]
     pub fn new(
         paths: AppPaths,
         core_seed_resource_dir: Option<PathBuf>,
         runner: Arc<dyn ProcessRunner>,
     ) -> Self {
+        // A run that died with the process leaves its config behind, and only
+        // a launcher that writes them knows to sweep them.
+        cleanup_stale_speedtest_configs(&paths);
         Self {
             paths,
             core_seed_resource_dir,
@@ -58,52 +139,29 @@ impl ProcessSpeedtestCoreBackend {
     }
 }
 
-impl SpeedtestCoreBackend for ProcessSpeedtestCoreBackend {
-    fn start(
-        &self,
-        entries: Vec<SpeedtestConfigEntry>,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
-        let paths = self.paths.clone();
-        let core_seed_resource_dir = self.core_seed_resource_dir.clone();
-        let runner = Arc::clone(&self.runner);
-        let target_os = self.target_os;
-        let live = self.live.clone();
-        Box::pin(async move {
-            check_cancelled(&cancel)?;
-            let config_file_name =
-                format!("{SPEEDTEST_CONFIG_PREFIX}-{}.json", uuid::Uuid::new_v4());
-            let ports = entries.iter().map(|entry| entry.port).collect::<Vec<_>>();
-            let blocking_runner = Arc::clone(&runner);
-            let started = task::spawn_blocking(move || {
-                start_probe_core(StartProbeCoreRequest {
-                    paths: &paths,
-                    config_file_name: &config_file_name,
-                    entries: &entries,
-                    core_seed_resource_dir: core_seed_resource_dir.as_ref(),
-                    target_os,
-                    runner: blocking_runner.as_ref(),
-                })
-            })
-            .await
-            .map_err(background_task_failed)??;
+impl ProbeCoreLauncher for ProcessProbeCoreLauncher {
+    fn start(&self, config_json: String) -> Result<Box<dyn ProbeCore>> {
+        let config_file_name = format!("{SPEEDTEST_CONFIG_PREFIX}-{}.json", uuid::Uuid::new_v4());
+        let started = start_probe_core(StartProbeCoreRequest {
+            paths: &self.paths,
+            config_file_name: &config_file_name,
+            config_json: &config_json,
+            core_seed_resource_dir: self.core_seed_resource_dir.as_ref(),
+            target_os: self.target_os,
+            runner: self.runner.as_ref(),
+        })?;
 
-            live.register(LiveProbeCore {
-                handle: started.handle.clone(),
-                config_path: started.config_path.clone(),
-            });
-            // Bind the session before waiting so an unready core is still torn
-            // down by the `?` below.
-            let session = ProcessSpeedtestCoreSession {
-                config_path: Some(started.config_path),
-                handle: Some(started.handle),
-                runner,
-                live,
-            };
-            wait_for_speedtest_ports(&ports, &cancel).await?;
+        self.live.register(LiveProbeCore {
+            handle: started.handle.clone(),
+            config_path: started.config_path.clone(),
+        });
 
-            Ok(Box::new(session) as Box<dyn SpeedtestCoreSession>)
-        })
+        Ok(Box::new(ProcessProbeCore {
+            config_path: Some(started.config_path),
+            handle: Some(started.handle),
+            runner: Arc::clone(&self.runner),
+            live: self.live.clone(),
+        }))
     }
 
     fn stop_all(&self) {
@@ -143,37 +201,28 @@ impl LiveProbeCores {
     }
 }
 
-struct ProcessSpeedtestCoreSession {
+struct ProcessProbeCore {
     config_path: Option<PathBuf>,
     handle: Option<ProcessHandle>,
     runner: Arc<dyn ProcessRunner>,
     live: LiveProbeCores,
 }
 
-impl SpeedtestCoreSession for ProcessSpeedtestCoreSession {
-    fn close(mut self: Box<Self>) -> BoxFuture<'static, ()> {
-        let handle = self.handle.take();
-        let config_path = self.config_path.take();
-        let runner = Arc::clone(&self.runner);
-        let live = self.live.clone();
-        Box::pin(async move {
-            // `ProcessRunner::stop` blocks until the reaper thread has killed
-            // and waited the child, so it must not run on a Tokio worker.
-            if let Err(error) = task::spawn_blocking(move || {
-                stop_probe_core(&live, runner.as_ref(), handle, config_path)
-            })
-            .await
-            {
-                tracing::warn!(?error, "failed to close speedtest core session");
-            }
-        })
+impl ProbeCore for ProcessProbeCore {
+    fn stop(mut self: Box<Self>) {
+        stop_probe_core(
+            &self.live,
+            self.runner.as_ref(),
+            self.handle.take(),
+            self.config_path.take(),
+        );
     }
 }
 
-impl Drop for ProcessSpeedtestCoreSession {
+impl Drop for ProcessProbeCore {
     fn drop(&mut self) {
-        // Best-effort fallback for panics and `?` returns; the happy path goes
-        // through `close`, which does the same work off the Tokio workers.
+        // `stop` empties both slots, so this only fires for a core nobody
+        // stopped — a panic, or a `?` between start and session.
         let handle = self.handle.take();
         let config_path = self.config_path.take();
         stop_probe_core(&self.live, self.runner.as_ref(), handle, config_path);
@@ -200,7 +249,7 @@ fn stop_probe_core(
 struct StartProbeCoreRequest<'request> {
     paths: &'request AppPaths,
     config_file_name: &'request str,
-    entries: &'request [SpeedtestConfigEntry],
+    config_json: &'request str,
     core_seed_resource_dir: Option<&'request PathBuf>,
     target_os: TargetOs,
     runner: &'request dyn ProcessRunner,
@@ -213,7 +262,7 @@ struct StartedProbeCore {
 
 fn start_probe_core(request: StartProbeCoreRequest<'_>) -> Result<StartedProbeCore> {
     let config_path =
-        write_speedtest_config(request.paths, request.config_file_name, request.entries)?;
+        write_speedtest_config(request.paths, request.config_file_name, request.config_json)?;
     match spawn_probe_core(&request) {
         Ok(handle) => Ok(StartedProbeCore {
             handle,
@@ -243,15 +292,10 @@ fn spawn_probe_core(request: &StartProbeCoreRequest<'_>) -> Result<ProcessHandle
     request.runner.spawn(spawn).map_err(Into::into)
 }
 
-fn write_speedtest_config(
-    paths: &AppPaths,
-    file_name: &str,
-    entries: &[SpeedtestConfigEntry],
-) -> Result<PathBuf> {
-    let json = generate_singbox_speedtest_config_json(entries)?;
+fn write_speedtest_config(paths: &AppPaths, file_name: &str, json: &str) -> Result<PathBuf> {
     // Speedtest configs carry the same outbound credentials as the runtime
     // config, so they go through the same 0600 + O_NOFOLLOW writer.
-    write_core_config(paths, file_name, &json).map_err(|error| SpeedtestError::WriteConfig {
+    write_core_config(paths, file_name, json).map_err(|error| SpeedtestError::WriteConfig {
         path: error.path,
         source: error.source,
     })
@@ -267,7 +311,7 @@ fn remove_speedtest_config(path: &Path) {
     }
 }
 
-pub(super) fn cleanup_stale_speedtest_configs(paths: &AppPaths) {
+fn cleanup_stale_speedtest_configs(paths: &AppPaths) {
     if let Err(error) =
         filesystem::remove_matching_files(paths.bin_config_dir(), SPEEDTEST_CONFIG_PREFIX, ".json")
     {
@@ -365,6 +409,7 @@ fn background_task_failed(error: task::JoinError) -> SpeedtestError {
 mod tests {
     use std::{fs, net::TcpListener as StdTcpListener};
 
+    use voya_core::CoreConfigContext;
     use voya_platform::{
         coreinfo::{executable_name_for_current_os, CORE_DIR_NAME},
         paths::core_seed_resources_dir,
@@ -439,16 +484,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_speedtest_core_backend_launches_the_staged_seed() {
+    async fn probe_core_launcher_launches_the_staged_seed() {
         let paths = test_paths();
         let (seed_root, _) = seed_core_binary(&paths);
         let runner = RecordingRunner::default();
-        let backend = ProcessSpeedtestCoreBackend::new(
-            paths.clone(),
-            Some(seed_root),
-            Arc::new(runner.clone()),
-        )
-        .with_target_os(TargetOs::Linux);
+        let backend = LauncherCoreBackend::new(Arc::new(
+            ProcessProbeCoreLauncher::new(paths.clone(), Some(seed_root), Arc::new(runner.clone()))
+                .with_target_os(TargetOs::Linux),
+        ));
 
         backend
             .start(Vec::new(), Arc::new(AtomicBool::new(false)))
@@ -465,16 +508,14 @@ mod tests {
 
     /// macOS launches the seed inside the signed bundle instead of a copy.
     #[tokio::test]
-    async fn process_speedtest_core_backend_uses_packaged_seed_directly_on_macos() {
+    async fn probe_core_launcher_uses_packaged_seed_directly_on_macos() {
         let paths = test_paths();
         let (seed_root, seed_exe) = seed_core_binary(&paths);
         let runner = RecordingRunner::default();
-        let backend = ProcessSpeedtestCoreBackend::new(
-            paths.clone(),
-            Some(seed_root),
-            Arc::new(runner.clone()),
-        )
-        .with_target_os(TargetOs::Macos);
+        let backend = LauncherCoreBackend::new(Arc::new(
+            ProcessProbeCoreLauncher::new(paths.clone(), Some(seed_root), Arc::new(runner.clone()))
+                .with_target_os(TargetOs::Macos),
+        ));
 
         backend
             .start(Vec::new(), Arc::new(AtomicBool::new(false)))
@@ -490,15 +531,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_speedtest_core_backend_stop_all_reaps_live_probe_cores() {
+    async fn probe_core_launcher_stop_all_reaps_live_probe_cores() {
         let paths = test_paths();
         let (seed_root, _) = seed_core_binary(&paths);
         let runner = RecordingRunner::default();
-        let backend = ProcessSpeedtestCoreBackend::new(
+        let backend = LauncherCoreBackend::new(Arc::new(ProcessProbeCoreLauncher::new(
             paths.clone(),
             Some(seed_root),
             Arc::new(runner.clone()),
-        );
+        )));
 
         let session = backend
             .start(Vec::new(), Arc::new(AtomicBool::new(false)))
@@ -520,15 +561,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_speedtest_core_backend_close_deregisters_the_session() {
+    async fn probe_core_launcher_close_deregisters_the_session() {
         let paths = test_paths();
         let (seed_root, _) = seed_core_binary(&paths);
         let runner = RecordingRunner::default();
-        let backend = ProcessSpeedtestCoreBackend::new(
+        let backend = LauncherCoreBackend::new(Arc::new(ProcessProbeCoreLauncher::new(
             paths.clone(),
             Some(seed_root),
             Arc::new(runner.clone()),
-        );
+        )));
 
         backend
             .start(Vec::new(), Arc::new(AtomicBool::new(false)))
@@ -550,14 +591,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn process_speedtest_core_backend_removes_config_when_spawn_fails() {
+    async fn probe_core_launcher_removes_config_when_spawn_fails() {
         let paths = test_paths();
         let (seed_root, _) = seed_core_binary(&paths);
-        let backend = ProcessSpeedtestCoreBackend::new(
+        let backend = LauncherCoreBackend::new(Arc::new(ProcessProbeCoreLauncher::new(
             paths.clone(),
             Some(seed_root),
             Arc::new(FailingRunner),
-        );
+        )));
 
         // `Box<dyn SpeedtestCoreSession>` is not `Debug`, so unwrap the error by
         // hand rather than through `expect_err`.
@@ -575,6 +616,106 @@ mod tests {
             0,
             "a failed spawn must not leave a config behind"
         );
+    }
+
+    /// A launcher that spawns nothing, the shape the mobile host has.
+    #[derive(Clone, Default)]
+    struct RecordingLauncher {
+        started: Arc<Mutex<Vec<String>>>,
+        stopped: Arc<Mutex<usize>>,
+        fail: bool,
+    }
+
+    struct RecordingCore {
+        stopped: Arc<Mutex<usize>>,
+    }
+
+    impl ProbeCore for RecordingCore {
+        fn stop(self: Box<Self>) {
+            *lock_ignoring_poison(&self.stopped) += 1;
+        }
+    }
+
+    impl ProbeCoreLauncher for RecordingLauncher {
+        fn start(&self, config_json: String) -> Result<Box<dyn ProbeCore>> {
+            if self.fail {
+                return Err(SpeedtestError::EmptySelection);
+            }
+            lock_ignoring_poison(&self.started).push(config_json);
+
+            Ok(Box::new(RecordingCore {
+                stopped: Arc::clone(&self.stopped),
+            }))
+        }
+    }
+
+    #[tokio::test]
+    async fn launcher_core_backend_hands_the_generated_config_to_the_launcher() {
+        let launcher = RecordingLauncher::default();
+        let backend = LauncherCoreBackend::new(Arc::new(launcher.clone()));
+
+        let session = backend
+            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
+            .await
+            .expect("speedtest test operation should succeed");
+
+        {
+            let started = lock_ignoring_poison(&launcher.started);
+            assert_eq!(started.len(), 1, "one core per run");
+            // The launcher receives sing-box JSON, not the entries: a host that
+            // runs Libbox in-process has nowhere to put a file.
+            assert!(
+                started[0].starts_with('{'),
+                "a generated config: {}",
+                started[0]
+            );
+        }
+
+        session.close().await;
+        assert_eq!(*lock_ignoring_poison(&launcher.stopped), 1);
+    }
+
+    #[tokio::test]
+    async fn launcher_core_backend_stops_a_core_the_run_abandoned() {
+        let launcher = RecordingLauncher::default();
+        let backend = LauncherCoreBackend::new(Arc::new(launcher.clone()));
+
+        // A port no SOCKS listener can ever answer on. The session is bound
+        // before the readiness wait, so the core that did start is still torn
+        // down on the way out rather than left running.
+        let entries = vec![SpeedtestConfigEntry {
+            index_id: "unreachable".to_owned(),
+            port: -1,
+            context: CoreConfigContext::default(),
+        }];
+        let error = match backend
+            .start(entries, Arc::new(AtomicBool::new(false)))
+            .await
+        {
+            Ok(_) => panic!("an unusable port must not produce a session"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, SpeedtestError::InvalidSocksPort(-1)));
+        assert_eq!(*lock_ignoring_poison(&launcher.stopped), 1);
+    }
+
+    #[tokio::test]
+    async fn launcher_core_backend_surfaces_a_launcher_failure() {
+        let backend = LauncherCoreBackend::new(Arc::new(RecordingLauncher {
+            fail: true,
+            ..RecordingLauncher::default()
+        }));
+
+        let error = match backend
+            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
+            .await
+        {
+            Ok(_) => panic!("a failing launcher must surface as an error"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(error, SpeedtestError::EmptySelection));
     }
 
     #[test]

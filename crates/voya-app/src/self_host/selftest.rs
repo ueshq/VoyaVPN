@@ -25,7 +25,7 @@ use voya_platform::coreinfo::TargetOs;
 use super::{identity::pick_free_port, reality_public_key, spec::selfhost_spec, SelfHostDeps};
 use crate::{
     runtime::core_gen_platform,
-    speedtest::{ProcessSpeedtestCoreBackend, SpeedtestCoreBackend},
+    speedtest::{LauncherCoreBackend, ProcessProbeCoreLauncher, SpeedtestCoreBackend},
 };
 
 /// Fetched through the node's own egress. A small page on an anycast network
@@ -106,12 +106,14 @@ async fn run_self_test(deps: &SelfHostDeps, record: &SelfHostRecordV1) -> SelfHo
         })
         .collect();
 
-    let backend = ProcessSpeedtestCoreBackend::new(
-        deps.paths.clone(),
-        deps.core_seed_resource_dir.clone(),
-        Arc::clone(&deps.runner),
-    )
-    .with_target_os(deps.target_os);
+    let backend = LauncherCoreBackend::new(Arc::new(
+        ProcessProbeCoreLauncher::new(
+            deps.paths.clone(),
+            deps.core_seed_resource_dir.clone(),
+            Arc::clone(&deps.runner),
+        )
+        .with_target_os(deps.target_os),
+    ));
     let cancel = Arc::new(AtomicBool::new(false));
     let session = match backend.start(entries, Arc::clone(&cancel)).await {
         Ok(session) => session,

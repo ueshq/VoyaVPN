@@ -1,6 +1,7 @@
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 import { useNodeGroups } from "./use-node-groups";
+import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeListVirtual } from "./use-node-list-virtual";
@@ -8,7 +9,6 @@ import { useNodeEditor } from "./use-node-editor";
 import { useNodeSubscriptions } from "@voya/features/profiles/use-node-subscriptions";
 import { useNodeExport } from "@voya/features/profiles/use-node-export";
 import { useNodeImport } from "@voya/features/profiles/use-node-import";
-import { useNodeSpeedtest } from "./use-node-speedtest";
 import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 
 /** Compose page capabilities; individual components consume only their own facet. */

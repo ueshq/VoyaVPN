@@ -77,6 +77,11 @@ pub enum SpeedtestError {
     InvalidSocksPort(i32),
     #[error("speedtest background task failed: {0}")]
     BackgroundTask(String),
+    /// The platform's own answer to "start a probe core": a phone's host runs
+    /// one in its process rather than spawning a child, so its failures arrive
+    /// as a message rather than as a [`ProcessError`].
+    #[error("the host could not run a probe core: {0}")]
+    ProbeCoreHost(String),
     #[error("select at least one node to test")]
     EmptySelection,
 }
@@ -204,6 +209,34 @@ pub trait SpeedtestCoreBackend: Send + Sync {
     fn stop_all(&self) {}
 }
 
+/// Starts the throwaway sing-box a disconnected probe run measures through.
+///
+/// The one thing that is not portable about a probe core. The desktop spawns a
+/// child process; a phone may not spawn anything, so its host runs Libbox
+/// inside the app process and hands back something it can stop. Everything
+/// around it — generating the config, reserving and waiting for the SOCKS
+/// ports, tearing the core down — is the same on both, and lives in
+/// [`LauncherCoreBackend`].
+pub trait ProbeCoreLauncher: Send + Sync {
+    /// Starts a probe core for a generated sing-box configuration.
+    ///
+    /// Blocking is expected: the caller runs this on a blocking thread, the
+    /// way writing a config and spawning a child process demand.
+    fn start(&self, config_json: String) -> Result<Box<dyn ProbeCore>>;
+
+    /// Stops every probe core this launcher still has running. See
+    /// [`SpeedtestCoreBackend::stop_all`] for why the shell asks explicitly.
+    fn stop_all(&self) {}
+}
+
+/// One running probe core, as the thing that stops it.
+pub trait ProbeCore: Send + Sync {
+    /// Stops the core and releases whatever starting it took — a config file
+    /// on the desktop, an in-process instance on a phone. Blocking, for the
+    /// same reason [`ProbeCoreLauncher::start`] is.
+    fn stop(self: Box<Self>);
+}
+
 /// Measures nodes with a throwaway sing-box per page, probed over SOCKS.
 ///
 /// On macOS a connected PacketTunnel core takes over instead: every connection
@@ -240,7 +273,7 @@ mod core_backend;
 mod manager;
 mod running_core;
 
-pub use core_backend::ProcessSpeedtestCoreBackend;
+pub use core_backend::{LauncherCoreBackend, ProcessProbeCoreLauncher};
 pub use running_core::{RunningCoreDelay, RunningCoreProbe, SupervisorRunningCoreProbe};
 
 async fn select_test_items(
@@ -322,6 +355,7 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
         SpeedtestError::CoreInfo(_)
         | SpeedtestError::Path(_)
         | SpeedtestError::Process(_)
+        | SpeedtestError::ProbeCoreHost(_)
         | SpeedtestError::CreateConfigDir { .. }
         | SpeedtestError::WriteConfig { .. }
         | SpeedtestError::RemoveConfig { .. } => SpeedtestOutcome::CoreUnavailable,

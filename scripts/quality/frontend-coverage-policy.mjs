@@ -89,7 +89,7 @@ export const runtimeModules = [
   { path: "packages/features/src/profiles/use-node-export.ts", lines: 80, branches: 75 },
   { path: "packages/features/src/profiles/use-node-operation.ts", lines: 90, branches: 90 },
   { path: "packages/features/src/profiles/use-node-subscriptions.ts", lines: 80, branches: 75 },
-  { path: "apps/desktop/src/features/profiles/use-node-speedtest.ts", lines: 90, branches: 50 },
+  { path: "packages/features/src/profiles/use-node-speedtest.ts", lines: 90, branches: 50 },
   { path: "packages/features/src/profiles/profile-form-values.ts", lines: 90, branches: 60 },
   // TLS field panel in the profile dialog; certificate fetch/hash was retired.
   { path: "apps/desktop/src/features/profiles/profile-security-panel.tsx", lines: 85, branches: 70 },

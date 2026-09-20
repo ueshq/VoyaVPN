@@ -98,6 +98,24 @@ describe("NodesScreen", () => {
     expect(await screen.findByText("Osaka", {}, { timeout: 5000 })).toBeOnTheScreen();
   });
 
+  it("measures every listed node and fills the latencies back in", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+    // The run tests what the list is showing, so there has to be a list.
+    await screen.findByText("🇯🇵 Tokyo");
+
+    await user.press(screen.getByText("Test all"));
+
+    const backend = voyaTransport() as MockBackend;
+    const run = backend.state.calls.find((call) => call.command === "runSpeedtest");
+    const target = (run?.args[0] as { target: { profileIds: string[]; scope: string } }).target;
+    expect(target.scope).toBe("profiles");
+    expect([...target.profileIds].sort()).toEqual(["profile-0", "profile-1", "profile-2"]);
+    // The measurement lands on the row it belongs to, off the streamed results
+    // rather than a refetch.
+    expect(await screen.findByText("40 ms")).toBeOnTheScreen();
+  });
+
   it("reports a clipboard that holds nothing importable", async () => {
     readText.mockResolvedValue("   ");
     await renderNodes();

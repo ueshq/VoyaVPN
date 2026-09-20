@@ -233,10 +233,11 @@ impl<'runtime> RuntimeManager<'runtime> {
                 "core config generation warning: {warning:?}"
             );
         }
-        if self.target_os == TargetOs::Macos {
-            // The PacketTunnel core is the only one on macOS, so the speedtest
-            // measures nodes through it (`speedtest::running_core`) and every
-            // node that can carry a probe outbound gets one.
+        if self.target_os.runs_core_in_tunnel_provider() {
+            // This core is the only one — macOS's PacketTunnel, a phone's
+            // provider — so the speedtest measures nodes through it
+            // (`speedtest::running_core`) and every node that can carry a
+            // probe outbound gets one.
             contexts.main_result.context.latency_probe_nodes = env.profiles().to_vec();
         }
 

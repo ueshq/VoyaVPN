@@ -221,8 +221,6 @@ impl AppServices {
     }
 
     /// Nodes are measured with throwaway probe cores from the packaged seed.
-    /// On macOS a connected PacketTunnel would carry their traffic, so while
-    /// connected the test goes through the running core instead.
     #[must_use]
     pub fn speedtest_manager(
         &self,
@@ -230,9 +228,30 @@ impl AppServices {
         runner: Arc<dyn ProcessRunner>,
         supervisor: CoreSupervisor,
     ) -> SpeedtestManager {
-        let manager =
-            SpeedtestManager::new(self.runtime_paths.clone(), core_seed_resource_dir, runner);
-        if TargetOs::current() == TargetOs::Macos {
+        self.speedtest_manager_with_launcher(
+            Arc::new(crate::speedtest::ProcessProbeCoreLauncher::new(
+                self.runtime_paths.clone(),
+                core_seed_resource_dir,
+                runner,
+            )),
+            supervisor,
+        )
+    }
+
+    /// The same manager over a host-supplied launcher, for a platform that may
+    /// not spawn a child process.
+    ///
+    /// Where the core runs inside a tunnel provider its traffic would carry a
+    /// probe core's connections too, so while connected the test goes through
+    /// the running core instead — on macOS and on both phones alike.
+    #[must_use]
+    pub fn speedtest_manager_with_launcher(
+        &self,
+        launcher: Arc<dyn crate::speedtest::ProbeCoreLauncher>,
+        supervisor: CoreSupervisor,
+    ) -> SpeedtestManager {
+        let manager = SpeedtestManager::with_launcher(self.runtime_paths.clone(), launcher);
+        if TargetOs::current().runs_core_in_tunnel_provider() {
             manager.with_running_core(Arc::new(crate::speedtest::SupervisorRunningCoreProbe::new(
                 supervisor,
             )))

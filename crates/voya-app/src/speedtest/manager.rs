@@ -2,26 +2,36 @@ use futures_util::{stream, FutureExt, Stream, StreamExt};
 use voya_contracts::DatabaseErrorCode;
 use voya_core::PreparedContextBuilder;
 
-use super::core_backend::{cleanup_stale_speedtest_configs, reserve_speedtest_ports};
+use super::core_backend::reserve_speedtest_ports;
 
 use super::*;
 
 impl SpeedtestManager {
+    /// The desktop's manager: every probe core is a child process.
     #[must_use]
     pub fn new(
         paths: AppPaths,
         core_seed_resource_dir: Option<PathBuf>,
         runner: Arc<dyn ProcessRunner>,
     ) -> Self {
-        cleanup_stale_speedtest_configs(&paths);
-        Self::with_probe_and_backend(
+        Self::with_launcher(
             paths.clone(),
-            Arc::new(ReqwestSpeedtestProbe),
-            Arc::new(ProcessSpeedtestCoreBackend::new(
+            Arc::new(ProcessProbeCoreLauncher::new(
                 paths,
                 core_seed_resource_dir,
                 runner,
             )),
+        )
+    }
+
+    /// A manager over a host-supplied launcher, for a platform that spawns
+    /// nothing: the phones run their probe core inside the app process.
+    #[must_use]
+    pub fn with_launcher(paths: AppPaths, launcher: Arc<dyn ProbeCoreLauncher>) -> Self {
+        Self::with_probe_and_backend(
+            paths,
+            Arc::new(ReqwestSpeedtestProbe),
+            Arc::new(LauncherCoreBackend::new(launcher)),
         )
     }
 

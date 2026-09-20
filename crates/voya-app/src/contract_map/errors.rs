@@ -327,6 +327,7 @@ impl From<SpeedtestError> for AppError {
             SpeedtestError::Io(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::Path(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::Process(ref source) => io(Sub::Speedtest, source),
+            SpeedtestError::ProbeCoreHost(_) => io(Sub::Speedtest, &error),
             SpeedtestError::CreateConfigDir { .. }
             | SpeedtestError::WriteConfig { .. }
             | SpeedtestError::RemoveConfig { .. } => io(Sub::Speedtest, &error),

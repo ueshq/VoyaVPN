@@ -413,6 +413,49 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
     speedtestStatus: () =>
       resolve(record("speedtestStatus", [], { running: state.speedtestRunning })),
 
+    /**
+     * Measures every selected node at once, the way a very fast backend would.
+     *
+     * The results stream on the transient channel *and* come back in the
+     * answer, because that is what the real backend does; a screen that only
+     * reads one of the two would look right here and be wrong on a device.
+     */
+    runSpeedtest: (request) => {
+      const profileIds = request.target.profileIds;
+      state.speedtestRunning = true;
+      const results = profileIds.map((indexId, index) => ({
+        countryCode: null,
+        delay: 40 + index * 7,
+        detail: null,
+        indexId,
+        ipInfo: null,
+        outcome: "completed" as const,
+      }));
+      state.profiles = state.profiles.map((entry) => {
+        const result = results.find((item) => item.indexId === entry.profile.id);
+        return result
+          ? { ...entry, metrics: { ...entry.metrics, delayMs: result.delay, outcome: "completed" } }
+          : entry;
+      });
+      emit("transientStreamEvent", { kind: "speedtestResults", payload: results });
+      state.speedtestRunning = false;
+      invalidate("runSpeedtest", "profiles");
+
+      return resolve(
+        record("runSpeedtest", [request], {
+          cancelled: false,
+          completedCount: results.length,
+          results,
+          selectedCount: profileIds.length,
+        }),
+      );
+    },
+
+    cancelSpeedtest: () => {
+      state.speedtestRunning = false;
+      return resolve(record("cancelSpeedtest", [], { running: false }));
+    },
+
     systemProxyStatus: () => resolve(record("systemProxyStatus", [], state.sysProxy)),
 
     tunStatus: () => resolve(record("tunStatus", [], state.tun)),
