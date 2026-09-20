@@ -1,6 +1,6 @@
 import type { ProfileProtocol } from "@/ipc/bindings";
 import { trimToNull } from "@voya/utils/text";
-import { CONFIG_TYPES } from "./profile-constants";
+import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import type { ParsedProfileFormValues } from "./profile-form-schema";
 export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
   const options = parsed.protocolOptions;

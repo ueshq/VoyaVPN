@@ -6,7 +6,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 
 import { DisabledReason } from "@/components/disabled-reason";
 
-import { useConnectionIp } from "./use-connection-ip";
+import { useConnectionIp } from "@voya/features/home/use-connection-ip";
 
 /** The exit address of the running connection; the lookup lives in `useConnectionIp`. */
 export function ExitIpMetric({ t }: { t: TranslationFunction }) {

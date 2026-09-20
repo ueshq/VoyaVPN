@@ -11,6 +11,7 @@ TypeScript, Tailwind v4, and shadcn/ui foundations.
 - `apps/web`: `@voya/web`, placeholder for a future web management surface.
 - `apps/mobile`: `@voya/mobile`, the bare React Native app (RN 0.87, no Expo).
 - `packages/ui`: source-only shadcn/ui primitives, design tokens, CSS, fonts, and `cn()`.
+- `packages/features`: source-only frontend logic and controller hooks shared by the desktop and mobile apps; views stay in each app.
 - `packages/i18n`: source-only i18next setup and Voya-maintained locale JSON.
 - `packages/utils`: source-only shared formatting, redaction, mounted-ref, and error helpers.
 - `crates/voya-contracts`: versioned camelCase IPC and persistence DTOs; the only crate that derives `specta::Type`.

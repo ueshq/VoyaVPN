@@ -14,7 +14,7 @@ import { Button } from "@voya/ui/components/button";
 import { MoreMenu } from "@voya/ui/components/row-menus";
 import { MenubarItem, MenubarSeparator } from "@voya/ui/components/menubar";
 import { ExportMenuItems, SpeedtestButton } from "./server-table-menus";
-import type { NodeListRow } from "./node-list-rows";
+import type { NodeListRow } from "@voya/features/profiles/node-list-rows";
 import type { ServerTableController } from "./use-server-table";
 
 export function NodeGroupCard({

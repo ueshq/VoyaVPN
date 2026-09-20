@@ -38,7 +38,7 @@ import type { ProfileSummaryEntry, SpeedtestTarget } from "@/ipc/bindings";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { MOVE_ACTIONS } from "./profile-constants";
+import { MOVE_ACTIONS } from "@voya/features/profiles/profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 import type { ServerTableController } from "./use-server-table";
 

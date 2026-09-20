@@ -4,11 +4,11 @@ import { restoreFocus } from "@voya/ui/lib/focus";
 import { deleteProfiles, getProfile, listProfileSummaries, saveProfile } from "@/ipc/commands";
 import type { ImportProfilesResult, Profile } from "@/ipc/bindings";
 import { queryKeys } from "@voya/client/query-keys";
-import { useProfileActivation } from "@/stores/runtime-action";
-import { formatImportSummary } from "./server-table-actions";
-import type { DialogImportMethod } from "./import-methods";
+import { useProfileActivation } from "@voya/client/runtime-action";
+import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
+import type { DialogImportMethod } from "@voya/features/profiles/import-methods";
 import type { TranslationFunction } from "@voya/i18n";
-import type { NodeOperation } from "./use-node-operation";
+import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 type DialogState =
   | { mode: "create"; profile?: null }
   | { mode: "edit"; profile: Profile }

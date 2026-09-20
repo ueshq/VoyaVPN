@@ -10,14 +10,14 @@ import { formatDelay } from "@voya/utils/formatting";
 import { listPolicyGroups, selectPolicyGroupMember } from "@/ipc/commands";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
+import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { PolicyGroupMemberChip } from "@/features/profiles/policy-group-member-chip";
-import { profileMemberName } from "@/features/profiles/profile-display";
+import { profileMemberName } from "@voya/features/profiles/profile-display";
 import {
   useGroupDelayTest,
   usePolicyGroupMemberSwitch,
   usePolicyGroupRuntime,
-} from "@/features/profiles/use-policy-group-runtime";
+} from "@voya/features/profiles/use-policy-group-runtime";
 import { useShellStore } from "@/stores/shell-store";
 import { toastError } from "@voya/client/toast-store";
 

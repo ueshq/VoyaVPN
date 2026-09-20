@@ -1,0 +1,36 @@
+import { setAppVisibility, setClipboard, setElevationHandler } from "@voya/client/platform";
+import { setVoyaCommands } from "@voya/client/transport";
+
+import * as commands from "@/ipc/commands";
+import { writeClipboard } from "@/lib/clipboard";
+import { isDocumentVisible, subscribeToDocumentVisible } from "@/lib/document-visible";
+
+/**
+ * Puts the desktop behind the seams `@voya/client` reaches the backend through.
+ *
+ * A function rather than module side effects so the unit tests can run it
+ * after their own `vi.mock("@/ipc/commands")` is in place; `platform-boot`
+ * calls it once at startup.
+ */
+export function registerDesktopBackend() {
+  // `satisfies` is the whole point of the seam: dropping or mistyping a command
+  // in the Tauri binding fails the build here rather than at the call site.
+  setVoyaCommands(commands satisfies VoyaCommandsShape);
+
+  // TUN needs one system authorization on Unix; the backend shows the native
+  // dialog and answers whether it was granted.
+  setElevationHandler(async () => (await commands.tunRequestElevation()).elevationGranted);
+
+  // Reads go through the backend because a WebView read needs a user gesture
+  // the paste menu item does not always carry; writes go through the WebView.
+  setClipboard({
+    readText: () => commands.readClipboardText(),
+    writeText: writeClipboard,
+  });
+
+  setAppVisibility({ isVisible: isDocumentVisible, subscribe: subscribeToDocumentVisible });
+}
+
+// Declared locally so the assertion reads as one line above; `VoyaCommands`
+// itself is the generated contract.
+type VoyaCommandsShape = import("@voya/contracts").VoyaCommands;

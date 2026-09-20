@@ -16,7 +16,7 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { Profile, ProfileKind } from "@/ipc/bindings";
 
-import { localizeProfileProtocols } from "./profile-constants";
+import { localizeProfileProtocols } from "@voya/features/profiles/profile-constants";
 import {
   Panel,
   ProfileFields,

@@ -1,12 +1,13 @@
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 import { useNodeGroups } from "./use-node-groups";
-import { useNodeOperation } from "./use-node-operation";
-import { useNodeListData } from "./use-node-list-data";
+import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
+import { useNodeListData } from "@voya/features/profiles/use-node-list-data";
+import { useNodeListVirtual } from "./use-node-list-virtual";
 import { useNodeEditor } from "./use-node-editor";
 import { useNodeSubscriptions } from "./use-node-subscriptions";
 import { useNodeExport } from "./use-node-export";
-import { useNodeImport } from "./use-node-import";
+import { useNodeImport } from "@voya/features/profiles/use-node-import";
 import { useNodeSpeedtest } from "./use-node-speedtest";
 import { usePolicyGroups } from "./use-policy-groups";
 
@@ -16,7 +17,8 @@ export function useServerTable() {
   const nodeGroups = useNodeGroups();
   const operation = useNodeOperation();
   const data = useNodeListData(nodeGroups, t);
-  const editor = useNodeEditor(operation, data.viewportRef, t);
+  const listView = useNodeListVirtual(data.rows, data.search);
+  const editor = useNodeEditor(operation, listView.viewportRef, t);
   const subscriptions = useNodeSubscriptions(operation, t);
   const exports = useNodeExport(operation, t);
   // A subscription URL only creates the source; updating it straight away is
@@ -39,6 +41,7 @@ export function useServerTable() {
     nodeGroups,
     ...operation,
     ...data,
+    ...listView,
     ...editor,
     ...subscriptions,
     ...exports,

@@ -1,6 +1,6 @@
 import type { ProfileTransport } from "@/ipc/bindings";
 import { trimToNull } from "@voya/utils/text";
-import { CONFIG_TYPES } from "./profile-constants";
+import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import type { ParsedProfileFormValues } from "./profile-form-schema";
 export function formTransport(
   parsed: ParsedProfileFormValues,

@@ -68,3 +68,83 @@ export function setSystemColorSchemeReader(read: () => ColorScheme) {
 export function systemColorScheme(): ColorScheme {
   return readColorScheme();
 }
+
+/**
+ * Asks the OS for whatever authorization the tunnel needs, resolving to
+ * whether it was granted.
+ *
+ * The prompt is platform-shaped — a native elevation dialog on desktop, the
+ * VPN-configuration consent sheet on iOS and Android — but what the shared
+ * retry in `runWithElevation` needs is the same everywhere: one attempt, and an
+ * answer. The default declines, so an app that never registers one simply never
+ * retries instead of calling a command it does not have.
+ */
+export type ElevationHandler = () => Promise<boolean>;
+
+let requestElevationHandler: ElevationHandler = async () => false;
+
+export function setElevationHandler(handler: ElevationHandler) {
+  requestElevationHandler = handler;
+}
+
+export function requestElevation(): Promise<boolean> {
+  return requestElevationHandler();
+}
+
+/**
+ * The system clipboard.
+ *
+ * Both halves are platform-shaped for different reasons: the desktop writes
+ * through the WebView's `navigator.clipboard` but *reads* through the backend,
+ * because a WebView read needs a user gesture the paste menu item does not
+ * always carry; React Native has one native module for both. Sharing the seam
+ * rather than the implementation keeps `use-node-import` identical on both.
+ */
+export type ClipboardAdapter = {
+  readText: () => Promise<string>;
+  writeText: (text: string) => Promise<void>;
+};
+
+const unregisteredClipboard = (): never => {
+  throw new Error("No clipboard registered — call setClipboard() during app startup.");
+};
+
+let clipboardAdapter: ClipboardAdapter = {
+  readText: unregisteredClipboard,
+  writeText: unregisteredClipboard,
+};
+
+export function setClipboard(adapter: ClipboardAdapter) {
+  clipboardAdapter = adapter;
+}
+
+export function clipboard(): ClipboardAdapter {
+  return clipboardAdapter;
+}
+
+/**
+ * Whether the app is on screen.
+ *
+ * `false` while the desktop window is hidden into the tray or minimized, and
+ * while a mobile app is backgrounded — which is when live streams (logs,
+ * connection polling) should stop feeding a surface nobody is looking at.
+ */
+export type AppVisibilityAdapter = {
+  subscribe: (onChange: () => void) => () => void;
+  isVisible: () => boolean;
+};
+
+// Always visible until an app says otherwise: a missing registration must not
+// silently switch every live stream off.
+let appVisibility: AppVisibilityAdapter = {
+  subscribe: () => () => {},
+  isVisible: () => true,
+};
+
+export function setAppVisibility(adapter: AppVisibilityAdapter) {
+  appVisibility = adapter;
+}
+
+export function appVisibilityAdapter(): AppVisibilityAdapter {
+  return appVisibility;
+}

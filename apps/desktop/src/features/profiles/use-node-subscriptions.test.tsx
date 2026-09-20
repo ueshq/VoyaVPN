@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { i18next } from "@voya/i18n";
 import { deleteSubscriptions, updateSubscriptions } from "@/ipc/commands";
 import type { Subscription, SubscriptionUpdateResult } from "@/ipc/bindings";
-import { useNodeOperation } from "./use-node-operation";
+import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeSubscriptions } from "./use-node-subscriptions";
 
 vi.mock("@/ipc/commands", () => ({ deleteSubscriptions: vi.fn(), updateSubscriptions: vi.fn() }));

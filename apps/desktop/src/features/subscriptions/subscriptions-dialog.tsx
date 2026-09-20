@@ -18,8 +18,8 @@ import { SwitchField, TextField } from "@voya/ui/components/form-fields";
 import { Spinner } from "@voya/ui/components/spinner";
 import { saveSubscription, updateSubscriptions } from "@/ipc/commands";
 import type { Subscription } from "@/ipc/bindings";
-import { useDialogSubmit } from "@/lib/use-dialog-submit";
-import { assertSubscriptionUpdated } from "./subscription-update-result";
+import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
+import { assertSubscriptionUpdated } from "@voya/features/subscriptions/subscription-update-result";
 import { subscriptionFormSchema } from "./subscriptions-form-schema";
 
 /** Fields the dialog validates; also the suffixes of the input ids. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { zodIssuesToErrorMap } from "@/lib/zod-errors";
+import { zodIssuesToErrorMap } from "@voya/features/forms/zod-errors";
 
 import { routingRuleSchema } from "./routing-form-schema";
 

@@ -32,7 +32,7 @@ import {
 import { VirtualScrollList } from "@/components/virtual-scroll-list";
 import { useConnectionModeStatus } from "./use-connection-mode-status";
 import { queryKeys } from "@voya/client/query-keys";
-import { useDialogSubmit } from "@/lib/use-dialog-submit";
+import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import {

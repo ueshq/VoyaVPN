@@ -30,7 +30,7 @@ import {
   translateFieldErrors,
   zodIssuesToErrorMap,
   type FieldErrorMap,
-} from "@/lib/zod-errors";
+} from "@voya/features/forms/zod-errors";
 
 import { OUTBOUND_LABEL_KEYS, type RuleGroupOutbound, appendMatcherLine, describeOutbound, groupOutboundValue } from "./rule-outbound";
 import { RULE_SCOPE_LABEL_KEYS } from "./routing-constants";

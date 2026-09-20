@@ -51,12 +51,19 @@
     "packages/contracts": {
       "project": ["src/**/*.ts"],
       "ignoreIssues": {
-        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"]
+        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"],
+        // The wire table exists for the native transports; the desktop's Tauri
+        // binding has its own generated wrappers and never reads it.
+        "src/commands.ts": ["exports"]
       }
     },
     "packages/client": {
       "entry": ["src/*.ts"],
       "project": ["src/**/*.ts"]
+    },
+    "packages/features": {
+      "entry": ["src/**/*.test.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}"]
     }
   }
 }

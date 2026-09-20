@@ -23,8 +23,8 @@ import { importProfilesFromText } from "@/ipc/commands";
 import { importLineText } from "@voya/client/messages";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 
-import { qrScanErrorCode } from "./qr-errors";
-import { formatImportSummary } from "./server-table-actions";
+import { qrScanErrorCode } from "@voya/features/profiles/qr-errors";
+import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
 
 type ImportProfilesDialogProps = {
   onCloseFocus?: () => void;

@@ -22,17 +22,28 @@ import {
  *
  * 1. the scope variants come out of the *generated* `bindings.ts`, so a new
  *    Rust variant shows up here without anyone updating a fixture;
- * 2. the subscribed keys come out of every `useQuery` in `apps/desktop/src`,
- *    checked against the registry in `@voya/client`.
+ * 2. the subscribed keys come out of every `useQuery` the desktop mounts —
+ *    its own modules and the shared ones in `@voya/features` — checked
+ *    against the registry in `@voya/client`.
  *
  * It then asserts the two agree, and that no `queryKey` anywhere is written as
  * a literal instead of coming from the registry.
  */
-const sources = import.meta.glob("../**/*.{ts,tsx}", {
-  eager: true,
-  import: "default",
-  query: "?raw",
-}) as Record<string, string>;
+const sources = {
+  ...(import.meta.glob("../**/*.{ts,tsx}", {
+    eager: true,
+    import: "default",
+    query: "?raw",
+  }) as Record<string, string>),
+  // Feature controllers moved into `@voya/features` still mount on the desktop
+  // and still own caches the backend invalidates, so they belong in the same
+  // sweep; without them a moved `useQuery` reads as an orphaned backend scope.
+  ...(import.meta.glob("../../../../packages/features/src/**/*.{ts,tsx}", {
+    eager: true,
+    import: "default",
+    query: "?raw",
+  }) as Record<string, string>),
+};
 
 // Vite normalises glob keys relative to this file, so same-directory modules
 // come back as `./x.ts` and everything else as `../<dir>/x.ts`.

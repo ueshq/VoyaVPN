@@ -17,6 +17,9 @@ const productionSourceDirs = [
   // The shared client owns `messages.ts`, the only place a backend code becomes
   // a translation key, so its keys would read as unused without this entry.
   resolve(repoRoot, "packages/client/src"),
+  // Shared feature logic and controllers; the desktop screens that used to hold
+  // these keys now import them from here.
+  resolve(repoRoot, "packages/features/src"),
 ];
 const localeCodes = ["en", "zh-Hans", "zh-Hant"];
 

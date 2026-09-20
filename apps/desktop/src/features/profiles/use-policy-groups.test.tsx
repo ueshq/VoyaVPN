@@ -13,7 +13,7 @@ import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
-import { makeProfileFixture } from "@/test/profile-fixture";
+import { makeProfileFixture } from "@voya/features/test/profile-fixture";
 import { renderHookWithQuery } from "@/test/render";
 
 import { usePolicyGroups } from "./use-policy-groups";
@@ -32,7 +32,7 @@ vi.mock("@/ipc/commands", () => ipc);
 // The runtime guard and the connect/restart it drives have their own suite;
 // here a switch runs the selection step and reports a connection.
 const runtimeAction = vi.hoisted(() => ({ activateSelection: vi.fn() }));
-vi.mock("@/stores/runtime-action", () => runtimeAction);
+vi.mock("@voya/client/runtime-action", () => runtimeAction);
 
 const connectedCore: RuntimeStatusResponse = {
   activeProfileId: null,

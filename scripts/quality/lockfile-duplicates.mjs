@@ -15,8 +15,13 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * dragged in a second one — so the pins in `packages/ui/package.json` and the
  * `pnpm.overrides` block in the root manifest exist to keep this list at one
  * version each, and this gate proves they still do.
+ *
+ * `@tanstack/react-query` fails the same way for the same reason: the
+ * `QueryClient` travels through a module-level React context, so a hook from a
+ * second copy throws "No QueryClient set" inside a provider that is right
+ * there. Both workspaces take it from the catalog to stay on one version.
  */
-const singleVersionPackages = ["react", "react-dom"];
+const singleVersionPackages = ["@tanstack/react-query", "react", "react-dom"];
 
 /**
  * Scopes where *every* package must be single-version.

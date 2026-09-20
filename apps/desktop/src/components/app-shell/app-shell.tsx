@@ -23,7 +23,7 @@ import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { isTauriRuntime } from "@/ipc/window";
-import { useDocumentVisible } from "@/lib/use-document-visible";
+import { useAppVisible } from "@voya/client/use-app-visible";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 import { toastError } from "@voya/client/toast-store";
 
@@ -140,7 +140,7 @@ function ScreenFallback() {
  */
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
   const coreConnected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
-  const visible = useDocumentVisible();
+  const visible = useAppVisible();
   const { t } = useI18n();
   // The controller is created once; this ref keeps its error path pointing at
   // the current locale without recreating the state machine.

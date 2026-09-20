@@ -1,7 +1,7 @@
 import { act } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { saveQueue } from "@/lib/save-queue";
+import { saveQueue } from "@voya/features/forms/save-queue";
 import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 
 import type { SettingsChange } from "./settings-draft";

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { CONFIG_TYPES } from "./profile-constants";
+import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 
 /**
  * Validation failures carry locale-independent codes instead of English

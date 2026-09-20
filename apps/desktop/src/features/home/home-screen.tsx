@@ -12,17 +12,17 @@ import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { DisabledReason } from "@/components/disabled-reason";
 import { connectionShortcutLabel } from "@/components/app-shell/use-shell-shortcuts";
 import { NodeCountryIcon } from "@/components/node-country-icon";
-import { getProtocolLabel } from "@/features/profiles/profile-constants";
-import { entryCountry, profileMemberName, profileNameWithoutFlag } from "@/features/profiles/profile-display";
-import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
+import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
+import { entryCountry, profileMemberName, profileNameWithoutFlag } from "@voya/features/profiles/profile-display";
+import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { type RuntimeAction } from "@voya/client/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
 import { ExitIpMetric } from "./exit-ip-metric";
 import { HomeWorldMap, type HomeMapMarker } from "./home-world-map";
-import { useConnectionIp } from "./use-connection-ip";
-import { useHomeRuntime } from "./use-home-runtime";
+import { useConnectionIp } from "@voya/features/home/use-connection-ip";
+import { useHomeRuntime } from "@voya/features/home/use-home-runtime";
 import { HomeModeSummary } from "./home-mode-summary";
 
 const ACTION_FAILED_KEYS = {

@@ -1,4 +1,4 @@
-import { worldMapPosition } from "./country-positions";
+import { worldMapPosition } from "@voya/features/home/country-positions";
 
 export type HomeMapMarker = {
   countryCode: string;

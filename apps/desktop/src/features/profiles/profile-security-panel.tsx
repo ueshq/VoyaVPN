@@ -5,7 +5,7 @@ import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { SECURITY_OPTIONS } from "./profile-constants";
+import { SECURITY_OPTIONS } from "@voya/features/profiles/profile-constants";
 import {
   Panel,
   SelectField,

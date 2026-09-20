@@ -4,9 +4,9 @@ import type { Subscription } from "@/ipc/bindings";
 import {
   assertSubscriptionUpdated,
   formatSubscriptionUpdateSummary,
-} from "@/features/subscriptions/subscription-update-result";
+} from "@voya/features/subscriptions/subscription-update-result";
 import type { TranslationFunction } from "@voya/i18n";
-import type { NodeOperation } from "./use-node-operation";
+import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 
 /**
  * Pending-action markers for the one re-entrancy guard: a subscription id

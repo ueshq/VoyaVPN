@@ -3,7 +3,7 @@ import { Waypoints } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { NETWORK_OPTIONS } from "./profile-constants";
+import { NETWORK_OPTIONS } from "@voya/features/profiles/profile-constants";
 import {
   Panel,
   SelectField,

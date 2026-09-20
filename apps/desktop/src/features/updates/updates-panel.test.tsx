@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { saveQueue } from "@/lib/save-queue";
+import { saveQueue } from "@voya/features/forms/save-queue";
 import { UpdatesPanel } from "@/features/updates/updates-panel";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 import { changeLocale } from "@voya/i18n";

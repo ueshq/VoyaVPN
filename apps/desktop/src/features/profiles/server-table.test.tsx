@@ -29,11 +29,11 @@ import type {
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
-import { makeProfileDetailsFixture, toProfileSummaryEntry } from "@/test/profile-fixture";
+import { makeProfileDetailsFixture, toProfileSummaryEntry } from "@voya/features/test/profile-fixture";
 
-import { MOVE_ACTIONS } from "./profile-constants";
+import { MOVE_ACTIONS } from "@voya/features/profiles/profile-constants";
 import { ProfilesScreen } from "./server-table";
-import { applySpeedtestResults, overlaySpeedtestResult, useNodeListData } from "./use-node-list-data";
+import { applySpeedtestResults, overlaySpeedtestResult, useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeGroups } from "./use-node-groups";
 
 const ipcMocks = vi.hoisted(() => ({

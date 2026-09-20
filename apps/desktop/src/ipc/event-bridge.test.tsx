@@ -40,6 +40,10 @@ const bridgeMocks = vi.hoisted(() => {
 });
 
 vi.mock("@/ipc/bindings", () => ({
+  // The bridge itself only reads `events`, but the shared backend registration
+  // the test setup runs imports `@/ipc/commands`, which reads every entry of
+  // this namespace; an absent export would throw there rather than here.
+  commands: {},
   events: {
     appEvent: { listen: bridgeMocks.appEventListen },
     invalidateEvent: { listen: bridgeMocks.invalidateEventListen },
@@ -253,5 +257,37 @@ describe("EventBridge", () => {
     });
 
     expect(bridgeMocks.setCloseRequestOpen).toHaveBeenCalledWith(true);
+  });
+
+  it("registers nothing outside a Tauri runtime", () => {
+    // The frontend-only dev server and the Vitest environment both load the
+    // app without a backend; listening there would throw on every mount.
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+
+    renderWithQuery(<EventBridge />);
+
+    expect(bridgeMocks.appEventListen).not.toHaveBeenCalled();
+    expect(bridgeMocks.invalidateEventListen).not.toHaveBeenCalled();
+    expect(bridgeMocks.transientStreamEventListen).not.toHaveBeenCalled();
+  });
+
+  it("reports a channel it could not register or unlisten and keeps the others", async () => {
+    const reported = vi.spyOn(console, "error").mockImplementation(() => {});
+    bridgeMocks.appEventListen.mockRejectedValueOnce(new Error("no such event"));
+    const unlisten = vi.fn(() => {
+      throw new Error("already gone");
+    });
+    bridgeMocks.invalidateEventListen.mockResolvedValueOnce(unlisten);
+
+    const { unmount } = renderWithQuery(<EventBridge />);
+    await waitFor(() => expect(reported).toHaveBeenCalledOnce());
+    expect(reported.mock.calls[0]?.[0]).toContain("failed to register appEvent");
+
+    // The other two channels still registered, and a throwing unlisten is
+    // reported rather than left to escape the effect cleanup.
+    unmount();
+    expect(unlisten).toHaveBeenCalledOnce();
+    expect(reported.mock.calls.at(-1)?.[0]).toContain("failed to unlisten invalidateEvent");
+    reported.mockRestore();
   });
 });

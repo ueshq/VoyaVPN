@@ -17,7 +17,7 @@ import { useModalStore } from "@voya/client/modal-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
-import { makeProfileFixture } from "@/test/profile-fixture";
+import { makeProfileFixture } from "@voya/features/test/profile-fixture";
 
 import { HomeScreen } from "./home-screen";
 

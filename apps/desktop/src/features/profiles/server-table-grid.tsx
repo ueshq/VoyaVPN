@@ -22,11 +22,11 @@ import {
   profileLatencyTone,
   profileNameWithoutFlag,
   profileTitle,
-} from "./profile-display";
-import { getProtocolLabel } from "./profile-constants";
+} from "@voya/features/profiles/profile-display";
+import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 
 import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
-import { overlaySpeedtestResult } from "./use-node-list-data";
+import { overlaySpeedtestResult } from "@voya/features/profiles/use-node-list-data";
 import type { ServerTableController } from "./use-server-table";
 
 export function ProfileCardList({

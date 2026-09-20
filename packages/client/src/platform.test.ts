@@ -1,6 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { clientStorage, setClientStorage, setSystemColorSchemeReader, systemColorScheme } from "./platform";
+import {
+  appVisibilityAdapter,
+  clientStorage,
+  clipboard,
+  requestElevation,
+  setAppVisibility,
+  setClientStorage,
+  setClipboard,
+  setElevationHandler,
+  setSystemColorSchemeReader,
+  systemColorScheme,
+} from "./platform";
 
 describe("clientStorage", () => {
   it("forgets rather than throwing before a platform registers", () => {
@@ -44,5 +55,59 @@ describe("systemColorScheme", () => {
 
     scheme = "light";
     expect(systemColorScheme()).toBe("light");
+  });
+});
+
+describe("requestElevation", () => {
+  it("declines for a platform that registered no prompt", async () => {
+    // No handler means no retry, rather than a call into a command this
+    // platform may not even have.
+    await expect(requestElevation()).resolves.toBe(false);
+  });
+
+  it("asks the registered handler, every time", async () => {
+    const handler = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    setElevationHandler(handler);
+
+    await expect(requestElevation()).resolves.toBe(true);
+    await expect(requestElevation()).resolves.toBe(false);
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("clipboard", () => {
+  it("names the missing registration instead of failing with a TypeError", () => {
+    expect(() => clipboard().readText()).toThrow(/No clipboard registered/);
+    expect(() => clipboard().writeText("vless://node")).toThrow(/No clipboard registered/);
+  });
+
+  it("forwards both halves to the registered adapter", async () => {
+    const readText = vi.fn().mockResolvedValue("vless://node");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    setClipboard({ readText, writeText });
+
+    await expect(clipboard().readText()).resolves.toBe("vless://node");
+    await clipboard().writeText("vless://other");
+    expect(writeText).toHaveBeenCalledWith("vless://other");
+  });
+});
+
+describe("appVisibilityAdapter", () => {
+  it("reports the app as on screen until a platform says otherwise", () => {
+    // A missing registration must not silently switch every live stream off.
+    const adapter = appVisibilityAdapter();
+    expect(adapter.isVisible()).toBe(true);
+    expect(adapter.subscribe(() => {})()).toBeUndefined();
+  });
+
+  it("reports what the registered adapter says and unsubscribes through it", () => {
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn().mockReturnValue(unsubscribe);
+    setAppVisibility({ isVisible: () => false, subscribe });
+
+    const adapter = appVisibilityAdapter();
+    expect(adapter.isVisible()).toBe(false);
+    adapter.subscribe(() => {})();
+    expect(unsubscribe).toHaveBeenCalledOnce();
   });
 });

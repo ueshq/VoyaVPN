@@ -119,6 +119,25 @@ export default tseslint.config(
     },
   },
   {
+    // The shared frontend layer runs in the desktop WebView and in React Native
+    // alike, so reaching the DOM has to fail lint here rather than on a device.
+    // TypeScript cannot catch it: its `lib` includes DOM for the whole
+    // workspace, and the jsdom-backed tests in these packages need it.
+    // `@voya/ui` is deliberately not listed — its primitives are Radix, and
+    // Radix is the DOM.
+    files: ["packages/client/src/**/*.{ts,tsx}", "packages/features/src/**/*.{ts,tsx}"],
+    ignores: ["packages/features/src/test/**"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        ...["document", "navigator", "window"].map((name) => ({
+          name,
+          message: "Shared frontend code must reach the platform through @voya/client/platform.",
+        })),
+      ],
+    },
+  },
+  {
     // Plain browser scripts Vite copies as-is, such as the pre-render theme boot.
     files: ["apps/desktop/public/**/*.js"],
     languageOptions: {

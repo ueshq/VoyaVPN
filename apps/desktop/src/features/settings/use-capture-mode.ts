@@ -3,15 +3,15 @@ import { useState } from "react";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
-import { useRuntimeBusy } from "@/stores/runtime-action";
+import { useRuntimeBusy } from "@voya/client/runtime-action";
 import {
   tunProviderErrorDescription,
   tunProviderPathMismatchDescription,
-} from "@/components/app-shell/tun-provider-text";
+} from "@voya/features/shell/tun-provider-text";
 import type { ConnectionMode } from "@/ipc/bindings";
 import { setConnectionMode, tunRequestElevation, tunStatus } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
+import { refreshRuntimeStatusAndReport } from "@voya/client/runtime-status";
 import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
 /**

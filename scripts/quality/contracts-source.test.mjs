@@ -3,7 +3,13 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { repoRootFromScript } from "../lib/common.mjs";
-import { generateContractsSource, parseCommands, parseEvents } from "./contracts-source.mjs";
+import {
+  generateCommandNames,
+  generateCommandWire,
+  generateContractsSource,
+  parseCommands,
+  parseEvents,
+} from "./contracts-source.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const bindings = readFileSync(resolve(repoRoot, "apps/desktop/src/ipc/bindings.ts"), "utf8");
@@ -34,7 +40,14 @@ describe("parseCommands", () => {
     );
 
     expect(parsed).toEqual([
-      { name: "loadAppSettings", parameters: "", returnType: "AppSettingsV1", doc: [] },
+      {
+        doc: [],
+        name: "loadAppSettings",
+        params: [],
+        parameters: "",
+        returnType: "AppSettingsV1",
+        wireName: "load_app_settings",
+      },
     ]);
   });
 
@@ -133,5 +146,49 @@ describe("generateContractsSource", () => {
     const invocations = bindings.split("__TAURI_INVOKE(").length - 1;
 
     expect(source.split("=> Promise<").length - 1).toBe(invocations);
+  });
+});
+
+describe("generateCommandWire", () => {
+  it("keeps the wire name and the argument names a transport has to rebuild", () => {
+    const wire = generateCommandWire(
+      fixture({
+        commands: [
+          '\tsetTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),',
+          '\trestartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),',
+        ].join("\n"),
+        events: '\tappEvent: makeEvent<AppEvent>("app-event"),',
+        types: "export type AppEvent = { kind: 'notice' };",
+      }),
+    );
+
+    expect(wire).toContain('setTunEnabled: { name: "set_tun_enabled", params: ["enabled"] },');
+    expect(wire).toContain('restartCore: { name: "restart_core", params: [] },');
+    // `satisfies` is what makes a missing entry a compile error downstream.
+    expect(wire).toContain("satisfies Record<keyof VoyaCommands, { name: string; params: readonly string[] }>");
+  });
+
+  it("refuses a command whose invocation disagrees with its parameters", () => {
+    // A reordered object would send `{ a: b, b: a }` and only fail on device.
+    const block = '\tmoveProfile: (id: string, action: MoveAction) => typedError<null, AppError>(__TAURI_INVOKE("move_profile", { action, id })),';
+
+    expect(() => parseCommands(block)).toThrow(/declares \(id, action\) but invokes with \(action, id\)/);
+  });
+
+  it("reproduces the checked-in wire table", () => {
+    const committed = readFileSync(resolve(repoRoot, "packages/contracts/src/commands.ts"), "utf8");
+
+    expect(generateCommandWire(bindings)).toBe(committed);
+  });
+});
+
+describe("generateCommandNames", () => {
+  it("reproduces the checked-in command list, sorted and complete", () => {
+    const committed = readFileSync(resolve(repoRoot, "packages/contracts/commands.json"), "utf8");
+    const names = JSON.parse(committed);
+
+    expect(generateCommandNames(bindings)).toBe(committed);
+    expect(names).toEqual([...names].sort());
+    expect(names).toHaveLength(bindings.split("__TAURI_INVOKE(").length - 1);
   });
 });

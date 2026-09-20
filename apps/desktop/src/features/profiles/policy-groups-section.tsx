@@ -10,9 +10,9 @@ import type { PolicyGroupEntry } from "@/ipc/bindings";
 
 import type { ServerTableController } from "./use-server-table";
 import { PolicyGroupDialog } from "./policy-group-dialog";
-import { POLICY_GROUP_STRATEGY_KEYS } from "./policy-group-labels";
+import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { PolicyGroupMemberChip } from "./policy-group-member-chip";
-import { profileMemberName } from "./profile-display";
+import { profileMemberName } from "@voya/features/profiles/profile-display";
 import { SpeedtestButton } from "./server-table-menus";
 
 /**

@@ -18,8 +18,8 @@ import { profileDetailsQueryKey } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { ProfileSummaryEntry } from "@/ipc/bindings";
 
-import { getProtocolLabel } from "./profile-constants";
-import { profileLatency, profileTitle, profileTransportName } from "./profile-display";
+import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
+import { profileLatency, profileTitle, profileTransportName } from "@voya/features/profiles/profile-display";
 import type { ServerTableController } from "./use-server-table";
 
 // Mounted only while open; the statistics selector watches this node alone.

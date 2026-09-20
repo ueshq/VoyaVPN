@@ -9,7 +9,7 @@ import {
   relativeTimeFrom,
   remainingDays,
   remainingTrafficBytes,
-} from "./subscription-usage";
+} from "@voya/features/subscriptions/subscription-usage";
 
 type TranslateFn = ReturnType<typeof useI18n>["t"];
 

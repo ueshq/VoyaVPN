@@ -19,14 +19,14 @@ import { Spinner } from "@voya/ui/components/spinner";
 import type { PolicyGroup, ProfileSummaryEntry, Subscription } from "@/ipc/bindings";
 import { VirtualScrollList } from "@/components/virtual-scroll-list";
 import { savePolicyGroup } from "@/ipc/commands";
-import { useDialogSubmit } from "@/lib/use-dialog-submit";
+import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
 
 import {
   POLICY_GROUP_STRATEGIES,
   POLICY_GROUP_STRATEGY_HINT_KEYS,
   POLICY_GROUP_STRATEGY_KEYS,
-} from "./policy-group-labels";
-import { profileMemberName } from "./profile-display";
+} from "@voya/features/profiles/policy-group-labels";
+import { profileMemberName } from "@voya/features/profiles/profile-display";
 
 type Props = {
   group: PolicyGroup | null;

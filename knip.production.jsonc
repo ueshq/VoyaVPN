@@ -59,10 +59,13 @@
       "ignore": ["src/**/*.test.{ts,tsx}"]
     },
     "packages/contracts": {
-      "entry": ["src/index.ts"],
+      "entry": ["src/index.ts", "src/commands.ts"],
       "project": ["src/**/*.ts!"],
       "ignoreIssues": {
-        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"]
+        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"],
+        // The wire table exists for the native transports; the desktop's Tauri
+        // binding has its own generated wrappers and never reads it.
+        "src/commands.ts": ["exports"]
       }
     },
     "packages/client": {
@@ -71,6 +74,13 @@
       // `test-storage.ts` is the storage seam tests register; it is deliberately
       // not reachable from a shipped path.
       "ignore": ["src/**/*.test.ts", "src/test-storage.ts"]
+    },
+    "packages/features": {
+      "entry": ["src/*/*.{ts,tsx}!"],
+      "project": ["src/**/*.{ts,tsx}!"],
+      // `src/test` is the package's own harness and fixtures, deliberately not
+      // reachable from a shipped path.
+      "ignore": ["src/**/*.test.{ts,tsx}", "src/test/**"]
     }
   }
 }

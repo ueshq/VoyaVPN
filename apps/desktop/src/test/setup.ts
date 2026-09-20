@@ -38,3 +38,17 @@ if (!Element.prototype.scrollIntoView) {
 beforeEach(() => {
   useNodeListStore.setState(useNodeListStore.getInitialState());
 });
+
+/**
+ * The same backend registration `platform-boot` does at startup, so shared
+ * code in `@voya/client` reaches the desktop binding.
+ *
+ * Imported here rather than at the top of the file, and per test rather than
+ * once: a test file's `vi.mock("@/ipc/commands")` is registered only after the
+ * setup files have run, so an eager import would hand the shared seam the real
+ * Tauri binding and every mocked command would be bypassed.
+ */
+beforeEach(async () => {
+  const { registerDesktopBackend } = await import("@/ipc/register-backend");
+  registerDesktopBackend();
+});

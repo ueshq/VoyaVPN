@@ -18,9 +18,11 @@
     "zustand": "^5.0.14"
   },
   "peerDependencies": {
+    "@tanstack/react-query": "catalog:",
     "react": "^19.2.6"
   },
   "devDependencies": {
+    "@tanstack/react-query": "catalog:",
     "@types/react": "catalog:",
     "react": "catalog:",
     "typescript": "catalog:",

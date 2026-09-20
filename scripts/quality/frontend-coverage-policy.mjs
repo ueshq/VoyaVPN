@@ -31,7 +31,7 @@ const criticalMinimum = 80;
 export const criticalModules = [
   "apps/desktop/src/ipc/commands.ts",
   "packages/client/src/runtime-state-version.ts",
-  "apps/desktop/src/ipc/runtime-status.ts",
+  "packages/client/src/runtime-status.ts",
   "apps/desktop/src/ipc/tauri-plugins.ts",
   "apps/desktop/src/ipc/notifications.ts",
   "apps/desktop/src/features/settings/use-app-settings.ts",
@@ -62,30 +62,32 @@ export const criticalModules = [
 ];
 
 export const runtimeModules = [
-  // The single mounted bridge for all three ADR-0002 event channels, and the
-  // store its streams land in. Measured 83/79 and 94/84 when the floors were
-  // last raised; the home hook at 100/95.
-  { path: "apps/desktop/src/ipc/event-bridge.tsx", lines: 75, branches: 70 },
+  // The single mounted bridge for all three ADR-0002 event channels, the shared
+  // router that decides what each event means, and the store its streams land
+  // in. Measured 89/78, 87/82 and 94/84 once routing moved into the router;
+  // the home hook at 100/95.
+  { path: "apps/desktop/src/ipc/event-bridge.tsx", lines: 85, branches: 75 },
+  { path: "packages/client/src/event-router.ts", lines: 85, branches: 80 },
   { path: "packages/client/src/runtime-event-store.ts", lines: 85, branches: 75 },
   // Connect/disconnect on the home screen.
-  { path: "apps/desktop/src/features/home/use-home-runtime.ts", lines: 90, branches: 85 },
+  { path: "packages/features/src/home/use-home-runtime.ts", lines: 90, branches: 85 },
   // Runs every runtime action and node or group switch, with the shared guard
   // and the elevation and missing-core recovery paths. Measured 97/98 when
   // profile activation merged into it.
-  { path: "apps/desktop/src/stores/runtime-action.ts", lines: 85, branches: 85 },
+  { path: "packages/client/src/runtime-action.ts", lines: 85, branches: 85 },
   { path: "packages/client/src/runtime-action-store.ts", lines: 90, branches: 90 },
   // Proxy-monitor lifecycle.
   { path: "apps/desktop/src/components/app-shell/app-shell.tsx", lines: 75, branches: 55 },
   { path: "apps/desktop/src/features/profiles/use-server-table.ts", lines: 75, branches: 55 },
   // Share-link-only export: 83/78 when the Base64, bundle and file-save paths were removed.
-  { path: "apps/desktop/src/features/profiles/server-table-actions.ts", lines: 75, branches: 65 },
+  { path: "packages/features/src/profiles/server-table-actions.ts", lines: 75, branches: 65 },
   { path: "apps/desktop/src/features/profiles/use-node-groups.ts", lines: 80, branches: 65 },
-  { path: "apps/desktop/src/features/profiles/node-list-rows.ts", lines: 80, branches: 65 },
+  { path: "packages/features/src/profiles/node-list-rows.ts", lines: 80, branches: 65 },
   // Page composition keeps the old floor; each extracted capability has its own floor.
-  { path: "apps/desktop/src/features/profiles/use-node-list-data.ts", lines: 90, branches: 75 },
+  { path: "packages/features/src/profiles/use-node-list-data.ts", lines: 90, branches: 75 },
   { path: "apps/desktop/src/features/profiles/use-node-editor.ts", lines: 85, branches: 65 },
   { path: "apps/desktop/src/features/profiles/use-node-export.ts", lines: 80, branches: 75 },
-  { path: "apps/desktop/src/features/profiles/use-node-operation.ts", lines: 90, branches: 90 },
+  { path: "packages/features/src/profiles/use-node-operation.ts", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/profiles/use-node-subscriptions.ts", lines: 80, branches: 75 },
   { path: "apps/desktop/src/features/profiles/use-node-speedtest.ts", lines: 90, branches: 50 },
   { path: "apps/desktop/src/features/profiles/profile-form-values.ts", lines: 90, branches: 60 },
@@ -120,7 +122,7 @@ export const runtimeModules = [
   { path: "packages/client/src/node-list-store.ts", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/profiles/use-policy-groups.ts", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/dns/dns-form-schema.ts", lines: 90, branches: 90 },
-  { path: "apps/desktop/src/features/profiles/qr-errors.ts", lines: 90, branches: 90 },
+  { path: "packages/features/src/profiles/qr-errors.ts", lines: 90, branches: 90 },
   // Had no test at all; 100/100 once it got one.
   { path: "apps/desktop/src/features/profiles/speedtest-settings-dialog.tsx", lines: 90, branches: 85 },
 ];

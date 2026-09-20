@@ -24,7 +24,8 @@ import {
 import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 
-import { IMPORT_METHODS } from "./import-methods";
+import { IMPORT_METHODS } from "@voya/features/profiles/import-methods";
+import { IMPORT_METHOD_ICONS } from "./import-methods";
 import { SpeedtestButton } from "./server-table-menus";
 import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
 import type { ServerTableController } from "./use-server-table";
@@ -177,7 +178,9 @@ export function ServerTableToolbar({
               }
             }}
           >
-            {IMPORT_METHODS.map(({ method, icon: Icon, labelKey }, index) => (
+            {IMPORT_METHODS.map(({ method, labelKey }, index) => {
+              const Icon = IMPORT_METHOD_ICONS[method];
+              return (
               <MenubarItem
                 key={method}
                 disabled={directImportPending !== null}
@@ -194,7 +197,8 @@ export function ServerTableToolbar({
                 <Icon aria-hidden="true" />
                 {t(labelKey)}
               </MenubarItem>
-            ))}
+              );
+            })}
             <MenubarSeparator />
             <MenubarItem onSelect={() => {
               openingDialogRef.current = true;

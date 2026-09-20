@@ -20,9 +20,9 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useNodeListStore } from "@voya/client/node-list-store";
-import { makeProfileFixture } from "@/test/profile-fixture";
+import { makeProfileFixture } from "@voya/features/test/profile-fixture";
 import { ProfilesScreen } from "./server-table";
-import { nodeListRows, nodeSearchText, LOCAL_GROUP_KEY } from "./node-list-rows";
+import { nodeListRows, nodeSearchText, LOCAL_GROUP_KEY } from "@voya/features/profiles/node-list-rows";
 
 const mocks = vi.hoisted(() => ({
   exportProfileShareLinks: vi.fn(),

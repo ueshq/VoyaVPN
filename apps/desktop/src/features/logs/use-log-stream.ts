@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import { setLogStreaming } from "@/ipc/commands";
 import { isTauriRuntime } from "@/ipc/window";
-import { useDocumentVisible } from "@/lib/use-document-visible";
+import { useAppVisible } from "@voya/client/use-app-visible";
 
 /**
  * Has the backend deliver log lines while the calling panel is mounted and the
@@ -12,7 +12,7 @@ import { useDocumentVisible } from "@/lib/use-document-visible";
  * just happened.
  */
 export function useLogStream() {
-  const visible = useDocumentVisible();
+  const visible = useAppVisible();
 
   useEffect(() => {
     if (!visible || !isTauriRuntime()) {

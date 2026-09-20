@@ -1,5 +1,5 @@
 import type { ProfileKind } from "@/ipc/bindings";
-import { CONFIG_TYPES } from "./profile-constants";
+import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import type { TranslationFunction } from "@voya/i18n";
 import { PROFILE_VALIDATION_CODES } from "./profile-form-schema";
 

@@ -1,6 +1,6 @@
 import { decodeQrImage } from "@/ipc/commands";
 
-import { QrScanError } from "./qr-errors";
+import { QrScanError } from "@voya/features/profiles/qr-errors";
 
 /** Longest side sent for decoding: `QR_IMAGE_MAX_SIDE` in `crates/voya-app/src/qr.rs`. */
 const MAX_SIDE = 1600;

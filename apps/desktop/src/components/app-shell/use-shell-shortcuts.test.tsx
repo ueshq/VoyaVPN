@@ -16,8 +16,8 @@ import { connectionShortcutLabel, pageShortcutAria, pageShortcutLabel, useShellS
 const runtime = vi.hoisted(() => ({
   runRuntimeAction: vi.fn(),
 }));
-vi.mock("@/stores/runtime-action", async (original) => ({
-  ...(await original<typeof import("@/stores/runtime-action")>()),
+vi.mock("@voya/client/runtime-action", async (original) => ({
+  ...(await original<typeof import("@voya/client/runtime-action")>()),
   runRuntimeAction: runtime.runRuntimeAction,
 }));
 

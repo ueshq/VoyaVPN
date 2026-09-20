@@ -4,7 +4,7 @@ import { Server } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ProfileKind } from "@/ipc/bindings";
 
-import { CONFIG_TYPES } from "./profile-constants";
+import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import {
   CheckboxField,
   Panel,

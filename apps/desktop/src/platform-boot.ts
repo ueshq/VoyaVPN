@@ -1,7 +1,6 @@
 import { setClientStorage, setSystemColorSchemeReader } from "@voya/client/platform";
-import { setVoyaCommands } from "@voya/client/transport";
 
-import * as commands from "@/ipc/commands";
+import { registerDesktopBackend } from "@/ipc/register-backend";
 
 /**
  * Registers the desktop platform behind `@voya/client`.
@@ -19,10 +18,4 @@ setSystemColorSchemeReader(() =>
     : "light",
 );
 
-// `satisfies` is the whole point of the seam: dropping or mistyping a command
-// in the Tauri binding fails the build here rather than at the call site.
-setVoyaCommands(commands satisfies VoyaCommandsShape);
-
-// Declared locally so the assertion reads as one line above; `VoyaCommands`
-// itself is the generated contract.
-type VoyaCommandsShape = import("@voya/contracts").VoyaCommands;
+registerDesktopBackend();

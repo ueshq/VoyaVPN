@@ -19,7 +19,7 @@ import {
   settingsIpc,
 } from "./settings-backend.test-fixture";
 import { SettingsScreen } from "./settings-screen";
-import { saveQueue } from "@/lib/save-queue";
+import { saveQueue } from "@voya/features/forms/save-queue";
 
 vi.mock(
   "@/ipc/commands",

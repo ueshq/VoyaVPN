@@ -13,7 +13,7 @@ import { changeLocale } from "@voya/i18n";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
-import { QrScanError } from "./qr-errors";
+import { QrScanError } from "@voya/features/profiles/qr-errors";
 
 const ipcMocks = vi.hoisted(() => ({
   importProfilesFromText: vi.fn(),

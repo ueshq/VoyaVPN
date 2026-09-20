@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@tanstack/react-query':
+      specifier: ^5.100.14
+      version: 5.103.1
     '@testing-library/jest-dom':
       specifier: ^6.9.1
       version: 6.9.1
@@ -96,8 +99,8 @@ importers:
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.76.1(react@19.2.6))
       '@tanstack/react-query':
-        specifier: ^5.100.14
-        version: 5.100.14(react@19.2.6)
+        specifier: 'catalog:'
+        version: 5.103.1(react@19.2.6)
       '@tanstack/react-virtual':
         specifier: ^3.13.26
         version: 3.13.26(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -119,6 +122,9 @@ importers:
       '@voya/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@voya/features':
+        specifier: workspace:*
+        version: link:../../packages/features
       '@voya/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -319,6 +325,9 @@ importers:
         specifier: ^5.0.14
         version: 5.0.14(@types/react@19.2.15)(react@19.2.6)(use-sync-external-store@1.7.0(react@19.2.6))
     devDependencies:
+      '@tanstack/react-query':
+        specifier: 'catalog:'
+        version: 5.103.1(react@19.2.6)
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.15
@@ -337,6 +346,52 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
+
+  packages/features:
+    dependencies:
+      '@voya/client':
+        specifier: workspace:*
+        version: link:../client
+      '@voya/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@voya/i18n':
+        specifier: workspace:*
+        version: link:../i18n
+      '@voya/utils':
+        specifier: workspace:*
+        version: link:../utils
+    devDependencies:
+      '@tanstack/react-query':
+        specifier: 'catalog:'
+        version: 5.103.1(react@19.2.6)
+      '@testing-library/jest-dom':
+        specifier: 'catalog:'
+        version: 6.9.1
+      '@testing-library/react':
+        specifier: 'catalog:'
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.15
+      jsdom:
+        specifier: 'catalog:'
+        version: 29.1.1
+      react:
+        specifier: 'catalog:'
+        version: 19.2.6
+      react-dom:
+        specifier: 'catalog:'
+        version: 19.2.6(react@19.2.6)
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.7(@types/node@25.9.1)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   packages/i18n:
     dependencies:
@@ -2266,16 +2321,8 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tanstack/query-core@5.100.14':
-    resolution: {integrity: sha512-5X41dGpxgeaHISCRW2oYwcSycZeULZzAunaudXT9ov1KOTj9xwt0CH6hbwqP1/z74ZWF7rYFnDpyYH07XFcZew==}
-
   '@tanstack/query-core@5.103.1':
     resolution: {integrity: sha512-rms8HqTGp6zA00dM+cUQ2eBcgzNJefuu5CAMB37i/6MiGT1zulPOytCFu2a0qjLqVR2n1jENPj9woqFQNuCzWA==}
-
-  '@tanstack/react-query@5.100.14':
-    resolution: {integrity: sha512-oOr6aRdSFEwWhzxEkD/9ZcItM3+LjBSkeVmadWKwUssAHTsqd/7bOjWrX4AbvEkoEhgAxzN0Xk6H/aYzXiYBAw==}
-    peerDependencies:
-      react: ^18 || ^19
 
   '@tanstack/react-query@5.103.1':
     resolution: {integrity: sha512-rmAPPApNEK17VXRJhtE1rja53n23VV5w30C0saCgJhhX+EpdUnVqMGV/s5nnzV43X75KTHKzuoiuxSzGTBIkag==}
@@ -7258,14 +7305,7 @@ snapshots:
       tailwindcss: 4.3.0
       vite: 8.0.14(@types/node@25.9.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0)
 
-  '@tanstack/query-core@5.100.14': {}
-
   '@tanstack/query-core@5.103.1': {}
-
-  '@tanstack/react-query@5.100.14(react@19.2.6)':
-    dependencies:
-      '@tanstack/query-core': 5.100.14
-      react: 19.2.6
 
   '@tanstack/react-query@5.103.1(react@19.2.6)':
     dependencies:

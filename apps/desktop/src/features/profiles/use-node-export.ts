@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { exportProfileShareLinks, listProfileSummaries } from "@/ipc/commands";
 import { writeClipboard } from "@/lib/clipboard";
-import { profilesByNodeGroup, type NodeSourceKey } from "./node-list-rows";
+import { profilesByNodeGroup, type NodeSourceKey } from "@voya/features/profiles/node-list-rows";
 import {
   supportsShareLinkExport,
   type ProfileExportDestination,
-} from "./server-table-actions";
+} from "@voya/features/profiles/server-table-actions";
 import type { TranslationFunction } from "@voya/i18n";
-import type { NodeOperation } from "./use-node-operation";
+import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 
 export function useNodeExport(
   { runOperation, setOperationError, setOperationMessage }: NodeOperation,

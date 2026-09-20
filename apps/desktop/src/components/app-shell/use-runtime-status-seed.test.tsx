@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useRuntimeStatusSeed } from "./use-runtime-status-seed";
 
 const refresh = vi.hoisted(() => vi.fn());
-vi.mock("@/ipc/runtime-status", () => ({ refreshRuntimeStatusAndReport: refresh }));
+vi.mock("@voya/client/runtime-status", () => ({ refreshRuntimeStatusAndReport: refresh }));
 function Seed() { useRuntimeStatusSeed(); return null; }
 
 describe("runtime status hydration and resume", () => {

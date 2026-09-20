@@ -14,15 +14,15 @@ import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
-import { activateSelection } from "@/stores/runtime-action";
+import { activateSelection } from "@voya/client/runtime-action";
 
-import { profileMemberName } from "./profile-display";
+import { profileMemberName } from "@voya/features/profiles/profile-display";
 import {
   useGroupDelayTest,
   usePolicyGroupMemberSwitch,
   usePolicyGroupRuntime,
-} from "./use-policy-group-runtime";
-import type { NodeOperation } from "./use-node-operation";
+} from "@voya/features/profiles/use-policy-group-runtime";
+import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 
 /** Marks a group switch in the shared runtime-action guard, apart from node ids. */
 const GROUP_SWITCH_PREFIX = "group:";

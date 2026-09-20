@@ -7,7 +7,7 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { AppSettingsV1, TrafficMode } from "@/ipc/bindings";
 import { queryKeys } from "@voya/client/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
-import { useRuntimeBusy } from "@/stores/runtime-action";
+import { useRuntimeBusy } from "@voya/client/runtime-action";
 
 /**
  * The saved traffic mode. The Rules page locks its rules while it is global,

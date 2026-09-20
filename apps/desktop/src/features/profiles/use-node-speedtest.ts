@@ -3,7 +3,7 @@ import { useState } from "react";
 import { cancelSpeedtest, runSpeedtest } from "@/ipc/commands";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { SpeedtestResult, SpeedtestTarget } from "@/ipc/bindings";
-import type { NodeOperation } from "./use-node-operation";
+import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 
 /** `source` names the button that started the run, so only it offers Stop. */
 type SpeedtestRun = { ids: string[]; before: Record<string, SpeedtestResult>; source: string };

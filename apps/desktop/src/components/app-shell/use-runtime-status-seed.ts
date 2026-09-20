@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { i18next } from "@voya/i18n";
-import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
+import { refreshRuntimeStatusAndReport } from "@voya/client/runtime-status";
 
 /** One always-mounted owner seeds runtime, platform capabilities and TUN. */
 export function useRuntimeStatusSeed() {
