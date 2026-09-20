@@ -21,12 +21,13 @@ private enum PacketTunnelTests {
         try validation()
         try optionsPrecedeFile(root)
         try workingPaths()
+        try appGroupIsABundleFact()
         try diagnosticsContainment(root)
         try diagnosticsStatus(root)
         try diagnosticsRotation(root)
         try diagnosticsDestinationChange(root)
         try diagnosticsFallback(root)
-        print("PacketTunnel runtime and diagnostics: 8 tests passed.")
+        print("PacketTunnel runtime and diagnostics: 9 tests passed.")
     }
 
     private static func validation() throws {
@@ -54,6 +55,20 @@ private enum PacketTunnelTests {
             _ = try PacketTunnelRuntime.loadRuntimeConfig(options: ["runtimeConfigJson": "malformed" as NSString], configURL: file)
             throw Failure(message: "invalid options silently fell back to file")
         } catch is DecodingError {}
+    }
+
+    /// macOS and iOS ship these sources with different App Groups, so the
+    /// identifier comes from the extension's own `Info.plist`. This test binary
+    /// declares none, which is what an extension built without the key looks
+    /// like: there is no container, and asking for paths fails closed rather
+    /// than reaching into some other app's group.
+    private static func appGroupIsABundleFact() throws {
+        try expect(PacketTunnelRuntime.appGroupIdentifier() == nil, "an undeclared App Group must not resolve")
+        try expect(PacketTunnelRuntime.containerURL() == nil, "no App Group means no container")
+        do {
+            _ = try PacketTunnelRuntime.runtimePaths(containerURL: nil)
+            throw Failure(message: "paths resolved without an App Group container")
+        } catch PacketTunnelProviderError.missingAppGroupContainer {}
     }
 
     private static func workingPaths() throws {

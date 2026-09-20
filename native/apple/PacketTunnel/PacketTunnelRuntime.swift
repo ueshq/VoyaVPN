@@ -1,12 +1,32 @@
 import Foundation
 
-private let appGroupIdentifier = "group.app.voyavpn.desktop"
+/// The `Info.plist` key each platform's extension declares its App Group in.
+///
+/// macOS and iOS are separate apps with separate identifiers
+/// (`group.app.voyavpn.desktop` and `group.app.voyavpn.mobile`), and macOS
+/// elects providers globally by bundle id, so the two must never share one.
+/// These sources are shared, so the identifier is read from the bundle the
+/// provider was loaded from rather than compiled in.
+private let appGroupInfoKey = "VoyaAppGroupIdentifier"
 private let runtimeConfigRelativePath = "Library/Application Support/VoyaVPN/packet-tunnel-runtime.json"
 
 /// Host payload decoding, validation and short libbox working paths.
 enum PacketTunnelRuntime {
-    static func containerURL() -> URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
+    /// The App Group this extension declares, or `nil` if it declares none.
+    static func appGroupIdentifier(bundle: Bundle = .main) -> String? {
+        guard let identifier = bundle.object(forInfoDictionaryKey: appGroupInfoKey) as? String,
+              !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+
+        return identifier
+    }
+
+    static func containerURL(bundle: Bundle = .main) -> URL? {
+        guard let identifier = appGroupIdentifier(bundle: bundle) else { return nil }
+
+        return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: identifier)
     }
 
     static func validate(_ runtimeConfig: PacketTunnelRuntimeConfig) throws {

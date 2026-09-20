@@ -38,7 +38,7 @@ const nativeRoot = resolve(repoRoot, "apps", "desktop", "src-tauri", "native", "
 const outRoot = resolve(repoRoot, "target", "native", "macos");
 const appBundle = resolve(process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(outRoot, "VoyaVPN.app"));
 const appContents = resolve(appBundle, "Contents");
-const providerSources = packetTunnelSources(nativeRoot);
+const providerSources = packetTunnelSources(repoRoot);
 const resolvedIdentity = resolveIdentityFromEnv();
 const macosDistribution = distributionFromIdentityName(
   resolvedIdentity?.name ?? "",

@@ -21,7 +21,8 @@ try {
   run(chromeBinary, []);
 
   const nativeRoot = resolve(root, "apps/desktop/src-tauri/native/macos");
-  const sources = packetTunnelSources(nativeRoot);
+  const appleRoot = resolve(root, "native/apple");
+  const sources = packetTunnelSources(root);
   run("xcrun", ["swiftc", "-typecheck", "-parse-as-library", ...sources]);
   console.log("PacketTunnel sources typechecked without Libbox.");
   const framework = resolve(process.env.VOYAVPN_LIBBOX_FRAMEWORK || join(nativeRoot, "Frameworks/Libbox.framework"));
@@ -33,9 +34,9 @@ try {
   }
   const runtimeBinary = join(directory, "packet-tunnel-runtime-tests");
   run("xcrun", ["swiftc", "-parse-as-library",
-    join(nativeRoot, "PacketTunnel/PacketTunnelRuntime.swift"),
-    join(nativeRoot, "PacketTunnel/PacketTunnelDiagnostics.swift"),
-    join(nativeRoot, "PacketTunnelTests.swift"), "-o", runtimeBinary]);
+    join(appleRoot, "PacketTunnel/PacketTunnelRuntime.swift"),
+    join(appleRoot, "PacketTunnel/PacketTunnelDiagnostics.swift"),
+    join(appleRoot, "PacketTunnelTests.swift"), "-o", runtimeBinary]);
   run(runtimeBinary, []);
 } finally {
   rmSync(directory, { recursive: true, force: true });

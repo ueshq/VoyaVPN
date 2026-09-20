@@ -3,6 +3,12 @@
 VoyaVPN's macOS transparent tunnel is designed to match the system VPN model
 used by clients such as V2Box.
 
+The provider's Swift sources are not here: they are shared with the iOS app at
+[`native/apple/`](../../../../../native/apple/README.md). What stays in this
+directory is what is macOS's alone — the extension's `Info.plist` (including
+the `VoyaAppGroupIdentifier` the shared sources read) and the universal macOS
+`Libbox.framework`.
+
 Runtime shape:
 
 - Containing app bundle id: `app.voyavpn.desktop`

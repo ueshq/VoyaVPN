@@ -13,7 +13,7 @@ final class PacketTunnelDiagnostics {
     static let shared = PacketTunnelDiagnostics()
     private let containerURL: () -> URL?
 
-    init(containerURL: @escaping () -> URL? = PacketTunnelRuntime.containerURL) {
+    init(containerURL: @escaping () -> URL? = { PacketTunnelRuntime.containerURL() }) {
         self.containerURL = containerURL
     }
 

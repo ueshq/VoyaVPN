@@ -5,14 +5,27 @@ import { checkedCapture } from "../../lib/common.mjs";
 export const appBundleIdentifier = "app.voyavpn.desktop";
 export const packetTunnelBundleIdentifier = "app.voyavpn.desktop.PacketTunnel";
 
+/**
+ * The provider sources, which macOS and iOS share.
+ *
+ * They live at `native/apple/` rather than under either app: the two ship the
+ * same provider with different bundle ids, App Groups and Libbox slices, and a
+ * copy would have drifted the first time one of them was fixed. What stays
+ * per-platform is the `Info.plist` (which names the App Group the sources
+ * read) and the framework that is linked in.
+ */
+function appleNativeRoot(repoRoot) {
+  return resolve(repoRoot, "native", "apple");
+}
+
 /** The build and native checks compile exactly the same provider sources. */
-export function packetTunnelSources(nativeRoot) {
+export function packetTunnelSources(repoRoot) {
   return [
     "PacketTunnelProvider.swift",
     "PacketTunnelRuntime.swift",
     "PacketTunnelDiagnostics.swift",
     "PacketTunnelPlatform.swift",
-  ].map((name) => resolve(nativeRoot, "PacketTunnel", name));
+  ].map((name) => resolve(appleNativeRoot(repoRoot), "PacketTunnel", name));
 }
 
 export function normalizeDistribution(value) {

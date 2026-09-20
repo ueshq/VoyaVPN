@@ -20,6 +20,10 @@
   <string>$(MARKETING_VERSION)</string>
   <key>CFBundleVersion</key>
   <string>$(CURRENT_PROJECT_VERSION)</string>
+  <!-- Read by the shared PacketTunnel sources; must match the App Group in
+       src-tauri/entitlements/packet-tunnel.plist. -->
+  <key>VoyaAppGroupIdentifier</key>
+  <string>group.app.voyavpn.desktop</string>
   <key>NSExtension</key>
   <dict>
     <key>NSExtensionPointIdentifier</key>
