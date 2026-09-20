@@ -3,7 +3,10 @@ import { dirname, relative, resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import ts from "typescript";
 
-import { changeLocale, getInitialLocale, i18next, localeOptions, type Locale } from "./index";
+// The locale data and types are platform-free; `changeLocale` and
+// `getInitialLocale` belong to the DOM host this suite exercises.
+import { i18next, localeOptions, type Locale } from "./core";
+import { changeLocale, getInitialLocale } from "./index";
 
 type LocaleTree = {
   [key: string]: LocaleTree | string;

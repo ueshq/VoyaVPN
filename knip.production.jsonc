@@ -36,7 +36,7 @@
       "ignoreDependencies": ["cloudflare"]
     },
     "packages/i18n": {
-      "entry": ["src/index.ts", "src/use-i18n.ts"],
+      "entry": ["src/core.ts", "src/index.ts", "src/use-i18n.ts"],
       "project": ["src/**/*.{ts,tsx}!"],
       "ignore": ["src/**/*.test.{ts,tsx}"]
     },

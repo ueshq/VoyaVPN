@@ -1,11 +1,8 @@
 import { useMemo, useSyncExternalStore } from "react";
 
-import {
-  i18next,
-  localeOptions,
-  type Locale,
-  type TranslationFunction,
-} from "./index";
+// `./core`, not `./index`: the hook is platform-free and must not drag the DOM
+// host into a React Native bundle.
+import { i18next, localeOptions, type Locale, type TranslationFunction } from "./core";
 
 function subscribe(listener: () => void) {
   i18next.on("languageChanged", listener);

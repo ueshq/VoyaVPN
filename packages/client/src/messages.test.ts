@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { changeLocale, i18next, localeOptions, type Locale, type TranslationFunction } from "@voya/i18n";
+import { changeLocale, i18next, type Locale, type TranslationFunction } from "@voya/i18n";
+import { localeOptions } from "@voya/i18n/core";
 
-import type { ImportLineIssue, LogCode, NoticeCode, SpeedtestOutcome, ValidationCode } from "@/ipc/bindings";
+import type { ImportLineIssue, LogCode, NoticeCode, SpeedtestOutcome, ValidationCode } from "@voya/contracts";
 import {
   CORE_FLOW_REASON_KEYS,
   IMPORT_LINE_KEYS,
@@ -16,7 +17,7 @@ import {
   noticeText,
   speedtestOutcomeText,
   validationText,
-} from "@voya/client/messages";
+} from "./messages";
 
 /**
  * The backend hands the frontend codes, not sentences. These tests are the

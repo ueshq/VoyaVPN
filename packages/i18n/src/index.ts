@@ -1,147 +1,44 @@
-import i18next from "i18next";
-
-import en from "./locales/en.json";
-
-// `nativeName` is each language's own name — locale-invariant data (never
-// translated), so a language picker stays readable whatever the current UI
-// language is.
-export const localeOptions = [
-  { code: "en", label: "EN", nativeName: "English" },
-  { code: "zh-Hans", label: "简", nativeName: "简体中文" },
-  { code: "zh-Hant", label: "繁", nativeName: "繁體中文" },
-] as const;
-
-export type Locale = (typeof localeOptions)[number]["code"];
-type LeafPaths<T> = {
-  [Key in keyof T & string]: T[Key] extends string
-    ? Key
-    : T[Key] extends Record<string, unknown>
-      ? `${Key}.${LeafPaths<T[Key]>}`
-      : never;
-}[keyof T & string];
-export type TranslationKey = LeafPaths<typeof en>;
-export type TranslationFunction = (key: TranslationKey, options?: Record<string, unknown>) => string;
-
-// localStorage key holding the chosen locale. `changeLocale` is the only writer.
-const storageKey = "voyavpn.locale";
+import { createI18nHost, LOCALE_STORAGE_KEY, type Locale } from "./core";
 
 /**
- * English ships with the entry: it is the fallback for every key and the
- * source of `TranslationKey`. The others load when first chosen, so a UI in
- * one language does not parse the other two at startup.
+ * The DOM host.
+ *
+ * Importing this module initialises i18next for a browser or webview: the
+ * choice persists in `localStorage`, detection reads `navigator.languages`, and
+ * applying a locale writes `<html lang>`. React Native imports `./native`
+ * instead; both sit on the same `./core`.
  */
-const lazyLocales: Record<Exclude<Locale, "en">, () => Promise<{ default: object }>> = {
-  "zh-Hans": () => import("./locales/zh-Hans.json"),
-  "zh-Hant": () => import("./locales/zh-Hant.json"),
-};
-
-async function loadLocale(locale: Locale) {
-  if (locale === "en" || i18next.hasResourceBundle(locale, "translation")) {
-    return;
-  }
-  const { default: translation } = await lazyLocales[locale]();
-  i18next.addResourceBundle(locale, "translation", translation);
-}
-
-export function isLocale(value: string | null | undefined): value is Locale {
-  return localeOptions.some((locale) => locale.code === value);
-}
-
-function readStoredLocale() {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-
-  return window.localStorage.getItem(storageKey);
-}
-
-function getBrowserLocale() {
-  if (typeof navigator === "undefined") {
-    return undefined;
-  }
-
-  const languages = navigator.languages.length > 0 ? navigator.languages : [navigator.language];
-
-  for (const language of languages) {
-    const normalized = language.toLowerCase();
-
-    if (normalized.startsWith("zh-hant") || ["zh-tw", "zh-hk", "zh-mo"].includes(normalized)) {
-      return "zh-Hant";
+const setup = createI18nHost({
+  readStoredLocale: () =>
+    typeof window === "undefined" ? undefined : window.localStorage.getItem(LOCALE_STORAGE_KEY),
+  persistLocale: (locale) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    }
+  },
+  deviceLanguages: () => {
+    if (typeof navigator === "undefined") {
+      return [];
     }
 
-    if (normalized.startsWith("zh")) {
-      return "zh-Hans";
+    return navigator.languages.length > 0 ? navigator.languages : [navigator.language];
+  },
+  applyLocale: (locale) => {
+    if (typeof document === "undefined") {
+      return;
     }
 
-    const baseLanguage = normalized.split("-")[0];
-
-    if (isLocale(baseLanguage)) {
-      return baseLanguage;
-    }
-  }
-
-  return "en";
-}
-
-export function getInitialLocale(): Locale {
-  const storedLocale = readStoredLocale();
-
-  if (isLocale(storedLocale)) {
-    return storedLocale;
-  }
-
-  return getBrowserLocale() ?? "en";
-}
-
-export function applyDocumentLocale(locale: Locale = getInitialLocale()) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  document.documentElement.lang = locale;
-  document.documentElement.dir = "ltr";
-}
-
-const initialLocale = getInitialLocale();
-
-void i18next.init({
-  resources: { en: { translation: en } },
-  lng: initialLocale,
-  fallbackLng: "en",
-  initAsync: false,
-  returnNull: false,
-  supportedLngs: localeOptions.map((locale) => locale.code),
-  interpolation: {
-    escapeValue: false,
+    document.documentElement.lang = locale;
+    document.documentElement.dir = "ltr";
   },
 });
 
-applyDocumentLocale(initialLocale);
+export const { getInitialLocale, changeLocale, localeReady } = setup;
 
-/**
- * Switch the UI language.
- *
- * `persist: false` previews a locale for the current session only — the Settings
- * surface needs that so an unsaved appearance edit never becomes the stored
- * preference. Without it a consumer has to re-declare this module's private
- * storage key and snapshot/restore localStorage around the call.
- */
-export async function changeLocale(locale: Locale, options?: { persist?: boolean }) {
-  if (options?.persist !== false && typeof window !== "undefined") {
-    window.localStorage.setItem(storageKey, locale);
-  }
+/** Writes the locale onto `<html>`; named for what it does on this platform. */
+export const applyDocumentLocale: (locale?: Locale) => void = setup.applyLocale;
 
-  await loadLocale(locale);
-  await i18next.changeLanguage(locale);
-  applyDocumentLocale(locale);
-}
-
-/**
- * Settles once the startup locale's resources are in place. The entry point
- * renders after it, so a Chinese UI never flashes English first; a failed
- * load leaves the English fallback.
- */
-export const localeReady: Promise<void> =
-  initialLocale === "en" ? Promise.resolve() : changeLocale(initialLocale, { persist: false });
-
-export { i18next };
+// `localeOptions` is not re-exported: components read it from `useI18n()`,
+// and anything outside React takes it from `@voya/i18n/core`.
+export { i18next, isLocale } from "./core";
+export type { Locale, TranslationFunction, TranslationKey } from "./core";
