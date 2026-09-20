@@ -16,6 +16,10 @@ for (const layout of ["macos", "windows"] as const) {
       "data-window-chrome",
       layout,
     );
+    // The document never scrolls or rubber-bands; only feature viewports do.
+    const root = page.locator("html");
+    await expect(root).toHaveCSS("overflow-y", "hidden");
+    await expect(root).toHaveCSS("overscroll-behavior-y", "none");
     // The primary Home action offers adding a node until one exists.
     await expect(page.getByTestId("home-connect-button")).toBeVisible();
     expect(await sidebar.boundingBox()).toMatchObject({
@@ -103,6 +107,11 @@ for (const layout of ["macos", "windows"] as const) {
       const heading = panel.locator('[data-slot="page-title"]');
       await expect(heading).toBeVisible();
       const top = layout === "macos" ? 0 : 40;
+      expect((await heading.boundingBox())!.y).toBe(top);
+      // A wheel over the page never moves the document, overflowing or not.
+      await panel.hover();
+      await page.mouse.wheel(0, 400);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
       expect((await heading.boundingBox())!.y).toBe(top);
       await expect(panel).toHaveCSS("padding-top", `${top}px`);
       const title = (await heading.getByRole("heading", { level: 1 }).boundingBox())!;

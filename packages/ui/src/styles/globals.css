@@ -431,7 +431,8 @@ html.voyavpn-acrylic.dark body {
   }
 
   html {
-    @apply overflow-x-hidden;
+    /* The shell owns the viewport; only feature viewports scroll. */
+    @apply overflow-hidden overscroll-none;
   }
 
   html,
@@ -441,7 +442,7 @@ html.voyavpn-acrylic.dark body {
   }
 
   body {
-    @apply min-h-svh w-full bg-background text-foreground;
+    @apply min-h-svh w-full overscroll-none bg-background text-foreground;
     font-family:
       -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC",
       "Hiragino Sans GB", "Microsoft YaHei", Helvetica, Arial, sans-serif,
