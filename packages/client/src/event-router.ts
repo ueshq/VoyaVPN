@@ -7,7 +7,7 @@ import type {
   ShellTabTarget,
   TransientStreamEvent,
 } from "@voya/contracts";
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { noticeText } from "./messages";

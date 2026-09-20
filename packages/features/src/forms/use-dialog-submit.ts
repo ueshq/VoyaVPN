@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { appErrorOfKind } from "@voya/client/errors";
 import { validationFieldErrors } from "@voya/client/messages";

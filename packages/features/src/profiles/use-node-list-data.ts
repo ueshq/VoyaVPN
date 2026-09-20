@@ -4,7 +4,7 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { queryKeys } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import type { ProfileSummaryEntry, SpeedtestResult } from "@voya/contracts";
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import { metadataBySubscriptionId } from "../subscriptions/subscription-usage";
 import { nodeListRows, nodeSearchText } from "./node-list-rows";
 

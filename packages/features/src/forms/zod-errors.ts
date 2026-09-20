@@ -1,6 +1,6 @@
 import type { ZodError } from "zod";
 
-import { i18next, type TranslationFunction, type TranslationKey } from "@voya/i18n";
+import { i18next, type TranslationFunction, type TranslationKey } from "@voya/i18n/core";
 
 /**
  * Field path → translation key for a rejected form value.

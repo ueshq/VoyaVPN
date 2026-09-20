@@ -2,6 +2,8 @@ import { setClientStorage, setSystemColorSchemeReader } from "@voya/client/platf
 import { createNativeI18n } from "@voya/i18n/native";
 import { Appearance } from "react-native";
 
+import { registerMobileBackend } from "~/ipc/platform";
+
 import { deviceLanguages } from "./locale";
 import { clientStorageAdapter, storage } from "./storage";
 
@@ -13,13 +15,13 @@ import { clientStorageAdapter, storage } from "./storage";
  * module is evaluated, so registering later would let them start from the
  * in-memory fallback and then silently disagree with what is on disk.
  *
- * The desktop equivalent is `apps/desktop/src/platform-boot.ts`. The command
- * surface is not registered here yet — that arrives with the native module in a
- * later phase; until then nothing in this app calls a backend command.
+ * The desktop equivalent is `apps/desktop/src/platform-boot.ts`.
  */
 setClientStorage(clientStorageAdapter);
 
 setSystemColorSchemeReader(() => (Appearance.getColorScheme() === "dark" ? "dark" : "light"));
+
+registerMobileBackend();
 
 // MMKV's `getString`/`set` are already the shape the i18n host asks for.
 const i18n = createNativeI18n({ storage, deviceLanguages });

@@ -3,7 +3,7 @@ import { clipboard } from "@voya/client/platform";
 import { voyaCommands } from "@voya/client/transport";
 import { importLineText } from "@voya/client/messages";
 import type { ImportProfilesResult, QrScanFailureReason } from "@voya/contracts";
-import type { TranslationFunction, TranslationKey } from "@voya/i18n";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import type { DirectImportMethod } from "./import-methods";

@@ -6,8 +6,10 @@ import { Suspense, use } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { EventBridge } from "~/ipc/event-bridge";
 import { localeReady } from "~/native/platform-boot";
 
+import { navigationRef } from "./navigation";
 import { createMobileQueryClient } from "./query-client";
 import type { ShellTab } from "./tabs";
 import { SHELL_TABS } from "./tabs";
@@ -47,7 +49,8 @@ function Shell() {
   const scheme = useTheme();
 
   return (
-    <NavigationContainer theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
+    <NavigationContainer ref={navigationRef} theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
+      <EventBridge />
       <Tab.Navigator>
         {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => (
           <Tab.Screen key={tab} name={tab} options={{ title: t(SHELL_TABS[tab].titleKey) }}>

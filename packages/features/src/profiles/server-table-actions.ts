@@ -1,6 +1,6 @@
 import type { ImportProfilesResult, ProfileKind } from "@voya/contracts";
 import { CONFIG_TYPES } from "./profile-constants";
-import type { TranslationFunction as TranslateFn } from "@voya/i18n";
+import type { TranslationFunction as TranslateFn } from "@voya/i18n/core";
 
 export type ProfileExportDestination = "clipboard" | "qr";
 

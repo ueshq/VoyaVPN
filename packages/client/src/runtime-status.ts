@@ -1,4 +1,4 @@
-import type { TranslationFunction, TranslationKey } from "@voya/i18n";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
 import { useRuntimeEventStore } from "./runtime-event-store";
 import { toastError } from "./toast-store";
 import { beginRuntimeRead, type RuntimeChannel } from "./runtime-state-version";

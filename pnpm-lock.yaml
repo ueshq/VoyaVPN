@@ -228,9 +228,15 @@ importers:
       '@voya/client':
         specifier: workspace:*
         version: link:../../packages/client
+      '@voya/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@voya/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@voya/utils':
+        specifier: workspace:*
+        version: link:../../packages/utils
       react:
         specifier: 'catalog:'
         version: 19.2.6

@@ -1,5 +1,5 @@
 import type { MoveAction, ProfileKind } from "@voya/contracts";
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 
 export const CONFIG_TYPES = {
   VMess: "vmess",

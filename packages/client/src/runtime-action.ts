@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 
 import type { PolicyGroupListing, RuntimeStatusResponse } from "@voya/contracts";
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { appErrorOfKind } from "./errors";
 import { useModalStore, type MissingCorePayload } from "./modal-store";

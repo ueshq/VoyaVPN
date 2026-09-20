@@ -1,4 +1,4 @@
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import type { ProfileSummaryEntry, ProfileTransport } from "@voya/contracts";
 import { speedtestOutcomeText } from "@voya/client/messages";
 import { formatDelay } from "@voya/utils/formatting";

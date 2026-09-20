@@ -1,4 +1,4 @@
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import type { TunStatus } from "@voya/contracts";
 
 /** The tunnel backend, its state and, when known, what went wrong, as one line. */

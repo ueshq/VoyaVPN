@@ -1,4 +1,4 @@
-import type { TranslationKey } from "@voya/i18n";
+import type { TranslationKey } from "@voya/i18n/core";
 import type { PolicyGroupStrategy } from "@voya/contracts";
 
 /** Offered in this order: automatic choices first, manual selection last. */

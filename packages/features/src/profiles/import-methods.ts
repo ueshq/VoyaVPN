@@ -1,4 +1,4 @@
-import type { TranslationKey } from "@voya/i18n";
+import type { TranslationKey } from "@voya/i18n/core";
 
 // Pasting links comes first: it takes share links and subscription URLs alike,
 // which is how most nodes arrive.
