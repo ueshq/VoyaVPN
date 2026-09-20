@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { listPolicyGroups, listProfileSummaries } from "@/ipc/commands";
-import { coreStateOf, runningProfileId, useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { coreStateOf, runningProfileId, useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { TunStatus } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { usePolicyGroupRuntime } from "@/features/profiles/use-policy-group-runtime";
 
 import {

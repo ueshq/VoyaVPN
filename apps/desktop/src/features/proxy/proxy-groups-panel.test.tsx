@@ -5,9 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 import type { PolicyGroupEntry, RuntimeStatusResponse } from "@/ipc/bindings";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 
 import { ProxyGroupsPanel } from "./proxy-groups-panel";
 

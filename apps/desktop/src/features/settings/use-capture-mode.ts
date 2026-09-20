@@ -10,9 +10,9 @@ import {
 } from "@/components/app-shell/tun-provider-text";
 import type { ConnectionMode } from "@/ipc/bindings";
 import { setConnectionMode, tunRequestElevation, tunStatus } from "@/ipc/commands";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { refreshRuntimeStatusAndReport } from "@/ipc/runtime-status";
-import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
 /**
  * How traffic is captured on Windows and Linux: the platform VPN or the system

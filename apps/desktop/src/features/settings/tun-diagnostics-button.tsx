@@ -8,7 +8,7 @@ import { tunProviderDiagnostics } from "@/ipc/commands";
 import type { TunProviderDiagnostics } from "@/ipc/bindings";
 import { writeClipboard } from "@/lib/clipboard";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
-import { toastError, useToastStore } from "@/stores/toast-store";
+import { toastError, useToastStore } from "@voya/client/toast-store";
 
 /**
  * Copies a structured TUN provider diagnostics report to the clipboard. Moved

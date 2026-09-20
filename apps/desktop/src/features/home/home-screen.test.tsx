@@ -13,9 +13,9 @@ import type {
   TunStatus,
 } from "@/ipc/bindings";
 import { IpcCommandError } from "@/ipc/commands";
-import { useModalStore } from "@/stores/modal-store";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useToastStore } from "@/stores/toast-store";
+import { useModalStore } from "@voya/client/modal-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useToastStore } from "@voya/client/toast-store";
 import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import { makeProfileFixture } from "@/test/profile-fixture";
 
@@ -149,8 +149,8 @@ vi.mock("@/ipc/commands", async (importOriginal) => {
     tunStatus: ipcMock.tunStatus,
   };
 });
-vi.mock("@/ipc/runtime-event-store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/ipc/runtime-event-store")>()),
+vi.mock("@voya/client/runtime-event-store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@voya/client/runtime-event-store")>()),
   useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
 }));
 

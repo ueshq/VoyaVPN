@@ -1,6 +1,6 @@
 import type { TranslationFunction } from "@voya/i18n";
 import type { ProfileSummaryEntry, ProfileTransport } from "@/ipc/bindings";
-import { speedtestOutcomeText } from "@/ipc/messages";
+import { speedtestOutcomeText } from "@voya/client/messages";
 import { formatDelay } from "@voya/utils/formatting";
 
 export function profileLatency(item: ProfileSummaryEntry, t: TranslationFunction) {

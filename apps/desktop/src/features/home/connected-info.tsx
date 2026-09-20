@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { formatClock, formatDelay } from "@voya/utils/formatting";
 
 import type { TranslationFunction } from "@voya/i18n";

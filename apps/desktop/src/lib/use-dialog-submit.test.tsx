@@ -9,7 +9,7 @@ vi.mock("@/ipc/commands", () => ({
   appErrorOfKind: (error: unknown, type: string) =>
     (error as { kind?: { type?: string } }).kind?.type === type ? error : null,
 }));
-vi.mock("@/ipc/messages", () => ({
+vi.mock("@voya/client/messages", () => ({
   validationFieldErrors: (_t: TranslationFunction, issues: { field: string }[]) =>
     Object.fromEntries(issues.map((issue) => [issue.field, "invalid"])),
 }));

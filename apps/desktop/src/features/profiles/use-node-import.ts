@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { importProfilesFromText, readClipboardText, scanScreenQr } from "@/ipc/commands";
-import { importLineText } from "@/ipc/messages";
+import { importLineText } from "@voya/client/messages";
 import type { ImportProfilesResult, QrScanFailureReason } from "@/ipc/bindings";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";

@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { checkConnectionIp, loadAppSettings } from "@/ipc/commands";
-import { connectionIpQueryKey, queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { connectionIpQueryKey, queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 /**
  * The exit address of the running connection. The query key follows the

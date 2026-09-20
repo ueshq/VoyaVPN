@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 
 import { createAppQueryClient } from "./query-client";
 

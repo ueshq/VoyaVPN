@@ -21,7 +21,7 @@ import { cn } from "@voya/ui/lib/utils";
 import { ShareQrImage } from "@/features/profiles/share-qr-dialog";
 import type { SelfHostShareLink, SelfHostState } from "@/ipc/bindings";
 import { writeClipboard } from "@/lib/clipboard";
-import { toastError } from "@/stores/toast-store";
+import { toastError } from "@voya/client/toast-store";
 
 import { ADDRESS_KIND_KEYS } from "./self-host-labels";
 import type { SelfHostController } from "./use-self-host";

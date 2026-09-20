@@ -13,10 +13,10 @@ import { afterEach, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { useNodeListStore } from "@/stores/node-list-store";
+import { useNodeListStore } from "@voya/client/node-list-store";
 
 import { IpcCommandError } from "@/ipc/commands";
-import { useModalStore } from "@/stores/modal-store";
+import { useModalStore } from "@voya/client/modal-store";
 import type {
   ImportProfilesResult,
   Profile,
@@ -26,9 +26,9 @@ import type {
   SpeedtestResult,
   TunStatus,
 } from "@/ipc/bindings";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useToastStore } from "@/stores/toast-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useToastStore } from "@voya/client/toast-store";
 import { makeProfileDetailsFixture, toProfileSummaryEntry } from "@/test/profile-fixture";
 
 import { MOVE_ACTIONS } from "./profile-constants";

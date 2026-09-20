@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TunProviderDiagnostics } from "@/ipc/bindings";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
 

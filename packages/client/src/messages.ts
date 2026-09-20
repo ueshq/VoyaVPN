@@ -9,7 +9,7 @@ import type {
   ValidationCode,
   ValidationIssue,
   ValidationScope,
-} from "@/ipc/bindings";
+} from "@voya/contracts";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 
 /**

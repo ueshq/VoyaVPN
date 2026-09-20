@@ -21,11 +21,11 @@ import { Skeleton } from "@voya/ui/components/skeleton";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { isTauriRuntime } from "@/ipc/window";
 import { useDocumentVisible } from "@/lib/use-document-visible";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
-import { toastError } from "@/stores/toast-store";
+import { toastError } from "@voya/client/toast-store";
 
 const HomeScreen = lazy(() =>
   import("@/features/home/home-screen").then(({ HomeScreen }) => ({ default: HomeScreen })),

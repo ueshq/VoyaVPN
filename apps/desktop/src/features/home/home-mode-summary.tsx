@@ -4,10 +4,10 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { Button } from "@voya/ui/components/button";
 import { getSettingsApplyStatus } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useSavedTrafficMode } from "@/features/routing/use-traffic-mode";
 
 /** Capture uses runtime evidence. Routing is explicitly a saved setting: IPC has no live read. */

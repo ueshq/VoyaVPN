@@ -12,8 +12,8 @@ import type {
   SystemProxyStatusResponse,
   TransientStreamEvent,
   TunStatus,
-} from "@/ipc/bindings";
-import { speedtestStatus } from "@/ipc/commands";
+} from "@voya/contracts";
+import { voyaCommands } from "./transport";
 import { isRecord } from "@voya/utils/guards";
 import { markRuntimeUpdate } from "./runtime-state-version";
 
@@ -267,7 +267,7 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     });
   },
   refreshSpeedtestStatus: async () => {
-    const status = await speedtestStatus();
+    const status = await voyaCommands().speedtestStatus();
     set({ speedtestRunning: status.running });
   },
   setProxyConnections: (proxyConnections) => {
@@ -420,9 +420,11 @@ function isNullableNonnegativeFinite(value: unknown): boolean {
 }
 
 function scheduleFrame(callback: () => void): CancelFrame {
-  if (typeof window !== "undefined" && window.requestAnimationFrame) {
-    const frame = window.requestAnimationFrame(callback);
-    return () => window.cancelAnimationFrame(frame);
+  // A global in both the DOM and React Native, so no platform seam is needed;
+  // the timer fallback covers a host without a frame loop, such as a test run.
+  if (typeof globalThis.requestAnimationFrame === "function") {
+    const frame = globalThis.requestAnimationFrame(callback);
+    return () => globalThis.cancelAnimationFrame(frame);
   }
 
   const timer = setTimeout(callback, 16);

@@ -1,9 +1,10 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import type { ThemeMode } from "@/ipc/bindings";
+import type { ThemeMode } from "@voya/contracts";
 
 import { mergeValidated } from "./persisted";
+import { clientStorage, systemColorScheme } from "./platform";
 
 /** Every mode the backend knows; a new one fails the typecheck here. */
 const THEME_MODES = { dark: true, light: true, system: true } satisfies Record<ThemeMode, true>;
@@ -51,7 +52,7 @@ export const usePreferencesStore = create<PreferencesState>()(
           : {}),
         ...(isThemeMode(themeMode) ? { themeMode } : {}),
       })),
-      storage: createJSONStorage(() => window.localStorage),
+      storage: createJSONStorage(() => clientStorage()),
     },
   ),
 );
@@ -61,11 +62,9 @@ export function resolveThemeMode(themeMode: ThemeMode) {
     return themeMode;
   }
 
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-    return "light";
-  }
-
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // Which OS preference `system` resolves to is a platform fact: the desktop
+  // shell reads `matchMedia`, React Native reads `Appearance`.
+  return systemColorScheme();
 }
 
 export function isThemeMode(value: unknown): value is ThemeMode {

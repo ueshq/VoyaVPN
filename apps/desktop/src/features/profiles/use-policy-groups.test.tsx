@@ -9,10 +9,10 @@ import type {
   ProfileSummaryListing,
   RuntimeStatusResponse,
 } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useToastStore } from "@/stores/toast-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useToastStore } from "@voya/client/toast-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 import { renderHookWithQuery } from "@/test/render";
 

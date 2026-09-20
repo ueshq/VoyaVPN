@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { RuntimeStatusResponse } from "@/ipc/bindings";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 
 import { ExitIpMetric } from "./exit-ip-metric";

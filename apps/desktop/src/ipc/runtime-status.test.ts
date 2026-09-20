@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { i18next } from "@voya/i18n";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 import type { RuntimeStatusResponse, SystemProxyStatusResponse, TunStatus } from "./bindings";
-import { useRuntimeEventStore } from "./runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { refreshRuntimeStatus, refreshRuntimeStatusAndReport } from "./runtime-status";
 
 const commands = vi.hoisted(() => ({ runtimeStatus: vi.fn(), systemProxyStatus: vi.fn(), tunStatus: vi.fn() }));

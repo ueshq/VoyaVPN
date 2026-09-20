@@ -1,28 +1,12 @@
+import type { CommandResult } from "@voya/client/errors";
+import { unwrapCommandResult } from "@voya/client/errors";
+
 import { commands } from "@/ipc/bindings";
-import type { AppError, AppErrorKind } from "@/ipc/bindings";
 
-type CommandResult<T> =
-  { status: "ok"; data: T } | { status: "error"; error: AppError };
-
-export class IpcCommandError extends Error {
-  readonly appError: AppError;
-
-  constructor(appError: AppError) {
-    super(appError.message);
-    this.appError = appError;
-    this.name = "IpcCommandError";
-  }
-}
-
-/** A rejected command's backend error when it is of the given kind, otherwise `null`. */
-export function appErrorOfKind<Type extends AppErrorKind["type"]>(
-  error: unknown,
-  type: Type,
-): (AppError & { kind: Extract<AppErrorKind, { type: Type }> }) | null {
-  return error instanceof IpcCommandError && error.appError.kind.type === type
-    ? (error.appError as AppError & { kind: Extract<AppErrorKind, { type: Type }> })
-    : null;
-}
+// The error type and the `appErrorOfKind` guard are transport-agnostic and live
+// in @voya/client; they are re-exported here so features keep importing their
+// IPC vocabulary from one place.
+export { appErrorOfKind, IpcCommandError } from "@voya/client/errors";
 
 export const loadUiPreferences = wrapCommand(commands.loadUiPreferences);
 
@@ -62,6 +46,16 @@ export const systemProxyStatus = wrapCommand(commands.systemProxyStatus);
 export const tunStatus = wrapCommand(commands.tunStatus);
 
 export const tunProviderDiagnostics = wrapCommand(commands.tunProviderDiagnostics);
+
+/**
+ * The tunnel toggle.
+ *
+ * The UI changes the tunnel through `setConnectionMode` instead, so nothing
+ * calls this today; it is wrapped because this module is the desktop's
+ * implementation of the whole `VoyaCommands` contract, not a list of the calls
+ * the current screens happen to make.
+ */
+export const setTunEnabled = wrapCommand(commands.setTunEnabled);
 
 export const tunRequestElevation = wrapCommand(commands.tunRequestElevation);
 
@@ -123,6 +117,14 @@ export const listProcessCandidates = wrapCommand(commands.listProcessCandidates)
 
 export const listRoutings = wrapCommand(commands.listRoutings);
 
+// Routing sets are seeded by the backend and edited rule by rule, so the app
+// never creates, deletes or switches one; wrapped for contract completeness.
+export const saveRouting = wrapCommand(commands.saveRouting);
+
+export const deleteRoutings = wrapCommand(commands.deleteRoutings);
+
+export const setActiveRouting = wrapCommand(commands.setActiveRouting);
+
 export const saveRoutingRule = wrapCommand(commands.saveRoutingRule);
 
 export const deleteRoutingRules = wrapCommand(commands.deleteRoutingRules);
@@ -178,12 +180,4 @@ function wrapCommand<Args extends unknown[], T>(
   command: (...args: Args) => Promise<CommandResult<T>>,
 ) {
   return async (...args: Args): Promise<T> => unwrapCommandResult(await command(...args));
-}
-
-function unwrapCommandResult<T>(result: CommandResult<T>): T {
-  if (result.status === "error") {
-    throw new IpcCommandError(result.error);
-  }
-
-  return result.data;
 }

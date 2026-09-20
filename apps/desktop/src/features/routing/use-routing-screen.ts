@@ -17,8 +17,8 @@ import type {
   Routing_Serialize,
   ValidationIssue,
 } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
-import { toastError } from "@/stores/toast-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { toastError } from "@voya/client/toast-store";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 

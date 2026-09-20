@@ -7,9 +7,9 @@ import { createAppQueryClient } from "@/components/app-shell/query-client";
 import { renderWithQuery } from "@/test/render";
 import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import type { AppSettingsV1, CoreState, TrafficModeResponse } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
-import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useToastStore } from "@/stores/toast-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useToastStore } from "@voya/client/toast-store";
 
 import { TrafficModeBanner } from "./traffic-mode-banner";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
@@ -23,7 +23,7 @@ vi.mock("@/ipc/commands", () => ({
   loadAppSettings: mocks.load,
   proxySetTrafficMode: mocks.save,
 }));
-vi.mock("@/ipc/runtime-event-store", () => ({
+vi.mock("@voya/client/runtime-event-store", () => ({
   useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) => select({ coreState: { state: mocks.state } }),
   coreStateOf: (coreState: { state: CoreState } | null) => coreState?.state ?? "disconnected",
 }));

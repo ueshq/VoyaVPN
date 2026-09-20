@@ -1,8 +1,8 @@
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { runtimeStatus, systemProxyStatus, tunStatus } from "@/ipc/commands";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { toastError } from "@/stores/toast-store";
-import { beginRuntimeRead, type RuntimeChannel } from "./runtime-state-version";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { toastError } from "@voya/client/toast-store";
+import { beginRuntimeRead, type RuntimeChannel } from "@voya/client/runtime-state-version";
 
 const runtimeStatusErrorKeys = {
   coreState: "status.runtimeStatusFailed",

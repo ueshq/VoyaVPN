@@ -2,7 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, expect, it, vi } from "vitest";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { SettingsApplyStatus } from "./settings-apply-status";
 const ipc = vi.hoisted(() => ({
   getSettingsApplyStatus: vi.fn(),

@@ -35,16 +35,16 @@ import { useI18n } from "@voya/i18n/use-i18n";
 
 import { formatTimeOfDay } from "@voya/utils/formatting";
 import { exportLogs } from "@/ipc/commands";
-import { logLineText } from "@/ipc/messages";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import type { StoredLogLine } from "@/ipc/runtime-event-store";
+import { logLineText } from "@voya/client/messages";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import type { StoredLogLine } from "@voya/client/runtime-event-store";
 import type { LogLevel } from "@/ipc/bindings";
 import { restoreFocus } from "@voya/ui/lib/focus";
 import { cn } from "@voya/ui/lib/utils";
 import { PageHeader } from "@/components/app-shell/page-section";
 import { writeClipboard } from "@/lib/clipboard";
 import { firstPaintVirtualItems } from "@/lib/virtual-list";
-import { toastError, useToastStore } from "@/stores/toast-store";
+import { toastError, useToastStore } from "@voya/client/toast-store";
 
 import { useLogStream } from "./use-log-stream";
 

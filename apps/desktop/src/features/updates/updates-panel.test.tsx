@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { saveQueue } from "@/lib/save-queue";
 import { UpdatesPanel } from "@/features/updates/updates-panel";
-import { usePreferencesStore } from "@/stores/preferences-store";
+import { usePreferencesStore } from "@voya/client/preferences-store";
 import { changeLocale } from "@voya/i18n";
 import type { AppUpdaterStatus, ResourceUpdateFile } from "@/ipc/bindings";
 

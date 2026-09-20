@@ -8,8 +8,8 @@ import { EmptyState } from "@voya/ui/components/empty-state";
 import { Spinner } from "@voya/ui/components/spinner";
 import { formatDelay } from "@voya/utils/formatting";
 import { listPolicyGroups, selectPolicyGroupMember } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
 import { PolicyGroupMemberChip } from "@/features/profiles/policy-group-member-chip";
 import { profileMemberName } from "@/features/profiles/profile-display";
@@ -19,7 +19,7 @@ import {
   usePolicyGroupRuntime,
 } from "@/features/profiles/use-policy-group-runtime";
 import { useShellStore } from "@/stores/shell-store";
-import { toastError } from "@/stores/toast-store";
+import { toastError } from "@voya/client/toast-store";
 
 /**
  * The running policy group as the core sees it: the member traffic goes

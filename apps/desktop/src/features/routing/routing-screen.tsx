@@ -19,7 +19,7 @@ import {
   PageSurface,
   PageTitle,
 } from "@/components/app-shell/page-section";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { PerAppProxyDialog } from "./per-app-proxy-dialog";
 import { PerAppSummaryCard } from "./per-app-summary-card";

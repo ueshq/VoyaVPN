@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProfileSummaryEntry, RoutingRule, Routing_Serialize, ValidationIssue } from "@/ipc/bindings";
 import { IpcCommandError } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
-import { useToastStore } from "@/stores/toast-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useToastStore } from "@voya/client/toast-store";
 
 import { useRoutingScreen } from "./use-routing-screen";
 

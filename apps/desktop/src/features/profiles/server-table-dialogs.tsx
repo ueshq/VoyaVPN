@@ -1,7 +1,7 @@
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import { restoreFocus } from "@voya/ui/lib/focus";
 import { SubscriptionsDialog } from "@/features/subscriptions/subscriptions-dialog";
-import { runningProfileId, useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { runningProfileId, useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
 import { ProfileDetailsDialog } from "./profile-details-dialog";

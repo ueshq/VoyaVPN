@@ -10,10 +10,10 @@ import {
   selectPolicyGroupMember,
   setActivePolicyGroup,
 } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useToastStore } from "@/stores/toast-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useToastStore } from "@voya/client/toast-store";
 import { activateSelection } from "@/stores/runtime-action";
 
 import { profileMemberName } from "./profile-display";

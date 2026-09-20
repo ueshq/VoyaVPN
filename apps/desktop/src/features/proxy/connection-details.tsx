@@ -15,7 +15,7 @@ import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { listRoutings } from "@/ipc/commands";
 import type { ProxyConnectionItem } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { outboundLabelKey } from "@/features/routing/rule-outbound";
 import { connectionBytes } from "./connection-display";
 import { connectionRuleText } from "./connection-rule";

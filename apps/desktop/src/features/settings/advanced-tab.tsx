@@ -4,7 +4,7 @@ import { Disclosure } from "@voya/ui/components/disclosure";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { LogsPanel, type LogFilter } from "@/features/logs/logs-panel";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { useShellStore } from "@/stores/shell-store";
 import { CoreTab } from "./core-tab";

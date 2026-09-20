@@ -13,7 +13,7 @@ import {
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { connectActiveProfile, installCoreSeed } from "@/ipc/commands";
-import { useModalStore } from "@/stores/modal-store";
+import { useModalStore } from "@voya/client/modal-store";
 import { getErrorMessage } from "@voya/utils/error";
 
 export function ModalHost() {

@@ -14,6 +14,9 @@ const localesDir = resolve(repoRoot, "packages/i18n/src/locales");
 const productionSourceDirs = [
   resolve(repoRoot, "apps/desktop/src"),
   resolve(repoRoot, "packages/ui/src"),
+  // The shared client owns `messages.ts`, the only place a backend code becomes
+  // a translation key, so its keys would read as unused without this entry.
+  resolve(repoRoot, "packages/client/src"),
 ];
 const localeCodes = ["en", "zh-Hans", "zh-Hant"];
 

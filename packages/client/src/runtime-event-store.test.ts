@@ -1,18 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const ipcCommandMocks = vi.hoisted(() => ({
-  speedtestStatus: vi.fn(),
-}));
-
-vi.mock("@/ipc/commands", () => ipcCommandMocks);
-
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
 import type {
   ProxyConnectionsSnapshot,
   RuntimeStatusResponse,
   SpeedtestResult,
   StatisticsSnapshot,
-} from "@/ipc/bindings";
+  VoyaCommands,
+} from "@voya/contracts";
+
+import { useRuntimeEventStore } from "./runtime-event-store";
+import { setVoyaCommands } from "./transport";
+
+// The store reaches the backend through the registered command surface, so the
+// test registers a stub platform rather than mocking a transport module.
+const ipcCommandMocks = {
+  speedtestStatus: vi.fn(),
+};
+
+setVoyaCommands(ipcCommandMocks as unknown as VoyaCommands);
 
 const initialMonitorStatus = {
   message: null,

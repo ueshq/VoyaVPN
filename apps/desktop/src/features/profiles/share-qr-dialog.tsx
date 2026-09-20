@@ -19,7 +19,7 @@ import { Textarea } from "@voya/ui/components/textarea";
 import { cn } from "@voya/ui/lib/utils";
 import { getErrorMessage } from "@voya/utils/error";
 import { generateQrCode } from "@/ipc/commands";
-import { profileShareQrQueryKey } from "@/ipc/query-keys";
+import { profileShareQrQueryKey } from "@voya/client/query-keys";
 
 type ShareQrDialogProps = {
   content: string;

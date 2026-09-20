@@ -14,8 +14,8 @@ import {
 } from "@voya/ui/components/dialog";
 import { formatBytes } from "@voya/utils/formatting";
 import { getProfile } from "@/ipc/commands";
-import { profileDetailsQueryKey } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { profileDetailsQueryKey } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { ProfileSummaryEntry } from "@/ipc/bindings";
 
 import { getProtocolLabel } from "./profile-constants";

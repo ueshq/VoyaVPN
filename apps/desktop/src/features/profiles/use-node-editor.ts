@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { restoreFocus } from "@voya/ui/lib/focus";
 import { deleteProfiles, getProfile, listProfileSummaries, saveProfile } from "@/ipc/commands";
 import type { ImportProfilesResult, Profile } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { useProfileActivation } from "@/stores/runtime-action";
 import { formatImportSummary } from "./server-table-actions";
 import type { DialogImportMethod } from "./import-methods";

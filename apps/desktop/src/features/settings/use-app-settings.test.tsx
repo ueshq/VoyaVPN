@@ -2,10 +2,10 @@ import { act, cleanup, waitFor } from "@testing-library/react";
 import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import type { AppSettingsV1 } from "@/ipc/bindings";
-import { usePreferencesStore } from "@/stores/preferences-store";
-import { useToastStore } from "@/stores/toast-store";
+import { usePreferencesStore } from "@voya/client/preferences-store";
+import { useToastStore } from "@voya/client/toast-store";
 import { useDnsSettings } from "@/features/dns/use-dns-settings";
 import {
   deferred,

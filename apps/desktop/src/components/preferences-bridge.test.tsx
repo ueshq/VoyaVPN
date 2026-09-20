@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PreferencesBridge } from "@/components/preferences-bridge";
 import { changeLocale } from "@voya/i18n";
-import { queryKeys } from "@/ipc/query-keys";
-import { usePreferencesStore } from "@/stores/preferences-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { usePreferencesStore } from "@voya/client/preferences-store";
 
 const preferencesMocks = vi.hoisted(() => ({
   loadUiPreferences: vi.fn(),

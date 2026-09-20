@@ -1,0 +1,29 @@
+{
+  "name": "@voya/client",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --pretty false",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@voya/contracts": "workspace:*",
+    "@voya/i18n": "workspace:*",
+    "@voya/utils": "workspace:*",
+    "zustand": "^5.0.14"
+  },
+  "peerDependencies": {
+    "react": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -1,4 +1,4 @@
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 /**
  * Whether rules can match traffic by app. The macOS NetworkExtension tunnel

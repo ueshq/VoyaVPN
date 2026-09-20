@@ -11,9 +11,9 @@ import {
 } from "@/features/updates/app-update-flow";
 import { appUpdateStatus, updateGeoAssets, updateSrsAssets } from "@/ipc/commands";
 import type { AppUpdaterStatus, ResourceUpdateFile } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { relaunch } from "@/ipc/tauri-plugins";
-import { usePreferencesStore } from "@/stores/preferences-store";
+import { usePreferencesStore } from "@voya/client/preferences-store";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";

@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { TranslationFunction } from "@voya/i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { appErrorOfKind } from "@/ipc/commands";
-import { validationFieldErrors } from "@/ipc/messages";
+import { validationFieldErrors } from "@voya/client/messages";
 
 /**
  * The pending flag and failure of a dialog's save. `submit` clears the last

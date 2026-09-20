@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { InvalidationScope } from "@/ipc/bindings";
+import type { InvalidationScope } from "@voya/contracts";
 import {
   connectionIpQueryKey,
   invalidationQueryKey,
   profileDetailsQueryKey,
   profileShareQrQueryKey,
   queryKeys,
-} from "@/ipc/query-keys";
+} from "@voya/client/query-keys";
 
 /**
  * The gate that stops the invalidation contract drifting again.
@@ -22,7 +22,8 @@ import {
  *
  * 1. the scope variants come out of the *generated* `bindings.ts`, so a new
  *    Rust variant shows up here without anyone updating a fixture;
- * 2. the subscribed keys come out of every `useQuery` in `apps/desktop/src`.
+ * 2. the subscribed keys come out of every `useQuery` in `apps/desktop/src`,
+ *    checked against the registry in `@voya/client`.
  *
  * It then asserts the two agree, and that no `queryKey` anywhere is written as
  * a literal instead of coming from the registry.
@@ -138,7 +139,7 @@ describe("query key registry", () => {
 
     // Every `useQuery` takes its key from the registry, so these roots are the
     // complete set of caches the app really reads.
-    expect(unresolved, "useQuery keys not built from @/ipc/query-keys").toEqual([]);
+    expect(unresolved, "useQuery keys not built from @voya/client/query-keys").toEqual([]);
     expect(subscribed.size).toBeGreaterThan(0);
 
     const orphaned = invalidationScopeKinds().filter((kind) => {
@@ -150,15 +151,15 @@ describe("query key registry", () => {
   });
 
   it("never writes a query key as a literal outside the registry", () => {
-    const literals = productionSources
-      .filter(([path]) => path !== "./query-keys.ts")
-      .flatMap(([path, source]) =>
-        queryKeyExpressions(source)
-          .filter((expression) => expression.startsWith("["))
-          .map((expression) => `${path}: ${expression}`),
-      );
+    // The registry itself lives in @voya/client, outside this glob, so every
+    // literal found here is a bypass.
+    const literals = productionSources.flatMap(([path, source]) =>
+      queryKeyExpressions(source)
+        .filter((expression) => expression.startsWith("["))
+        .map((expression) => `${path}: ${expression}`),
+    );
 
-    expect(literals, "queryKey literals that bypass @/ipc/query-keys").toEqual([]);
+    expect(literals, "queryKey literals that bypass @voya/client/query-keys").toEqual([]);
   });
 
   it("builds every nested key on top of its registry root", () => {

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { AppSettingsV1, AppearanceSettings, TunStatus } from "@/ipc/bindings";
 
 import { makeAppSettings } from "./app-settings.test-fixture";

@@ -5,9 +5,9 @@ import { i18next } from "@voya/i18n";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProfileSummaryListing, RuntimeStatusResponse } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { connectionShortcutLabel, pageShortcutAria, pageShortcutLabel, useShellShortcuts } from "./use-shell-shortcuts";

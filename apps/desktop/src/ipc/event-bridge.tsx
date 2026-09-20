@@ -8,10 +8,10 @@ import type {
   NoticeCode,
   ShellTabTarget,
 } from "@/ipc/bindings";
-import { noticeText } from "@/ipc/messages";
+import { noticeText } from "@voya/client/messages";
 import { notifyWhenHidden } from "@/ipc/notifications";
-import { invalidationQueryKey, queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { invalidationQueryKey, queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { isTauriRuntime } from "@/ipc/window";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationFunction } from "@voya/i18n";
@@ -19,7 +19,7 @@ import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
 import { type ConnectionsView, type ShellTab, useShellStore } from "@/stores/shell-store";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 
 type Unlisten = () => void;
 type RegisteredUnlisten = {

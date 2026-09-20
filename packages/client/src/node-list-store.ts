@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import { mergeValidated } from "./persisted";
+import { clientStorage } from "./platform";
 
 type NodeListView = {
   collapsedGroups: string[];
@@ -39,7 +40,7 @@ export const useNodeListStore = create<NodeListState>()(
         sortByLatency,
       }),
       merge: mergeValidated<NodeListState>(persistedView),
-      storage: createJSONStorage(() => window.localStorage),
+      storage: createJSONStorage(() => clientStorage()),
     },
   ),
 );

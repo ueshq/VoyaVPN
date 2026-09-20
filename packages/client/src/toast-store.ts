@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import type { AppNoticeLevel } from "@/ipc/bindings";
+import type { AppNoticeLevel } from "@voya/contracts";
 
 type AppToast = {
   description?: string;

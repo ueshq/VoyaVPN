@@ -16,10 +16,10 @@ import type {
   Subscription,
   RuntimeStatusResponse,
 } from "@/ipc/bindings";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useNodeListStore } from "@/stores/node-list-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useNodeListStore } from "@voya/client/node-list-store";
 import { makeProfileFixture } from "@/test/profile-fixture";
 import { ProfilesScreen } from "./server-table";
 import { nodeListRows, nodeSearchText, LOCAL_GROUP_KEY } from "./node-list-rows";

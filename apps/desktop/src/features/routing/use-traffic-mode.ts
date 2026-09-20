@@ -3,10 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { loadAppSettings, proxySetTrafficMode } from "@/ipc/commands";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { AppSettingsV1, TrafficMode } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
-import { runtimeActionPending, useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeBusy } from "@/stores/runtime-action";
 
 /**

@@ -1,5 +1,5 @@
 import { beforeEach } from "vitest";
-import { useNodeListStore } from "@/stores/node-list-store";
+import { useNodeListStore } from "@voya/client/node-list-store";
 
 import "@testing-library/jest-dom/vitest";
 

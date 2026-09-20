@@ -1,4 +1,4 @@
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, RotateCcw } from "lucide-react";
@@ -7,7 +7,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { applyPendingSettings, getSettingsApplyStatus } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { PageSurface } from "@/components/app-shell/page-section";
 
 /**

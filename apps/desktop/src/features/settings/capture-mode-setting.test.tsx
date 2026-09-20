@@ -9,8 +9,8 @@ import type {
   SystemProxyStatusResponse,
   TunStatus,
 } from "@/ipc/bindings";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
 import { CaptureModeSetting } from "./capture-mode-setting";
 

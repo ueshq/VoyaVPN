@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import { mergeValidated } from "./persisted";
+import { mergeValidated } from "@voya/client/persisted";
 
 export type ShellTab =
   "home" | "profiles" | "settings" | "connections" | "rules" | "selfHost";

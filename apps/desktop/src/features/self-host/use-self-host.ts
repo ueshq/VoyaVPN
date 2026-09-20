@@ -15,9 +15,9 @@ import {
   saveSelfHostConfig,
   setSelfHostEnabled,
 } from "@/ipc/commands";
-import { validationFieldErrors } from "@/ipc/messages";
-import { queryKeys } from "@/ipc/query-keys";
-import { toastError } from "@/stores/toast-store";
+import { validationFieldErrors } from "@voya/client/messages";
+import { queryKeys } from "@voya/client/query-keys";
+import { toastError } from "@voya/client/toast-store";
 
 /** Live counters refresh this often while the node runs and the page is open. */
 const STATS_INTERVAL_MS = 3000;

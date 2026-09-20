@@ -1,3 +1,7 @@
+// Side-effect first: registers storage, the system colour scheme and the Tauri
+// command binding behind @voya/client, before any store module is evaluated.
+import "./platform-boot";
+
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";

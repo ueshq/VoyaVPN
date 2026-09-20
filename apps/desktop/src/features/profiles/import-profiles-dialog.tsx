@@ -20,7 +20,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { importProfilesFromText } from "@/ipc/commands";
-import { importLineText } from "@/ipc/messages";
+import { importLineText } from "@voya/client/messages";
 import type { ImportProfilesResult } from "@/ipc/bindings";
 
 import { qrScanErrorCode } from "./qr-errors";

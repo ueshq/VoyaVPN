@@ -25,7 +25,7 @@ import {
 } from "@voya/ui/components/form-fields";
 
 import type { RoutingRule, RoutingRuleScope } from "@/ipc/bindings";
-import { validationFieldErrors } from "@/ipc/messages";
+import { validationFieldErrors } from "@voya/client/messages";
 import {
   translateFieldErrors,
   zodIssuesToErrorMap,

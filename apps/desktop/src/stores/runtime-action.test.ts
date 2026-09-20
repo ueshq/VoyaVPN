@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TranslationFunction } from "@voya/i18n";
 import type { AppError, AppErrorKind, RuntimeStatusResponse } from "@/ipc/bindings";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
-import { beginRuntimeRead } from "@/ipc/runtime-state-version";
-import { useModalStore } from "@/stores/modal-store";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
-import { useToastStore } from "@/stores/toast-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { beginRuntimeRead } from "@voya/client/runtime-state-version";
+import { useModalStore } from "@voya/client/modal-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useToastStore } from "@voya/client/toast-store";
 
 const runtimeStatus = vi.hoisted(() => ({ refreshRuntimeStatusAndReport: vi.fn() }));
 vi.mock("@/ipc/runtime-status", () => runtimeStatus);

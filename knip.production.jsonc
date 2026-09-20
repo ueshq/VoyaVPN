@@ -19,7 +19,12 @@
       // in node-country-icon.tsx, which knip cannot follow.
       "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
       "ignoreIssues": {
-        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"]
+        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],
+      // `commands.ts` is the desktop's implementation of the whole
+      // `VoyaCommands` contract, consumed as a namespace by platform-boot.ts.
+      // Completeness is the invariant here, not per-export usage, and the
+      // `satisfies VoyaCommands` assertion is what enforces it.
+        "src/ipc/commands.ts": ["exports"]
       }
     },
     "apps/probe": {
@@ -44,6 +49,20 @@
       "entry": ["src/*.ts"],
       "project": ["src/**/*.{ts,tsx}!"],
       "ignore": ["src/**/*.test.{ts,tsx}"]
+    },
+    "packages/contracts": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts!"],
+      "ignoreIssues": {
+        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"]
+      }
+    },
+    "packages/client": {
+      "entry": ["src/*.ts"],
+      "project": ["src/**/*.ts!"],
+      // `test-storage.ts` is the storage seam tests register; it is deliberately
+      // not reachable from a shipped path.
+      "ignore": ["src/**/*.test.ts", "src/test-storage.ts"]
     }
   }
 }

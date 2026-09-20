@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import type { AppSettingsV1 } from "@/ipc/bindings";
 import { useShellStore } from "@/stores/shell-store";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 import {
   deferred,
   resetSettingsBackend,

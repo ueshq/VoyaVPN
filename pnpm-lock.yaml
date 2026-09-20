@@ -113,6 +113,12 @@ importers:
       '@tauri-apps/plugin-updater':
         specifier: ^2.10.1
         version: 2.10.1
+      '@voya/client':
+        specifier: workspace:*
+        version: link:../../packages/client
+      '@voya/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@voya/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -217,6 +223,40 @@ importers:
         version: 4.1.7(@types/node@25.9.1)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(jiti@2.7.0)(yaml@2.9.0))
 
   apps/web: {}
+
+  packages/client:
+    dependencies:
+      '@voya/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@voya/i18n':
+        specifier: workspace:*
+        version: link:../i18n
+      '@voya/utils':
+        specifier: workspace:*
+        version: link:../utils
+      zustand:
+        specifier: ^5.0.14
+        version: 5.0.14(@types/react@19.2.15)(react@19.2.6)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.15
+      react:
+        specifier: 'catalog:'
+        version: 19.2.6
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.7(@types/node@25.9.1)(@vitest/coverage-v8@4.1.7)(jsdom@29.1.1)(vite@8.0.14(@types/node@25.9.1)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/contracts:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
 
   packages/i18n:
     dependencies:

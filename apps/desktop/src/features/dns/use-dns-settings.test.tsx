@@ -2,7 +2,7 @@ import { act, cleanup, waitFor } from "@testing-library/react";
 import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { resetSettingsBackend, serverSettings, settingsIpc } from "@/features/settings/settings-backend.test-fixture";
 import { saveQueue } from "@/lib/save-queue";
 import { useDnsSettings } from "./use-dns-settings";

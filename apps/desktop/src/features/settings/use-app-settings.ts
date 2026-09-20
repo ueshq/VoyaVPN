@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { loadAppSettings, saveAppSettings } from "@/ipc/commands";
 import type { AppSettingsV1, AppearanceSettings } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 
 import { applyChanges, changedFields } from "./settings-draft";

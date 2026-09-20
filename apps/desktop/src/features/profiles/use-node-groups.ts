@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 
-import { useNodeListStore } from "@/stores/node-list-store";
+import { useNodeListStore } from "@voya/client/node-list-store";
 
 /** Collapsed groups and the list's order and filter, kept across launches. */
 export function useNodeGroups() {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { cancelSpeedtest, runSpeedtest } from "@/ipc/commands";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { SpeedtestResult, SpeedtestTarget } from "@/ipc/bindings";
 import type { NodeOperation } from "./use-node-operation";
 

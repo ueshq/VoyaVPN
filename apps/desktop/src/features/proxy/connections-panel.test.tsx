@@ -7,10 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@/components/app-shell/query-client";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot, Routing_Serialize, RuntimeStatusResponse } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 import { ConnectionsPanel } from "./connections-panel";
 
 const ipc = vi.hoisted(() => ({

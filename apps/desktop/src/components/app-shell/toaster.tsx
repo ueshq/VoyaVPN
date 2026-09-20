@@ -7,7 +7,7 @@ import {
   ToastViewport,
 } from "@voya/ui/components/toast";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 
 export function Toaster() {
   const { t } = useI18n();

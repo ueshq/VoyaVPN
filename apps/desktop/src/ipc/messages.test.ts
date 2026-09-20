@@ -16,7 +16,7 @@ import {
   noticeText,
   speedtestOutcomeText,
   validationText,
-} from "@/ipc/messages";
+} from "@voya/client/messages";
 
 /**
  * The backend hands the frontend codes, not sentences. These tests are the

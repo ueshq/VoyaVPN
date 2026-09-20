@@ -27,10 +27,10 @@ import type {
 import type {
   RuntimeEventState,
   RuntimeProxyMonitorStatus,
-} from "@/ipc/runtime-event-store";
-import { usePreferencesStore } from "@/stores/preferences-store";
+} from "@voya/client/runtime-event-store";
+import { usePreferencesStore } from "@voya/client/preferences-store";
 import { useShellStore } from "@/stores/shell-store";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 
 vi.mock("@/ipc/window", async (importOriginal) => ({
   // The shell checks for Tauri through the real module; only the window plugin is faked.
@@ -315,8 +315,8 @@ vi.mock("@/ipc/commands", () => ({
   updateSubscriptions: vi.fn(),
 }));
 vi.mock("@/ipc/event-bridge", () => ({ EventBridge: () => null }));
-vi.mock("@/ipc/runtime-event-store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/ipc/runtime-event-store")>()),
+vi.mock("@voya/client/runtime-event-store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@voya/client/runtime-event-store")>()),
   useRuntimeEventStore: runtimeStoreMock.useRuntimeEventStore,
 }));
 

@@ -47,7 +47,7 @@ vi.mock("@/ipc/bindings", () => ({
   },
 }));
 
-vi.mock("@/ipc/runtime-event-store", () => ({
+vi.mock("@voya/client/runtime-event-store", () => ({
   useRuntimeEventStore: {
     getState: () => ({
       speedtestRunning: bridgeMocks.speedtestRunning,
@@ -73,7 +73,7 @@ vi.mock("@/ipc/notifications", () => ({
   notifyWhenHidden: bridgeMocks.notifyWhenHidden,
 }));
 
-vi.mock("@/stores/toast-store", () => ({
+vi.mock("@voya/client/toast-store", () => ({
   useToastStore: {
     getState: () => ({ pushToast: bridgeMocks.pushToast }),
   },

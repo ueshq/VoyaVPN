@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModalHost } from "@/components/app-shell/modal-host";
 import { changeLocale } from "@voya/i18n";
 import type { CoreSeedInstallStatus } from "@/ipc/bindings";
-import { useModalStore } from "@/stores/modal-store";
+import { useModalStore } from "@voya/client/modal-store";
 
 const ipcMocks = vi.hoisted(() => ({
   connectActiveProfile: vi.fn(),

@@ -15,7 +15,7 @@ import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@/features/profiles/profile-constants";
 import { entryCountry, profileMemberName, profileNameWithoutFlag } from "@/features/profiles/profile-display";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@/features/profiles/policy-group-labels";
-import { type RuntimeAction } from "@/stores/runtime-action-store";
+import { type RuntimeAction } from "@voya/client/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";

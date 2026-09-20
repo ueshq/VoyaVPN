@@ -1,5 +1,5 @@
 import { proxyStartMonitor, proxyStopMonitor } from "@/ipc/commands";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 /** Which command rejected, so the shell can pick the right fallback message. */
 export type ProxyMonitorPhase = "start" | "stop";

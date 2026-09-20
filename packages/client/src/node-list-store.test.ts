@@ -1,21 +1,23 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useNodeListStore } from "./node-list-store";
+import { installTestStorage } from "./test-storage";
 
 const STORAGE_KEY = "voyavpn.nodeList";
+const storage = installTestStorage();
 
 function storedView() {
-  return (JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "{}") as { state?: unknown }).state;
+  return (JSON.parse(storage.read(STORAGE_KEY) ?? "{}") as { state?: unknown }).state;
 }
 
 async function rehydrateFrom(state: unknown) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ state, version: 0 }));
+  storage.write(STORAGE_KEY, JSON.stringify({ state, version: 0 }));
   await useNodeListStore.persist.rehydrate();
 }
 
 describe("node list store", () => {
   beforeEach(() => {
-    window.localStorage.clear();
+    storage.clear();
     useNodeListStore.setState(useNodeListStore.getInitialState());
   });
 

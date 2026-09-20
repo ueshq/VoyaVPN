@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeAppSettings } from "@/features/settings/app-settings.test-fixture";
 import type { CoreState, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
-import { useRuntimeActionStore } from "@/stores/runtime-action-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
 import { RoutingScreen } from "./routing-screen";
 
@@ -29,7 +29,7 @@ vi.mock("@/ipc/commands", async (importOriginal) => ({
 }));
 
 const runtime = vi.hoisted(() => ({ state: "disconnected" as CoreState }));
-vi.mock("@/ipc/runtime-event-store", () => ({
+vi.mock("@voya/client/runtime-event-store", () => ({
   useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) =>
     select({ coreState: { state: runtime.state } }),
   coreStateOf: (coreState: { state: CoreState } | null) => coreState?.state ?? "disconnected",

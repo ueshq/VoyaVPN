@@ -19,7 +19,12 @@
       "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
       "ignoreBinaries": ["tauri-driver"],
       "ignoreIssues": {
-        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"]
+        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],
+      // `commands.ts` is the desktop's implementation of the whole
+      // `VoyaCommands` contract, consumed as a namespace by platform-boot.ts.
+      // Completeness is the invariant here, not per-export usage, and the
+      // `satisfies VoyaCommands` assertion is what enforces it.
+        "src/ipc/commands.ts": ["exports"]
       }
     },
     "apps/probe": {
@@ -33,6 +38,18 @@
     },
     "packages/ui": {
       "project": ["src/**/*.{ts,tsx,css}"]
+    },
+    // Generated from bindings.ts; every DTO is part of the contract whether or
+    // not a frontend reads it today.
+    "packages/contracts": {
+      "project": ["src/**/*.ts"],
+      "ignoreIssues": {
+        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"]
+      }
+    },
+    "packages/client": {
+      "entry": ["src/*.ts"],
+      "project": ["src/**/*.ts"]
     }
   }
 }

@@ -9,7 +9,7 @@ import type {
   SelfHostShareLink,
   SelfHostState,
 } from "@/ipc/bindings";
-import { useToastStore } from "@/stores/toast-store";
+import { useToastStore } from "@voya/client/toast-store";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 
 import { SelfHostScreen } from "./self-host-screen";

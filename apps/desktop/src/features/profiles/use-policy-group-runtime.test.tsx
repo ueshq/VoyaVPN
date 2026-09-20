@@ -2,7 +2,7 @@ import { act } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { PolicyGroupEntry, PolicyGroupListing, PolicyGroupRuntime } from "@/ipc/bindings";
-import { queryKeys } from "@/ipc/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { renderHookWithQuery } from "@/test/render";
 
 import { usePolicyGroupMemberSwitch } from "./use-policy-group-runtime";

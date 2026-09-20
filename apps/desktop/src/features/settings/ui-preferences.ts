@@ -9,10 +9,10 @@ import {
   type Locale,
 } from "@voya/i18n";
 import { loadUiPreferences } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
-import { toastError, useToastStore } from "@/stores/toast-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { toastError, useToastStore } from "@voya/client/toast-store";
 import type { AppearanceSettings, ThemeMode } from "@/ipc/bindings";
-import { isThemeMode, usePreferencesStore } from "@/stores/preferences-store";
+import { isThemeMode, usePreferencesStore } from "@voya/client/preferences-store";
 
 type NormalizedUiPreferences = AppearanceSettings & {
   language: Locale;

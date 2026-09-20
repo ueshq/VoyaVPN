@@ -4,7 +4,7 @@ import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RoutingRule, Routing_Serialize, TunStatus } from "@/ipc/bindings";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { PerAppSummaryCard } from "./per-app-summary-card";
 

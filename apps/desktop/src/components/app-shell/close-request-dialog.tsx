@@ -15,7 +15,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import type { CloseRequestAction } from "@/ipc/bindings";
 import { resolveCloseRequest } from "@/ipc/commands";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 
 /**

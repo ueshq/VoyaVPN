@@ -5,7 +5,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { cn } from "@voya/ui/lib/utils";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import type { ConnectionMode } from "@/ipc/bindings";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { SettingsGroup } from "./settings-form";
 import { useCaptureMode } from "./use-capture-mode";

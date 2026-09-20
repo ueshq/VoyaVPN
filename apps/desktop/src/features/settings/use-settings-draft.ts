@@ -7,13 +7,13 @@ import {
 import { z } from "zod";
 
 import { appErrorOfKind } from "@/ipc/commands";
-import { validationFieldErrors } from "@/ipc/messages";
+import { validationFieldErrors } from "@voya/client/messages";
 import { translateFieldErrors, zodIssuesToErrorMap } from "@/lib/zod-errors";
 import { i18next, type TranslationFunction } from "@voya/i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
-import { toastError } from "@/stores/toast-store";
+import { toastError } from "@voya/client/toast-store";
 
 import {
   applyChanges,

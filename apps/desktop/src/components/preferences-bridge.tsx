@@ -3,7 +3,7 @@ import { getErrorMessage } from "@voya/utils/error";
 
 import { applyUiPreferences, useUiPreferencesQuery } from "@/features/settings/ui-preferences";
 import type { ThemeMode } from "@/ipc/bindings";
-import { resolveThemeMode, usePreferencesStore } from "@/stores/preferences-store";
+import { resolveThemeMode, usePreferencesStore } from "@voya/client/preferences-store";
 
 export function PreferencesBridge() {
   const preferencesQuery = useUiPreferencesQuery();

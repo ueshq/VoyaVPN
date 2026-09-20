@@ -30,7 +30,7 @@ const criticalMinimum = 80;
 
 export const criticalModules = [
   "apps/desktop/src/ipc/commands.ts",
-  "apps/desktop/src/ipc/runtime-state-version.ts",
+  "packages/client/src/runtime-state-version.ts",
   "apps/desktop/src/ipc/runtime-status.ts",
   "apps/desktop/src/ipc/tauri-plugins.ts",
   "apps/desktop/src/ipc/notifications.ts",
@@ -47,6 +47,11 @@ export const criticalModules = [
   "apps/desktop/src/features/routing/routing-rule-dialog.tsx",
   "apps/desktop/src/features/routing/use-routing-screen.ts",
   "apps/desktop/src/stores/shell-store.ts",
+  // The platform seam: every frontend reaches the backend and its own storage
+  // through these three, so a gap here is a gap in every app at once.
+  "packages/client/src/errors.ts",
+  "packages/client/src/transport.ts",
+  "packages/client/src/platform.ts",
   "packages/utils/src/formatting.ts",
   "packages/utils/src/operational-redaction.ts",
   "packages/utils/src/text.ts",
@@ -61,14 +66,14 @@ export const runtimeModules = [
   // store its streams land in. Measured 83/79 and 94/84 when the floors were
   // last raised; the home hook at 100/95.
   { path: "apps/desktop/src/ipc/event-bridge.tsx", lines: 75, branches: 70 },
-  { path: "apps/desktop/src/ipc/runtime-event-store.ts", lines: 85, branches: 75 },
+  { path: "packages/client/src/runtime-event-store.ts", lines: 85, branches: 75 },
   // Connect/disconnect on the home screen.
   { path: "apps/desktop/src/features/home/use-home-runtime.ts", lines: 90, branches: 85 },
   // Runs every runtime action and node or group switch, with the shared guard
   // and the elevation and missing-core recovery paths. Measured 97/98 when
   // profile activation merged into it.
   { path: "apps/desktop/src/stores/runtime-action.ts", lines: 85, branches: 85 },
-  { path: "apps/desktop/src/stores/runtime-action-store.ts", lines: 90, branches: 90 },
+  { path: "packages/client/src/runtime-action-store.ts", lines: 90, branches: 90 },
   // Proxy-monitor lifecycle.
   { path: "apps/desktop/src/components/app-shell/app-shell.tsx", lines: 75, branches: 55 },
   { path: "apps/desktop/src/features/profiles/use-server-table.ts", lines: 75, branches: 55 },
@@ -87,8 +92,8 @@ export const runtimeModules = [
   // TLS field panel in the profile dialog; certificate fetch/hash was retired.
   { path: "apps/desktop/src/features/profiles/profile-security-panel.tsx", lines: 85, branches: 70 },
   { path: "apps/desktop/src/features/updates/app-update-flow.ts", lines: 85, branches: 75 },
-  { path: "apps/desktop/src/stores/preferences-store.ts", lines: 80, branches: 55 },
-  { path: "apps/desktop/src/stores/toast-store.ts", lines: 70, branches: 80 },
+  { path: "packages/client/src/preferences-store.ts", lines: 80, branches: 55 },
+  { path: "packages/client/src/toast-store.ts", lines: 70, branches: 80 },
   // Promoted out of `untestedModules` once the typed-contract passes gave them
   // real tests. Measured at promotion: modal-host 92/80, modal-store 86/100.
   { path: "apps/desktop/src/components/app-shell/modal-host.tsx", lines: 82, branches: 70 },
@@ -97,7 +102,7 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/routing/routing-rule-list.tsx", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/routing/routing-screen.tsx", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/routing/traffic-mode-switcher.tsx", lines: 85, branches: 75 },
-  { path: "apps/desktop/src/stores/modal-store.ts", lines: 75, branches: 90 },
+  { path: "packages/client/src/modal-store.ts", lines: 75, branches: 90 },
   // The Self-hosted node page after its redesign: controller 100/78, screen
   // 100/92, settings dialog 100/96, share dialog 97/88, network status 100/95,
   // hosting card and action tile 100/100.
@@ -112,7 +117,7 @@ export const runtimeModules = [
   // stop them sliding further (listed at node-list-store 40/25, policy groups
   // 53/44, DNS form schema 71/57, QR errors 63/17). All four measured 100/100
   // once they got behavioural tests of their own or through the DNS pane.
-  { path: "apps/desktop/src/stores/node-list-store.ts", lines: 90, branches: 90 },
+  { path: "packages/client/src/node-list-store.ts", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/profiles/use-policy-groups.ts", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/dns/dns-form-schema.ts", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/profiles/qr-errors.ts", lines: 90, branches: 90 },

@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { PolicyGroupListing, PolicyGroupRuntime } from "@/ipc/bindings";
 import { policyGroupRuntime, testPolicyGroupDelay } from "@/ipc/commands";
-import { queryKeys } from "@/ipc/query-keys";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { queryKeys } from "@voya/client/query-keys";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 /** How often a running group's live member and delays are read again; the same everywhere a group shows. */
 const RUNTIME_REFRESH_MS = 3_000;

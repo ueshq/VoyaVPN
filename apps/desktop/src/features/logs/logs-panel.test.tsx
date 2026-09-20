@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LogLevel } from "@/ipc/bindings";
-import type { StoredLogLine } from "@/ipc/runtime-event-store";
+import type { StoredLogLine } from "@voya/client/runtime-event-store";
 
 import { LogsPanel, type LogFilter } from "./logs-panel";
 
@@ -21,7 +21,7 @@ const storeMock = vi.hoisted(() => {
 });
 
 
-vi.mock("@/ipc/runtime-event-store", () => ({ useRuntimeEventStore: storeMock }));
+vi.mock("@voya/client/runtime-event-store", () => ({ useRuntimeEventStore: storeMock }));
 
 // 2026-06-01T08:09:10 local time; the panel renders the store's receipt stamp,
 // not a render-time clock read.

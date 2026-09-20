@@ -16,7 +16,7 @@
  * mapped, and `query-keys.test.ts` enumerates the variants straight out of
  * `bindings.ts` so neither half can rot.
  */
-import type { InvalidationScope } from "./bindings";
+import type { InvalidationScope } from "@voya/contracts";
 
 /**
  * Key roots, one per cache. Invalidating a root also invalidates every key

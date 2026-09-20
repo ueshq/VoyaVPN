@@ -1,5 +1,5 @@
 import { useI18n } from "@voya/i18n/use-i18n";
-import { useRuntimeEventStore } from "@/ipc/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import {
   NumberField,

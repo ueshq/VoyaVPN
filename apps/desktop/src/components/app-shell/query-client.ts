@@ -1,7 +1,7 @@
 import { MutationCache, QueryClient, type Mutation } from "@tanstack/react-query";
 
 import { i18next } from "@voya/i18n";
-import { toastError } from "@/stores/toast-store";
+import { toastError } from "@voya/client/toast-store";
 
 /**
  * The single app-wide TanStack Query client.
