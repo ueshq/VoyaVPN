@@ -3,7 +3,7 @@ import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Suspense, use } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { localeReady } from "~/native/platform-boot";
@@ -27,8 +27,8 @@ function PendingScreen({ tab }: { tab: ShellTab }) {
   const { t } = useI18n();
 
   return (
-    <View style={styles.pending}>
-      <Text style={styles.pendingTitle}>{t(SHELL_TABS[tab].titleKey)}</Text>
+    <View className="flex-1 items-center justify-center bg-canvas">
+      <Text className="text-section text-foreground">{t(SHELL_TABS[tab].titleKey)}</Text>
     </View>
   );
 }
@@ -70,14 +70,3 @@ export function App() {
     </SafeAreaProvider>
   );
 }
-
-const styles = StyleSheet.create({
-  pending: {
-    alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-  },
-  pendingTitle: {
-    fontSize: 16,
-  },
-});

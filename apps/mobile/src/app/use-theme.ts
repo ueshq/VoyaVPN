@@ -1,6 +1,7 @@
 import { usePreferencesStore } from "@voya/client/preferences-store";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Appearance } from "react-native";
+import { Uniwind } from "uniwind";
 
 function subscribeToAppearance(onChange: () => void) {
   const subscription = Appearance.addChangeListener(onChange);
@@ -24,10 +25,18 @@ function appearanceSnapshot() {
  *
  * `Appearance` is subscribed to rather than read in an effect, so a running app
  * follows the OS switch without a second render pass to correct itself.
+ *
+ * Uniwind keeps its own current theme — it is what every `dark:` class resolves
+ * against — so the preference is pushed into it as well. Its vocabulary is the
+ * same three words, including `system`, so nothing is translated on the way.
  */
 export function useTheme() {
   const themeMode = usePreferencesStore((state) => state.themePreview ?? state.themeMode);
   const systemScheme = useSyncExternalStore(subscribeToAppearance, appearanceSnapshot);
+
+  useEffect(() => {
+    Uniwind.setTheme(themeMode);
+  }, [themeMode]);
 
   return themeMode === "system" ? systemScheme : themeMode;
 }

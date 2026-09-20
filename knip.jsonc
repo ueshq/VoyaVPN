@@ -13,7 +13,10 @@
     },
     "apps/mobile": {
       "entry": ["src/**/*.test.{ts,tsx}"],
-      "project": ["src/**/*.{ts,tsx}"],
+      // `global.css` is Uniwind's build input, reached from `index.js` and
+      // compiled by Metro, so it belongs to the project rather than to the
+      // ignore list; nothing imports *from* it.
+      "project": ["src/**/*.{ts,tsx}", "global.css"],
       // Babel rewrites helper calls into `@babel/runtime` imports, so no
       // source file names it.
       "ignoreDependencies": ["@babel/runtime"]

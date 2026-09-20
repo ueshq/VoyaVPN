@@ -15,6 +15,6 @@ module.exports = {
   // symlink to `packages/*/src`, a path with no `node_modules` in it, so they
   // are never ignored.
   transformIgnorePatterns: [
-    "node_modules/(?!.*(react-native|@react-navigation|test-renderer))",
+    "node_modules/(?!.*(react-native|@react-navigation|test-renderer|uniwind))",
   ],
 };

@@ -1,6 +1,7 @@
 const path = require("node:path");
 
 const { getDefaultConfig, mergeConfig } = require("@react-native/metro-config");
+const { withUniwindConfig } = require("uniwind/metro");
 
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, "../..");
@@ -46,4 +47,23 @@ const config = {
   },
 };
 
-module.exports = mergeConfig(getDefaultConfig(projectRoot), config);
+/**
+ * Tailwind comes from Uniwind, not NativeWind.
+ *
+ * Both compile Tailwind v4 at build time, but NativeWind v5 styles through
+ * `react-native-css`, whose Metro integration is built on `@expo/metro-config`
+ * — and that package now fails to load without the `expo` SDK beside it, which
+ * a bare React Native app does not have. Uniwind detects a non-Expo project and
+ * uses Metro's own transform worker, so the app stays bare.
+ *
+ * `polyfills.rem` fixes the root font size, because React Native has no
+ * document to read one from, and `dtsFile` is where Uniwind writes the
+ * `className` types.
+ */
+module.exports = withUniwindConfig(mergeConfig(getDefaultConfig(projectRoot), config), {
+  // Both paths are resolved against the working directory Metro runs in, which
+  // is this app's directory; an absolute path would be joined onto it.
+  cssEntryFile: "global.css",
+  dtsFile: "uniwind-env.d.ts",
+  polyfills: { rem: 16 },
+});
