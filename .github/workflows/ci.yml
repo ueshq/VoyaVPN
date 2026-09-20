@@ -351,6 +351,14 @@ jobs:
         if: ${{ matrix.platform == 'Android' }}
         run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 check -p voya-mobile-ffi --locked
 
+      # The app-side Swift has no host-side build — it reaches React,
+      # NetworkExtension, Libbox and the uniffi bindings — so this checks the
+      # one thing that can be checked without an Xcode project: that it parses.
+      # It rides the iOS leg because that is the macOS runner already here.
+      - name: Parse the iOS Swift sources
+        if: ${{ matrix.platform == 'iOS' }}
+        run: node scripts/quality/mobile-swift.mjs
+
   desktop-smoke:
     name: Linux native desktop smoke
     runs-on: ubuntu-24.04

@@ -37,6 +37,11 @@
 	<string></string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<!-- The container the app shares with its PacketTunnel extension. Must
+	     match the App Group in VoyaVPN.entitlements and the one the extension
+	     declares; never the desktop's. -->
+	<key>VoyaAppGroupIdentifier</key>
+	<string>group.app.voyavpn.mobile</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

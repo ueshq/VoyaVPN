@@ -16,7 +16,9 @@ import {
   shellDtoRule,
   shellRules,
   untranslatedMessageRule,
+  gradleVersionName,
   versionAlignmentProblem,
+  xcodeMarketingVersion,
   voyaAppRules,
   voyaCoreRules,
 } from "./architecture-rules.mjs";
@@ -187,10 +189,18 @@ function checkReleaseVersionAlignment() {
     tauriVersion = JSON.parse(readFileSync(resolve(root, dirname(tauriConfigPath), tauriVersion), "utf8")).version;
   }
 
+  const iosProjectPath = "apps/mobile/ios/VoyaVPN.xcodeproj/project.pbxproj";
+  const androidGradlePath = "apps/mobile/android/app/build.gradle";
+
   const problem = versionAlignmentProblem([
     ["package.json", JSON.parse(readText("package.json")).version],
     ["apps/desktop/package.json", JSON.parse(readText("apps/desktop/package.json")).version],
     [tauriConfigPath, tauriVersion],
+    // The phones ship the same release. Their versions live where each
+    // platform's build reads them: Xcode build settings and the Gradle module.
+    ["apps/mobile/package.json", JSON.parse(readText("apps/mobile/package.json")).version],
+    [iosProjectPath, xcodeMarketingVersion(readText(iosProjectPath))],
+    [androidGradlePath, gradleVersionName(readText(androidGradlePath))],
     ...cargoWorkspaceMembers(workspaceManifest).map((member) => [
       `${member}/Cargo.toml`,
       cargoPackageVersion(readText(`${member}/Cargo.toml`), workspaceManifest),

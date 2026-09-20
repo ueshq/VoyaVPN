@@ -264,6 +264,30 @@ export function cargoPackageVersion(manifest, workspaceManifest) {
  * names disagree. Takes `[label, version]` pairs; returns a failure message or
  * `null` when they all name the same version.
  */
+/**
+ * The marketing version the iOS app ships.
+ *
+ * `Info.plist` carries `$(MARKETING_VERSION)`, so the value itself lives in
+ * the Xcode build settings. Every configuration has to agree — a debug build
+ * that reports a different version than release is a bug, not a variant — so
+ * two distinct values are reported as a drift rather than one of them picked.
+ */
+export function xcodeMarketingVersion(pbxproj) {
+  const values = new Set(
+    [...pbxproj.matchAll(/^\s*MARKETING_VERSION\s*=\s*([^;]+);/gmu)].map(([, value]) =>
+      value.trim(),
+    ),
+  );
+  if (values.size !== 1) return undefined;
+
+  return [...values][0];
+}
+
+/** The version name the Android app ships, from its module's build script. */
+export function gradleVersionName(buildGradle) {
+  return buildGradle.match(/^\s*versionName\s+["']([^"']+)["']/mu)?.[1];
+}
+
 export function versionAlignmentProblem(versions) {
   const distinct = new Set(versions.map(([, version]) => version));
   if (distinct.size === 1 && !distinct.has(undefined) && !distinct.has("")) return null;

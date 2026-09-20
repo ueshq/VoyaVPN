@@ -14,7 +14,9 @@ import {
   shellDtoRule,
   shellRules,
   untranslatedMessageRule,
+  gradleVersionName,
   versionAlignmentProblem,
+  xcodeMarketingVersion,
   voyaAppRules,
   voyaCoreRules,
 } from "./architecture-rules.mjs";
@@ -317,6 +319,39 @@ describe("release version alignment", () => {
     expect(drift).toContain("tauri.conf.json = 0.3.9");
     expect(versionAlignmentProblem([["package.json", "0.4.0"], ["Cargo", undefined]])).toContain("Cargo = missing");
     expect(versionAlignmentProblem([["package.json", undefined]])).toContain("missing");
+  });
+
+  it("reads the iOS version out of the Xcode build settings", () => {
+    const pbxproj = [
+      "\t\t\t\tCURRENT_PROJECT_VERSION = 1;",
+      "\t\t\t\tMARKETING_VERSION = 0.4.0;",
+      "\t\t\t\tMARKETING_VERSION = 0.4.0;",
+    ].join("\n");
+
+    expect(xcodeMarketingVersion(pbxproj)).toBe("0.4.0");
+  });
+
+  it("treats configurations that disagree as no version at all", () => {
+    // Debug and release reporting different versions is a bug, not a variant,
+    // and picking one of them would hide it from the alignment check.
+    const drifted = "MARKETING_VERSION = 0.4.0;\nMARKETING_VERSION = 0.3.9;";
+
+    expect(xcodeMarketingVersion(drifted)).toBeUndefined();
+    expect(xcodeMarketingVersion("")).toBeUndefined();
+  });
+
+  it("reads the Android version out of its module's build script", () => {
+    const gradle = [
+      "    defaultConfig {",
+      '        applicationId "app.voyavpn.mobile"',
+      "        versionCode 1",
+      '        versionName "0.4.0"',
+      "    }",
+    ].join("\n");
+
+    expect(gradleVersionName(gradle)).toBe("0.4.0");
+    // A comment mentioning it is not a declaration of it.
+    expect(gradleVersionName("// versionName \"0.4.0\"")).toBeUndefined();
   });
 });
 

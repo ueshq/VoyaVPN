@@ -60,7 +60,8 @@
     "native:mobile:libbox:ios": "node scripts/native/mobile/build-libbox-ios.mjs",
     "native:mobile:libbox:android": "node scripts/native/mobile/build-libbox-android.mjs",
     "check:mobile:test": "pnpm --filter @voya/mobile test",
-    "check:mobile:bundle": "node scripts/quality/mobile-bundle.mjs"
+    "check:mobile:bundle": "node scripts/quality/mobile-bundle.mjs",
+    "check:mobile:swift": "node scripts/quality/mobile-swift.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
