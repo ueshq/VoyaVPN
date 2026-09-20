@@ -14,13 +14,14 @@ import { connectionShortcutLabel } from "@/components/app-shell/use-shell-shortc
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 import { entryCountry, profileMemberName, profileNameWithoutFlag } from "@voya/features/profiles/profile-display";
+import { homeMapMarker } from "@voya/features/home/map-marker";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { type RuntimeAction } from "@voya/client/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
 import { ExitIpMetric } from "./exit-ip-metric";
-import { HomeWorldMap, type HomeMapMarker } from "./home-world-map";
+import { HomeWorldMap } from "./home-world-map";
 import { useConnectionIp } from "@voya/features/home/use-connection-ip";
 import { useHomeRuntime } from "@voya/features/home/use-home-runtime";
 import { HomeModeSummary } from "./home-mode-summary";
@@ -40,11 +41,7 @@ export function HomeScreen() {
   const openLogs = () => useShellStore.getState().openSettings("advanced", "logs");
   const runtimeActionAvailable =
     home.connected || home.state === "cleanupPending";
-  const noNodes =
-    !runtimeActionAvailable &&
-    !home.profilesPending &&
-    !home.profilesError &&
-    home.profiles.length === 0;
+  const noNodes = !home.hasNodes;
   const group = home.activeGroup;
   const needsSelection =
     !runtimeActionAvailable && !home.nodeEntry && !group && !noNodes;
@@ -76,19 +73,14 @@ export function HomeScreen() {
     : home.nodeEntry && home.nodeEntry.metrics.delayMs > 0
       ? home.nodeEntry.metrics.delayMs
       : null;
-  // While connected the map shows where traffic leaves (the checked exit IP
-  // wins); before that, where the selected node would take it. A group has no
-  // single country until one of its members is running.
-  const markerCountry = noNodes
-    ? null
-    : home.connected
-      ? (ipQuery.data?.countryCode ?? entryCountry(group ? groupNowEntry : home.nodeEntry))
-      : group
-        ? null
-        : entryCountry(home.nodeEntry);
-  const marker: HomeMapMarker | null = markerCountry
-    ? { countryCode: markerCountry, state: home.connected ? "connected" : "selected" }
-    : null;
+  const marker = homeMapMarker({
+    connected: home.connected,
+    exitCountryCode: ipQuery.data?.countryCode,
+    groupEntry: groupNowEntry,
+    hasNodes: home.hasNodes,
+    isGroup: group !== null,
+    nodeEntry: home.nodeEntry,
+  });
 
   return (
     <section

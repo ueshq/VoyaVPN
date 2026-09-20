@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import type { PolicyGroup, PolicyGroupEntry, ProfileSummaryListing } from "@voya/contracts";
 import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";

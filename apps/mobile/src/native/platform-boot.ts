@@ -1,6 +1,6 @@
-import { setClientStorage, setSystemColorSchemeReader } from "@voya/client/platform";
+import { setAppVisibility, setClientStorage, setSystemColorSchemeReader } from "@voya/client/platform";
 import { createNativeI18n } from "@voya/i18n/native";
-import { Appearance } from "react-native";
+import { Appearance, AppState } from "react-native";
 
 import { registerMobileBackend } from "~/ipc/platform";
 
@@ -20,6 +20,23 @@ import { clientStorageAdapter, storage } from "./storage";
 setClientStorage(clientStorageAdapter);
 
 setSystemColorSchemeReader(() => (Appearance.getColorScheme() === "dark" ? "dark" : "light"));
+
+/**
+ * What the desktop reads off `document.visibilityState`.
+ *
+ * Only `background` counts as off screen. `inactive` is the app switcher, a
+ * notification shade or an incoming call — a blink, not a reason to tear the
+ * log stream and the connection monitor down and build them again a second
+ * later — and `currentState` is undefined until the first native report, which
+ * must not read as "hidden" either.
+ */
+setAppVisibility({
+  isVisible: () => AppState.currentState !== "background",
+  subscribe: (onChange) => {
+    const subscription = AppState.addEventListener("change", onChange);
+    return () => subscription.remove();
+  },
+});
 
 registerMobileBackend();
 

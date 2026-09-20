@@ -5,7 +5,7 @@ import {
   assertSubscriptionUpdated,
   formatSubscriptionUpdateSummary,
 } from "@voya/features/subscriptions/subscription-update-result";
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 
 /**

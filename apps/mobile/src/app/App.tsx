@@ -3,11 +3,13 @@ import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Suspense, use } from "react";
-import { Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { HomeScreen } from "~/features/home/home-screen";
 import { NodesScreen } from "~/features/profiles/nodes-screen";
+import { ActivityScreen } from "~/features/proxy/activity-screen";
+import { RulesScreen } from "~/features/routing/rules-screen";
+import { SettingsScreen } from "~/features/settings/settings-screen";
 import { EventBridge } from "~/ipc/event-bridge";
 import { localeReady } from "~/native/platform-boot";
 
@@ -21,38 +23,25 @@ const Tab = createBottomTabNavigator();
 const queryClient = createMobileQueryClient();
 
 /**
- * A placeholder for a tab that has no screen yet.
- *
- * Every tab is wired from the start so the navigator, the shared translations
- * and the `ShellTab` union are exercised end to end; the screens replace these
- * one at a time.
- */
-function PendingScreen({ tab }: { tab: ShellTab }) {
-  const { t } = useI18n();
-
-  return (
-    <View className="flex-1 items-center justify-center bg-canvas">
-      <Text className="text-section text-foreground">{t(SHELL_TABS[tab].titleKey)}</Text>
-    </View>
-  );
-}
-
-/**
  * The shell, suspended until the startup locale's resources are in place.
  *
  * The desktop entry delays `render()` on the same promise; React Native mounts
  * the registered component immediately instead, so the gate has to live here.
  * Without it a non-English launch paints English first and then swaps.
  */
-/** The screen behind one tab; the rest are still placeholders. */
+/** The screen behind one tab. */
 function TabScreen({ tab }: { tab: ShellTab }) {
   switch (tab) {
     case "home":
       return <HomeScreen />;
     case "profiles":
       return <NodesScreen />;
-    default:
-      return <PendingScreen tab={tab} />;
+    case "rules":
+      return <RulesScreen />;
+    case "connections":
+      return <ActivityScreen />;
+    case "settings":
+      return <SettingsScreen />;
   }
 }
 

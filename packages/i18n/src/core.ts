@@ -178,7 +178,30 @@ export function createI18nHost(host: I18nHost): I18nSetup {
   const localeReady: Promise<void> =
     initialLocale === "en" ? Promise.resolve() : changeLocale(initialLocale, { persist: false });
 
-  return { getInitialLocale, applyLocale, changeLocale, localeReady };
+  const setup: I18nSetup = { getInitialLocale, applyLocale, changeLocale, localeReady };
+  active = setup;
+
+  return setup;
+}
+
+/**
+ * The host this process wired up, if any.
+ *
+ * Shared code has to change the language without knowing whether it is running
+ * in a WebView or in React Native — the Settings surface previews a locale and
+ * then saves or discards it. Before a host exists, changing the language is a
+ * no-op rather than a crash: a store may be read while the app is still
+ * starting, and the initial locale is applied by `createI18nHost` anyway.
+ */
+let active: I18nSetup = {
+  applyLocale: () => {},
+  changeLocale: async () => {},
+  getInitialLocale: () => "en",
+  localeReady: Promise.resolve(),
+};
+
+export function i18nHost(): I18nSetup {
+  return active;
 }
 
 export { i18next };

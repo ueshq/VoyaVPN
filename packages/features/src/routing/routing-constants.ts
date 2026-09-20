@@ -1,4 +1,4 @@
-import type { TranslationKey } from "@voya/i18n";
+import type { TranslationKey } from "@voya/i18n/core";
 
 import type { RoutingRuleScope } from "@voya/contracts";
 

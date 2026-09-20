@@ -1,6 +1,6 @@
 import type { ProfileKind } from "@voya/contracts";
 import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import { PROFILE_VALIDATION_CODES } from "./profile-form-schema";
 
 export function optionalNumber(value: unknown) {

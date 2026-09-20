@@ -78,8 +78,23 @@ export function useHomeRuntime() {
     if (failed) void runRuntimeAction(failed.action, t, { inline: true });
   }
 
+  /**
+   * Whether there is anything to run at all.
+   *
+   * A pending or failed read is not an empty list: only a settled, empty one
+   * is, and a running core proves there was a node whatever the read says.
+   * Both shells key their empty state and their map marker off this.
+   */
+  const hasNodes =
+    connected ||
+    state === "cleanupPending" ||
+    profilesQuery.isPending ||
+    profilesQuery.error !== null ||
+    (profilesQuery.data?.entries.length ?? 0) > 0;
+
   return {
     activeGroup,
+    hasNodes,
     groupRuntime,
     nodeEntry,
     busy,

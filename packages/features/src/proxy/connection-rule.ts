@@ -1,4 +1,4 @@
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import { ruleDisplayName } from "../routing/sentinel-rules";
 import type { ProxyConnectionItem, RoutingRule } from "@voya/contracts";
 

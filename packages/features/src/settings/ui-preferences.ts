@@ -1,13 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import {
-  applyDocumentLocale,
-  changeLocale,
-  getInitialLocale,
-  i18next,
-  isLocale,
-  type Locale,
-} from "@voya/i18n";
+import { i18next, i18nHost, isLocale, type Locale } from "@voya/i18n/core";
 import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";
 import { toastError, useToastStore } from "@voya/client/toast-store";
@@ -58,7 +51,7 @@ export function useUiPreferencesQuery() {
 
 function normalizeUiPreferences(preferences: AppearanceSettings): NormalizedUiPreferences {
   return {
-    language: isLocale(preferences.language) ? preferences.language : getInitialLocale(),
+    language: isLocale(preferences.language) ? preferences.language : i18nHost().getInitialLocale(),
     theme: isThemeMode(preferences.theme) ? preferences.theme : "system",
   };
 }
@@ -86,9 +79,9 @@ export async function applyUiPreferences(
 
   const currentLanguage = i18next.resolvedLanguage ?? i18next.language;
   if (currentLanguage === normalized.language) {
-    applyDocumentLocale(normalized.language);
+    i18nHost().applyLocale(normalized.language);
   } else {
-    await changeLocale(normalized.language, { persist });
+    await i18nHost().changeLocale(normalized.language, { persist });
   }
   // A cache refresh or an older save must not replace the user's newer preview.
   if (persist && preview) await applyUiPreferences(preview.preferences, { persist: false });

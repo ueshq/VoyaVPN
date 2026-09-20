@@ -6,7 +6,7 @@ import {
   supportsShareLinkExport,
   type ProfileExportDestination,
 } from "@voya/features/profiles/server-table-actions";
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 
 export function useNodeExport(

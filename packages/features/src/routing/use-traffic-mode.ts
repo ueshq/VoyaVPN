@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type { TranslationKey } from "@voya/i18n";
+import type { TranslationKey } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";

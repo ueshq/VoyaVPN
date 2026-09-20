@@ -8,3 +8,7 @@
  * shipped it in its polyfills for years.
  */
 declare const performance: { now: () => number };
+
+/** Hermes has had both since React Native 0.72; neither is in the RN types. */
+declare function queueMicrotask(callback: () => void): void;
+declare function structuredClone<T>(value: T): T;

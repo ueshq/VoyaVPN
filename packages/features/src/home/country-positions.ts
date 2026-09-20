@@ -7,8 +7,12 @@
  * within a few pixels. Each country is placed at its capital, or at its usual
  * exit city where that differs.
  */
-const MAP_WIDTH = 1078;
-const MAP_HEIGHT = 466;
+
+/** That box: the projection's extent, and the `viewBox` of the map in it. */
+export const WORLD_MAP_BOX = { height: 466, width: 1078 } as const;
+
+const MAP_WIDTH = WORLD_MAP_BOX.width;
+const MAP_HEIGHT = WORLD_MAP_BOX.height;
 
 const COUNTRY_COORDINATES: Readonly<Record<string, readonly [lat: number, lon: number]>> = {
   AD: [42.5, 1.5], AE: [25.2, 55.3], AF: [34.5, 69.2], AG: [17.1, -61.8], AL: [41.3, 19.8],

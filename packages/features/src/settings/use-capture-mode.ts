@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { TranslationFunction } from "@voya/i18n";
+import type { TranslationFunction } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
 import { useRuntimeBusy } from "@voya/client/runtime-action";

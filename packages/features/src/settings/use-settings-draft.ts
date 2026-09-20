@@ -9,7 +9,7 @@ import { z } from "zod";
 import { appErrorOfKind } from "@voya/client/errors";
 import { validationFieldErrors } from "@voya/client/messages";
 import { translateFieldErrors, zodIssuesToErrorMap } from "@voya/features/forms/zod-errors";
-import { i18next, type TranslationFunction } from "@voya/i18n";
+import { i18next, type TranslationFunction } from "@voya/i18n/core";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useLatestRef } from "@voya/utils/use-latest-ref";

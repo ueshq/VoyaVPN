@@ -1,6 +1,10 @@
 import type {
   AppSettingsV1,
   DnsSettings,
+  ProxyConnectionItem,
+  ProxyConnectionsSnapshot,
+  Routing_Serialize,
+  RoutingRule,
   PolicyGroupEntry,
   ProfileSummaryEntry,
   RuntimeStatusResponse,
@@ -19,6 +23,8 @@ import type {
  */
 export type MockSeed = {
   profiles: ProfileSummaryEntry[];
+  routings: Routing_Serialize[];
+  connections: ProxyConnectionsSnapshot;
   subscriptions: Subscription[];
   subscriptionMetadata: SubscriptionMetadata[];
   policyGroups: PolicyGroupEntry[];
@@ -238,6 +244,80 @@ function makeTunStatus(): TunStatus {
   };
 }
 
+export function makeRoutingRule(
+  index = 0,
+  overrides: Partial<RoutingRule> = {},
+): RoutingRule {
+  return {
+    domain: null,
+    enabled: true,
+    id: `rule-${index}`,
+    inboundTags: null,
+    ip: null,
+    kind: null,
+    network: null,
+    outbound: "proxy",
+    port: null,
+    process: null,
+    protocol: null,
+    remarks: `Rule ${index}`,
+    scope: null,
+    ...overrides,
+  };
+}
+
+/**
+ * `Routing_Serialize` rather than `Routing`: the contract's `Routing` is a
+ * union with the deserialize shape, which has no `isActive` — what a backend
+ * *returns* is always the serialize side.
+ */
+export function makeRouting(
+  index = 0,
+  overrides: Partial<Routing_Serialize> = {},
+): Routing_Serialize {
+  return {
+    enabled: true,
+    icon: "",
+    id: `routing-${index}`,
+    isActive: index === 0,
+    locked: false,
+    remarks: index === 0 ? "Default" : `Routing ${index}`,
+    rules: [],
+    singboxDomainStrategy: "AsIs",
+    singboxRulesetPath: "",
+    sort: index,
+    ...overrides,
+  };
+}
+
+function makeConnectionsSnapshot(): ProxyConnectionsSnapshot {
+  return { connections: [], downloadTotal: 0, uploadTotal: 0 };
+}
+
+/** One live connection, the way the Clash API reports one. */
+export function makeConnection(
+  index = 0,
+  overrides: Partial<ProxyConnectionItem> = {},
+): ProxyConnectionItem {
+  return {
+    chains: ["proxy", `Node ${index}`],
+    connectionType: "TCP",
+    destination: `203.0.113.${index + 1}:443`,
+    download: 2048,
+    host: `host-${index}.example`,
+    id: `connection-${index}`,
+    network: "tcp",
+    process: `app-${index}`,
+    processPath: null,
+    rule: "Domain",
+    rulePayload: `host-${index}.example`,
+    source: `192.168.1.${index + 1}:50000`,
+    start: "2026-01-01T00:00:00Z",
+    upload: 1024,
+    ...overrides,
+  };
+}
+
 /**
  * A seed with two local nodes and nothing connected.
  *
@@ -246,8 +326,12 @@ function makeTunStatus(): TunStatus {
  */
 export function makeMockSeed(overrides: Partial<MockSeed> = {}): MockSeed {
   return {
+    connections: makeConnectionsSnapshot(),
     policyGroups: [],
     profiles: [makeProfileEntry(0), makeProfileEntry(1)],
+    // A fresh install is seeded with the default routing profile, the way
+    // `AppServices::ensure_default_routing` does on both hosts.
+    routings: [makeRouting(0)],
     runtime: makeRuntimeStatus(),
     settings: makeAppSettings(),
     subscriptionMetadata: [],

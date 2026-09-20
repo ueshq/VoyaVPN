@@ -5,6 +5,7 @@ import type {
   PolicyGroupRuntime,
   ProfileDetails,
   ProfileSummaryEntry,
+  ProxyMonitorStatus,
   SubscriptionUpdateResult,
   VoyaCommands,
   VoyaEventName,
@@ -26,6 +27,7 @@ type MockState = MockSeed & {
   calls: Array<{ command: keyof VoyaCommands; args: readonly unknown[] }>;
   speedtestRunning: boolean;
   logStreaming: boolean;
+  proxyMonitorRunning: boolean;
 };
 
 export type MockBackend = {
@@ -58,6 +60,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
     ...makeMockSeed(seed),
     calls: [],
     logStreaming: false,
+    proxyMonitorRunning: false,
     speedtestRunning: false,
   };
 
@@ -98,6 +101,31 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
     state.runtime = next;
     emit("transientStreamEvent", { kind: "coreState", payload: next });
     return next;
+  }
+
+  /**
+   * Whether a saved setting is still waiting for the core to pick it up.
+   *
+   * Nothing here defers: the mock applies a save at once, so there is never a
+   * pending action to report.
+   */
+  function settingsApplyStatus() {
+    return { action: "none" as const, connected: state.runtime.state === "connected" };
+  }
+
+  /**
+   * A phone captures traffic only through its tunnel provider, and the desktop
+   * mock follows the same rule as macOS: the tunnel is the mode, and process
+   * rules are the one thing a packet tunnel cannot do.
+   */
+  function connectionMode() {
+    return {
+      mode: "vpn" as const,
+      processRulesEffective: false,
+      processRulesSupported: false,
+      systemProxyAvailable: false,
+      vpnAvailable: true,
+    };
   }
 
   const implemented: Partial<VoyaCommands> = {
@@ -190,6 +218,123 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
 
     listPolicyGroups: () =>
       resolve(record("listPolicyGroups", [], { entries: state.policyGroups })),
+
+    listRoutings: () => resolve(record("listRoutings", [], state.routings)),
+
+    loadDnsSettings: () => resolve(record("loadDnsSettings", [], state.settings.dns)),
+
+    saveDnsSettings: (settings) => {
+      state.settings = { ...state.settings, dns: settings };
+      invalidate("saveDnsSettings", "dns", "appSettings");
+      return resolve(record("saveDnsSettings", [settings], settings));
+    },
+
+    saveAppSettings: (settings) => {
+      state.settings = settings;
+      invalidate("saveAppSettings", "appSettings", "uiPreferences", "dns", "connectionMode");
+      return resolve(record("saveAppSettings", [settings], settings));
+    },
+
+    getSettingsApplyStatus: () =>
+      resolve(record("getSettingsApplyStatus", [], settingsApplyStatus())),
+
+    applyPendingSettings: () =>
+      resolve(record("applyPendingSettings", [], settingsApplyStatus())),
+
+    connectionModeStatus: () =>
+      resolve(record("connectionModeStatus", [], connectionMode())),
+
+    saveRouting: (item) => {
+      // `Routing_Deserialize` in, `Routing_Serialize` out: the active flag is
+      // the backend's answer, never the caller's claim.
+      const saved = {
+        ...item,
+        id: item.id || `routing-${state.routings.length}`,
+        isActive: state.routings.some(
+          (routing) => routing.isActive && routing.id === item.id,
+        ),
+      };
+      state.routings = upsert(state.routings, saved);
+      invalidate("saveRouting", "routings", "appSettings");
+      return resolve(record("saveRouting", [item], saved));
+    },
+
+    setActiveRouting: (id) => {
+      const target = state.routings.find((routing) => routing.id === id);
+      if (!target) return reject("routing", id, `no routing with id ${id}`);
+      state.routings = state.routings.map((routing) => ({
+        ...routing,
+        isActive: routing.id === id,
+      }));
+      invalidate("setActiveRouting", "routings", "appSettings");
+      return resolve(record("setActiveRouting", [id], { ...target, isActive: true }));
+    },
+
+    deleteRoutings: (ids) => {
+      const before = state.routings.length;
+      state.routings = state.routings.filter((routing) => !ids.includes(routing.id));
+      invalidate("deleteRoutings", "routings", "appSettings");
+      return resolve(record("deleteRoutings", [ids], before - state.routings.length));
+    },
+
+    saveRoutingRule: (routingId, rule) => {
+      const routing = state.routings.find((item) => item.id === routingId);
+      if (!routing) return reject("routing", routingId, `no routing with id ${routingId}`);
+      const saved = { ...rule, id: rule.id || `rule-${routing.rules.length}` };
+      const updated = {
+        ...routing,
+        rules: routing.rules.some((item) => item.id === saved.id)
+          ? routing.rules.map((item) => (item.id === saved.id ? saved : item))
+          : [...routing.rules, saved],
+      };
+      state.routings = upsert(state.routings, updated);
+      invalidate("saveRoutingRule", "routings");
+      return resolve(record("saveRoutingRule", [routingId, rule], updated));
+    },
+
+    deleteRoutingRules: (routingId, ruleIds) => {
+      const routing = state.routings.find((item) => item.id === routingId);
+      if (!routing) return reject("routing", routingId, `no routing with id ${routingId}`);
+      const updated = {
+        ...routing,
+        rules: routing.rules.filter((rule) => !ruleIds.includes(rule.id)),
+      };
+      state.routings = upsert(state.routings, updated);
+      invalidate("deleteRoutingRules", "routings");
+      return resolve(record("deleteRoutingRules", [routingId, ruleIds], updated));
+    },
+
+    proxyListConnections: () =>
+      resolve(record("proxyListConnections", [], state.connections)),
+
+    // A null id is the command's own "all of them", the same as the backend.
+    proxyCloseConnection: (connectionId) => {
+      state.connections = {
+        ...state.connections,
+        connections:
+          connectionId === null
+            ? []
+            : state.connections.connections.filter((item) => item.id !== connectionId),
+      };
+      invalidate("proxyCloseConnection", "proxyConnections");
+      return resolve(record("proxyCloseConnection", [connectionId], state.connections));
+    },
+
+    proxyStartMonitor: () => {
+      state.proxyMonitorRunning = true;
+      return resolve(record("proxyStartMonitor", [], monitorStatus(true)));
+    },
+
+    proxyStopMonitor: () => {
+      state.proxyMonitorRunning = false;
+      return resolve(record("proxyStopMonitor", [], monitorStatus(false)));
+    },
+
+    proxySetTrafficMode: (mode) => {
+      state.settings = { ...state.settings, proxy: { ...state.settings.proxy, trafficMode: mode } };
+      invalidate("proxySetTrafficMode", "proxyConnections", "appSettings");
+      return resolve(record("proxySetTrafficMode", [mode], { mode }));
+    },
 
     listProfileSummaries: () =>
       resolve(
@@ -317,6 +462,18 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
  * keyed on it skips the rebuild. That is a difference a screen can see, so the
  * mock has to cross the same boundary.
  */
+/** The monitor reports itself the way the real one does: never stale, never failed. */
+function monitorStatus(running: boolean): ProxyMonitorStatus {
+  return { message: null, running, stale: false, state: running ? "running" : "stopped" };
+}
+
+/** Replaces an item by id, or appends it. */
+function upsert<T extends { id: string }>(items: T[], item: T): T[] {
+  return items.some((existing) => existing.id === item.id)
+    ? items.map((existing) => (existing.id === item.id ? item : existing))
+    : [...items, item];
+}
+
 function resolve<T>(value: T): Promise<T> {
   return Promise.resolve(value === undefined ? value : (JSON.parse(JSON.stringify(value)) as T));
 }

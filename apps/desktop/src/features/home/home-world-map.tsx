@@ -1,10 +1,5 @@
 import { worldMapPosition } from "@voya/features/home/country-positions";
-
-export type HomeMapMarker = {
-  countryCode: string;
-  /** Connected: where traffic leaves. Selected: where it would leave. */
-  state: "connected" | "selected";
-};
+import type { HomeMapMarker } from "@voya/features/home/map-marker";
 
 /**
  * The world map behind Home's hero. The land is a mask painted with a theme

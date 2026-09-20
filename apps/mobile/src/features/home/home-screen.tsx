@@ -1,4 +1,5 @@
 import { profileTitle } from "@voya/features/profiles/profile-display";
+import { homeMapMarker } from "@voya/features/home/map-marker";
 import { useConnectionIp } from "@voya/features/home/use-connection-ip";
 import { useHomeRuntime } from "@voya/features/home/use-home-runtime";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
@@ -12,13 +13,16 @@ import { Button, ButtonSpinner, ButtonText } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { Text } from "~/components/ui/text";
 
+import { WorldMap } from "./world-map";
+
 /**
  * The connection screen.
  *
  * Every decision it makes — which action the button runs, whether it is busy,
  * what the tunnel is complaining about — comes from `useHomeRuntime`, the same
  * controller the desktop's Home screen uses. What is rewritten here is the
- * view: a phone shows one column, and the world map arrives later.
+ * view: one column, with the map a band above the state rather than a layer
+ * behind it, because a phone has no room for text over a map.
  */
 export function HomeScreen() {
   const { t } = useI18n();
@@ -29,6 +33,18 @@ export function HomeScreen() {
   const nodeName = runtime.nodeEntry
     ? profileTitle(runtime.nodeEntry.profile.remarks, t)
     : null;
+  const groupRuntime = runtime.groupRuntime;
+  const groupEntry = groupRuntime?.nowProfileId
+    ? (runtime.profiles.find((entry) => entry.profile.id === groupRuntime.nowProfileId) ?? null)
+    : null;
+  const marker = homeMapMarker({
+    connected: runtime.connected,
+    exitCountryCode: ipQuery.data?.countryCode,
+    groupEntry,
+    hasNodes: runtime.hasNodes,
+    isGroup: runtime.activeGroup !== null,
+    nodeEntry: runtime.nodeEntry,
+  });
 
   return (
     <ScrollView
@@ -36,6 +52,8 @@ export function HomeScreen() {
       contentContainerClassName="gap-4 p-page"
       accessibilityLabel={t("home.aria")}
     >
+      <WorldMap marker={marker} />
+
       <View className="items-center gap-2 py-6">
         <Text className="text-page font-semibold text-foreground">
           {t(CORE_STATE_KEYS[runtime.state])}
@@ -112,9 +130,9 @@ export function HomeScreen() {
           </Button>
         </View>
       ) : null}
-      {!runtime.profilesPending && runtime.profiles.length === 0 ? (
+      {runtime.hasNodes ? null : (
         <Text className="text-caption text-subtle">{t("home.emptyGuide")}</Text>
-      ) : null}
+      )}
     </ScrollView>
   );
 }

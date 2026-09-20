@@ -137,3 +137,97 @@ describe("createMockBackend", () => {
     expect(backend.state.logStreaming).toBe(true);
   });
 });
+
+describe("the routing surface", () => {
+  it("starts from the seeded default profile and saves a rule into it", async () => {
+    const backend = createMockBackend();
+
+    const [routing] = await backend.commands.listRoutings();
+    expect(routing).toMatchObject({ isActive: true, remarks: "Default", rules: [] });
+
+    const saved = await backend.commands.saveRoutingRule(routing.id, {
+      domain: ["example.test"],
+      enabled: true,
+      id: "",
+      inboundTags: null,
+      ip: null,
+      kind: null,
+      network: null,
+      outbound: "proxy",
+      port: null,
+      process: null,
+      protocol: null,
+      remarks: "Office",
+      scope: null,
+    });
+
+    expect(saved.rules).toMatchObject([{ id: "rule-0", remarks: "Office" }]);
+    await expect(backend.commands.listRoutings()).resolves.toMatchObject([
+      { rules: [{ remarks: "Office" }] },
+    ]);
+
+    await expect(backend.commands.deleteRoutingRules(routing.id, ["rule-0"])).resolves.toMatchObject(
+      { rules: [] },
+    );
+  });
+
+  it("refuses a rule for a routing profile it does not have", async () => {
+    const backend = createMockBackend();
+
+    await expect(
+      backend.commands.deleteRoutingRules("ghost", ["rule-0"]),
+    ).rejects.toSatisfy(
+      (error: unknown) => appErrorOfKind(error, "notFound")?.kind.entity === "routing",
+    );
+  });
+});
+
+describe("the settings surface", () => {
+  it("round-trips a saved bundle and announces every cache it feeds", async () => {
+    const backend = createMockBackend();
+    const invalidations = vi.fn<(event: InvalidateEvent) => void>();
+    backend.on("invalidateEvent", invalidations);
+
+    const settings = await backend.commands.loadAppSettings();
+    await backend.commands.saveAppSettings({
+      ...settings,
+      behavior: { ...settings.behavior, autoCheckIp: false },
+    });
+
+    await expect(backend.commands.loadAppSettings()).resolves.toMatchObject({
+      behavior: { autoCheckIp: false },
+    });
+    // The bundle is a projection of the whole config, so every surface derived
+    // from it goes stale at once.
+    expect(invalidations.mock.calls[0]?.[0].keys.map((key) => key.scope.kind)).toEqual([
+      "appSettings",
+      "uiPreferences",
+      "dns",
+      "connectionMode",
+    ]);
+  });
+
+  it("keeps DNS and the bundle agreeing after a DNS-only save", async () => {
+    const backend = createMockBackend();
+    const dns = await backend.commands.loadDnsSettings();
+
+    await backend.commands.saveDnsSettings({ ...dns, direct: "9.9.9.9" });
+
+    await expect(backend.commands.loadDnsSettings()).resolves.toMatchObject({ direct: "9.9.9.9" });
+    await expect(backend.commands.loadAppSettings()).resolves.toMatchObject({
+      dns: { direct: "9.9.9.9" },
+    });
+  });
+
+  it("offers the tunnel as the only capture path", async () => {
+    const backend = createMockBackend();
+
+    await expect(backend.commands.connectionModeStatus()).resolves.toEqual({
+      mode: "vpn",
+      processRulesEffective: false,
+      processRulesSupported: false,
+      systemProxyAvailable: false,
+      vpnAvailable: true,
+    });
+  });
+});

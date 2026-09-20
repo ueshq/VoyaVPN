@@ -1,4 +1,4 @@
-import { createI18nHost, LOCALE_STORAGE_KEY, type Locale } from "./core";
+import { createI18nHost, LOCALE_STORAGE_KEY } from "./core";
 
 /**
  * The DOM host.
@@ -35,10 +35,8 @@ const setup = createI18nHost({
 
 export const { getInitialLocale, changeLocale, localeReady } = setup;
 
-/** Writes the locale onto `<html>`; named for what it does on this platform. */
-export const applyDocumentLocale: (locale?: Locale) => void = setup.applyLocale;
-
-// `localeOptions` is not re-exported: components read it from `useI18n()`,
-// and anything outside React takes it from `@voya/i18n/core`.
-export { i18next, isLocale } from "./core";
+// `localeOptions` and `isLocale` are not re-exported: components read the
+// options from `useI18n()`, and anything outside React takes either from
+// `@voya/i18n/core`.
+export { i18next } from "./core";
 export type { Locale, TranslationFunction, TranslationKey } from "./core";
