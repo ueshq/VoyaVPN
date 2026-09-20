@@ -95,11 +95,16 @@ type IInputFieldProps = React.ComponentProps<typeof UIInput.Input> &
 const InputField = React.forwardRef<
   React.ComponentRef<typeof UIInput.Input>,
   IInputFieldProps
->(function InputField({ className, ...props }, ref) {
+>(function InputField({ accessibilityLabel, className, ...props }, ref) {
   return (
     <UIInput.Input
       ref={ref}
       {...props}
+      // gluestack defaults `aria-label` to the literal "Input Field", which
+      // beats `accessibilityLabel` — so every field would announce itself as
+      // "Input Field" to a screen reader. React Native's own prop is what a
+      // caller should reach for, so it is mapped onto the one that wins.
+      aria-label={accessibilityLabel ?? props["aria-label"]}
       className={inputFieldStyle({
         class: className,
       })}

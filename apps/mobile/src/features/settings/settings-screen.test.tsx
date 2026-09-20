@@ -100,6 +100,27 @@ describe("SettingsScreen", () => {
     expect(screen.queryByText("Not updated from this device yet")).toBeNull();
   });
 
+  it("saves a resolver as it is typed", async () => {
+    await renderSettings();
+    const user = userEvent.setup();
+    const remote = await screen.findByLabelText("Remote DNS");
+
+    await user.clear(remote);
+    await user.type(remote, "1.1.1.1");
+
+    // The shared draft debounces and writes; nothing here is a save button.
+    await waitFor(() => expect(backend().state.settings.dns.remote).toBe("1.1.1.1"));
+    expect(remote.props.value).toBe("1.1.1.1");
+  });
+
+  it("switches FakeIP through the same draft", async () => {
+    await renderSettings();
+
+    await fireEvent(await screen.findByRole("switch", { name: "FakeIP" }), "valueChange", true);
+
+    await waitFor(() => expect(backend().state.settings.dns.fakeIp).toBe(true));
+  });
+
   it("streams the core log only while it is open, and says when there is none", async () => {
     const { unmount } = await renderSettings();
 

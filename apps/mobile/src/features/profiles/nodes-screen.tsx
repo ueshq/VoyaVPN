@@ -100,6 +100,7 @@ export function NodesScreen() {
         <Input>
           <InputField
             placeholder={t("panes.profiles.search.placeholder")}
+            accessibilityLabel={t("panes.profiles.search.placeholder")}
             value={selection.search}
             onChangeText={selection.setSearch}
             autoCapitalize="none"

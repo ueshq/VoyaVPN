@@ -1,4 +1,5 @@
 import { useAppSettings } from "@voya/features/settings/use-app-settings";
+import { useDnsSettings } from "@voya/features/dns/use-dns-settings";
 import { useLogStream } from "@voya/features/logs/use-log-stream";
 import { useRuleLibraryUpdate } from "@voya/features/updates/use-rule-library-update";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
@@ -10,6 +11,7 @@ import { ScrollView, Switch, View } from "react-native";
 
 import { Button, ButtonSpinner, ButtonText } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
+import { Input, InputField } from "~/components/ui/input";
 import { Pressable } from "~/components/ui/pressable";
 import { Text } from "~/components/ui/text";
 
@@ -35,6 +37,7 @@ export function SettingsScreen() {
   const appearance = app.settings?.appearance;
   const logLines = useRuntimeEventStore((state) => state.logLines.length);
   const ruleLibrary = useRuleLibraryUpdate();
+  const dns = useDnsSettings(true);
 
   // Mounting this screen is what asks the backend for log lines.
   useLogStream();
@@ -114,6 +117,48 @@ export function SettingsScreen() {
         </Card>
       ) : null}
 
+      {/* The three resolvers and the two switches that change what gets
+          resolved at all. The rest of the desktop's DNS pane — strategies,
+          expected IPs, Hosts — is a text-editing job a phone should not ask
+          for; the desktop stays the place to do it, and what is set there is
+          kept as it is. */}
+      {dns.form ? (
+        <Card className="gap-3 rounded-card bg-card p-4">
+          <Text className="text-section text-foreground">{t("panes.dns.title")}</Text>
+          <DnsField
+            label={t("panes.dns.remoteDns")}
+            value={dns.form.remote}
+            error={dns.fieldErrors.remote}
+            onChange={(remote) => dns.updateSimple({ remote })}
+          />
+          <DnsField
+            label={t("panes.dns.directDns")}
+            value={dns.form.direct}
+            error={dns.fieldErrors.direct}
+            onChange={(direct) => dns.updateSimple({ direct })}
+          />
+          <DnsField
+            label={t("panes.dns.bootstrapDns")}
+            value={dns.form.bootstrap}
+            error={dns.fieldErrors.bootstrap}
+            onChange={(bootstrap) => dns.updateSimple({ bootstrap })}
+          />
+          <Toggle
+            label={t("panes.dns.fakeIp")}
+            value={dns.form.fakeIp ?? false}
+            onChange={(fakeIp) => dns.updateSimple({ fakeIp })}
+          />
+          <Toggle
+            label={t("panes.dns.blockBindingQuery")}
+            value={dns.form.blockBindingQuery ?? false}
+            onChange={(blockBindingQuery) => dns.updateSimple({ blockBindingQuery })}
+          />
+          {dns.operationError ? (
+            <Text className="text-caption text-danger">{dns.operationError}</Text>
+          ) : null}
+        </Card>
+      ) : null}
+
       {/* The app itself is updated by the store, so only the rule library is
           offered here — the desktop's self-update has no equivalent. */}
       <Card className="gap-3 rounded-card bg-card p-4">
@@ -154,6 +199,41 @@ export function SettingsScreen() {
         </Text>
       </Card>
     </ScrollView>
+  );
+}
+
+/**
+ * One resolver address.
+ *
+ * Saved as it is typed, like every other setting here: the shared draft
+ * debounces and validates, and a rejected value keeps what was typed so it can
+ * be corrected rather than retyped.
+ */
+function DnsField({
+  error,
+  label,
+  onChange,
+  value,
+}: {
+  error: string | undefined;
+  label: string;
+  onChange: (value: string) => void;
+  value: string | null;
+}) {
+  return (
+    <View className="gap-1">
+      <Text className="text-caption text-subtle">{label}</Text>
+      <Input>
+        <InputField
+          value={value ?? ""}
+          onChangeText={onChange}
+          autoCapitalize="none"
+          autoCorrect={false}
+          accessibilityLabel={label}
+        />
+      </Input>
+      {error ? <Text className="text-caption text-danger">{error}</Text> : null}
+    </View>
   );
 }
 

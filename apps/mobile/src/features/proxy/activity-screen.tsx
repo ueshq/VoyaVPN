@@ -124,6 +124,7 @@ export function ActivityScreen() {
         <Input>
           <InputField
             placeholder={t("proxy.filterConnections")}
+            accessibilityLabel={t("proxy.filterConnections")}
             value={search}
             onChangeText={setSearch}
             autoCapitalize="none"
