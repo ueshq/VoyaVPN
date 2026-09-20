@@ -46,6 +46,7 @@ apps/web/.output/
 .gradle/
 .cxx/
 apps/mobile/ios/Pods/
+apps/mobile/ios/.xcode.env.local
 apps/mobile/ios/build/
 apps/mobile/android/.kotlin/
 apps/mobile/.bundle-check/
