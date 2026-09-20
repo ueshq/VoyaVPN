@@ -451,6 +451,19 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       );
     },
 
+    updateGeoAssets: () =>
+      resolve(
+        record("updateGeoAssets", [], [
+          { bytes: 1_048_576, name: "geoip.db", usedProxy: false },
+          { bytes: 2_097_152, name: "geosite.db", usedProxy: false },
+        ]),
+      ),
+
+    updateSrsAssets: () =>
+      resolve(
+        record("updateSrsAssets", [], [{ bytes: 131_072, name: "geosite-cn.srs", usedProxy: false }]),
+      ),
+
     cancelSpeedtest: () => {
       state.speedtestRunning = false;
       return resolve(record("cancelSpeedtest", [], { running: false }));

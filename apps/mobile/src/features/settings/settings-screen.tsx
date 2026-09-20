@@ -1,5 +1,6 @@
 import { useAppSettings } from "@voya/features/settings/use-app-settings";
 import { useLogStream } from "@voya/features/logs/use-log-stream";
+import { useRuleLibraryUpdate } from "@voya/features/updates/use-rule-library-update";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { localeOptions } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -7,6 +8,7 @@ import type { ThemeMode } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n/core";
 import { ScrollView, Switch, View } from "react-native";
 
+import { Button, ButtonSpinner, ButtonText } from "~/components/ui/button";
 import { Card } from "~/components/ui/card";
 import { Pressable } from "~/components/ui/pressable";
 import { Text } from "~/components/ui/text";
@@ -28,10 +30,11 @@ const THEME_MODES = [
  * `UNSUPPORTED_ON_MOBILE` in the mobile host).
  */
 export function SettingsScreen() {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const app = useAppSettings();
   const appearance = app.settings?.appearance;
   const logLines = useRuntimeEventStore((state) => state.logLines.length);
+  const ruleLibrary = useRuleLibraryUpdate();
 
   // Mounting this screen is what asks the backend for log lines.
   useLogStream();
@@ -110,6 +113,37 @@ export function SettingsScreen() {
           {app.error ? <Text className="text-caption text-danger">{app.error}</Text> : null}
         </Card>
       ) : null}
+
+      {/* The app itself is updated by the store, so only the rule library is
+          offered here — the desktop's self-update has no equivalent. */}
+      <Card className="gap-3 rounded-card bg-card p-4">
+        <Text className="text-section text-foreground">{t("updates.ruleLibraryTitle")}</Text>
+        <Text className="text-caption text-subtle">{t("updates.ruleLibraryDescription")}</Text>
+        <Text className="text-caption text-subtlest">
+          {ruleLibrary.updatedAt === null
+            ? t("updates.neverUpdated")
+            : t("updates.lastUpdated", {
+                time: new Date(ruleLibrary.updatedAt).toLocaleString(language),
+              })}
+        </Text>
+        {ruleLibrary.files?.length ? (
+          <Text className="text-caption text-subtle">
+            {t("updates.resourceUpdated", { count: ruleLibrary.files.length })}
+          </Text>
+        ) : null}
+        {ruleLibrary.error ? (
+          <Text className="text-caption text-danger">{ruleLibrary.error}</Text>
+        ) : null}
+        <Button
+          size="sm"
+          variant="outline"
+          isDisabled={ruleLibrary.updating}
+          onPress={() => void ruleLibrary.update()}
+        >
+          {ruleLibrary.updating ? <ButtonSpinner /> : null}
+          <ButtonText>{t("updates.updateNow")}</ButtonText>
+        </Button>
+      </Card>
 
       <Card className="gap-1 rounded-card bg-card p-4">
         <Text className="text-section text-foreground">{t("tabs.logs")}</Text>

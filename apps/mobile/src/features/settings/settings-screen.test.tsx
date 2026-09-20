@@ -45,6 +45,12 @@ afterEach(async () => {
   usePreferencesStore.setState(usePreferencesStore.getInitialState());
 });
 
+beforeEach(() => {
+  // The timestamp is persisted, so a run that updated it would leak into the
+  // next test's "never updated" line.
+  usePreferencesStore.setState({ ruleLibraryUpdatedAt: null });
+});
+
 describe("SettingsScreen", () => {
   it("marks the saved theme and saves another one", async () => {
     await renderSettings();
@@ -78,6 +84,20 @@ describe("SettingsScreen", () => {
     await fireEvent(toggle, "valueChange", false);
 
     await waitFor(() => expect(backend().state.settings.behavior.autoCheckIp).toBe(false));
+  });
+
+  it("refreshes the rule library and says what arrived", async () => {
+    await renderSettings();
+    const user = userEvent.setup();
+
+    await user.press(await screen.findByText("Update now"));
+
+    await waitFor(() => expect(screen.getByText("Updated 3 files")).toBeOnTheScreen());
+    expect(backend().state.calls.map((call) => call.command)).toEqual(
+      expect.arrayContaining(["updateGeoAssets", "updateSrsAssets"]),
+    );
+    // Both halves land, and the timestamp replaces "never updated".
+    expect(screen.queryByText("Not updated from this device yet")).toBeNull();
   });
 
   it("streams the core log only while it is open, and says when there is none", async () => {
