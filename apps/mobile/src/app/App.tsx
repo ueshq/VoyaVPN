@@ -17,6 +17,7 @@ import { navigationRef } from "./navigation";
 import { createMobileQueryClient } from "./query-client";
 import type { ShellTab } from "./tabs";
 import { SHELL_TABS } from "./tabs";
+import { useRuntimeStatusSeed } from "./use-runtime-status-seed";
 import { useTheme } from "./use-theme";
 
 const Tab = createBottomTabNavigator();
@@ -50,6 +51,7 @@ function Shell() {
 
   const { t } = useI18n();
   const scheme = useTheme();
+  useRuntimeStatusSeed();
 
   return (
     <NavigationContainer ref={navigationRef} theme={scheme === "dark" ? DarkTheme : DefaultTheme}>

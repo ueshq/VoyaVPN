@@ -28,33 +28,52 @@ import Network
         private static let workingDirectoryName = "PTest"
 
         private let lock = NSLock()
-        private var instances: [String: LibboxBoxService] = [:]
+        private var instances: [String: LibboxCommandServer] = [:]
 
         func start(configJson: String) throws -> String {
             let coreId = UUID().uuidString
-            let working = try prepareWorkingDirectory(coreId: coreId)
+            let paths = try prepareWorkingDirectory(coreId: coreId)
+
+            // Process-wide, so two probe cores at once would fight over it.
+            // Nothing starts two: `SpeedtestManager` runs one core per run and
+            // holds a lock across the run.
+            let options = LibboxSetupOptions()
+            options.basePath = paths.base.path
+            options.workingPath = paths.working.path
+            options.tempPath = paths.temp.path
+            options.logMaxLines = 0
+            options.debug = false
 
             var setupError: NSError?
-            LibboxSetup(working.base.path, working.working.path, working.temp.path, false, &setupError)
+            LibboxSetup(options, &setupError)
             if let setupError {
                 throw ProbeCoreError.Failed(message: "libbox setup failed: \(setupError.localizedDescription)")
             }
 
-            var newError: NSError?
-            guard let service = LibboxNewService(configJson, ProbePlatformInterface(), &newError) else {
+            let platform = ProbePlatformInterface()
+            var serverError: NSError?
+            let server = LibboxNewCommandServer(platform, platform, &serverError)
+            if let serverError {
                 throw ProbeCoreError.Failed(
-                    message: newError.map { "the probe config was rejected: \($0.localizedDescription)" }
-                        ?? "the probe core could not be created",
+                    message: "the probe core could not be created: \(serverError.localizedDescription)",
                 )
             }
+            guard let server else {
+                throw ProbeCoreError.Failed(message: "LibboxNewCommandServer returned nil")
+            }
+
             do {
-                try service.start()
+                try server.start()
+                try server.startOrReloadService(configJson, options: LibboxOverrideOptions())
             } catch {
-                throw ProbeCoreError.Failed(message: "the probe core did not start: \(error.localizedDescription)")
+                server.close()
+                throw ProbeCoreError.Failed(
+                    message: "the probe core did not start: \(error.localizedDescription)",
+                )
             }
 
             lock.lock()
-            instances[coreId] = service
+            instances[coreId] = server
             lock.unlock()
 
             return coreId
@@ -62,16 +81,15 @@ import Network
 
         func stop(coreId: String) throws {
             lock.lock()
-            let service = instances.removeValue(forKey: coreId)
+            let server = instances.removeValue(forKey: coreId)
             lock.unlock()
 
-            guard let service else { return }
-            do {
-                try service.close()
-            } catch {
-                throw ProbeCoreError.Failed(message: "the probe core did not stop: \(error.localizedDescription)")
-            }
-            try? FileManager.default.removeItem(at: workingRoot().appendingPathComponent(coreId))
+            guard let server else { return }
+            // Closing the service first stops the inbounds; closing the server
+            // releases the instance behind them.
+            try? server.closeService()
+            server.close()
+            try? FileManager.default.removeItem(at: workingRoot().appendingPathComponent(String(coreId.prefix(8))))
         }
 
         private func workingRoot() -> URL {
@@ -110,7 +128,9 @@ import Network
      * The tunnel's own implementation — the one that answers all of this for real
      * — is `native/apple/PacketTunnel/PacketTunnelPlatform.swift`.
      */
-    private final class ProbePlatformInterface: NSObject, LibboxPlatformInterfaceProtocol {
+    private final class ProbePlatformInterface: NSObject, LibboxPlatformInterfaceProtocol,
+        LibboxCommandServerHandlerProtocol
+    {
         private var defaultPathMonitor: NWPathMonitor?
 
         func openTun(_: LibboxTunOptionsProtocol?, ret0_: UnsafeMutablePointer<Int32>?) throws {
@@ -191,10 +211,34 @@ import Network
 
         func send(_: LibboxNotification?) throws {}
 
+        // MARK: - LibboxCommandServerHandlerProtocol
+        //
+        // A probe core has no system proxy to report and nobody to reload it;
+        // the command server only needs these to answer.
+
+        func serviceReload() throws {}
+
+        func serviceStop() throws {}
+
+        func getSystemProxyStatus() throws -> LibboxSystemProxyStatus {
+            let status = LibboxSystemProxyStatus()
+            status.available = false
+            status.enabled = false
+
+            return status
+        }
+
+        func setSystemProxyEnabled(_: Bool) throws {
+            throw probeError("A probe core sets no system proxy.")
+        }
+
+        func writeDebugMessage(_: String?) {}
+
         private func probeError(_ message: String) -> NSError {
             NSError(domain: "VoyaProbePlatformInterface", code: -1, userInfo: [NSLocalizedDescriptionKey: message])
         }
     }
+
 #else
     /**
      * A build without Libbox.

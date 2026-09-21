@@ -9,22 +9,90 @@
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-VoyaVPN.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-VoyaVPN.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		1861294F9DD14C6E28777254 /* VoyaMobile.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5D567F08A5BB2472A3195D1 /* VoyaMobile.xcframework */; };
+		22CFC5869E3B3759234E32DF /* VoyaNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0644747CCFE960CE954AD933 /* VoyaNative.swift */; };
+		42CE4D7CA38AD481CD1D6749 /* PacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 50E81178832F794513B4E65B /* PacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		463B87F382BCC306A0E97DF6 /* PacketTunnelPlatform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C499B0D4FB261A67584353F /* PacketTunnelPlatform.swift */; };
+		4AFCCC2B94CB5B3BEF0EAD38 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72B400BBB64AE08ACBAF695A /* Foundation.framework */; };
 		505BC13DD62EE3498AAB3EA2 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+		59242FCD90881918AC5F99D3 /* Libbox.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = DF1D8107720952E131412334 /* Libbox.xcframework */; };
+		716FA596E2798DA25A90D3FD /* PacketTunnelDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FE8B2556E60B895C7F47354 /* PacketTunnelDiagnostics.swift */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		82D39D05BABEF47ED1015765 /* PacketTunnelRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73BBE08A90A4CE764C0CB366 /* PacketTunnelRuntime.swift */; };
+		877BA7E1A6C05A91C5B187EE /* SystemTunnelHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B48A5A7FD7186CBF27566D /* SystemTunnelHost.swift */; };
+		A4AED9639592F9E312E41595 /* Libbox.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = DF1D8107720952E131412334 /* Libbox.xcframework */; };
+		A4D68F46DDC48318DFDB0042 /* VoyaNative.m in Sources */ = {isa = PBXBuildFile; fileRef = D69BEAD0F5C9D92DA12EBDE3 /* VoyaNative.m */; };
+		BC720925E8796201901BF824 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF131E8A8403724863AC75BD /* NetworkExtension.framework */; };
+		BE3E6F6BF68F1352AE35644A /* VoyaVPNUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBEBC064102B39B1CCE093D8 /* VoyaVPNUITests.swift */; };
+		C98B8803CF80369F43275AF4 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF131E8A8403724863AC75BD /* NetworkExtension.framework */; };
+		CCDBA2FD6C8CD6F4B7CA73FF /* voya_mobile_ffi.swift in Sources */ = {isa = PBXBuildFile; fileRef = C61EA0586910C0E073994894 /* voya_mobile_ffi.swift */; };
+		CE769709CEE289E9E1B66E96 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72B400BBB64AE08ACBAF695A /* Foundation.framework */; };
+		D36620DFBD50E5B6FB12267F /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACD3E150945C58AA0FC180D /* PacketTunnelProvider.swift */; };
+		D92D1824FC1BED7E496E83E3 /* LibboxProbeCoreHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC0BACB3A3F05714704D984 /* LibboxProbeCoreHost.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		122D27D21BF12047DFA28F20 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 13B07F861A680F5B00A75B9A;
+			remoteInfo = VoyaVPN;
+		};
+		570A319B0BEEA2C4F4D5FA4F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 83CBB9F71A601CBA00E9B192 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C2FA60C4A0EF494D25E4A677;
+			remoteInfo = PacketTunnel;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		FFAAFC1ECCC7FF193922F9BA /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				42CE4D7CA38AD481CD1D6749 /* PacketTunnel.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0644747CCFE960CE954AD933 /* VoyaNative.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoyaNative.swift; sourceTree = "<group>"; };
+		0FE8B2556E60B895C7F47354 /* PacketTunnelDiagnostics.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PacketTunnelDiagnostics.swift; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* VoyaVPN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VoyaVPN.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = VoyaVPN/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = VoyaVPN/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = VoyaVPN/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		1AF6A75C9DD5D477824A0224 /* VoyaVPNUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoyaVPNUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2ACD3E150945C58AA0FC180D /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-VoyaVPN.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VoyaVPN.debug.xcconfig"; path = "Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN.debug.xcconfig"; sourceTree = "<group>"; };
+		4C499B0D4FB261A67584353F /* PacketTunnelPlatform.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PacketTunnelPlatform.swift; sourceTree = "<group>"; };
+		4F8DD884BFE8E4921CCD0A1A /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		50E81178832F794513B4E65B /* PacketTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PacketTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5709B34CF0A7D63546082F79 /* Pods-VoyaVPN.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VoyaVPN.release.xcconfig"; path = "Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-VoyaVPN.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-VoyaVPN.a"; sourceTree = BUILT_PRODUCTS_DIR; };
+		72B400BBB64AE08ACBAF695A /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		73BBE08A90A4CE764C0CB366 /* PacketTunnelRuntime.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PacketTunnelRuntime.swift; sourceTree = "<group>"; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = VoyaVPN/AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = VoyaVPN/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		A4B48A5A7FD7186CBF27566D /* SystemTunnelHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SystemTunnelHost.swift; sourceTree = "<group>"; };
+		ABBE146FE502123AC1B2D651 /* VoyaVPN-Bridging-Header.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "VoyaVPN-Bridging-Header.h"; sourceTree = "<group>"; };
+		C61EA0586910C0E073994894 /* voya_mobile_ffi.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = voya_mobile_ffi.swift; sourceTree = "<group>"; };
+		D69BEAD0F5C9D92DA12EBDE3 /* VoyaNative.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = VoyaNative.m; sourceTree = "<group>"; };
+		DBEBC064102B39B1CCE093D8 /* VoyaVPNUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoyaVPNUITests.swift; sourceTree = "<group>"; };
+		DDC0BACB3A3F05714704D984 /* LibboxProbeCoreHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LibboxProbeCoreHost.swift; sourceTree = "<group>"; };
+		DF1D8107720952E131412334 /* Libbox.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; path = Libbox.xcframework; sourceTree = "<group>"; };
+		E5D567F08A5BB2472A3195D1 /* VoyaMobile.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; path = VoyaMobile.xcframework; sourceTree = "<group>"; };
+		E99A8BD66DC9F940B396688F /* PacketTunnel.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PacketTunnel.entitlements; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
+		EF131E8A8403724863AC75BD /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,6 +101,27 @@
 			buildActionMask = 2147483647;
 			files = (
 				0C80B921A6F3F58F76C31292 /* libPods-VoyaVPN.a in Frameworks */,
+				1861294F9DD14C6E28777254 /* VoyaMobile.xcframework in Frameworks */,
+				C98B8803CF80369F43275AF4 /* NetworkExtension.framework in Frameworks */,
+				A4AED9639592F9E312E41595 /* Libbox.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		58DE3A9DC94223434945C289 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CE769709CEE289E9E1B66E96 /* Foundation.framework in Frameworks */,
+				BC720925E8796201901BF824 /* NetworkExtension.framework in Frameworks */,
+				59242FCD90881918AC5F99D3 /* Libbox.xcframework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C97FC85EC0BD9D5A2C97C289 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4AFCCC2B94CB5B3BEF0EAD38 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -47,18 +136,65 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */,
+				31569DAAC9EBC699EBC3D190 /* Native */,
+				DE4B946CB814D7DEC918C25B /* Generated */,
 			);
 			name = VoyaVPN;
 			sourceTree = "<group>";
+		};
+		1584DC8BBD59177F508FBA9D /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				72B400BBB64AE08ACBAF695A /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		1B671533167E7DB60F3ED916 /* PacketTunnelProvider */ = {
+			isa = PBXGroup;
+			children = (
+				2ACD3E150945C58AA0FC180D /* PacketTunnelProvider.swift */,
+				73BBE08A90A4CE764C0CB366 /* PacketTunnelRuntime.swift */,
+				0FE8B2556E60B895C7F47354 /* PacketTunnelDiagnostics.swift */,
+				4C499B0D4FB261A67584353F /* PacketTunnelPlatform.swift */,
+			);
+			name = PacketTunnelProvider;
+			path = ../../../native/apple/PacketTunnel;
+			sourceTree = SOURCE_ROOT;
 		};
 		2D16E6871FA4F8E400B85C8A /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				5DCACB8F33CDC322A6C60F78 /* libPods-VoyaVPN.a */,
+				EF131E8A8403724863AC75BD /* NetworkExtension.framework */,
+				1584DC8BBD59177F508FBA9D /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
+		};
+		31569DAAC9EBC699EBC3D190 /* Native */ = {
+			isa = PBXGroup;
+			children = (
+				0644747CCFE960CE954AD933 /* VoyaNative.swift */,
+				D69BEAD0F5C9D92DA12EBDE3 /* VoyaNative.m */,
+				A4B48A5A7FD7186CBF27566D /* SystemTunnelHost.swift */,
+				DDC0BACB3A3F05714704D984 /* LibboxProbeCoreHost.swift */,
+				ABBE146FE502123AC1B2D651 /* VoyaVPN-Bridging-Header.h */,
+			);
+			name = Native;
+			path = VoyaVPN/Native;
+			sourceTree = "<group>";
+		};
+		46B7EB0AF1824A4AAC341BDC /* PacketTunnel */ = {
+			isa = PBXGroup;
+			children = (
+				4F8DD884BFE8E4921CCD0A1A /* Info.plist */,
+				E99A8BD66DC9F940B396688F /* PacketTunnel.entitlements */,
+			);
+			name = PacketTunnel;
+			path = PacketTunnel;
+			sourceTree = SOURCE_ROOT;
 		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
 			isa = PBXGroup;
@@ -75,6 +211,10 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				D1F05ACC0D125CFDB78F1B0D /* VoyaFrameworks */,
+				1B671533167E7DB60F3ED916 /* PacketTunnelProvider */,
+				46B7EB0AF1824A4AAC341BDC /* PacketTunnel */,
+				F0487B8371431A6CF109E2A2 /* VoyaVPNUITests */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -85,6 +225,8 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* VoyaVPN.app */,
+				50E81178832F794513B4E65B /* PacketTunnel.appex */,
+				1AF6A75C9DD5D477824A0224 /* VoyaVPNUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -98,6 +240,34 @@
 			path = Pods;
 			sourceTree = "<group>";
 		};
+		D1F05ACC0D125CFDB78F1B0D /* VoyaFrameworks */ = {
+			isa = PBXGroup;
+			children = (
+				E5D567F08A5BB2472A3195D1 /* VoyaMobile.xcframework */,
+				DF1D8107720952E131412334 /* Libbox.xcframework */,
+			);
+			name = VoyaFrameworks;
+			path = Frameworks;
+			sourceTree = SOURCE_ROOT;
+		};
+		DE4B946CB814D7DEC918C25B /* Generated */ = {
+			isa = PBXGroup;
+			children = (
+				C61EA0586910C0E073994894 /* voya_mobile_ffi.swift */,
+			);
+			name = Generated;
+			path = VoyaVPN/Generated;
+			sourceTree = "<group>";
+		};
+		F0487B8371431A6CF109E2A2 /* VoyaVPNUITests */ = {
+			isa = PBXGroup;
+			children = (
+				DBEBC064102B39B1CCE093D8 /* VoyaVPNUITests.swift */,
+			);
+			name = VoyaVPNUITests;
+			path = VoyaVPNUITests;
+			sourceTree = SOURCE_ROOT;
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -109,6 +279,7 @@
 				13B07F871A680F5B00A75B9A /* Sources */,
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
+				FFAAFC1ECCC7FF193922F9BA /* Embed App Extensions */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				00EEFC60759A1932668264C0 /* [CP] Embed Pods Frameworks */,
 				E235C05ADACE081382539298 /* [CP] Copy Pods Resources */,
@@ -116,11 +287,47 @@
 			buildRules = (
 			);
 			dependencies = (
+				E3A03F007DC244A260AAF978 /* PBXTargetDependency */,
 			);
 			name = VoyaVPN;
 			productName = VoyaVPN;
 			productReference = 13B07F961A680F5B00A75B9A /* VoyaVPN.app */;
 			productType = "com.apple.product-type.application";
+		};
+		C17963C46F16DF75CE96C7EC /* VoyaVPNUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A5D0814A5B4EA38C99FC0C68 /* Build configuration list for PBXNativeTarget "VoyaVPNUITests" */;
+			buildPhases = (
+				DEC5C052D9AF3BC1F27FADCE /* Sources */,
+				C97FC85EC0BD9D5A2C97C289 /* Frameworks */,
+				27189FFEDB347A1CC9F7B024 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3304B2C19ADC9407E14CC65B /* PBXTargetDependency */,
+			);
+			name = VoyaVPNUITests;
+			productName = VoyaVPNUITests;
+			productReference = 1AF6A75C9DD5D477824A0224 /* VoyaVPNUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		C2FA60C4A0EF494D25E4A677 /* PacketTunnel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 956CB599A3913978DAC052D2 /* Build configuration list for PBXNativeTarget "PacketTunnel" */;
+			buildPhases = (
+				D3232DCE5FFB6E001F90B4B3 /* Sources */,
+				58DE3A9DC94223434945C289 /* Frameworks */,
+				A86DF526F2737E9B18770AF1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PacketTunnel;
+			productName = PacketTunnel;
+			productReference = 50E81178832F794513B4E65B /* PacketTunnel.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -149,6 +356,8 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* VoyaVPN */,
+				C2FA60C4A0EF494D25E4A677 /* PacketTunnel */,
+				C17963C46F16DF75CE96C7EC /* VoyaVPNUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -161,6 +370,20 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				505BC13DD62EE3498AAB3EA2 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		27189FFEDB347A1CC9F7B024 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A86DF526F2737E9B18770AF1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -247,20 +470,120 @@
 			buildActionMask = 2147483647;
 			files = (
 				761780ED2CA45674006654EE /* AppDelegate.swift in Sources */,
+				22CFC5869E3B3759234E32DF /* VoyaNative.swift in Sources */,
+				A4D68F46DDC48318DFDB0042 /* VoyaNative.m in Sources */,
+				877BA7E1A6C05A91C5B187EE /* SystemTunnelHost.swift in Sources */,
+				D92D1824FC1BED7E496E83E3 /* LibboxProbeCoreHost.swift in Sources */,
+				CCDBA2FD6C8CD6F4B7CA73FF /* voya_mobile_ffi.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D3232DCE5FFB6E001F90B4B3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D36620DFBD50E5B6FB12267F /* PacketTunnelProvider.swift in Sources */,
+				82D39D05BABEF47ED1015765 /* PacketTunnelRuntime.swift in Sources */,
+				716FA596E2798DA25A90D3FD /* PacketTunnelDiagnostics.swift in Sources */,
+				463B87F382BCC306A0E97DF6 /* PacketTunnelPlatform.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DEC5C052D9AF3BC1F27FADCE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BE3E6F6BF68F1352AE35644A /* VoyaVPNUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		3304B2C19ADC9407E14CC65B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = VoyaVPN;
+			target = 13B07F861A680F5B00A75B9A /* VoyaVPN */;
+			targetProxy = 122D27D21BF12047DFA28F20 /* PBXContainerItemProxy */;
+		};
+		E3A03F007DC244A260AAF978 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = PacketTunnel;
+			target = C2FA60C4A0EF494D25E4A677 /* PacketTunnel */;
+			targetProxy = 570A319B0BEEA2C4F4D5FA4F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		106BCB6D08D8E378E655572C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks",
+				);
+				INFOPLIST_FILE = PacketTunnel/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lresolv",
+					"-Wl,-no_compact_unwind",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.voyavpn.mobile.PacketTunnel;
+				PRODUCT_MODULE_NAME = PacketTunnel;
+				PRODUCT_NAME = PacketTunnel;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		117068AE687F7B65132FD129 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				PRODUCT_BUNDLE_IDENTIFIER = app.voyavpn.mobile.uitests;
+				PRODUCT_NAME = VoyaVPNUITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = VoyaVPN;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		13B07F941A680F5B00A75B9A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 3B4392A12AC88292D35C810B /* Pods-VoyaVPN.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = VoyaVPN/VoyaVPN.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_BITCODE = NO;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/VoyaVPN/Generated",
+				);
 				INFOPLIST_FILE = VoyaVPN/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -272,10 +595,13 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
+					"-lresolv",
+					"-Wl,-no_compact_unwind",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.voyavpn.mobile;
 				PRODUCT_NAME = VoyaVPN;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "VoyaVPN/Native/VoyaVPN-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -289,7 +615,16 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = VoyaVPN/VoyaVPN.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/VoyaVPN/Generated",
+				);
 				INFOPLIST_FILE = VoyaVPN/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -301,15 +636,68 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
+					"-lresolv",
+					"-Wl,-no_compact_unwind",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = app.voyavpn.mobile;
 				PRODUCT_NAME = VoyaVPN;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_OBJC_BRIDGING_HEADER = "VoyaVPN/Native/VoyaVPN-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
+		};
+		3C91350AA70588976C20BA80 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
+				CURRENT_PROJECT_VERSION = 1;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks",
+				);
+				INFOPLIST_FILE = PacketTunnel/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-lresolv",
+					"-Wl,-no_compact_unwind",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = app.voyavpn.mobile.PacketTunnel;
+				PRODUCT_MODULE_NAME = PacketTunnel;
+				PRODUCT_NAME = PacketTunnel;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		58B7B03AE5E0FBEC86EF19FA /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
+				PRODUCT_BUNDLE_IDENTIFIER = app.voyavpn.mobile.uitests;
+				PRODUCT_NAME = VoyaVPNUITests;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = VoyaVPN;
+			};
+			name = Debug;
 		};
 		83CBBA201A601CBA00E9B192 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -344,7 +732,7 @@
 				COPY_PHASE_STRIP = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -426,7 +814,7 @@
 				COPY_PHASE_STRIP = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -484,6 +872,24 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		956CB599A3913978DAC052D2 /* Build configuration list for PBXNativeTarget "PacketTunnel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				106BCB6D08D8E378E655572C /* Release */,
+				3C91350AA70588976C20BA80 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A5D0814A5B4EA38C99FC0C68 /* Build configuration list for PBXNativeTarget "VoyaVPNUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				117068AE687F7B65132FD129 /* Release */,
+				58B7B03AE5E0FBEC86EF19FA /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

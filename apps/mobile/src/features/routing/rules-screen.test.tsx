@@ -66,6 +66,16 @@ describe("RulesScreen", () => {
     expect(screen.getByText("example.test")).toBeOnTheScreen();
   });
 
+  it("calls a managed rule what the desktop calls it, not by its reserved remarks", async () => {
+    // `voya:ai-services` is the rule's identity, seeded by the backend on a
+    // fresh install; showing it raw is what a phone did before this.
+    await seedRule("voya:ai-services");
+    await renderRules();
+
+    expect(await screen.findByText("AI services via proxy")).toBeOnTheScreen();
+    expect(screen.queryByText("voya:ai-services")).toBeNull();
+  });
+
   it("says the list is empty rather than showing nothing", async () => {
     await renderRules();
 

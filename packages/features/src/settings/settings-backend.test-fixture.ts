@@ -4,6 +4,7 @@ import { appErrorOfKind, IpcCommandError } from "@voya/client/errors";
 import { setVoyaCommands } from "@voya/client/transport";
 
 import { makeAppSettings } from "./app-settings.test-fixture";
+import { cloneJson } from "./settings-draft";
 
 // The error class and the kind check stay real, so a rejected save takes the
 // app's own validation path rather than a stand-in for it.
@@ -56,20 +57,20 @@ export function resetSettingsBackend() {
     connected: false,
   });
   settingsIpc.loadAppSettings.mockImplementation(async () =>
-    structuredClone(settings),
+    cloneJson(settings),
   );
   settingsIpc.saveAppSettings.mockImplementation(
     async (next: AppSettingsV1) => {
-      settings = structuredClone(next);
-      return structuredClone(settings);
+      settings = cloneJson(next);
+      return cloneJson(settings);
     },
   );
   settingsIpc.loadDnsSettings.mockImplementation(async () =>
-    structuredClone(settings.dns),
+    cloneJson(settings.dns),
   );
   settingsIpc.saveDnsSettings.mockImplementation(async (dns: DnsSettings) => {
-    settings = { ...settings, dns: structuredClone(dns) };
-    return structuredClone(dns);
+    settings = { ...settings, dns: cloneJson(dns) };
+    return cloneJson(dns);
   });
   settingsIpc.loadUiPreferences.mockImplementation(
     async () => settings.appearance,

@@ -9,6 +9,14 @@
  */
 declare const performance: { now: () => number };
 
-/** Hermes has had both since React Native 0.72; neither is in the RN types. */
+/**
+ * Hermes has had this since React Native 0.72 and the RN types omit it;
+ * `setUpReactDevTools` asserts on it at startup, so it is always there.
+ *
+ * `structuredClone` deliberately is *not* declared here. It used to be, and it
+ * was wrong: RN 0.87 keeps its implementation private to the `Performance` web
+ * API and never installs the global. The declaration made shared code compile
+ * against a global that does not exist, and the app died on Hermes the first
+ * time the settings screen mounted. `no-restricted-globals` now says so too.
+ */
 declare function queueMicrotask(callback: () => void): void;
-declare function structuredClone<T>(value: T): T;

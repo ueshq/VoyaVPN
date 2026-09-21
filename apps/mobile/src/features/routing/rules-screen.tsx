@@ -1,6 +1,7 @@
 import { useTrafficMode } from "@voya/features/routing/use-traffic-mode";
 import { useRoutingScreen } from "@voya/features/routing/use-routing-screen";
 import { ruleMatchChips, type MatchChip } from "@voya/features/routing/rule-match-summary";
+import { ruleDisplayName } from "@voya/features/routing/sentinel-rules";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n/core";
 import type { RoutingRule, TrafficMode } from "@voya/contracts";
@@ -60,6 +61,10 @@ export function RulesScreen() {
   const renderRule = useCallback(
     ({ item }: { item: RoutingRule }) => {
       const locked = !rulesApply || routing.pendingToggles.has(item.id);
+      // The rules a fresh install seeds carry reserved remarks — `voya:ai-services`
+      // and the like — which are an identity, not a name. The shared helper is
+      // what turns them into the words the desktop shows.
+      const name = ruleDisplayName(item, t);
       return (
         <View
           className={`flex-row items-center justify-between border-b border-border-subtle bg-surface px-4 py-3 ${
@@ -68,7 +73,7 @@ export function RulesScreen() {
         >
           <View className="flex-1 gap-0.5 pr-3">
             <Text className="text-body text-foreground" numberOfLines={1}>
-              {item.remarks || t("panes.routing.defaultValue")}
+              {name}
             </Text>
             <Text className="text-caption text-subtlest" numberOfLines={1}>
               {matchSummary(item)}
@@ -78,7 +83,7 @@ export function RulesScreen() {
             value={item.enabled}
             disabled={locked}
             onValueChange={(enabled) => void routing.toggleRule(item, enabled)}
-            accessibilityLabel={item.remarks ?? item.id}
+            accessibilityLabel={name}
             // iOS's switch carries `disabled` natively but says nothing about
             // it, so the state is spelled out for VoiceOver either way.
             accessibilityState={{ disabled: locked }}

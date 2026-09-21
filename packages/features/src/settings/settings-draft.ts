@@ -18,8 +18,25 @@ export function changedFields(
   return [{ path, value: after }];
 }
 
+/**
+ * A deep copy of a value that came from, or is headed for, the IPC boundary.
+ *
+ * Not `structuredClone`: React Native does not have it. RN 0.87 ships an
+ * implementation but keeps it private to its own `Performance` web API and
+ * never installs the global, so calling it on Hermes throws
+ * `ReferenceError: Property 'structuredClone' doesn't exist` — which on a
+ * release build is fatal, and took the whole app down when the settings screen
+ * mounted. Everything this module clones is an IPC DTO, which is by definition
+ * what `JSON.parse` produced, so a round trip through JSON is not a
+ * compromise here: it is the same value. `changedFields` above already
+ * compares by `JSON.stringify` for the same reason.
+ */
+export function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 export function applyChanges<T>(original: T, changes: SettingsChange[]): T {
-  const result = structuredClone(original);
+  const result = cloneJson(original);
   for (const { path, value } of changes) {
     const keys = path.split(".");
     let target: unknown = result;

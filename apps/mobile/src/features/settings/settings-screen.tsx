@@ -43,7 +43,16 @@ export function SettingsScreen() {
   useLogStream();
 
   return (
-    <ScrollView className="flex-1 bg-canvas" contentContainerClassName="gap-4 p-page">
+    <ScrollView
+      className="flex-1 bg-canvas"
+      contentContainerClassName="gap-4 p-page"
+      // The three DNS fields sit low enough that the keyboard covers them
+      // completely once one is focused — measured at y=734 on a 874pt screen
+      // against a keyboard whose top edge is at 538 — so without this you
+      // cannot see the resolver you are editing. A plain ScrollView does not
+      // inset itself for the keyboard on its own.
+      automaticallyAdjustKeyboardInsets
+    >
       {appearance ? (
         <Card className="gap-3 rounded-card bg-card p-4">
           <Text className="text-section text-foreground">{t("modal.theme")}</Text>

@@ -22,6 +22,8 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
     private static let startTimeout: TimeInterval = 60
     private static let stopTimeout: TimeInterval = 20
     private static let pollInterval: TimeInterval = 0.1
+    /// How long one NetworkExtension call may take before it counts as hung.
+    private static let callTimeout: TimeInterval = 30
 
     func start(handoffJson: String, includeAllNetworks: Bool) throws {
         let manager = try loadOrCreateManager(includeAllNetworks: includeAllNetworks)
@@ -64,7 +66,15 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
 
     /// One of `NativeTunProviderState`'s camelCase names; anything else reads as an error.
     func status() -> String {
-        guard let found = try? currentManager() else { return "error" }
+        // `try?` would flatten the optional and lose the difference between
+        // "the preferences could not be read" and "nothing is installed" —
+        // which are the two states this has to tell apart.
+        let found: NETunnelProviderManager?
+        do {
+            found = try currentManager()
+        } catch {
+            return "error"
+        }
         guard let manager = found else { return "missingComponent" }
 
         switch manager.connection.status {
@@ -122,7 +132,15 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         return found
     }
 
-    /// Turns one of NetworkExtension's completion-handler APIs into a throwing call.
+    /**
+     * Turns one of NetworkExtension's completion-handler APIs into a throwing
+     * call.
+     *
+     * The wait is bounded because the Rust side runs this on a thread it is
+     * blocking: a handler that never fires — which is what NetworkExtension
+     * does where it is unavailable, such as the simulator — would otherwise
+     * take the whole command channel down with it and never give it back.
+     */
     private func blocking(_ body: (@escaping (Error?) -> Void) -> Void) throws {
         let semaphore = DispatchSemaphore(value: 0)
         var failure: Error?
@@ -130,7 +148,11 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
             failure = error
             semaphore.signal()
         }
-        semaphore.wait()
+        if semaphore.wait(timeout: .now() + Self.callTimeout) == .timedOut {
+            throw TunnelError.Failed(
+                message: "the system did not answer within \(Int(Self.callTimeout))s",
+            )
+        }
 
         if let failure {
             let code = (failure as NSError).code

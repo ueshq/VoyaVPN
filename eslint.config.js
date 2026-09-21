@@ -134,6 +134,14 @@ export default tseslint.config(
           name,
           message: "Shared frontend code must reach the platform through @voya/client/platform.",
         })),
+        {
+          // Every other runtime has it, which is what makes it dangerous: it
+          // typechecks, it passes the jsdom tests, and then it is a fatal
+          // ReferenceError the first time a release build mounts the screen.
+          name: "structuredClone",
+          message:
+            "React Native does not define structuredClone. Use a local JSON clone for IPC DTOs.",
+        },
       ],
     },
   },

@@ -34,9 +34,18 @@ export function useTheme() {
   const themeMode = usePreferencesStore((state) => state.themePreview ?? state.themeMode);
   const systemScheme = useSyncExternalStore(subscribeToAppearance, appearanceSnapshot);
 
-  useEffect(() => {
-    Uniwind.setTheme(themeMode);
-  }, [themeMode]);
+  const resolved = themeMode === "system" ? systemScheme : themeMode;
 
-  return themeMode === "system" ? systemScheme : themeMode;
+  // The resolved scheme, never the word "system". Uniwind understands
+  // "system", but on React Native 0.87 its adaptive path writes `"auto"` back
+  // through `Appearance` and then reads that same `"auto"` out of its own
+  // change listener as if it were a theme name. Nothing matches it, so every
+  // theme variable resolves to nothing: layout classes still work and every
+  // colour silently disappears.
+  useEffect(() => {
+    Uniwind.setTheme(resolved);
+
+  }, [resolved]);
+
+  return resolved;
 }

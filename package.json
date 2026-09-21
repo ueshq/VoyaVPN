@@ -59,6 +59,7 @@
     "native:mobile:rust:android": "node scripts/native/mobile/build-rust-android.mjs",
     "native:mobile:libbox:ios": "node scripts/native/mobile/build-libbox-ios.mjs",
     "native:mobile:libbox:android": "node scripts/native/mobile/build-libbox-android.mjs",
+    "native:mobile:ios:project": "node scripts/native/mobile/ios-project.mjs",
     "check:mobile:test": "pnpm --filter @voya/mobile test",
     "check:mobile:bundle": "node scripts/quality/mobile-bundle.mjs",
     "check:mobile:swift": "node scripts/quality/mobile-swift.mjs"

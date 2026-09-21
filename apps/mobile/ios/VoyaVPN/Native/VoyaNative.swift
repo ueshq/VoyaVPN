@@ -21,7 +21,11 @@ final class VoyaNative: RCTEventEmitter {
 
     private var app: VoyaApp?
     private var listening = false
-    private let queue = DispatchQueue(label: "app.voyavpn.mobile.native", qos: .userInitiated)
+    /// `invoke` runs on a task per call and the frontend fires several the
+    /// moment it mounts, so without this each of them would see no host yet
+    /// and build its own — several SQLite connections racing the same
+    /// migrations, which the database reports as "database is locked".
+    private let hostLock = NSLock()
 
     override static func requiresMainQueueSetup() -> Bool { false }
 
@@ -68,6 +72,9 @@ final class VoyaNative: RCTEventEmitter {
 
     /// Starts the host on first use, so a JS reload does not reopen the database.
     private func host() throws -> VoyaApp {
+        hostLock.lock()
+        defer { hostLock.unlock() }
+
         if let app { return app }
         let started = try VoyaApp(
             dataDir: VoyaContainer.dataDirectory().path,

@@ -70,9 +70,25 @@ export function NodeActionsSheet({
       onRequestClose={close}
       accessibilityViewIsModal
     >
-      {/* Tapping away closes it, the way every sheet on a phone does. */}
-      <RNPressable className="flex-1 justify-end bg-black/40" onPress={close}>
-        <RNPressable className="gap-3 rounded-t-card bg-card p-page" onPress={() => {}}>
+      {/* Tapping away closes it, the way every sheet on a phone does.
+          Both wrappers are `accessible={false}`: React Native's `Pressable`
+          makes itself an accessibility element by default, which collapsed the
+          whole sheet into one node announced as
+          "Simulator node, Share links, Show QR, Delete, Close" — a single blob
+          with no way to activate any one action, for VoiceOver or for anything
+          else. The scrim loses nothing by it, because the explicit Close button
+          below is the accessible way out, and the inner wrapper only exists to
+          stop the tap from reaching the scrim. */}
+      <RNPressable
+        accessible={false}
+        className="flex-1 justify-end bg-black/40"
+        onPress={close}
+      >
+        <RNPressable
+          accessible={false}
+          className="gap-3 rounded-t-card bg-card p-page"
+          onPress={() => {}}
+        >
           {share ? (
             <View className="items-center gap-3">
               <Text className="text-section text-foreground">
@@ -80,6 +96,12 @@ export function NodeActionsSheet({
               </Text>
               {qrQuery.data ? (
                 <View
+                  // `accessible` is what turns the label into something a
+                  // screen reader can land on: a bare View carrying an
+                  // `accessibilityLabel` is not an accessibility element in
+                  // React Native, so the label was dropped on the floor.
+                  accessible
+                  accessibilityRole="image"
                   className="aspect-square w-full max-w-72 bg-white p-3"
                   accessibilityLabel={t("qr.generatedAlt")}
                 >

@@ -16,15 +16,27 @@ import { capture, isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs"
  * The provider sources shared with macOS are typechecked properly by
  * `pnpm check:native:macos:bridge`; this covers the app-side half.
  */
-const SOURCE_DIR = ["apps", "mobile", "ios", "VoyaVPN", "Native"];
+/**
+ * The app's own Swift, and the XCUITest bundle beside it.
+ *
+ * The UI tests are here because they are the one place a mistake stays quiet:
+ * they only compile during `xcodebuild test`, which nothing in CI runs, so a
+ * typo in them would surface on someone's machine minutes into a simulator run.
+ */
+const SOURCE_DIRS = [
+  ["apps", "mobile", "ios", "VoyaVPN", "Native"],
+  ["apps", "mobile", "ios", "VoyaVPNUITests"],
+];
 
 export function swiftSources(root) {
-  const directory = resolve(root, ...SOURCE_DIR);
+  return SOURCE_DIRS.flatMap((segments) => {
+    const directory = resolve(root, ...segments);
 
-  return readdirSync(directory)
-    .filter((name) => name.endsWith(".swift"))
-    .sort()
-    .map((name) => resolve(directory, name));
+    return readdirSync(directory)
+      .filter((name) => name.endsWith(".swift"))
+      .sort()
+      .map((name) => resolve(directory, name));
+  });
 }
 
 export function main() {

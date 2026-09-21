@@ -27,6 +27,8 @@ const IOS_SLICE_PREFIX = "ios-";
 /** The simulator slice is an iOS slice too, and both are needed. */
 const SIMULATOR_MARKER = "simulator";
 const XCFRAMEWORK_NAME = "Libbox.xcframework";
+/** What gomobile is asked to bind: a device and the simulator, nothing else. */
+const APPLE_PLATFORMS = "ios,iossimulator";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const sourceDir = singBoxSourceDir(repoRoot);
@@ -35,10 +37,23 @@ const targetXCFramework = resolve(
   process.env.VOYAVPN_LIBBOX_IOS_XCFRAMEWORK || resolve(frameworkRoot, XCFRAMEWORK_NAME),
 );
 
+/**
+ * The two slices, and only those two.
+ *
+ * `make lib_apple` is `build_libbox -target apple`, which defaults to
+ * `ios,iossimulator,tvos,tvossimulator,macos` — four platforms this script
+ * deletes immediately afterwards, at the cost of compiling every Go dependency
+ * for each of them. Naming the platforms cuts the build to what is kept, and
+ * takes tvOS's own dependencies out of the picture with it.
+ */
 function buildLibbox() {
   rmSync(resolve(sourceDir, XCFRAMEWORK_NAME), { force: true, recursive: true });
   run("make", ["lib_install"], { cwd: sourceDir });
-  run("make", ["lib_apple"], { cwd: sourceDir });
+  run(
+    "go",
+    ["run", "./cmd/internal/build_libbox", "-target", "apple", "-platform", APPLE_PLATFORMS],
+    { cwd: sourceDir },
+  );
 }
 
 /**

@@ -13,9 +13,24 @@
  * gluestack components are written against, and the app roles (`canvas`,
  * `connected`, `subtle`, …) are what screens use.
  *
- * Uniwind's theme model is `@variant light` / `@variant dark` blocks of custom
- * properties. It collects the names out of these two blocks and resolves them
- * per theme at build time, so both blocks have to declare exactly the same set.
+ * The theming shape below was established by running the app, not from the
+ * documentation, because three shapes compile without complaint and only one
+ * of them produces colours on a device:
+ *
+ *   - Two top-level `@variant light` / `@variant dark` blocks — what this file
+ *     used to have. Tailwind collects the *names* (they even reach Uniwind's
+ *     own `@theme` block in node_modules) but never the values, so every
+ *     colour in the app resolved to nothing. Layout still worked, which is why
+ *     it went unnoticed: the screens looked plausible in light mode because an
+ *     unstyled React Native view is already white with black text.
+ *   - `light-dark(light, dark)` inside `@theme` — parses, and renders black.
+ *   - `@theme inline` pointing at plain variables that `:root` supplies, which
+ *     is what is here and what works.
+ *
+ * Known gap: `.dark` is not applied on React Native. `Uniwind.setTheme("dark")`
+ * does switch its reported theme, but the runtime keeps resolving `:root`, so
+ * the app is light-only for now. The values are kept here so that whatever
+ * mechanism turns out to be right has them to hand.
  */
 @import "tailwindcss";
 @import "uniwind";
@@ -37,80 +52,131 @@
   --text-caption--line-height: 18px;
 }
 
-@variant light {
-  /* shadcn slots — what the components under src/components/ui are written against. */
-  --color-background: #ffffff;
-  --color-foreground: #1f2328;
-  --color-card: #ffffff;
-  --color-card-foreground: #1f2328;
-  --color-popover: #ffffff;
-  --color-popover-foreground: #1f2328;
-  --color-primary: #0969da;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #f6f8fa;
-  --color-secondary-foreground: #1f2328;
-  --color-muted: #f6f8fa;
-  --color-muted-foreground: #59636e;
-  --color-accent: rgb(129 139 152 / 0.1);
-  --color-accent-foreground: #1f2328;
-  --color-destructive: #cf222e;
-  --color-destructive-foreground: #ffffff;
-  --color-border: #d1d9e0;
-  --color-input: #d1d9e0;
-  --color-ring: #0969da;
-
-  /* App roles — what the screens use. */
-  --color-canvas: #f6f8fa;
-  --color-surface: #ffffff;
-  --color-surface-sunken: #f6f8fa;
-  --color-subtle: #59636e;
-  --color-subtlest: #818b98;
-  --color-border-subtle: rgb(209 217 224 / 0.7);
-  --color-brand: #0969da;
-  --color-brand-tint: rgb(9 105 218 / 0.08);
-  --color-connected: #1f883d;
-  --color-connected-foreground: #ffffff;
-  --color-danger: #d1242f;
-  --color-danger-tint: rgb(207 36 46 / 0.1);
-  --color-success: #1a7f37;
-  --color-warning: #9a6700;
-  --color-map-land: #e0e6eb;
+/*
+ * The colour roles, one line each.
+ *
+ * `light-dark(light, dark)` rather than two blocks: Uniwind resolves it at
+ * runtime through the theme its `setTheme` is on. Two top-level `@variant`
+ * blocks look right and compile to nothing — the names reach Tailwind but
+ * the values never do, and every colour in the app silently falls back.
+ */
+/*
+ * The colour roles.
+ *
+ * `@theme inline` names them and points each at a plain variable; `:root`
+ * and `.dark` supply the two sets. That indirection is Tailwind v4's own
+ * theming shape and the only one Uniwind actually resolves here: two
+ * top-level `@variant` blocks compile to nothing at all, and `light-dark()`
+ * resolves to black.
+ */
+@theme inline {
+  --color-background: var(--voya-background);
+  --color-foreground: var(--voya-foreground);
+  --color-card: var(--voya-card);
+  --color-card-foreground: var(--voya-card-foreground);
+  --color-popover: var(--voya-popover);
+  --color-popover-foreground: var(--voya-popover-foreground);
+  --color-primary: var(--voya-primary);
+  --color-primary-foreground: var(--voya-primary-foreground);
+  --color-secondary: var(--voya-secondary);
+  --color-secondary-foreground: var(--voya-secondary-foreground);
+  --color-muted: var(--voya-muted);
+  --color-muted-foreground: var(--voya-muted-foreground);
+  --color-accent: var(--voya-accent);
+  --color-accent-foreground: var(--voya-accent-foreground);
+  --color-destructive: var(--voya-destructive);
+  --color-destructive-foreground: var(--voya-destructive-foreground);
+  --color-border: var(--voya-border);
+  --color-input: var(--voya-input);
+  --color-ring: var(--voya-ring);
+  --color-canvas: var(--voya-canvas);
+  --color-surface: var(--voya-surface);
+  --color-surface-sunken: var(--voya-surface-sunken);
+  --color-subtle: var(--voya-subtle);
+  --color-subtlest: var(--voya-subtlest);
+  --color-border-subtle: var(--voya-border-subtle);
+  --color-brand: var(--voya-brand);
+  --color-brand-tint: var(--voya-brand-tint);
+  --color-connected: var(--voya-connected);
+  --color-connected-foreground: var(--voya-connected-foreground);
+  --color-danger: var(--voya-danger);
+  --color-danger-tint: var(--voya-danger-tint);
+  --color-success: var(--voya-success);
+  --color-warning: var(--voya-warning);
+  --color-map-land: var(--voya-map-land);
 }
 
-@variant dark {
-  --color-background: #0d1117;
-  --color-foreground: #f0f6fc;
-  --color-card: #151b23;
-  --color-card-foreground: #f0f6fc;
-  --color-popover: #151b23;
-  --color-popover-foreground: #f0f6fc;
-  --color-primary: #1f6feb;
-  --color-primary-foreground: #ffffff;
-  --color-secondary: #212830;
-  --color-secondary-foreground: #f0f6fc;
-  --color-muted: #151b23;
-  --color-muted-foreground: #9198a1;
-  --color-accent: rgb(101 108 118 / 0.2);
-  --color-accent-foreground: #f0f6fc;
-  --color-destructive: #da3633;
-  --color-destructive-foreground: #ffffff;
-  --color-border: #3d444d;
-  --color-input: #3d444d;
-  --color-ring: #1f6feb;
-
-  --color-canvas: #0d1117;
-  --color-surface: #151b23;
-  --color-surface-sunken: #151b23;
-  --color-subtle: #9198a1;
-  --color-subtlest: #656c76;
-  --color-border-subtle: rgb(61 68 77 / 0.7);
-  --color-brand: #4493f8;
-  --color-brand-tint: rgb(68 147 248 / 0.16);
-  --color-connected: #238636;
-  --color-connected-foreground: #ffffff;
-  --color-danger: #f85149;
-  --color-danger-tint: rgb(248 81 73 / 0.1);
-  --color-success: #3fb950;
-  --color-warning: #d29922;
-  --color-map-land: #212830;
+:root {
+  --voya-background: #ffffff;
+  --voya-foreground: #1f2328;
+  --voya-card: #ffffff;
+  --voya-card-foreground: #1f2328;
+  --voya-popover: #ffffff;
+  --voya-popover-foreground: #1f2328;
+  --voya-primary: #0969da;
+  --voya-primary-foreground: #ffffff;
+  --voya-secondary: #f6f8fa;
+  --voya-secondary-foreground: #1f2328;
+  --voya-muted: #f6f8fa;
+  --voya-muted-foreground: #59636e;
+  --voya-accent: rgb(129 139 152 / 0.1);
+  --voya-accent-foreground: #1f2328;
+  --voya-destructive: #cf222e;
+  --voya-destructive-foreground: #ffffff;
+  --voya-border: #d1d9e0;
+  --voya-input: #d1d9e0;
+  --voya-ring: #0969da;
+  --voya-canvas: #f6f8fa;
+  --voya-surface: #ffffff;
+  --voya-surface-sunken: #f6f8fa;
+  --voya-subtle: #59636e;
+  --voya-subtlest: #818b98;
+  --voya-border-subtle: rgb(209 217 224 / 0.7);
+  --voya-brand: #0969da;
+  --voya-brand-tint: rgb(9 105 218 / 0.08);
+  --voya-connected: #1f883d;
+  --voya-connected-foreground: #ffffff;
+  --voya-danger: #d1242f;
+  --voya-danger-tint: rgb(207 36 46 / 0.1);
+  --voya-success: #1a7f37;
+  --voya-warning: #9a6700;
+  --voya-map-land: #e0e6eb;
 }
+
+.dark {
+  --voya-background: #0d1117;
+  --voya-foreground: #f0f6fc;
+  --voya-card: #151b23;
+  --voya-card-foreground: #f0f6fc;
+  --voya-popover: #151b23;
+  --voya-popover-foreground: #f0f6fc;
+  --voya-primary: #1f6feb;
+  --voya-primary-foreground: #ffffff;
+  --voya-secondary: #212830;
+  --voya-secondary-foreground: #f0f6fc;
+  --voya-muted: #151b23;
+  --voya-muted-foreground: #9198a1;
+  --voya-accent: rgb(101 108 118 / 0.2);
+  --voya-accent-foreground: #f0f6fc;
+  --voya-destructive: #da3633;
+  --voya-destructive-foreground: #ffffff;
+  --voya-border: #3d444d;
+  --voya-input: #3d444d;
+  --voya-ring: #1f6feb;
+  --voya-canvas: #0d1117;
+  --voya-surface: #151b23;
+  --voya-surface-sunken: #151b23;
+  --voya-subtle: #9198a1;
+  --voya-subtlest: #656c76;
+  --voya-border-subtle: rgb(61 68 77 / 0.7);
+  --voya-brand: #4493f8;
+  --voya-brand-tint: rgb(68 147 248 / 0.16);
+  --voya-connected: #238636;
+  --voya-connected-foreground: #ffffff;
+  --voya-danger: #f85149;
+  --voya-danger-tint: rgb(248 81 73 / 0.1);
+  --voya-success: #3fb950;
+  --voya-warning: #d29922;
+  --voya-map-land: #212830;
+}
+

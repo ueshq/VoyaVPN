@@ -64,11 +64,24 @@ pnpm native:mobile:rust:ios         # VoyaMobile.xcframework + Swift bindings
 pnpm native:mobile:rust:android     # jniLibs + Kotlin bindings
 ```
 
+The Xcode project that consumes them is wired up by a script, not by hand:
+
+```sh
+pnpm run native:mobile:ios:project  # app sources + PacketTunnel appex + UI tests
+```
+
+It is idempotent, and it has to be re-run after `pod install` or a React Native
+upgrade — both rewrite parts of `project.pbxproj` and drop our half of it.
+`scripts/native/mobile/ios-project.rb` is where the wiring actually lives; the
+`.mjs` beside it only finds a Ruby that can load the `xcodeproj` gem, which
+CocoaPods already bundles.
+
 The runbooks are [`docs/release/mobile-ios-signing.md`](../../docs/release/mobile-ios-signing.md),
 [`mobile-android-signing.md`](../../docs/release/mobile-android-signing.md) and
 [`mobile-libbox-pinning.md`](../../docs/release/mobile-libbox-pinning.md). The
-iOS one also carries the Xcode target setup, which is not yet committed to the
-project file.
+iOS one carries what that script sets up, the signing that still has to be done
+in Xcode, and the acceptance list split into what the simulator proves and what
+only a device can.
 
 ## Commands
 
@@ -79,8 +92,13 @@ pnpm --filter @voya/mobile android        # run on an Android device/emulator
 pnpm --filter @voya/mobile typecheck      # also covered by check:frontend:typecheck
 pnpm run check:mobile:test                # Jest + @testing-library/react-native
 pnpm run check:mobile:bundle              # Metro bundle for both platforms
-pnpm run check:mobile:swift               # parse the iOS app Swift (macOS only)
+pnpm run check:mobile:swift               # parse the iOS app + UI test Swift (macOS only)
 ```
+
+The XCUITest suite is not one of these: it needs a booted simulator and a
+Release build, takes about four minutes, and is run from the iOS runbook. It is
+what proves the screens are driving the real Rust backend rather than the
+in-memory mock.
 
 `typecheck` and lint run inside the repo-wide gates. The three `check:mobile:*`
 gates are not part of `verify:local`; CI runs the first two in the `mobile` job
