@@ -1,5 +1,8 @@
 module.exports = {
   preset: "@react-native/jest-preset",
+  // Gesture Handler's native module is read at import time; its own setup file
+  // stands one in. Jest runs these after the preset's own `setupFiles`.
+  setupFiles: ["react-native-gesture-handler/jestSetup"],
   setupFilesAfterEnv: ["<rootDir>/src/test/setup.ts"],
   moduleNameMapper: {
     "^~/(.*)$": "<rootDir>/src/$1",
@@ -20,8 +23,9 @@ module.exports = {
   //
   // The `@voya/*` packages need no entry: they resolve through a workspace
   // symlink to `packages/*/src`, a path with no `node_modules` in it, so they
-  // are never ignored.
+  // are never ignored. Reanimated, Worklets and Gesture Handler are covered by
+  // the `react-native` substring already.
   transformIgnorePatterns: [
-    "node_modules/(?!.*(react-native|@react-navigation|test-renderer|uniwind|@gluestack-ui|@legendapp))",
+    "node_modules/(?!.*(react-native|@react-navigation|test-renderer|uniwind|heroui-native|@gorhom|@gluestack-ui|@legendapp))",
   ],
 };

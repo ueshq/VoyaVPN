@@ -2,7 +2,10 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useI18n } from "@voya/i18n/use-i18n";
+import type { HeroUINativeConfig } from "heroui-native/provider";
+import { HeroUINativeProvider } from "heroui-native/provider";
 import { Suspense, use } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { HomeScreen } from "~/features/home/home-screen";
@@ -67,14 +70,40 @@ function Shell() {
   );
 }
 
+/**
+ * Nothing shows a toast, so its overlay is not mounted, and the styling
+ * primer HeroUI prints on every development launch is switched off.
+ */
+const HEROUI_CONFIG: HeroUINativeConfig = {
+  devInfo: { stylingPrinciples: false },
+  toast: false,
+};
+
+/**
+ * The provider stack.
+ *
+ * `GestureHandlerRootView` is outermost because a gesture outside it is never
+ * recognised, and HeroUI's sheet and press feedback are gestures.
+ *
+ * `HeroUINativeProvider` sits outside `Suspense` because it renders the portal
+ * host that sheets mount into: inside, every suspension of `Shell` would
+ * unmount the host along with whatever was open in it. It sits inside
+ * `QueryClientProvider` because portal content renders at the host, not where
+ * it was declared — so a sheet can read the query client, but not navigation,
+ * which lives in `Shell`.
+ */
 export function App() {
   return (
-    <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <Suspense fallback={null}>
-          <Shell />
-        </Suspense>
-      </QueryClientProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <HeroUINativeProvider config={HEROUI_CONFIG}>
+            <Suspense fallback={null}>
+              <Shell />
+            </Suspense>
+          </HeroUINativeProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

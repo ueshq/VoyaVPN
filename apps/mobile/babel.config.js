@@ -23,5 +23,9 @@ module.exports = {
         extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
       },
     ],
+    // Reanimated 4 moved its worklet compiler into `react-native-worklets`;
+    // `react-native-reanimated/plugin` is the Reanimated 3 name. It rewrites
+    // the functions other plugins have already produced, so it stays last.
+    "react-native-worklets/plugin",
   ],
 };

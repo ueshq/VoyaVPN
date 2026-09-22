@@ -11,6 +11,7 @@ catalog:
   '@types/react-dom': ^19.2.3
   typescript: ^6.0.3
   tailwindcss: ^4.3.0
+  tailwind-merge: ^3.6.0
   lucide-react: ^1.17.0
   vitest: ^4.1.7
   jsdom: ^29.1.1
@@ -26,3 +27,9 @@ overrides:
 allowBuilds:
   '@swc/core': true
 optimisticRepeatInstall: false
+# 1.0.10 was a day old when the mobile app adopted it, and it carries the
+# BottomSheet fixes for the closed sheet's visibility during layout changes
+# that the node actions sheet relies on. The exclusion names that one version;
+# drop it when heroui-native is next bumped.
+minimumReleaseAgeExclude:
+  - heroui-native@1.0.10

@@ -1,6 +1,7 @@
 const path = require("node:path");
 
 const { getDefaultConfig, mergeConfig } = require("@react-native/metro-config");
+const { wrapWithReanimatedMetroConfig } = require("react-native-reanimated/metro-config");
 const { withUniwindConfig } = require("uniwind/metro");
 
 const projectRoot = __dirname;
@@ -59,11 +60,19 @@ const config = {
  * `polyfills.rem` fixes the root font size, because React Native has no
  * document to read one from, and `dtsFile` is where Uniwind writes the
  * `className` types.
+ *
+ * `withUniwindConfig` has to stay the outermost wrapper: it swaps in its own
+ * `transformerPath` and wraps `resolveRequest`, so a wrapper applied after it
+ * could replace either. Reanimated's wrapper only folds its own frames out of
+ * red-box stacks.
  */
-module.exports = withUniwindConfig(mergeConfig(getDefaultConfig(projectRoot), config), {
-  // Both paths are resolved against the working directory Metro runs in, which
-  // is this app's directory; an absolute path would be joined onto it.
-  cssEntryFile: "global.css",
-  dtsFile: "uniwind-env.d.ts",
-  polyfills: { rem: 16 },
-});
+module.exports = withUniwindConfig(
+  wrapWithReanimatedMetroConfig(mergeConfig(getDefaultConfig(projectRoot), config)),
+  {
+    // Both paths are resolved against the working directory Metro runs in,
+    // which is this app's directory; an absolute path would be joined onto it.
+    cssEntryFile: "global.css",
+    dtsFile: "uniwind-env.d.ts",
+    polyfills: { rem: 16 },
+  },
+);

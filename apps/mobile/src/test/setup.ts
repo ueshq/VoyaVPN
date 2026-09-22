@@ -43,3 +43,20 @@ jest.mock("react-native-mmkv", () => {
 
   return { createMMKV: () => new FakeMMKV() };
 });
+
+// Worklets owns the JSI runtime Reanimated 4 compiles worklets against. A Jest
+// run has neither, and importing the real module throws on that. The shipped
+// mock replaces the runtime with ordinary function calls.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock("react-native-worklets", () => require("react-native-worklets/lib/module/mock"));
+
+// The shipped Reanimated mock still requires the real package, whose import-time
+// initializer calls `setCSSEventHandler` on the JS fallback and throws. The
+// local stub covers the public surface HeroUI reads.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock("react-native-reanimated", () => require("~/test/reanimated-mock"));
+
+// The real sheet measures its container before it shows anything, which never
+// happens off a device. The shipped mock renders its children as they are.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+jest.mock("@gorhom/bottom-sheet", () => require("@gorhom/bottom-sheet/mock"));
