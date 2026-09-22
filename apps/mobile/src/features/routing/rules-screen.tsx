@@ -5,11 +5,10 @@ import { ruleDisplayName } from "@voya/features/routing/sentinel-rules";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n/core";
 import type { RoutingRule, TrafficMode } from "@voya/contracts";
+import { PressableFeedback } from "heroui-native/pressable-feedback";
+import { Typography } from "heroui-native/text";
 import { useCallback } from "react";
 import { FlatList, Switch, View } from "react-native";
-
-import { Pressable } from "~/components/ui/pressable";
-import { Text } from "~/components/ui/text";
 
 /**
  * What a rule matches, in one line.
@@ -72,12 +71,12 @@ export function RulesScreen() {
           }`}
         >
           <View className="flex-1 gap-0.5 pr-3">
-            <Text className="text-body text-foreground" numberOfLines={1}>
+            <Typography className="text-body text-foreground" numberOfLines={1}>
               {name}
-            </Text>
-            <Text className="text-caption text-subtlest" numberOfLines={1}>
+            </Typography>
+            <Typography className="text-caption text-subtlest" numberOfLines={1}>
               {matchSummary(item)}
-            </Text>
+            </Typography>
           </View>
           <Switch
             value={item.enabled}
@@ -97,36 +96,43 @@ export function RulesScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <View className="gap-2 p-page">
-        <Text className="text-caption uppercase text-subtle">{t("panes.routing.trafficMode")}</Text>
+        <Typography className="text-caption uppercase text-subtle">
+          {t("panes.routing.trafficMode")}
+        </Typography>
         <View className="flex-row gap-2">
           {TRAFFIC_MODES.map(({ labelKey, value }) => (
-            <Pressable
+            <PressableFeedback
               key={value}
-              className={`flex-1 items-center rounded-control border px-3 py-2 ${
+              className={`flex-1 items-center rounded-2xl border px-3 py-2 ${
                 trafficMode.mode === value
                   ? "border-brand bg-brand-tint"
                   : "border-border bg-surface"
               }`}
-              disabled={trafficMode.disabled}
+              isDisabled={trafficMode.disabled}
               onPress={() => trafficMode.selectMode(value)}
               accessibilityRole="button"
               accessibilityState={{ selected: trafficMode.mode === value }}
             >
-              <Text className="text-body text-foreground">{t(labelKey)}</Text>
-            </Pressable>
+              <PressableFeedback.Highlight />
+              <Typography className="text-body text-foreground">{t(labelKey)}</Typography>
+            </PressableFeedback>
           ))}
         </View>
         {trafficMode.disabledReason ? (
-          <Text className="text-caption text-subtle">{t(trafficMode.disabledReason)}</Text>
+          <Typography className="text-caption text-subtle">
+            {t(trafficMode.disabledReason)}
+          </Typography>
         ) : null}
         {rulesApply ? null : (
-          <Text className="text-caption text-warning">{t("panes.routing.globalModeBanner")}</Text>
+          <Typography className="text-caption text-warning-soft-foreground">
+            {t("panes.routing.globalModeBanner")}
+          </Typography>
         )}
         {routing.loadError ? (
-          <Text className="text-caption text-danger">{routing.loadError}</Text>
+          <Typography className="text-caption text-danger">{routing.loadError}</Typography>
         ) : null}
         {routing.operationError ? (
-          <Text className="text-caption text-danger">{routing.operationError}</Text>
+          <Typography className="text-caption text-danger">{routing.operationError}</Typography>
         ) : null}
       </View>
 
@@ -139,9 +145,9 @@ export function RulesScreen() {
         extraData={renderRule}
         ListEmptyComponent={
           <View className="items-center p-page">
-            <Text className="text-body text-subtle">
+            <Typography className="text-body text-subtle">
               {t("panes.routing.emptyRules")}
-            </Text>
+            </Typography>
           </View>
         }
       />
