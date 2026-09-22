@@ -1,45 +1,51 @@
 /*
  * The mobile style sheet.
  *
- * Uniwind compiles this at build time; nothing here reaches a browser. The
- * colours are the same roles the desktop uses in
- * `packages/ui/src/styles/globals.css` — vendored from Primer 11.9 — restated
- * as Tailwind v4 theme variables, so `bg-card` or `text-danger` means the same
- * thing on both shells. Values are copied, never tweaked by eye; re-vendor from
- * the desktop sheet when it changes.
+ * Uniwind compiles this at build time; nothing here reaches a browser.
  *
- * Two families live here for the same reason they do on the desktop: the
- * shadcn slots (`primary`, `muted`, `destructive`, …) are what the copied
- * gluestack components are written against, and the app roles (`canvas`,
- * `connected`, `subtle`, …) are what screens use.
+ * Semantic palette ownership:
+ *   - HeroUI (`heroui-native/styles`) owns the design-system slots —
+ *     `surface`, `border`, `muted`, `accent`, `danger`, `warning`, `field`, …
+ *     Components under `heroui-native/*` are written against those tokens.
+ *   - Voya keeps nine application roles that the screens still need and that
+ *     HeroUI has no equivalent for: `canvas`, `subtle`, `subtlest`,
+ *     `border-subtle`, `brand`, `brand-tint`, `connected`,
+ *     `connected-foreground`, `map-land`. Their values are still the Primer
+ *     11.9 numbers the desktop uses, because "copy the desktop hex" is only
+ *     true for these nine — not for the design-system slots, which are
+ *     HeroUI's to choose.
  *
- * The theming shape below was established by running the app, not from the
- * documentation, because three shapes compile without complaint and only one
- * of them produces colours on a device:
+ * Do not add a `@source` line for `heroui-native/styles`. Since 1.0.8 that
+ * import carries its own, and a hand-written path under pnpm is wrong and
+ * fails silently (upstream #454).
  *
- *   - Two top-level `@variant light` / `@variant dark` blocks — what this file
- *     used to have. Tailwind collects the *names* (they even reach Uniwind's
- *     own `@theme` block in node_modules) but never the values, so every
- *     colour in the app resolved to nothing. Layout still worked, which is why
- *     it went unnoticed: the screens looked plausible in light mode because an
- *     unstyled React Native view is already white with black text.
+ * Theming shape — established by running the app, not from documentation.
+ * Three shapes compile without complaint and only one produces colours:
+ *
+ *   - Two top-level `@variant light` / `@variant dark` blocks. Tailwind
+ *     collects the *names* (they even reach Uniwind's own `@theme` block in
+ *     node_modules) but never the values, so every colour resolved to
+ *     nothing. Layout still worked, which is why it went unnoticed: an
+ *     unstyled React Native view is already white with black text — the
+ *     silent failure looks like a working light theme.
  *   - `light-dark(light, dark)` inside `@theme` — parses, and renders black.
- *   - `@theme inline` pointing at plain variables that `:root` supplies, which
- *     is what is here and what works.
+ *   - `@theme inline` pointing at plain variables that a nested
+ *     `:root { @variant light/dark { … } }` block supplies. That is what is
+ *     here. Nested `@variant` is also what `Uniwind.setTheme("dark")`
+ *     actually reads — never a `.dark` class, which React Native does not
+ *     apply at all.
  *
- * Known gap: `.dark` is not applied on React Native. `Uniwind.setTheme("dark")`
- * does switch its reported theme, but the runtime keeps resolving `:root`, so
- * the app is light-only for now. The values are kept here so that whatever
- * mechanism turns out to be right has them to hand.
+ * Keep the `--voya-` prefix on every Voya role. HeroUI's raw variables are
+ * already called `--surface`, `--border`, `--muted`; an unprefixed Voya name
+ * would collide with them.
  */
 @import "tailwindcss";
 @import "uniwind";
+@import "heroui-native/styles";
 
 @theme {
   /* Theme-independent scale. The desktop's control heights are pointer-sized;
      these are the touch equivalents, and the type scale is shared. */
-  --radius-card: 12px;
-  --radius-control: 8px;
   --spacing-control: 44px;
   --spacing-page: 16px;
   --text-page: 24px;
@@ -53,45 +59,42 @@
 }
 
 /*
- * The colour roles, one line each.
+ * The nine Voya application roles, one line each.
  *
- * `light-dark(light, dark)` rather than two blocks: Uniwind resolves it at
- * runtime through the theme its `setTheme` is on. Two top-level `@variant`
- * blocks look right and compile to nothing — the names reach Tailwind but
- * the values never do, and every colour in the app silently falls back.
+ * Nested `@variant light` / `@variant dark` under `:root` is the shape
+ * Uniwind's theme scanner resolves. The two blocks must declare exactly the
+ * same names — a name only one of them has is a compile error.
  */
-/*
- * The colour roles.
- *
- * `@theme inline` names them and points each at a plain variable; `:root`
- * and `.dark` supply the two sets. That indirection is Tailwind v4's own
- * theming shape and the only one Uniwind actually resolves here: two
- * top-level `@variant` blocks compile to nothing at all, and `light-dark()`
- * resolves to black.
- */
+@layer theme {
+  :root {
+    @variant light {
+      --voya-canvas: #f6f8fa;
+      --voya-subtle: #59636e;
+      --voya-subtlest: #818b98;
+      --voya-border-subtle: rgb(209 217 224 / 0.7);
+      --voya-brand: #0969da;
+      --voya-brand-tint: rgb(9 105 218 / 0.08);
+      --voya-connected: #1f883d;
+      --voya-connected-foreground: #ffffff;
+      --voya-map-land: #e0e6eb;
+    }
+
+    @variant dark {
+      --voya-canvas: #0d1117;
+      --voya-subtle: #9198a1;
+      --voya-subtlest: #656c76;
+      --voya-border-subtle: rgb(61 68 77 / 0.7);
+      --voya-brand: #4493f8;
+      --voya-brand-tint: rgb(68 147 248 / 0.16);
+      --voya-connected: #238636;
+      --voya-connected-foreground: #ffffff;
+      --voya-map-land: #212830;
+    }
+  }
+}
+
 @theme inline {
-  --color-background: var(--voya-background);
-  --color-foreground: var(--voya-foreground);
-  --color-card: var(--voya-card);
-  --color-card-foreground: var(--voya-card-foreground);
-  --color-popover: var(--voya-popover);
-  --color-popover-foreground: var(--voya-popover-foreground);
-  --color-primary: var(--voya-primary);
-  --color-primary-foreground: var(--voya-primary-foreground);
-  --color-secondary: var(--voya-secondary);
-  --color-secondary-foreground: var(--voya-secondary-foreground);
-  --color-muted: var(--voya-muted);
-  --color-muted-foreground: var(--voya-muted-foreground);
-  --color-accent: var(--voya-accent);
-  --color-accent-foreground: var(--voya-accent-foreground);
-  --color-destructive: var(--voya-destructive);
-  --color-destructive-foreground: var(--voya-destructive-foreground);
-  --color-border: var(--voya-border);
-  --color-input: var(--voya-input);
-  --color-ring: var(--voya-ring);
   --color-canvas: var(--voya-canvas);
-  --color-surface: var(--voya-surface);
-  --color-surface-sunken: var(--voya-surface-sunken);
   --color-subtle: var(--voya-subtle);
   --color-subtlest: var(--voya-subtlest);
   --color-border-subtle: var(--voya-border-subtle);
@@ -99,84 +102,36 @@
   --color-brand-tint: var(--voya-brand-tint);
   --color-connected: var(--voya-connected);
   --color-connected-foreground: var(--voya-connected-foreground);
-  --color-danger: var(--voya-danger);
-  --color-danger-tint: var(--voya-danger-tint);
-  --color-success: var(--voya-success);
-  --color-warning: var(--voya-warning);
   --color-map-land: var(--voya-map-land);
 }
 
-:root {
-  --voya-background: #ffffff;
-  --voya-foreground: #1f2328;
-  --voya-card: #ffffff;
-  --voya-card-foreground: #1f2328;
-  --voya-popover: #ffffff;
-  --voya-popover-foreground: #1f2328;
-  --voya-primary: #0969da;
-  --voya-primary-foreground: #ffffff;
-  --voya-secondary: #f6f8fa;
-  --voya-secondary-foreground: #1f2328;
-  --voya-muted: #f6f8fa;
-  --voya-muted-foreground: #59636e;
-  --voya-accent: rgb(129 139 152 / 0.1);
-  --voya-accent-foreground: #1f2328;
-  --voya-destructive: #cf222e;
-  --voya-destructive-foreground: #ffffff;
-  --voya-border: #d1d9e0;
-  --voya-input: #d1d9e0;
-  --voya-ring: #0969da;
-  --voya-canvas: #f6f8fa;
-  --voya-surface: #ffffff;
-  --voya-surface-sunken: #f6f8fa;
-  --voya-subtle: #59636e;
-  --voya-subtlest: #818b98;
-  --voya-border-subtle: rgb(209 217 224 / 0.7);
-  --voya-brand: #0969da;
-  --voya-brand-tint: rgb(9 105 218 / 0.08);
-  --voya-connected: #1f883d;
-  --voya-connected-foreground: #ffffff;
-  --voya-danger: #d1242f;
-  --voya-danger-tint: rgb(207 36 46 / 0.1);
-  --voya-success: #1a7f37;
-  --voya-warning: #9a6700;
-  --voya-map-land: #e0e6eb;
-}
+/*
+ * Temporary shims, deleted once every screen is on `heroui-native`.
+ *
+ * The copied gluestack components are written against the old shadcn slot
+ * names. Until they are gone, each name is an alias of the HeroUI token that
+ * means the same thing, so those components still paint. Do not grow this
+ * list — new code imports HeroUI and uses HeroUI names.
+ */
+@theme inline {
+  /* gluestack Card / Button default / Button destructive / Input focus */
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-foreground);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: var(--danger-foreground);
+  --color-secondary: var(--surface-secondary);
+  --color-secondary-foreground: var(--surface-secondary-foreground);
+  --color-muted-foreground: var(--muted);
+  --color-popover: var(--overlay);
+  --color-popover-foreground: var(--overlay-foreground);
+  --color-input: var(--field-background, var(--default));
+  --color-ring: var(--focus);
 
-.dark {
-  --voya-background: #0d1117;
-  --voya-foreground: #f0f6fc;
-  --voya-card: #151b23;
-  --voya-card-foreground: #f0f6fc;
-  --voya-popover: #151b23;
-  --voya-popover-foreground: #f0f6fc;
-  --voya-primary: #1f6feb;
-  --voya-primary-foreground: #ffffff;
-  --voya-secondary: #212830;
-  --voya-secondary-foreground: #f0f6fc;
-  --voya-muted: #151b23;
-  --voya-muted-foreground: #9198a1;
-  --voya-accent: rgb(101 108 118 / 0.2);
-  --voya-accent-foreground: #f0f6fc;
-  --voya-destructive: #da3633;
-  --voya-destructive-foreground: #ffffff;
-  --voya-border: #3d444d;
-  --voya-input: #3d444d;
-  --voya-ring: #1f6feb;
-  --voya-canvas: #0d1117;
-  --voya-surface: #151b23;
-  --voya-surface-sunken: #151b23;
-  --voya-subtle: #9198a1;
-  --voya-subtlest: #656c76;
-  --voya-border-subtle: rgb(61 68 77 / 0.7);
-  --voya-brand: #4493f8;
-  --voya-brand-tint: rgb(68 147 248 / 0.16);
-  --voya-connected: #238636;
-  --voya-connected-foreground: #ffffff;
-  --voya-danger: #f85149;
-  --voya-danger-tint: rgb(248 81 73 / 0.1);
-  --voya-success: #3fb950;
-  --voya-warning: #d29922;
-  --voya-map-land: #212830;
+  /* `rounded-card` / `rounded-control` still name the old radii. HeroUI
+     brings its own `--radius-*` scale; screens move onto that in the
+     page-by-page rewrite and these two go with the shims. */
+  --radius-card: 12px;
+  --radius-control: 8px;
 }
-
