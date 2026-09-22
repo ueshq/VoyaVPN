@@ -14,7 +14,27 @@ const ID = (value) => value;
 const RN = require("react-native");
 
 function sharedValue(init) {
-  return { value: init };
+  const box = { value: init };
+  return new Proxy(box, {
+    get(target, prop) {
+      if (prop === "_isReanimatedSharedValue") return true;
+      if (prop === "value") return target.value;
+      if (prop === "get") return () => target.value;
+      if (prop === "set") {
+        return (next) => {
+          target.value = typeof next === "function" ? next(target.value) : next;
+        };
+      }
+      return Reflect.get(target, prop);
+    },
+    set(target, prop, next) {
+      if (prop === "value") {
+        target.value = next;
+        return true;
+      }
+      return Reflect.set(target, prop, next);
+    },
+  });
 }
 
 function createAnimatedComponent(Component) {
@@ -136,7 +156,7 @@ const known = {
   useSharedValue: sharedValue,
   useAnimatedStyle: (fn) => (typeof fn === "function" ? fn() : {}),
   useAnimatedProps: (fn) => (typeof fn === "function" ? fn() : {}),
-  useDerivedValue: (fn) => ({ value: typeof fn === "function" ? fn() : fn }),
+  useDerivedValue: (fn) => sharedValue(typeof fn === "function" ? fn() : fn),
   useAnimatedReaction: NOOP,
   useAnimatedRef: () => ({ current: null }),
   useAnimatedScrollHandler: () => NOOP,

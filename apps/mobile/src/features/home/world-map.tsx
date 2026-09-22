@@ -60,7 +60,7 @@ export function WorldMap({ marker }: { marker: HomeMapMarker | null }) {
           className={`absolute -ml-1.5 -mt-1.5 h-3 w-3 rounded-full ${
             marker.state === "connected"
               ? "bg-connected"
-              : "border-2 border-primary bg-canvas"
+              : "border-2 border-brand bg-canvas"
           }`}
           style={{ left: `${position.left}%`, top: `${position.top}%` }}
           testID={`world-map-marker-${marker.countryCode}`}

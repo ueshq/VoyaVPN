@@ -7,11 +7,11 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { formatBytesPerSecond, formatClock } from "@voya/utils/formatting";
 import type { CoreState } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n/core";
+import { Button } from "heroui-native/button";
+import { Card } from "heroui-native/card";
+import { Spinner } from "heroui-native/spinner";
+import { Typography } from "heroui-native/text";
 import { ScrollView, View } from "react-native";
-
-import { Button, ButtonSpinner, ButtonText } from "~/components/ui/button";
-import { Card } from "~/components/ui/card";
-import { Text } from "~/components/ui/text";
 
 import { WorldMap } from "./world-map";
 
@@ -55,56 +55,58 @@ export function HomeScreen() {
       <WorldMap marker={marker} />
 
       <View className="items-center gap-2 py-6">
-        <Text className="text-page font-semibold text-foreground">
+        <Typography className="text-page font-semibold text-foreground">
           {t(CORE_STATE_KEYS[runtime.state])}
-        </Text>
-        <Text className="text-body text-subtle">
+        </Typography>
+        <Typography className="text-body text-subtle">
           {runtime.activeGroup
             ? runtime.activeGroup.group.name
             : (nodeName ?? t("home.noSelection"))}
-        </Text>
+        </Typography>
         {runtime.activeGroup && runtime.groupRuntime?.nowProfileId ? (
-          <Text className="text-caption text-subtlest">
+          <Typography className="text-caption text-subtlest">
             {t("home.groupVia", { node: groupMemberName(runtime, t) })}
-          </Text>
+          </Typography>
         ) : null}
       </View>
 
       <Button
         size="lg"
-        variant={runtime.connected ? "outline" : "default"}
+        variant={runtime.connected ? "outline" : "primary"}
         isDisabled={runtime.busy || runtime.modePending}
         onPress={runtime.handlePrimaryAction}
         accessibilityLabel={t(runtime.connected ? "actions.disconnect" : "actions.connect")}
       >
-        {runtime.inProgress ? <ButtonSpinner /> : null}
-        <ButtonText>
+        {runtime.inProgress ? <Spinner size="sm" /> : null}
+        <Button.Label>
           {t(runtime.connected || runtime.state === "cleanupPending"
             ? "actions.disconnect"
             : "actions.connect")}
-        </ButtonText>
+        </Button.Label>
       </Button>
 
       {runtime.modePending ? (
-        <Text className="text-caption text-subtle">{t("home.modePendingReason")}</Text>
+        <Typography className="text-caption text-subtle">{t("home.modePendingReason")}</Typography>
       ) : null}
       {runtime.lastError ? (
         <View className="gap-2">
-          <Text className="text-caption text-danger">
+          <Typography className="text-caption text-danger">
             {t(ACTION_FAILED_KEYS[runtime.lastError.action], {
               message: runtime.lastError.message,
             })}
-          </Text>
+          </Typography>
           <Button size="sm" variant="outline" onPress={runtime.retryLastAction}>
-            <ButtonText>{t("actions.retry")}</ButtonText>
+            <Button.Label>{t("actions.retry")}</Button.Label>
           </Button>
         </View>
       ) : null}
       {runtime.tunIssue ? (
-        <Text className="text-caption text-warning">{runtime.tunIssue}</Text>
+        <Typography className="text-caption text-warning-soft-foreground">
+          {runtime.tunIssue}
+        </Typography>
       ) : null}
 
-      <Card className="gap-3 rounded-card bg-card p-4">
+      <Card className="gap-3">
         <Metric label={t("home.duration")} value={connectionTime(runtime.state)} />
         <Metric
           label={t("home.exitIp")}
@@ -122,16 +124,16 @@ export function HomeScreen() {
 
       {runtime.profilesError ? (
         <View className="gap-2">
-          <Text className="text-caption text-danger">
+          <Typography className="text-caption text-danger">
             {t("home.profilesFailed", { message: String(runtime.profilesError) })}
-          </Text>
+          </Typography>
           <Button size="sm" variant="outline" onPress={runtime.retryProfiles}>
-            <ButtonText>{t("actions.retry")}</ButtonText>
+            <Button.Label>{t("actions.retry")}</Button.Label>
           </Button>
         </View>
       ) : null}
       {runtime.hasNodes ? null : (
-        <Text className="text-caption text-subtle">{t("home.emptyGuide")}</Text>
+        <Typography className="text-caption text-subtle">{t("home.emptyGuide")}</Typography>
       )}
     </ScrollView>
   );
@@ -162,8 +164,8 @@ const ACTION_FAILED_KEYS = {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row items-center justify-between">
-      <Text className="text-caption text-subtle">{label}</Text>
-      <Text className="text-body text-foreground">{value}</Text>
+      <Typography className="text-caption text-subtle">{label}</Typography>
+      <Typography className="text-body text-foreground">{value}</Typography>
     </View>
   );
 }

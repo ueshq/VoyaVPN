@@ -1,23 +1,23 @@
 import { render, screen, userEvent } from "@testing-library/react-native";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { ReactNode } from "react";
 
 import type { MockBackend } from "@voya/client/mock-backend";
 
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
 import { localeReady } from "~/native/platform-boot";
+import { makeTestQueryClient, TestProviders } from "~/test/providers";
 
 import { HomeScreen } from "./home-screen";
 
 let activeQueryClient: QueryClient | null = null;
 
 async function renderHome() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = makeTestQueryClient();
   activeQueryClient = queryClient;
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <TestProviders queryClient={queryClient}>{children}</TestProviders>
   );
 
   return { queryClient, ...(await render(<HomeScreen />, { wrapper })) };
