@@ -19,15 +19,7 @@
       "project": ["src/**/*.{ts,tsx}", "global.css"],
       // Babel rewrites helper calls into `@babel/runtime` imports, so no
       // source file names it.
-      "ignoreDependencies": ["@babel/runtime"],
-      "ignoreIssues": {
-        // gluestack components are copied into the repo, shadcn-style, and each
-        // one is a unit: `Button` without `ButtonIcon` is a component we would
-        // have to re-derive on the next copy. What keeps this directory small
-        // is the "copy on demand" rule in src/components/ui/README.md, enforced
-        // by the file-level scan, not by per-export usage.
-        "src/components/ui/*/index.tsx": ["exports"]
-      }
+      "ignoreDependencies": ["@babel/runtime"]
     },
     "apps/desktop": {
       "entry": ["src/**/*.{test,spec}.{ts,tsx}"],

@@ -17,11 +17,7 @@
       "ignore": ["src/**/*.test.{ts,tsx}", "src/test/**"],
       // Babel rewrites helper calls into `@babel/runtime` imports, so no
       // source file names it.
-      "ignoreDependencies": ["@babel/runtime"],
-      // See knip.jsonc: the copied gluestack components are units.
-      "ignoreIssues": {
-        "src/components/ui/*/index.tsx": ["exports"]
-      }
+      "ignoreDependencies": ["@babel/runtime"]
     },
     "apps/desktop": {
       "entry": ["src/main.tsx!"],
