@@ -11,13 +11,13 @@ import { useNodeSubscriptions } from "@voya/features/profiles/use-node-subscript
 import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "heroui-native/button";
+import { Input } from "heroui-native/input";
+import { PressableFeedback } from "heroui-native/pressable-feedback";
+import { Spinner } from "heroui-native/spinner";
+import { Typography } from "heroui-native/text";
 import { useCallback, useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
-
-import { Button, ButtonSpinner, ButtonText } from "~/components/ui/button";
-import { Input, InputField } from "~/components/ui/input";
-import { Pressable } from "~/components/ui/pressable";
-import { Text } from "~/components/ui/text";
 
 import { NodeActionsSheet } from "./node-actions-sheet";
 import { useNodeSelection } from "./use-node-selection";
@@ -61,20 +61,25 @@ export function NodesScreen() {
   const renderRow = useCallback(
     ({ item }: { item: NodeListRow }) =>
       item.kind === "group" ? (
-        <Pressable
+        <PressableFeedback
+          animation="disable-all"
           className="flex-row items-center justify-between bg-canvas px-4 py-2"
           onPress={() => selection.toggleGroup(item.groupKey)}
           accessibilityRole="button"
         >
-          <Text className="text-caption font-medium uppercase text-subtle">{item.name}</Text>
-          <Text className="text-caption text-subtlest">
+          <PressableFeedback.Highlight />
+          <Typography className="text-caption font-medium uppercase text-subtle">
+            {item.name}
+          </Typography>
+          <Typography className="text-caption text-subtlest">
             {t("nodeGroups.membersCount", { count: item.allMembers.length })}
-          </Text>
-        </Pressable>
+          </Typography>
+        </PressableFeedback>
       ) : (
-        <Pressable
+        <PressableFeedback
+          animation="disable-all"
           className="flex-row items-center justify-between border-b border-border-subtle bg-surface px-4 py-3"
-          disabled={activation.busy}
+          isDisabled={activation.busy}
           onPress={() => void activation.activateProfile(item.item.profile.id)}
           // A phone has no right-click, so the desktop's row menu is a long
           // press; the sheet says what it offers.
@@ -82,23 +87,30 @@ export function NodesScreen() {
           accessibilityRole="button"
           accessibilityActions={[{ label: actionsLabel(item.item, t), name: "longpress" }]}
         >
+          <PressableFeedback.Highlight />
           <View className="flex-1 gap-0.5 pr-3">
-            <Text className="text-body text-foreground" numberOfLines={1}>
+            <Typography className="text-body text-foreground" numberOfLines={1}>
               {profileTitle(item.item.profile.remarks, t)}
-            </Text>
-            <Text className="text-caption text-subtlest" numberOfLines={1}>
+            </Typography>
+            <Typography className="text-caption text-subtlest" numberOfLines={1}>
               {item.item.profile.address}
-            </Text>
+            </Typography>
           </View>
           <View className="items-end gap-0.5">
-            <Text className="text-caption text-subtle">{profileLatency(item.item, t)}</Text>
+            <Typography className="text-caption text-subtle">
+              {profileLatency(item.item, t)}
+            </Typography>
             {activation.runningId === item.item.profile.id ? (
-              <Text className="text-caption text-connected">{t("panes.profiles.card.using")}</Text>
+              <Typography className="text-caption text-connected">
+                {t("panes.profiles.card.using")}
+              </Typography>
             ) : item.item.isActive ? (
-              <Text className="text-caption text-brand">{t("panes.profiles.card.default")}</Text>
+              <Typography className="text-caption text-brand">
+                {t("panes.profiles.card.default")}
+              </Typography>
             ) : null}
           </View>
-        </Pressable>
+        </PressableFeedback>
       ),
     [activation, selection, t],
   );
@@ -106,16 +118,14 @@ export function NodesScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <View className="gap-2 p-page">
-        <Input>
-          <InputField
-            placeholder={t("panes.profiles.search.placeholder")}
-            accessibilityLabel={t("panes.profiles.search.placeholder")}
-            value={selection.search}
-            onChangeText={selection.setSearch}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </Input>
+        <Input
+          placeholder={t("panes.profiles.search.placeholder")}
+          accessibilityLabel={t("panes.profiles.search.placeholder")}
+          value={selection.search}
+          onChangeText={selection.setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
         <View className="flex-row gap-2">
           <Button
             className="flex-1"
@@ -123,8 +133,8 @@ export function NodesScreen() {
             isDisabled={imports.directImportPending !== null}
             onPress={() => void imports.handleDirectImport("clipboard")}
           >
-            {imports.directImportPending ? <ButtonSpinner /> : null}
-            <ButtonText>{t("panes.profiles.import.clipboard")}</ButtonText>
+            {imports.directImportPending ? <Spinner size="sm" /> : null}
+            <Button.Label>{t("panes.profiles.import.clipboard")}</Button.Label>
           </Button>
           {/* One button, two jobs: while a run is in flight it is the way to
               stop it, and it counts the nodes that have answered. */}
@@ -138,18 +148,18 @@ export function NodesScreen() {
                 : void speedtest.handleSpeedtest({ profileIds: testableIds, scope: "profiles" })
             }
           >
-            {speedtest.speedtestRunning ? <ButtonSpinner /> : null}
-            <ButtonText>
+            {speedtest.speedtestRunning ? <Spinner size="sm" /> : null}
+            <Button.Label>
               {speedtest.speedtestRunning
                 ? speedtest.speedtestProgress
                   ? t("panes.profiles.speedtest.stopProgress", speedtest.speedtestProgress)
                   : t("panes.profiles.speedtest.stop")
                 : t("panes.profiles.speedtest.testAll")}
-            </ButtonText>
+            </Button.Label>
           </Button>
         </View>
         {operation.operationError ? (
-          <Text className="text-caption text-danger">{operation.operationError}</Text>
+          <Typography className="text-caption text-danger">{operation.operationError}</Typography>
         ) : null}
 
         {/* A group replaces the single selected node, so it sits above the
@@ -157,26 +167,29 @@ export function NodesScreen() {
             Editing a group is a desktop job; a phone uses what is there. */}
         {groups.policyGroupEntries.length > 0 ? (
           <View className="gap-2">
-            <Text className="text-caption uppercase text-subtle">{t("policyGroups.title")}</Text>
+            <Typography className="text-caption uppercase text-subtle">
+              {t("policyGroups.title")}
+            </Typography>
             <View className="flex-row flex-wrap gap-2">
               {groups.policyGroupEntries.map((entry) => (
-                <Pressable
+                <PressableFeedback
                   key={entry.group.id}
-                  className={`rounded-control border px-3 py-2 ${
+                  className={`rounded-2xl border px-3 py-2 ${
                     entry.isActive ? "border-brand bg-brand-tint" : "border-border bg-surface"
                   }`}
-                  disabled={groups.switchingPolicyGroupId !== null}
+                  isDisabled={groups.switchingPolicyGroupId !== null}
                   onPress={() => void groups.activatePolicyGroup(entry.group.id)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: entry.isActive }}
                 >
-                  <Text className="text-body text-foreground">{entry.group.name}</Text>
+                  <PressableFeedback.Highlight />
+                  <Typography className="text-body text-foreground">{entry.group.name}</Typography>
                   {entry.isActive ? (
-                    <Text className="text-caption text-brand">
+                    <Typography className="text-caption text-brand">
                       {t(groups.coreConnected ? "policyGroups.inUse" : "policyGroups.active")}
-                    </Text>
+                    </Typography>
                   ) : null}
-                </Pressable>
+                </PressableFeedback>
               ))}
             </View>
           </View>
@@ -187,37 +200,40 @@ export function NodesScreen() {
         {subscriptionRows.length > 0 ? (
           <View className="gap-2">
             <View className="flex-row items-center justify-between">
-              <Text className="text-caption uppercase text-subtle">
+              <Typography className="text-caption uppercase text-subtle">
                 {t("panes.profiles.subscriptionSources")}
-              </Text>
-              <Pressable
-                disabled={subscriptions.updatingAllSubscriptions}
+              </Typography>
+              <Button
+                variant="ghost"
+                size="sm"
+                isDisabled={subscriptions.updatingAllSubscriptions}
                 onPress={() => void subscriptions.updateAllSubscriptions()}
-                accessibilityRole="button"
               >
-                <Text className="text-caption text-brand">
+                <Button.Label>
                   {t("panes.profiles.toolbar.updateAllSubscriptions")}
-                </Text>
-              </Pressable>
+                </Button.Label>
+              </Button>
             </View>
             {subscriptionRows.map((subscription) => (
               <View
                 key={subscription.id}
-                className="flex-row items-center justify-between rounded-control bg-surface px-3 py-2"
+                className="flex-row items-center justify-between rounded-2xl bg-surface px-3 py-2"
               >
-                <Text className="flex-1 pr-3 text-body text-foreground" numberOfLines={1}>
+                <Typography
+                  className="flex-1 pr-3 text-body text-foreground"
+                  numberOfLines={1}
+                >
                   {subscription.remarks}
-                </Text>
-                <Pressable
-                  disabled={subscriptions.updatingSubscriptions.has(subscription.id)}
+                </Typography>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  isDisabled={subscriptions.updatingSubscriptions.has(subscription.id)}
                   onPress={() => void subscriptions.updateSubscription(subscription.id)}
-                  accessibilityRole="button"
                   accessibilityLabel={`${t("home.subscriptionCard.update")} ${subscription.remarks}`}
                 >
-                  <Text className="text-caption text-brand">
-                    {t("home.subscriptionCard.update")}
-                  </Text>
-                </Pressable>
+                  <Button.Label>{t("home.subscriptionCard.update")}</Button.Label>
+                </Button>
               </View>
             ))}
           </View>
@@ -230,14 +246,14 @@ export function NodesScreen() {
         renderItem={renderRow}
         ListEmptyComponent={
           <View className="items-center gap-1 p-page">
-            <Text className="text-body text-foreground">
+            <Typography className="text-body text-foreground">
               {selection.search ? t("panes.profiles.search.empty") : t("panes.profiles.empty")}
-            </Text>
-            <Text className="text-caption text-subtle">
+            </Typography>
+            <Typography className="text-caption text-subtle">
               {selection.search
                 ? t("panes.profiles.search.emptyHint")
                 : t("panes.profiles.emptyDescription")}
-            </Text>
+            </Typography>
           </View>
         }
       />

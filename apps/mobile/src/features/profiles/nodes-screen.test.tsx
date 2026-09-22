@@ -1,25 +1,25 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import type { QueryClient } from "@tanstack/react-query";
 import type { MockBackend } from "@voya/client/mock-backend";
 import { makePolicyGroupEntry } from "@voya/client/mock-seed";
 import { useNodeListStore } from "@voya/client/node-list-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { setClipboard } from "@voya/client/platform";
-import type { ReactNode } from "react";
 
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
 import { localeReady } from "~/native/platform-boot";
+import { makeTestQueryClient, TestProviders } from "~/test/providers";
 
 import { NodesScreen } from "./nodes-screen";
 
 let activeQueryClient: QueryClient | null = null;
 
 async function renderNodes() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = makeTestQueryClient();
   activeQueryClient = queryClient;
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <TestProviders queryClient={queryClient}>{children}</TestProviders>
   );
 
   return { queryClient, ...(await render(<NodesScreen />, { wrapper })) };
