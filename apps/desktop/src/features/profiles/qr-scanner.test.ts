@@ -52,20 +52,20 @@ describe("profile QR scanner", () => {
     ipcMocks.decodeQrImage.mockResolvedValue(scanResult("notFound", []));
 
     await expect(scanQrBlob(new Blob(["not-a-qr"]))).rejects.toMatchObject({
-      name: "QrNotFoundError",
+      name: "QrScanError",
     });
     expect(closeBitmap).toHaveBeenCalledOnce();
   });
 
   it("reports a file the webview cannot decode, or a failed decode, as no code found", async () => {
     vi.mocked(createImageBitmap).mockRejectedValueOnce(new DOMException("unreadable"));
-    await expect(scanQrBlob(new Blob(["pdf"]))).rejects.toMatchObject({ name: "QrNotFoundError" });
+    await expect(scanQrBlob(new Blob(["pdf"]))).rejects.toMatchObject({ name: "QrScanError" });
 
     const failure = new Error("IPC transport unavailable");
     ipcMocks.decodeQrImage.mockRejectedValue(failure);
     await expect(scanQrBlob(new Blob(["qr"]))).rejects.toMatchObject({
       cause: failure,
-      name: "QrNotFoundError",
+      name: "QrScanError",
     });
     expect(closeBitmap).toHaveBeenCalledOnce();
   });

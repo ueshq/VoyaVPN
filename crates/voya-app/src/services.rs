@@ -3,27 +3,32 @@
 //! Desktop shells depend on this facade instead of constructing repositories or
 //! passing the database handle through command adapters.
 
-use std::{path::Path, sync::Arc};
+use std::{path::Path, path::PathBuf, sync::Arc};
 
-pub use voya_core::{AppConfig, SysProxyType, TrafficMode, DEFAULT_LOCAL_PORT};
-use voya_db::{Database, DbError};
-use voya_platform::{coreinfo::TargetOs, paths::AppPaths, process::ProcessRunner};
+use voya_contracts::{SpeedtestResult, SpeedtestRunResult};
+use voya_core::AppConfig;
+use voya_db::{Database, DbError, ProfileNamesHead};
+use voya_platform::{
+    coreinfo::TargetOs, paths::AppPaths, privilege::ElevationState, process::ProcessRunner,
+    sysproxy::SystemProxyService,
+};
 
 use crate::{
     config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
     connection_mode::{enforce_platform_connection_mode, seed_platform_connection_defaults},
-    exports::ExportManager,
     profiles::ProfileManager,
     routing::RoutingManager,
     runtime::RuntimeManager,
     self_host::{SelfHostDeps, SelfHostManager},
     settings::save::app_config_from_settings,
-    speedtest::{SpeedtestManager, SpeedtestResult, SpeedtestRunResult},
+    speedtest::SpeedtestManager,
     statistics::{StatisticsEventSink, StatisticsManager},
     subscriptions::{
         SubscriptionAutoUpdateScheduler, SubscriptionAutoUpdateSink, SubscriptionManager,
     },
     supervisor::CoreSupervisor,
+    sysproxy::SystemProxyManager,
+    tun::{ProviderRegistrationCache, TunManager},
     updates::UpdateManager,
 };
 
@@ -82,6 +87,53 @@ impl AppServices {
         Ok(self.database.profile_exs().delete_orphans().await?)
     }
 
+    /// The first `limit` nodes' ids and remarks in list order, plus `pinned`
+    /// when it sits further down, and the node count: the tray's node menu.
+    pub async fn list_profile_names_head(
+        &self,
+        limit: usize,
+        pinned: Option<&str>,
+    ) -> crate::profiles::Result<ProfileNamesHead> {
+        Ok(self
+            .database
+            .profiles()
+            .list_names_head(limit, pinned)
+            .await?)
+    }
+
+    pub async fn list_subscriptions(
+        &self,
+    ) -> crate::subscriptions::Result<Vec<voya_core::SubItem>> {
+        Ok(self.database.subscriptions().list().await?)
+    }
+
+    pub async fn list_subscription_metadata(
+        &self,
+    ) -> crate::subscriptions::Result<Vec<voya_core::SubMetadataItem>> {
+        Ok(self.database.subscription_metadata().list().await?)
+    }
+
+    pub async fn list_routings(&self) -> crate::routing::Result<Vec<voya_core::RoutingItem>> {
+        Ok(self.database.routings().list().await?)
+    }
+
+    /// Every group in display order, without resolving members: the tray
+    /// names groups only, and resolving reads the whole node list.
+    pub async fn list_policy_groups(
+        &self,
+    ) -> crate::policy_groups::Result<Vec<voya_core::PolicyGroupItem>> {
+        Ok(self.database.policy_groups().list().await?)
+    }
+
+    /// The share links of `index_ids`, one per line in selection order.
+    pub async fn export_profiles(
+        &self,
+        config: &AppConfig,
+        index_ids: &[String],
+    ) -> crate::exports::Result<voya_contracts::ExportProfilesResult> {
+        crate::exports::export_profiles(&self.database, config, index_ids).await
+    }
+
     #[must_use]
     pub fn profiles(&self) -> ProfileManager<'_> {
         ProfileManager::new(&self.database)
@@ -121,20 +173,51 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn exports(&self) -> ExportManager<'_> {
-        ExportManager::new(&self.database)
-    }
-
-    #[must_use]
     pub fn updates(&self) -> UpdateManager<'_> {
         UpdateManager::new(&self.database, self.runtime_paths.clone())
     }
 
+    /// The runtime manager over the recipe both hosts share: one operation
+    /// lock, one settings application, and the packaged core seed when the
+    /// host has one (the phones run the core inside the tunnel provider and
+    /// pass `None`).
     #[must_use]
-    pub fn runtime(&self, supervisor: CoreSupervisor) -> RuntimeManager<'_> {
-        RuntimeManager::new(&self.database, self.runtime_paths.clone(), supervisor)
+    pub fn runtime(
+        &self,
+        supervisor: CoreSupervisor,
+        core_seed_resource_dir: Option<PathBuf>,
+    ) -> RuntimeManager<'_> {
+        let manager = RuntimeManager::new(&self.database, self.runtime_paths.clone(), supervisor)
             .with_operation_lock(Arc::clone(&self.runtime_lock))
-            .with_settings_application(self.settings_application.clone())
+            .with_settings_application(self.settings_application.clone());
+        match core_seed_resource_dir {
+            Some(seed_dir) => manager.with_core_seed_resource_dir(seed_dir),
+            None => manager,
+        }
+    }
+
+    /// The TUN manager. A fresh handle per call is fine — it holds no OS
+    /// resource — but a host that memoizes the PlugInKit registration probe
+    /// passes its shared cache so status reads do not fork `pluginkit` again.
+    #[must_use]
+    pub fn tun_manager(
+        &self,
+        elevation: Arc<ElevationState>,
+        provider_registration_cache: Option<Arc<ProviderRegistrationCache>>,
+    ) -> TunManager {
+        let manager = TunManager::new(elevation);
+        match provider_registration_cache {
+            Some(cache) => manager.with_provider_registration_cache(cache),
+            None => manager,
+        }
+    }
+
+    /// The system-proxy manager over a host-supplied process runner. Both
+    /// hosts construct it through here so the paths and service wiring stay
+    /// one recipe; a phone hands a rejecting runner because it sets no proxy.
+    #[must_use]
+    pub fn system_proxy_manager(&self, runner: Arc<dyn ProcessRunner>) -> SystemProxyManager {
+        SystemProxyManager::new(SystemProxyService::new(runner), self.runtime_paths.clone())
     }
 
     /// An explicit live mode switch acknowledges that field alone. Other
@@ -224,7 +307,7 @@ impl AppServices {
     #[must_use]
     pub fn speedtest_manager(
         &self,
-        core_seed_resource_dir: Option<std::path::PathBuf>,
+        core_seed_resource_dir: Option<PathBuf>,
         runner: Arc<dyn ProcessRunner>,
         supervisor: CoreSupervisor,
     ) -> SpeedtestManager {
@@ -266,6 +349,7 @@ mod tests {
     use super::*;
     use crate::settings::save::{app_config_from_settings, settings_from_app_config};
     use voya_contracts::{AppSettingsV1, SystemProxyType};
+    use voya_core::SysProxyType;
 
     /// The plain persisted-settings projection, without the platform seeding
     /// and enforcement that [`AppServices::load_config_for`] layers on top.

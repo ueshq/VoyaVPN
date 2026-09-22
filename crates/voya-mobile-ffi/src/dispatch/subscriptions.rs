@@ -19,7 +19,7 @@ use crate::app::MobileState;
 use super::{answer, arguments};
 
 pub(super) async fn list(state: &MobileState) -> Result<Value, AppError> {
-    let items = state.services.subscriptions().list_subscriptions().await?;
+    let items = state.services.list_subscriptions().await?;
 
     answer(
         "list_subscriptions",
@@ -31,11 +31,7 @@ pub(super) async fn list(state: &MobileState) -> Result<Value, AppError> {
 }
 
 pub(super) async fn list_metadata(state: &MobileState) -> Result<Value, AppError> {
-    let items = state
-        .services
-        .subscriptions()
-        .list_subscription_metadata()
-        .await?;
+    let items = state.services.list_subscription_metadata().await?;
 
     answer(
         "list_subscription_metadata",

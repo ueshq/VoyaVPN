@@ -40,29 +40,3 @@ pub mod sysproxy;
 pub mod tray;
 pub mod tun;
 pub mod updates;
-
-/// Static application metadata exposed to the shell.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AppMetadata {
-    pub name: &'static str,
-    pub version: &'static str,
-}
-
-/// Return compile-time metadata for the current package.
-#[must_use]
-pub fn metadata() -> AppMetadata {
-    AppMetadata {
-        name: "VoyaVPN",
-        version: env!("CARGO_PKG_VERSION"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn metadata_names_the_product() {
-        assert_eq!(metadata().name, "VoyaVPN");
-    }
-}

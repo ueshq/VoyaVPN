@@ -3,9 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   EXTERNAL_KEY_NAMESPACES,
   inspectI18nSource,
-  isKnownHardcodedText,
   isUserVisibleText,
-  KNOWN_HARDCODED_TEXT,
   unusedTranslationKeys,
 } from "./i18n-analyzer.mjs";
 
@@ -106,25 +104,6 @@ describe("i18n AST analyzer", () => {
     expect(isUserVisibleText("保存")).toBe(true);
     expect(isUserVisibleText("1.2.3")).toBe(false);
     expect(isUserVisibleText("   ")).toBe(false);
-  });
-
-  it("suppresses only the exact allowlisted path and text", () => {
-    // A synthetic entry, so the test keeps working once the shipped allowlist
-    // is empty — which is the state the next assertion demands.
-    const entry = { path: "apps/desktop/src/features/settings/general-tab.tsx", text: "Key" };
-    const allowlist = [entry];
-
-    expect(isKnownHardcodedText(entry.path, entry.text, allowlist)).toBe(true);
-    expect(isKnownHardcodedText(entry.path, `${entry.text}!`, allowlist)).toBe(false);
-    expect(
-      isKnownHardcodedText("apps/desktop/src/features/other.tsx", entry.text, allowlist),
-    ).toBe(false);
-  });
-
-  it("ships no suppressions", () => {
-    // Every entry here is text a locale gate cannot see. Adding one is a
-    // deliberate, temporary act; this assertion makes it visible in review.
-    expect(KNOWN_HARDCODED_TEXT).toEqual([]);
   });
 
   it("counts a key as used from any string literal, including label maps", () => {

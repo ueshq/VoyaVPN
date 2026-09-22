@@ -134,13 +134,6 @@ fn statistics_config(config: &RwLock<AppConfig>) -> StatisticsConfigSnapshot {
         .unwrap_or_else(|_| StatisticsConfigSnapshot::from_app_config(&AppConfig::default()))
 }
 
-#[derive(Clone)]
-pub struct NoopStatisticsEventSink;
-
-impl StatisticsEventSink for NoopStatisticsEventSink {
-    fn emit_statistics(&self, _snapshot: StatisticsSnapshot) {}
-}
-
 pub struct StatisticsManager {
     shutdown: watch::Sender<bool>,
     /// Writes the samples to SQLite. Taken by `shutdown`, which waits for its

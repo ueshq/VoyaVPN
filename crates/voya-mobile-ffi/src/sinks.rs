@@ -12,10 +12,9 @@ use std::sync::{
 };
 
 use voya_app::{
-    contract_map::statistics_snapshot_to_contract,
+    contract_map::{process_log_level_to_contract, statistics_snapshot_to_contract},
     invalidation,
-    logging::process_log_level_to_contract,
-    proxy_runtime::{ProxyConnectionsSnapshot, ProxyRuntimeEventSink},
+    proxy_runtime::ProxyRuntimeEventSink,
     redaction::{redact_url_userinfo, redact_urls},
     statistics::{StatisticsEventSink, StatisticsSnapshot as AppStatisticsSnapshot},
     subscriptions::{AutoUpdateOutcome, SubscriptionAutoUpdateSink},
@@ -23,7 +22,7 @@ use voya_app::{
 };
 use voya_contracts::{
     AppNotice, AppNoticeLevel, InvalidationScope, LogCode, LogLevel, LogLineBody, LogLineEvent,
-    NoticeCode, QueryInvalidation,
+    NoticeCode, ProxyConnectionsSnapshot, QueryInvalidation,
 };
 use voya_platform::process::{ProcessLogLevel, ProcessLogSink, ProcessOutputStream, ProcessRole};
 

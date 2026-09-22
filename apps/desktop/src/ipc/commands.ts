@@ -3,11 +3,6 @@ import { unwrapCommandResult } from "@voya/client/errors";
 
 import { commands } from "@/ipc/bindings";
 
-// The error type and the `appErrorOfKind` guard are transport-agnostic and live
-// in @voya/client; they are re-exported here so features keep importing their
-// IPC vocabulary from one place.
-export { appErrorOfKind, IpcCommandError } from "@voya/client/errors";
-
 export const loadUiPreferences = wrapCommand(commands.loadUiPreferences);
 
 export const loadAppSettings = wrapCommand(commands.loadAppSettings);

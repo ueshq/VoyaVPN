@@ -266,7 +266,7 @@ async fn a_failed_apply_rolls_the_persisted_mode_back() {
 fn macos_offers_neither_the_system_proxy_nor_process_rules() {
     let config = config_with(SysProxyType::Unchanged, true);
     let macos = TunStatus {
-        backend: crate::tun::TunBackend::MacosPacketTunnel,
+        backend: voya_contracts::TunBackend::MacosPacketTunnel,
         enabled: true,
         ..disabled_tun_status()
     };

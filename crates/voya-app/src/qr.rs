@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use qrcode::{render::svg, EcLevel, QrCode};
 use thiserror::Error;
-pub use voya_contracts::{QrCodeImage, QrScanFailureReason, QrScanResult, QrScanStatus};
+use voya_contracts::{QrCodeImage, QrScanFailureReason, QrScanResult, QrScanStatus};
 use voya_platform::screen_capture::{ScreenCaptureBatch, ScreenCaptureFailure, ScreenFrame};
 
 mod screen;
@@ -16,115 +16,109 @@ const QR_MIN_DIMENSION: u32 = 256;
 /// a few megabytes of grey pixels rather than tens.
 pub const QR_IMAGE_MAX_SIDE: u32 = 1600;
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct QrCodeManager;
-
-impl QrCodeManager {
-    pub fn generate_svg(&self, content: &str) -> Result<QrCodeImage, QrCodeError> {
-        let trimmed = content.trim();
-        if trimmed.is_empty() {
-            return Err(QrCodeError::EmptyContent);
-        }
-
-        let code = generate_with_fallback(trimmed.as_bytes())?;
-        let svg = code
-            .render::<svg::Color<'_>>()
-            .min_dimensions(QR_MIN_DIMENSION, QR_MIN_DIMENSION)
-            .dark_color(svg::Color("#111827"))
-            .light_color(svg::Color("#ffffff"))
-            .build();
-
-        Ok(QrCodeImage {
-            mime_type: "image/svg+xml".to_string(),
-            svg,
-        })
+pub fn generate_svg(content: &str) -> Result<QrCodeImage, QrCodeError> {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return Err(QrCodeError::EmptyContent);
     }
 
-    #[must_use]
-    pub fn decode_screens(&self, batch: ScreenCaptureBatch) -> QrScanResult {
-        let mut texts = Vec::new();
-        let mut seen = BTreeSet::new();
-        let mut failure = batch.failure;
-        for frame in batch.frames {
-            if !decode_frame(&frame, &mut texts, &mut seen) {
-                failure = Some(ScreenCaptureFailure::CaptureFailed);
-            }
+    let code = generate_with_fallback(trimmed.as_bytes())?;
+    let svg = code
+        .render::<svg::Color<'_>>()
+        .min_dimensions(QR_MIN_DIMENSION, QR_MIN_DIMENSION)
+        .dark_color(svg::Color("#111827"))
+        .light_color(svg::Color("#ffffff"))
+        .build();
+
+    Ok(QrCodeImage {
+        mime_type: "image/svg+xml".to_string(),
+        svg,
+    })
+}
+
+#[must_use]
+pub fn decode_screens(batch: ScreenCaptureBatch) -> QrScanResult {
+    let mut texts = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut failure = batch.failure;
+    for frame in batch.frames {
+        if !decode_frame(&frame, &mut texts, &mut seen) {
+            failure = Some(ScreenCaptureFailure::CaptureFailed);
         }
-        QrScanResult {
-            status: if texts.is_empty() {
-                if failure.is_some() {
-                    QrScanStatus::Unavailable
-                } else {
-                    QrScanStatus::NotFound
-                }
+    }
+    QrScanResult {
+        status: if texts.is_empty() {
+            if failure.is_some() {
+                QrScanStatus::Unavailable
             } else {
-                QrScanStatus::Found
-            },
-            texts,
-            source: "screen".to_string(),
-            message: None,
-            failure_reason: failure.map(capture_failure_reason),
-        }
-    }
-
-    /// Decodes every QR code in a picture the user picked, which the renderer
-    /// sends as base64 luma: one byte per pixel, row by row. The webview
-    /// already decodes image formats, so none ships in the binary, and the
-    /// same decoder serves the screen scan and the picked file.
-    pub fn decode_image(
-        &self,
-        width: u32,
-        height: u32,
-        luma_base64: &str,
-    ) -> Result<QrScanResult, QrCodeError> {
-        if width == 0 || height == 0 || width > QR_IMAGE_MAX_SIDE || height > QR_IMAGE_MAX_SIDE {
-            return Err(QrCodeError::InvalidImage("the image size is out of range"));
-        }
-        let (Ok(width), Ok(height)) = (usize::try_from(width), usize::try_from(height)) else {
-            return Err(QrCodeError::InvalidImage("the image size is out of range"));
-        };
-        // Checked before decoding, so a mismatched size allocates nothing.
-        if luma_base64.len() != (width * height).div_ceil(3) * 4 {
-            return Err(QrCodeError::InvalidImage(
-                "the pixel data does not match the image size",
-            ));
-        }
-        let luma = STANDARD
-            .decode(luma_base64)
-            .map_err(|_| QrCodeError::InvalidImage("the pixel data is not base64"))?;
-        let mut texts = Vec::new();
-        let frame = ScreenFrame {
-            width,
-            height,
-            luma,
-        };
-        if !decode_frame(&frame, &mut texts, &mut BTreeSet::new()) {
-            return Err(QrCodeError::InvalidImage(
-                "the pixel data does not match the image size",
-            ));
-        }
-        Ok(QrScanResult {
-            status: if texts.is_empty() {
                 QrScanStatus::NotFound
-            } else {
-                QrScanStatus::Found
-            },
-            texts,
-            source: "image".to_string(),
-            message: None,
-            failure_reason: None,
-        })
+            }
+        } else {
+            QrScanStatus::Found
+        },
+        texts,
+        source: "screen".to_string(),
+        message: None,
+        failure_reason: failure.map(capture_failure_reason),
     }
+}
 
-    #[must_use]
-    pub fn scan_failure(&self, failure: ScreenCaptureFailure) -> QrScanResult {
-        QrScanResult {
-            status: QrScanStatus::Unavailable,
-            texts: Vec::new(),
-            source: "screen".to_string(),
-            message: None,
-            failure_reason: Some(capture_failure_reason(failure)),
-        }
+/// Decodes every QR code in a picture the user picked, which the renderer
+/// sends as base64 luma: one byte per pixel, row by row. The webview
+/// already decodes image formats, so none ships in the binary, and the
+/// same decoder serves the screen scan and the picked file.
+pub fn decode_image(
+    width: u32,
+    height: u32,
+    luma_base64: &str,
+) -> Result<QrScanResult, QrCodeError> {
+    if width == 0 || height == 0 || width > QR_IMAGE_MAX_SIDE || height > QR_IMAGE_MAX_SIDE {
+        return Err(QrCodeError::InvalidImage("the image size is out of range"));
+    }
+    let (Ok(width), Ok(height)) = (usize::try_from(width), usize::try_from(height)) else {
+        return Err(QrCodeError::InvalidImage("the image size is out of range"));
+    };
+    // Checked before decoding, so a mismatched size allocates nothing.
+    if luma_base64.len() != (width * height).div_ceil(3) * 4 {
+        return Err(QrCodeError::InvalidImage(
+            "the pixel data does not match the image size",
+        ));
+    }
+    let luma = STANDARD
+        .decode(luma_base64)
+        .map_err(|_| QrCodeError::InvalidImage("the pixel data is not base64"))?;
+    let mut texts = Vec::new();
+    let frame = ScreenFrame {
+        width,
+        height,
+        luma,
+    };
+    if !decode_frame(&frame, &mut texts, &mut BTreeSet::new()) {
+        return Err(QrCodeError::InvalidImage(
+            "the pixel data does not match the image size",
+        ));
+    }
+    Ok(QrScanResult {
+        status: if texts.is_empty() {
+            QrScanStatus::NotFound
+        } else {
+            QrScanStatus::Found
+        },
+        texts,
+        source: "image".to_string(),
+        message: None,
+        failure_reason: None,
+    })
+}
+
+#[must_use]
+pub fn scan_failure(failure: ScreenCaptureFailure) -> QrScanResult {
+    QrScanResult {
+        status: QrScanStatus::Unavailable,
+        texts: Vec::new(),
+        source: "screen".to_string(),
+        message: None,
+        failure_reason: Some(capture_failure_reason(failure)),
     }
 }
 
@@ -193,8 +187,7 @@ mod qr_tests {
 
     #[test]
     fn qr_generation_returns_backend_svg() {
-        let image = QrCodeManager
-            .generate_svg("vless://00000000-0000-0000-0000-000000000000@example.test:443")
+        let image = generate_svg("vless://00000000-0000-0000-0000-000000000000@example.test:443")
             .expect("qr image");
 
         assert_eq!(image.mime_type, "image/svg+xml");
@@ -204,9 +197,7 @@ mod qr_tests {
 
     #[test]
     fn qr_generation_rejects_empty_content() {
-        let error = QrCodeManager
-            .generate_svg("   ")
-            .expect_err("empty content should fail");
+        let error = generate_svg("   ").expect_err("empty content should fail");
 
         assert!(matches!(error, QrCodeError::EmptyContent));
     }
@@ -247,7 +238,7 @@ mod qr_tests {
     fn decodes_all_codes_across_displays_and_deduplicates_payloads() {
         let a = "vless://one@example.test:443";
         let b = "trojan://two@example.test:443";
-        let result = QrCodeManager.decode_screens(ScreenCaptureBatch {
+        let result = decode_screens(ScreenCaptureBatch {
             frames: vec![qr_frame(&[a, b]), qr_frame(&[a])],
             failure: None,
         });
@@ -259,7 +250,7 @@ mod qr_tests {
     }
 
     fn decode_picked(frame: &ScreenFrame) -> Result<QrScanResult, QrCodeError> {
-        QrCodeManager.decode_image(
+        decode_image(
             u32::try_from(frame.width).expect("width fits"),
             u32::try_from(frame.height).expect("height fits"),
             &STANDARD.encode(&frame.luma),
@@ -293,9 +284,8 @@ mod qr_tests {
             (2, 3, three_pixels.as_str()),
             (1, 3, "!!!!"),
         ] {
-            let error = QrCodeManager
-                .decode_image(width, height, pixels)
-                .expect_err("the image should be rejected");
+            let error =
+                decode_image(width, height, pixels).expect_err("the image should be rejected");
             assert!(
                 matches!(error, QrCodeError::InvalidImage(_)),
                 "{width}x{height}: {error}"
@@ -305,13 +295,13 @@ mod qr_tests {
 
     #[test]
     fn blank_screen_and_partial_capture_have_distinct_results() {
-        let blank = QrCodeManager.decode_screens(ScreenCaptureBatch {
+        let blank = decode_screens(ScreenCaptureBatch {
             frames: vec![qr_frame(&[])],
             failure: None,
         });
         assert_eq!(blank.status, QrScanStatus::NotFound);
         assert!(blank.texts.is_empty());
-        let partial = QrCodeManager.decode_screens(ScreenCaptureBatch {
+        let partial = decode_screens(ScreenCaptureBatch {
             frames: vec![qr_frame(&["vless://node@example.test:443"])],
             failure: Some(ScreenCaptureFailure::CaptureFailed),
         });
@@ -324,7 +314,7 @@ mod qr_tests {
 
     #[test]
     fn malformed_frame_and_native_failures_are_typed() {
-        let result = QrCodeManager.decode_screens(ScreenCaptureBatch {
+        let result = decode_screens(ScreenCaptureBatch {
             frames: vec![ScreenFrame {
                 width: 10,
                 height: 10,
@@ -349,7 +339,7 @@ mod qr_tests {
             (ScreenCaptureFailure::Timeout, QrScanFailureReason::Timeout),
             (ScreenCaptureFailure::Busy, QrScanFailureReason::Busy),
         ] {
-            let result = QrCodeManager.scan_failure(failure);
+            let result = scan_failure(failure);
             assert_eq!(result.failure_reason, Some(reason));
             assert!(result.texts.is_empty());
         }

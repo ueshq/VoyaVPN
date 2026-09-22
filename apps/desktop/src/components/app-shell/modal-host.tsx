@@ -13,12 +13,12 @@ import {
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { connectActiveProfile, installCoreSeed } from "@/ipc/commands";
-import { useModalStore } from "@voya/client/modal-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { getErrorMessage } from "@voya/utils/error";
 
 export function ModalHost() {
-  const closeMissingCore = useModalStore((state) => state.closeMissingCore);
-  const missingCore = useModalStore((state) => state.missingCore);
+  const closeMissingCore = useRuntimeActionStore((state) => state.closeMissingCore);
+  const missingCore = useRuntimeActionStore((state) => state.missingCore);
 
   return (
     <Dialog
@@ -32,7 +32,7 @@ export function ModalHost() {
 
 function MissingCoreDialog() {
   const { t } = useI18n();
-  const closeMissingCore = useModalStore((state) => state.closeMissingCore);
+  const closeMissingCore = useRuntimeActionStore((state) => state.closeMissingCore);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [seedMissing, setSeedMissing] = useState(false);

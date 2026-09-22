@@ -9,7 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createAppQueryClient } from "@/components/app-shell/query-client";
+import { createAppQueryClient } from "@voya/client/query-client";
 import { renderWithQuery } from "@/test/render";
 import type {
   ProfileSummaryEntry,

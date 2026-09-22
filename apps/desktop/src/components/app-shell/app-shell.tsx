@@ -12,7 +12,7 @@ import {
 import { TitleBar } from "@/components/app-shell/title-bar";
 import { Toaster } from "@/components/app-shell/toaster";
 import { useAcrylicWindow } from "@/components/app-shell/use-acrylic-window";
-import { useRuntimeStatusSeed } from "@/components/app-shell/use-runtime-status-seed";
+import { useRuntimeStatusSeed } from "@voya/features/shell/use-runtime-status-seed";
 import { useShellShortcuts } from "@/components/app-shell/use-shell-shortcuts";
 import { useWindowChrome } from "@/components/app-shell/use-window-chrome";
 import { WindowChromeContext } from "@/components/app-shell/window-chrome-context";
@@ -84,7 +84,7 @@ export function AppShell() {
   const { titleBarLayout } = useWindowChrome();
 
   useProxyMonitorLifecycle(activeTab);
-  useRuntimeStatusSeed();
+  useRuntimeStatusSeed(["coreState", "sysProxy", "tun"]);
   useShellShortcuts();
   // Windows borderless chrome is the only Acrylic target; the hook no-ops elsewhere.
   useAcrylicWindow(titleBarLayout === "windows");

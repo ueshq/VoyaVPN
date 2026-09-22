@@ -41,10 +41,6 @@ impl<'db> RoutingManager<'db> {
         Self { database }
     }
 
-    pub async fn list_routings(&self) -> Result<Vec<RoutingItem>> {
-        Ok(self.database.routings().list().await?)
-    }
-
     pub async fn save_routing(
         &self,
         config: &mut AppConfig,
@@ -416,7 +412,7 @@ mod tests {
             .await
             .expect("second call")
             .is_none());
-        assert_eq!(manager.list_routings().await.expect("routings").len(), 1);
+        assert_eq!(database.routings().list().await.expect("routings").len(), 1);
     }
 
     #[tokio::test]
@@ -442,7 +438,7 @@ mod tests {
             .await
             .expect("seed check")
             .is_none());
-        let routings = manager.list_routings().await.expect("routings");
+        let routings = database.routings().list().await.expect("routings");
         assert_eq!(routings.len(), 1);
         assert_eq!(routings[0].remarks, "Mine");
     }

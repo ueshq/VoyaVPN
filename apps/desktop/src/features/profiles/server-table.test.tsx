@@ -15,8 +15,8 @@ import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useNodeListStore } from "@voya/client/node-list-store";
 
-import { IpcCommandError } from "@/ipc/commands";
-import { useModalStore } from "@voya/client/modal-store";
+import { IpcCommandError } from "@voya/client/errors";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import type {
   ImportProfilesResult,
   Profile,
@@ -27,7 +27,6 @@ import type {
   TunStatus,
 } from "@/ipc/bindings";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { makeProfileDetailsFixture, toProfileSummaryEntry } from "@voya/features/test/profile-fixture";
 
@@ -71,9 +70,8 @@ const ipcMocks = vi.hoisted(() => ({
 }));
 
 // The real error class and kind check, so a missing core opens its dialog.
-vi.mock("@/ipc/commands", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/ipc/commands")>();
-  return { ...ipcMocks, appErrorOfKind: actual.appErrorOfKind, IpcCommandError: actual.IpcCommandError };
+vi.mock("@/ipc/commands", async () => {
+  return { ...ipcMocks };
 });
 
 // `listProfileSummaries` answers with the rows plus the number of stored profiles this
@@ -193,7 +191,7 @@ describe("ProfilesScreen", () => {
     });
     window.localStorage.removeItem("voyavpn.profileColumns");
     useToastStore.setState({ toasts: [] });
-    useModalStore.setState({ missingCore: null });
+    useRuntimeActionStore.setState({ missingCore: null });
     useRuntimeEventStore.setState({
       coreState: null,
       serverStatsByProfileId: {},
@@ -934,7 +932,7 @@ describe("ProfilesScreen", () => {
     await screen.findByText("Server 0");
     await userEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() =>
-      expect(useModalStore.getState().missingCore).toMatchObject({
+      expect(useRuntimeActionStore.getState().missingCore).toMatchObject({
         message: "Core unavailable",
       }),
     );

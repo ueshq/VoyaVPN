@@ -20,7 +20,7 @@ import { useCallback, useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
 
 import { NodeActionsSheet } from "./node-actions-sheet";
-import { useNodeSelection } from "./use-node-selection";
+import { useNodeSelection } from "@voya/features/profiles/use-node-selection";
 
 /**
  * The node list.

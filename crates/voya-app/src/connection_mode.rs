@@ -30,7 +30,7 @@
 use std::sync::Arc;
 
 use thiserror::Error;
-use voya_contracts::{ConnectionMode, ConnectionModeStatus};
+use voya_contracts::{ConnectionMode, ConnectionModeStatus, TunBackend, TunStatus};
 use voya_core::{AppConfig, SysProxyType};
 use voya_platform::{
     coreinfo::TargetOs,
@@ -42,7 +42,7 @@ use crate::{
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
     supervisor::SupervisorConnectionState,
     sysproxy::{SystemProxyManager, SystemProxyManagerError},
-    tun::{TunBackend, TunManager, TunManagerError, TunStatus},
+    tun::{TunManager, TunManagerError},
 };
 
 /// Derives the current connection mode. TUN wins over everything; every other
@@ -156,6 +156,10 @@ pub struct ConnectionModeOutcome {
     /// Only a TUN flip needs a running core to be restarted; a system-proxy
     /// flavor change is picked up live.
     pub tun_flag_changed: bool,
+    /// Whether the commit rewrote the persisted configuration. Always true
+    /// for a mode switch today, but reported so a caller can follow
+    /// `config_changed` rather than assume.
+    pub config_changed: bool,
 }
 
 #[derive(Debug, Error)]
@@ -223,7 +227,7 @@ impl ConnectionModeManager {
         let enable_tun = mode == ConnectionMode::Vpn;
         let tun_status = self.plan_tun(&snapshot, enable_tun).await?;
 
-        let (original, committed) = self
+        let (original, committed, config_changed) = self
             .commit(coordinator, |config| {
                 apply_connection_mode(config, mode);
             })
@@ -246,23 +250,30 @@ impl ConnectionModeManager {
             system_proxy_applied,
             tun_status,
             tun_flag_changed,
+            config_changed,
         })
     }
 
     /// The guard's whole lifetime: read, mutate, write. No OS call, no process
     /// spawn, nothing that can block a tokio worker or another command for
     /// seconds behind the global mutation lock.
+    ///
+    /// Returns the pre-mutation configuration alongside the commit so the
+    /// caller can compute `tun_flag_changed` and roll back, and the
+    /// coordinator's `config_changed` so a cache refresh can follow it.
     async fn commit(
         &self,
         coordinator: &ConfigMutationCoordinator,
         mutate: impl FnOnce(&mut AppConfig),
-    ) -> Result<(AppConfig, AppConfig), ConnectionModeError> {
-        let mut mutation = coordinator.begin().await?;
-        let original = mutation.config().clone();
-        mutate(mutation.config_mut());
-        let committed = mutation.commit().await?;
-
-        Ok((original, committed))
+    ) -> Result<(AppConfig, AppConfig, bool), ConnectionModeError> {
+        let committed = coordinator
+            .mutate(async move |_unit_of_work, config| {
+                let original = config.clone();
+                mutate(config);
+                Ok::<AppConfig, ConnectionModeError>(original)
+            })
+            .await?;
+        Ok((committed.value, committed.config, committed.config_changed))
     }
 
     /// Apply the committed mode to the machine — but only while a core is

@@ -21,10 +21,9 @@ pub async fn proxy_close_connection<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     connection_id: Option<String>,
 ) -> Result<ProxyConnectionsSnapshot, AppError> {
-    validate_present_ipc_text(
-        connection_id.as_deref(),
+    map_ipc_input(
+        input_safety::validate_present_text(connection_id.as_deref(), IPC_ID_MAX_CHARS),
         "proxy connection id",
-        IPC_ID_MAX_CHARS,
         AppErrorSubsystem::ProxyRuntime,
     )?;
     let clash_api = current_clash_api_access(&state).await;
@@ -86,7 +85,9 @@ pub async fn proxy_start_monitor(
         std::sync::Arc::new(crate::TauriProxyRuntimeEventSink { app: app.clone() }),
     );
 
-    report_monitor_result(&app, result)
+    voya_app::proxy_runtime::report_monitor_result(result, |status| {
+        emit_proxy_monitor_status(&app, status);
+    })
 }
 
 #[tauri::command]
@@ -95,23 +96,10 @@ pub fn proxy_stop_monitor(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyMonitorStatus, AppError> {
-    report_monitor_result(&app, state.proxy_monitor_controller().stop())
-}
-
-/// Announces where the monitor ended up, a failure included, and returns it.
-fn report_monitor_result<E>(
-    app: &tauri::AppHandle,
-    result: Result<ProxyMonitorStatus, E>,
-) -> Result<ProxyMonitorStatus, AppError>
-where
-    E: std::fmt::Display,
-    AppError: From<E>,
-{
-    let status = match &result {
-        Ok(status) => status.clone(),
-        Err(error) => ProxyMonitorStatus::failed(error.to_string()),
-    };
-    emit_proxy_monitor_status(app, &status);
-
-    result.map_err(AppError::from)
+    voya_app::proxy_runtime::report_monitor_result(
+        state.proxy_monitor_controller().stop(),
+        |status| {
+            emit_proxy_monitor_status(&app, status);
+        },
+    )
 }

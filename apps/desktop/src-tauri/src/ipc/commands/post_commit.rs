@@ -1,7 +1,7 @@
 //! What follows a committed change: cache invalidation, the core restart it
 //! may need, and the status events it changes.
 
-pub(super) use voya_app::post_commit::ConfigChange;
+pub(super) use voya_app::post_commit::{self, ConfigChange, PostCommitSink};
 
 use super::{support::*, *};
 
@@ -98,21 +98,6 @@ pub(crate) fn emit_subscription_invalidation<R>(
     );
 }
 
-pub(super) fn emit_routing_invalidation<R>(
-    app: &tauri::AppHandle<R>,
-    reason: &str,
-    config_changed: bool,
-) where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::RoutingRefreshFailed,
-        reason,
-        invalidation::routing_scopes(config_changed),
-    );
-}
-
 /// Self-hosted node changes, from a command or from the node's own loops.
 pub(crate) fn emit_self_host_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
 where
@@ -190,17 +175,33 @@ where
     emit_event(app, TransientStreamEvent::TunChanged(status.clone()))
 }
 
-/// Names one committed configuration change for the restart that follows it.
+/// The tail every committed configuration change shares.
 ///
-/// Every mutating command used to spell both strings out inline around an
-/// identical eight-line `if let Err(..) { report_post_commit_error(..) }`
-/// Restarts the core after a committed configuration change, if it is running.
-///
-/// The whole sequence — the connecting/connected events, the system proxy, the
-/// TUN status, and the recovery when the restart fails — lives in
-/// `voya_app::core_flow`, shared with connect/disconnect and the crash paths.
-/// The change is already persisted when this runs, so a restart failure is a
-/// warning notice rather than a command error.
+/// The choreography itself is `voya_app::post_commit::finish_config_change`,
+/// shared with the mobile host; this supplies the Tauri sinks. `scopes` empty
+/// means the caller already announced them and this call owes only the restart.
+pub(super) async fn finish_config_change<R>(
+    app: &tauri::AppHandle<R>,
+    state: &AppState,
+    reason: &str,
+    scopes: &[InvalidationScope],
+    config: &AppConfig,
+    change: ConfigChange,
+) where
+    R: tauri::Runtime,
+{
+    post_commit::finish_config_change(
+        &TauriPostCommitSink { app: app.clone() },
+        &core_flow(app, state),
+        reason,
+        scopes,
+        config,
+        change,
+    )
+    .await;
+}
+
+/// The restart-only tail, for callers that already announced their caches.
 pub(super) async fn restart_after_config_change<R>(
     app: &tauri::AppHandle<R>,
     state: &AppState,
@@ -209,18 +210,7 @@ pub(super) async fn restart_after_config_change<R>(
 ) where
     R: tauri::Runtime,
 {
-    if let Err(error) = core_flow(app, state)
-        .restart_if_connected(config, change.reason)
-        .await
-        .map_err(AppError::from)
-    {
-        report_post_commit_error(
-            app,
-            change.restart_failed_code,
-            &format!("{error:?}"),
-            AppNoticeLevel::Warning,
-        );
-    }
+    finish_config_change(app, state, "", &[], config, change).await;
 }
 
 /// The tail every routing mutation shares: refresh the routing caches, then
@@ -235,8 +225,42 @@ pub(super) async fn finish_routing_change<R, T>(
 ) where
     R: tauri::Runtime,
 {
-    emit_routing_invalidation(app, reason, committed.config_changed);
-    restart_after_config_change(app, state, &committed.config, change).await;
+    finish_config_change(
+        app,
+        state,
+        reason,
+        &invalidation::routing_scopes(committed.config_changed),
+        &committed.config,
+        change,
+    )
+    .await;
+}
+
+struct TauriPostCommitSink<R: tauri::Runtime> {
+    app: tauri::AppHandle<R>,
+}
+
+impl<R> PostCommitSink for TauriPostCommitSink<R>
+where
+    R: tauri::Runtime,
+{
+    fn invalidate(
+        &self,
+        reason: &str,
+        scopes: &[InvalidationScope],
+        refresh_failed_code: NoticeCode,
+    ) {
+        emit_invalidation(
+            &self.app,
+            refresh_failed_code,
+            reason,
+            scopes.iter().copied(),
+        );
+    }
+
+    fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
+        report_post_commit_error(&self.app, code, detail, level);
+    }
 }
 
 /// The tail the removal-family commands share: emit the subsystem's
@@ -269,7 +293,7 @@ where
     R: tauri::Runtime,
 {
     core_flow(app, state)
-        .disconnect_removed_profile(&current_config(state))
+        .disconnect_removed_profile(&state.config_mutations().current_config())
         .await
         .map_err(AppError::from)
 }

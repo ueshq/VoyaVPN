@@ -25,7 +25,7 @@ import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 
 import { IMPORT_METHODS } from "@voya/features/profiles/import-methods";
-import { IMPORT_METHOD_ICONS } from "./import-methods";
+import { IMPORT_METHOD_ICONS } from "./import-method-icons";
 import { SpeedtestButton } from "./server-table-menus";
 import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
 import type { ServerTableController } from "./use-server-table";

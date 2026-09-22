@@ -25,7 +25,6 @@ use voya_app::{
     },
     services::AppServices,
     supervisor::{CoreSupervisor, SupervisorDeps},
-    sysproxy::SystemProxyManager,
     tun::ProviderRegistrationCache,
 };
 use voya_platform::{
@@ -33,7 +32,6 @@ use voya_platform::{
     firewall::FirewallService,
     paths::{core_seed_resources_dir, AppPaths},
     process::{JobAssignedRunner, PlatformProcessJobFactory, ProcessRunner, StdProcessRunner},
-    sysproxy::SystemProxyService,
 };
 
 /// Everything the app needs before it can serve a single command.
@@ -66,10 +64,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
             services.load_config_for(TargetOs::current(), system_locale.as_deref()),
         )
     })?;
-    let system_proxy_manager = SystemProxyManager::new(
-        SystemProxyService::new(Arc::new(StdProcessRunner::new())),
-        runtime_paths.clone(),
-    );
+    let system_proxy_manager = services.system_proxy_manager(Arc::new(StdProcessRunner::new()));
     // Startup only *undoes* a proxy a crashed run left behind. The
     // persisted mode is deliberately not applied: nothing is listening
     // on the local port until the user connects, and `connect` applies

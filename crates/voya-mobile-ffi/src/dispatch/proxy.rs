@@ -8,9 +8,10 @@ use serde_json::Value;
 use voya_app::{
     contract_map::{traffic_mode_from_contract, traffic_mode_to_contract},
     invalidation,
+    proxy_runtime::report_monitor_result,
     supervisor::{ClashApiAccess, SupervisorSnapshot},
 };
-use voya_contracts::{AppError, ProxyMonitorStatus, TrafficMode, TrafficModeResponse};
+use voya_contracts::{AppError, TrafficMode, TrafficModeResponse};
 
 use crate::app::MobileState;
 
@@ -85,34 +86,29 @@ pub(super) async fn start_monitor(state: &MobileState) -> Result<Value, AppError
         .proxy_monitor
         .start(&access, Arc::clone(&state.sinks) as Arc<_>);
 
-    answer("proxy_start_monitor", &report_monitor(state, result)?)
+    answer(
+        "proxy_start_monitor",
+        &report_monitor_result(result, |status| {
+            state.sinks.emit(
+                crate::events::EventChannel::TransientStream,
+                &crate::events::TransientStreamEvent::ProxyMonitorStatus(status.clone()),
+            );
+        })?,
+    )
 }
 
 pub(super) async fn stop_monitor(state: &MobileState) -> Result<Value, AppError> {
     let result = state.proxy_monitor.stop();
 
-    answer("proxy_stop_monitor", &report_monitor(state, result)?)
-}
-
-/// Announces where the monitor ended up, a failure included, and returns it.
-fn report_monitor<E>(
-    state: &MobileState,
-    result: Result<ProxyMonitorStatus, E>,
-) -> Result<ProxyMonitorStatus, AppError>
-where
-    AppError: From<E>,
-    E: std::fmt::Display,
-{
-    let status = match &result {
-        Ok(status) => status.clone(),
-        Err(error) => ProxyMonitorStatus::failed(error.to_string()),
-    };
-    state.sinks.emit(
-        crate::events::EventChannel::TransientStream,
-        &crate::events::TransientStreamEvent::ProxyMonitorStatus(status.clone()),
-    );
-
-    result.map_err(AppError::from).map(|_| status)
+    answer(
+        "proxy_stop_monitor",
+        &report_monitor_result(result, |status| {
+            state.sinks.emit(
+                crate::events::EventChannel::TransientStream,
+                &crate::events::TransientStreamEvent::ProxyMonitorStatus(status.clone()),
+            );
+        })?,
+    )
 }
 
 /// How to reach the Clash API of the core that is actually running, if any.

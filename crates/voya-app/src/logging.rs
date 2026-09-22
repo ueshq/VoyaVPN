@@ -12,7 +12,6 @@ use tracing::{
     Level,
 };
 use voya_contracts::LogLevel;
-use voya_platform::process::ProcessLogLevel;
 
 use crate::redaction::redact_url_userinfo;
 
@@ -66,18 +65,6 @@ pub fn ui_log_level(level: &Level) -> Option<LogLevel> {
         Some(LogLevel::Warn)
     } else {
         None
-    }
-}
-
-/// Map a classified core log line onto the public log severity.
-#[must_use]
-pub const fn process_log_level_to_contract(level: ProcessLogLevel) -> LogLevel {
-    match level {
-        ProcessLogLevel::Trace => LogLevel::Trace,
-        ProcessLogLevel::Debug => LogLevel::Debug,
-        ProcessLogLevel::Info => LogLevel::Info,
-        ProcessLogLevel::Warn => LogLevel::Warn,
-        ProcessLogLevel::Error => LogLevel::Error,
     }
 }
 
@@ -174,30 +161,6 @@ mod tests {
         assert!(ui_log_level(&Level::INFO).is_none());
         assert!(ui_log_level(&Level::DEBUG).is_none());
         assert!(ui_log_level(&Level::TRACE).is_none());
-    }
-
-    #[test]
-    fn core_log_levels_map_onto_the_contract() {
-        assert!(matches!(
-            process_log_level_to_contract(ProcessLogLevel::Trace),
-            LogLevel::Trace
-        ));
-        assert!(matches!(
-            process_log_level_to_contract(ProcessLogLevel::Debug),
-            LogLevel::Debug
-        ));
-        assert!(matches!(
-            process_log_level_to_contract(ProcessLogLevel::Info),
-            LogLevel::Info
-        ));
-        assert!(matches!(
-            process_log_level_to_contract(ProcessLogLevel::Warn),
-            LogLevel::Warn
-        ));
-        assert!(matches!(
-            process_log_level_to_contract(ProcessLogLevel::Error),
-            LogLevel::Error
-        ));
     }
 
     #[test]

@@ -12,8 +12,7 @@ import type {
   SystemProxyStatusResponse,
   TunStatus,
 } from "@/ipc/bindings";
-import { IpcCommandError } from "@/ipc/commands";
-import { useModalStore } from "@voya/client/modal-store";
+import { IpcCommandError } from "@voya/client/errors";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
@@ -128,15 +127,12 @@ const missingTunnelMessages = {
 
 // The real error class and kind check: the sudo-retry and missing-core paths
 // branch on `appError.kind`.
-vi.mock("@/ipc/commands", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/ipc/commands")>();
+vi.mock("@/ipc/commands", async () => {
   return {
-    appErrorOfKind: actual.appErrorOfKind,
     connectActiveProfile: ipcMock.connectActiveProfile,
     loadAppSettings: ipcMock.loadAppSettings,
     getSettingsApplyStatus: ipcMock.getSettingsApplyStatus,
     disconnectCore: ipcMock.disconnectCore,
-    IpcCommandError: actual.IpcCommandError,
     listPolicyGroups: ipcMock.listPolicyGroups,
     listProfileSummaries: ipcMock.listProfileSummaries,
     policyGroupRuntime: ipcMock.policyGroupRuntime,
@@ -205,7 +201,7 @@ describe("HomeScreen", () => {
     ipcMock.tunRequestElevation.mockResolvedValue(tunStatusResponse);
     ipcMock.tunStatus.mockResolvedValue(tunStatusResponse);
     useToastStore.setState({ toasts: [] });
-    useModalStore.setState({ missingCore: null });
+    useRuntimeActionStore.setState({ missingCore: null });
   });
 
   afterEach(async () => {
@@ -463,7 +459,7 @@ describe("HomeScreen", () => {
     await user.click(connectButton());
 
     await waitFor(() =>
-      expect(useModalStore.getState().missingCore).toEqual({
+      expect(useRuntimeActionStore.getState().missingCore).toEqual({
         message: "sing-box is not installed",
       }),
     );
@@ -500,7 +496,7 @@ describe("HomeScreen", () => {
     );
     expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1);
     expect(useToastStore.getState().toasts).toHaveLength(0);
-    expect(useModalStore.getState().missingCore).toBeNull();
+    expect(useRuntimeActionStore.getState().missingCore).toBeNull();
   });
 
   it("explains a declined authorization dialog instead of the raw failure", async () => {

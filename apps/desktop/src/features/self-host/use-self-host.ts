@@ -5,8 +5,8 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 
 import type { SelfHostConfig, SelfHostState } from "@/ipc/bindings";
+import { appErrorOfKind } from "@voya/client/errors";
 import {
-  appErrorOfKind,
   applySelfHostFirewallRule,
   getSelfHostState,
   getSelfHostStats,

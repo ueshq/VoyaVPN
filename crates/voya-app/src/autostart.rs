@@ -5,7 +5,7 @@ use std::{
 };
 
 use thiserror::Error;
-pub use voya_contracts::{AutostartPlatform, AutostartStatus};
+use voya_contracts::{AutostartPlatform, AutostartStatus};
 use voya_core::AppConfig;
 use voya_platform::{
     autostart::{

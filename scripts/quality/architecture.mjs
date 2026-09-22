@@ -8,7 +8,6 @@ import {
   clashBoundaryRules,
   contractsCasingRule,
   findUndocumentedUnsafe,
-  KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT,
   manifestDependencyRules,
   resolveTestModuleFiles,
   retiredCompatibilityRules,
@@ -38,7 +37,6 @@ const testModuleFiles = resolveTestModuleFiles({
   read: (path) => readFileSync(path, "utf8"),
 });
 const rustFiles = rustSources.filter((path) => !testModuleFiles.has(path));
-const usedUnsafeAllowlistEntries = new Set();
 
 // Every file, test modules and inline `mod tests { … }` included, needs its
 // SAFETY comments: an undocumented `unsafe` block is just as unsound in a test.
@@ -107,8 +105,6 @@ for (const path of rustFiles) {
     applyRules(path, source, production, [untranslatedMessageRule]);
   }
 }
-
-reportUnusedUnsafeAllowlistEntries();
 
 applyManifestRules(
   "apps/desktop/src-tauri/Cargo.toml",
@@ -210,22 +206,9 @@ function checkReleaseVersionAlignment() {
 }
 
 function requireSafetyComments(path, source) {
-  const { findings, usedAllowlistEntries } = findUndocumentedUnsafe(source, { path: display(path) });
-  for (const index of usedAllowlistEntries) usedUnsafeAllowlistEntries.add(index);
-  for (const finding of findings) {
+  for (const finding of findUndocumentedUnsafe(source)) {
     failures.push(`${display(path)}:${finding.line}: unsafe code requires a nearby SAFETY comment`);
   }
-}
-
-function reportUnusedUnsafeAllowlistEntries() {
-  // A stale entry is reported, not failed: the owning crate may fix its SAFETY
-  // comment at any time, and this gate must not turn red when it does.
-  KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT.forEach((entry, index) => {
-    if (usedUnsafeAllowlistEntries.has(index)) return;
-    console.warn(
-      `Stale unsafe allowlist entry (delete it from architecture-rules.mjs): ${entry.path} — ${entry.line}`,
-    );
-  });
 }
 
 function walk(directory) {
@@ -236,6 +219,6 @@ function walk(directory) {
 }
 
 function display(path) {
-  // Forward slashes so messages and allowlist keys match on Windows too.
+  // Forward slashes so messages match on Windows too.
   return relative(root, path).replaceAll("\\", "/");
 }

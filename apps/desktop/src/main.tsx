@@ -10,10 +10,10 @@ import { localeReady } from "@voya/i18n";
 
 import { App } from "./App";
 import { AppErrorBoundary } from "@/components/app-shell/error-boundary";
-import { createAppQueryClient } from "@/components/app-shell/query-client";
+import { createAppQueryClient } from "@voya/client/query-client";
 import "./styles/globals.css";
 
-const queryClient = createAppQueryClient();
+const queryClient = createAppQueryClient({ refetchOnWindowFocus: false });
 
 function render() {
   createRoot(document.getElementById("root")!, {

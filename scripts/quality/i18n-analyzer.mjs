@@ -218,21 +218,6 @@ export function unusedTranslationKeys({ keys, literals, externalPrefixes = [] })
   );
 }
 
-/**
- * Hardcoded strings that predate the `||` / `??` / `&&` fallback rule and live
- * in files this tooling batch may not edit. Matched on repository-relative path
- * plus the exact normalized text, so an entry cannot suppress anything else.
- * A stale entry is reported by `i18n.mjs`, never failed, so the owning feature
- * can delete it whenever the locale key lands.
- *
- * Empty on purpose: keep it that way.
- */
-export const KNOWN_HARDCODED_TEXT = [];
-
-export function isKnownHardcodedText(relativePath, text, allowlist = KNOWN_HARDCODED_TEXT) {
-  return allowlist.some((entry) => entry.path === relativePath && entry.text === text);
-}
-
 export function isUserVisibleText(value) {
   const text = normalizeText(value);
   // Detect letters in any script so all hardcoded UI text uses the same rule.

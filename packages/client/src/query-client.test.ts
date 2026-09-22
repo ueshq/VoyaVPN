@@ -1,16 +1,26 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useToastStore } from "@voya/client/toast-store";
-
 import { createAppQueryClient } from "./query-client";
+import { useToastStore } from "./toast-store";
 
 describe("createAppQueryClient", () => {
   beforeEach(() => {
     useToastStore.setState({ toasts: [] });
   });
 
-  it("stops retrying deterministic IPC failures and focus refetching", () => {
+  it("stops retrying deterministic IPC failures", () => {
     const queryClient = createAppQueryClient();
+
+    expect(queryClient.getDefaultOptions().queries).toMatchObject({
+      retry: false,
+      staleTime: 30_000,
+    });
+    // Mobile leaves the DOM-only option unset rather than disabling it.
+    expect(queryClient.getDefaultOptions().queries?.refetchOnWindowFocus).toBeUndefined();
+  });
+
+  it("applies the desktop focus-refetch delta when a host asks for it", () => {
+    const queryClient = createAppQueryClient({ refetchOnWindowFocus: false });
 
     expect(queryClient.getDefaultOptions().queries).toMatchObject({
       refetchOnWindowFocus: false,

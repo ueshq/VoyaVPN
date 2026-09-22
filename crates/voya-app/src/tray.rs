@@ -11,7 +11,10 @@
 //! `packages/i18n/src/index.ts` `localeOptions`, and
 //! [`tray_labels_cover_every_shipped_locale`](tests) pins the list.
 
-use voya_core::TrafficMode;
+/// The traffic mode the tray menu speaks. Re-exported because
+/// [`TrayMenuInput`] carries it and both hosts are barred from depending on
+/// `voya-core` directly (ADR 0012).
+pub use voya_core::TrafficMode;
 
 /// Every tray entry's text, already translated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

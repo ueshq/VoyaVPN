@@ -8,7 +8,7 @@ use voya_contracts::{ConnectionMode, ConnectionModeStatus};
 pub async fn connection_mode_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<ConnectionModeStatus, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let tun_status = tun_status_off_thread(&state, config.clone()).await?;
 
     Ok(voya_app::connection_mode::connection_mode_status(

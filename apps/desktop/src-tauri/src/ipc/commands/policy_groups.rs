@@ -17,7 +17,7 @@ const GROUP_DELAY_TIMEOUT_MS: u32 = 5_000;
 pub async fn list_policy_groups(
     state: tauri::State<'_, AppState>,
 ) -> Result<PolicyGroupListing, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let entries = state
         .services()
         .policy_groups()
@@ -42,18 +42,19 @@ pub async fn save_policy_group<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     group: PolicyGroup,
 ) -> Result<PolicyGroup, AppError> {
-    validate_ipc_text_list(
-        &group.member_ids,
+    map_ipc_input(
+        input_safety::validate_text_list(&group.member_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
         "node id",
-        IPC_ID_MAX_CHARS,
         AppErrorSubsystem::PolicyGroup,
     )?;
-    let saved = mutate_config(&state, async |unit_of_work, _config| {
-        Ok(PolicyGroupManager::new_in(unit_of_work)
-            .save(policy_group_from_contract(group))
-            .await?)
-    })
-    .await?;
+    let saved = state
+        .config_mutations()
+        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
+            Ok(PolicyGroupManager::new_in(unit_of_work)
+                .save(policy_group_from_contract(group))
+                .await?)
+        })
+        .await?;
     emit_policy_group_invalidation(&app, "policy-group-saved", saved.config_changed);
     if saved.config.active_group_id == saved.value.id {
         restart_after_config_change(&app, &state, &saved.config, ConfigChange::POLICY_GROUP).await;
@@ -69,18 +70,19 @@ pub async fn delete_policy_groups<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     ids: Vec<String>,
 ) -> Result<u32, AppError> {
-    validate_ipc_text_list(
-        &ids,
+    map_ipc_input(
+        input_safety::validate_text_list(&ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
         "policy group id",
-        IPC_ID_MAX_CHARS,
         AppErrorSubsystem::PolicyGroup,
     )?;
-    let deleted = mutate_config(&state, async |unit_of_work, config| {
-        Ok(PolicyGroupManager::new_in(unit_of_work)
-            .delete(config, &ids)
-            .await?)
-    })
-    .await?;
+    let deleted = state
+        .config_mutations()
+        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
+            Ok(PolicyGroupManager::new_in(unit_of_work)
+                .delete(config, &ids)
+                .await?)
+        })
+        .await?;
     emit_then_disconnect_removed(&app, &state, |app| {
         emit_policy_group_invalidation(app, "policy-groups-deleted", deleted.config_changed)
     })
@@ -98,18 +100,19 @@ pub async fn set_active_policy_group<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<PolicyGroup, AppError> {
-    validate_required_ipc_text(
-        &id,
+    map_ipc_input(
+        input_safety::validate_required_text(&id, IPC_ID_MAX_CHARS),
         "policy group id",
-        IPC_ID_MAX_CHARS,
         AppErrorSubsystem::PolicyGroup,
     )?;
-    let active = mutate_config(&state, async |unit_of_work, config| {
-        Ok(PolicyGroupManager::new_in(unit_of_work)
-            .set_active(config, &id)
-            .await?)
-    })
-    .await?;
+    let active = state
+        .config_mutations()
+        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
+            Ok(PolicyGroupManager::new_in(unit_of_work)
+                .set_active(config, &id)
+                .await?)
+        })
+        .await?;
     emit_policy_group_invalidation(&app, "active-policy-group-changed", true);
 
     Ok(policy_group_to_contract(active.value))
@@ -125,24 +128,24 @@ pub async fn select_policy_group_member<R: tauri::Runtime>(
     group_id: String,
     profile_id: String,
 ) -> Result<PolicyGroup, AppError> {
-    validate_required_ipc_text(
-        &group_id,
+    map_ipc_input(
+        input_safety::validate_required_text(&group_id, IPC_ID_MAX_CHARS),
         "policy group id",
-        IPC_ID_MAX_CHARS,
         AppErrorSubsystem::PolicyGroup,
     )?;
-    validate_required_ipc_text(
-        &profile_id,
+    map_ipc_input(
+        input_safety::validate_required_text(&profile_id, IPC_ID_MAX_CHARS),
         "node id",
-        IPC_ID_MAX_CHARS,
         AppErrorSubsystem::PolicyGroup,
     )?;
-    let selected = mutate_config(&state, async |unit_of_work, _config| {
-        Ok(PolicyGroupManager::new_in(unit_of_work)
-            .select_member(&group_id, &profile_id)
-            .await?)
-    })
-    .await?;
+    let selected = state
+        .config_mutations()
+        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
+            Ok(PolicyGroupManager::new_in(unit_of_work)
+                .select_member(&group_id, &profile_id)
+                .await?)
+        })
+        .await?;
 
     let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
     if snapshot.state == SupervisorConnectionState::Connected

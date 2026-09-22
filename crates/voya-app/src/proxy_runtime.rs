@@ -5,9 +5,7 @@ use std::{
 
 use thiserror::Error;
 use tokio::{runtime::Handle, sync::watch, task::JoinHandle, time};
-pub use voya_contracts::{
-    ProxyConnectionItem, ProxyConnectionsSnapshot, ProxyMonitorState, ProxyMonitorStatus,
-};
+use voya_contracts::{ProxyConnectionItem, ProxyConnectionsSnapshot, ProxyMonitorStatus};
 use voya_core::TrafficMode;
 use voya_net::clash::{
     ClashApiEndpoint, ClashConnection as NetClashConnection,
@@ -300,6 +298,29 @@ pub fn proxy_runtime_endpoint(access: &ClashApiAccess) -> Option<ClashApiEndpoin
     })
 }
 
+/// Announces where the monitor ended up, a failure included, and returns it.
+///
+/// Both hosts used to spell this out: clone the status (or synthesise a failed
+/// one), push it on the transient stream so the UI reflects the real monitor
+/// state even when the command fails, then convert the error. `report` is the
+/// host's emit of that status.
+pub fn report_monitor_result<E>(
+    result: std::result::Result<ProxyMonitorStatus, E>,
+    report: impl FnOnce(&ProxyMonitorStatus),
+) -> std::result::Result<ProxyMonitorStatus, voya_contracts::AppError>
+where
+    E: std::fmt::Display,
+    voya_contracts::AppError: From<E>,
+{
+    let status = match &result {
+        Ok(status) => status.clone(),
+        Err(error) => ProxyMonitorStatus::failed(error.to_string()),
+    };
+    report(&status);
+
+    result.map_err(voya_contracts::AppError::from)
+}
+
 #[must_use]
 fn traffic_mode_api_value(mode: TrafficMode) -> Option<&'static str> {
     match mode {
@@ -373,6 +394,8 @@ fn endpoint_label(address: Option<&str>, port: Option<&str>) -> String {
 }
 #[cfg(test)]
 mod tests {
+    use voya_contracts::ProxyMonitorState;
+
     use std::{
         collections::BTreeMap,
         future::Future,

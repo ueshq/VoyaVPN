@@ -1,5 +1,5 @@
 use thiserror::Error;
-use voya_core::{AppConfig, SubItem, SubMetadataItem};
+use voya_core::{AppConfig, SubItem};
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 use voya_net::DownloadError;
 
@@ -54,14 +54,6 @@ impl<'db> SubscriptionManager<'db> {
     #[must_use]
     pub(crate) const fn from_session(database: DatabaseSession<'db>) -> Self {
         Self { database }
-    }
-
-    pub async fn list_subscription_metadata(&self) -> Result<Vec<SubMetadataItem>> {
-        Ok(self.database.subscription_metadata().list().await?)
-    }
-
-    pub async fn list_subscriptions(&self) -> Result<Vec<SubItem>> {
-        Ok(self.database.subscriptions().list().await?)
     }
 
     /// Subscription selection is not part of the persisted application

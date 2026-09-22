@@ -22,7 +22,7 @@ use crate::app::MobileState;
 use super::{answer, arguments, runtime::finish_config_change};
 
 pub(super) async fn list(state: &MobileState) -> Result<Value, AppError> {
-    let items = state.services.routings().list_routings().await?;
+    let items = state.services.list_routings().await?;
 
     answer(
         "list_routings",

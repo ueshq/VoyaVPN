@@ -18,6 +18,7 @@ vi.mock("@/ipc/bindings", () => ({ commands: commandMocks }));
 
 import type { AppError, AppErrorKind } from "@/ipc/bindings";
 import * as ipc from "@/ipc/commands";
+import { IpcCommandError, appErrorOfKind } from "@voya/client/errors";
 
 const wrapperNames = [
   "loadUiPreferences",
@@ -139,14 +140,14 @@ describe("typed IPC command facade", () => {
   );
 
   it("narrows a rejected command to one backend error kind", () => {
-    const [validation, notFound] = appErrors().map(({ error }) => new ipc.IpcCommandError(error));
+    const [validation, notFound] = appErrors().map(({ error }) => new IpcCommandError(error));
 
-    expect(ipc.appErrorOfKind(validation, "validation")?.kind.issues).toHaveLength(1);
-    expect(ipc.appErrorOfKind(validation, "notFound")).toBeNull();
-    expect(ipc.appErrorOfKind(notFound, "notFound")?.kind).toMatchObject({ entity: "profile" });
+    expect(appErrorOfKind(validation, "validation")?.kind.issues).toHaveLength(1);
+    expect(appErrorOfKind(validation, "notFound")).toBeNull();
+    expect(appErrorOfKind(notFound, "notFound")?.kind).toMatchObject({ entity: "profile" });
     // Only the typed command error carries a kind; anything else never matches.
-    expect(ipc.appErrorOfKind(new Error("validation"), "validation")).toBeNull();
-    expect(ipc.appErrorOfKind("validation", "validation")).toBeNull();
+    expect(appErrorOfKind(new Error("validation"), "validation")).toBeNull();
+    expect(appErrorOfKind("validation", "validation")).toBeNull();
   });
 
   it.each(appErrors())("preserves and formats the $label backend error", async ({ error }) => {

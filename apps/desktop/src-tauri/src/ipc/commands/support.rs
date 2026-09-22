@@ -1,4 +1,5 @@
 use std::{
+    path::Path,
     sync::{
         atomic::{AtomicBool, Ordering},
         LazyLock,
@@ -21,10 +22,6 @@ static LOG_LINES: LazyLock<LogBatcher<LogLineEvent>> =
 /// here, which `get_or_init` would deadlock on.
 static LOG_FLUSHER_STARTED: AtomicBool = AtomicBool::new(false);
 
-pub(super) fn current_config(state: &AppState) -> AppConfig {
-    state.config_mutations().current_config()
-}
-
 /// How to reach the Clash API of the core that is actually running, if any.
 ///
 /// The generated main config decides both the port and the bearer token it
@@ -44,75 +41,17 @@ pub(super) async fn current_clash_api_access(state: &AppState) -> ClashApiAccess
         .unwrap_or_default()
 }
 
-/// Runs one manager call inside a configuration mutation and commits it.
+/// Maps one `input_safety` check onto the shared `input_text_error` issue.
 ///
-/// The begin / clone / `split()` / compare / commit scaffold lives in
-/// `voya_app::config_mutation` where it is unit-tested; commands keep only the
-/// manager call and the cache invalidation that follows the commit, which is
-/// the one thing that needs an `AppHandle`.
-pub(super) async fn mutate_config<T, F>(
-    state: &AppState,
-    operation: F,
-) -> Result<CommittedMutation<T>, AppError>
-where
-    F: AsyncFnOnce(&UnitOfWork, &mut AppConfig) -> Result<T, AppError>,
-{
-    state.config_mutations().mutate(operation).await
-}
-
-// Argument guards. Rejected IPC text is a *validation* failure addressed to the
-// argument that carried it, so each guard names its subsystem and the shared
-// `input_text_error` mapper builds the issue — the shell no longer picks an
-// error variant per call site.
-
-pub(super) fn validate_present_ipc_text(
-    value: Option<&str>,
+/// Rejected IPC text is a *validation* failure addressed to the argument that
+/// carried it; this is the one remap, so the shell never picks an error variant
+/// per call site.
+pub(super) fn map_ipc_input<T>(
+    result: input_safety::Result<T>,
     field: &str,
-    max_chars: usize,
     subsystem: AppErrorSubsystem,
-) -> Result<(), AppError> {
-    input_safety::validate_present_text(value, max_chars)
-        .map_err(|error| input_text_error(&error, field, subsystem))
-}
-
-pub(super) fn validate_optional_ipc_text(
-    value: Option<&str>,
-    field: &str,
-    max_chars: usize,
-    subsystem: AppErrorSubsystem,
-) -> Result<(), AppError> {
-    input_safety::validate_optional_text(value, max_chars)
-        .map_err(|error| input_text_error(&error, field, subsystem))
-}
-
-pub(super) fn validate_ipc_text_list(
-    values: &[String],
-    field: &str,
-    max_chars: usize,
-    subsystem: AppErrorSubsystem,
-) -> Result<(), AppError> {
-    input_safety::validate_text_list(values, max_chars, IPC_LIST_MAX_ITEMS)
-        .map_err(|error| input_text_error(&error, field, subsystem))
-}
-
-pub(super) fn validate_required_ipc_text(
-    value: &str,
-    field: &str,
-    max_chars: usize,
-    subsystem: AppErrorSubsystem,
-) -> Result<(), AppError> {
-    input_safety::validate_required_text(value, max_chars)
-        .map_err(|error| input_text_error(&error, field, subsystem))
-}
-
-pub(super) fn validate_ipc_qr_content(
-    value: &str,
-    field: &str,
-    max_chars: usize,
-    subsystem: AppErrorSubsystem,
-) -> Result<(), AppError> {
-    input_safety::validate_qr_content(value, max_chars)
-        .map_err(|error| input_text_error(&error, field, subsystem))
+) -> Result<T, AppError> {
+    result.map_err(|error| input_text_error(&error, field, subsystem))
 }
 
 /// The supervisor state the OS-facing transactions gate on.
@@ -130,21 +69,20 @@ pub(super) async fn supervisor_connection_state(
 }
 
 pub(super) fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
-    let manager = state.services().runtime(state.supervisor());
-
-    if let Some(seed_dir) = state.core_seed_resource_dir() {
-        manager.with_core_seed_resource_dir(seed_dir.to_path_buf())
-    } else {
-        manager
-    }
+    state.services().runtime(
+        state.supervisor(),
+        state.core_seed_resource_dir().map(Path::to_path_buf),
+    )
 }
 
 pub(super) fn tun_manager(state: &AppState) -> TunManager {
     // A fresh manager per command is fine — it is a handle, not a resource —
     // but the PlugInKit registration memo has to outlive it, or every status
     // read forks `pluginkit` again.
-    TunManager::new(state.elevation_manager().state())
-        .with_provider_registration_cache(state.provider_registration_cache())
+    state.services().tun_manager(
+        state.elevation_manager().state(),
+        Some(state.provider_registration_cache()),
+    )
 }
 
 /// Runs blocking OS work off the caller's thread.

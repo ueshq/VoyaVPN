@@ -5,7 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createAppQueryClient } from "@/components/app-shell/query-client";
+import { createAppQueryClient } from "@voya/client/query-client";
 import type { ProxyConnectionItem, ProxyConnectionsSnapshot, Routing_Serialize, RuntimeStatusResponse } from "@/ipc/bindings";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";

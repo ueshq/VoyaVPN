@@ -1,8 +1,9 @@
 use thiserror::Error;
 use voya_contracts::ValidationCode;
-pub use voya_contracts::ValidationIssue;
+use voya_contracts::ValidationIssue;
 use voya_core::{
-    first_dns_address, SimpleDnsItem, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
+    first_dns_address, text::nonempty_string, SimpleDnsItem, DEFAULT_BOOTSTRAP_DNS,
+    DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
 };
 
 pub type Result<T> = std::result::Result<T, DnsSettingsError>;
@@ -27,16 +28,16 @@ pub fn normalize_simple_dns(mut item: SimpleDnsItem) -> SimpleDnsItem {
     item.fake_ip = item.fake_ip.or(defaults.fake_ip);
     item.global_fake_ip = item.global_fake_ip.or(defaults.global_fake_ip);
     item.block_binding_query = item.block_binding_query.or(defaults.block_binding_query);
-    item.direct_dns =
-        clean_optional_string(item.direct_dns).or_else(|| Some(DEFAULT_DIRECT_DNS.to_string()));
-    item.remote_dns =
-        clean_optional_string(item.remote_dns).or_else(|| Some(DEFAULT_REMOTE_DNS.to_string()));
-    item.bootstrap_dns = clean_optional_string(item.bootstrap_dns)
+    item.direct_dns = nonempty_string(item.direct_dns.as_deref())
+        .or_else(|| Some(DEFAULT_DIRECT_DNS.to_string()));
+    item.remote_dns = nonempty_string(item.remote_dns.as_deref())
+        .or_else(|| Some(DEFAULT_REMOTE_DNS.to_string()));
+    item.bootstrap_dns = nonempty_string(item.bootstrap_dns.as_deref())
         .or_else(|| Some(DEFAULT_BOOTSTRAP_DNS.to_string()));
-    item.strategy4_freedom = clean_optional_string(item.strategy4_freedom);
-    item.strategy4_proxy = clean_optional_string(item.strategy4_proxy);
-    item.hosts = clean_optional_string(item.hosts);
-    item.direct_expected_ips = clean_optional_string(item.direct_expected_ips);
+    item.strategy4_freedom = nonempty_string(item.strategy4_freedom.as_deref());
+    item.strategy4_proxy = nonempty_string(item.strategy4_proxy.as_deref());
+    item.hosts = nonempty_string(item.hosts.as_deref());
+    item.direct_expected_ips = nonempty_string(item.direct_expected_ips.as_deref());
     item
 }
 
@@ -148,12 +149,6 @@ fn validate_expected_ips(value: Option<&str>, field: &str, issues: &mut Vec<Vali
     {
         issues.push(ValidationIssue::new(field, ValidationCode::DnsExpectedIps));
     }
-}
-
-fn clean_optional_string(value: Option<String>) -> Option<String> {
-    value
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
 }
 
 #[cfg(test)]

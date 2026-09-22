@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use thiserror::Error;
-pub use voya_contracts::ResourceUpdateFile;
+use voya_contracts::ResourceUpdateFile;
 use voya_db::{Database, DbError};
 use voya_net::ruleset::{
     collect_singbox_ruleset_assets, discover_local_singbox_ruleset_paths, geo_assets,

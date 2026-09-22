@@ -8,17 +8,21 @@ use std::sync::Arc;
 
 use serde_json::Value;
 use voya_app::{
-    contract_map::{runtime_status_event, runtime_status_response},
+    config_mutation::AppConfig,
+    contract_map::{
+        connection_ip_to_contract, core_flow_log_level, core_flow_notice_level,
+        core_state_to_contract, runtime_status_event, runtime_status_response,
+    },
     core_flow::{CoreFlow, CoreFlowLevel, CoreFlowSink, CoreFlowState},
+    post_commit::{self, ConfigChange, PostCommitSink},
     runtime::RuntimeManager,
     supervisor::SupervisorSnapshot,
-    sysproxy::SystemProxyManager,
-    tun::{TunManager, TunStatus},
+    tun::TunManager,
 };
 use voya_contracts::{
-    AppError, AppNotice, AppNoticeLevel, CoreState, LogCode, LogLevel, NoticeCode,
+    AppError, AppNotice, AppNoticeLevel, InvalidationScope, LogCode, NoticeCode, TunStatus,
 };
-use voya_platform::sysproxy::{SystemProxyService, SystemProxyStatus};
+use voya_platform::sysproxy::SystemProxyStatus;
 
 use crate::{
     app::MobileState,
@@ -73,37 +77,48 @@ pub(super) async fn check_connection_ip(state: &MobileState) -> Result<Value, Ap
     let snapshot = state.supervisor.status().await?;
     let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot).await?;
 
-    answer(
-        "check_connection_ip",
-        &voya_contracts::ConnectionIpResult {
-            country_code: exit.country_code,
-            ip: exit.ip,
-        },
-    )
+    answer("check_connection_ip", &connection_ip_to_contract(exit))
 }
 
-/// The tail every committed configuration change shares: announce the caches,
-/// then restart a connected core for the change. The change is already
-/// persisted by the time this runs, so a failed restart is a warning notice
-/// rather than a command error.
+/// The tail every committed configuration change shares. The choreography
+/// itself is `voya_app::post_commit::finish_config_change`, shared with the
+/// Tauri shell; this only supplies the host's sinks and core flow.
 pub(super) async fn finish_config_change(
     state: &MobileState,
     reason: &str,
-    scopes: Vec<voya_contracts::InvalidationScope>,
-    config: &voya_app::config_mutation::AppConfig,
-    change: voya_app::post_commit::ConfigChange,
+    scopes: Vec<InvalidationScope>,
+    config: &AppConfig,
+    change: ConfigChange,
 ) {
-    state.sinks.invalidate(reason, scopes);
+    post_commit::finish_config_change(
+        &MobilePostCommitSink {
+            sinks: Arc::clone(&state.sinks),
+        },
+        &core_flow(state),
+        reason,
+        &scopes,
+        config,
+        change,
+    )
+    .await;
+}
 
-    if let Err(error) = core_flow(state)
-        .restart_if_connected(config, change.reason)
-        .await
-    {
-        state.sinks.notice(
-            AppNoticeLevel::Warning,
-            change.restart_failed_code,
-            Some(format!("{error:?}")),
-        );
+struct MobilePostCommitSink {
+    sinks: Arc<HostSinks>,
+}
+
+impl PostCommitSink for MobilePostCommitSink {
+    fn invalidate(
+        &self,
+        reason: &str,
+        scopes: &[InvalidationScope],
+        _refresh_failed_code: NoticeCode,
+    ) {
+        self.sinks.invalidate(reason, scopes.to_vec());
+    }
+
+    fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
+        self.sinks.notice(level, code, Some(detail.to_string()));
     }
 }
 
@@ -121,7 +136,7 @@ pub(super) async fn disconnect_removed_profile(state: &MobileState) -> Result<()
 pub(super) fn core_flow(state: &MobileState) -> CoreFlow<'_> {
     CoreFlow::new(
         runtime_manager(state),
-        system_proxy_manager(state),
+        state.system_proxy_manager.clone(),
         tun_manager(state),
         Arc::new(HostCoreFlowSink {
             sinks: Arc::clone(&state.sinks),
@@ -132,21 +147,13 @@ pub(super) fn core_flow(state: &MobileState) -> CoreFlow<'_> {
 fn runtime_manager(state: &MobileState) -> RuntimeManager<'_> {
     // No core seed directory: the tunnel provider ships its own Libbox and
     // never looks for an executable on disk.
-    state.services.runtime(state.supervisor.clone())
+    state.services.runtime(state.supervisor.clone(), None)
 }
 
 fn tun_manager(state: &MobileState) -> TunManager {
-    TunManager::new(Arc::clone(&state.elevation))
-}
-
-/// A manager over a service that will refuse, which is the honest shape: the
-/// platform reports `SystemProxyManagement::Unsupported` for both phones, so
-/// every path through `core_flow` skips the proxy before it reaches this.
-fn system_proxy_manager(state: &MobileState) -> SystemProxyManager {
-    SystemProxyManager::new(
-        SystemProxyService::new(crate::app::no_process_runner()),
-        state.services.runtime_paths().clone(),
-    )
+    state
+        .services
+        .tun_manager(Arc::clone(&state.elevation), None)
 }
 
 struct HostCoreFlowSink {
@@ -156,7 +163,7 @@ struct HostCoreFlowSink {
 impl CoreFlowSink for HostCoreFlowSink {
     fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>) {
         self.sinks
-            .log(log_level(level), code, detail.map(str::to_string));
+            .log(core_flow_log_level(level), code, detail.map(str::to_string));
     }
 
     fn core_state(
@@ -168,7 +175,7 @@ impl CoreFlowSink for HostCoreFlowSink {
         self.sinks.emit(
             EventChannel::TransientStream,
             &TransientStreamEvent::CoreState(runtime_status_event(
-                core_state_event_kind(state),
+                core_state_to_contract(state),
                 active_profile_id,
                 snapshot,
             )),
@@ -194,7 +201,11 @@ impl CoreFlowSink for HostCoreFlowSink {
     fn statistics_zero(&self) {
         self.sinks.emit(
             EventChannel::TransientStream,
-            &TransientStreamEvent::Statistics(zero_statistics()),
+            &TransientStreamEvent::Statistics(
+                voya_app::contract_map::statistics_snapshot_to_contract(
+                    voya_app::statistics::StatisticsSnapshot::zero(),
+                ),
+            ),
         );
     }
 
@@ -204,50 +215,9 @@ impl CoreFlowSink for HostCoreFlowSink {
             &AppEvent::Notice(AppNotice {
                 code,
                 detail: Some(detail.to_string()),
-                level: notice_level(level),
+                level: core_flow_notice_level(level),
             }),
         );
-    }
-}
-
-const fn log_level(level: CoreFlowLevel) -> LogLevel {
-    match level {
-        CoreFlowLevel::Info => LogLevel::Info,
-        CoreFlowLevel::Warn => LogLevel::Warn,
-        CoreFlowLevel::Error => LogLevel::Error,
-    }
-}
-
-const fn notice_level(level: CoreFlowLevel) -> AppNoticeLevel {
-    match level {
-        CoreFlowLevel::Info => AppNoticeLevel::Info,
-        CoreFlowLevel::Warn => AppNoticeLevel::Warning,
-        CoreFlowLevel::Error => AppNoticeLevel::Error,
-    }
-}
-
-const fn core_state_event_kind(state: CoreFlowState) -> CoreState {
-    match state {
-        CoreFlowState::CleanupPending => CoreState::CleanupPending,
-        CoreFlowState::Connecting => CoreState::Connecting,
-        CoreFlowState::Connected => CoreState::Connected,
-        CoreFlowState::Disconnecting => CoreState::Disconnecting,
-        CoreFlowState::Disconnected => CoreState::Disconnected,
-    }
-}
-
-/// A sample with nothing flowing, published when a core stops so the live
-/// rates fall to zero rather than freezing at the last reading.
-fn zero_statistics() -> voya_contracts::StatisticsSnapshot {
-    voya_contracts::StatisticsSnapshot {
-        active_profile_id: None,
-        proxy_upload_bytes_per_second: 0.0,
-        proxy_download_bytes_per_second: 0.0,
-        direct_upload_bytes_per_second: 0.0,
-        direct_download_bytes_per_second: 0.0,
-        upload_bytes_per_second: 0.0,
-        download_bytes_per_second: 0.0,
-        server_stat: None,
     }
 }
 
@@ -279,7 +249,7 @@ pub(super) async fn set_tun_enabled(state: &MobileState, args: &Value) -> Result
         "tun-enabled-changed",
         voya_app::invalidation::connection_mode_scopes(),
         &planned.config,
-        voya_app::post_commit::ConfigChange::TUN,
+        ConfigChange::TUN,
     )
     .await;
 
@@ -312,7 +282,7 @@ pub(super) async fn set_connection_mode(
     let SetMode { mode } = super::arguments("set_connection_mode", args)?;
     let connected = state.supervisor.status().await?.state;
     let outcome = voya_app::connection_mode::ConnectionModeManager::new(
-        system_proxy_manager(state),
+        state.system_proxy_manager.clone(),
         tun_manager(state),
         Arc::new(HostConnectionModeSink {
             sinks: Arc::clone(&state.sinks),
@@ -332,7 +302,7 @@ pub(super) async fn set_connection_mode(
             "connection-mode-restart",
             Vec::new(),
             &outcome.config,
-            voya_app::post_commit::ConfigChange::CONNECTION_MODE,
+            ConfigChange::CONNECTION_MODE,
         )
         .await;
     }

@@ -545,7 +545,7 @@ export type InvalidateEvent = {
  * 
  *  Replaces the free-string key list the shell used to build by hand. The
  *  variants are generated into `apps/desktop/src/ipc/bindings.ts`, and
- *  `apps/desktop/src/ipc/query-keys.ts` maps each one onto the `queryKey`
+ *  `packages/client/src/query-keys.ts` maps each one onto the `queryKey`
  *  array its `useQuery` really uses, so a variant added here fails the frontend
  *  typecheck until the map is extended. Only caches an emitter can actually
  *  invalidate belong here; a query whose data no command mutates

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModalHost } from "@/components/app-shell/modal-host";
 import { changeLocale } from "@voya/i18n";
 import type { CoreSeedInstallStatus } from "@/ipc/bindings";
-import { useModalStore } from "@voya/client/modal-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
 const ipcMocks = vi.hoisted(() => ({
   connectActiveProfile: vi.fn(),
@@ -24,7 +24,7 @@ function seedInstallResult(status: CoreSeedInstallStatus) {
  * dialog is the onboarding path every user meets.
  */
 function openMissingCoreModal() {
-  useModalStore.getState().showMissingCore({ message: "core missing" });
+  useRuntimeActionStore.getState().showMissingCore({ message: "core missing" });
 }
 
 function renderModalHost() {
@@ -36,14 +36,14 @@ describe("ModalHost", () => {
     cleanup();
     vi.clearAllMocks();
     await changeLocale("en");
-    useModalStore.setState({ missingCore: null });
+    useRuntimeActionStore.setState({ missingCore: null });
     ipcMocks.connectActiveProfile.mockResolvedValue(undefined);
     ipcMocks.installCoreSeed.mockResolvedValue(seedInstallResult("installed"));
   });
 
   afterEach(() => {
     cleanup();
-    useModalStore.setState({ missingCore: null });
+    useRuntimeActionStore.setState({ missingCore: null });
   });
 
   it("does not expose the retired full config template surface", () => {
@@ -63,7 +63,7 @@ describe("ModalHost", () => {
 
     await user.click(screen.getByRole("button", { name: "Repair" }));
 
-    await waitFor(() => expect(useModalStore.getState().missingCore).toBeNull());
+    await waitFor(() => expect(useRuntimeActionStore.getState().missingCore).toBeNull());
     expect(ipcMocks.installCoreSeed).toHaveBeenCalledWith();
     expect(ipcMocks.connectActiveProfile).toHaveBeenCalledTimes(1);
   });
@@ -79,7 +79,7 @@ describe("ModalHost", () => {
     expect(await screen.findByText(/No bundled component is available to repair with/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Repair" })).not.toBeInTheDocument();
     expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
-    expect(useModalStore.getState().missingCore).not.toBeNull();
+    expect(useRuntimeActionStore.getState().missingCore).not.toBeNull();
   });
 
   it("keeps the modal open with the failure text when the install rejects", async () => {
@@ -93,6 +93,6 @@ describe("ModalHost", () => {
 
     expect(await screen.findByText("download failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Repair" })).toBeEnabled();
-    expect(useModalStore.getState().missingCore).not.toBeNull();
+    expect(useRuntimeActionStore.getState().missingCore).not.toBeNull();
   });
 });

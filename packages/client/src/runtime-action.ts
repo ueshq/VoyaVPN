@@ -4,11 +4,11 @@ import type { PolicyGroupListing, RuntimeStatusResponse } from "@voya/contracts"
 import type { TranslationFunction } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { appErrorOfKind } from "./errors";
-import { useModalStore, type MissingCorePayload } from "./modal-store";
 import { requestElevation } from "./platform";
 import { queryKeys } from "./query-keys";
 import {
   runtimeActionPending,
+  type MissingCorePayload,
   type RuntimeAction,
   useRuntimeActionStore,
 } from "./runtime-action-store";
@@ -135,7 +135,7 @@ function reportRuntimeActionError(
 ) {
   const missingCore = missingCorePayload(error);
   if (missingCore) {
-    useModalStore.getState().showMissingCore(missingCore);
+    useRuntimeActionStore.getState().showMissingCore(missingCore);
   } else if (inline) {
     useRuntimeActionStore.getState().failInline(action, runtimeActionMessage(error, t));
   } else {

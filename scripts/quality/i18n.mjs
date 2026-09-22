@@ -4,8 +4,6 @@ import { readJson, repoRootFromScript } from "../lib/common.mjs";
 import {
   EXTERNAL_KEY_NAMESPACES,
   inspectI18nSource,
-  isKnownHardcodedText,
-  KNOWN_HARDCODED_TEXT,
   unusedTranslationKeys,
 } from "./i18n-analyzer.mjs";
 
@@ -49,20 +47,12 @@ if (englishKeys.some((key) => key.startsWith("resx."))) {
 const invalidKeys = [];
 const dynamicKeys = [];
 const hardcodedJsx = [];
-const usedHardcodedAllowlistEntries = new Set();
 const sourceLiterals = new Set();
 
 for (const root of productionSourceDirs) {
   for (const path of productionSourceFiles(root)) {
     inspectSource(path);
   }
-}
-
-for (const entry of KNOWN_HARDCODED_TEXT) {
-  if (usedHardcodedAllowlistEntries.has(`${entry.path}:${entry.text}`)) continue;
-  // Reported, not failed: the owning feature may add the locale key at any
-  // time and this gate must not turn red when it does.
-  console.warn(`Stale hardcoded-text allowlist entry (delete it from i18n-analyzer.mjs): ${entry.path} — ${entry.text}`);
 }
 
 if (invalidKeys.length > 0) {
@@ -100,18 +90,10 @@ console.log(`i18n check passed: ${localeCodes.length} aligned Voya locales, ${en
 function inspectSource(path) {
   const source = readFileSync(path, "utf8");
   const result = inspectI18nSource({ path, source, knownKeys });
-  // Forward slashes so the allowlist keys match on Windows too.
-  const relativePath = relative(repoRoot, path).replaceAll("\\", "/");
   invalidKeys.push(...result.invalidKeys.map((item) => location(path, item)));
   dynamicKeys.push(...result.dynamicKeys.map((item) => location(path, item)));
   for (const literal of result.literals) sourceLiterals.add(literal);
-  for (const item of result.hardcodedText) {
-    if (isKnownHardcodedText(relativePath, item.detail)) {
-      usedHardcodedAllowlistEntries.add(`${relativePath}:${item.detail}`);
-      continue;
-    }
-    hardcodedJsx.push(location(path, item));
-  }
+  hardcodedJsx.push(...result.hardcodedText.map((item) => location(path, item)));
 }
 
 function readLocale(code) {

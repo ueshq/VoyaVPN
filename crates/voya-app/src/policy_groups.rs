@@ -87,12 +87,6 @@ impl<'db> PolicyGroupManager<'db> {
         Self { database }
     }
 
-    /// Every group in display order, without resolving members: the tray
-    /// names groups only, and resolving reads the whole node list.
-    pub async fn list_groups(&self) -> Result<Vec<PolicyGroupItem>> {
-        Ok(self.database.policy_groups().list().await?)
-    }
-
     /// Every group in display order with its resolved members.
     pub async fn list(&self, config: &AppConfig) -> Result<Vec<PolicyGroupEntry>> {
         let nodes = self.database.profiles().list_identities().await?;

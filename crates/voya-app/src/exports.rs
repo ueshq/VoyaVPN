@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use thiserror::Error;
-pub use voya_contracts::ExportProfilesResult;
+use voya_contracts::ExportProfilesResult;
 use voya_core::{
     export_share_link_with_options, AppConfig, ProfileItem, ShareError, ShareLinkOptions,
 };
@@ -21,55 +21,43 @@ pub enum ExportManagerError {
 
 pub type Result<T> = std::result::Result<T, ExportManagerError>;
 
-pub struct ExportManager<'db> {
-    database: &'db Database,
+/// The share links of `index_ids`, one per line in selection order.
+pub async fn export_profiles(
+    database: &Database,
+    config: &AppConfig,
+    index_ids: &[String],
+) -> Result<ExportProfilesResult> {
+    let profiles = load_profiles(database, index_ids).await?;
+
+    Ok(ExportProfilesResult {
+        text: export_share_links(&profiles, config)?,
+        count: u32::try_from(profiles.len()).unwrap_or(u32::MAX),
+    })
 }
 
-impl<'db> ExportManager<'db> {
-    #[must_use]
-    pub fn new(database: &'db Database) -> Self {
-        Self { database }
+async fn load_profiles(database: &Database, index_ids: &[String]) -> Result<Vec<ProfileItem>> {
+    if index_ids.is_empty() {
+        return Err(ExportManagerError::EmptySelection);
     }
 
-    /// The share links of `index_ids`, one per line in selection order.
-    pub async fn export_profiles(
-        &self,
-        config: &AppConfig,
-        index_ids: &[String],
-    ) -> Result<ExportProfilesResult> {
-        let profiles = self.load_profiles(index_ids).await?;
-
-        Ok(ExportProfilesResult {
-            text: export_share_links(&profiles, config)?,
-            count: u32::try_from(profiles.len()).unwrap_or(u32::MAX),
+    // One query for the whole selection rather than one per node; the
+    // links still come out in selection order.
+    let by_id = database
+        .profiles()
+        .list_by_ids(index_ids)
+        .await?
+        .into_iter()
+        .map(|profile| (profile.index_id.clone(), profile))
+        .collect::<HashMap<_, _>>();
+    index_ids
+        .iter()
+        .map(|index_id| {
+            by_id
+                .get(index_id)
+                .cloned()
+                .ok_or_else(|| ExportManagerError::ProfileNotFound(index_id.clone()))
         })
-    }
-
-    async fn load_profiles(&self, index_ids: &[String]) -> Result<Vec<ProfileItem>> {
-        if index_ids.is_empty() {
-            return Err(ExportManagerError::EmptySelection);
-        }
-
-        // One query for the whole selection rather than one per node; the
-        // links still come out in selection order.
-        let by_id = self
-            .database
-            .profiles()
-            .list_by_ids(index_ids)
-            .await?
-            .into_iter()
-            .map(|profile| (profile.index_id.clone(), profile))
-            .collect::<HashMap<_, _>>();
-        index_ids
-            .iter()
-            .map(|index_id| {
-                by_id
-                    .get(index_id)
-                    .cloned()
-                    .ok_or_else(|| ExportManagerError::ProfileNotFound(index_id.clone()))
-            })
-            .collect()
-    }
+        .collect()
 }
 
 fn export_share_links(profiles: &[ProfileItem], config: &AppConfig) -> Result<String> {
@@ -95,7 +83,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn export_manager_exports_share_links_in_selection_order() {
+    async fn export_profiles_exports_share_links_in_selection_order() {
         let database = Database::connect_in_memory()
             .await
             .expect("database test operation should succeed");
@@ -120,14 +108,13 @@ mod tests {
                 .expect("database test operation should succeed");
         }
 
-        let manager = ExportManager::new(&database);
-        let result = manager
-            .export_profiles(
-                &AppConfig::default(),
-                &["two".to_string(), "one".to_string()],
-            )
-            .await
-            .expect("export test operation should succeed");
+        let result = export_profiles(
+            &database,
+            &AppConfig::default(),
+            &["two".to_string(), "one".to_string()],
+        )
+        .await
+        .expect("export test operation should succeed");
 
         let lines = result.text.lines().collect::<Vec<_>>();
         assert_eq!(lines.len(), 2);
@@ -136,18 +123,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn export_manager_rejects_an_empty_or_unknown_selection() {
+    async fn export_profiles_rejects_an_empty_or_unknown_selection() {
         let database = Database::connect_in_memory()
             .await
             .expect("database test operation should succeed");
-        let manager = ExportManager::new(&database);
-
         for (index_ids, expected_missing) in [
             (Vec::new(), None),
             (vec!["ghost".to_string()], Some("ghost")),
         ] {
-            let error = manager
-                .export_profiles(&AppConfig::default(), &index_ids)
+            let error = export_profiles(&database, &AppConfig::default(), &index_ids)
                 .await
                 .expect_err("an unusable selection must not reach config generation");
 

@@ -3,7 +3,7 @@
 //! The Tauri shell owns the emit — it needs an `AppHandle` — but *which*
 //! scopes a change touches is policy, and the shell's lib test harness is
 //! disabled on purpose (see AGENTS.md), so the selection lives here where it
-//! can be unit-tested. `apps/desktop/src-tauri/src/ipc/commands/lifecycle.rs`
+//! can be unit-tested. `apps/desktop/src-tauri/src/ipc/commands/post_commit.rs`
 //! turns each list into one `InvalidateEvent`.
 //!
 //! Two invariants hold across every function below:

@@ -9,7 +9,10 @@
 
 use std::sync::Arc;
 
-use voya_app::core_flow::{CoreFlow, CoreFlowLevel, CoreFlowSink, CoreFlowState};
+use voya_app::{
+    contract_map::{core_flow_log_level, core_flow_notice_level, core_state_to_contract},
+    core_flow::{CoreFlow, CoreFlowLevel, CoreFlowSink, CoreFlowState},
+};
 
 use super::{post_commit::*, support::*, *};
 
@@ -19,7 +22,7 @@ pub async fn connect_active_profile<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let flow = core_flow(&app, &state);
 
     flow.connect(&config)
@@ -34,7 +37,7 @@ pub async fn disconnect_core<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let flow = core_flow(&app, &state);
 
     flow.disconnect(&config)
@@ -49,7 +52,7 @@ pub async fn restart_core<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let flow = core_flow(&app, &state);
 
     flow.restart(&config)
@@ -94,7 +97,7 @@ where
     R: tauri::Runtime + 'static,
 {
     fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>) {
-        emit_app_log(&self.app, log_level(level), code, detail);
+        emit_app_log(&self.app, core_flow_log_level(level), code, detail);
     }
 
     fn core_state(
@@ -105,7 +108,7 @@ where
     ) {
         if let Err(error) = emit_core_state(
             &self.app,
-            core_state_event_kind(state),
+            core_state_to_contract(state),
             active_profile_id,
             snapshot,
         ) {
@@ -135,32 +138,6 @@ where
     }
 
     fn notice(&self, level: CoreFlowLevel, code: NoticeCode, detail: &str) {
-        report_post_commit_error(&self.app, code, detail, notice_level(level));
-    }
-}
-
-const fn log_level(level: CoreFlowLevel) -> LogLevel {
-    match level {
-        CoreFlowLevel::Info => LogLevel::Info,
-        CoreFlowLevel::Warn => LogLevel::Warn,
-        CoreFlowLevel::Error => LogLevel::Error,
-    }
-}
-
-const fn notice_level(level: CoreFlowLevel) -> AppNoticeLevel {
-    match level {
-        CoreFlowLevel::Info => AppNoticeLevel::Info,
-        CoreFlowLevel::Warn => AppNoticeLevel::Warning,
-        CoreFlowLevel::Error => AppNoticeLevel::Error,
-    }
-}
-
-const fn core_state_event_kind(state: CoreFlowState) -> CoreState {
-    match state {
-        CoreFlowState::CleanupPending => CoreState::CleanupPending,
-        CoreFlowState::Connecting => CoreState::Connecting,
-        CoreFlowState::Connected => CoreState::Connected,
-        CoreFlowState::Disconnecting => CoreState::Disconnecting,
-        CoreFlowState::Disconnected => CoreState::Disconnected,
+        report_post_commit_error(&self.app, code, detail, core_flow_notice_level(level));
     }
 }

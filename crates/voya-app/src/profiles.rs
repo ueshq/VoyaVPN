@@ -3,7 +3,7 @@ use voya_core::{
     AppConfig, MoveAction, ProfileExItem, ProfileItem, ProfileListItem, ProfileProtocol,
     ProfileTransport, ServerEndpoint, ServerStatItem,
 };
-use voya_db::{Database, DatabaseSession, DbError, ProfileNamesHead, UnitOfWork};
+use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
 const DEFAULT_PROFILE_SORT_STEP: i32 = 10;
 
@@ -89,21 +89,6 @@ impl<'db> ProfileManager<'db> {
     #[must_use]
     pub(crate) const fn from_session(database: DatabaseSession<'db>) -> Self {
         Self { database }
-    }
-
-    /// The first `limit` nodes' ids and remarks in list order, plus `pinned`
-    /// when it sits further down, and the node count: the tray's node menu,
-    /// which needs neither traffic stats nor the list items built from them.
-    pub async fn list_names_head(
-        &self,
-        limit: usize,
-        pinned: Option<&str>,
-    ) -> Result<ProfileNamesHead> {
-        Ok(self
-            .database
-            .profiles()
-            .list_names_head(limit, pinned)
-            .await?)
     }
 
     /// The listing behind every node view, with the undecodable-row count the

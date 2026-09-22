@@ -61,7 +61,12 @@ fn disconnect_runtime_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> 
         // Startup never got far enough to spawn anything through the launcher.
         return true;
     };
-    let runtime = state.services().runtime(state.supervisor());
+    let runtime = state.services().runtime(
+        state.supervisor(),
+        state
+            .core_seed_resource_dir()
+            .map(std::path::Path::to_path_buf),
+    );
     match tauri::async_runtime::block_on(runtime.disconnect()) {
         Ok(_) => true,
         Err(error) => {

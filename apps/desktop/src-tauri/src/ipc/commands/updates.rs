@@ -28,7 +28,7 @@ pub fn app_update_status<R: tauri::Runtime>(
 pub async fn update_geo_assets(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<ResourceUpdateFile>, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let proxy_url = runtime_proxy_url(true, None, &config);
 
     state
@@ -44,7 +44,7 @@ pub async fn update_geo_assets(
 pub async fn update_srs_assets(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<ResourceUpdateFile>, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let proxy_url = runtime_proxy_url(true, None, &config);
 
     state

@@ -17,14 +17,14 @@ import { EventBridge } from "~/ipc/event-bridge";
 import { localeReady } from "~/native/platform-boot";
 
 import { navigationRef } from "./navigation";
-import { createMobileQueryClient } from "./query-client";
+import { createAppQueryClient } from "@voya/client/query-client";
 import type { ShellTab } from "./tabs";
 import { SHELL_TABS } from "./tabs";
-import { useRuntimeStatusSeed } from "./use-runtime-status-seed";
+import { useRuntimeStatusSeed } from "@voya/features/shell/use-runtime-status-seed";
 import { useTheme } from "./use-theme";
 
 const Tab = createBottomTabNavigator();
-const queryClient = createMobileQueryClient();
+const queryClient = createAppQueryClient();
 
 /**
  * The shell, suspended until the startup locale's resources are in place.
@@ -54,7 +54,7 @@ function Shell() {
 
   const { t } = useI18n();
   const scheme = useTheme();
-  useRuntimeStatusSeed();
+  useRuntimeStatusSeed(["coreState"]);
 
   return (
     <NavigationContainer ref={navigationRef} theme={scheme === "dark" ? DarkTheme : DefaultTheme}>

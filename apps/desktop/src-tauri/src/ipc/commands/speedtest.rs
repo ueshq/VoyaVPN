@@ -10,13 +10,12 @@ pub async fn run_speedtest<R: tauri::Runtime>(
     let voya_contracts::SpeedtestTarget::Profiles {
         profile_ids: index_ids,
     } = request.target;
-    validate_ipc_text_list(
-        &index_ids,
+    map_ipc_input(
+        input_safety::validate_text_list(&index_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
         "node id",
-        IPC_ID_MAX_CHARS,
         AppErrorSubsystem::Speedtest,
     )?;
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let manager = state.speedtest_manager();
     let emit_app = app.clone();
     let result = state
@@ -64,14 +63,11 @@ pub fn speedtest_status(state: tauri::State<'_, AppState>) -> Result<SpeedtestSt
 pub async fn check_connection_ip(
     state: tauri::State<'_, AppState>,
 ) -> Result<voya_contracts::ConnectionIpResult, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
     let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot)
         .await
         .map_err(AppError::from)?;
 
-    Ok(voya_contracts::ConnectionIpResult {
-        ip: exit.ip,
-        country_code: exit.country_code,
-    })
+    Ok(voya_app::contract_map::connection_ip_to_contract(exit))
 }

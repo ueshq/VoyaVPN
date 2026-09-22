@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
-import { createAppQueryClient } from "@/components/app-shell/query-client";
+import { createAppQueryClient } from "@voya/client/query-client";
 import { renderWithQuery } from "@/test/render";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 import type { AppSettingsV1, CoreState, TrafficModeResponse } from "@/ipc/bindings";

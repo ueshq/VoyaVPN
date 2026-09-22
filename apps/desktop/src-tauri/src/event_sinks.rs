@@ -2,15 +2,15 @@
 use crate::{ipc, AppState};
 use tauri::Manager;
 use voya_app::{
-    contract_map::statistics_snapshot_to_contract,
-    logging::process_log_level_to_contract,
-    proxy_runtime::{ProxyConnectionsSnapshot, ProxyRuntimeEventSink},
+    contract_map::{process_log_level_to_contract, statistics_snapshot_to_contract},
+    proxy_runtime::ProxyRuntimeEventSink,
     redaction::{redact_url_userinfo, redact_urls},
     self_host::SelfHostEventSink,
     statistics::{StatisticsEventSink, StatisticsSnapshot as AppStatisticsSnapshot},
     subscriptions::{AutoUpdateOutcome, SubscriptionAutoUpdateSink},
     supervisor::{CoreExitEvent, NativeTunExitEvent, SupervisorEventSink},
 };
+use voya_contracts::ProxyConnectionsSnapshot;
 use voya_platform::process::{ProcessLogLevel, ProcessLogSink, ProcessOutputStream, ProcessRole};
 
 pub(crate) struct TauriProcessLogSink {

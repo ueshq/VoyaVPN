@@ -7,7 +7,7 @@ use super::{support::*, *};
 pub async fn system_proxy_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<SystemProxyStatusResponse, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let manager = state.system_proxy_manager();
 
     run_blocking("system proxy status", move || {

@@ -21,6 +21,7 @@ use voya_app::{
     services::AppServices,
     speedtest::SpeedtestManager,
     supervisor::{CoreSupervisor, SupervisorDeps},
+    sysproxy::SystemProxyManager,
 };
 use voya_platform::{
     coreinfo::TargetOs,
@@ -76,6 +77,11 @@ pub struct MobileState {
     pub(crate) proxy_runtime: ProxyRuntimeManager,
     pub(crate) proxy_monitor: ProxyMonitorController,
     pub(crate) speedtest: SpeedtestManager,
+    /// One manager over a service that will refuse, which is the honest shape:
+    /// the platform reports `SystemProxyManagement::Unsupported` for both
+    /// phones, so every path through `core_flow` skips the proxy before it
+    /// reaches this.
+    pub(crate) system_proxy_manager: SystemProxyManager,
 }
 
 #[derive(uniffi::Object)]
@@ -152,7 +158,7 @@ impl VoyaApp {
     pub fn shutdown(&self) {
         // Probe cores belong to the app process, not to the supervisor, and an
         // abandoned run leaves one listening; the desktop shell reaps them the
-        // same way in `lifecycle.rs`.
+        // the same way in `apps/desktop/src-tauri/src/lifecycle.rs` and `voya_app::lifecycle`.
         self.state.speedtest.shutdown();
         self.runtime.block_on(async {
             if let Err(error) = self.state.supervisor.stop().await {
@@ -211,6 +217,8 @@ async fn connect(
         supervisor.clone(),
     );
 
+    let system_proxy_manager = services.system_proxy_manager(no_process_runner());
+
     Ok(MobileState {
         config_mutations,
         elevation,
@@ -220,6 +228,7 @@ async fn connect(
         sinks,
         speedtest,
         supervisor,
+        system_proxy_manager,
     })
 }
 

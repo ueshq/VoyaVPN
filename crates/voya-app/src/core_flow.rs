@@ -24,7 +24,7 @@
 use std::sync::Arc;
 
 use voya_contracts::{
-    CoreFlowReason, LogCode, NoticeCode, SettingsApplyAction, SettingsApplyStatus,
+    CoreFlowReason, LogCode, NoticeCode, SettingsApplyAction, SettingsApplyStatus, TunStatus,
 };
 use voya_core::AppConfig;
 use voya_net::clash::{ClashHttpTransport, ReqwestClashHttpTransport};
@@ -38,7 +38,7 @@ use crate::{
         SupervisorSnapshot,
     },
     sysproxy::SystemProxyManager,
-    tun::{TunManager, TunStatus},
+    tun::TunManager,
 };
 
 /// Severity for the flow's log lines and user notices.

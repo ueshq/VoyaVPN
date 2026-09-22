@@ -12,10 +12,6 @@
  *   coverage the module had when it was added, so the gate fails on a
  *   regression instead of only on a catastrophe. **Raise the floor whenever you
  *   raise the coverage** — that is the whole point of the tier.
- *
- * `untestedModules` is reported, never failed: those files have no meaningful
- * tests yet, and the report keeps the gap visible in every CI log and asks for
- * a promotion into `runtimeModules` once tests land.
  */
 
 export const globalMinimums = {
@@ -96,15 +92,15 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/updates/app-update-flow.ts", lines: 85, branches: 75 },
   { path: "packages/client/src/preferences-store.ts", lines: 80, branches: 55 },
   { path: "packages/client/src/toast-store.ts", lines: 70, branches: 80 },
-  // Promoted out of `untestedModules` once the typed-contract passes gave them
-  // real tests. Measured at promotion: modal-host 92/80, modal-store 86/100.
+  // Promoted into the runtime tier once the typed-contract passes gave them
+  // real tests. Measured at promotion: modal-host 92/80.
   { path: "apps/desktop/src/components/app-shell/modal-host.tsx", lines: 82, branches: 70 },
   // The Rules page: one active rule set, a sortable rule list, its dialogs and
   // the traffic mode that locks them in global mode.
   { path: "apps/desktop/src/features/routing/routing-rule-list.tsx", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/routing/routing-screen.tsx", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/routing/traffic-mode-switcher.tsx", lines: 85, branches: 75 },
-  { path: "packages/client/src/modal-store.ts", lines: 75, branches: 90 },
+
   // The Self-hosted node page after its redesign: controller 100/78, screen
   // 100/92, settings dialog 100/96, share dialog 97/88, network status 100/95,
   // hosting card and action tile 100/100.
@@ -127,12 +123,6 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/profiles/speedtest-settings-dialog.tsx", lines: 90, branches: 85 },
 ];
 
-/**
- * Modules with no meaningful tests. Reported so the gap stays visible; promote
- * one into `runtimeModules` (with a floor) as soon as it gets tests.
- */
-export const untestedModules = [];
-
 const METRICS = ["lines", "functions", "branches", "statements"];
 
 function percent(entry, metric) {
@@ -149,12 +139,10 @@ export function evaluateCoverage({ total, lookup, policy = {} }) {
     globals = globalMinimums,
     critical = criticalModules,
     runtime = runtimeModules,
-    untested = untestedModules,
     criticalFloor = criticalMinimum,
   } = policy;
 
   const failures = [];
-  const warnings = [];
 
   for (const metric of METRICS) {
     const actual = percent(total, metric);
@@ -195,19 +183,5 @@ export function evaluateCoverage({ total, lookup, policy = {} }) {
     }
   }
 
-  for (const module of untested) {
-    const entry = lookup(module.path);
-    if (!entry) {
-      warnings.push(`${module.path}: still absent from the coverage report`);
-      continue;
-    }
-    const actual = percent(entry, "lines") ?? 0;
-    warnings.push(
-      actual >= module.promoteAbove
-        ? `${module.path}: now at ${actual}% lines — move it into runtimeModules with a floor`
-        : `${module.path}: ${actual}% lines, still untested`,
-    );
-  }
-
-  return { failures, warnings };
+  return { failures };
 }

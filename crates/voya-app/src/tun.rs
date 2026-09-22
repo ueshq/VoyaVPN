@@ -5,7 +5,7 @@ use std::{
 };
 
 use thiserror::Error;
-pub use voya_contracts::{
+use voya_contracts::{
     TunBackend, TunPlatform, TunPreflight, TunPreflightState, TunProviderDiagnostics,
     TunProviderState, TunStatus,
 };

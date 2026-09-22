@@ -6,7 +6,6 @@ import {
   evaluateCoverage,
   globalMinimums,
   runtimeModules,
-  untestedModules,
 } from "./frontend-coverage-policy.mjs";
 
 function metrics(lines, branches = lines, functions = lines, statements = lines) {
@@ -23,7 +22,6 @@ function healthySummary(overrides = {}) {
   const entries = new Map();
   for (const path of criticalModules) entries.set(path, metrics(100));
   for (const module of runtimeModules) entries.set(module.path, metrics(100));
-  for (const module of untestedModules) entries.set(module.path, metrics(0, 0, 0, 0));
   for (const [path, value] of Object.entries(overrides)) entries.set(path, value);
   return entries;
 }
@@ -74,37 +72,12 @@ describe("frontend coverage policy", () => {
     ]);
   });
 
-  it("warns about untested modules and asks for a promotion once they get tests", () => {
-    // Synthetic entries, so the test keeps working now that the shipped list is
-    // empty — which is what the next assertion demands.
-    const tested = { path: "apps/desktop/src/features/demo/tested.tsx", promoteAbove: 40 };
-    const untouched = { path: "apps/desktop/src/features/demo/untouched.tsx", promoteAbove: 40 };
-    const entries = healthySummary({ [tested.path]: metrics(72), [untouched.path]: metrics(0) });
-
-    const { failures, warnings } = evaluate(entries, metrics(90, 85, 90, 90), {
-      untested: [tested, untouched],
-    });
-
-    expect(failures).toEqual([]);
-    expect(warnings[0]).toContain("move it into runtimeModules");
-    expect(warnings[1]).toContain("still untested");
-  });
-
-  it("ships no untested modules", () => {
-    // Every entry here is a module the gate cannot protect. The list reaching
-    // empty is the goal; a new entry should be a deliberate, visible act.
-    expect(untestedModules).toEqual([]);
-  });
-
   it("keeps the runtime tier disjoint from the critical tier", () => {
     const runtimePaths = new Set(runtimeModules.map((module) => module.path));
-    const untestedPaths = new Set(untestedModules.map((module) => module.path));
 
     for (const path of criticalModules) {
       expect(runtimePaths.has(path), path).toBe(false);
-      expect(untestedPaths.has(path), path).toBe(false);
     }
-    for (const module of runtimeModules) expect(untestedPaths.has(module.path), module.path).toBe(false);
   });
 });
 

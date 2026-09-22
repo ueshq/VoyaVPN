@@ -245,11 +245,7 @@ pub(super) async fn export_share_links(
 
     answer(
         "export_profile_share_links",
-        &state
-            .services
-            .exports()
-            .export_profiles(&config, &index_ids)
-            .await?,
+        &state.services.export_profiles(&config, &index_ids).await?,
     )
 }
 
@@ -263,8 +259,5 @@ struct QrContent {
 pub(super) fn generate_qr_code(args: &Value) -> Result<Value, AppError> {
     let QrContent { content } = arguments("generate_qr_code", args)?;
 
-    answer(
-        "generate_qr_code",
-        &voya_app::qr::QrCodeManager.generate_svg(&content)?,
-    )
+    answer("generate_qr_code", &voya_app::qr::generate_svg(&content)?)
 }

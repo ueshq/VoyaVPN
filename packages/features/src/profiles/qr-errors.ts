@@ -17,8 +17,7 @@ export class QrScanError extends Error {
 
   constructor(code: QrScanErrorCode, options?: ErrorOptions) {
     super(code, options);
-    // Kept for callers (and tests) that recognise the historical name.
-    this.name = "QrNotFoundError";
+    this.name = "QrScanError";
     this.code = code;
   }
 }
@@ -26,9 +25,6 @@ export class QrScanError extends Error {
 export function qrScanErrorCode(error: unknown): QrScanErrorCode | null {
   if (error instanceof QrScanError) {
     return error.code;
-  }
-  if (error instanceof Error && error.name === "QrNotFoundError") {
-    return "notFound";
   }
 
   return null;

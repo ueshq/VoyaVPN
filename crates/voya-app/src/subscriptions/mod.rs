@@ -14,5 +14,5 @@ pub use auto_update::{
     due_subscription_ids, AttemptState, AutoUpdateOutcome, SubscriptionAutoUpdateScheduler,
     SubscriptionAutoUpdateSink,
 };
-pub use manager::{SubscriptionManager, SubscriptionManagerError};
+pub use manager::{Result, SubscriptionManager, SubscriptionManagerError};
 pub use update_flow::PreparedSubscriptionUpdate;

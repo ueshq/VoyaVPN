@@ -13,7 +13,7 @@ use std::{
 use futures_util::future::BoxFuture;
 use thiserror::Error;
 use tokio::time;
-pub use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
+use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
     generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, InboundProtocol,
     ProfileItem, SpeedTestItem, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,

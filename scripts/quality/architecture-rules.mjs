@@ -307,36 +307,18 @@ export function versionAlignmentProblem(versions) {
  */
 const UNSAFE_SITE = /\bunsafe\s+(?:extern\b|fn\b)|\bunsafe\s*(?:\{|impl\b)/u;
 
-/**
- * Escape hatch for `unsafe` sites that cannot carry a `// SAFETY:` comment yet.
- * Entries are matched on the exact trimmed line, so they cannot suppress a
- * different `unsafe` site in the same file, and `architecture.mjs` reports an
- * entry that no longer matches anything so it gets deleted again.
- *
- * Deliberately empty: every `unsafe` site in the workspace documents itself.
- */
-export const KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT = [];
-
-export function findUndocumentedUnsafe(source, { path = "", allowlist = KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT } = {}) {
+export function findUndocumentedUnsafe(source) {
   const lines = source.split(/\r?\n/u);
   const findings = [];
-  const usedAllowlistEntries = new Set();
 
   for (let index = 0; index < lines.length; index += 1) {
     if (!UNSAFE_SITE.test(lines[index])) continue;
     if (/SAFETY:/u.test(lines.slice(Math.max(0, index - 3), index).join("\n"))) continue;
 
-    const trimmed = lines[index].trim();
-    const allowed = allowlist.findIndex((entry) => entry.path === path && entry.line === trimmed);
-    if (allowed !== -1) {
-      usedAllowlistEntries.add(allowed);
-      continue;
-    }
-
-    findings.push({ line: index + 1, text: trimmed });
+    findings.push({ line: index + 1, text: lines[index].trim() });
   }
 
-  return { findings, usedAllowlistEntries };
+  return findings;
 }
 
 /**

@@ -4,7 +4,7 @@
 //! error to; each one reports through the notice channel instead.
 
 use tauri::Manager;
-use voya_app::services::TrafficMode;
+use voya_app::tray::TrafficMode;
 use voya_app::tray::{TrayGroup, TrayMenuInput, TrayNode, TRAY_NODE_LIMIT};
 use voya_contracts::{AppErrorKind, CloseRequestAction};
 
@@ -21,10 +21,12 @@ pub async fn resolve_close_request<R: tauri::Runtime>(
     remember: bool,
 ) -> Result<(), AppError> {
     if remember {
-        let committed = mutate_config(&state, async |_unit_of_work, config| {
-            Ok(voya_app::lifecycle::remember_close_action(config, action))
-        })
-        .await?;
+        let committed = state
+            .config_mutations()
+            .mutate(async |_unit_of_work, config| -> Result<_, AppError> {
+                Ok(voya_app::lifecycle::remember_close_action(config, action))
+            })
+            .await?;
         if committed.config_changed {
             emit_settings_bundle_invalidation(&app, "close-action-remembered");
         }
@@ -100,7 +102,7 @@ impl TraySnapshot {
 /// yet. Setup builds the menu from this so the window does not wait on two
 /// table reads; the queued refresh fills it in.
 pub(crate) fn initial_tray_snapshot(state: &AppState) -> TraySnapshot {
-    let config = current_config(state);
+    let config = state.config_mutations().current_config();
     TraySnapshot {
         language: config.ui_item.current_language.clone(),
         connected: false,
@@ -114,7 +116,7 @@ pub(crate) fn initial_tray_snapshot(state: &AppState) -> TraySnapshot {
 }
 
 pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
-    let config = current_config(state);
+    let config = state.config_mutations().current_config();
     let connected = matches!(
         state.supervisor().status().await,
         Ok(snapshot) if snapshot.state == SupervisorConnectionState::Connected
@@ -122,8 +124,7 @@ pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
     let pinned = Some(config.index_id.as_str()).filter(|id| !id.is_empty());
     let (nodes, total_nodes, active_node_id) = match state
         .services()
-        .profiles()
-        .list_names_head(TRAY_NODE_LIMIT, pinned)
+        .list_profile_names_head(TRAY_NODE_LIMIT, pinned)
         .await
     {
         Ok(head) => {
@@ -143,7 +144,7 @@ pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
         }
     };
 
-    let (groups, active_group_id) = match state.services().policy_groups().list_groups().await {
+    let (groups, active_group_id) = match state.services().list_policy_groups().await {
         Ok(groups) => {
             let active = groups
                 .iter()
@@ -180,7 +181,7 @@ pub(crate) async fn tray_connect<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let mut result = core_flow(app, &state)
         .connect(&config)
         .await
@@ -206,7 +207,7 @@ pub(crate) async fn tray_disconnect<R: tauri::Runtime>(app: &tauri::AppHandle<R>
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     if let Err(error) = core_flow(app, &state).disconnect(&config).await {
         report_tray_failure(app, &AppError::from(error));
     }
@@ -233,12 +234,14 @@ pub(crate) async fn tray_activate_node<R: tauri::Runtime>(
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let activated = mutate_config(&state, async |unit_of_work, config| {
-        Ok(ProfileManager::new_in(unit_of_work)
-            .set_active_profile(config, &index_id)
-            .await?)
-    })
-    .await;
+    let activated = state
+        .config_mutations()
+        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
+            Ok(ProfileManager::new_in(unit_of_work)
+                .set_active_profile(config, &index_id)
+                .await?)
+        })
+        .await;
     tray_commit(
         app,
         &state,
@@ -258,14 +261,16 @@ pub(crate) async fn tray_activate_group<R: tauri::Runtime>(
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let activated = mutate_config(&state, async |unit_of_work, config| {
-        Ok(
-            voya_app::policy_groups::PolicyGroupManager::new_in(unit_of_work)
-                .set_active(config, &group_id)
-                .await?,
-        )
-    })
-    .await;
+    let activated = state
+        .config_mutations()
+        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
+            Ok(
+                voya_app::policy_groups::PolicyGroupManager::new_in(unit_of_work)
+                    .set_active(config, &group_id)
+                    .await?,
+            )
+        })
+        .await;
     tray_commit(
         app,
         &state,

@@ -23,9 +23,8 @@ const ipc = vi.hoisted(() => ({
   resetRoutingRules: vi.fn(),
   saveRoutingRule: vi.fn(),
 }));
-vi.mock("@/ipc/commands", async (importOriginal) => ({
+vi.mock("@/ipc/commands", async () => ({
   ...ipc,
-  appErrorOfKind: (await importOriginal<typeof import("@/ipc/commands")>()).appErrorOfKind,
 }));
 
 const runtime = vi.hoisted(() => ({ state: "disconnected" as CoreState }));

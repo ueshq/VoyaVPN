@@ -519,16 +519,13 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
 
     let response = runtime_status_response(snapshot.clone());
     let event = runtime_status_event(
-        voya_contracts::CoreState::Connected,
+        CoreState::Connected,
         Some("requested-node".to_string()),
         Some(&snapshot),
     );
 
-    assert!(matches!(
-        response.state,
-        voya_contracts::CoreState::Connected
-    ));
-    assert!(matches!(event.state, voya_contracts::CoreState::Connected));
+    assert!(matches!(response.state, CoreState::Connected));
+    assert!(matches!(event.state, CoreState::Connected));
     assert_eq!(event.connected_duration_ms, Some(1458000));
     assert_eq!(event.connected_duration_ms, response.connected_duration_ms);
     assert_eq!(event.active_profile_id, response.active_profile_id);
@@ -545,14 +542,11 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
     // No snapshot: the transition still names the profile it is connecting to,
     // and reports no pids because there is no process to report yet.
     let connecting = runtime_status_event(
-        voya_contracts::CoreState::Connecting,
+        CoreState::Connecting,
         Some("requested-node".to_string()),
         None,
     );
-    assert!(matches!(
-        connecting.state,
-        voya_contracts::CoreState::Connecting
-    ));
+    assert!(matches!(connecting.state, CoreState::Connecting));
     assert_eq!(
         connecting.active_profile_id.as_deref(),
         Some("requested-node")
@@ -563,10 +557,7 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
     assert_eq!(connecting.active_tun_backend, None);
 
     let disconnected = runtime_status_response(SupervisorSnapshot::disconnected());
-    assert!(matches!(
-        disconnected.state,
-        voya_contracts::CoreState::Disconnected
-    ));
+    assert!(matches!(disconnected.state, CoreState::Disconnected));
 
     // Pending cleanup is settled, so the response must keep it rather than
     // collapsing it into either neighbour.
@@ -576,10 +567,7 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
         main_pid: Some(4242),
         ..SupervisorSnapshot::disconnected()
     });
-    assert_eq!(
-        cleanup_pending.state,
-        voya_contracts::CoreState::CleanupPending
-    );
+    assert_eq!(cleanup_pending.state, CoreState::CleanupPending);
     assert_eq!(
         cleanup_pending.active_profile_id.as_deref(),
         Some("stuck-node")
@@ -791,4 +779,97 @@ fn system_proxy_status_mapping_keeps_requested_and_effective_modes_apart() {
         assert_eq!(contract.proxy.as_deref(), Some("127.0.0.1:10808"));
         assert_eq!(contract.exceptions, "localhost");
     }
+}
+
+#[test]
+fn core_flow_levels_map_onto_the_contract_vocabulary() {
+    use crate::core_flow::{CoreFlowLevel, CoreFlowState};
+
+    assert!(matches!(
+        core_flow_log_level(CoreFlowLevel::Info),
+        LogLevel::Info
+    ));
+    assert!(matches!(
+        core_flow_log_level(CoreFlowLevel::Warn),
+        LogLevel::Warn
+    ));
+    assert!(matches!(
+        core_flow_log_level(CoreFlowLevel::Error),
+        LogLevel::Error
+    ));
+
+    assert!(matches!(
+        core_flow_notice_level(CoreFlowLevel::Info),
+        AppNoticeLevel::Info
+    ));
+    assert!(matches!(
+        core_flow_notice_level(CoreFlowLevel::Warn),
+        AppNoticeLevel::Warning
+    ));
+    assert!(matches!(
+        core_flow_notice_level(CoreFlowLevel::Error),
+        AppNoticeLevel::Error
+    ));
+
+    assert!(matches!(
+        core_state_to_contract(CoreFlowState::CleanupPending),
+        CoreState::CleanupPending
+    ));
+    assert!(matches!(
+        core_state_to_contract(CoreFlowState::Connecting),
+        CoreState::Connecting
+    ));
+    assert!(matches!(
+        core_state_to_contract(CoreFlowState::Connected),
+        CoreState::Connected
+    ));
+    assert!(matches!(
+        core_state_to_contract(CoreFlowState::Disconnecting),
+        CoreState::Disconnecting
+    ));
+    assert!(matches!(
+        core_state_to_contract(CoreFlowState::Disconnected),
+        CoreState::Disconnected
+    ));
+}
+
+#[test]
+fn connection_ip_and_core_log_levels_map_onto_the_contract() {
+    use voya_platform::process::ProcessLogLevel;
+
+    let exit = crate::connection_ip::ConnectionIp {
+        ip: Some("203.0.113.8".to_string()),
+        country_code: Some("ZZ".to_string()),
+    };
+    let mapped = connection_ip_to_contract(exit);
+    assert_eq!(mapped.ip.as_deref(), Some("203.0.113.8"));
+    assert_eq!(mapped.country_code.as_deref(), Some("ZZ"));
+
+    let empty = connection_ip_to_contract(crate::connection_ip::ConnectionIp {
+        ip: None,
+        country_code: None,
+    });
+    assert_eq!(empty.ip, None);
+    assert_eq!(empty.country_code, None);
+
+    assert!(matches!(
+        process_log_level_to_contract(ProcessLogLevel::Trace),
+        LogLevel::Trace
+    ));
+    assert!(matches!(
+        process_log_level_to_contract(ProcessLogLevel::Debug),
+        LogLevel::Debug
+    ));
+    assert!(matches!(
+        process_log_level_to_contract(ProcessLogLevel::Info),
+        LogLevel::Info
+    ));
+    assert!(matches!(
+        process_log_level_to_contract(ProcessLogLevel::Warn),
+        LogLevel::Warn
+    ));
+    assert!(matches!(
+        process_log_level_to_contract(ProcessLogLevel::Error),
+        LogLevel::Error
+    ));
 }

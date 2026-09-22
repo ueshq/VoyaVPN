@@ -9,7 +9,6 @@ import type {
 } from "@voya/contracts";
 import { useRuntimeEventStore } from "./runtime-event-store";
 import { beginRuntimeRead } from "./runtime-state-version";
-import { useModalStore } from "./modal-store";
 import { useRuntimeActionStore } from "./runtime-action-store";
 import { useToastStore } from "./toast-store";
 import { setElevationHandler } from "./platform";
@@ -76,7 +75,7 @@ function coreStatus(state: RuntimeStatusResponse["state"]): RuntimeStatusRespons
 function resetStores() {
   useRuntimeEventStore.setState({ coreState: null });
   useRuntimeActionStore.setState({ lastError: null, modePending: false, pendingAction: null, switchingId: null });
-  useModalStore.setState({ missingCore: null });
+  useRuntimeActionStore.setState({ missingCore: null });
   useToastStore.setState({ toasts: [] });
 }
 
@@ -267,7 +266,7 @@ describe("runRuntimeAction", () => {
 
     await runRuntimeAction("connect", t);
 
-    expect(useModalStore.getState().missingCore).toEqual({
+    expect(useRuntimeActionStore.getState().missingCore).toEqual({
       message: "sing-box is not installed",
     });
     expect(useToastStore.getState().toasts).toHaveLength(0);

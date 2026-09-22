@@ -9,7 +9,7 @@ use super::{post_commit::*, support::*, *};
 pub async fn tun_request_elevation(
     state: tauri::State<'_, AppState>,
 ) -> Result<TunStatus, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
     let current = tun_status_off_thread(&state, config.clone()).await?;
     if !current.requires_elevation {
         return Ok(current);
@@ -26,7 +26,7 @@ pub async fn tun_request_elevation(
 #[tauri::command]
 #[specta::specta]
 pub async fn tun_status(state: tauri::State<'_, AppState>) -> Result<TunStatus, AppError> {
-    let config = current_config(&state);
+    let config = state.config_mutations().current_config();
 
     tun_status_off_thread(&state, config).await
 }
@@ -52,15 +52,17 @@ pub async fn set_tun_enabled<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     enabled: bool,
 ) -> Result<TunStatus, AppError> {
-    let planned = mutate_config(&state, async |_unit_of_work, config| {
-        // The preflight probe forks OS helpers, so it runs off the runtime
-        // against a snapshot; only the validated flag change happens under the
-        // guard.
-        let status = plan_tun_enabled_off_thread(&state, config.clone(), enabled).await?;
-        TunManager::apply_enabled(config, enabled);
-        Ok::<_, AppError>(status)
-    })
-    .await?;
+    let planned = state
+        .config_mutations()
+        .mutate(async |_unit_of_work, config| -> Result<_, AppError> {
+            // The preflight probe forks OS helpers, so it runs off the runtime
+            // against a snapshot; only the validated flag change happens under the
+            // guard.
+            let status = plan_tun_enabled_off_thread(&state, config.clone(), enabled).await?;
+            TunManager::apply_enabled(config, enabled);
+            Ok::<_, AppError>(status)
+        })
+        .await?;
     let status = planned.value;
     let config = planned.config;
     if let Err(error) = emit_tun_changed(&app, &status) {

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use tauri_plugin_updater::UpdaterExt;
 use tauri_specta::Event;
 use voya_app::autostart::AutostartManager;
-use voya_app::config_mutation::{CommittedMutation, UnitOfWork};
+use voya_app::config_mutation::{AppConfig, CommittedMutation};
 use voya_app::contract_map::{
     core_info_error, core_seed_install_result, import_profiles_to_contract, input_text_error,
     move_action_from_contract, profile_details_to_contract, profile_from_contract,
@@ -17,10 +17,8 @@ use voya_app::contract_map::{
 use voya_app::input_safety;
 use voya_app::invalidation;
 use voya_app::profiles::ProfileManager;
-use voya_app::qr::QrCodeManager;
 use voya_app::routing::RoutingManager;
 use voya_app::runtime::RuntimeManager;
-use voya_app::services::AppConfig;
 use voya_app::settings::save::SettingsSideEffectAdapter;
 use voya_app::subscriptions::SubscriptionManager;
 use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};

@@ -1,6 +1,6 @@
 //! Tauri owns window visibility; capture and decoding belong to the app/platform.
 use std::sync::LazyLock;
-use voya_app::qr::{QrCodeManager, ScreenQrCapture};
+use voya_app::qr::{self, ScreenQrCapture};
 use voya_contracts::{AppError, AppErrorSubsystem, QrScanResult};
 use voya_platform::screen_capture::{
     NativeScreenCapture, ScreenCaptureFailure, ScreenCaptureWindow,
@@ -51,11 +51,8 @@ pub(super) async fn scan(window: tauri::WebviewWindow) -> Result<QrScanResult, A
     };
     let batch = match CAPTURE.capture(NativeScreenCapture, scan_window).await {
         Ok(batch) => batch,
-        Err(error) => return Ok(QrCodeManager.scan_failure(error)),
+        Err(error) => return Ok(qr::scan_failure(error)),
     };
     // The window has already been restored, even when decoding is expensive.
-    super::support::run_blocking("screen QR decode", move || {
-        QrCodeManager.decode_screens(batch)
-    })
-    .await
+    super::support::run_blocking("screen QR decode", move || qr::decode_screens(batch)).await
 }

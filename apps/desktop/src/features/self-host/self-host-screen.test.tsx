@@ -24,12 +24,9 @@ const ipc = vi.hoisted(() => ({
   saveSelfHostConfig: vi.fn(),
   setSelfHostEnabled: vi.fn(),
 }));
-vi.mock("@/ipc/commands", async (importOriginal) => {
-  const original = await importOriginal<typeof import("@/ipc/commands")>();
+vi.mock("@/ipc/commands", async () => {
   return {
     ...ipc,
-    appErrorOfKind: original.appErrorOfKind,
-    IpcCommandError: original.IpcCommandError,
   };
 });
 
@@ -509,7 +506,7 @@ describe("SelfHostScreen", () => {
 
   it("shows a rejected port next to its field and opens Advanced for it", async () => {
     const user = setupUser();
-    const { IpcCommandError } = await import("@/ipc/commands");
+    const { IpcCommandError } = await import("@voya/client/errors");
     ipc.getSelfHostState.mockResolvedValue(runningState());
     ipc.saveSelfHostConfig.mockRejectedValue(
       new IpcCommandError({

@@ -6,7 +6,6 @@ import {
   clashBoundaryRules,
   contractsCasingRule,
   findUndocumentedUnsafe,
-  KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT,
   manifestDependencyRules,
   moduleFileCandidates,
   resolveTestModuleFiles,
@@ -356,8 +355,6 @@ describe("release version alignment", () => {
 });
 
 describe("SAFETY comment requirement", () => {
-  const allowlist = [];
-
   it.each([
     "unsafe { ptr.read() }",
     "unsafe impl Send for Handle {}",
@@ -365,34 +362,17 @@ describe("SAFETY comment requirement", () => {
     "pub unsafe fn release(value: *mut c_char) {",
     'unsafe extern "C" fn callback(value: *mut c_char) {',
   ])("flags %s without a nearby SAFETY comment", (line) => {
-    expect(findUndocumentedUnsafe(line, { allowlist }).findings).toHaveLength(1);
+    expect(findUndocumentedUnsafe(line)).toHaveLength(1);
   });
 
   it("accepts a SAFETY comment within the three preceding lines", () => {
     const source = `// SAFETY: the bridge returns an owned C string.\n//\n//\nunsafe { voya_status() }`;
-    expect(findUndocumentedUnsafe(source, { allowlist }).findings).toEqual([]);
+    expect(findUndocumentedUnsafe(source)).toEqual([]);
   });
 
   it("reports the line number of each undocumented site", () => {
     const source = ["fn a() {}", "unsafe { one() }", "fn b() {}", "unsafe impl Sync for B {}"].join("\n");
-    expect(findUndocumentedUnsafe(source, { allowlist }).findings.map((item) => item.line)).toEqual([2, 4]);
-  });
-
-  it("suppresses only the exact allowlisted line in the allowlisted file", () => {
-    const entry = { path: "crates/voya-platform/src/tun/macos/bridge.rs", line: 'unsafe extern "C" {' };
-    const source = `${entry.line}\n    unsafe { something() }\n`;
-
-    expect(findUndocumentedUnsafe(source, { path: entry.path, allowlist: [entry] }).findings).toEqual([
-      { line: 2, text: "unsafe { something() }" },
-    ]);
-    // The same line in another file is still a failure.
-    expect(
-      findUndocumentedUnsafe(entry.line, { path: "crates/voya-platform/src/other.rs", allowlist: [entry] }).findings,
-    ).toHaveLength(1);
-  });
-
-  it("ships an empty allowlist so every unsafe site carries its own SAFETY comment", () => {
-    expect(KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT).toEqual([]);
+    expect(findUndocumentedUnsafe(source).map((item) => item.line)).toEqual([2, 4]);
   });
 });
 
