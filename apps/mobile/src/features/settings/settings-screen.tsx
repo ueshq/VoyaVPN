@@ -12,8 +12,9 @@ import { Card } from "heroui-native/card";
 import { Input } from "heroui-native/input";
 import { PressableFeedback } from "heroui-native/pressable-feedback";
 import { Spinner } from "heroui-native/spinner";
+import { Switch } from "heroui-native/switch";
 import { Typography } from "heroui-native/text";
-import { ScrollView, Switch, View } from "react-native";
+import { ScrollView, View } from "react-native";
 
 /** The three theme choices, in the order the desktop offers them. */
 const THEME_MODES = [
@@ -268,7 +269,12 @@ function Toggle({
   return (
     <View className="flex-row items-center justify-between">
       <Typography className="flex-1 pr-3 text-body text-foreground">{label}</Typography>
-      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} />
+      <Switch
+        isSelected={value}
+        onSelectedChange={onChange}
+        accessibilityLabel={label}
+        hitSlop={10}
+      />
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MockBackend } from "@voya/client/mock-backend";
 import { usePreferencesStore } from "@voya/client/preferences-store";
@@ -77,11 +77,14 @@ describe("SettingsScreen", () => {
 
   it("saves a behaviour switch through the backend", async () => {
     await renderSettings();
+    const user = userEvent.setup();
 
-    const toggle = await screen.findByRole("switch", {
-      name: "Check the exit IP after connecting",
-    });
-    await fireEvent(toggle, "valueChange", false);
+    // HeroUI's Switch is a Pressable; a press is the toggle.
+    await user.press(
+      await screen.findByRole("switch", {
+        name: "Check the exit IP after connecting",
+      }),
+    );
 
     await waitFor(() => expect(backend().state.settings.behavior.autoCheckIp).toBe(false));
   });
@@ -115,8 +118,9 @@ describe("SettingsScreen", () => {
 
   it("switches FakeIP through the same draft", async () => {
     await renderSettings();
+    const user = userEvent.setup();
 
-    await fireEvent(await screen.findByRole("switch", { name: "FakeIP" }), "valueChange", true);
+    await user.press(await screen.findByRole("switch", { name: "FakeIP" }));
 
     await waitFor(() => expect(backend().state.settings.dns.fakeIp).toBe(true));
   });

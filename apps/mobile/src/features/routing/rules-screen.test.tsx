@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MockBackend } from "@voya/client/mock-backend";
 import { makeRouting, makeRoutingRule } from "@voya/client/mock-seed";
@@ -85,10 +85,11 @@ describe("RulesScreen", () => {
   it("turns a rule off through the backend", async () => {
     await seedRule("Office");
     await renderRules();
+    const user = userEvent.setup();
 
-    // A `Switch` answers `valueChange`, not a press: pressing it is the
-    // platform's business, and RNTL does not simulate that.
-    await fireEvent(await screen.findByRole("switch", { name: "Office" }), "valueChange", false);
+    // HeroUI's Switch is a Pressable, so a press is what a toggle answers —
+    // not the platform `valueChange` the RN control used to emit.
+    await user.press(await screen.findByRole("switch", { name: "Office" }));
 
     await waitFor(() =>
       expect(backend().state.routings[0].rules[0].enabled).toBe(false),

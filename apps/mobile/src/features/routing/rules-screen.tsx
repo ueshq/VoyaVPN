@@ -6,9 +6,10 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n/core";
 import type { RoutingRule, TrafficMode } from "@voya/contracts";
 import { PressableFeedback } from "heroui-native/pressable-feedback";
+import { Switch } from "heroui-native/switch";
 import { Typography } from "heroui-native/text";
 import { useCallback } from "react";
-import { FlatList, Switch, View } from "react-native";
+import { FlatList, View } from "react-native";
 
 /**
  * What a rule matches, in one line.
@@ -79,13 +80,11 @@ export function RulesScreen() {
             </Typography>
           </View>
           <Switch
-            value={item.enabled}
-            disabled={locked}
-            onValueChange={(enabled) => void routing.toggleRule(item, enabled)}
+            isSelected={item.enabled}
+            isDisabled={locked}
+            onSelectedChange={(enabled) => void routing.toggleRule(item, enabled)}
             accessibilityLabel={name}
-            // iOS's switch carries `disabled` natively but says nothing about
-            // it, so the state is spelled out for VoiceOver either way.
-            accessibilityState={{ disabled: locked }}
+            hitSlop={10}
           />
         </View>
       );
