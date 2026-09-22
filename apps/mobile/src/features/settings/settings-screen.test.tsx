@@ -1,23 +1,23 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import type { QueryClient } from "@tanstack/react-query";
 import type { MockBackend } from "@voya/client/mock-backend";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { i18nHost } from "@voya/i18n/core";
-import type { ReactNode } from "react";
 
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
 import { localeReady } from "~/native/platform-boot";
+import { makeTestQueryClient, TestProviders } from "~/test/providers";
 
 import { SettingsScreen } from "./settings-screen";
 
 let activeQueryClient: QueryClient | null = null;
 
 async function renderSettings() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const queryClient = makeTestQueryClient();
   activeQueryClient = queryClient;
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <TestProviders queryClient={queryClient}>{children}</TestProviders>
   );
 
   return { queryClient, ...(await render(<SettingsScreen />, { wrapper })) };
