@@ -12,13 +12,12 @@ import {
 import { connectionRoute } from "@voya/features/proxy/connection-route";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ProxyConnectionItem } from "@voya/contracts";
+import { Button } from "heroui-native/button";
+import { Input } from "heroui-native/input";
+import { PressableFeedback } from "heroui-native/pressable-feedback";
+import { Typography } from "heroui-native/text";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, View } from "react-native";
-
-import { Button, ButtonText } from "~/components/ui/button";
-import { Input, InputField } from "~/components/ui/input";
-import { Pressable } from "~/components/ui/pressable";
-import { Text } from "~/components/ui/text";
 
 /**
  * The node a connection's chain ends at, when it is a node at all.
@@ -88,24 +87,28 @@ export function ActivityScreen() {
 
   const renderRow = useCallback(
     ({ item }: { item: ProxyConnectionItem }) => (
-      <Pressable
+      // A full-width list row: the highlight is enough, and the root scale
+      // would fight the row's own layout as the finger lands.
+      <PressableFeedback
+        animation="disable-all"
         className="flex-row items-center justify-between border-b border-border-subtle bg-surface px-4 py-3"
         onPress={() => close(item.id)}
         accessibilityRole="button"
         accessibilityLabel={t("activity.disconnectRow", { target: item.host })}
       >
+        <PressableFeedback.Highlight />
         <View className="flex-1 gap-0.5 pr-3">
-          <Text className="text-body text-foreground" numberOfLines={1}>
+          <Typography className="text-body text-foreground" numberOfLines={1}>
             {item.host}
-          </Text>
-          <Text className="text-caption text-subtlest" numberOfLines={1}>
+          </Typography>
+          <Typography className="text-caption text-subtlest" numberOfLines={1}>
             {[item.process, routeNode(item)].filter(Boolean).join(" · ")}
-          </Text>
+          </Typography>
         </View>
-        <Text className="text-caption text-subtle">
+        <Typography className="text-caption text-subtle">
           {`${connectionBytes(item.upload)} / ${connectionBytes(item.download)}`}
-        </Text>
-      </Pressable>
+        </Typography>
+      </PressableFeedback>
     ),
     [close, t],
   );
@@ -113,7 +116,7 @@ export function ActivityScreen() {
   if (!connected) {
     return (
       <View className="flex-1 items-center justify-center gap-2 bg-canvas p-page">
-        <Text className="text-body text-foreground">{t("activity.connectToView")}</Text>
+        <Typography className="text-body text-foreground">{t("activity.connectToView")}</Typography>
       </View>
     );
   }
@@ -121,27 +124,25 @@ export function ActivityScreen() {
   return (
     <View className="flex-1 bg-canvas">
       <View className="gap-2 p-page">
-        <Input>
-          <InputField
-            placeholder={t("proxy.filterConnections")}
-            accessibilityLabel={t("proxy.filterConnections")}
-            value={search}
-            onChangeText={setSearch}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </Input>
+        <Input
+          placeholder={t("proxy.filterConnections")}
+          accessibilityLabel={t("proxy.filterConnections")}
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
         <View className="flex-row items-center justify-between">
-          <Text className="text-caption text-subtle">
+          <Typography className="text-caption text-subtle">
             {needle
               ? t("activity.filteredConnections", {
                   count: rows.length,
                   total: connections.length,
                 })
               : t("activity.connectionCount", { count: connections.length })}
-          </Text>
+          </Typography>
           <Button size="sm" variant="outline" onPress={() => close(null)}>
-            <ButtonText>{t("activity.disconnectAll")}</ButtonText>
+            <Button.Label>{t("activity.disconnectAll")}</Button.Label>
           </Button>
         </View>
       </View>
@@ -152,9 +153,9 @@ export function ActivityScreen() {
         renderItem={renderRow}
         ListEmptyComponent={
           <View className="items-center p-page">
-            <Text className="text-body text-subtle">
+            <Typography className="text-body text-subtle">
               {needle ? t("activity.noMatches") : t("activity.liveConnections")}
-            </Text>
+            </Typography>
           </View>
         }
       />
