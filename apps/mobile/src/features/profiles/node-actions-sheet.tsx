@@ -6,10 +6,11 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ProfileSummaryEntry } from "@voya/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { Modal, Pressable as RNPressable, View } from "react-native";
+import { BottomSheet } from "heroui-native/bottom-sheet";
+import { Button } from "heroui-native/button";
+import { Typography } from "heroui-native/text";
+import { View } from "react-native";
 import { SvgXml } from "react-native-svg";
-
-import { Text } from "~/components/ui/text";
 
 /**
  * What a node row can do beyond being selected.
@@ -23,6 +24,17 @@ import { Text } from "~/components/ui/text";
  * Editing is not here. The desktop dialog is a protocol, transport and TLS
  * form; retyping one of those on a phone is not a feature, and every ordinary
  * way a node arrives — a share link, a subscription, a QR — already works.
+ *
+ * The sheet is a HeroUI `BottomSheet` (gorhom under the hood) rather than a
+ * hand-rolled `Modal`: dynamic height, drag-to-dismiss, and the portal host
+ * that keeps the panel above the tab bar. Portal content renders at the host,
+ * not where it is declared — so this file takes already-translated strings as
+ * props and calls no context hook inside the sheet body.
+ *
+ * The default gorhom background and handle announce themselves to VoiceOver
+ * as "BottomSheet" / "Bottom sheet handle". Both are replaced with unlabelled
+ * views (`accessible={false}`) so a screen reader only lands on the actions;
+ * the explicit Close button is the accessible way out.
  */
 export function NodeActionsSheet({
   entry,
@@ -62,95 +74,114 @@ export function NodeActionsSheet({
 
   const open = entry !== null || share !== null;
 
+  const shareLabel = t("panes.profiles.export.shareLinks");
+  const showQrLabel = t("panes.profiles.export.showQr");
+  const deleteLabel = t("actions.delete");
+  const closeLabel = t("actions.close");
+  const title = entry ? profileTitle(entry.profile.remarks, t) : "";
+  const qrTitle = t("panes.profiles.export.showQr");
+  const qrAlt = t("qr.generatedAlt");
+  const loadingLabel = t("panes.profiles.loadingNodes");
+  const failedLabel = t("status.operationFailed");
+  const subscriptionReadOnly = t("panes.profiles.menu.subscriptionReadOnly");
+
   return (
-    <Modal
-      visible={open}
-      transparent
-      animationType="slide"
-      onRequestClose={close}
-      accessibilityViewIsModal
+    <BottomSheet
+      isOpen={open}
+      onOpenChange={(next) => {
+        if (!next) close();
+      }}
     >
-      {/* Tapping away closes it, the way every sheet on a phone does.
-          Both wrappers are `accessible={false}`: React Native's `Pressable`
-          makes itself an accessibility element by default, which collapsed the
-          whole sheet into one node announced as
-          "Simulator node, Share links, Show QR, Delete, Close" — a single blob
-          with no way to activate any one action, for VoiceOver or for anything
-          else. The scrim loses nothing by it, because the explicit Close button
-          below is the accessible way out, and the inner wrapper only exists to
-          stop the tap from reaching the scrim. */}
-      <RNPressable
-        accessible={false}
-        className="flex-1 justify-end bg-black/40"
-        onPress={close}
+      <BottomSheet.Portal
+        // A plain View is what XCUITest can see into; FullWindowOverlay puts
+        // the panel in another window the test runner does not walk.
+        disableFullWindowOverlay
       >
-        <RNPressable
-          accessible={false}
-          className="gap-3 rounded-t-card bg-card p-page"
-          onPress={() => {}}
+        <BottomSheet.Overlay accessible={false} />
+        <BottomSheet.Content
+          // No `snapPoints`: gorhom v5 sizes to content, and this sheet is a
+          // handful of rows either way.
+          backgroundComponent={SheetBackground}
+          handleComponent={SheetHandle}
         >
-          {share ? (
-            <View className="items-center gap-3">
-              <Text className="text-section text-foreground">
-                {t("panes.profiles.export.showQr")}
-              </Text>
-              {qrQuery.data ? (
-                <View
-                  // `accessible` is what turns the label into something a
-                  // screen reader can land on: a bare View carrying an
-                  // `accessibilityLabel` is not an accessibility element in
-                  // React Native, so the label was dropped on the floor.
-                  accessible
-                  accessibilityRole="image"
-                  className="aspect-square w-full max-w-72 bg-white p-3"
-                  accessibilityLabel={t("qr.generatedAlt")}
-                >
-                  <SvgXml xml={qrQuery.data.svg} width="100%" height="100%" />
-                </View>
-              ) : (
-                <Text className="text-caption text-subtle">
-                  {qrQuery.error
-                    ? t("status.operationFailed")
-                    : t("panes.profiles.loadingNodes")}
-                </Text>
-              )}
-            </View>
-          ) : entry ? (
-            <>
-              <Text className="text-section text-foreground" numberOfLines={1}>
-                {profileTitle(entry.profile.remarks, t)}
-              </Text>
-              <SheetAction
-                label={t("panes.profiles.export.shareLinks")}
-                onPress={() => {
-                  void exports.handleExport([entry.profile.id]);
-                  close();
-                }}
-              />
-              <SheetAction
-                label={t("panes.profiles.export.showQr")}
-                onPress={() => void exports.handleExport([entry.profile.id], "qr")}
-              />
-              {entry.profile.subscriptionId === null ? (
+          <View className="gap-3 p-page">
+            {share ? (
+              <View className="items-center gap-3">
+                <Typography className="text-section text-foreground">{qrTitle}</Typography>
+                {qrQuery.data ? (
+                  <View
+                    // `accessible` is what turns the label into something a
+                    // screen reader can land on: a bare View carrying an
+                    // `accessibilityLabel` is not an accessibility element in
+                    // React Native, so the label would be dropped on the floor.
+                    accessible
+                    accessibilityRole="image"
+                    className="aspect-square w-full max-w-72 bg-white p-3"
+                    accessibilityLabel={qrAlt}
+                  >
+                    <SvgXml xml={qrQuery.data.svg} width="100%" height="100%" />
+                  </View>
+                ) : (
+                  <Typography className="text-caption text-subtle">
+                    {qrQuery.error ? failedLabel : loadingLabel}
+                  </Typography>
+                )}
+              </View>
+            ) : entry ? (
+              <>
+                <Typography className="text-section text-foreground" numberOfLines={1}>
+                  {title}
+                </Typography>
                 <SheetAction
-                  destructive
-                  label={t("actions.delete")}
-                  onPress={() => void remove(entry.profile.id)}
+                  label={shareLabel}
+                  onPress={() => {
+                    void exports.handleExport([entry.profile.id]);
+                    close();
+                  }}
                 />
-              ) : (
-                <Text className="text-caption text-subtle">
-                  {t("panes.profiles.menu.subscriptionReadOnly")}
-                </Text>
-              )}
-            </>
-          ) : null}
-          <SheetAction label={t("actions.close")} onPress={close} />
-        </RNPressable>
-      </RNPressable>
-    </Modal>
+                <SheetAction
+                  label={showQrLabel}
+                  onPress={() => void exports.handleExport([entry.profile.id], "qr")}
+                />
+                {entry.profile.subscriptionId === null ? (
+                  <SheetAction
+                    destructive
+                    label={deleteLabel}
+                    onPress={() => void remove(entry.profile.id)}
+                  />
+                ) : (
+                  <Typography className="text-caption text-subtle">
+                    {subscriptionReadOnly}
+                  </Typography>
+                )}
+              </>
+            ) : null}
+            <SheetAction label={closeLabel} onPress={close} />
+          </View>
+        </BottomSheet.Content>
+      </BottomSheet.Portal>
+    </BottomSheet>
   );
 }
 
+/** Unlabelled surface so VoiceOver does not announce a bare "BottomSheet". */
+function SheetBackground() {
+  return <View accessible={false} className="flex-1 rounded-t-3xl bg-surface" />;
+}
+
+/** Unlabelled grabber; the drag itself is the affordance. */
+function SheetHandle() {
+  return (
+    <View accessible={false} className="items-center py-2">
+      <View className="h-1 w-10 rounded-full bg-subtlest" />
+    </View>
+  );
+}
+
+/**
+ * One sheet row. Pure props — the portal body cannot read context, so the
+ * label is already a string by the time it gets here.
+ */
 function SheetAction({
   destructive = false,
   label,
@@ -161,14 +192,12 @@ function SheetAction({
   onPress: () => void;
 }) {
   return (
-    <RNPressable
-      className="rounded-control bg-surface px-4 py-3"
+    <Button
+      variant={destructive ? "danger-soft" : "tertiary"}
       onPress={onPress}
       accessibilityRole="button"
     >
-      <Text className={`text-body ${destructive ? "text-danger" : "text-foreground"}`}>
-        {label}
-      </Text>
-    </RNPressable>
+      <Button.Label>{label}</Button.Label>
+    </Button>
   );
 }
