@@ -1,14 +1,62 @@
 ---
 feature: reduce-complexity
-status: in-progress
+status: delivered
 updated: 2026-09-22
 branch: refactor/reduce-complexity
-commits:
+commits: ae0d859..f5fc516
 ---
 
 # Reduce Complexity
 
 ## Report
+
+**What was built** — Desktop Tauri and `voya-mobile-ffi` now share one copy of the
+pure domain→contract maps (`core_flow_*`, `core_state_to_contract`,
+`connection_ip_to_contract`, `process_log_level_to_contract`) in
+`voya-app::contract_map`, one `report_monitor_result`, and one
+`post_commit::finish_config_change`. Manager construction (`runtime`,
+`tun_manager`, `system_proxy_manager`) lives on `AppServices`; mobile holds a
+single `SystemProxyManager`. Dead and name-compat surface is gone
+(`AppMetadata`, `NoopStatisticsEventSink`, `QrNotFoundError` shim,
+`commands.ts` error re-export, pure `voya_contracts` re-exports, mobile
+`zero_statistics`). Pass-through wrappers were inlined or collapsed
+(`clean_optional_string`, shell `mutate_config`/`current_config`,
+`validate_*_ipc_*`→`map_ipc_input`, manager `list_*`, `ExportManager`/
+`QrCodeManager` unit structs, `ConnectionModeManager::commit`→`mutate`).
+Frontend twins merged into `@voya/client`/`@voya/features`
+(`createAppQueryClient`, `useRuntimeStatusSeed` via `appVisibilityAdapter`,
+`useNodeSelection`); `modal-store` folded into `runtime-action-store`; desktop
+icon map renamed `import-method-icons.ts`. Three empty allowlist machines and
+their emptiness tests were deleted; `packages/contracts` README documents all
+four generated artifacts. Larger structural work (contract_map type collapse,
+CommandResult envelope, event-channel codegen, `CoreFlow`/`RuntimeManager`
+merge) is recorded under Deferred in [S2] and was not attempted.
+
+**Verification** — `pnpm run verify:local` (architecture, lockfile, rust
+fmt/clippy/deps/test, frontend typecheck/coverage/lint/bundle/smoke:mock),
+plus `check:dead-code`, `check:bindings`, `check:i18n`, `check:sing-box`.
+All PASS. `check:frontend:smoke:mock` first run failed 3/98 under 6-worker
+parallel load (home-design en, home-onboarding en 960, page-layout en light);
+the same specs passed 25/25 on a targeted re-run — recorded as FLAKY, not a
+regression. Independent review of `ae0d859..f5fc516`: ACCEPT, T1–T9 all MET,
+no critical/major findings.
+
+**Journey log** —
+
+1. Prior cleanups (`fa9b11b`, `c348f40`, `36a7268`) already removed the loud
+   cases; this pass is the quieter residue (host↔host twins, pass-throughs,
+   empty suppression machines). Expect diminishing returns if run again soon
+   unless Deferred lands first.
+2. Parallel implementers on disjoint file sets work, but tool-call flood
+   limits can strand a "partial" report mid-rewire — finish consumer imports
+   yourself and run typecheck early.
+3. Shared React hooks used by mobile cannot name `HTMLInputElement`; type
+   search refs structurally (`{ focus?: () => void }`) or mobile tsc fails.
+4. Un-pubbing `pub use voya_contracts::…` breaks sibling `crate::mod::Type`
+   imports; keep deliberate facades only where the architecture gate requires
+   them (`config_mutation::AppConfig`, `startup::*`, `tray::TrafficMode`).
+5. Playwright mock smoke is load-sensitive at 6 workers; a targeted re-run of
+   the failed specs is the right signal before treating a failure as real.
 
 ## [S1] Problem
 
@@ -152,12 +200,12 @@ These are real complexity taxes but need focused, separately reviewed changes:
 
 ## Tasks
 
-- [ ] T1: Extract host-shared pure maps into `voya-app::contract_map` (`core_flow_log_level`, `core_flow_notice_level`, `core_state_to_contract`, `connection_ip_to_contract`, move `process_log_level_to_contract`) — acceptance: both hosts compile against the shared fns; the hand-rolled copies are gone; `pnpm run check:architecture` and `pnpm run check:rust:clippy` pass (covers: S2)
-- [ ] T2: Share `report_monitor_result` and `finish_config_change`; delete mobile `zero_statistics` — acceptance: one implementation each in `voya-app`; hosts call them; mobile statistics zero path uses `StatisticsSnapshot::zero()` (covers: S2; depends: T1)
-- [ ] T3: Move manager construction onto `AppServices` and stop per-call `SystemProxyManager` allocation on mobile — acceptance: both hosts obtain tun/system-proxy/runtime through `AppServices`; mobile holds one `SystemProxyManager` (covers: S2; depends: T2)
-- [ ] T4: Delete dead and name-compat surface (`QrNotFoundError` shim → `QrScanError`, `AppMetadata`, `NoopStatisticsEventSink`, `commands.ts` error re-export, pure `voya_contracts` re-exports) — acceptance: `pnpm run check:dead-code` and affected tests pass; no production caller references the old names (covers: S2)
-- [ ] T5: Inline pass-throughs (`clean_optional_string`, shell `mutate_config`/`current_config`, `validate_*_ipc_*` → `map_ipc_input`, manager `list_*`, `ExportManager`, `QrCodeManager`, `ConnectionModeManager::commit` → `mutate`) — acceptance: call sites use the underlying API or the single shared helper; `pnpm run check:rust:test` passes (covers: S2)
-- [ ] T6: Merge frontend twins (`createAppQueryClient`, shared `useRuntimeStatusSeed` via `appVisibilityAdapter`, shared node-list selection) — acceptance: one factory/hook each under `@voya/client`/`@voya/features`; desktop uses the visibility seam; mobile/desktop tests pass (covers: S2)
-- [ ] T7: Fold `modal-store` into `runtime-action-store`; rename desktop `import-methods.ts` → `import-method-icons.ts` — acceptance: single modal state owner; icon map filename no longer collides with the shared module (covers: S2)
-- [ ] T8: Documentation hygiene (stale `lifecycle.rs`/`query-keys` paths, `packages/contracts` README lists four artifacts) — acceptance: no comment names a deleted module; README names `generated.ts`, `commands.ts`, `commands.json`, `events.json` (covers: S2)
-- [ ] T9: Delete empty allowlist machinery (`KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT`, `KNOWN_HARDCODED_TEXT`, `untestedModules`) and their emptiness tests — acceptance: the three suppressions and their emptiness tests are gone; `pnpm run check:architecture` and `pnpm run check:i18n` still pass (covers: S2)
+- [x] T1: Extract host-shared pure maps into `voya-app::contract_map` (`core_flow_log_level`, `core_flow_notice_level`, `core_state_to_contract`, `connection_ip_to_contract`, move `process_log_level_to_contract`) — acceptance: both hosts compile against the shared fns; the hand-rolled copies are gone; `pnpm run check:architecture` and `pnpm run check:rust:clippy` pass (covers: S2)
+- [x] T2: Share `report_monitor_result` and `finish_config_change`; delete mobile `zero_statistics` — acceptance: one implementation each in `voya-app`; hosts call them; mobile statistics zero path uses `StatisticsSnapshot::zero()` (covers: S2; depends: T1)
+- [x] T3: Move manager construction onto `AppServices` and stop per-call `SystemProxyManager` allocation on mobile — acceptance: both hosts obtain tun/system-proxy/runtime through `AppServices`; mobile holds one `SystemProxyManager` (covers: S2; depends: T2)
+- [x] T4: Delete dead and name-compat surface (`QrNotFoundError` shim → `QrScanError`, `AppMetadata`, `NoopStatisticsEventSink`, `commands.ts` error re-export, pure `voya_contracts` re-exports) — acceptance: `pnpm run check:dead-code` and affected tests pass; no production caller references the old names (covers: S2)
+- [x] T5: Inline pass-throughs (`clean_optional_string`, shell `mutate_config`/`current_config`, `validate_*_ipc_*` → `map_ipc_input`, manager `list_*`, `ExportManager`, `QrCodeManager`, `ConnectionModeManager::commit` → `mutate`) — acceptance: call sites use the underlying API or the single shared helper; `pnpm run check:rust:test` passes (covers: S2)
+- [x] T6: Merge frontend twins (`createAppQueryClient`, shared `useRuntimeStatusSeed` via `appVisibilityAdapter`, shared node-list selection) — acceptance: one factory/hook each under `@voya/client`/`@voya/features`; desktop uses the visibility seam; mobile/desktop tests pass (covers: S2)
+- [x] T7: Fold `modal-store` into `runtime-action-store`; rename desktop `import-methods.ts` → `import-method-icons.ts` — acceptance: single modal state owner; icon map filename no longer collides with the shared module (covers: S2)
+- [x] T8: Documentation hygiene (stale `lifecycle.rs`/`query-keys` paths, `packages/contracts` README lists four artifacts) — acceptance: no comment names a deleted module; README names `generated.ts`, `commands.ts`, `commands.json`, `events.json` (covers: S2)
+- [x] T9: Delete empty allowlist machinery (`KNOWN_UNSAFE_WITHOUT_SAFETY_COMMENT`, `KNOWN_HARDCODED_TEXT`, `untestedModules`) and their emptiness tests — acceptance: the three suppressions and their emptiness tests are gone; `pnpm run check:architecture` and `pnpm run check:i18n` still pass (covers: S2)
