@@ -9,6 +9,7 @@
  * Missing names resolve to a chainable no-op constructor so a component that
  * reaches for the next layout preset does not explode the suite.
  */
+/* eslint-disable @typescript-eslint/no-require-imports, no-undef */
 const NOOP = () => {};
 const ID = (value) => value;
 const RN = require("react-native");

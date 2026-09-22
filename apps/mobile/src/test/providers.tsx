@@ -16,6 +16,11 @@ const TEST_HEROUI_CONFIG: HeroUINativeConfig = {
   toast: false,
 };
 
+/**
+ * A fresh client per test. Lives beside the wrapper so a suite can clear its
+ * timers in `afterEach`; fast refresh never sees this test-only module.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
 export function makeTestQueryClient() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
