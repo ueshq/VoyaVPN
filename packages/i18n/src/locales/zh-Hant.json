@@ -211,6 +211,7 @@
       "remoteDns": "遠程 DNS",
       "title": "DNS",
       "strategyHint": "解析網域時優先使用 IPv4 或 IPv6。",
+      "strategyIpv6Off": "需在設定中開啟 IPv6 後才生效；IPv6 關閉時所有查詢僅使用 IPv4。",
       "expectedHint": "用於直連 DNS：透過這些 IP 範圍判斷是否接受解析結果。",
       "strategyIpv4": "優先 IPv4",
       "strategyIpv6": "優先 IPv6",
@@ -825,7 +826,7 @@
       },
       "icmpHint": "ping 等 ICMP 流量的去向。",
       "tunAutoRouteHint": "自動把系統流量導入 VPN，通常保持開啟。",
-      "enableIpv6Hint": "為 VPN 分配 IPv6 位址，節點支援 IPv6 時再開啟。"
+      "enableIpv6Hint": "關閉時只解析 IPv4，IPv6 流量在本地拒絕且不會繞過 VPN。節點支援 IPv6 時再開啟。"
     },
     "startup": "啟動",
     "tabGeneral": "通用",

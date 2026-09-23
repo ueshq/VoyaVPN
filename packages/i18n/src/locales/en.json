@@ -211,6 +211,7 @@
       "remoteDns": "Remote DNS",
       "title": "DNS",
       "strategyHint": "Prefer IPv4 or IPv6 when resolving a hostname.",
+      "strategyIpv6Off": "Takes effect after IPv6 is enabled in Settings; while IPv6 is off every query uses IPv4 only.",
       "expectedHint": "For direct DNS: use these IP ranges to check whether a response should be accepted.",
       "strategyIpv4": "Prefer IPv4",
       "strategyIpv6": "Prefer IPv6",
@@ -825,7 +826,7 @@
       },
       "icmpHint": "Where ping and other ICMP traffic goes.",
       "tunAutoRouteHint": "Sends system traffic into the VPN automatically; usually keep this on.",
-      "enableIpv6Hint": "Gives the VPN an IPv6 address; turn this on only if your node supports IPv6."
+      "enableIpv6Hint": "When off, only IPv4 is resolved and IPv6 traffic is rejected locally so it cannot bypass the VPN. Turn this on only if your node supports IPv6."
     },
     "startup": "Startup",
     "tabGeneral": "General",

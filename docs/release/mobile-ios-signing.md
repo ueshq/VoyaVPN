@@ -153,6 +153,17 @@ the database, config generation, imports, routing, DNS, settings. The tunnel
 reports `missingComponent` and connecting fails cleanly. That is the line the
 acceptance list below is split along.
 
+**Debug and a Mac HTTP proxy.** The iOS Simulator inherits CFNetwork’s system
+proxy settings. A proxy on `127.0.0.1` (Clash, V2Ray, …) without a
+`127.0.0.1`/`localhost` exception makes `RCTBundleURLProvider`’s packager
+probe fail and a Debug launch redbox with `No script URL provided`. Debug
+builds therefore mint `http://localhost:8081` directly and force URLSession to
+skip proxy lookup, so Metro is reachable with the proxy on. Release still embeds
+`main.jsbundle` and never talks to Metro; if that file is missing from the
+product you get the same nil script URL. Keep `127.0.0.1, localhost` in the
+system proxy bypass list if you also need the host browser or other tools to
+reach Metro.
+
 For a device, open `apps/mobile/ios/VoyaVPN.xcworkspace`, select the device and
 run. The first connection raises the system's "VoyaVPN would like to add VPN
 configurations" prompt; declining it surfaces as a permission failure on the

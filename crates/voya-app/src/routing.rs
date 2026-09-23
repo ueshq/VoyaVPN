@@ -109,6 +109,28 @@ impl<'db> RoutingManager<'db> {
         Ok(routing)
     }
 
+    /// Unions each managed rule's matchers with the current seed at startup.
+    ///
+    /// Profile structure, switches, order, outbounds and deletions stay as the
+    /// user left them; only the seed's `domain`/`ip` entries missing from an
+    /// existing managed rule are appended. Returns how many profiles changed.
+    pub async fn refresh_managed_rules(&self) -> Result<u32> {
+        let mut updated = 0;
+        for mut routing in self.database.routings().list().await? {
+            let mut changed = false;
+            for rule in &mut routing.rule_set {
+                changed |= voya_core::refresh_managed_rule(rule);
+            }
+            if !changed {
+                continue;
+            }
+            normalize_routing_item(&mut routing);
+            self.database.routings().upsert(&routing).await?;
+            updated += 1;
+        }
+        Ok(updated)
+    }
+
     pub async fn delete_routings(&self, config: &mut AppConfig, ids: &[String]) -> Result<u32> {
         let deleted = self.database.routings().delete_many(ids).await?;
         self.ensure_active_routing(config).await?;
@@ -441,6 +463,95 @@ mod tests {
         let routings = database.routings().list().await.expect("routings");
         assert_eq!(routings.len(), 1);
         assert_eq!(routings[0].remarks, "Mine");
+    }
+
+    #[tokio::test]
+    async fn startup_refresh_appends_new_ai_domains_without_touching_the_rest() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
+        let manager = RoutingManager::new(&database);
+        let mut config = AppConfig::default();
+        // An old AI list without claude.com, plus an unrelated user rule and a
+        // disabled managed rule — order, switches and user matchers must hold.
+        let old_ai = RulesItem {
+            id: "rule-old-ai".to_string(),
+            remarks: Some(voya_core::SENTINEL_AI_SERVICES.to_string()),
+            outbound_tag: Some(PROXY_TAG.to_string()),
+            rule_type: Some(RuleType::ALL),
+            enabled: true,
+            domain: Some(vec![
+                "domain:anthropic.com".to_string(),
+                "domain:my-extra.example".to_string(),
+            ]),
+            ..RulesItem::default()
+        };
+        let custom = RulesItem {
+            id: "rule-custom".to_string(),
+            remarks: Some("Mine".to_string()),
+            outbound_tag: Some(DIRECT_TAG.to_string()),
+            domain: Some(vec!["full:custom.example".to_string()]),
+            ..RulesItem::default()
+        };
+        let disabled_ads = RulesItem {
+            id: "rule-ads".to_string(),
+            remarks: Some(voya_core::SENTINEL_BLOCK_ADS.to_string()),
+            outbound_tag: Some(BLOCK_TAG.to_string()),
+            rule_type: Some(RuleType::ALL),
+            enabled: false,
+            domain: Some(vec!["geosite:category-ads-all".to_string()]),
+            ..RulesItem::default()
+        };
+        let saved = manager
+            .save_routing(
+                &mut config,
+                RoutingItem {
+                    remarks: "Mine".to_string(),
+                    rule_set: vec![old_ai, custom, disabled_ads],
+                    ..RoutingItem::default()
+                },
+            )
+            .await
+            .expect("custom routing");
+
+        let updated = manager
+            .refresh_managed_rules()
+            .await
+            .expect("refresh managed rules");
+        assert_eq!(updated, 1);
+
+        let routing = database
+            .routings()
+            .get(&saved.id)
+            .await
+            .expect("load routing")
+            .expect("routing still exists");
+        assert_eq!(routing.rule_set.len(), 3);
+        assert_eq!(routing.rule_set[0].id, "rule-old-ai");
+        assert_eq!(routing.rule_set[1].id, "rule-custom");
+        assert_eq!(routing.rule_set[2].id, "rule-ads");
+        assert!(!routing.rule_set[2].enabled);
+
+        let ai_domains = routing.rule_set[0].domain.as_ref().expect("ai domains");
+        assert!(ai_domains.contains(&"domain:claude.com".to_string()));
+        assert!(ai_domains.contains(&"domain:my-extra.example".to_string()));
+        assert_eq!(ai_domains[0], "domain:anthropic.com");
+        assert_eq!(
+            routing.rule_set[1].domain.as_ref(),
+            Some(&vec!["full:custom.example".to_string()])
+        );
+        assert_eq!(
+            routing.rule_set[2].domain.as_ref(),
+            Some(&vec!["geosite:category-ads-all".to_string()])
+        );
+
+        assert_eq!(
+            manager
+                .refresh_managed_rules()
+                .await
+                .expect("second refresh"),
+            0
+        );
     }
 
     #[tokio::test]

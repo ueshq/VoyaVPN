@@ -43,6 +43,7 @@ pub const SENTINEL_REMARKS: [&str; 7] = [
 pub const AI_SERVICE_DOMAIN_SUFFIXES: &[&str] = &[
     "anthropic.com",
     "claude.ai",
+    "claude.com",
     "claudeusercontent.com",
     "openai.com",
     "chatgpt.com",
@@ -90,6 +91,50 @@ const CN_PUBLIC_DNS_DOMAINS: &[&str] = &[
 #[must_use]
 pub fn is_sentinel_remarks(remarks: Option<&str>) -> bool {
     remarks.is_some_and(|remarks| SENTINEL_REMARKS.contains(&remarks))
+}
+
+/// Unions a managed rule's `domain`/`ip` matchers with the current seed.
+///
+/// Content is maintained here; the user keeps the switch, position, outbound
+/// and deletion. Missing seed matchers are appended (user-added entries and
+/// order stay), and a deleted managed rule is never recreated. Returns whether
+/// the rule changed. Non-sentinel remarks and the per-app proxy (which has no
+/// seed content) are left alone.
+#[must_use]
+pub fn refresh_managed_rule(rule: &mut RulesItem) -> bool {
+    let Some(remarks) = rule.remarks.as_deref() else {
+        return false;
+    };
+    if !is_sentinel_remarks(rule.remarks.as_deref()) {
+        return false;
+    }
+    let Some(seed) = default_rule_set()
+        .into_iter()
+        .find(|candidate| candidate.remarks.as_deref() == Some(remarks))
+    else {
+        return false;
+    };
+
+    let mut changed = false;
+    if let Some(seed_domains) = seed.domain.as_ref().filter(|items| !items.is_empty()) {
+        let domains = rule.domain.get_or_insert_with(Vec::new);
+        for domain in seed_domains {
+            if !domains.contains(domain) {
+                domains.push(domain.clone());
+                changed = true;
+            }
+        }
+    }
+    if let Some(seed_ips) = seed.ip.as_ref().filter(|items| !items.is_empty()) {
+        let ips = rule.ip.get_or_insert_with(Vec::new);
+        for ip in seed_ips {
+            if !ips.contains(ip) {
+                ips.push(ip.clone());
+                changed = true;
+            }
+        }
+    }
+    changed
 }
 
 /// The seeded rule set, in evaluation order. Anything no rule matches falls
@@ -261,7 +306,7 @@ mod tests {
     fn the_ai_service_rule_carries_every_suffix_as_a_domain_suffix_matcher() {
         let rules = default_rule_set();
         let domains = rules[0].domain.as_ref().expect("AI service domains");
-        assert_eq!(AI_SERVICE_DOMAIN_SUFFIXES.len(), 27);
+        assert_eq!(AI_SERVICE_DOMAIN_SUFFIXES.len(), 28);
         assert_eq!(domains.len(), AI_SERVICE_DOMAIN_SUFFIXES.len());
         assert!(domains.iter().all(|domain| domain.starts_with("domain:")));
         assert_eq!(rules[0].outbound_tag.as_deref(), Some(PROXY_TAG));
@@ -274,5 +319,71 @@ mod tests {
         assert_eq!(seed_routing_remarks("zh-Hans"), "智能分流");
         assert_eq!(seed_routing_remarks("zh-Hant"), "智慧分流");
         assert_eq!(default_routing_item("Seed").rule_set, default_rule_set());
+    }
+
+    fn ai_services_rule(domains: Vec<String>) -> RulesItem {
+        RulesItem {
+            id: "rule-ai".to_string(),
+            remarks: Some(SENTINEL_AI_SERVICES.to_string()),
+            outbound_tag: Some(PROXY_TAG.to_string()),
+            rule_type: Some(RuleType::ALL),
+            domain: Some(domains),
+            ..RulesItem::default()
+        }
+    }
+
+    #[test]
+    fn refresh_appends_missing_seed_matchers_and_preserves_user_entries() {
+        let mut rule = ai_services_rule(vec![
+            "domain:anthropic.com".to_string(),
+            "domain:my-extra.example".to_string(),
+        ]);
+        assert!(refresh_managed_rule(&mut rule));
+        let domains = rule.domain.as_ref().expect("domains");
+        assert!(domains.contains(&"domain:claude.com".to_string()));
+        assert!(domains.contains(&"domain:my-extra.example".to_string()));
+        assert_eq!(domains[0], "domain:anthropic.com", "user order is kept");
+        assert_eq!(domains[1], "domain:my-extra.example");
+
+        assert!(
+            !refresh_managed_rule(&mut rule),
+            "an already-complete managed rule is unchanged"
+        );
+    }
+
+    #[test]
+    fn refresh_leaves_non_managed_rules_alone() {
+        let mut custom = RulesItem {
+            id: "rule-custom".to_string(),
+            remarks: Some("mine".to_string()),
+            domain: Some(vec!["full:example.test".to_string()]),
+            ..RulesItem::default()
+        };
+        let before = custom.clone();
+        assert!(!refresh_managed_rule(&mut custom));
+        assert_eq!(custom, before);
+
+        let mut anonymous = RulesItem {
+            id: "rule-anon".to_string(),
+            ..RulesItem::default()
+        };
+        assert!(!refresh_managed_rule(&mut anonymous));
+        assert_eq!(anonymous.domain, None);
+    }
+
+    #[test]
+    fn refresh_unions_ip_matchers_too() {
+        let mut rule = RulesItem {
+            id: "rule-cn-dns".to_string(),
+            remarks: Some(SENTINEL_CN_DNS.to_string()),
+            outbound_tag: Some(DIRECT_TAG.to_string()),
+            rule_type: Some(RuleType::ALL),
+            ip: Some(vec!["223.5.5.5".to_string()]),
+            ..RulesItem::default()
+        };
+        assert!(refresh_managed_rule(&mut rule));
+        let ips = rule.ip.expect("ips");
+        assert!(ips.contains(&"119.29.29.29".to_string()));
+        assert_eq!(ips[0], "223.5.5.5");
     }
 }

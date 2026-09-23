@@ -211,6 +211,7 @@
       "remoteDns": "远程 DNS",
       "title": "DNS",
       "strategyHint": "解析域名时优先使用 IPv4 或 IPv6。",
+      "strategyIpv6Off": "需在设置中开启 IPv6 后才生效；IPv6 关闭时所有查询仅使用 IPv4。",
       "expectedHint": "用于直连 DNS：通过这些 IP 范围判断是否接受解析结果。",
       "strategyIpv4": "优先 IPv4",
       "strategyIpv6": "优先 IPv6",
@@ -825,7 +826,7 @@
       },
       "icmpHint": "ping 等 ICMP 流量的去向。",
       "tunAutoRouteHint": "自动把系统流量导入 VPN，通常保持开启。",
-      "enableIpv6Hint": "为 VPN 分配 IPv6 地址，节点支持 IPv6 时再开启。"
+      "enableIpv6Hint": "关闭时只解析 IPv4，IPv6 流量在本地拒绝且不会绕过 VPN。节点支持 IPv6 时再开启。"
     },
     "startup": "启动",
     "tabGeneral": "通用",

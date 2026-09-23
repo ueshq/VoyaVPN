@@ -21,6 +21,7 @@
         "domain_suffix": [
           "anthropic.com",
           "claude.ai",
+          "claude.com",
           "claudeusercontent.com",
           "openai.com",
           "chatgpt.com",
@@ -72,7 +73,8 @@
         ],
         "server": "direct_dns"
       }
-    ]
+    ],
+    "strategy": "ipv4_only"
   },
   "route": {
     "final": "proxy",
@@ -121,6 +123,10 @@
         "type": "logical"
       },
       {
+        "action": "reject",
+        "ip_version": 6
+      },
+      {
         "clash_mode": "Global",
         "outbound": "proxy"
       },
@@ -128,6 +134,7 @@
         "domain_suffix": [
           "anthropic.com",
           "claude.ai",
+          "claude.com",
           "claudeusercontent.com",
           "openai.com",
           "chatgpt.com",

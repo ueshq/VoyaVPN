@@ -642,6 +642,7 @@ fn singbox_default_seed_snapshot() -> Value {
         },
         "dns": {
             "rules": config["dns"]["rules"],
+            "strategy": config["dns"]["strategy"],
         },
     })
 }

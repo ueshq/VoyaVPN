@@ -51,6 +51,10 @@
       ]
     },
     {
+      "action": "reject",
+      "ip_version": 6
+    },
+    {
       "outbound": "proxy",
       "clash_mode": "Global"
     }

@@ -291,6 +291,8 @@ pub struct TunModeItem {
     pub strict_route: bool,
     pub stack: String,
     pub mtu: i32,
+    /// Whether IPv6 traffic is allowed. Off means dual-stack capture with
+    /// local reject of IPv6 and dual-path DNS forced to `ipv4_only`.
     pub enable_ipv6_address: bool,
     pub icmp_routing: String,
 }

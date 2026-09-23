@@ -90,12 +90,14 @@ fn build_tun_inbound(context: &CoreConfigContext, http_proxy_port: Option<i32>) 
     }
 }
 
-fn tun_addresses(context: &CoreConfigContext) -> Vec<String> {
-    let mut address = vec!["172.18.0.1/30".to_string()];
-    if context.platform.is_macos() || context.app_config.tun_mode_item.enable_ipv6_address {
-        address.push("fdfe:dcba:9876::1/126".to_string());
-    }
-    address
+fn tun_addresses(_context: &CoreConfigContext) -> Vec<String> {
+    // Always dual-stack: without a local IPv6 address the TUN cannot capture
+    // literal IPv6 destinations, so the reject rule would never see them and
+    // they would leak out of the physical NIC.
+    vec![
+        "172.18.0.1/30".to_string(),
+        "fdfe:dcba:9876::1/126".to_string(),
+    ]
 }
 
 fn tun_platform(

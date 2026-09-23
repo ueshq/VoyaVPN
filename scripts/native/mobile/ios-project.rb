@@ -191,6 +191,11 @@ file_ref(appex_group, 'PacketTunnel.entitlements')
 
 ensure_framework(appex, sdk_framework(project, 'NetworkExtension'))
 if libbox
+  # Libbox's Chromium base pulls in UIApplication / UIBackgroundTaskInvalid /
+  # UIDevice (scoped_critical_action, MessagePumpUIApplication). The extension
+  # sources never `import UIKit`, so Swift autolinking does not add it and the
+  # PacketTunnel link fails with those symbols missing.
+  ensure_framework(appex, sdk_framework(project, 'UIKit'))
   ensure_framework(appex, libbox)
   append_ldflag(appex, '-lresolv')
   append_ldflag(appex, '-Wl,-no_compact_unwind')

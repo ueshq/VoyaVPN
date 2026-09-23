@@ -148,7 +148,7 @@
       "core": "sing-box",
       "fixture": "singbox/inbounds/tun_macos.json",
       "generated": "singbox.inbounds.tun_macos",
-      "summary": "sing-box macOS PacketTunnel inbound shape with utun allocation, IPv6 address, safe MTU, gVisor default stack, and platform HTTP proxy.",
+      "summary": "sing-box macOS PacketTunnel inbound shape with utun allocation, IPv6 only when enabled, safe MTU, gVisor default stack, and platform HTTP proxy.",
       "hotspots": [
         "tun",
         "inbounds",

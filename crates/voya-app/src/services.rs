@@ -154,7 +154,8 @@ impl AppServices {
         RoutingManager::new(&self.database)
     }
 
-    /// Seeds the default routing profile on a database that has none. Returns
+    /// Seeds the default routing profile on a database that has none, then
+    /// unions every managed rule's matchers with the current seed. Returns
     /// whether a profile was created.
     pub async fn ensure_default_routing(
         &self,
@@ -163,9 +164,12 @@ impl AppServices {
         let committed = coordinator
             .mutate(async |unit_of_work, config| {
                 let language = config.ui_item.current_language.clone();
-                let seeded = RoutingManager::new_in(unit_of_work)
-                    .ensure_default_routing(config, &language)
-                    .await?;
+                let manager = RoutingManager::new_in(unit_of_work);
+                let seeded = manager.ensure_default_routing(config, &language).await?;
+                let refreshed = manager.refresh_managed_rules().await?;
+                if refreshed > 0 {
+                    tracing::info!("managed routing rules refreshed in {refreshed} profile(s)");
+                }
                 Ok::<bool, voya_contracts::AppError>(seeded.is_some())
             })
             .await?;

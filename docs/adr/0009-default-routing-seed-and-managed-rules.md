@@ -21,7 +21,7 @@ blocking ads and bypassing the LAN.
   through to the proxy.
 - `voya-app` seeds that set as an active routing profile at startup, only when
   the database has no routing profile at all. Existing profiles are never
-  touched. `reset_routing_rules` restores the default set on a chosen profile
+  replaced. `reset_routing_rules` restores the default set on a chosen profile
   and keeps its per-app proxy rule first.
 - Managed rules are identified by reserved remarks (`voya:*`). The Rules page
   shows their translated names with a Managed badge and locks the remarks in
@@ -35,10 +35,11 @@ blocking ads and bypassing the LAN.
 
 ## Consequences
 
-- Upgraded installs keep their routing profiles unchanged and get the AI list
-  only by restoring the default rules.
-- The AI-service DNS rule follows the proxy DNS strategy like any other rule;
-  it is no longer forced to `ipv4_only` under TUN without IPv6.
+- Upgraded installs keep their routing profiles unchanged. Managed rules still
+  present in a profile get their seed matchers unioned in at startup (see the
+  2026-09-23 revision); a managed rule the user deleted is not restored.
+- The AI-service DNS rule follows the same DNS strategy helper as any other
+  rule under the IPv6 master switch (see the 2026-09-23 revision).
 - `tests/golden/singbox/route/default_seed.json` pins the generated route and
   DNS rules of the seed and is accepted by `sing-box check`.
 
@@ -69,6 +70,53 @@ blocking ads and bypassing the LAN.
   unsupported in the rule list. Windows and Linux are unchanged.
 - The Home and Rules pages call the rule-based traffic mode "Rule", matching
   the tray.
+
+## Revision 2026-09-23: Proxy-path DNS defaults to ipv4_only
+
+This supersedes the consequence above ("no longer forced to `ipv4_only` under
+TUN without IPv6"). That consequence was wrong for real-world use:
+
+- Most proxy nodes have no IPv6 egress. Returning AAAA through the remote DNS
+  makes clients dial a v6 literal that the node cannot complete, and the
+  connection dies after the local TCP handshake (`ERR_SOCKET_CLOSED` in
+  Bun-compiled clients such as the Claude Code CLI).
+- Browsers hide the failure behind Happy Eyeballs; curl and many CLIs do not.
+- Hiddify and Clash Verge already default to IPv6 off (DNS `ipv4_only` + TUN
+  without inet6).
+
+`enable_ipv6_address` (contract: `network.tun.ipv6Enabled`, default off) is
+now the master switch for IPv6 traffic. **Off means all IPv6 is refused
+locally**, matching mihomo `ipv6: false`:
+
+- The TUN always carries both `172.18.0.1/30` and `fdfe:dcba:9876::1/126`, so
+  literal IPv6 destinations are captured instead of leaking out of the
+  physical NIC. (Previously an off switch dropped the ULA and the leak.) The
+  direct-CN cost of losing native IPv6 is accepted.
+- DNS gets a top-level `strategy: "ipv4_only"`. Rule-level strategies yield
+  to it: `dns_strategy` returns `None` while the switch is off, because an
+  explicit IPv6 preference would contradict the switch. The trailing catch-all
+  rule that carried the proxy strategy is only emitted when a rule-level
+  strategy still has to reach `final` (IPv6 on and an explicit proxy
+  strategy). `strategy4_freedom` is no longer an exception.
+- Routing rejects `ip_version: 6` after DNS hijack and before Global mode, in
+  every traffic mode, so a literal IPv6 address fails fast rather than being
+  dialed by the node.
+
+When the switch is on, explicit UseIPv4/UseIPv6/ForceIPv4/ForceIPv6 still map
+through `domain_strategy4_sbox` on each rule, and the IPv6 reject rule is
+absent. The TUN IPv6 address itself follows the switch on every platform,
+including macOS.
+
+## Revision 2026-09-23: Managed rules content refresh
+
+Managed-rule **content** is maintained by us; the user keeps the switch,
+position, outbound and deletion. At startup `RoutingManager::refresh_managed_rules`
+walks every profile: for each existing `voya:*` rule it appends any
+`domain`/`ip` matchers the current seed has and the stored rule lacks (union,
+user-added entries and order preserved). `enabled`, position and
+`outbound_tag` are never rewritten. A managed rule the user deleted is not
+recreated. Stateless and idempotent — no seed version number. This is how
+`claude.com` reaches already-installed users.
 
 ## Revision 2026-09-14: Group outbounds, presets and repair
 

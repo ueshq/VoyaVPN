@@ -255,6 +255,8 @@ pub struct SingboxRule {
     pub ip_accept_any: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_port: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ip_version: Option<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

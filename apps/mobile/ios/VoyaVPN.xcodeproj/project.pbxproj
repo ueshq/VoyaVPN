@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-VoyaVPN.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-VoyaVPN.a */; };
+		128B91FBC8379B5C31B4015D /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 15C083E057535160E81DF6CB /* UIKit.framework */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		1861294F9DD14C6E28777254 /* VoyaMobile.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5D567F08A5BB2472A3195D1 /* VoyaMobile.xcframework */; };
 		22CFC5869E3B3759234E32DF /* VoyaNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0644747CCFE960CE954AD933 /* VoyaNative.swift */; };
@@ -70,6 +71,7 @@
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = VoyaVPN/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = VoyaVPN/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = VoyaVPN/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		15C083E057535160E81DF6CB /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		1AF6A75C9DD5D477824A0224 /* VoyaVPNUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoyaVPNUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2ACD3E150945C58AA0FC180D /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PacketTunnelProvider.swift; sourceTree = "<group>"; };
 		3B4392A12AC88292D35C810B /* Pods-VoyaVPN.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-VoyaVPN.debug.xcconfig"; path = "Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN.debug.xcconfig"; sourceTree = "<group>"; };
@@ -114,6 +116,7 @@
 				CE769709CEE289E9E1B66E96 /* Foundation.framework in Frameworks */,
 				BC720925E8796201901BF824 /* NetworkExtension.framework in Frameworks */,
 				59242FCD90881918AC5F99D3 /* Libbox.xcframework in Frameworks */,
+				128B91FBC8379B5C31B4015D /* UIKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -169,6 +172,7 @@
 				5DCACB8F33CDC322A6C60F78 /* libPods-VoyaVPN.a */,
 				EF131E8A8403724863AC75BD /* NetworkExtension.framework */,
 				1584DC8BBD59177F508FBA9D /* iOS */,
+				15C083E057535160E81DF6CB /* UIKit.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";

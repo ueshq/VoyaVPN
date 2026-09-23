@@ -5,7 +5,7 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
     let simple_dns = &context.simple_dns_item;
     config.route.default_domain_resolver = Some(SingboxRule {
         server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
-        strategy: domain_strategy4_sbox(simple_dns.strategy4_freedom.as_deref()),
+        strategy: dns_strategy(context, simple_dns.strategy4_freedom.as_deref()),
         ..SingboxRule::default()
     });
 
@@ -78,6 +78,18 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
 
     if let Some(hosts_resolve_rule) = hosts_resolve_rule(simple_dns) {
         config.route.rules.push(hosts_resolve_rule);
+    }
+
+    // IPv6 off: reject every IPv6 destination at the routing layer so a
+    // literal v6 address fails fast instead of leaking out of the physical
+    // NIC. Placed after DNS hijack so DNS is unaffected, and before Global
+    // so the reject wins in every traffic mode.
+    if !context.app_config.tun_mode_item.enable_ipv6_address {
+        config.route.rules.push(SingboxRule {
+            ip_version: Some(6),
+            action: Some("reject".to_string()),
+            ..SingboxRule::default()
+        });
     }
 
     // Global mode sends everything through the proxy ahead of the user's rules.

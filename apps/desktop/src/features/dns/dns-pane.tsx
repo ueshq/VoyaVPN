@@ -10,6 +10,9 @@ import {
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@voya/client/query-keys";
+import { voyaCommands } from "@voya/client/transport";
 import { SettingsGroup } from "@/features/settings/settings-form";
 import type { DnsSettings } from "@/ipc/bindings";
 
@@ -70,6 +73,15 @@ function SimpleDnsForm({
   updateSimple: (patch: Partial<DnsSettings>) => void;
 }) {
   const { t } = useI18n();
+  // The strategies below only apply once IPv6 is allowed; while the master
+  // switch is off the generator forces every path to `ipv4_only`.
+  const settingsQuery = useQuery({
+    queryFn: () => voyaCommands().loadAppSettings(),
+    queryKey: queryKeys.appSettings,
+  });
+  const ipv6Off = settingsQuery.data
+    ? !settingsQuery.data.network.tun.ipv6Enabled
+    : false;
   const strategyLabels: Record<string, string> = {
     "": t("panes.routing.defaultValue"),
     UseIPv4: t("panes.dns.strategyIpv4"), UseIPv6: t("panes.dns.strategyIpv6"), ForceIPv4: t("panes.dns.strategyOnlyIpv4"), ForceIPv6: t("panes.dns.strategyOnlyIpv6"),
@@ -129,7 +141,7 @@ function SimpleDnsForm({
         />
         <SelectField
           options={strategies}
-          description={t("panes.dns.strategyHint")}
+          description={ipv6Off ? t("panes.dns.strategyIpv6Off") : t("panes.dns.strategyHint")}
           label={t("panes.dns.directStrategy")}
           layout="row"
           onChange={(value) => updateSimple({ directStrategy: value || null })}
@@ -137,7 +149,7 @@ function SimpleDnsForm({
         />
         <SelectField
           options={strategies}
-          description={t("panes.dns.strategyHint")}
+          description={ipv6Off ? t("panes.dns.strategyIpv6Off") : t("panes.dns.strategyHint")}
           label={t("panes.dns.proxyStrategy")}
           layout="row"
           onChange={(value) => updateSimple({ proxyStrategy: value || null })}
