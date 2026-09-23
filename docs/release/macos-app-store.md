@@ -104,6 +104,14 @@ Before it writes the `.pkg`, `native:macos:pkg` checks the following:
   and its folder name equals its `CFBundleExecutable` (ITMS-90362).
 - No System Extension, `export-bindings` or tunnel service is bundled, and no
   appex is left under the old bundle-id folder name.
+- No file carries `com.apple.quarantine` (ITMS-91109). This is checked on the
+  bundle, and again on the finished `.pkg` after expanding it, because
+  `productbuild` keeps extended attributes in the payload.
+
+Provisioning profiles saved from a browser are quarantined, and build 352
+shipped both embedded profiles with that attribute. The lane now writes
+profiles into the bundle as plain bytes. `native:macos:app:sign` also removes
+any remaining quarantine before signing, and lists the files it cleaned.
 
 Afterwards the script removes `Contents/PlugIns` from the `target/` app copy.
 That keeps the copy from winning PlugInKit election for the production bundle

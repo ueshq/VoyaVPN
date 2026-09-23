@@ -27,6 +27,7 @@ import {
 import {
   assertProfileCapabilities,
   distributionProfileLabel,
+  embedProvisioningProfile,
   formatProfileSelectionError,
   localProvisioningUdid,
   plistBuddy,
@@ -184,12 +185,10 @@ function stageProvisioningProfiles() {
   );
 
   if (appProfile) {
-    mkdirSync(appContents, { recursive: true });
-    cpSync(appProfile.path, appProvisioningProfileDestination);
+    embedProvisioningProfile(appProfile.path, appProvisioningProfileDestination);
   }
   if (packetTunnelProfile) {
-    mkdirSync(appexContents, { recursive: true });
-    cpSync(packetTunnelProfile.path, packetTunnelProvisioningProfileDestination);
+    embedProvisioningProfile(packetTunnelProfile.path, packetTunnelProvisioningProfileDestination);
   }
 
   return { app: appProfile, packetTunnel: packetTunnelProfile };

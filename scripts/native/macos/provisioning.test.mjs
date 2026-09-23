@@ -1,8 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { capture } from "../../lib/common.mjs";
 
 import {
   assertProfileCapabilities,
   certificateSha1Fingerprint,
+  embedProvisioningProfile,
   findMatchingIdentities,
   formatProfileSelectionError,
   parseCodesigningIdentities,
@@ -390,5 +396,43 @@ describe("store submission entitlements", () => {
     const xml = renderProfileEntitlements(development, { appSandbox: true });
     expect(xml).toContain("4LUKJ56532.*");
     expect(xml).toContain("keychain-access-groups");
+  });
+});
+
+describe("embedProvisioningProfile", () => {
+  const roots = [];
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  function scratch() {
+    const root = mkdtempSync(join(tmpdir(), "voya-profile-"));
+    roots.push(root);
+    const source = join(root, "downloaded.provisionprofile");
+    writeFileSync(source, Buffer.from([0x30, 0x82, 0x01, 0x02]));
+    return { root, source };
+  }
+
+  it("copies the profile bytes into a folder that does not exist yet", () => {
+    const { root, source } = scratch();
+    const destination = join(root, "VoyaPacketTunnel.appex", "Contents", "embedded.provisionprofile");
+
+    embedProvisioningProfile(source, destination);
+
+    expect(readFileSync(destination)).toEqual(readFileSync(source));
+  });
+
+  // Browser-downloaded profiles are quarantined; build 352 embedded them with
+  // the attribute and App Store Connect rejected the package (ITMS-91109).
+  it.runIf(process.platform === "darwin")("leaves a downloaded profile's quarantine behind", () => {
+    const { root, source } = scratch();
+    const quarantine = "0281;6a46dacf;;D5853559-011B-43DD-B861-15287EBF3D57";
+    expect(capture("xattr", ["-w", "com.apple.quarantine", quarantine, source]).status).toBe(0);
+    const destination = join(root, "embedded.provisionprofile");
+
+    embedProvisioningProfile(source, destination);
+
+    expect(capture("xattr", ["-p", "com.apple.quarantine", source]).stdout.trim()).toBe(quarantine);
+    expect(capture("xattr", ["-p", "com.apple.quarantine", destination]).status).not.toBe(0);
   });
 });

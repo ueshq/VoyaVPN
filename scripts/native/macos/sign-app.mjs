@@ -1,5 +1,5 @@
-import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, rmSync } from "node:fs";
+import { resolve } from "node:path";
 import { capture, isCliEntrypoint, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
@@ -10,6 +10,7 @@ import {
 import {
   assertProfileCapabilities,
   distributionProfileLabel,
+  embedProvisioningProfile,
   formatProfileSelectionError,
   localProvisioningUdid,
   plistBuddy,
@@ -18,6 +19,7 @@ import {
   resolveSigningIdentity,
   writeProfileEntitlements,
 } from "./provisioning.mjs";
+import { findQuarantined, quarantineAttribute } from "./quarantine.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const outRoot = resolve(repoRoot, "target", "native", "macos");
@@ -116,6 +118,22 @@ function signNestedCode(identity, packetTunnelProfile) {
   signSandboxedHelper(identity, resolve(appContents, "Resources", "core-seeds", "sing_box", "sing-box"), "sing-box core seed");
 }
 
+/**
+ * App Store Connect rejects a package holding any quarantined file
+ * (ITMS-91109). Build 352 shipped both embedded profiles quarantined; they are
+ * now written as plain bytes, and this removes the attribute from anything
+ * else that arrives with it. Runs before signing so nothing changes under a
+ * seal, and names what it strips so the source can be traced.
+ */
+function removeQuarantine() {
+  const found = findQuarantined(appBundle);
+  if (!found.length) {
+    return;
+  }
+  run("xattr", ["-dr", quarantineAttribute, appBundle], { cwd: repoRoot });
+  console.log(`Removed ${quarantineAttribute} before signing from:\n${found.map((path) => `  - ${path}`).join("\n")}`);
+}
+
 function removeUnsupportedLaunchServicesKeys() {
   if (!existsSync(appInfoPlist)) {
     throw new Error(`macOS app Info.plist is missing: ${appInfoPlist}`);
@@ -173,7 +191,7 @@ function main() {
     : appEntitlements;
   if (appProfile) {
     validateProvisioningProfile(appProfile, criteria, "macOS app", appBundleIdentifier);
-    cpSync(appProfile.path, appProvisioningProfileDestination);
+    embedProvisioningProfile(appProfile.path, appProvisioningProfileDestination);
     console.log(`Using macOS app provisioning profile ${appProfile.name || appProfile.path}`);
   } else if (distribution === "app-store" || distribution === "developer-id" || truthy(process.env.VOYAVPN_REQUIRE_PROVISIONING)) {
     throw missingProfileError(
@@ -185,8 +203,7 @@ function main() {
   }
   if (packetTunnelProfile) {
     validateProvisioningProfile(packetTunnelProfile, criteria, "PacketTunnel", packetTunnelBundleIdentifier);
-    mkdirSync(dirname(packetTunnelProvisioningProfileDestination), { recursive: true });
-    cpSync(packetTunnelProfile.path, packetTunnelProvisioningProfileDestination);
+    embedProvisioningProfile(packetTunnelProfile.path, packetTunnelProvisioningProfileDestination);
     console.log(`Using PacketTunnel provisioning profile ${packetTunnelProfile.name || packetTunnelProfile.path}`);
   } else if (existsSync(packetTunnelBundle) && truthy(process.env.VOYAVPN_REQUIRE_PROVISIONING)) {
     throw missingProfileError(
@@ -197,6 +214,7 @@ function main() {
     );
   }
 
+  removeQuarantine();
   signNestedCode(identity, packetTunnelProfile);
 
   const args = [...codesignBaseArgs(identity), "--entitlements", entitlements];

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { capture, checkedCapture, repoRootFromScript } from "../../lib/common.mjs";
 import { requiredNetworkExtensionValue } from "./tunnel-layout.mjs";
@@ -372,6 +372,20 @@ export function decodeProvisioningProfile(profilePath, decodedDir = defaultDecod
     provisionedDevices: readProvisionedDevices(plistPath),
     expirationDate: readExpirationDate(plistPath),
   };
+}
+
+/**
+ * Places a provisioning profile in a bundle as a new file holding only its
+ * bytes, so none of the source's extended attributes can come along.
+ *
+ * Profiles downloaded through a browser carry `com.apple.quarantine`. Build
+ * 352 embedded both profiles with their source's quarantine event, which
+ * `productbuild` kept in the payload and App Store Connect rejected
+ * (ITMS-91109).
+ */
+export function embedProvisioningProfile(source, destination) {
+  mkdirSync(dirname(destination), { recursive: true });
+  writeFileSync(destination, readFileSync(source));
 }
 
 export function resolveProfileFromEnv({ bundleIdentifier, explicitEnvName, profileDir, criteria, decodedDir }) {

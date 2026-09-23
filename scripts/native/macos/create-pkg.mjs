@@ -26,6 +26,7 @@ import {
   isStoreDistributionProfile,
   plistBuddy,
 } from "./provisioning.mjs";
+import { findQuarantined, quarantineAttribute } from "./quarantine.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const appBundle = resolve(
@@ -283,6 +284,36 @@ function verifyDeploymentTargets(executables, appMinimumSystemVersion) {
   }
 }
 
+function assertNoQuarantine(root, label) {
+  const found = findQuarantined(root);
+  if (found.length) {
+    throw new Error(
+      `${label} has files with ${quarantineAttribute}, which App Store Connect rejects (ITMS-91109):\n${found
+        .map((path) => `  - ${path}`)
+        .join("\n")}`,
+    );
+  }
+  console.log(`✓ ${label} has no quarantined files`);
+}
+
+/**
+ * `productbuild` keeps extended attributes in the payload, so the check that
+ * matters is on the package itself, exactly as it will be uploaded. The
+ * expansion holds a copy of the PacketTunnel appex; it is deleted right away
+ * so PlugInKit never sees it (AGENTS.md, NetworkExtension hygiene).
+ */
+function verifyPackagePayload(outputPath) {
+  const expanded = resolve(repoRoot, "target", "native", "macos", "pkg-verify");
+  rmSync(expanded, { recursive: true, force: true });
+  mkdirSync(dirname(expanded), { recursive: true });
+  try {
+    run("pkgutil", ["--expand-full", outputPath, expanded], { cwd: repoRoot });
+    assertNoQuarantine(expanded, "Package payload");
+  } finally {
+    rmSync(expanded, { recursive: true, force: true });
+  }
+}
+
 function installerIdentity() {
   const listing = checkedCapture("security", ["find-identity", "-v"], { cwd: repoRoot }).stdout;
   return selectInstallerIdentity(parseCodesigningIdentities(listing), process.env.VOYAVPN_INSTALLER_IDENTITY);
@@ -302,6 +333,7 @@ function main() {
   verifySignatures(executables);
   verifyDeploymentTargets(executables, appMinimumSystemVersion);
   verifyAppExtensions(appMinimumSystemVersion);
+  assertNoQuarantine(appBundle, "App bundle");
 
   const version = plistBuddy(infoPlist, ":CFBundleShortVersionString");
   const buildNumber = plistBuddy(infoPlist, ":CFBundleVersion");
@@ -326,6 +358,7 @@ function main() {
       { cwd: repoRoot },
     );
     run("pkgutil", ["--check-signature", outputPath], { cwd: repoRoot });
+    verifyPackagePayload(outputPath);
   } catch (error) {
     rmSync(outputPath, { force: true });
     throw error;
