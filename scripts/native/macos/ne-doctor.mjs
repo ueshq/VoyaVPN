@@ -4,7 +4,9 @@ import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run } from
 import { parseArgs } from "../../lib/args.mjs";
 import { defaultIsProcessRunning, voyaRuntimeExecutables } from "./local-runtime.mjs";
 import {
+  legacyPacketTunnelAppexName,
   packetTunnelBundleIdentifier as providerBundleId,
+  packetTunnelExecutableName,
   packetTunnelLayout,
 } from "./tunnel-layout.mjs";
 
@@ -93,14 +95,19 @@ function normalizePath(path) {
 export function parsePluginkitMatches(output) {
   const matches = [];
   const seen = new Set();
-  const escapedId = providerBundleId.replaceAll(".", "\\.");
+  // The appex folder is named after the provider executable; builds before
+  // ITMS-90362 named it after the bundle id, and PlugInKit may still hold such
+  // registrations, which `--fix` has to see to remove.
+  const appexNames = [`${packetTunnelExecutableName}.appex`, legacyPacketTunnelAppexName]
+    .map((name) => name.replaceAll(".", "\\."))
+    .join("|");
   // Bundle paths may contain spaces (`~/My Builds/VoyaVPN.app/...`), so the run
   // cannot exclude whitespace. Instead the path must start at a delimiter —
   // line start, whitespace, `=`, a quote, `(` or `,` — and is matched lazily up
   // to the provider's `.appex`, which keeps several paths on one line separable.
   // The previous `[^\s"']*` silently truncated a spaced path to its last
   // segment, and `--fix` then unregistered that nonexistent path.
-  const pathPattern = new RegExp(`(?:^|[\\s="'(,])((?:file:)?/[^"'\\n]*?${escapedId}\\.appex)`, "g");
+  const pathPattern = new RegExp(`(?:^|[\\s="'(,])((?:file:)?/[^"'\\n]*?(?:${appexNames}))`, "g");
 
   for (const line of output.split(/\r?\n/)) {
     for (const match of line.matchAll(pathPattern)) {

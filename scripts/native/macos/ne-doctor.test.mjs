@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { parsePluginkitMatches, planPacketTunnelFix } from "./ne-doctor.mjs";
-import { packetTunnelBundleIdentifier } from "./tunnel-layout.mjs";
+import { legacyPacketTunnelAppexName, packetTunnelBundleIdentifier } from "./tunnel-layout.mjs";
 
 const providerId = packetTunnelBundleIdentifier;
+const appexName = "VoyaPacketTunnel.appex";
 
 function appexEntry(path, overrides = {}) {
   return { type: "appex", path, appBundle: path.split(".app/")[0] + ".app", stale: true, ...overrides };
@@ -13,35 +14,43 @@ describe("pluginkit -mDvvv parsing", () => {
   it("extracts appex paths from a real pluginkit listing", () => {
     const output = [
       `   ${providerId}(1.0)`,
-      `\tPath = /Applications/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`,
+      `\tPath = /Applications/VoyaVPN.app/Contents/PlugIns/${appexName}`,
       `\tUUID = 6D0F0F0F-0000-0000-0000-000000000000`,
-      `+   ${providerId}(1.0) /Users/afu/Dev/VoyaVPN/target/release/bundle/macos/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`,
+      `+   ${providerId}(1.0) /Users/afu/Dev/VoyaVPN/target/release/bundle/macos/VoyaVPN.app/Contents/PlugIns/${appexName}`,
     ].join("\n");
 
     expect(parsePluginkitMatches(output)).toEqual([
-      `/Applications/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`,
-      `/Users/afu/Dev/VoyaVPN/target/release/bundle/macos/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`,
+      `/Applications/VoyaVPN.app/Contents/PlugIns/${appexName}`,
+      `/Users/afu/Dev/VoyaVPN/target/release/bundle/macos/VoyaVPN.app/Contents/PlugIns/${appexName}`,
     ]);
   });
 
   it("normalizes file:// URLs, strips trailing punctuation, and de-duplicates", () => {
-    const path = `/Applications/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`;
+    const path = `/Applications/VoyaVPN.app/Contents/PlugIns/${appexName}`;
     const output = [`Registered at file://${path},`, `Also at ${path};`, `And at ${path}`].join("\n");
 
     expect(parsePluginkitMatches(output)).toEqual([path]);
   });
 
   it("keeps paths that contain spaces", () => {
-    const path = `/Users/afu/My Builds/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`;
+    const path = `/Users/afu/My Builds/VoyaVPN.app/Contents/PlugIns/${appexName}`;
 
     expect(parsePluginkitMatches(`Path = ${path}\n`)).toEqual([path]);
   });
 
   it("separates two provider paths that share one line", () => {
-    const a = `/Applications/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`;
-    const b = `/Users/afu/builds/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`;
+    const a = `/Applications/VoyaVPN.app/Contents/PlugIns/${appexName}`;
+    const b = `/Users/afu/builds/VoyaVPN.app/Contents/PlugIns/${appexName}`;
 
     expect(parsePluginkitMatches(`${a} and ${b}`)).toEqual([a, b]);
+  });
+
+  it("still finds registrations under the pre-ITMS-90362 bundle-id folder name", () => {
+    const legacy = `/Applications/Old.app/Contents/PlugIns/${legacyPacketTunnelAppexName}`;
+    const current = `/Applications/VoyaVPN.app/Contents/PlugIns/${appexName}`;
+
+    expect(legacyPacketTunnelAppexName).toBe(`${providerId}.appex`);
+    expect(parsePluginkitMatches(`Path = ${legacy}\nPath = ${current}\n`)).toEqual([legacy, current]);
   });
 
   it("ignores lines for other plugin identifiers", () => {
@@ -52,8 +61,8 @@ describe("pluginkit -mDvvv parsing", () => {
 });
 
 describe("--fix preconditions", () => {
-  const stale = [appexEntry(`/Applications/Old.app/Contents/PlugIns/${providerId}.appex`)];
-  const providerPath = `/Applications/VoyaVPN.app/Contents/PlugIns/${providerId}.appex`;
+  const stale = [appexEntry(`/Applications/Old.app/Contents/PlugIns/${appexName}`)];
+  const providerPath = `/Applications/VoyaVPN.app/Contents/PlugIns/${appexName}`;
 
   it("returns the stale appex entries when every precondition holds", () => {
     expect(planPacketTunnelFix(stale, { providerPath, providerExists: true })).toEqual(stale);
@@ -80,8 +89,8 @@ describe("--fix preconditions", () => {
 
   it("requires --yes before removing more than one registration", () => {
     const many = [
-      appexEntry(`/Applications/A.app/Contents/PlugIns/${providerId}.appex`),
-      appexEntry(`/Applications/B.app/Contents/PlugIns/${providerId}.appex`),
+      appexEntry(`/Applications/A.app/Contents/PlugIns/${appexName}`),
+      appexEntry(`/Applications/B.app/Contents/PlugIns/${appexName}`),
     ];
 
     expect(() => planPacketTunnelFix(many, { providerPath, providerExists: true })).toThrow(

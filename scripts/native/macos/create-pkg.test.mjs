@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { entitlementsEnableSandbox, pkgBuildPlan, resolvePkgPath, selectInstallerIdentity } from "./create-pkg.mjs";
+import {
+  appexInfoProblems,
+  deploymentTargetProblems,
+  entitlementsEnableSandbox,
+  parseMachOMinimumVersions,
+  pkgBuildPlan,
+  resolvePkgPath,
+  selectInstallerIdentity,
+} from "./create-pkg.mjs";
 
 const installerSha1 = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const otherInstallerSha1 = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
@@ -81,5 +89,93 @@ describe("Mac App Store package", () => {
         env: { VOYAVPN_MACOS_PKG_PATH: "/tmp/x.pkg" },
       }),
     ).toBe("/tmp/x.pkg");
+  });
+});
+
+describe("App Store validation rules checked before packaging", () => {
+  const otoolBuildVersion = (minos) => `Load command 10
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 1
+    minos ${minos}
+      sdk 26.5
+   ntools 1
+     tool 3
+  version 1267.0
+Load command 11
+      cmd LC_SOURCE_VERSION`;
+
+  it("reads each slice's deployment target from otool output, ignoring tool versions", () => {
+    expect(parseMachOMinimumVersions(otoolBuildVersion("26.0"))).toEqual(["26.0"]);
+    expect(
+      parseMachOMinimumVersions(`Load command 9
+      cmd LC_VERSION_MIN_MACOSX
+  cmdsize 16
+  version 10.15
+      sdk 14.0`),
+    ).toEqual(["10.15"]);
+    expect(parseMachOMinimumVersions("")).toEqual([]);
+  });
+
+  // The upload that failed with ITMS-90869: arm64 only, declared 11.0, with a
+  // PacketTunnel and seed built for the host's macOS 26.
+  it("rejects the bundle Transporter rejected", () => {
+    const problems = deploymentTargetProblems({
+      appMinimumSystemVersion: "11.0",
+      arm64Only: true,
+      executables: [
+        { name: "MacOS/voyavpn", minimumVersions: ["11.0"] },
+        { name: "PlugIns/VoyaPacketTunnel.appex/Contents/MacOS/VoyaPacketTunnel", minimumVersions: ["26.0"] },
+        { name: "Resources/core-seeds/sing_box/sing-box", minimumVersions: ["26.0"] },
+      ],
+    });
+
+    expect(problems).toHaveLength(3);
+    expect(problems[0]).toMatch(/12\.0 or later.*ITMS-90869/u);
+    expect(problems[1]).toMatch(/VoyaPacketTunnel is built for macOS 26\.0, newer than the app's 11\.0/u);
+    expect(problems[2]).toMatch(/sing-box is built for macOS 26\.0/u);
+  });
+
+  it("accepts a macOS 26 arm64 bundle and a lower floor for universal builds", () => {
+    expect(
+      deploymentTargetProblems({
+        appMinimumSystemVersion: "26.0",
+        arm64Only: true,
+        executables: [{ name: "MacOS/voyavpn", minimumVersions: ["26.0"] }],
+      }),
+    ).toEqual([]);
+    expect(
+      deploymentTargetProblems({
+        appMinimumSystemVersion: "11.0",
+        arm64Only: false,
+        executables: [{ name: "MacOS/voyavpn", minimumVersions: ["11.0", "10.15"] }],
+      }),
+    ).toEqual([]);
+    expect(deploymentTargetProblems({ appMinimumSystemVersion: "", arm64Only: true, executables: [] })).toEqual([
+      "The app's Info.plist declares no LSMinimumSystemVersion.",
+    ]);
+  });
+
+  it("rejects the PacketTunnel shape behind ITMS-90360 and ITMS-90362", () => {
+    const problems = appexInfoProblems({
+      folderName: "app.voyavpn.desktop.PacketTunnel.appex",
+      executableName: "VoyaPacketTunnel",
+      minimumSystemVersion: "",
+      appMinimumSystemVersion: "26.0",
+    });
+
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toMatch(/must equal the folder name, "app\.voyavpn\.desktop\.PacketTunnel" \(ITMS-90362\)/u);
+    expect(problems[1]).toMatch(/no LSMinimumSystemVersion \(ITMS-90360\)/u);
+  });
+
+  it("accepts the renamed PacketTunnel and flags a floor that drifted from the app", () => {
+    const appex = {
+      folderName: "VoyaPacketTunnel.appex",
+      executableName: "VoyaPacketTunnel",
+      appMinimumSystemVersion: "26.0",
+    };
+    expect(appexInfoProblems({ ...appex, minimumSystemVersion: "26.0" })).toEqual([]);
+    expect(appexInfoProblems({ ...appex, minimumSystemVersion: "11.0" })[0]).toMatch(/differs from the app's 26\.0/u);
   });
 });

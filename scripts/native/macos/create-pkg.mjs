@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import {
   capture,
@@ -12,7 +12,9 @@ import {
 } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
+  compareMacosVersions,
   incompatiblePacketTunnelBundle,
+  legacyPacketTunnelAppexBundle,
   normalizeDistribution,
   packetTunnelBundleIdentifier,
   packetTunnelLayout,
@@ -87,6 +89,70 @@ export function entitlementsEnableSandbox(entitlementsOutput) {
   return /<key>com\.apple\.security\.app-sandbox<\/key>\s*<true\s*\/>/u.test(String(entitlementsOutput ?? ""));
 }
 
+/**
+ * The deployment targets a Mach-O declares, one per slice: `minos` of
+ * LC_BUILD_VERSION, or `version` of the older LC_VERSION_MIN_MACOSX. Parses
+ * `otool -arch all -l` output.
+ */
+export function parseMachOMinimumVersions(otoolOutput) {
+  const versions = [];
+  for (const block of String(otoolOutput ?? "").split(/Load command \d+/u)) {
+    const field = /cmd LC_BUILD_VERSION\b/u.test(block)
+      ? "minos"
+      : /cmd LC_VERSION_MIN_MACOSX\b/u.test(block)
+        ? "version"
+        : null;
+    const match = field ? block.match(new RegExp(`^\\s*${field}\\s+(\\S+)`, "mu")) : null;
+    if (match) versions.push(match[1]);
+  }
+  return versions;
+}
+
+/**
+ * App Store Connect's deployment-target rules for the bundle as a whole.
+ *
+ * - An arm64-only app must declare macOS 12.0 or later (ITMS-90869).
+ * - No executable may need a newer macOS than the app declares; the app would
+ *   install on a release where that code cannot run.
+ */
+export function deploymentTargetProblems({ appMinimumSystemVersion, arm64Only, executables }) {
+  if (!appMinimumSystemVersion) {
+    return ["The app's Info.plist declares no LSMinimumSystemVersion."];
+  }
+  const problems = [];
+  if (arm64Only && compareMacosVersions(appMinimumSystemVersion, "12.0") < 0) {
+    problems.push(
+      `An arm64-only app must declare LSMinimumSystemVersion 12.0 or later, not ${appMinimumSystemVersion} (ITMS-90869).`,
+    );
+  }
+  for (const { name, minimumVersions } of executables) {
+    const newer = minimumVersions.filter((version) => compareMacosVersions(version, appMinimumSystemVersion) > 0);
+    if (newer.length) {
+      problems.push(`${name} is built for macOS ${newer.join(", ")}, newer than the app's ${appMinimumSystemVersion}.`);
+    }
+  }
+  return problems;
+}
+
+/** The Info.plist fields App Store validation checks in each app extension. */
+export function appexInfoProblems({ folderName, executableName, minimumSystemVersion, appMinimumSystemVersion }) {
+  const problems = [];
+  const expectedExecutable = folderName.replace(/\.appex$/u, "");
+  if (executableName !== expectedExecutable) {
+    problems.push(
+      `${folderName}: CFBundleExecutable is "${executableName}" but must equal the folder name, "${expectedExecutable}" (ITMS-90362).`,
+    );
+  }
+  if (!minimumSystemVersion) {
+    problems.push(`${folderName}: Info.plist declares no LSMinimumSystemVersion (ITMS-90360).`);
+  } else if (appMinimumSystemVersion && compareMacosVersions(minimumSystemVersion, appMinimumSystemVersion) !== 0) {
+    problems.push(
+      `${folderName}: LSMinimumSystemVersion ${minimumSystemVersion} differs from the app's ${appMinimumSystemVersion}.`,
+    );
+  }
+  return problems;
+}
+
 export function resolvePkgPath({ pkgDir: dir, version, buildNumber, arch, env = process.env }) {
   const explicit = env.VOYAVPN_MACOS_PKG_PATH?.trim();
   if (explicit) return resolve(explicit);
@@ -132,6 +198,7 @@ function verifyBundleShape(layout) {
   requirePath(resolve(appContents, "embedded.provisionprofile"), "macOS app provisioning profile");
   requirePath(layout.provisioningProfile, "PacketTunnel provisioning profile");
   requireAbsent(incompatiblePacketTunnelBundle(appContents, "app-store"), "A Developer ID system extension");
+  requireAbsent(legacyPacketTunnelAppexBundle(appContents), "A PacketTunnel under the old bundle-id folder name");
   requireAbsent(resolve(appContents, "MacOS", "export-bindings"), "The export-bindings development tool");
   requireAbsent(resolve(appContents, "MacOS", "voyavpn-tunnel-service"), "The Windows-only tunnel service");
 }
@@ -174,6 +241,48 @@ function verifySignatures(executables) {
   }
 }
 
+function throwProblems(problems) {
+  if (problems.length) {
+    throw new Error(`App Store validation would reject this bundle:\n${problems.map((line) => `  - ${line}`).join("\n")}`);
+  }
+}
+
+function verifyAppExtensions(appMinimumSystemVersion) {
+  const plugIns = resolve(appContents, "PlugIns");
+  const folders = existsSync(plugIns) ? readdirSync(plugIns).filter((name) => name.endsWith(".appex")) : [];
+  const problems = folders.flatMap((folderName) => {
+    const infoPlist = resolve(plugIns, folderName, "Contents", "Info.plist");
+    return appexInfoProblems({
+      folderName,
+      executableName: plistBuddy(infoPlist, ":CFBundleExecutable", true),
+      minimumSystemVersion: plistBuddy(infoPlist, ":LSMinimumSystemVersion", true),
+      appMinimumSystemVersion,
+    });
+  });
+  throwProblems(problems);
+  console.log(`✓ App extensions name their executables and declare macOS ${appMinimumSystemVersion}: ${folders.join(", ")}`);
+}
+
+function verifyDeploymentTargets(executables, appMinimumSystemVersion) {
+  const slices = executables.map((executable) => ({
+    name: relative(appContents, executable),
+    archs: checkedCapture("lipo", ["-archs", executable], { cwd: repoRoot }).stdout.trim().split(/\s+/),
+    minimumVersions: parseMachOMinimumVersions(
+      checkedCapture("otool", ["-arch", "all", "-l", executable], { cwd: repoRoot }).stdout,
+    ),
+  }));
+  throwProblems(
+    deploymentTargetProblems({
+      appMinimumSystemVersion,
+      arm64Only: slices.every((slice) => !slice.archs.includes("x86_64")),
+      executables: slices,
+    }),
+  );
+  for (const slice of slices) {
+    console.log(`✓ ${slice.name}: built for macOS ${slice.minimumVersions.join(", ") || "(undeclared)"}`);
+  }
+}
+
 function installerIdentity() {
   const listing = checkedCapture("security", ["find-identity", "-v"], { cwd: repoRoot }).stdout;
   return selectInstallerIdentity(parseCodesigningIdentities(listing), process.env.VOYAVPN_INSTALLER_IDENTITY);
@@ -187,10 +296,13 @@ function main() {
   verifyDistributionProfile(resolve(appContents, "embedded.provisionprofile"), "macOS app", appBundleIdentifier);
   verifyDistributionProfile(layout.provisioningProfile, "PacketTunnel", packetTunnelBundleIdentifier);
 
+  const infoPlist = resolve(appContents, "Info.plist");
+  const appMinimumSystemVersion = plistBuddy(infoPlist, ":LSMinimumSystemVersion", true);
   const executables = executablesIn(appContents);
   verifySignatures(executables);
+  verifyDeploymentTargets(executables, appMinimumSystemVersion);
+  verifyAppExtensions(appMinimumSystemVersion);
 
-  const infoPlist = resolve(appContents, "Info.plist");
   const version = plistBuddy(infoPlist, ":CFBundleShortVersionString");
   const buildNumber = plistBuddy(infoPlist, ":CFBundleVersion");
   const mainExecutable = resolve(appContents, "MacOS", plistBuddy(infoPlist, ":CFBundleExecutable"));

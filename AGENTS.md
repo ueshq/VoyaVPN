@@ -192,8 +192,11 @@ Config generation correctness is judged by the **generated sing-box JSON**, not 
 
 macOS chooses PacketTunnel providers globally by bundle id through PlugInKit,
 not by the currently launched VoyaVPN app path. Any copied or launched `.app`
-that contains `Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex` can
-become the elected provider for `app.voyavpn.desktop.PacketTunnel`.
+that contains `Contents/PlugIns/VoyaPacketTunnel.appex` (or, in builds from
+before 2026-09-24, `Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex`)
+can become the elected provider for `app.voyavpn.desktop.PacketTunnel`. The
+appex folder must equal its executable name, which App Store validation
+enforces (ITMS-90362); the doctor recognizes both names.
 
 - After copying, launching, or testing any `.app` with the PacketTunnel appex,
   quit VoyaVPN and run `pnpm native:macos:ne:doctor --fix` (add `--app <path>`

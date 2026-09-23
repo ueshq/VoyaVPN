@@ -13,8 +13,12 @@ use crate::coreinfo::TargetOs;
 pub const MACOS_PACKET_TUNNEL_BUNDLE_ID: &str = "app.voyavpn.desktop.PacketTunnel";
 pub const WINDOWS_TUN_SERVICE_NAME: &str = "VoyaVPNTunnelService";
 pub const MACOS_PACKET_TUNNEL_START_TIMEOUT_MS: i64 = 20_000;
-#[cfg(target_os = "macos")]
-const MACOS_PACKET_TUNNEL_APPEX_NAME: &str = "app.voyavpn.desktop.PacketTunnel.appex";
+/// The appex folder is named after the provider executable, as App Store
+/// validation requires of an app extension (ITMS-90362).
+const MACOS_PACKET_TUNNEL_APPEX_NAME: &str = "VoyaPacketTunnel.appex";
+/// The bundle-id folder name builds used before ITMS-90362 was caught. PlugInKit
+/// can still hold registrations under it from an older install.
+const MACOS_PACKET_TUNNEL_LEGACY_APPEX_NAME: &str = "app.voyavpn.desktop.PacketTunnel.appex";
 #[cfg(target_os = "macos")]
 const MACOS_PACKET_TUNNEL_SYSEX_NAME: &str = "app.voyavpn.desktop.PacketTunnel.systemextension";
 const MACOS_PROVIDER_STATUS_RELATIVE_PATH: &str =
@@ -663,7 +667,7 @@ mod tests {
             r#"{
               "state":"failed",
               "lastError":"sing-box runtime unavailable",
-              "providerBundlePath":"/tmp/profile-only.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
+              "providerBundlePath":"/tmp/profile-only.app/Contents/PlugIns/VoyaPacketTunnel.appex",
               "breadcrumbs":["starting","failed: sing-box runtime unavailable"]
             }"#,
         )
@@ -676,7 +680,7 @@ mod tests {
         );
         assert_eq!(
             status.provider_bundle_path.as_deref(),
-            Some("/tmp/profile-only.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex")
+            Some("/tmp/profile-only.app/Contents/PlugIns/VoyaPacketTunnel.appex")
         );
         assert_eq!(
             status.breadcrumbs,
@@ -688,11 +692,13 @@ mod tests {
     fn pluginkit_parser_extracts_unique_appex_paths_from_verbose_output() {
         let output = r#"
 +    app.voyavpn.desktop.PacketTunnel(0.1)
-        Path = /Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex
+        Path = /Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex
         UUID = 11111111-1111-1111-1111-111111111111
 -    app.voyavpn.desktop.PacketTunnel(0.1)
-        Path = "/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex"
-        Path = /Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex
+        Path = "/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/VoyaPacketTunnel.appex"
+        Path = /Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex
+-    app.voyavpn.desktop.PacketTunnel(0.1)
+        Path = /Applications/Old/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex
 "#;
 
         let matches = parse_pluginkit_matches(output);
@@ -701,10 +707,14 @@ mod tests {
             matches,
             [
                 PathBuf::from(
-                    "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex"
+                    "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex"
                 ),
                 PathBuf::from(
-                    "/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex"
+                    "/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/VoyaPacketTunnel.appex"
+                ),
+                // Registered by a build from before the appex was renamed.
+                PathBuf::from(
+                    "/Applications/Old/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex"
                 )
             ]
         );
@@ -765,7 +775,7 @@ enabled active teamID bundleID (version) name [state]
     fn provider_path_precheck_fails_open_on_empty_or_query_error() {
         ensure_macos_provider_path_matches(&StaticProviderRegistrationResolver {
             expected: Some(PathBuf::from(
-                "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
+                "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex",
             )),
             resolved: Ok(Vec::new()),
         })
@@ -773,7 +783,7 @@ enabled active teamID bundleID (version) name [state]
 
         ensure_macos_provider_path_matches(&StaticProviderRegistrationResolver {
             expected: Some(PathBuf::from(
-                "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
+                "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex",
             )),
             resolved: Err(NativeTunError::CommandFailed {
                 action: "query macOS PacketTunnel provider registration",
@@ -787,8 +797,8 @@ enabled active teamID bundleID (version) name [state]
     #[test]
     fn provider_path_precheck_blocks_clear_mismatch() {
         let error = ensure_macos_provider_path_matches(&StaticProviderRegistrationResolver {
-            expected: Some(PathBuf::from("/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex")),
-            resolved: Ok(vec![PathBuf::from("/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex")]),
+            expected: Some(PathBuf::from("/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex")),
+            resolved: Ok(vec![PathBuf::from("/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/VoyaPacketTunnel.appex")]),
         })
         .expect_err("mismatch should fail");
 

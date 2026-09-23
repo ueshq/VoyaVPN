@@ -27,7 +27,7 @@ const packetTunnelDiagnostics: TunProviderDiagnostics = {
     "/Applications/VoyaVPN.app/Contents/Library/SystemExtensions/app.voyavpn.desktop.PacketTunnel.systemextension",
   hostLogTail: ["nesessionmanager: Validation failed - no audit tokens"],
   packagingMode: "systemExtension",
-  providerBundlePath: "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
+  providerBundlePath: "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex",
   providerLogTail: ["2026-07-08T10:00:00Z failed: The VPN session failed."],
   registrationPaths: [
     "4LUKJ56532 app.voyavpn.desktop.PacketTunnel (0.1.0/1) VoyaVPN PacketTunnel [activated enabled]",
@@ -68,7 +68,7 @@ describe("TunDiagnosticsButton", () => {
       paths: {
         expectedProvider:
           "/Applications/VoyaVPN.app/Contents/Library/SystemExtensions/app.voyavpn.desktop.PacketTunnel.systemextension",
-        providerBundle: "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
+        providerBundle: "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex",
       },
       status: {
         lastError: "The VPN session failed because an internal error occurred.",

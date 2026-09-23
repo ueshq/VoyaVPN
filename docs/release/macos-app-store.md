@@ -11,20 +11,27 @@ It is the third macOS lane beside `pnpm build:mac` (notarized Developer ID
 DMG, see [signing-notarization.md](signing-notarization.md)) and
 `pnpm build:mac:local` (this-Mac-only TUN testing, see
 [macos-local-tun-testing.md](macos-local-tun-testing.md)). The package is
-**arm64 only** and requires macOS 11 or later.
+**arm64 only** and requires **macOS 26** or later. App Store Connect needs at
+least 12.0 for an arm64-only package (ITMS-90869), and the pinned upstream
+sing-box seed is itself built for macOS 26.
 
 ## What differs from the other lanes
 
 | | App Store package | Local / Developer ID |
 | --- | --- | --- |
 | Rust feature | `mac-app-store`: the Tauri updater plugin is not compiled in, and `app_update_status` reports `unsupported` so Settings hides the app-update panel | self-updater present |
-| Tauri config | `target/release-config/tauri.mac-app-store.generated.json`: app bundle only, `LSMinimumSystemVersion` 11.0, `CFBundleVersion` = build number | `tauri.conf.json` |
-| PacketTunnel | `Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex` | appex (local) / System Extension (Developer ID) |
+| Tauri config | `target/release-config/tauri.mac-app-store.generated.json`: app bundle only, `LSMinimumSystemVersion` 26.0, `CFBundleVersion` = build number | `tauri.conf.json` |
+| PacketTunnel | `Contents/PlugIns/VoyaPacketTunnel.appex` | appex (local) / System Extension (Developer ID) |
 | Signing identity | `3rd Party Mac Developer Application` (or `Apple Distribution`) | Apple Development / Developer ID Application |
 | Profiles | Mac App Store distribution profiles, no device list | development / Developer ID |
 | Signed NetworkExtension values | `packet-tunnel-provider` only; no team wildcards, no keychain groups | everything the profile grants |
 | Output | `.pkg` signed by `3rd Party Mac Developer Installer` | `.dmg` |
 | Notarization | none (App Store Connect does not use notarytool) | Developer ID only |
+
+In every lane the PacketTunnel is compiled for its container's
+`LSMinimumSystemVersion` (raised to 11.0 on Apple Silicon) and declares the
+same value in its own `Info.plist` (ITMS-90360). Its folder is named after its
+executable, `VoyaPacketTunnel` (ITMS-90362).
 
 Every lane now signs the bundled sing-box seed with
 `apps/desktop/src-tauri/entitlements/macos-inherit.plist` (App Sandbox +
@@ -91,7 +98,12 @@ Before it writes the `.pkg`, `native:macos:pkg` checks the following:
 - The app is signed by a store application identity.
 - `codesign --verify --deep --strict` passes.
 - Every executable in the bundle enables App Sandbox and has an arm64 slice.
-- No System Extension, `export-bindings` or tunnel service is bundled.
+- No executable targets a newer macOS than the app's `LSMinimumSystemVersion`,
+  and an arm64-only app declares at least 12.0 (ITMS-90869).
+- The PacketTunnel declares the app's `LSMinimumSystemVersion` (ITMS-90360),
+  and its folder name equals its `CFBundleExecutable` (ITMS-90362).
+- No System Extension, `export-bindings` or tunnel service is bundled, and no
+  appex is left under the old bundle-id folder name.
 
 Afterwards the script removes `Contents/PlugIns` from the `target/` app copy.
 That keeps the copy from winning PlugInKit election for the production bundle
@@ -142,6 +154,8 @@ version fields from the app, which avoids ITMS-90473.
 - **Launch at login.** Autostart writes a LaunchAgent under `~/Library`. Inside
   the sandbox that path is redirected into the app container, so the setting
   has no effect in the store build. A store-safe version needs `SMAppService`.
-- **Architecture.** The package is arm64 only. A universal package would need
-  an x86_64 seed merged with `lipo`, an x86_64 appex slice, and a universal Rust
-  build.
+- **Architecture and OS floor.** The package is arm64 only and macOS 26 only.
+  Lowering the floor needs a sing-box seed built from source for that release;
+  the upstream darwin-arm64 archive is built for macOS 26. A universal package
+  would also need an x86_64 seed merged with `lipo`, an x86_64 appex slice, and
+  a universal Rust build.

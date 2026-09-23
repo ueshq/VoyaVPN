@@ -50,7 +50,7 @@ discarded. Override the source or destination with:
 - Developer ID direct distribution:
   `VoyaVPN.app/Contents/Library/SystemExtensions/app.voyavpn.desktop.PacketTunnel.systemextension`
 - App Store/TestFlight or unsigned development:
-  `VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex`
+  `VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex`
 - `Contents/Frameworks/Libbox.framework` under the selected provider bundle
   only when the staged framework is dynamic.
 

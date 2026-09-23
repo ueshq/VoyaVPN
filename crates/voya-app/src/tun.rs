@@ -531,9 +531,9 @@ mod tests {
     }
 
     const EXPECTED_PROVIDER: &str =
-        "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex";
+        "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex";
     const OTHER_PROVIDER: &str =
-        "/Users/afu/Dev/VoyaVPN/target/release/bundle/macos/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex";
+        "/Users/afu/Dev/VoyaVPN/target/release/bundle/macos/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex";
 
     fn macos_manager(
         resolver: &Arc<CountingProviderResolver>,
@@ -737,10 +737,10 @@ mod tests {
         let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos)
             .with_provider_resolver(Arc::new(FakeProviderResolver {
                 expected: Some(std::path::PathBuf::from(
-                    "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
+                    "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex",
                 )),
                 resolved: vec![std::path::PathBuf::from(
-                    "/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
+                    "/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/VoyaPacketTunnel.appex",
                 )],
             }));
 
@@ -749,13 +749,11 @@ mod tests {
         assert!(!status.allow_enable_tun);
         assert_eq!(
             status.expected_provider_path.as_deref(),
-            Some(
-                "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex"
-            )
+            Some("/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex")
         );
         assert_eq!(
             status.resolved_provider_path.as_deref(),
-            Some("/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex")
+            Some("/Users/afu/Dev/VoyaVPN/target/native/macos/runtime-kill-tests/profile-only.app/Contents/PlugIns/VoyaPacketTunnel.appex")
         );
 
         assert!(matches!(

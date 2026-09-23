@@ -48,12 +48,12 @@ describe("Mac App Store Tauri config", () => {
     );
   });
 
-  it("bundles only the app, for macOS 11+, with the build number and no updater artifacts", () => {
+  it("bundles only the app, for macOS 26+, with the build number and no updater artifacts", () => {
     expect(macAppStoreOverlay({ buildNumber: "7" })).toEqual({
       bundle: {
         targets: ["app"],
         createUpdaterArtifacts: false,
-        macOS: { minimumSystemVersion: "11.0", bundleVersion: "7" },
+        macOS: { minimumSystemVersion: "26.0", bundleVersion: "7" },
       },
     });
   });

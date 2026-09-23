@@ -4,6 +4,19 @@ import { checkedCapture } from "../../lib/common.mjs";
 
 export const appBundleIdentifier = "app.voyavpn.desktop";
 export const packetTunnelBundleIdentifier = "app.voyavpn.desktop.PacketTunnel";
+/**
+ * The provider executable, and the appex folder name. App Store validation
+ * requires an app extension's folder to be its CFBundleExecutable plus
+ * `.appex` (ITMS-90362). The executable keeps this short name rather than
+ * taking the bundle id: macOS truncates process names to 16 characters, and
+ * the build and doctor scripts find the running provider by that name.
+ */
+export const packetTunnelExecutableName = "VoyaPacketTunnel";
+/**
+ * The appex folder name builds used before ITMS-90362 was caught. PlugInKit
+ * can still hold registrations under it, so the doctor keeps recognizing it.
+ */
+export const legacyPacketTunnelAppexName = `${packetTunnelBundleIdentifier}.appex`;
 
 /**
  * The provider sources, which macOS and iOS share.
@@ -98,12 +111,12 @@ export function packetTunnelLayout(appContents, distribution) {
   const base =
     mode === "system-extension"
       ? resolve(appContents, "Library", "SystemExtensions", `${packetTunnelBundleIdentifier}.systemextension`)
-      : resolve(appContents, "PlugIns", `${packetTunnelBundleIdentifier}.appex`);
+      : resolve(appContents, "PlugIns", `${packetTunnelExecutableName}.appex`);
   const contents = resolve(base, "Contents");
   const label = mode === "system-extension" ? "PacketTunnel system extension" : "PacketTunnel appex";
 
   return {
-    binary: resolve(contents, "MacOS", "VoyaPacketTunnel"),
+    binary: resolve(contents, "MacOS", packetTunnelExecutableName),
     bundle: base,
     contents,
     embeddedLibboxFramework: resolve(contents, "Frameworks", "Libbox.framework"),
@@ -113,6 +126,49 @@ export function packetTunnelLayout(appContents, distribution) {
     mode,
     provisioningProfile: resolve(contents, "embedded.provisionprofile"),
   };
+}
+
+/** An appex left over from a build that still used the bundle-id folder name. */
+export function legacyPacketTunnelAppexBundle(appContents) {
+  return resolve(appContents, "PlugIns", legacyPacketTunnelAppexName);
+}
+
+function versionParts(value) {
+  return String(value ?? "")
+    .trim()
+    .split(".")
+    .map((part) => Number.parseInt(part, 10) || 0);
+}
+
+/** Compares dotted macOS versions numerically: `compareMacosVersions("12.0", "11.5") > 0`. */
+export function compareMacosVersions(left, right) {
+  const a = versionParts(left);
+  const b = versionParts(right);
+  for (let index = 0; index < Math.max(a.length, b.length, 2); index += 1) {
+    const difference = (a[index] ?? 0) - (b[index] ?? 0);
+    if (difference !== 0) return Math.sign(difference);
+  }
+  return 0;
+}
+
+/**
+ * The deployment target the PacketTunnel is compiled for and declares in its
+ * Info.plist: the containing app's LSMinimumSystemVersion, so the provider
+ * runs everywhere the app installs.
+ *
+ * Without `-target`, swiftc builds for the host's macOS release, which marked
+ * the provider for macOS 26 inside an app that declared 10.15. Apple Silicon
+ * has no release before macOS 11, so an arm64 build is raised to at least 11.0.
+ */
+export function resolvePacketTunnelDeploymentTarget({ appMinimumSystemVersion, fallbackMinimumSystemVersion, hostArch = process.arch }) {
+  const declared = text(appMinimumSystemVersion) || text(fallbackMinimumSystemVersion);
+  if (!declared) {
+    throw new Error("Unable to resolve the PacketTunnel deployment target: the app declares no LSMinimumSystemVersion.");
+  }
+  const arch = hostArch === "arm64" ? "arm64" : "x86_64";
+  const minimumSystemVersion =
+    arch === "arm64" && compareMacosVersions(declared, "11.0") < 0 ? "11.0" : declared;
+  return { minimumSystemVersion, target: `${arch}-apple-macos${minimumSystemVersion}` };
 }
 
 export function incompatiblePacketTunnelBundle(appContents, distribution) {

@@ -20,6 +20,10 @@
   <string>$(MARKETING_VERSION)</string>
   <key>CFBundleVersion</key>
   <string>$(CURRENT_PROJECT_VERSION)</string>
+  <!-- The containing app's LSMinimumSystemVersion; App Store validation
+       requires every extension to declare one (ITMS-90360). -->
+  <key>LSMinimumSystemVersion</key>
+  <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
   <!-- Read by the shared PacketTunnel sources; must match the App Group in
        src-tauri/entitlements/packet-tunnel.plist. -->
   <key>VoyaAppGroupIdentifier</key>

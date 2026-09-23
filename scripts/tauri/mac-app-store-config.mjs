@@ -3,6 +3,9 @@ import { dirname, resolve } from "node:path";
 
 import { capture, truthy } from "../lib/common.mjs";
 
+/** LSMinimumSystemVersion of the store package; see `macAppStoreOverlay`. */
+const macAppStoreMinimumSystemVersion = "26.0";
+
 /** The shell feature that leaves the self-updater out of the binary. */
 export const macAppStoreFeature = "mac-app-store";
 
@@ -54,8 +57,9 @@ export function resolveMacAppStoreBuildNumber({ env = process.env, repoRoot, cap
  *
  * - Only the `.app` bundle: the signed `.pkg` is made later by
  *   `scripts/native/macos/create-pkg.mjs`, after the PacketTunnel is staged.
- * - macOS 11 is the first release that runs on Apple Silicon, and the store
- *   package is arm64 only.
+ * - macOS 26 only. App Store Connect requires 12.0 or later for an arm64-only
+ *   package (ITMS-90869), and the pinned sing-box seed is itself built for
+ *   macOS 26, so no lower floor would run everything the package ships.
  * - No updater artifacts: the store delivers updates.
  */
 export function macAppStoreOverlay({ buildNumber }) {
@@ -64,7 +68,7 @@ export function macAppStoreOverlay({ buildNumber }) {
       targets: ["app"],
       createUpdaterArtifacts: false,
       macOS: {
-        minimumSystemVersion: "11.0",
+        minimumSystemVersion: macAppStoreMinimumSystemVersion,
         bundleVersion: buildNumber,
       },
     },

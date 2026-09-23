@@ -113,13 +113,26 @@ fn probe_macos_packet_tunnel_packaging_error() -> Option<String> {
 }
 
 pub fn parse_pluginkit_matches(output: &str) -> Vec<PathBuf> {
-    let needle = format!("{MACOS_PACKET_TUNNEL_BUNDLE_ID}.appex");
+    // `pluginkit -i` already filters to this provider. Both folder names count:
+    // a registration left by a build from before the rename must still surface,
+    // so the provider-path precheck reports it instead of seeing nothing.
+    let needles = [
+        MACOS_PACKET_TUNNEL_APPEX_NAME,
+        MACOS_PACKET_TUNNEL_LEGACY_APPEX_NAME,
+    ];
     let mut paths = Vec::new();
 
     for line in output.lines() {
         let mut search_start = 0;
-        while let Some(relative_index) = line[search_start..].find(&needle) {
-            let needle_start = search_start + relative_index;
+        while let Some((needle_start, needle)) = needles
+            .iter()
+            .filter_map(|needle| {
+                line[search_start..]
+                    .find(needle)
+                    .map(|index| (search_start + index, *needle))
+            })
+            .min_by_key(|(start, _)| *start)
+        {
             let needle_end = needle_start + needle.len();
             let prefix = &line[..needle_start];
             let Some(path_start) = prefix.find("file:/").or_else(|| prefix.find('/')) else {

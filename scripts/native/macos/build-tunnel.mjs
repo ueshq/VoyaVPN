@@ -15,9 +15,12 @@ import {
   appBundleIdentifier,
   libboxBinaryPath,
   incompatiblePacketTunnelBundle,
+  legacyPacketTunnelAppexBundle,
   packetTunnelBundleIdentifier,
+  packetTunnelExecutableName,
   packetTunnelLayout,
   packetTunnelSources,
+  resolvePacketTunnelDeploymentTarget,
   resolvePacketTunnelVersions,
   distributionFromIdentityName,
 } from "./tunnel-layout.mjs";
@@ -96,6 +99,16 @@ function packetTunnelVersions() {
     appShortVersion: hasAppPlist ? plistBuddy(appInfoPlist, "CFBundleShortVersionString", true) : "",
     appBundleVersion: hasAppPlist ? plistBuddy(appInfoPlist, "CFBundleVersion", true) : "",
     packageVersion: readJson(resolve(repoRoot, "package.json")).version,
+  });
+}
+
+/** The provider's `-target` and LSMinimumSystemVersion follow its container app. */
+function packetTunnelDeploymentTarget() {
+  const appInfoPlist = resolve(appContents, "Info.plist");
+  const tauriConfig = readJson(resolve(repoRoot, "apps", "desktop", "src-tauri", "tauri.conf.json"));
+  return resolvePacketTunnelDeploymentTarget({
+    appMinimumSystemVersion: existsSync(appInfoPlist) ? plistBuddy(appInfoPlist, "LSMinimumSystemVersion", true) : "",
+    fallbackMinimumSystemVersion: tauriConfig.bundle?.macOS?.minimumSystemVersion,
   });
 }
 
@@ -241,10 +254,17 @@ function buildPacketTunnel() {
   }
 
   rmSync(incompatibleTunnelBundle, { force: true, recursive: true });
+  // A bundle reused from an older build can still hold the appex under its
+  // bundle-id folder name, which App Store validation rejects (ITMS-90362).
+  rmSync(legacyPacketTunnelAppexBundle(appContents), { force: true, recursive: true });
   mkdirSync(dirname(appexBinary), { recursive: true });
+  const deployment = packetTunnelDeploymentTarget();
+  console.log(`Building PacketTunnel for ${deployment.target}`);
   const args = [
     "swiftc",
     "-O",
+    "-target",
+    deployment.target,
     "-emit-executable",
     "-parse-as-library",
     "-module-name",
@@ -301,7 +321,8 @@ function buildPacketTunnel() {
     resolve(appexContents, "Info.plist"),
     {
       "$(PRODUCT_MODULE_NAME)": "VoyaPacketTunnel",
-      "$(EXECUTABLE_NAME)": "VoyaPacketTunnel",
+      "$(EXECUTABLE_NAME)": packetTunnelExecutableName,
+      "$(MACOSX_DEPLOYMENT_TARGET)": deployment.minimumSystemVersion,
       "$(MARKETING_VERSION)": packetTunnelVersions().marketing,
       "$(CURRENT_PROJECT_VERSION)": packetTunnelVersions().build,
       "$(BUNDLE_PACKAGE_TYPE)": tunnelLayout.infoPackageType,

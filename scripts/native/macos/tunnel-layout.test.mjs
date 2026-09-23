@@ -4,12 +4,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import {
+  compareMacosVersions,
   distributionFromIdentityName,
   incompatiblePacketTunnelBundle,
+  legacyPacketTunnelAppexBundle,
   libboxBinaryPath,
   packetTunnelLayout,
   packagingModeForDistribution,
   requiredNetworkExtensionValue,
+  resolvePacketTunnelDeploymentTarget,
   resolvePacketTunnelVersions,
   resolveDmgPath,
 } from "./tunnel-layout.mjs";
@@ -50,7 +53,7 @@ describe("macOS native tunnel layout", () => {
       "/Applications/VoyaVPN.app/Contents/Library/SystemExtensions/app.voyavpn.desktop.PacketTunnel.systemextension",
     );
     expect(incompatiblePacketTunnelBundle(appContents, "developer-id")).toBe(
-      "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
+      "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex",
     );
   });
 
@@ -60,9 +63,41 @@ describe("macOS native tunnel layout", () => {
     expect(packagingModeForDistribution("app-store")).toBe("app-extension");
     expect(requiredNetworkExtensionValue("app-store")).toBe("packet-tunnel-provider");
     expect(layout.infoPackageType).toBe("XPC!");
-    expect(layout.bundle).toBe(
+    expect(layout.bundle).toBe("/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex");
+    // App Store validation: an appex folder is its executable name (ITMS-90362).
+    expect(layout.binary).toBe(`${layout.bundle}/Contents/MacOS/VoyaPacketTunnel`);
+    expect(legacyPacketTunnelAppexBundle(appContents)).toBe(
       "/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex",
     );
+  });
+
+  it("compiles the PacketTunnel for its container's minimum macOS", () => {
+    expect(resolvePacketTunnelDeploymentTarget({ appMinimumSystemVersion: "26.0", hostArch: "arm64" })).toEqual({
+      minimumSystemVersion: "26.0",
+      target: "arm64-apple-macos26.0",
+    });
+    // Apple Silicon starts at macOS 11, so an older container floor is raised for arm64 only.
+    expect(resolvePacketTunnelDeploymentTarget({ appMinimumSystemVersion: "10.15", hostArch: "arm64" })).toEqual({
+      minimumSystemVersion: "11.0",
+      target: "arm64-apple-macos11.0",
+    });
+    expect(resolvePacketTunnelDeploymentTarget({ appMinimumSystemVersion: "10.15", hostArch: "x64" })).toEqual({
+      minimumSystemVersion: "10.15",
+      target: "x86_64-apple-macos10.15",
+    });
+    // Before the app bundle exists, tauri.conf.json's value stands in.
+    expect(
+      resolvePacketTunnelDeploymentTarget({ appMinimumSystemVersion: "", fallbackMinimumSystemVersion: "12.0", hostArch: "arm64" })
+        .minimumSystemVersion,
+    ).toBe("12.0");
+    expect(() => resolvePacketTunnelDeploymentTarget({ hostArch: "arm64" })).toThrow(/no LSMinimumSystemVersion/u);
+  });
+
+  it("compares macOS versions numerically", () => {
+    expect(compareMacosVersions("26.0", "12.0")).toBe(1);
+    expect(compareMacosVersions("12", "12.0")).toBe(0);
+    expect(compareMacosVersions("11.5", "12.0")).toBe(-1);
+    expect(compareMacosVersions("10.15", "10.9")).toBe(1);
   });
 
   it("infers distribution from signing identity names", () => {

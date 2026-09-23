@@ -82,8 +82,14 @@ The healthy App Store/TestFlight or unsigned development shape is exactly one
 active legal PlugInKit provider under:
 
 ```sh
-/Applications/VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex
+/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex
 ```
+
+Builds from before 2026-09-24 named the folder
+`app.voyavpn.desktop.PacketTunnel.appex`. App Store validation requires an
+appex folder to match its executable (ITMS-90362), so it was renamed. The
+doctor still lists registrations under the old name and `--fix` removes them
+as stale.
 
 For local release-bundle testing, pass the app path and allow the repo bundle:
 

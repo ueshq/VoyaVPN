@@ -298,7 +298,7 @@ The staged PacketTunnel provider depends on the macOS distribution lane:
 - Developer ID direct distribution:
   `VoyaVPN.app/Contents/Library/SystemExtensions/app.voyavpn.desktop.PacketTunnel.systemextension`
 - App Store/TestFlight and unsigned development:
-  `VoyaVPN.app/Contents/PlugIns/app.voyavpn.desktop.PacketTunnel.appex`
+  `VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex`
 - `Contents/Frameworks/Libbox.framework` under the selected provider bundle
   only when the selected Libbox slice is dynamic.
 
