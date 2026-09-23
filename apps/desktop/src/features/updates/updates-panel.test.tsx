@@ -146,6 +146,21 @@ describe("UpdatesPanel", () => {
     expect(usePreferencesStore.getState().ruleLibraryUpdatedAt).toBeNull();
   });
 
+  it("hides the app updater in the Mac App Store build but keeps the rule library", async () => {
+    ipcMocks.appUpdateStatus.mockResolvedValue({
+      currentVersion: "1.0.0",
+      message: "updates are delivered by the Mac App Store",
+      state: "unsupported",
+    } satisfies AppUpdaterStatus);
+
+    renderPanel();
+
+    expect(await screen.findByRole("region", { name: "IP, domain and rule set data" })).toBeInTheDocument();
+    await waitFor(() => expect(ipcMocks.appUpdateStatus).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Check for updates" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Current version 1.0.0")).not.toBeInTheDocument();
+  });
+
   it("does not render update preferences or manual download fallback", async () => {
     renderPanel();
 

@@ -1,7 +1,8 @@
 import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, checkedCapture, readJson, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import { capture, checkedCapture, isCliEntrypoint, readJson, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
 import { resolveDmgPath } from "./tunnel-layout.mjs";
+import { requestedMacAppStoreBuild } from "../../tauri/mac-app-store-config.mjs";
 import { prepareVoyaForLocalBuild } from "./local-runtime.mjs";
 import { resolveSigningIdentity } from "./provisioning.mjs";
 
@@ -53,6 +54,28 @@ function localAppExtensionIdentity() {
   return signingIdentity(/Apple Development:|Mac Developer:/, "Apple Development or Mac Developer");
 }
 
+function appStoreIdentity() {
+  return signingIdentity(
+    /3rd Party Mac Developer Application:|Apple Distribution:/,
+    "3rd Party Mac Developer Application or Apple Distribution",
+  );
+}
+
+/**
+ * Three lanes share this script:
+ * - `developer-id` (`pnpm build:mac`): notarized DMG with a System Extension.
+ * - `local` (`pnpm build:mac:local`): App-Store-shaped appex signed with an
+ *   Apple Development identity, installed into /Applications for TUN testing.
+ * - `app-store` (`pnpm build:mac:appstore`): the signed `.pkg` uploaded to App
+ *   Store Connect with Transporter. No DMG, no notarization, no install.
+ */
+function buildLane() {
+  if (requestedMacAppStoreBuild()) {
+    return "app-store";
+  }
+  return skipNotarization() ? "local" : "developer-id";
+}
+
 function requireMacos() {
   if (process.platform !== "darwin") {
     throw new Error("pnpm build:mac must run on macOS.");
@@ -63,8 +86,8 @@ function skipNotarization() {
   return truthy(process.env.VOYAVPN_SKIP_NOTARIZATION);
 }
 
-function requireNotaryCredentials() {
-  if (skipNotarization()) {
+function requireNotaryCredentials(lane) {
+  if (lane !== "developer-id") {
     return;
   }
   if (process.env.VOYAVPN_NOTARY_KEYCHAIN_PROFILE?.trim()) {
@@ -173,10 +196,63 @@ function runNetworkExtensionDoctor(appPath, env, extraArgs = []) {
   run("node", args, commandOptions(env));
 }
 
+function requireAppleSilicon() {
+  // The store package is arm64 only: the core seed, the Rust binaries and the
+  // PacketTunnel are all built for the host architecture.
+  if (process.arch !== "arm64") {
+    throw new Error("pnpm build:mac:appstore builds the arm64-only store package and must run on an Apple Silicon Mac.");
+  }
+}
+
+function buildAppStorePackage() {
+  requireAppleSilicon();
+  const identity = appStoreIdentity();
+  const commonEnv = {
+    ...process.env,
+    VOYAVPN_MAC_APP_STORE: "1",
+    VOYAVPN_MACOS_APP_BUNDLE: appBundle,
+    VOYAVPN_CODESIGN_IDENTITY: identity,
+    VOYAVPN_MACOS_DISTRIBUTION: "app-store",
+    VOYAVPN_REQUIRE_PROVISIONING: "1",
+  };
+  // A development profile would sign and verify, then fail App Review.
+  delete commonEnv.VOYAVPN_ALLOW_DEVELOPMENT_PROVISIONING;
+  const verifyEnv = {
+    ...commonEnv,
+    VOYAVPN_REQUIRE_LIBBOX: "1",
+    VOYAVPN_REQUIRE_CODESIGN: "1",
+  };
+
+  console.log("Building the Mac App Store package (arm64, PacketTunnel appex, no self-updater).");
+  console.log(`Output: ${appBundle}`);
+
+  // Start from an empty bundle directory: Tauri writes into an existing
+  // bundle, so a PlugIns or SystemExtensions copy from another lane would
+  // otherwise survive into the store package.
+  rmSync(appBundle, { recursive: true, force: true });
+  run("pnpm", ["tauri:build", "--bundles", "app"], commandOptions(commonEnv));
+  run("pnpm", ["native:macos:tunnel"], commandOptions(verifyEnv));
+  run("pnpm", ["native:macos:app:sign"], commandOptions(commonEnv));
+  run("pnpm", ["native:macos:tunnel:verify"], commandOptions(verifyEnv));
+  run("pnpm", ["native:macos:pkg"], commandOptions(verifyEnv));
+
+  // The signed .pkg carries its own copy of the app. The target/ bundle cannot
+  // launch outside the store anyway, and its appex could win PlugInKit
+  // election for the production bundle id (AGENTS.md, NetworkExtension hygiene).
+  stripLeftoverPacketTunnelCopies();
+  console.log("");
+  console.log("The target/ app had Contents/PlugIns removed for PlugInKit hygiene; the .pkg above is the artifact.");
+}
+
 function main() {
   requireMacos();
-  requireNotaryCredentials();
-  const notarizationSkipped = skipNotarization();
+  const lane = buildLane();
+  if (lane === "app-store") {
+    buildAppStorePackage();
+    return;
+  }
+  requireNotaryCredentials(lane);
+  const notarizationSkipped = lane === "local";
 
   if (notarizationSkipped) {
     assertInstalledAppGuiNotRunning();
@@ -272,9 +348,12 @@ function main() {
   console.log("Do not use pnpm dev for macOS TUN testing; it does not bundle the PacketTunnel provider.");
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+// Guarded like sign-app.mjs: importing this module must not start a build.
+if (isCliEntrypoint(import.meta.url)) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }

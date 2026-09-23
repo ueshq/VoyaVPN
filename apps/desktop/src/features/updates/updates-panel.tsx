@@ -33,17 +33,23 @@ export function UpdatesPanel() {
     <div className="grid gap-4">
       <h3 className="sr-only">{t("updates.title")}</h3>
 
-      {/* A build without an update feed has nothing to check, so it shows
-          no updater at all rather than a permanent error. */}
+      {/* A build without an update feed has nothing to check, and the Mac App
+          Store build has no updater at all (the store delivers updates), so
+          both show no updater rather than a permanent notice. */}
       {controller.appUpdaterError ||
       (controller.appUpdaterStatus &&
-        controller.appUpdaterStatus.state !== "unconfigured") ? (
+        !HIDDEN_APP_UPDATER_STATES.has(controller.appUpdaterStatus.state)) ? (
         <AppUpdatePanel controller={controller} />
       ) : null}
       <RuleLibraryPanel controller={controller} />
     </div>
   );
 }
+
+const HIDDEN_APP_UPDATER_STATES: ReadonlySet<AppUpdaterState> = new Set([
+  "unconfigured",
+  "unsupported",
+]);
 
 const APP_UPDATER_STATE_TRANSLATION_KEYS = {
   error: "updates.appUpdaterState.error",

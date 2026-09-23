@@ -29,6 +29,13 @@ path = "src/main.rs"
 name = "voyavpn-tunnel-service"
 path = "src/bin/voyavpn-tunnel-service.rs"
 
+[features]
+# The Mac App Store build (`pnpm build:mac:appstore`). It leaves out the
+# self-updater, which App Review forbids; the store delivers updates. The
+# updater crate stays a plain dependency so `capabilities/default.json` still
+# resolves `updater:default` in every build.
+mac-app-store = []
+
 [build-dependencies]
 tauri-build.workspace = true
 

@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { capture, isCliEntrypoint, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
 import {
@@ -27,6 +27,8 @@ const appInfoPlist = resolve(appContents, "Info.plist");
 const appProvisioningProfileDestination = resolve(appContents, "embedded.provisionprofile");
 const appEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "macos-app.plist");
 const packetTunnelEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "packet-tunnel.plist");
+const helperEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "macos-inherit.plist");
+const windowsTunnelService = resolve(appContents, "MacOS", "voyavpn-tunnel-service");
 const defaultProvisioningProfileDir = resolve(repoRoot, "..", "docs", "certs");
 const provisioningProfileDir = resolve(process.env.VOYAVPN_PROVISIONING_PROFILE_DIR || defaultProvisioningProfileDir);
 const generatedEntitlementsDir = resolve(outRoot, "generated-entitlements");
@@ -66,12 +68,31 @@ function codesignBaseArgs(identity) {
   return args;
 }
 
-function signPlainExecutable(identity, path, label) {
+/**
+ * A helper the sandboxed app launches. Every macOS lane keeps App Sandbox
+ * (ADR 0007), and App Store validation rejects a nested executable that does
+ * not enable it, so helpers inherit the app's sandbox.
+ */
+function signSandboxedHelper(identity, path, label) {
   if (!existsSync(path)) {
     return;
   }
-  run("codesign", [...codesignBaseArgs(identity), path], { cwd: repoRoot });
-  console.log(`Signed nested executable: ${label}`);
+  run("codesign", [...codesignBaseArgs(identity), "--entitlements", helperEntitlements, path], { cwd: repoRoot });
+  console.log(`Signed nested executable with inherited sandbox: ${label}`);
+}
+
+/**
+ * `voyavpn-tunnel-service` is the Windows TUN service. Cargo builds every
+ * `[[bin]]` of the shell and Tauri copies them all into `Contents/MacOS`, but
+ * macOS runs its tunnel in the PacketTunnel provider and never launches it.
+ * Shipping it would put an unsandboxed, unused executable in the bundle.
+ */
+function removeWindowsTunnelService() {
+  if (!existsSync(windowsTunnelService)) {
+    return;
+  }
+  rmSync(windowsTunnelService, { force: true });
+  console.log("Removed the Windows-only voyavpn-tunnel-service from the macOS bundle.");
 }
 
 function signNestedCode(identity, packetTunnelProfile) {
@@ -92,8 +113,7 @@ function signNestedCode(identity, packetTunnelProfile) {
     console.log(`Signed nested ${tunnelLayout.label}: PacketTunnel`);
   }
 
-  signPlainExecutable(identity, resolve(appContents, "MacOS", "voyavpn-tunnel-service"), "voyavpn-tunnel-service");
-  signPlainExecutable(identity, resolve(appContents, "Resources", "core-seeds", "sing_box", "sing-box"), "sing-box core seed");
+  signSandboxedHelper(identity, resolve(appContents, "Resources", "core-seeds", "sing_box", "sing-box"), "sing-box core seed");
 }
 
 function removeUnsupportedLaunchServicesKeys() {
@@ -137,6 +157,7 @@ function main() {
   packetTunnelProvisioningProfileDestination = tunnelLayout.provisioningProfile;
   embeddedLibboxFramework = tunnelLayout.embeddedLibboxFramework;
   removeUnsupportedLaunchServicesKeys();
+  removeWindowsTunnelService();
   const appProfileResult = provisioningProfile(
     appBundleIdentifier,
     "VOYAVPN_MACOS_APP_PROVISIONING_PROFILE",

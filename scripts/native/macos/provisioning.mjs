@@ -87,6 +87,28 @@ export function profileMatchesDistribution(profile, distribution, allowDevelopme
   return true;
 }
 
+/**
+ * A Mac App Store distribution profile: issued to a store signing certificate
+ * and bound to no device list. Development profiles also satisfy
+ * `profileMatchesDistribution(…, "app-store", true)`, but they list devices.
+ */
+export function isStoreDistributionProfile(profile) {
+  return !Array.isArray(profile.provisionedDevices) && profileMatchesDistribution(profile, "app-store", false);
+}
+
+/**
+ * The NetworkExtension values a bundle signed with `profile` carries.
+ *
+ * A profile grants every NetworkExtension type the App ID enables; a store
+ * submission signs only the one the provider implements, as Xcode would.
+ * Development and Developer ID signing keep the profile's full list.
+ */
+export function signedNetworkExtensions(profile) {
+  return isStoreDistributionProfile(profile)
+    ? [requiredNetworkExtensionValue("app-store")]
+    : profile.networkExtensions;
+}
+
 export function distributionProfileLabel(distribution) {
   return distribution === "developer-id" ? "Developer ID" : "App Store/TestFlight";
 }
@@ -391,39 +413,64 @@ function baseEntitlementEnabled(baseEntitlements, keyPath) {
   return plistBuddy(baseEntitlements, keyPath, true) === "true";
 }
 
-export function writeProfileEntitlements(profile, destination, baseEntitlements) {
-  mkdirSync(dirname(destination), { recursive: true });
-  const keychainAccessGroups = profile.keychainAccessGroups.length
-    ? profile.keychainAccessGroups
-    : [`${profile.teamIdentifier}.*`];
-  const appGroups = profile.appGroups.length ? profile.appGroups : ["group.app.voyavpn.desktop"];
-  const appSandbox = profile.appSandbox || baseEntitlementEnabled(baseEntitlements, ":com.apple.security.app-sandbox");
-  const networkClient = profile.networkClient || baseEntitlementEnabled(baseEntitlements, ":com.apple.security.network.client");
-  const networkServer = profile.networkServer || baseEntitlementEnabled(baseEntitlements, ":com.apple.security.network.server");
-  const systemExtensionInstall =
-    profile.systemExtensionInstall ||
-    baseEntitlementEnabled(baseEntitlements, ":com.apple.developer.system-extension.install");
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+/**
+ * The entitlements a signed bundle carries: what its provisioning profile
+ * grants, plus the sandbox-only keys that no profile lists and that come from
+ * the bundle's checked-in base plist instead (`apps/desktop/src-tauri/entitlements/`).
+ */
+export function renderProfileEntitlements(profile, base = {}) {
+  // A store submission signs concrete values only: a profile's team wildcards
+  // (`<TEAM>.*` app and keychain groups) are what it permits, not what the app
+  // uses, and nothing in VoyaVPN reads the keychain.
+  const store = isStoreDistributionProfile(profile);
+  const keychainAccessGroups = store
+    ? []
+    : profile.keychainAccessGroups.length
+      ? profile.keychainAccessGroups
+      : [`${profile.teamIdentifier}.*`];
+  const profileAppGroups = store ? profile.appGroups.filter((group) => !group.includes("*")) : profile.appGroups;
+  const appGroups = profileAppGroups.length ? profileAppGroups : [requiredAppGroup];
+  const flag = (enabled, key) => (enabled ? `<key>${key}</key>\n  <true/>` : "");
+  const keychain = keychainAccessGroups.length
+    ? `<key>keychain-access-groups</key>\n  ${plistStringArray(keychainAccessGroups)}`
+    : "";
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>com.apple.application-identifier</key>
   <string>${escapeXml(profile.applicationIdentifier)}</string>
   <key>com.apple.developer.networking.networkextension</key>
-  ${plistStringArray(profile.networkExtensions)}
-  ${systemExtensionInstall ? "<key>com.apple.developer.system-extension.install</key>\n  <true/>" : ""}
+  ${plistStringArray(signedNetworkExtensions(profile))}
+  ${flag(profile.systemExtensionInstall || base.systemExtensionInstall, "com.apple.developer.system-extension.install")}
   <key>com.apple.developer.team-identifier</key>
   <string>${escapeXml(profile.teamIdentifier)}</string>
-  ${appSandbox ? "<key>com.apple.security.app-sandbox</key>\n  <true/>" : ""}
+  ${flag(profile.appSandbox || base.appSandbox, "com.apple.security.app-sandbox")}
   <key>com.apple.security.application-groups</key>
   ${plistStringArray(appGroups)}
-  ${networkClient ? "<key>com.apple.security.network.client</key>\n  <true/>" : ""}
-  ${networkServer ? "<key>com.apple.security.network.server</key>\n  <true/>" : ""}
-  <key>keychain-access-groups</key>
-  ${plistStringArray(keychainAccessGroups)}
+  ${flag(base.userSelectedReadWrite, "com.apple.security.files.user-selected.read-write")}
+  ${flag(profile.networkClient || base.networkClient, "com.apple.security.network.client")}
+  ${flag(profile.networkServer || base.networkServer, "com.apple.security.network.server")}
+  ${keychain}
 </dict>
 </plist>
 `;
-  writeFileSync(destination, xml);
+}
+
+export function writeProfileEntitlements(profile, destination, baseEntitlements) {
+  mkdirSync(dirname(destination), { recursive: true });
+  const base = {
+    appSandbox: baseEntitlementEnabled(baseEntitlements, ":com.apple.security.app-sandbox"),
+    networkClient: baseEntitlementEnabled(baseEntitlements, ":com.apple.security.network.client"),
+    networkServer: baseEntitlementEnabled(baseEntitlements, ":com.apple.security.network.server"),
+    systemExtensionInstall: baseEntitlementEnabled(baseEntitlements, ":com.apple.developer.system-extension.install"),
+    // The save panel behind log export: inside the sandbox the app may only
+    // write where the user pointed it, and only with this entitlement.
+    userSelectedReadWrite: baseEntitlementEnabled(
+      baseEntitlements,
+      ":com.apple.security.files.user-selected.read-write",
+    ),
+  };
+  writeFileSync(destination, renderProfileEntitlements(profile, base));
   return destination;
 }

@@ -251,21 +251,18 @@ pnpm native:macos:dmg
 pnpm native:macos:app:notarize
 ```
 
-App Store/TestFlight lane:
+App Store/TestFlight lane, which produces the signed `.pkg` for Transporter:
 
 ```sh
-pnpm native:macos:libbox
-pnpm tauri:build --bundles app
-export VOYAVPN_MACOS_APP_BUNDLE="$PWD/target/release/bundle/macos/VoyaVPN.app"
-export VOYAVPN_CODESIGN_IDENTITY="<3rd Party Mac Developer Application or Apple Distribution identity>"
-export VOYAVPN_MACOS_DISTRIBUTION=app-store
-export VOYAVPN_PROVISIONING_PROFILE_DIR="<profile-dir-for-App-Store-or-TestFlight>"
-export VOYAVPN_REQUIRE_PROVISIONING=1
-pnpm native:macos:tunnel
-pnpm native:macos:tunnel:verify
-pnpm native:macos:app:sign
-pnpm native:macos:dmg
+export VOYAVPN_PROVISIONING_PROFILE_DIR="<profile-dir-for-Mac-App-Store>"
+pnpm build:mac:appstore
 ```
+
+It builds with the `mac-app-store` Cargo feature (no self-updater) and a
+generated store config overlay, stages and signs the appex, verifies the
+bundle, and runs `pnpm native:macos:pkg`. See
+[macos-app-store.md](macos-app-store.md) for setup, the build number, and
+upload.
 
 App Store/TestFlight artifacts are submitted through App Store Connect. They are
 not expected to pass `spctl` or launch by being copied directly into
@@ -323,7 +320,11 @@ either static symbols or an embedded dynamic framework when
 `VOYAVPN_REQUIRE_LIBBOX=1` is set.
 
 The containing app uses `apps/desktop/src-tauri/entitlements/macos-app.plist`;
-the provider uses `apps/desktop/src-tauri/entitlements/packet-tunnel.plist`.
+the provider uses `apps/desktop/src-tauri/entitlements/packet-tunnel.plist`;
+the bundled sing-box seed uses
+`apps/desktop/src-tauri/entitlements/macos-inherit.plist` (App Sandbox +
+`inherit`), because every macOS lane keeps the sandbox and App Store validation
+rejects an unsandboxed nested executable.
 Developer ID direct builds must provision `packet-tunnel-provider-systemextension`
 and package PacketTunnel as `.systemextension`; signing that entitlement into an
 `.appex` causes macOS to reject the provider before `startTunnel` runs. App

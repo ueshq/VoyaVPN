@@ -309,6 +309,7 @@ pub(super) fn report_post_commit_error<R>(
     );
 }
 
+#[cfg(not(feature = "mac-app-store"))]
 pub(super) fn app_updater_state_for_error(error: &tauri_plugin_updater::Error) -> AppUpdaterState {
     match error {
         tauri_plugin_updater::Error::EmptyEndpoints => AppUpdaterState::Unconfigured,

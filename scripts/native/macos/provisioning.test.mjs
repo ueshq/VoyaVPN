@@ -10,7 +10,10 @@ import {
   profileDeviceCoverage,
   profileMatchesDistribution,
   profileRejectionReason,
+  isStoreDistributionProfile,
+  renderProfileEntitlements,
   selectProvisioningProfile,
+  signedNetworkExtensions,
 } from "./provisioning.mjs";
 
 const developmentSha1 = "1111111111111111111111111111111111111111";
@@ -311,5 +314,81 @@ describe("shared provisioning capability check", () => {
         distribution: "app-store",
       }),
     ).toThrow(/does not include group\.app\.voyavpn\.desktop/u);
+  });
+});
+
+describe("renderProfileEntitlements", () => {
+  const profile = () =>
+    profileFixture({ keychainAccessGroups: [], appSandbox: false, networkClient: true, networkServer: false });
+
+  it("forwards user-selected file access from the base plist, which no profile lists", () => {
+    const withAccess = renderProfileEntitlements(profile(), { appSandbox: true, userSelectedReadWrite: true });
+    expect(withAccess).toContain("<key>com.apple.security.files.user-selected.read-write</key>\n  <true/>");
+    expect(withAccess).toContain("<key>com.apple.security.app-sandbox</key>\n  <true/>");
+
+    // The PacketTunnel base plist has no save panel to serve.
+    const without = renderProfileEntitlements(profile(), { appSandbox: true });
+    expect(without).not.toContain("files.user-selected");
+  });
+
+  it("derives identifiers and defaults from the profile", () => {
+    const xml = renderProfileEntitlements(profile(), {});
+    expect(xml).toContain("<string>4LUKJ56532.app.voyavpn.desktop</string>");
+    expect(xml).toContain("<string>4LUKJ56532.*</string>");
+    expect(xml).toContain("<string>packet-tunnel-provider</string>");
+    expect(xml).toContain("com.apple.security.network.client");
+    expect(xml).not.toContain("com.apple.security.network.server");
+    expect(xml).not.toContain("com.apple.security.app-sandbox");
+  });
+});
+
+describe("store submission entitlements", () => {
+  // The shape of a real Mac App Store profile: every NetworkExtension type the
+  // App ID enables, plus team wildcards for app and keychain groups.
+  const allNetworkExtensions = [
+    "app-proxy-provider",
+    "content-filter-provider",
+    "packet-tunnel-provider",
+    "dns-proxy",
+    "dns-settings",
+    "relay",
+    "url-filter-provider",
+    "hotspot-provider",
+  ];
+  const storeProfile = () => ({
+    ...appStoreProfile("app.voyavpn.desktop"),
+    networkExtensions: allNetworkExtensions,
+    appGroups: ["group.app.voyavpn.desktop", "4LUKJ56532.*"],
+    keychainAccessGroups: ["4LUKJ56532.*"],
+  });
+
+  it("tells store distribution profiles from development and Developer ID ones", () => {
+    expect(isStoreDistributionProfile(storeProfile())).toBe(true);
+    expect(isStoreDistributionProfile(developmentProfile("app.voyavpn.desktop"))).toBe(false);
+    expect(isStoreDistributionProfile(developerIdProfile("app.voyavpn.desktop"))).toBe(false);
+  });
+
+  it("signs a store build with only the concrete values the app uses", () => {
+    expect(signedNetworkExtensions(storeProfile())).toEqual(["packet-tunnel-provider"]);
+
+    const xml = renderProfileEntitlements(storeProfile(), { appSandbox: true, userSelectedReadWrite: true });
+    expect(xml).toContain("<string>group.app.voyavpn.desktop</string>");
+    expect(xml).not.toContain("4LUKJ56532.*");
+    expect(xml).not.toContain("keychain-access-groups");
+    expect(xml).not.toContain("app-proxy-provider");
+    expect(xml).toContain("<string>packet-tunnel-provider</string>");
+  });
+
+  it("keeps the profile's full grant for development signing", () => {
+    const development = {
+      ...developmentProfile("app.voyavpn.desktop"),
+      networkExtensions: allNetworkExtensions,
+      appGroups: ["group.app.voyavpn.desktop", "4LUKJ56532.*"],
+      keychainAccessGroups: ["4LUKJ56532.*"],
+    };
+    expect(signedNetworkExtensions(development)).toEqual(allNetworkExtensions);
+    const xml = renderProfileEntitlements(development, { appSandbox: true });
+    expect(xml).toContain("4LUKJ56532.*");
+    expect(xml).toContain("keychain-access-groups");
   });
 });

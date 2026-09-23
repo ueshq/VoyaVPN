@@ -23,6 +23,19 @@ pub fn export_bindings(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Registers the self-updater, except in the Mac App Store build: App Review
+/// Guideline 2.4.5(vii) forbids an app from updating itself, and the store
+/// delivers every update. `app_update_status` reports `Unsupported` there.
+#[cfg(not(feature = "mac-app-store"))]
+fn with_updater<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder.plugin(tauri_plugin_updater::Builder::new().build())
+}
+
+#[cfg(feature = "mac-app-store")]
+fn with_updater<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
+    builder
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let specta_builder = ipc::specta_builder();
@@ -40,12 +53,7 @@ pub fn run() {
         }
     }
 
-    #[expect(
-        clippy::expect_used,
-        reason = "only the Tauri runtime itself failing lands here; `initialize` reports \
-                  every failure the user can act on"
-    )]
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // First, so a second launch hands over before anything else starts.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             residency::show_main_window(app);
@@ -54,8 +62,13 @@ pub fn run() {
         // OS notifications for a user whose window is hidden in the tray; the
         // renderer decides when to show one (`src/ipc/notifications.ts`).
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+    #[expect(
+        clippy::expect_used,
+        reason = "only the Tauri runtime itself failing lands here; `initialize` reports \
+                  every failure the user can act on"
+    )]
+    let app = with_updater(builder)
         .invoke_handler(specta_builder.invoke_handler())
         .on_window_event(|window, event| {
             if window.label() == "main" {
@@ -76,10 +89,9 @@ pub fn run() {
                 // `setup` returns, so a blocking dialog would hang the launch.
                 // The message is stashed and rendered on `RunEvent::Ready`.
                 tracing::error!(%error, "VoyaVPN failed to start");
-                let resettable_database =
-                    voya_app::startup::offers_database_reset(error.as_ref())
-                        .then(|| database_path(app).ok())
-                        .flatten();
+                let resettable_database = voya_app::startup::offers_database_reset(error.as_ref())
+                    .then(|| database_path(app).ok())
+                    .flatten();
                 record_startup_failure(error.to_string(), resettable_database);
             } else {
                 residency::show_after_launch(app.handle());

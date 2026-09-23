@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { ensureSingBoxSeedForBuild } from "../core/sing-box-installer.mjs";
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
 import { writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
+import { macAppStoreFeature, requestedMacAppStoreBuild, writeMacAppStoreOverlay } from "./mac-app-store-config.mjs";
 import {
   normalizeCiEnv,
   requestedStableUpdaterConfig,
@@ -70,6 +71,7 @@ export async function prepareTauriInvocation(
     ensureSeed = ensureSingBoxSeedForBuild,
     writeCoreOverlay = writeOptionalCoreSeedOverlay,
     writeUpdaterOverlay = writeStableUpdaterOverlay,
+    writeAppStoreOverlay = writeMacAppStoreOverlay,
     hostPlatform = process.platform,
   } = {},
 ) {
@@ -98,10 +100,27 @@ export async function prepareTauriInvocation(
     }
   }
 
-  if (operation === "build" && requestedStableUpdaterConfig(env)) {
+  const macAppStore = operation === "build" && requestedMacAppStoreBuild(env);
+  const stableUpdater = operation === "build" && requestedStableUpdaterConfig(env);
+  if (macAppStore && stableUpdater) {
+    throw new Error(
+      "VOYAVPN_MAC_APP_STORE builds cannot enable the stable updater: the Mac App Store delivers updates. "
+        + "Unset VOYAVPN_RELEASE_CHANNEL=stable / VOYAVPN_TAURI_UPDATER_CONFIG for this build.",
+    );
+  }
+
+  if (stableUpdater) {
     const overlayPath = writeUpdaterOverlay({ repoRoot, env });
     console.log(`Using stable Tauri updater config overlay: ${overlayPath}`);
     tauriArgs.splice(1, 0, "--config", overlayPath);
+  }
+
+  if (macAppStore) {
+    const { overlayPath, buildNumber } = writeAppStoreOverlay({ repoRoot, env });
+    console.log(`Using Mac App Store config overlay (build ${buildNumber}): ${overlayPath}`);
+    // Inserted right after `build`, so neither can land behind a `--` that
+    // forwards the rest of the arguments to cargo.
+    tauriArgs.splice(1, 0, "--config", overlayPath, "--features", macAppStoreFeature);
   }
 
   return {

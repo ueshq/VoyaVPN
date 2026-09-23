@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- For helper executables the sandboxed app launches (the sing-box core seed).
+     App Store validation requires every executable in the bundle to enable the
+     sandbox; `inherit` makes the helper take the parent app's sandbox, and
+     these two keys must be the only ones it carries. -->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.security.inherit</key>
+  <true/>
+</dict>
+</plist>

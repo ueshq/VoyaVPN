@@ -13,6 +13,7 @@ import {
 import {
   assertProfileCapabilities,
   plistBuddy,
+  signedNetworkExtensions,
   decodeProvisioningProfile as decodeProfileWithDir,
 } from "./provisioning.mjs";
 
@@ -85,7 +86,7 @@ function profileRequiredEntitlements(profile) {
   if (!profile) {
     return [requiredNetworkExtensionValue(macosDistribution)];
   }
-  const required = [...profile.networkExtensions];
+  const required = [...signedNetworkExtensions(profile)];
   if (profile.systemExtensionInstall) {
     required.push("com.apple.developer.system-extension.install");
   }
@@ -261,7 +262,10 @@ function main() {
   if (existsSync(tunnelService)) {
     verifySignature(tunnelService, "Tunnel service binary");
   }
-  verifySignature(singBoxCoreSeed, "sing-box core seed binary");
+  verifySignature(singBoxCoreSeed, "sing-box core seed binary", [
+    "com.apple.security.app-sandbox",
+    "com.apple.security.inherit",
+  ]);
   verifySignature(appex, tunnelLayout.label, [
     "com.apple.developer.networking.networkextension",
     ...profileRequiredEntitlements(packetTunnelProfile),

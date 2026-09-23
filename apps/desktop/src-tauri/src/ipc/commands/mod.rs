@@ -1,7 +1,6 @@
 mod screen_qr;
 use std::collections::BTreeSet;
 
-use tauri_plugin_updater::UpdaterExt;
 use tauri_specta::Event;
 use voya_app::autostart::AutostartManager;
 use voya_app::config_mutation::{AppConfig, CommittedMutation};

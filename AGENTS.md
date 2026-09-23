@@ -35,6 +35,7 @@ pnpm dev:web             # Delegates to @voya/desktop frontend-only Vite dev ser
 pnpm build               # Delegates to @voya/desktop build (tsc -b + vite build)
 pnpm --filter @voya/desktop build  # Build only the desktop app
 pnpm tauri:build --debug # Unsigned debug Tauri packages (no signing creds needed)
+pnpm build:mac:appstore  # arm64 Mac App Store .pkg (feature mac-app-store drops the updater); docs/release/macos-app-store.md
 
 pnpm run verify:local       # Full local verification suite — run this before declaring work done
 ```

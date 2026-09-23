@@ -109,7 +109,9 @@ PacketTunnel extension, including the App Group and Network Extension
 entitlements. A Mac App Store/TestFlight signed `.app` is not a direct
 drag-to-Applications artifact; local `spctl`/`syspolicy_check distribution`
 will reject it with the wrong certificate type until it is delivered through
-App Store Connect/TestFlight.
+App Store Connect/TestFlight. `pnpm build:mac:appstore` is that path end to
+end, ending in a `.pkg` signed by the installer certificate; see
+[macos-app-store.md](macos-app-store.md).
 
 For local TUN testing without notarization, `pnpm build:mac:local` signs the
 App-Store-shaped `.appex` lane with an Apple Development certificate and
@@ -145,20 +147,25 @@ pnpm native:macos:tunnel:verify
 pnpm native:macos:app:notarize
 ```
 
-App Store/TestFlight native tunnel command shape:
+App Store/TestFlight command shape. `pnpm build:mac:appstore` runs exactly
+these steps; `VOYAVPN_MAC_APP_STORE=1` is what makes `tauri:build` leave out
+the self-updater and apply the store config overlay:
 
 ```sh
 pnpm native:macos:libbox
+export VOYAVPN_MAC_APP_STORE=1
 export VOYAVPN_MACOS_APP_BUNDLE="$PWD/target/release/bundle/macos/VoyaVPN.app"
 export VOYAVPN_CODESIGN_IDENTITY="<3rd Party Mac Developer Application or Apple Distribution identity>"
 export VOYAVPN_MACOS_DISTRIBUTION=app-store
-export VOYAVPN_PROVISIONING_PROFILE_DIR="<profile-dir-for-App-Store-or-TestFlight>"
+export VOYAVPN_PROVISIONING_PROFILE_DIR="<profile-dir-for-Mac-App-Store>"
 export VOYAVPN_REQUIRE_LIBBOX=1
 export VOYAVPN_REQUIRE_CODESIGN=1
 export VOYAVPN_REQUIRE_PROVISIONING=1
+pnpm tauri:build --bundles app
 pnpm native:macos:tunnel
-pnpm native:macos:tunnel:verify
 pnpm native:macos:app:sign
+pnpm native:macos:tunnel:verify
+pnpm native:macos:pkg
 ```
 
 Use `VOYAVPN_NOTARY_KEYCHAIN_PROFILE` for notarization when possible. If the

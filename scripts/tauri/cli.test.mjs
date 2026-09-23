@@ -61,6 +61,73 @@ describe("Tauri CLI", () => {
     ]);
   });
 
+  it("adds the Mac App Store overlay and feature right after build", async () => {
+    const writeAppStoreOverlay = vi.fn(() => ({
+      overlayPath: "/repo/target/release-config/tauri.mac-app-store.generated.json",
+      buildNumber: "412",
+    }));
+    const invocation = await prepareTauriInvocation(["build", "--bundles", "app", "--", "--locked"], {
+      repoRoot: "/repo",
+      hostPlatform: "darwin",
+      sourceEnv: { VOYAVPN_MAC_APP_STORE: "1" },
+      ensureSeed: vi.fn(),
+      writeCoreOverlay: () => "/repo/target/release-config/tauri.core.json",
+      writeAppStoreOverlay,
+    });
+
+    expect(writeAppStoreOverlay).toHaveBeenCalledWith({
+      repoRoot: "/repo",
+      env: expect.objectContaining({ VOYAVPN_MAC_APP_STORE: "1" }),
+    });
+    expect(invocation.commandArgs).toEqual([
+      "build",
+      "--config",
+      "/repo/target/release-config/tauri.mac-app-store.generated.json",
+      "--features",
+      "mac-app-store",
+      "--config",
+      "/repo/target/release-config/tauri.core.json",
+      "--bundles",
+      "app",
+      "--",
+      "--locked",
+    ]);
+  });
+
+  it("refuses a Mac App Store build that also asks for the stable updater", async () => {
+    const writeUpdaterOverlay = vi.fn();
+    const writeAppStoreOverlay = vi.fn();
+
+    await expect(
+      prepareTauriInvocation(["build"], {
+        repoRoot: "/repo",
+        hostPlatform: "darwin",
+        sourceEnv: { VOYAVPN_MAC_APP_STORE: "true", VOYAVPN_RELEASE_CHANNEL: "stable" },
+        ensureSeed: vi.fn(),
+        writeCoreOverlay: () => null,
+        writeUpdaterOverlay,
+        writeAppStoreOverlay,
+      }),
+    ).rejects.toThrow(/cannot enable the stable updater/);
+    expect(writeUpdaterOverlay).not.toHaveBeenCalled();
+    expect(writeAppStoreOverlay).not.toHaveBeenCalled();
+  });
+
+  it("ignores the Mac App Store switch outside build", async () => {
+    const writeAppStoreOverlay = vi.fn();
+    const invocation = await prepareTauriInvocation(["dev"], {
+      repoRoot: "/repo",
+      hostPlatform: "darwin",
+      sourceEnv: { VOYAVPN_MAC_APP_STORE: "1" },
+      ensureSeed: vi.fn(),
+      writeCoreOverlay: () => null,
+      writeAppStoreOverlay,
+    });
+
+    expect(writeAppStoreOverlay).not.toHaveBeenCalled();
+    expect(invocation.commandArgs).toEqual(["dev"]);
+  });
+
   it("stages the seed for the requested cross-compilation target", async () => {
     const ensureSeed = vi.fn();
     await prepareTauriInvocation(["build", "--target", "aarch64-unknown-linux-gnu", "--bundles", "app"], {

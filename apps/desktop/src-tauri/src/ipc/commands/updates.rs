@@ -9,7 +9,30 @@ pub fn app_update_status<R: tauri::Runtime>(
 ) -> Result<AppUpdaterStatus, AppError> {
     let current_version = app.package_info().version.to_string();
 
-    Ok(match app.updater() {
+    Ok(updater_status(&app, current_version))
+}
+
+/// The Mac App Store build has no updater plugin: the store delivers updates.
+#[cfg(feature = "mac-app-store")]
+fn updater_status<R: tauri::Runtime>(
+    _app: &tauri::AppHandle<R>,
+    current_version: String,
+) -> AppUpdaterStatus {
+    AppUpdaterStatus {
+        current_version,
+        state: AppUpdaterState::Unsupported,
+        message: Some("updates are delivered by the Mac App Store".to_owned()),
+    }
+}
+
+#[cfg(not(feature = "mac-app-store"))]
+fn updater_status<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    current_version: String,
+) -> AppUpdaterStatus {
+    use tauri_plugin_updater::UpdaterExt;
+
+    match app.updater() {
         Ok(_) => AppUpdaterStatus {
             current_version,
             state: AppUpdaterState::Ready,
@@ -20,7 +43,7 @@ pub fn app_update_status<R: tauri::Runtime>(
             state: app_updater_state_for_error(&error),
             message: Some(error.to_string()),
         },
-    })
+    }
 }
 
 #[tauri::command]
