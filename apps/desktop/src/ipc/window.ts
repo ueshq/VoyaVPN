@@ -1,11 +1,18 @@
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
+
+import { ipcCommands } from "@/ipc/commands";
 
 /**
- * Sole entry point for the Tauri window plugin API.
+ * Sole entry point for window chrome.
  *
- * Window controls talk to the window plugin directly (they do not go through a
- * Rust IPC command), so the custom title bar drives the current window only via
- * this module. No other file may import `@tauri-apps/api/window`.
+ * The five controls are thin Rust commands (see `ipc/window.rs`) so the
+ * startup path no longer pulls `@tauri-apps/api/window` — and with it
+ * `window.js`/`dpi.js`/`image.js`. Resize is the one event that still needs
+ * the Tauri event API; `listen("tauri://resize")` is already loaded for the
+ * app's own channels.
+ *
+ * These go through `ipcCommands` (already unwrapped) rather than the raw
+ * binding, so they reject with `IpcCommandError` like every other command.
  */
 
 /** Unsubscribe handle returned by the window event listeners below. */
@@ -16,28 +23,30 @@ export function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-export function minimizeWindow(): Promise<void> {
-  return getCurrentWindow().minimize();
+export async function minimizeWindow(): Promise<void> {
+  await ipcCommands.minimizeWindow();
 }
 
-export function toggleMaximizeWindow(): Promise<void> {
-  return getCurrentWindow().toggleMaximize();
+export async function toggleMaximizeWindow(): Promise<void> {
+  await ipcCommands.toggleMaximizeWindow();
 }
 
-export function closeWindow(): Promise<void> {
-  return getCurrentWindow().close();
+export async function closeWindow(): Promise<void> {
+  await ipcCommands.closeWindow();
 }
 
 export function isWindowMaximized(): Promise<boolean> {
-  return getCurrentWindow().isMaximized();
+  return ipcCommands.isWindowMaximized();
 }
 
 /** Whether the window is on screen rather than hidden into the tray. */
 export function isWindowVisible(): Promise<boolean> {
-  return getCurrentWindow().isVisible();
+  return ipcCommands.isWindowVisible();
 }
 
 /** Watch for size changes so the title bar can swap the maximize/restore icon. */
-export function onWindowResized(handler: () => void): Promise<WindowUnlisten> {
-  return getCurrentWindow().onResized(handler);
+export async function onWindowResized(handler: () => void): Promise<WindowUnlisten> {
+  return listen("tauri://resize", () => {
+    handler();
+  });
 }

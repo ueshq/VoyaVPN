@@ -3,17 +3,19 @@
 //! Every mutation here ends the same way the shell's does: announce the
 //! caches, then restart a connected core for the committed change. Which
 //! change that is — and which notice names a failed restart — is
-//! `voya_app::post_commit::ConfigChange`, shared by both hosts.
+//! `voya_app::post_commit::ConfigChange`, shared by both hosts. The bodies
+//! themselves are `voya_app::routing`'s use cases.
 
 use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
-    contract_map::{
-        move_action_from_contract, routing_from_contract, routing_to_contract, rule_from_contract,
-    },
     invalidation,
     post_commit::ConfigChange,
-    routing::RoutingManager,
+    routing::{
+        delete_routing_rules_use_case, delete_routings_use_case, list_routings_use_case,
+        move_routing_rule_use_case, reset_routing_rules_use_case, save_routing_rule_use_case,
+        save_routing_use_case, set_active_routing_use_case,
+    },
 };
 use voya_contracts::{AppError, MoveAction, Routing, RoutingRule};
 
@@ -22,14 +24,9 @@ use crate::app::MobileState;
 use super::{answer, arguments, runtime::finish_config_change};
 
 pub(super) async fn list(state: &MobileState) -> Result<Value, AppError> {
-    let items = state.services.list_routings().await?;
-
     answer(
         "list_routings",
-        &items
-            .into_iter()
-            .map(routing_to_contract)
-            .collect::<Vec<_>>(),
+        &list_routings_use_case(&state.services).await?,
     )
 }
 
@@ -41,14 +38,7 @@ struct SaveRouting {
 
 pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let SaveRouting { item } = arguments("save_routing", args)?;
-    let saved = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .save_routing(config, routing_from_contract(item))
-                .await?)
-        })
-        .await?;
+    let saved = save_routing_use_case(&state.config_mutations, item).await?;
     finish_config_change(
         state,
         "routing-saved",
@@ -58,7 +48,7 @@ pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, App
     )
     .await;
 
-    answer("save_routing", &routing_to_contract(saved.value))
+    answer("save_routing", &saved.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -69,14 +59,7 @@ struct Ids {
 
 pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let Ids { ids } = arguments("delete_routings", args)?;
-    let deleted = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .delete_routings(config, &ids)
-                .await?)
-        })
-        .await?;
+    let deleted = delete_routings_use_case(&state.config_mutations, ids).await?;
     finish_config_change(
         state,
         "routings-deleted",
@@ -97,14 +80,7 @@ struct Id {
 
 pub(super) async fn set_active(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let Id { id } = arguments("set_active_routing", args)?;
-    let active = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .set_active_routing(config, &id)
-                .await?)
-        })
-        .await?;
+    let active = set_active_routing_use_case(&state.config_mutations, id).await?;
     finish_config_change(
         state,
         "active-routing-changed",
@@ -114,7 +90,7 @@ pub(super) async fn set_active(state: &MobileState, args: &Value) -> Result<Valu
     )
     .await;
 
-    answer("set_active_routing", &routing_to_contract(active.value))
+    answer("set_active_routing", &active.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -126,14 +102,7 @@ struct SaveRule {
 
 pub(super) async fn save_rule(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let SaveRule { routing_id, rule } = arguments("save_routing_rule", args)?;
-    let saved = state
-        .config_mutations
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .save_rule(&routing_id, rule_from_contract(rule))
-                .await?)
-        })
-        .await?;
+    let saved = save_routing_rule_use_case(&state.config_mutations, routing_id, rule).await?;
     finish_config_change(
         state,
         "routing-rule-saved",
@@ -143,7 +112,7 @@ pub(super) async fn save_rule(state: &MobileState, args: &Value) -> Result<Value
     )
     .await;
 
-    answer("save_routing_rule", &routing_to_contract(saved.value))
+    answer("save_routing_rule", &saved.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,14 +127,8 @@ pub(super) async fn delete_rules(state: &MobileState, args: &Value) -> Result<Va
         routing_id,
         rule_ids,
     } = arguments("delete_routing_rules", args)?;
-    let deleted = state
-        .config_mutations
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .delete_rules(&routing_id, &rule_ids)
-                .await?)
-        })
-        .await?;
+    let deleted =
+        delete_routing_rules_use_case(&state.config_mutations, routing_id, rule_ids).await?;
     finish_config_change(
         state,
         "routing-rules-deleted",
@@ -175,7 +138,7 @@ pub(super) async fn delete_rules(state: &MobileState, args: &Value) -> Result<Va
     )
     .await;
 
-    answer("delete_routing_rules", &routing_to_contract(deleted.value))
+    answer("delete_routing_rules", &deleted.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -194,19 +157,14 @@ pub(super) async fn move_rule(state: &MobileState, args: &Value) -> Result<Value
         action,
         position,
     } = arguments("move_routing_rule", args)?;
-    let moved = state
-        .config_mutations
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .move_rule(
-                    &routing_id,
-                    &rule_id,
-                    move_action_from_contract(action),
-                    position,
-                )
-                .await?)
-        })
-        .await?;
+    let moved = move_routing_rule_use_case(
+        &state.config_mutations,
+        routing_id,
+        rule_id,
+        action,
+        position,
+    )
+    .await?;
     finish_config_change(
         state,
         "routing-rule-moved",
@@ -216,7 +174,7 @@ pub(super) async fn move_rule(state: &MobileState, args: &Value) -> Result<Value
     )
     .await;
 
-    answer("move_routing_rule", &routing_to_contract(moved.value))
+    answer("move_routing_rule", &moved.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -227,15 +185,7 @@ struct ResetRules {
 
 pub(super) async fn reset_rules(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let ResetRules { routing_id } = arguments("reset_routing_rules", args)?;
-    let reset = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            let _ = config;
-            Ok(RoutingManager::new_in(unit_of_work)
-                .reset_rules_to_default(&routing_id)
-                .await?)
-        })
-        .await?;
+    let reset = reset_routing_rules_use_case(&state.config_mutations, routing_id).await?;
     finish_config_change(
         state,
         "routing-rules-reset",
@@ -245,5 +195,5 @@ pub(super) async fn reset_rules(state: &MobileState, args: &Value) -> Result<Val
     )
     .await;
 
-    answer("reset_routing_rules", &routing_to_contract(reset.value))
+    answer("reset_routing_rules", &reset.value)
 }

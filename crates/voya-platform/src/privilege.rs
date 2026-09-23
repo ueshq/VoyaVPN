@@ -505,10 +505,11 @@ mod tests {
 
     #[cfg(unix)]
     fn unique_temp_root(name: &str) -> PathBuf {
-        let nonce = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |duration| duration.as_nanos());
-        std::env::temp_dir().join(format!("voyavpn-{name}-{}-{nonce}", std::process::id()))
+        tempfile::Builder::new()
+            .prefix(&format!("voyavpn-{name}-"))
+            .tempdir()
+            .expect("privilege test temp dir")
+            .keep()
     }
 
     #[test]

@@ -18,13 +18,16 @@
 //!   `original != *mutation.config()`, which over-approximates in the safe
 //!   direction: an extra refetch of an in-memory projection, never a miss.
 
-use voya_contracts::InvalidationScope;
+use voya_contracts::{InvalidationScope, NoticeCode};
+
+/// The caches a change invalidates, plus the notice raised if announcing them fails.
+pub type InvalidationBundle = (NoticeCode, Vec<InvalidationScope>);
 
 /// Saved-node mutations invalidate the profile list used to derive source groups.
-pub fn profile_scopes(config_changed: bool) -> Vec<InvalidationScope> {
+pub fn profile_scopes(config_changed: bool) -> InvalidationBundle {
     let mut scopes = vec![InvalidationScope::Profiles];
     push_config_scopes(&mut scopes, config_changed);
-    scopes
+    (NoticeCode::ProfileRefreshFailed, scopes)
 }
 
 /// Subscription mutations: save, delete, text import, and both update paths
@@ -32,7 +35,7 @@ pub fn profile_scopes(config_changed: bool) -> Vec<InvalidationScope> {
 ///
 /// `profiles_changed` is false only for `save_subscription`, which writes the
 /// subscription row without importing anything.
-pub fn subscription_scopes(profiles_changed: bool, config_changed: bool) -> Vec<InvalidationScope> {
+pub fn subscription_scopes(profiles_changed: bool, config_changed: bool) -> InvalidationBundle {
     let mut scopes = vec![
         InvalidationScope::Subscriptions,
         InvalidationScope::SubscriptionMetadata,
@@ -41,17 +44,17 @@ pub fn subscription_scopes(profiles_changed: bool, config_changed: bool) -> Vec<
         scopes.push(InvalidationScope::Profiles);
     }
     push_config_scopes(&mut scopes, config_changed);
-    scopes
+    (NoticeCode::SubscriptionRefreshFailed, scopes)
 }
 
 /// Routing and routing-rule mutations.
 ///
 /// The per-app-proxy dialog reads its state out of the active routing's rules,
 /// so it shares the `routings` cache rather than owning one of its own.
-pub fn routing_scopes(config_changed: bool) -> Vec<InvalidationScope> {
+pub fn routing_scopes(config_changed: bool) -> InvalidationBundle {
     let mut scopes = vec![InvalidationScope::Routings];
     push_config_scopes(&mut scopes, config_changed);
-    scopes
+    (NoticeCode::RoutingRefreshFailed, scopes)
 }
 
 /// `save_dns_settings`.
@@ -59,18 +62,21 @@ pub fn routing_scopes(config_changed: bool) -> Vec<InvalidationScope> {
 /// The DNS pane and the Settings surface write the same backend field through
 /// different commands, so the bundle cache has to follow the pane's own cache;
 /// without it a later Save-all reposts the pre-save DNS block.
-pub fn dns_scopes() -> Vec<InvalidationScope> {
-    vec![InvalidationScope::Dns, InvalidationScope::AppSettings]
+pub fn dns_scopes() -> InvalidationBundle {
+    (
+        NoticeCode::DnsRefreshFailed,
+        vec![InvalidationScope::Dns, InvalidationScope::AppSettings],
+    )
 }
 
 /// Proxy-runtime commands that talk to the core's Clash-compatible API.
 ///
 /// `config_changed` is true only for `proxy_set_traffic_mode`, the one command
 /// here that also persists a settings field (`proxy.trafficMode`).
-pub fn proxy_runtime_scopes(config_changed: bool) -> Vec<InvalidationScope> {
+pub fn proxy_runtime_scopes(config_changed: bool) -> InvalidationBundle {
     let mut scopes = vec![InvalidationScope::ProxyConnections];
     push_config_scopes(&mut scopes, config_changed);
-    scopes
+    (NoticeCode::ProxyViewRefreshFailed, scopes)
 }
 
 /// `save_app_settings`.
@@ -78,13 +84,16 @@ pub fn proxy_runtime_scopes(config_changed: bool) -> Vec<InvalidationScope> {
 /// The bundle owns the appearance block the shell reads separately, the DNS
 /// block the DNS pane reads separately, and the TUN/system-proxy fields the
 /// connection-mode status is derived from, so all four caches move together.
-pub fn settings_bundle_scopes() -> Vec<InvalidationScope> {
-    vec![
-        InvalidationScope::AppSettings,
-        InvalidationScope::UiPreferences,
-        InvalidationScope::Dns,
-        InvalidationScope::ConnectionMode,
-    ]
+pub fn settings_bundle_scopes() -> InvalidationBundle {
+    (
+        NoticeCode::SettingsRefreshFailed,
+        vec![
+            InvalidationScope::AppSettings,
+            InvalidationScope::UiPreferences,
+            InvalidationScope::Dns,
+            InvalidationScope::ConnectionMode,
+        ],
+    )
 }
 
 /// `set_connection_mode` and `set_tun_enabled`.
@@ -92,36 +101,45 @@ pub fn settings_bundle_scopes() -> Vec<InvalidationScope> {
 /// Both persist `tun.enabled` / `systemProxy.mode`, which the settings
 /// bundle mirrors — the round-trip that used to let a stale bundle rewrite
 /// `enable_tun` back to its old value on the next Save-all.
-pub fn connection_mode_scopes() -> Vec<InvalidationScope> {
-    vec![
-        InvalidationScope::ConnectionMode,
-        InvalidationScope::AppSettings,
-    ]
+pub fn connection_mode_scopes() -> InvalidationBundle {
+    (
+        NoticeCode::ConnectionModeRefreshFailed,
+        vec![
+            InvalidationScope::ConnectionMode,
+            InvalidationScope::AppSettings,
+        ],
+    )
 }
 
 /// Policy group mutations. Activating a group, or deleting the active one,
 /// rewrites the persisted config and changes which node the profile list marks
 /// active, so both follow `config_changed`.
-pub fn policy_group_scopes(config_changed: bool) -> Vec<InvalidationScope> {
+pub fn policy_group_scopes(config_changed: bool) -> InvalidationBundle {
     let mut scopes = vec![InvalidationScope::PolicyGroups];
     if config_changed {
         scopes.push(InvalidationScope::Profiles);
     }
     push_config_scopes(&mut scopes, config_changed);
-    scopes
+    (NoticeCode::PolicyGroupRefreshFailed, scopes)
 }
 
 /// A live change to the running group: its selected member or fresh delays.
-pub fn policy_group_runtime_scopes() -> Vec<InvalidationScope> {
-    vec![
-        InvalidationScope::PolicyGroups,
-        InvalidationScope::PolicyGroupRuntime,
-    ]
+pub fn policy_group_runtime_scopes() -> InvalidationBundle {
+    (
+        NoticeCode::PolicyGroupRefreshFailed,
+        vec![
+            InvalidationScope::PolicyGroups,
+            InvalidationScope::PolicyGroupRuntime,
+        ],
+    )
 }
 
 /// Every self-hosted node change: settings, status, links, network report.
-pub fn self_host_scopes() -> Vec<InvalidationScope> {
-    vec![InvalidationScope::SelfHost]
+pub fn self_host_scopes() -> InvalidationBundle {
+    (
+        NoticeCode::SelfHostRefreshFailed,
+        vec![InvalidationScope::SelfHost],
+    )
 }
 
 fn push_config_scopes(scopes: &mut Vec<InvalidationScope>, config_changed: bool) {
@@ -134,9 +152,16 @@ fn push_config_scopes(scopes: &mut Vec<InvalidationScope>, config_changed: bool)
 mod tests {
     use super::*;
 
+    fn scopes(bundle: InvalidationBundle) -> Vec<InvalidationScope> {
+        bundle.1
+    }
+
     #[test]
     fn profile_scopes_always_refresh_the_list() {
-        assert_eq!(profile_scopes(false), vec![InvalidationScope::Profiles]);
+        assert_eq!(
+            scopes(profile_scopes(false)),
+            vec![InvalidationScope::Profiles]
+        );
     }
 
     #[test]
@@ -145,7 +170,7 @@ mod tests {
         // profile rewrite the persisted config, which the settings bundle is a
         // projection of.
         assert_eq!(
-            profile_scopes(true),
+            scopes(profile_scopes(true)),
             vec![InvalidationScope::Profiles, InvalidationScope::AppSettings]
         );
     }
@@ -155,7 +180,7 @@ mod tests {
         // The retired `profile-ex` / `active-profile` / `profile/<id>` keys had
         // no `useQuery` behind them; the enum can no longer express them.
         for config_changed in [false, true] {
-            for scope in profile_scopes(config_changed) {
+            for scope in scopes(profile_scopes(config_changed)) {
                 assert!(
                     matches!(
                         scope,
@@ -170,14 +195,14 @@ mod tests {
     #[test]
     fn subscription_scopes_only_touch_profiles_when_profiles_changed() {
         assert_eq!(
-            subscription_scopes(false, false),
+            scopes(subscription_scopes(false, false)),
             vec![
                 InvalidationScope::Subscriptions,
                 InvalidationScope::SubscriptionMetadata
             ]
         );
         assert_eq!(
-            subscription_scopes(true, false),
+            scopes(subscription_scopes(true, false)),
             vec![
                 InvalidationScope::Subscriptions,
                 InvalidationScope::SubscriptionMetadata,
@@ -189,7 +214,7 @@ mod tests {
     #[test]
     fn subscription_scopes_add_the_settings_bundle_when_the_config_changed() {
         assert_eq!(
-            subscription_scopes(true, true),
+            scopes(subscription_scopes(true, true)),
             vec![
                 InvalidationScope::Subscriptions,
                 InvalidationScope::SubscriptionMetadata,
@@ -201,9 +226,12 @@ mod tests {
 
     #[test]
     fn routing_scopes_follow_the_same_config_rule() {
-        assert_eq!(routing_scopes(false), vec![InvalidationScope::Routings]);
         assert_eq!(
-            routing_scopes(true),
+            scopes(routing_scopes(false)),
+            vec![InvalidationScope::Routings]
+        );
+        assert_eq!(
+            scopes(routing_scopes(true)),
             vec![InvalidationScope::Routings, InvalidationScope::AppSettings]
         );
     }
@@ -211,11 +239,11 @@ mod tests {
     #[test]
     fn proxy_runtime_scopes_add_the_bundle_only_for_the_traffic_mode_command() {
         assert_eq!(
-            proxy_runtime_scopes(false),
+            scopes(proxy_runtime_scopes(false)),
             vec![InvalidationScope::ProxyConnections]
         );
         assert_eq!(
-            proxy_runtime_scopes(true),
+            scopes(proxy_runtime_scopes(true)),
             vec![
                 InvalidationScope::ProxyConnections,
                 InvalidationScope::AppSettings,
@@ -225,26 +253,26 @@ mod tests {
 
     #[test]
     fn dns_saves_refresh_the_settings_bundle() {
-        assert!(dns_scopes().contains(&InvalidationScope::AppSettings));
+        assert!(scopes(dns_scopes()).contains(&InvalidationScope::AppSettings));
     }
 
     #[test]
     fn settings_and_mode_saves_refresh_the_connection_mode_status() {
-        assert!(settings_bundle_scopes().contains(&InvalidationScope::ConnectionMode));
-        assert!(connection_mode_scopes().contains(&InvalidationScope::ConnectionMode));
-        assert!(connection_mode_scopes().contains(&InvalidationScope::AppSettings));
+        assert!(scopes(settings_bundle_scopes()).contains(&InvalidationScope::ConnectionMode));
+        assert!(scopes(connection_mode_scopes()).contains(&InvalidationScope::ConnectionMode));
+        assert!(scopes(connection_mode_scopes()).contains(&InvalidationScope::AppSettings));
     }
 
     #[test]
     fn no_scope_list_repeats_a_cache() {
         let lists = [
-            profile_scopes(true),
-            subscription_scopes(true, true),
-            routing_scopes(true),
-            dns_scopes(),
-            proxy_runtime_scopes(true),
-            settings_bundle_scopes(),
-            connection_mode_scopes(),
+            scopes(profile_scopes(true)),
+            scopes(subscription_scopes(true, true)),
+            scopes(routing_scopes(true)),
+            scopes(dns_scopes()),
+            scopes(proxy_runtime_scopes(true)),
+            scopes(settings_bundle_scopes()),
+            scopes(connection_mode_scopes()),
         ];
         for list in lists {
             let mut deduped = list.clone();
@@ -257,11 +285,11 @@ mod tests {
     #[test]
     fn policy_group_scopes_follow_config_and_runtime_changes() {
         assert_eq!(
-            policy_group_scopes(false),
+            scopes(policy_group_scopes(false)),
             vec![InvalidationScope::PolicyGroups]
         );
         assert_eq!(
-            policy_group_scopes(true),
+            scopes(policy_group_scopes(true)),
             vec![
                 InvalidationScope::PolicyGroups,
                 InvalidationScope::Profiles,
@@ -269,11 +297,39 @@ mod tests {
             ]
         );
         assert_eq!(
-            policy_group_runtime_scopes(),
+            scopes(policy_group_runtime_scopes()),
             vec![
                 InvalidationScope::PolicyGroups,
                 InvalidationScope::PolicyGroupRuntime,
             ]
         );
+    }
+
+    #[test]
+    fn every_bundle_names_the_notice_raised_when_announcing_it_fails() {
+        assert_eq!(profile_scopes(false).0, NoticeCode::ProfileRefreshFailed);
+        assert_eq!(
+            subscription_scopes(false, false).0,
+            NoticeCode::SubscriptionRefreshFailed
+        );
+        assert_eq!(routing_scopes(false).0, NoticeCode::RoutingRefreshFailed);
+        assert_eq!(dns_scopes().0, NoticeCode::DnsRefreshFailed);
+        assert_eq!(
+            proxy_runtime_scopes(false).0,
+            NoticeCode::ProxyViewRefreshFailed
+        );
+        assert_eq!(
+            settings_bundle_scopes().0,
+            NoticeCode::SettingsRefreshFailed
+        );
+        assert_eq!(
+            connection_mode_scopes().0,
+            NoticeCode::ConnectionModeRefreshFailed
+        );
+        assert_eq!(
+            policy_group_scopes(false).0,
+            NoticeCode::PolicyGroupRefreshFailed
+        );
+        assert_eq!(self_host_scopes().0, NoticeCode::SelfHostRefreshFailed);
     }
 }

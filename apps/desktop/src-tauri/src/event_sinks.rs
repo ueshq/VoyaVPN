@@ -2,15 +2,15 @@
 use crate::{ipc, AppState};
 use tauri::Manager;
 use voya_app::{
-    contract_map::{process_log_level_to_contract, statistics_snapshot_to_contract},
+    contract_map::process_log_level_to_contract,
     proxy_runtime::ProxyRuntimeEventSink,
     redaction::{redact_url_userinfo, redact_urls},
     self_host::SelfHostEventSink,
-    statistics::{StatisticsEventSink, StatisticsSnapshot as AppStatisticsSnapshot},
+    statistics::StatisticsEventSink,
     subscriptions::{AutoUpdateOutcome, SubscriptionAutoUpdateSink},
     supervisor::{CoreExitEvent, NativeTunExitEvent, SupervisorEventSink},
 };
-use voya_contracts::ProxyConnectionsSnapshot;
+use voya_contracts::{ProxyConnectionsSnapshot, StatisticsSnapshot};
 use voya_platform::process::{ProcessLogLevel, ProcessLogSink, ProcessOutputStream, ProcessRole};
 
 pub(crate) struct TauriProcessLogSink {
@@ -39,7 +39,11 @@ pub(crate) struct TauriSelfHostEventSink {
 
 impl SelfHostEventSink for TauriSelfHostEventSink {
     fn state_changed(&self) {
-        ipc::commands::emit_self_host_invalidation(&self.app, "self-host-state-changed");
+        ipc::commands::emit_invalidation(
+            &self.app,
+            "self-host-state-changed",
+            voya_app::invalidation::self_host_scopes(),
+        );
     }
 
     fn log(
@@ -108,11 +112,10 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
 
         // Same helper the `update_subscriptions` command uses, so the
         // background path can never drift from the key set the command emits.
-        ipc::commands::emit_subscription_invalidation(
+        ipc::commands::emit_invalidation(
             &self.app,
             "subscription-auto-updated",
-            true,
-            outcome.config_changed,
+            voya_app::invalidation::subscription_scopes(true, outcome.config_changed),
         );
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
@@ -156,12 +159,10 @@ impl SupervisorEventSink for TauriSupervisorEventSink {
 }
 
 impl StatisticsEventSink for TauriStatisticsEventSink {
-    fn emit_statistics(&self, snapshot: AppStatisticsSnapshot) {
+    fn emit_statistics(&self, snapshot: StatisticsSnapshot) {
         ipc::commands::emit_or_warn(
             &self.app,
-            ipc::events::TransientStreamEvent::Statistics(statistics_snapshot_to_contract(
-                snapshot,
-            )),
+            ipc::events::TransientStreamEvent::Statistics(snapshot),
             "statistics event",
         );
     }

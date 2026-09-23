@@ -4,7 +4,7 @@ import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { cn } from "@voya/ui/lib/utils";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import type { ConnectionMode } from "@/ipc/bindings";
+import type { ConnectionMode } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { SettingsGroup } from "./settings-form";

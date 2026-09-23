@@ -1,9 +1,7 @@
-import { createHash } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
   mkdirSync,
-  readFileSync,
   rmSync,
   statSync,
 } from "node:fs";
@@ -17,6 +15,7 @@ import {
   isCliEntrypoint,
   repoRootFromScript,
   run,
+  sha256FileSync,
 } from "../../lib/common.mjs";
 import { singBoxExecutableName, singBoxSeedDir } from "../../core/sing-box-installer.mjs";
 
@@ -55,7 +54,7 @@ function defaultWait(milliseconds) {
 }
 
 function defaultHashFile(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
+  return sha256FileSync(path);
 }
 
 function missingService(result) {

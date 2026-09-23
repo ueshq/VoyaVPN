@@ -55,7 +55,11 @@ pub async fn save_profile<R: tauri::Runtime>(
                 .await?)
         })
         .await?;
-    emit_profile_invalidation(&app, "profile-saved", saved.config_changed);
+    emit_invalidation(
+        &app,
+        "profile-saved",
+        invalidation::profile_scopes(saved.config_changed),
+    );
 
     Ok(profile_details_to_contract(saved.value))
 }
@@ -81,7 +85,11 @@ pub async fn delete_profiles<R: tauri::Runtime>(
         })
         .await?;
     emit_then_disconnect_removed(&app, &state, |app| {
-        emit_profile_invalidation(app, "profiles-deleted", deleted.config_changed)
+        emit_invalidation(
+            app,
+            "profiles-deleted",
+            invalidation::profile_scopes(deleted.config_changed),
+        )
     })
     .await?;
 
@@ -130,7 +138,11 @@ pub async fn set_active_profile<R: tauri::Runtime>(
         .await?;
     // The active-profile pointer lives in the persisted config, so the settings
     // bundle projected from it is refreshed too.
-    emit_profile_invalidation(&app, "active-profile-changed", true);
+    emit_invalidation(
+        &app,
+        "active-profile-changed",
+        invalidation::profile_scopes(true),
+    );
 
     Ok(profile_details_to_contract(active.value))
 }
@@ -169,7 +181,7 @@ pub async fn move_profile<R: tauri::Runtime>(
         })
         .await?;
 
-    emit_profile_invalidation(&app, "profile-moved", false);
+    emit_invalidation(&app, "profile-moved", invalidation::profile_scopes(false));
 
     Ok(())
 }

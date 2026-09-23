@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { i18next } from "@voya/i18n";
 
-import type { SelfHostFamilyReport, SelfHostReachability } from "@/ipc/bindings";
+import type { SelfHostFamilyReport, SelfHostReachability } from "@voya/contracts";
 
 import {
   ADDRESS_KIND_KEYS,

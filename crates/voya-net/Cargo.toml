@@ -16,8 +16,15 @@ percent-encoding = "2.3"
 # `gzip` lets subscription servers compress their base64 bodies; the response
 # limits count decoded bytes, so it cannot slip past them. Which roots are
 # trusted is a per-target decision; see the two blocks at the bottom.
-reqwest = { version = "0.12", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-tls", "socks"] }
-rustls = { version = "0.23", default-features = false, features = ["std"] }
+#
+# `rustls-no-provider` (0.13) rather than `rustls`: reqwest's default verifier
+# would re-read the OS store per client. `tls_roots` builds one
+# `rustls::ClientConfig` per trust policy and hands it to every client via
+# `tls_backend_preconfigured`, which is also what preserves the 09-19 root
+# cache (startup 420 → 31 ms).
+reqwest = { version = "0.13", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-no-provider", "socks"] }
+ring = "0.17"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -27,13 +34,13 @@ tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "time"
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect"] }
 tracing.workspace = true
 voya-core.workspace = true
+webpki-roots = "0.26"
 
 # Desktop: the bundled webpki roots *plus* the OS trust store, so a self-hosted
 # server behind a private CA the machine already trusts works too. Clients are
 # built through `tls_roots::client_builder`, which reads that store once per
 # process instead of once per client.
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
 rustls-native-certs = "0.8"
 
 # Mobile: the bundled webpki roots only. Neither OS lets a library read the
@@ -41,11 +48,11 @@ rustls-native-certs = "0.8"
 # Security.framework APIs that are not available to a static library, and
 # Android's is a Java `KeyStore` — and the private-CA case that motivates the
 # native roots is a self-hosted desktop node, which mobile does not run.
-[target.'cfg(any(target_os = "ios", target_os = "android"))'.dependencies]
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-webpki-roots"] }
+
 
 [dev-dependencies]
 base64 = "0.22"
+tempfile = "3"
 
 [lints]
 workspace = true

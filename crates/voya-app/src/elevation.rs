@@ -62,6 +62,7 @@ impl ElevationManager {
     ///
     /// The real path is fixed per platform; this exists so the stale-grant
     /// sweep can be exercised without writing to a system directory.
+    #[cfg(test)]
     #[must_use]
     pub fn with_launcher_path(mut self, launcher_path: Option<PathBuf>) -> Self {
         self.launcher_path = launcher_path;
@@ -208,8 +209,13 @@ mod tests {
     use super::*;
     use voya_platform::test_support::RecordingRunner;
 
+    #[cfg(test)]
     fn unique_temp_dir(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("voya-elevation-{}-{name}", std::process::id()))
+        tempfile::Builder::new()
+            .prefix(&format!("voya-elevation-{name}-"))
+            .tempdir()
+            .expect("elevation test temp dir")
+            .keep()
     }
 
     fn manager(runner: Arc<dyn ProcessRunner>, os: TargetOs, name: &str) -> ElevationManager {

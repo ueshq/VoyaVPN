@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, lstatSync, readdirSync, statSync } from "no
 import { join, relative } from "node:path";
 
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
+import { parseArgs as parseArgsShared } from "../lib/args.mjs";
 
 /**
  * Reports what a build produced and how big it is: the shell binaries and every
@@ -16,17 +17,13 @@ const BINARIES = ["voyavpn", "voyavpn-tunnel-service"];
 const PACKAGE_EXTENSIONS = [".dmg", ".exe", ".msi", ".deb", ".rpm", ".AppImage", ".tar.gz"];
 const APP_PARTS = ["Contents/MacOS", "Contents/Resources", "Contents/PlugIns", "Contents/Library", "Contents/Frameworks"];
 
+const argSpec = {
+  "--target": { key: "target" },
+  "--profile": { key: "profile" },
+};
+
 export function parseArgs(argv) {
-  const options = { profile: "release", target: null };
-  for (let index = 0; index < argv.length; index += 1) {
-    const [flag, inline] = argv[index].split("=", 2);
-    const value = inline ?? argv[index + 1];
-    if (flag === "--target" || flag === "--profile") {
-      options[flag.slice(2)] = value;
-      if (inline === undefined) index += 1;
-    }
-  }
-  return options;
+  return parseArgsShared(argv, argSpec, { profile: "release", target: null });
 }
 
 /** Bytes under `path`, following nothing: symlinks count as themselves. */

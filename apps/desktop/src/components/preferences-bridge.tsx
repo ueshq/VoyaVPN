@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { getErrorMessage } from "@voya/utils/error";
 
 import { applyUiPreferences, useUiPreferencesQuery } from "@voya/features/settings/ui-preferences";
-import type { ThemeMode } from "@/ipc/bindings";
+import type { ThemeMode } from "@voya/contracts";
 import { resolveThemeMode, usePreferencesStore } from "@voya/client/preferences-store";
 
 export function PreferencesBridge() {

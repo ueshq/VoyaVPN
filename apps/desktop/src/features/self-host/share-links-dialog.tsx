@@ -19,7 +19,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 
 import { ShareQrImage } from "@/features/profiles/share-qr-dialog";
-import type { SelfHostShareLink, SelfHostState } from "@/ipc/bindings";
+import type { SelfHostShareLink, SelfHostState } from "@voya/contracts";
 import { writeClipboard } from "@/lib/clipboard";
 import { toastError } from "@voya/client/toast-store";
 

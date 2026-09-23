@@ -4,7 +4,7 @@ import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
 import { i18next } from "@voya/i18n";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProfileSummaryListing, RuntimeStatusResponse } from "@/ipc/bindings";
+import type { ProfileSummaryListing, RuntimeStatusResponse } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";

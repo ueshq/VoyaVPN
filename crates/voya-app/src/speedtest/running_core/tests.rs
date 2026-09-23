@@ -35,19 +35,32 @@ struct FakeDelay {
 }
 
 impl RunningCoreProbe for FakeCore {
-    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreDelay>>> {
+    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>> {
         let delay = self.connected.then(|| {
             Arc::new(FakeDelay {
                 answers: self.answers.clone(),
                 block_until_cancelled: self.block_until_cancelled.clone(),
                 requests: Arc::clone(&self.requests),
-            }) as Arc<dyn RunningCoreDelay>
+            }) as Arc<dyn RunningCoreProbe>
         });
         Box::pin(async move { delay })
     }
+
+    fn delay(
+        &self,
+        _tag: String,
+        _test_url: String,
+        _timeout_ms: u32,
+    ) -> BoxFuture<'static, std::result::Result<u32, ClashError>> {
+        Box::pin(async { Err(ClashError::WebSocketClosed) })
+    }
 }
 
-impl RunningCoreDelay for FakeDelay {
+impl RunningCoreProbe for FakeDelay {
+    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>> {
+        Box::pin(async { None })
+    }
+
     fn delay(
         &self,
         tag: String,
@@ -88,10 +101,10 @@ fn manager(core: FakeCore) -> Harness {
     let paths = AppPaths::new(
         std::env::temp_dir().join(format!("voyavpn-running-core-{}", uuid::Uuid::new_v4())),
     );
-    let manager = SpeedtestManager::with_probe_and_backend(
+    let manager = SpeedtestManager::with_probe_and_launcher(
         paths,
         Arc::clone(&probe) as Arc<dyn SpeedtestProbe>,
-        Arc::clone(&probe_cores) as Arc<dyn SpeedtestCoreBackend>,
+        Arc::clone(&probe_cores) as Arc<dyn ProbeCoreLauncher>,
     )
     .with_running_core(Arc::clone(&core) as Arc<dyn RunningCoreProbe>);
     Harness {

@@ -9,18 +9,16 @@ use std::sync::Arc;
 use serde_json::Value;
 use voya_app::{
     config_mutation::AppConfig,
-    contract_map::{
-        connection_ip_to_contract, core_flow_log_level, core_flow_notice_level,
-        core_state_to_contract, runtime_status_event, runtime_status_response,
-    },
-    core_flow::{CoreFlow, CoreFlowLevel, CoreFlowSink, CoreFlowState},
+    contract_map::{runtime_status_event, runtime_status_response},
+    core_flow::{CoreFlow, CoreFlowSink},
     post_commit::{self, ConfigChange, PostCommitSink},
     runtime::RuntimeManager,
     supervisor::SupervisorSnapshot,
     tun::TunManager,
 };
 use voya_contracts::{
-    AppError, AppNotice, AppNoticeLevel, InvalidationScope, LogCode, NoticeCode, TunStatus,
+    AppError, AppNotice, AppNoticeLevel, CoreState, InvalidationScope, LogCode, LogLevel,
+    NoticeCode, TunStatus,
 };
 use voya_platform::sysproxy::SystemProxyStatus;
 
@@ -77,7 +75,7 @@ pub(super) async fn check_connection_ip(state: &MobileState) -> Result<Value, Ap
     let snapshot = state.supervisor.status().await?;
     let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot).await?;
 
-    answer("check_connection_ip", &connection_ip_to_contract(exit))
+    answer("check_connection_ip", &exit)
 }
 
 /// The tail every committed configuration change shares. The choreography
@@ -86,7 +84,7 @@ pub(super) async fn check_connection_ip(state: &MobileState) -> Result<Value, Ap
 pub(super) async fn finish_config_change(
     state: &MobileState,
     reason: &str,
-    scopes: Vec<InvalidationScope>,
+    scopes: voya_app::invalidation::InvalidationBundle,
     config: &AppConfig,
     change: ConfigChange,
 ) {
@@ -96,7 +94,7 @@ pub(super) async fn finish_config_change(
         },
         &core_flow(state),
         reason,
-        &scopes,
+        &scopes.1,
         config,
         change,
     )
@@ -112,9 +110,10 @@ impl PostCommitSink for MobilePostCommitSink {
         &self,
         reason: &str,
         scopes: &[InvalidationScope],
-        _refresh_failed_code: NoticeCode,
+        refresh_failed_code: NoticeCode,
     ) {
-        self.sinks.invalidate(reason, scopes.to_vec());
+        self.sinks
+            .invalidate(reason, (refresh_failed_code, scopes.to_vec()));
     }
 
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
@@ -161,21 +160,20 @@ struct HostCoreFlowSink {
 }
 
 impl CoreFlowSink for HostCoreFlowSink {
-    fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>) {
-        self.sinks
-            .log(core_flow_log_level(level), code, detail.map(str::to_string));
+    fn log(&self, level: LogLevel, code: LogCode, detail: Option<&str>) {
+        self.sinks.log(level, code, detail.map(str::to_string));
     }
 
     fn core_state(
         &self,
-        state: CoreFlowState,
+        state: CoreState,
         active_profile_id: Option<String>,
         snapshot: Option<&SupervisorSnapshot>,
     ) {
         self.sinks.emit(
             EventChannel::TransientStream,
             &TransientStreamEvent::CoreState(runtime_status_event(
-                core_state_to_contract(state),
+                state,
                 active_profile_id,
                 snapshot,
             )),
@@ -201,21 +199,17 @@ impl CoreFlowSink for HostCoreFlowSink {
     fn statistics_zero(&self) {
         self.sinks.emit(
             EventChannel::TransientStream,
-            &TransientStreamEvent::Statistics(
-                voya_app::contract_map::statistics_snapshot_to_contract(
-                    voya_app::statistics::StatisticsSnapshot::zero(),
-                ),
-            ),
+            &TransientStreamEvent::Statistics(voya_app::statistics::zero_statistics_snapshot()),
         );
     }
 
-    fn notice(&self, level: CoreFlowLevel, code: NoticeCode, detail: &str) {
+    fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
         self.sinks.emit(
             EventChannel::App,
             &AppEvent::Notice(AppNotice {
                 code,
                 detail: Some(detail.to_string()),
-                level: core_flow_notice_level(level),
+                level,
             }),
         );
     }
@@ -300,7 +294,7 @@ pub(super) async fn set_connection_mode(
         finish_config_change(
             state,
             "connection-mode-restart",
-            Vec::new(),
+            (NoticeCode::ConnectionModeRefreshFailed, Vec::new()),
             &outcome.config,
             ConfigChange::CONNECTION_MODE,
         )

@@ -1,4 +1,4 @@
-import { proxyStartMonitor, proxyStopMonitor } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 /** Which command rejected, so the shell can pick the right fallback message. */
@@ -74,7 +74,7 @@ export function createProxyMonitorController({
 
       starting = true;
       useRuntimeEventStore.getState().setProxyMonitorStarting();
-      void proxyStartMonitor()
+      void voyaCommands().proxyStartMonitor()
         .then((status) => {
           useRuntimeEventStore.getState().setProxyMonitorStatus(status);
           // The surface may have gone away while the command was in flight.
@@ -100,7 +100,7 @@ export function createProxyMonitorController({
       }
 
       stopping = true;
-      void proxyStopMonitor()
+      void voyaCommands().proxyStopMonitor()
         .then((status) => {
           useRuntimeEventStore.getState().setProxyMonitorStatus(status);
         })
@@ -124,7 +124,7 @@ export function createProxyMonitorController({
       clearStartTimer();
       clearStopTimer();
       if (isRunning()) {
-        void proxyStopMonitor().catch((error: unknown) => {
+        void voyaCommands().proxyStopMonitor().catch((error: unknown) => {
           console.error("[proxy-monitor] failed to stop during cleanup", error);
         });
       }

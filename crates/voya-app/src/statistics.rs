@@ -9,6 +9,7 @@ use tokio::{
     task::JoinHandle,
     time,
 };
+use voya_contracts::StatisticsSnapshot;
 use voya_core::{text::nonempty_string, AppConfig, ServerStatItem};
 use voya_db::{Database, DbError};
 use voya_net::clash::{
@@ -78,31 +79,18 @@ impl ServerSpeedSample {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct StatisticsSnapshot {
-    pub active_profile_id: Option<String>,
-    pub proxy_upload_bytes_per_second: f64,
-    pub proxy_download_bytes_per_second: f64,
-    pub direct_upload_bytes_per_second: f64,
-    pub direct_download_bytes_per_second: f64,
-    pub upload_bytes_per_second: f64,
-    pub download_bytes_per_second: f64,
-    pub server_stat: Option<ServerStatItem>,
-}
-
-impl StatisticsSnapshot {
-    #[must_use]
-    pub fn zero() -> Self {
-        Self {
-            active_profile_id: None,
-            proxy_upload_bytes_per_second: 0.0,
-            proxy_download_bytes_per_second: 0.0,
-            direct_upload_bytes_per_second: 0.0,
-            direct_download_bytes_per_second: 0.0,
-            upload_bytes_per_second: 0.0,
-            download_bytes_per_second: 0.0,
-            server_stat: None,
-        }
+/// The zero rates the UI shows once the core stops.
+#[must_use]
+pub fn zero_statistics_snapshot() -> StatisticsSnapshot {
+    StatisticsSnapshot {
+        active_profile_id: None,
+        proxy_upload_bytes_per_second: 0.0,
+        proxy_download_bytes_per_second: 0.0,
+        direct_upload_bytes_per_second: 0.0,
+        direct_download_bytes_per_second: 0.0,
+        upload_bytes_per_second: 0.0,
+        download_bytes_per_second: 0.0,
+        server_stat: None,
     }
 }
 
@@ -620,7 +608,7 @@ fn snapshot_from_sample(
             + sample.direct_up_bytes.max(0) as f64,
         download_bytes_per_second: sample.proxy_down_bytes.max(0) as f64
             + sample.direct_down_bytes.max(0) as f64,
-        server_stat,
+        server_stat: server_stat.map(crate::contract_map::server_stat_to_contract),
     }
 }
 

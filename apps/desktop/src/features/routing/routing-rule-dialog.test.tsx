@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { RoutingRule } from "@/ipc/bindings";
+import type { RoutingRule } from "@voya/contracts";
 
 import { RoutingRuleDialog } from "./routing-rule-dialog";
 

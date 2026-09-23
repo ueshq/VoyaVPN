@@ -3,15 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
-import type { PolicyGroup, ProfileSummaryEntry } from "@/ipc/bindings";
+import type { PolicyGroup, ProfileSummaryEntry } from "@voya/contracts";
 
 import { PolicyGroupDialog } from "./policy-group-dialog";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({ savePolicyGroup: vi.fn() }));
-vi.mock("@/ipc/commands", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/ipc/commands")>()),
-  savePolicyGroup: ipc.savePolicyGroup,
-}));
+const ipc = installFakeCommands({ savePolicyGroup: vi.fn() });
 
 function node(id: string, remarks: string) {
   return { isActive: false, profile: { id, remarks, subscriptionId: null } } as unknown as ProfileSummaryEntry;

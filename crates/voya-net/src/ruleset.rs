@@ -582,11 +582,7 @@ fn collect_srs_from_rule(
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::HashMap,
-        sync::Arc,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::{collections::HashMap, sync::Arc};
 
     use tokio::sync::Mutex;
     use voya_core::{RoutingItem, RuleType, RulesItem};
@@ -976,10 +972,10 @@ mod tests {
     }
 
     fn unique_temp_root(name: &str) -> PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("time")
-            .as_nanos();
-        std::env::temp_dir().join(format!("voyavpn-{name}-{}-{nanos}", std::process::id()))
+        tempfile::Builder::new()
+            .prefix(&format!("voyavpn-{name}-"))
+            .tempdir()
+            .expect("ruleset test temp dir")
+            .keep()
     }
 }

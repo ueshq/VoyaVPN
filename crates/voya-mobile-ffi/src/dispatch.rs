@@ -52,6 +52,11 @@ pub const UNSUPPORTED_ON_MOBILE: &[&str] = &[
     "get_window_chrome_config",
     "set_window_acrylic",
     "resolve_close_request",
+    "close_window",
+    "is_window_maximized",
+    "is_window_visible",
+    "minimize_window",
+    "toggle_maximize_window",
     // A phone is not an exit node (ADR 0011 is desktop-only).
     "get_self_host_state",
     "get_self_host_stats",

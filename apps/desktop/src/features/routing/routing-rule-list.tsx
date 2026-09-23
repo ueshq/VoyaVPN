@@ -50,7 +50,7 @@ import {
   dataTableRowDivider,
   dataTableRowHover,
 } from "@/components/app-shell/data-table-surface";
-import type { RoutingRule } from "@/ipc/bindings";
+import type { RoutingRule } from "@voya/contracts";
 
 import { OUTBOUND_LABEL_KEYS, describeOutbound, type RuleGroupOutbound } from "@voya/features/routing/rule-outbound";
 import {

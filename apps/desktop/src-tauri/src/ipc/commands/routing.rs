@@ -1,3 +1,11 @@
+//! Thin adapters over `voya_app::routing`'s contract-typed use cases.
+
+use voya_app::routing::{
+    delete_routing_rules_use_case, delete_routings_use_case, list_routings_use_case,
+    move_routing_rule_use_case, reset_routing_rules_use_case, save_routing_rule_use_case,
+    save_routing_use_case, set_active_routing_use_case,
+};
+
 use super::{post_commit::*, support::*, *};
 
 #[tauri::command]
@@ -5,12 +13,7 @@ use super::{post_commit::*, support::*, *};
 pub async fn list_routings(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<RoutingContract>, AppError> {
-    state
-        .services()
-        .list_routings()
-        .await
-        .map(|items| items.into_iter().map(routing_to_contract).collect())
-        .map_err(AppError::from)
+    list_routings_use_case(state.services()).await
 }
 
 #[tauri::command]
@@ -20,14 +23,7 @@ pub async fn save_routing<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     item: RoutingContract,
 ) -> Result<RoutingContract, AppError> {
-    let saved = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .save_routing(config, routing_from_contract(item))
-                .await?)
-        })
-        .await?;
+    let saved = save_routing_use_case(state.config_mutations(), item).await?;
     finish_routing_change(
         &app,
         &state,
@@ -37,7 +33,7 @@ pub async fn save_routing<R: tauri::Runtime>(
     )
     .await;
 
-    Ok(routing_to_contract(saved.value))
+    Ok(saved.value)
 }
 
 #[tauri::command]
@@ -52,14 +48,7 @@ pub async fn delete_routings<R: tauri::Runtime>(
         "routing id",
         AppErrorSubsystem::Routing,
     )?;
-    let deleted = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .delete_routings(config, &ids)
-                .await?)
-        })
-        .await?;
+    let deleted = delete_routings_use_case(state.config_mutations(), ids).await?;
     finish_routing_change(
         &app,
         &state,
@@ -84,14 +73,7 @@ pub async fn set_active_routing<R: tauri::Runtime>(
         "routing id",
         AppErrorSubsystem::Routing,
     )?;
-    let active = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .set_active_routing(config, &id)
-                .await?)
-        })
-        .await?;
+    let active = set_active_routing_use_case(state.config_mutations(), id).await?;
     finish_routing_change(
         &app,
         &state,
@@ -101,7 +83,7 @@ pub async fn set_active_routing<R: tauri::Runtime>(
     )
     .await;
 
-    Ok(routing_to_contract(active.value))
+    Ok(active.value)
 }
 
 #[tauri::command]
@@ -117,14 +99,7 @@ pub async fn save_routing_rule<R: tauri::Runtime>(
         "routing id",
         AppErrorSubsystem::Routing,
     )?;
-    let saved = state
-        .config_mutations()
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .save_rule(&routing_id, rule_from_contract(rule))
-                .await?)
-        })
-        .await?;
+    let saved = save_routing_rule_use_case(state.config_mutations(), routing_id, rule).await?;
 
     finish_routing_change(
         &app,
@@ -135,7 +110,7 @@ pub async fn save_routing_rule<R: tauri::Runtime>(
     )
     .await;
 
-    Ok(routing_to_contract(saved.value))
+    Ok(saved.value)
 }
 
 #[tauri::command]
@@ -156,14 +131,8 @@ pub async fn delete_routing_rules<R: tauri::Runtime>(
         "routing rule id",
         AppErrorSubsystem::Routing,
     )?;
-    let saved = state
-        .config_mutations()
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .delete_rules(&routing_id, &rule_ids)
-                .await?)
-        })
-        .await?;
+    let saved =
+        delete_routing_rules_use_case(state.config_mutations(), routing_id, rule_ids).await?;
 
     finish_routing_change(
         &app,
@@ -174,7 +143,7 @@ pub async fn delete_routing_rules<R: tauri::Runtime>(
     )
     .await;
 
-    Ok(routing_to_contract(saved.value))
+    Ok(saved.value)
 }
 
 #[tauri::command]
@@ -197,19 +166,14 @@ pub async fn move_routing_rule<R: tauri::Runtime>(
         "routing rule id",
         AppErrorSubsystem::Routing,
     )?;
-    let saved = state
-        .config_mutations()
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .move_rule(
-                    &routing_id,
-                    &rule_id,
-                    move_action_from_contract(action),
-                    position,
-                )
-                .await?)
-        })
-        .await?;
+    let saved = move_routing_rule_use_case(
+        state.config_mutations(),
+        routing_id,
+        rule_id,
+        action,
+        position,
+    )
+    .await?;
 
     finish_routing_change(
         &app,
@@ -220,7 +184,7 @@ pub async fn move_routing_rule<R: tauri::Runtime>(
     )
     .await;
 
-    Ok(routing_to_contract(saved.value))
+    Ok(saved.value)
 }
 
 /// Replaces a routing profile's rules with the default set, keeping its
@@ -237,14 +201,7 @@ pub async fn reset_routing_rules<R: tauri::Runtime>(
         "routing id",
         AppErrorSubsystem::Routing,
     )?;
-    let saved = state
-        .config_mutations()
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(RoutingManager::new_in(unit_of_work)
-                .reset_rules_to_default(&routing_id)
-                .await?)
-        })
-        .await?;
+    let saved = reset_routing_rules_use_case(state.config_mutations(), routing_id).await?;
 
     finish_routing_change(
         &app,
@@ -255,5 +212,5 @@ pub async fn reset_routing_rules<R: tauri::Runtime>(
     )
     .await;
 
-    Ok(routing_to_contract(saved.value))
+    Ok(saved.value)
 }

@@ -4,20 +4,20 @@ import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
-import type { PolicyGroupEntry, RuntimeStatusResponse } from "@/ipc/bindings";
+import type { PolicyGroupEntry, RuntimeStatusResponse } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@voya/client/toast-store";
 
 import { ProxyGroupsPanel } from "./proxy-groups-panel";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({
+const ipc = installFakeCommands({
   listPolicyGroups: vi.fn(),
   policyGroupRuntime: vi.fn(),
   selectPolicyGroupMember: vi.fn(),
   testPolicyGroupDelay: vi.fn(),
-}));
-vi.mock("@/ipc/commands", () => ipc);
+});
 
 const connected: RuntimeStatusResponse = {
   activeProfileId: null,

@@ -50,32 +50,35 @@ pub trait ProxyRuntimeEventSink: Send + Sync {
     fn emit_connections(&self, event: ProxyConnectionsSnapshot);
 }
 
-#[derive(Debug, Clone)]
-pub struct ProxyRuntimeManager<T = ReqwestClashHttpTransport> {
-    transport: T,
+#[derive(Clone)]
+pub struct ProxyRuntimeManager {
+    transport: Arc<dyn ClashHttpTransport>,
 }
 
-impl Default for ProxyRuntimeManager<ReqwestClashHttpTransport> {
+impl std::fmt::Debug for ProxyRuntimeManager {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProxyRuntimeManager")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Default for ProxyRuntimeManager {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ProxyRuntimeManager<ReqwestClashHttpTransport> {
+impl ProxyRuntimeManager {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            transport: ReqwestClashHttpTransport::new(),
+            transport: Arc::new(ReqwestClashHttpTransport::new()),
         }
     }
-}
 
-impl<T> ProxyRuntimeManager<T>
-where
-    T: ClashHttpTransport,
-{
     #[must_use]
-    pub fn with_transport(transport: T) -> Self {
+    pub fn with_transport(transport: Arc<dyn ClashHttpTransport>) -> Self {
         Self { transport }
     }
     pub async fn connections(&self, access: &ClashApiAccess) -> Result<ProxyConnectionsSnapshot> {
@@ -109,11 +112,11 @@ where
             .map_err(Into::into)
     }
 
-    fn client(&self, access: &ClashApiAccess) -> Result<ClashRestClient<T>> {
+    fn client(&self, access: &ClashApiAccess) -> Result<ClashRestClient> {
         let endpoint = proxy_runtime_endpoint(access).ok_or(ProxyRuntimeError::InvalidStatePort)?;
         Ok(ClashRestClient::with_transport(
             endpoint,
-            self.transport.clone(),
+            Arc::clone(&self.transport),
         ))
     }
 }
@@ -508,7 +511,7 @@ mod tests {
     async fn proxy_runtime_traffic_mode_uses_patch_configs() {
         let transport = MockTransport::default();
         transport.respond("/configs", Value::Null);
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
 
         manager
             .set_traffic_mode(&access(RUNTIME_PORT), TrafficMode::Global)
@@ -528,7 +531,7 @@ mod tests {
     #[tokio::test]
     async fn proxy_runtime_rejects_zero_state_port_without_request() {
         let transport = MockTransport::default();
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
 
         let error = manager
             .connections(&ClashApiAccess::default())
@@ -715,7 +718,7 @@ mod tests {
         let secret = ClashApiSecret::generate();
         let transport = MockTransport::default();
         transport.respond("/configs", Value::Null);
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
 
         manager
             .set_traffic_mode(
@@ -890,7 +893,7 @@ mod tests {
             "/group/proxy/delay?url=https%3A%2F%2Fprobe.example%2F&timeout=3000",
             json!({ "Osaka [osaka]": 120 }),
         );
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
         let members = vec![
             voya_core::ProfileIdentity {
                 index_id: "tokyo".to_string(),

@@ -25,7 +25,7 @@ import type {
   RuntimeStatusResponse,
   SpeedtestResult,
   TunStatus,
-} from "@/ipc/bindings";
+} from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { makeProfileDetailsFixture, toProfileSummaryEntry } from "@voya/features/test/profile-fixture";
@@ -34,8 +34,9 @@ import { MOVE_ACTIONS } from "@voya/features/profiles/profile-constants";
 import { ProfilesScreen } from "./server-table";
 import { applySpeedtestResults, overlaySpeedtestResult, useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeGroups } from "./use-node-groups";
+import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 
-const ipcMocks = vi.hoisted(() => ({
+const ipcMocks = installFakeCommands({
   connectActiveProfile: vi.fn(),
   restartCore: vi.fn(),
   runtimeStatus: vi.fn(),
@@ -49,8 +50,7 @@ const ipcMocks = vi.hoisted(() => ({
   getProfile: vi.fn(),
   importProfilesFromText: vi.fn(),
   readClipboardText: vi.fn(),
-  listProfileSummaries: vi.fn(),
-  listPolicyGroups: vi.fn(),
+  ...seedListCommands(),
   policyGroupRuntime: vi.fn(),
   deletePolicyGroups: vi.fn(),
   savePolicyGroup: vi.fn(),
@@ -58,7 +58,6 @@ const ipcMocks = vi.hoisted(() => ({
   setActivePolicyGroup: vi.fn(),
   testPolicyGroupDelay: vi.fn(),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
-  listSubscriptions: vi.fn(),
   moveProfile: vi.fn(),
   cancelSpeedtest: vi.fn(),
   runSpeedtest: vi.fn(),
@@ -67,12 +66,9 @@ const ipcMocks = vi.hoisted(() => ({
   saveSubscription: vi.fn(),
   setActiveProfile: vi.fn(),
   updateSubscriptions: vi.fn(),
-}));
+});
 
 // The real error class and kind check, so a missing core opens its dialog.
-vi.mock("@/ipc/commands", async () => {
-  return { ...ipcMocks };
-});
 
 // `listProfileSummaries` answers with the rows plus the number of stored profiles this
 // build could not decode. Tests that only care about the rows go through these

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run } from "../../lib/common.mjs";
+import { parseArgs } from "../../lib/args.mjs";
 import { defaultIsProcessRunning, voyaRuntimeExecutables } from "./local-runtime.mjs";
 import {
   packetTunnelBundleIdentifier as providerBundleId,
@@ -11,38 +12,20 @@ const repoRoot = repoRootFromScript(import.meta.url);
 const defaultAppBundle = "/Applications/VoyaVPN.app";
 const repoReleaseAppBundle = resolve(repoRoot, "target", "release", "bundle", "macos", "VoyaVPN.app");
 
-function parseArgs(argv) {
-  const options = {
+const argSpec = {
+  "--app": { key: "app" },
+  "--dev": { key: "dev", value: true },
+  "--fix": { key: "fix", value: true },
+  "--yes|-y": { key: "yes", value: true },
+};
+
+function parseDoctorArgs(argv) {
+  return parseArgs(argv, argSpec, {
     app: defaultAppBundle,
     dev: false,
     fix: false,
     yes: false,
-  };
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === "--fix") {
-      options.fix = true;
-    } else if (arg === "--dev") {
-      options.dev = true;
-    } else if (arg === "--yes" || arg === "-y") {
-      options.yes = true;
-    } else if (arg === "--app") {
-      const value = argv[index + 1];
-      if (!value) {
-        throw new Error("--app requires a path");
-      }
-      options.app = value;
-      index += 1;
-    } else if (arg === "-h" || arg === "--help") {
-      printHelp();
-      process.exit(0);
-    } else {
-      throw new Error(`Unknown option: ${arg}`);
-    }
-  }
-
-  return options;
+  });
 }
 
 function printHelp() {
@@ -391,7 +374,11 @@ function fix(entries, legalApps, options) {
 
 function main() {
   requireDarwin("macOS NetworkExtension doctor must run on macOS.");
-  const options = parseArgs(process.argv.slice(2));
+  const options = parseDoctorArgs(process.argv.slice(2));
+  if (options.help) {
+    printHelp();
+    return;
+  }
   const legalApps = buildLegalApps(options);
   let entries = classify(collectPluginkitMatches(), legalApps);
   printReport(entries, legalApps);

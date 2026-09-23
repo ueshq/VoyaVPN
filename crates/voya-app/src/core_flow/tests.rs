@@ -8,14 +8,16 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use voya_contracts::{AppNoticeLevel, CoreState, LogLevel};
 use voya_core::{AppConfig, ProfileItem, ProfileProtocol, ProfileTransport, ServerEndpoint};
 use voya_db::Database;
+use voya_net::clash::ClashHttpTransport;
 use voya_platform::{
     coreinfo::{executable_name_for_current_os, TargetOs, CORE_DIR_NAME, SING_BOX_EXECUTABLES},
     paths::AppPaths,
     privilege::ElevationState,
     sysproxy::SystemProxyService,
-    test_support::RecordingRunner,
+    test_support::{RecordingRunner, StoppedNativeTun},
     tun::{
         NativeTunController, NativeTunError, NativeTunProviderState, NativeTunStartRequest,
         NativeTunStatus, TunBackend,
@@ -43,7 +45,7 @@ impl RecordingSink {
 }
 
 impl CoreFlowSink for RecordingSink {
-    fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>) {
+    fn log(&self, level: LogLevel, code: LogCode, detail: Option<&str>) {
         // Codes, not sentences: the recording spells the variant the way the
         // wire does, so a reworded locale string can never fail these.
         self.push(format!(
@@ -57,7 +59,7 @@ impl CoreFlowSink for RecordingSink {
 
     fn core_state(
         &self,
-        state: CoreFlowState,
+        state: CoreState,
         active_profile_id: Option<String>,
         snapshot: Option<&SupervisorSnapshot>,
     ) {
@@ -83,7 +85,7 @@ impl CoreFlowSink for RecordingSink {
         self.push("statistics:zero");
     }
 
-    fn notice(&self, level: CoreFlowLevel, code: NoticeCode, _detail: &str) {
+    fn notice(&self, level: AppNoticeLevel, code: NoticeCode, _detail: &str) {
         self.push(format!("notice:{level:?}:{}", code_tag(&code)));
     }
 }
@@ -104,27 +106,6 @@ fn code_tag(code: &impl serde::Serialize) -> String {
         tag
     } else {
         format!("{tag}({})", params.join(","))
-    }
-}
-
-struct StoppedNativeTun;
-
-impl NativeTunController for StoppedNativeTun {
-    fn status(&self, backend: TunBackend) -> NativeTunStatus {
-        NativeTunStatus {
-            backend,
-            provider_state: NativeTunProviderState::Stopped,
-            component_ready: true,
-            message: None,
-        }
-    }
-
-    fn start(&self, _request: NativeTunStartRequest) -> Result<(), NativeTunError> {
-        Ok(())
-    }
-
-    fn stop(&self, _backend: TunBackend) -> Result<(), NativeTunError> {
-        Ok(())
     }
 }
 
@@ -200,11 +181,11 @@ impl Harness {
         }
     }
 
-    fn flow(&self) -> CoreFlow<'_, ModeTransport> {
+    fn flow(&self) -> CoreFlow<'_> {
         self.flow_with_proxy_runner(RecordingRunner::default())
     }
 
-    fn flow_with_proxy_runner(&self, runner: RecordingRunner) -> CoreFlow<'_, ModeTransport> {
+    fn flow_with_proxy_runner(&self, runner: RecordingRunner) -> CoreFlow<'_> {
         let system_proxy = SystemProxyManager::with_target_os(
             SystemProxyService::new(Arc::new(runner)),
             self.paths.clone(),
@@ -213,10 +194,7 @@ impl Harness {
         self.flow_with_proxy_manager(system_proxy)
     }
 
-    fn flow_with_proxy_manager(
-        &self,
-        system_proxy: SystemProxyManager,
-    ) -> CoreFlow<'_, ModeTransport> {
+    fn flow_with_proxy_manager(&self, system_proxy: SystemProxyManager) -> CoreFlow<'_> {
         let tun = TunManager::with_target_os_and_native_tun(
             Arc::new(ElevationState::new()),
             TargetOs::Linux,
@@ -234,9 +212,9 @@ impl Harness {
             tun,
             Arc::new(self.sink.clone()),
         )
-        .with_proxy_runtime(ProxyRuntimeManager::with_transport(
+        .with_proxy_runtime(ProxyRuntimeManager::with_transport(Arc::new(
             self.mode_transport.clone(),
-        ))
+        )))
     }
 }
 
@@ -256,7 +234,9 @@ async fn saved_mode_is_applied_before_connect_restart_and_recovery_are_announced
     };
     let flow = harness
         .flow()
-        .with_proxy_runtime(ProxyRuntimeManager::with_transport(transport.clone()));
+        .with_proxy_runtime(ProxyRuntimeManager::with_transport(Arc::new(
+            transport.clone(),
+        )));
     let mut config = active_config();
     config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
     let first = flow.connect(&config).await.expect("connect");
@@ -315,7 +295,7 @@ async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
     config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
     let snapshot = harness
         .flow()
-        .with_proxy_runtime(ProxyRuntimeManager::with_transport(transport))
+        .with_proxy_runtime(ProxyRuntimeManager::with_transport(Arc::new(transport)))
         .connect(&config)
         .await
         .expect("core still connected");
@@ -327,7 +307,7 @@ async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
     let events = harness.sink.events();
     let warning = events
         .iter()
-        .position(|event| event == "notice:Warn:proxyModeSavedRuntimeUpdateFailed")
+        .position(|event| event == "notice:Warning:proxyModeSavedRuntimeUpdateFailed")
         .expect("warning");
     let connected = events
         .iter()
@@ -425,7 +405,7 @@ async fn explicit_proxy_application_failure_is_reported_and_keeps_the_core_conne
         &harness.sink.events()[before..],
         [
             "sysproxy",
-            "notice:Warn:settingsSavedSystemProxyUpdateFailed"
+            "notice:Warning:settingsSavedSystemProxyUpdateFailed"
         ]
     );
     assert_eq!(
@@ -786,7 +766,7 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
     let events = harness.sink.events();
     assert!(events.contains(&"statistics:zero".into()));
     assert!(events.contains(&"sysproxy".into()));
-    assert!(events.contains(&"notice:Warn:activeSelectionRemoved".into()));
+    assert!(events.contains(&"notice:Warning:activeSelectionRemoved".into()));
     // A repeated notification must not interrupt a newer valid selection.
     config.index_id = "other".into();
     flow.connect(&config).await.expect("select other");

@@ -6,7 +6,6 @@
 use std::collections::BTreeMap;
 
 use voya_core::{unique_member_tags, ProfileIdentity, PROXY_TAG};
-use voya_net::clash::ClashHttpTransport;
 
 use super::{ProxyRuntimeError, ProxyRuntimeManager, Result};
 use crate::supervisor::ClashApiAccess;
@@ -27,10 +26,7 @@ pub struct RuntimeGroupState {
     pub members: Vec<RuntimeGroupMember>,
 }
 
-impl<T> ProxyRuntimeManager<T>
-where
-    T: ClashHttpTransport,
-{
+impl ProxyRuntimeManager {
     pub async fn group_state(
         &self,
         access: &ClashApiAccess,

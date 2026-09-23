@@ -7,22 +7,20 @@ use super::{support::*, *};
 
 /// Broadcasts one invalidation bundle and reports a failed emit as a notice.
 ///
-/// The seven `emit_*_invalidation` wrappers below were eight copies of this
-/// body (the eighth was hand-rolled in `lib.rs`) that differed only in the
-/// notice title and the key list. Emitting is best-effort by design: the change
-/// is already committed when this runs, so a dead event channel becomes a
-/// warning notice and never changes the command's result.
+/// The seven `emit_*_invalidation` wrappers used to differ only in the notice
+/// title and the key list; both now come from `voya_app::invalidation`, which
+/// returns the pair together. Emitting is best-effort by design: the change is
+/// already committed when this runs, so a dead event channel becomes a warning
+/// notice and never changes the command's result.
 ///
 /// `scopes` is deduplicated and ordered so the payload is deterministic
 /// regardless of how a caller assembled its list.
-pub(crate) fn emit_invalidation<R, I>(
+pub(crate) fn emit_invalidation<R>(
     app: &tauri::AppHandle<R>,
-    failure_code: NoticeCode,
     reason: &str,
-    scopes: I,
+    (failure_code, scopes): invalidation::InvalidationBundle,
 ) where
     R: tauri::Runtime,
-    I: IntoIterator<Item = InvalidationScope>,
 {
     let scopes: BTreeSet<InvalidationScope> = scopes.into_iter().collect();
     // Nodes, the active node and the traffic mode all sit behind these scopes,
@@ -48,110 +46,6 @@ pub(crate) fn emit_invalidation<R, I>(
             AppNoticeLevel::Warning,
         );
     }
-}
-
-/// Profile-list mutations. `config_changed` reports that the commit also
-/// rewrote the persisted `AppConfig` (see `voya_app::invalidation`).
-pub(super) fn emit_profile_invalidation<R>(
-    app: &tauri::AppHandle<R>,
-    reason: &str,
-    config_changed: bool,
-) where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::ProfileRefreshFailed,
-        reason,
-        invalidation::profile_scopes(config_changed),
-    );
-}
-
-pub(super) fn emit_policy_group_invalidation<R>(
-    app: &tauri::AppHandle<R>,
-    reason: &str,
-    config_changed: bool,
-) where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::PolicyGroupRefreshFailed,
-        reason,
-        invalidation::policy_group_scopes(config_changed),
-    );
-}
-
-pub(crate) fn emit_subscription_invalidation<R>(
-    app: &tauri::AppHandle<R>,
-    reason: &str,
-    profiles_changed: bool,
-    config_changed: bool,
-) where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::SubscriptionRefreshFailed,
-        reason,
-        invalidation::subscription_scopes(profiles_changed, config_changed),
-    );
-}
-
-/// Self-hosted node changes, from a command or from the node's own loops.
-pub(crate) fn emit_self_host_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
-where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::SelfHostRefreshFailed,
-        reason,
-        invalidation::self_host_scopes(),
-    );
-}
-
-pub(super) fn emit_dns_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
-where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::DnsRefreshFailed,
-        reason,
-        invalidation::dns_scopes(),
-    );
-}
-
-/// Proxy-runtime commands. `config_changed` is true only for the traffic-mode
-/// command, which also persists a settings field.
-pub(super) fn emit_proxy_runtime_invalidation<R>(
-    app: &tauri::AppHandle<R>,
-    reason: &str,
-    config_changed: bool,
-) where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::ProxyViewRefreshFailed,
-        reason,
-        invalidation::proxy_runtime_scopes(config_changed),
-    );
-}
-
-/// The TUN / system-proxy mode commands, which persist settings fields the
-/// bundle mirrors without going through `save_app_settings`.
-pub(super) fn emit_connection_mode_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
-where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::ConnectionModeRefreshFailed,
-        reason,
-        invalidation::connection_mode_scopes(),
-    );
 }
 
 pub(super) fn emit_proxy_monitor_status<R>(app: &tauri::AppHandle<R>, status: &ProxyMonitorStatus)
@@ -229,7 +123,7 @@ pub(super) async fn finish_routing_change<R, T>(
         app,
         state,
         reason,
-        &invalidation::routing_scopes(committed.config_changed),
+        &invalidation::routing_scopes(committed.config_changed).1,
         &committed.config,
         change,
     )
@@ -250,12 +144,7 @@ where
         scopes: &[InvalidationScope],
         refresh_failed_code: NoticeCode,
     ) {
-        emit_invalidation(
-            &self.app,
-            refresh_failed_code,
-            reason,
-            scopes.iter().copied(),
-        );
+        emit_invalidation(&self.app, reason, (refresh_failed_code, scopes.to_vec()));
     }
 
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
@@ -296,18 +185,6 @@ where
         .disconnect_removed_profile(&state.config_mutations().current_config())
         .await
         .map_err(AppError::from)
-}
-
-pub(super) fn emit_settings_bundle_invalidation<R>(app: &tauri::AppHandle<R>, reason: &str)
-where
-    R: tauri::Runtime,
-{
-    emit_invalidation(
-        app,
-        NoticeCode::SettingsRefreshFailed,
-        reason,
-        invalidation::settings_bundle_scopes(),
-    );
 }
 
 pub(super) fn emit_sysproxy_changed<R>(

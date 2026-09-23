@@ -7,20 +7,20 @@ import { saveQueue } from "@voya/features/forms/save-queue";
 import { UpdatesPanel } from "@/features/updates/updates-panel";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 import { changeLocale } from "@voya/i18n";
-import type { AppUpdaterStatus, ResourceUpdateFile } from "@/ipc/bindings";
+import type { AppUpdaterStatus, ResourceUpdateFile } from "@voya/contracts";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipcMocks = vi.hoisted(() => ({
+const ipcMocks = installFakeCommands({
   appUpdateStatus: vi.fn(),
   updateGeoAssets: vi.fn(),
   updateSrsAssets: vi.fn(),
-}));
+});
 const tauriMocks = vi.hoisted(() => ({
   check: vi.fn(),
   getVersion: vi.fn(),
   relaunch: vi.fn(),
 }));
 
-vi.mock("@/ipc/commands", () => ipcMocks);
 vi.mock("@/ipc/tauri-plugins", () => tauriMocks);
 
 describe("UpdatesPanel", () => {

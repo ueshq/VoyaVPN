@@ -49,7 +49,11 @@ pub async fn save_subscription<R: tauri::Runtime>(
                 .await?)
         })
         .await?;
-    emit_subscription_invalidation(&app, "subscription-saved", false, false);
+    emit_invalidation(
+        &app,
+        "subscription-saved",
+        invalidation::subscription_scopes(false, false),
+    );
 
     Ok(subscription_to_contract(saved.value))
 }
@@ -75,7 +79,11 @@ pub async fn delete_subscriptions<R: tauri::Runtime>(
         })
         .await?;
     emit_then_disconnect_removed(&app, &state, |app| {
-        emit_subscription_invalidation(app, "subscriptions-deleted", true, deleted.config_changed)
+        emit_invalidation(
+            app,
+            "subscriptions-deleted",
+            invalidation::subscription_scopes(true, deleted.config_changed),
+        )
     })
     .await?;
 
@@ -104,7 +112,11 @@ pub async fn import_profiles_from_text<R: tauri::Runtime>(
         })
         .await?;
     emit_then_disconnect_removed(&app, &state, |app| {
-        emit_subscription_invalidation(app, "profiles-imported", true, imported.config_changed)
+        emit_invalidation(
+            app,
+            "profiles-imported",
+            invalidation::subscription_scopes(true, imported.config_changed),
+        )
     })
     .await?;
 
@@ -154,7 +166,11 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
         })
         .await?;
     emit_then_disconnect_removed(&app, &state, |app| {
-        emit_subscription_invalidation(app, "subscriptions-updated", true, updated.config_changed)
+        emit_invalidation(
+            app,
+            "subscriptions-updated",
+            invalidation::subscription_scopes(true, updated.config_changed),
+        )
     })
     .await?;
 

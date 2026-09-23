@@ -5,27 +5,23 @@ import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
-import type { CoreState, RoutingRule, Routing_Serialize } from "@/ipc/bindings";
+import type { CoreState, RoutingRule, Routing_Serialize } from "@voya/contracts";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
 import { RoutingScreen } from "./routing-screen";
+import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({
+const ipc = installFakeCommands({
   connectionModeStatus: vi.fn(),
   deleteRoutingRules: vi.fn(),
-  listPolicyGroups: vi.fn(),
+  ...seedListCommands(),
   listProcessCandidates: vi.fn(),
-  listProfileSummaries: vi.fn(),
-  listRoutings: vi.fn(),
   loadAppSettings: vi.fn(),
   moveRoutingRule: vi.fn(),
   proxySetTrafficMode: vi.fn(),
   resetRoutingRules: vi.fn(),
   saveRoutingRule: vi.fn(),
-}));
-vi.mock("@/ipc/commands", async () => ({
-  ...ipc,
-}));
+});
 
 const runtime = vi.hoisted(() => ({ state: "disconnected" as CoreState }));
 vi.mock("@voya/client/runtime-event-store", () => ({

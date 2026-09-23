@@ -1,7 +1,6 @@
-import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { promisify } from "node:util";
+import { checkedCapture } from "../../../lib/common.mjs";
 import {
   isPositiveByteSize,
   isSha256Hex,
@@ -16,7 +15,7 @@ import { stableTargets } from "../../matrix.mjs";
 import {
   repoRoot,
   resolveRepoPath,
-  readJson,
+  readJsonAsync,
   displayPath,
   isDryRun,
   stableInputPath,
@@ -26,10 +25,9 @@ import {
   forbiddenSerialized,
 } from "./inputs.mjs";
 import { lineSummary } from "./reporter.mjs";
-const execFileAsync = promisify(execFile);
 
-async function runGenerator(script, args, env) {
-  const result = await execFileAsync(process.execPath, [resolveRepoPath(script), ...args], {
+function runGenerator(script, args, env) {
+  const result = checkedCapture(process.execPath, [resolveRepoPath(script), ...args], {
     cwd: repoRoot,
     env: { ...process.env, ...env },
     maxBuffer: 10 * 1024 * 1024,
@@ -144,7 +142,7 @@ async function checkStableUpdaterConfigEvidence(reporter, options, roots, update
 
   for (const manifestPath of manifestPaths) {
     const label = displayPath(manifestPath);
-    const manifest = await readJson(manifestPath);
+    const manifest = await readJsonAsync(manifestPath);
     try {
       validateStableUpdaterConfigMetadata(manifest.stableUpdaterConfig, {
         updatesBaseUrl,
@@ -239,19 +237,19 @@ export async function checkGeneratedManifests(reporter, options, cdnBaseUrl, upd
   );
   if (options.releaseIndex) {
     assertStableEvidencePath(options, "release index evidence", options.releaseIndex);
-    const releaseIndexEvidence = await readJson(resolveRepoPath(options.releaseIndex));
+    const releaseIndexEvidence = await readJsonAsync(resolveRepoPath(options.releaseIndex));
     validateReleaseIndex(releaseIndexEvidence, cdnBaseUrl);
     reporter.pass("workflow CDN staging metadata", [`validated ${options.releaseIndex}`]);
   }
   if (options.updaterMetadata) {
     assertStableEvidencePath(options, "updater metadata evidence", options.updaterMetadata);
-    const updaterMetadataEvidence = await readJson(resolveRepoPath(options.updaterMetadata));
+    const updaterMetadataEvidence = await readJsonAsync(resolveRepoPath(options.updaterMetadata));
     validateUpdaterMetadata(updaterMetadataEvidence, updatesBaseUrl);
     reporter.pass("workflow updater metadata", [`validated ${options.updaterMetadata}`]);
   }
   if (options.coreManifest) {
     assertStableEvidencePath(options, "core manifest evidence", options.coreManifest);
-    const coreManifestEvidence = await readJson(resolveRepoPath(options.coreManifest));
+    const coreManifestEvidence = await readJsonAsync(resolveRepoPath(options.coreManifest));
     validateCoreManifest(coreManifestEvidence, cdnBaseUrl);
     reporter.pass("workflow core manifest metadata", [`validated ${options.coreManifest}`]);
   }
@@ -261,7 +259,7 @@ export async function checkGeneratedManifests(reporter, options, cdnBaseUrl, upd
     ["index", "--input", releaseArtifacts, "--out", releaseIndexOut, "--base-url", cdnBaseUrl, "--channel", "stable"],
     env,
   );
-  const releaseIndex = await readJson(releaseIndexOut);
+  const releaseIndex = await readJsonAsync(releaseIndexOut);
   validateReleaseIndex(releaseIndex, cdnBaseUrl);
   reporter.pass("stable release index manifest", [
     `generated ${displayPath(releaseIndexOut)}`,
@@ -274,7 +272,7 @@ export async function checkGeneratedManifests(reporter, options, cdnBaseUrl, upd
     ["updater", "--input", updaterArtifacts, "--out", latestOut, "--channel", "stable", "--base-url", updatesBaseUrl],
     env,
   );
-  const latest = await readJson(latestOut);
+  const latest = await readJsonAsync(latestOut);
   validateUpdaterMetadata(latest, updatesBaseUrl);
   reporter.pass("stable updater metadata", [
     `generated ${displayPath(latestOut)}`,
@@ -287,7 +285,7 @@ export async function checkGeneratedManifests(reporter, options, cdnBaseUrl, upd
     ["core-assets", "--fixture", coreAssets, "--out", coreManifestOut, "--base-url", cdnBaseUrl, "--channel", "stable"],
     env,
   );
-  const coreManifest = await readJson(coreManifestOut);
+  const coreManifest = await readJsonAsync(coreManifestOut);
   validateCoreManifest(coreManifest, cdnBaseUrl);
   reporter.pass("stable core asset manifest", [
     `generated ${displayPath(coreManifestOut)}`,

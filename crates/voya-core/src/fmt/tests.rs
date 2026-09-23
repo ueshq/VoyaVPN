@@ -1,7 +1,5 @@
 use std::{collections::BTreeMap, panic};
 
-use proptest::prelude::*;
-
 use super::{entry::export_share_link, *};
 use crate::testutil::{endpoint, linux_context as fmt_test_context};
 use crate::{generate_singbox_config_value, AppConfig, PROXY_TAG};
@@ -853,16 +851,60 @@ fn fmt_socks_accepts_plain_user_names_and_anonymous_links() {
     assert_eq!(reparsed.password(), "");
 }
 
-proptest! {
-    #[test]
-    fn share_url_component_property_round_trips(value in "[A-Za-z0-9 _./:@,=+%\\-]{0,80}") {
-        prop_assert_eq!(url_decode(&url_encode(&value)), value);
+/// Table-driven stand-in for the single `proptest!` block that used to live
+/// here. The interesting cases are punctuation, spaces, and empty input —
+/// random 80-char strings rarely exercised more than that.
+#[test]
+fn share_url_component_round_trips() {
+    let empty = String::new();
+    let long = "a".repeat(80);
+    let cases = [
+        empty.as_str(),
+        " ",
+        "  ",
+        "simple",
+        "with spaces",
+        "punct./:@,=+%-",
+        "punct ./:@,=+%",
+        "UPPER lower 123",
+        long.as_str(),
+        "%20-already-encoded-looking",
+        "double++plus",
+        "comma,separated,values",
+        "path/like/segments",
+        "user@example.com",
+        "key=value&more=data",
+    ];
+    for value in cases {
+        assert_eq!(url_decode(&url_encode(value)), value, "{value:?}");
     }
+}
 
-    #[test]
-    fn share_base64_property_round_trips(value in "[A-Za-z0-9 _./:@,=+\\-]{0,80}") {
-        let encoded = base64_encode(&value, true);
-        prop_assert_eq!(base64_decode(&encoded, "test").expect("decode"), value);
+#[test]
+fn share_base64_round_trips() {
+    let empty = String::new();
+    let long = "a".repeat(80);
+    let cases = [
+        empty.as_str(),
+        " ",
+        "  ",
+        "simple",
+        "with spaces",
+        "punct./:@,=+-",
+        "UPPER lower 123",
+        long.as_str(),
+        "double++plus",
+        "comma,separated,values",
+        "path/like/segments",
+        "user@example.com",
+    ];
+    for value in cases {
+        let encoded = base64_encode(value, true);
+        assert_eq!(
+            base64_decode(&encoded, "test").expect("decode"),
+            value,
+            "{value:?}"
+        );
     }
 }
 

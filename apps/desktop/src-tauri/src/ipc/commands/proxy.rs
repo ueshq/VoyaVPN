@@ -33,7 +33,11 @@ pub async fn proxy_close_connection<R: tauri::Runtime>(
         .await
         .map_err(AppError::from)?;
 
-    emit_proxy_runtime_invalidation(&app, "proxy-connection-closed", false);
+    emit_invalidation(
+        &app,
+        "proxy-connection-closed",
+        invalidation::proxy_runtime_scopes(false),
+    );
 
     Ok(snapshot)
 }
@@ -65,7 +69,11 @@ pub(crate) async fn apply_traffic_mode<R: tauri::Runtime>(
     state
         .services()
         .acknowledge_traffic_mode(&snapshot, &outcome);
-    emit_proxy_runtime_invalidation(app, "proxy-traffic-mode-changed", outcome.config_changed);
+    emit_invalidation(
+        app,
+        "proxy-traffic-mode-changed",
+        invalidation::proxy_runtime_scopes(outcome.config_changed),
+    );
     outcome.runtime_result.map_err(AppError::from)?;
 
     Ok(voya_contracts::TrafficModeResponse {

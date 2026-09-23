@@ -1,17 +1,15 @@
 import { createHash } from "node:crypto";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { checkedCapture, repoRootFromScript } from "../../lib/common.mjs";
+import { capture, checkedCapture, repoRootFromScript } from "../../lib/common.mjs";
 import { requiredNetworkExtensionValue } from "./tunnel-layout.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const defaultDecodedDir = resolve(repoRoot, "target", "native", "macos", "decoded-provisioning-profiles");
 
 export function plistBuddy(plistPath, keyPath, optional = false) {
-  const result = spawnSync("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], {
+  const result = capture("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], {
     cwd: repoRoot,
-    encoding: "utf8",
   });
   if (result.status !== 0) {
     if (optional) {
@@ -23,9 +21,8 @@ export function plistBuddy(plistPath, keyPath, optional = false) {
 }
 
 function plistBuddyXml(plistPath, keyPath, optional = false) {
-  const result = spawnSync("/usr/libexec/PlistBuddy", ["-x", "-c", `Print ${keyPath}`, plistPath], {
+  const result = capture("/usr/libexec/PlistBuddy", ["-x", "-c", `Print ${keyPath}`, plistPath], {
     cwd: repoRoot,
-    encoding: "utf8",
   });
   if (result.status !== 0) {
     if (optional) {
@@ -239,9 +236,8 @@ export function localProvisioningUdid() {
   if (explicit) {
     return explicit;
   }
-  const result = spawnSync("system_profiler", ["SPHardwareDataType", "-json"], {
+  const result = capture("system_profiler", ["SPHardwareDataType", "-json"], {
     cwd: repoRoot,
-    encoding: "utf8",
   });
   if (result.error || result.status !== 0) {
     return null;
@@ -304,9 +300,8 @@ function readProvisionedDevices(plistPath) {
 }
 
 function readExpirationDate(plistPath) {
-  const result = spawnSync("plutil", ["-extract", "ExpirationDate", "raw", "-o", "-", plistPath], {
+  const result = capture("plutil", ["-extract", "ExpirationDate", "raw", "-o", "-", plistPath], {
     cwd: repoRoot,
-    encoding: "utf8",
   });
   if (result.error || result.status !== 0) {
     return null;

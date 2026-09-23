@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { changeLocale } from "@voya/i18n";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { RuntimeStatusResponse } from "@/ipc/bindings";
+import type { RuntimeStatusResponse } from "@voya/contracts";
 
 import { ConnectedInfo } from "./connected-info";
 

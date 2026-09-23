@@ -13,10 +13,10 @@ import {
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { formatBytes } from "@voya/utils/formatting";
-import { getProfile } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { profileDetailsQueryKey } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { ProfileSummaryEntry } from "@/ipc/bindings";
+import type { ProfileSummaryEntry } from "@voya/contracts";
 
 import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 import { profileLatency, profileTitle, profileTransportName } from "@voya/features/profiles/profile-display";
@@ -46,7 +46,7 @@ export function ProfileDetailsDialog({
   );
   const { profile } = item;
   const details = useQuery({
-    queryFn: () => getProfile(profile.id),
+    queryFn: () => voyaCommands().getProfile(profile.id),
     queryKey: profileDetailsQueryKey(profile.id),
   }).data;
   const transport = details?.profile.transport;

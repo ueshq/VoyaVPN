@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { capture, repoRootFromScript } from "../../lib/common.mjs";
@@ -53,14 +52,14 @@ function warn(message) {
 }
 
 function checkXcode() {
-  const developerDir = spawnSync("xcode-select", ["-p"], { encoding: "utf8" });
+  const developerDir = capture("xcode-select", ["-p"]);
   if (developerDir.status !== 0) {
     fail("Xcode command line tools are missing. Run xcode-select --install (or install Xcode).");
     return;
   }
   ok(`Xcode developer dir: ${developerDir.stdout.trim()}`);
 
-  const swiftc = spawnSync("xcrun", ["--find", "swiftc"], { encoding: "utf8" });
+  const swiftc = capture("xcrun", ["--find", "swiftc"]);
   if (swiftc.status !== 0) {
     fail("swiftc is not available via xcrun; the PacketTunnel provider cannot be compiled. Install Xcode.");
     return;
@@ -85,7 +84,7 @@ function checkIdentity() {
     } catch {
       validMatches = 0;
     }
-    const unvalidated = spawnSync("security", ["find-identity", "-p", "codesigning"], { encoding: "utf8" });
+    const unvalidated = capture("security", ["find-identity", "-p", "codesigning"]);
     const unvalidatedMatches = findMatchingIdentities(parseCodesigningIdentities(unvalidated.stdout ?? ""), spec);
     if (validMatches === 0 && unvalidatedMatches.length > 0) {
       hints.push(
@@ -185,7 +184,7 @@ function checkLibbox() {
 
 function warnIfInstalledAppRunning() {
   for (const executable of ["voyavpn", "VoyaVPN", "VoyaPacketTunnel"]) {
-    const result = spawnSync("pgrep", ["-x", executable], { encoding: "utf8" });
+    const result = capture("pgrep", ["-x", executable]);
     if (result.status === 0) {
       warn(
         executable === "VoyaPacketTunnel"

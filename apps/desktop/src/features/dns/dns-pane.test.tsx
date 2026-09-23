@@ -1,20 +1,19 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithQuery } from "@/test/render";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { changeLocale } from "@voya/i18n";
-import type { DnsSettings } from "@/ipc/bindings";
+import type { DnsSettings } from "@voya/contracts";
 import {
   deferred,
-  resetSettingsBackend,
+  installSettingsBackend,
   serverSettings,
   settingsIpc,
 } from "@voya/features/settings/settings-backend.test-fixture";
 import { DnsPane } from "./dns-pane";
 import { useDnsSettings } from "@voya/features/dns/use-dns-settings";
 
-vi.mock("@/ipc/commands", async () => (await import("@voya/features/settings/settings-backend.test-fixture")).settingsIpc);
-beforeEach(async () => { resetSettingsBackend(); await changeLocale("en"); });
+beforeEach(async () => { installSettingsBackend(); await changeLocale("en"); });
 afterEach(cleanup);
 function mount() {
   function Pane() { return <DnsPane controller={useDnsSettings()} />; }

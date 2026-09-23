@@ -4,11 +4,11 @@ import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@voya/client/query-keys";
 import { SettingsApplyStatus } from "./settings-apply-status";
-const ipc = vi.hoisted(() => ({
+import { installFakeCommands } from "@voya/features/test/backend";
+const ipc = installFakeCommands({
   getSettingsApplyStatus: vi.fn(),
   applyPendingSettings: vi.fn(),
-}));
-vi.mock("@/ipc/commands", () => ipc);
+});
 beforeEach(() => {
   vi.resetAllMocks();
 });

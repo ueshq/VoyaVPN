@@ -5,7 +5,7 @@ import { cn } from "@voya/ui/lib/utils";
 import { formatBytes } from "@voya/utils/formatting";
 
 import { PageSurface } from "@/components/app-shell/page-section";
-import type { SelfHostState } from "@/ipc/bindings";
+import type { SelfHostState } from "@voya/contracts";
 
 import { NetworkStatus } from "./network-status";
 import { PROBLEM_KEYS, STATUS_HINT_KEYS, STATUS_KEYS, statusTone } from "./self-host-labels";

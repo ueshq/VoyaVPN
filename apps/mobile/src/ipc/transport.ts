@@ -1,13 +1,4 @@
-import { createMockBackend } from "@voya/client/mock-backend";
 import { NativeEventEmitter, TurboModuleRegistry } from "react-native";
-import {
-  makeConnection,
-  makeProfileEntry,
-  makeRouting,
-  makeRoutingRule,
-  makeSubscription,
-  makeSubscriptionMetadata,
-} from "@voya/client/mock-seed";
 import type { VoyaCommands, VoyaEventName, VoyaEventPayload } from "@voya/contracts";
 
 import {
@@ -69,7 +60,31 @@ function nativeEvents(native: VoyaNativeModule): VoyaNativeEvents {
   };
 }
 
+/**
+ * `require` rather than a top-level `import`: the mock backend and its seed
+ * data are ~1000 lines that only a development build ever runs. Metro still
+ * bundles whatever `require` can reach, so the call is gated on `__DEV__` and
+ * a device bundle never pulls the mock in.
+ */
 function createMockTransport(): VoyaTransport {
+  if (!__DEV__) {
+    throw new Error("createMockTransport is development-only; a device build has no native module");
+  }
+  // `require` rather than a top-level `import`: the mock backend and its seed
+  // data are ~1000 lines that only a development build ever runs. Metro's
+  // `__DEV__` inlining drops this whole function body from a device bundle.
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const { createMockBackend } = require("@voya/client/mock-backend") as typeof import("@voya/client/mock-backend");
+  const {
+    makeConnection,
+    makeProfileEntry,
+    makeRouting,
+    makeRoutingRule,
+    makeSubscription,
+    makeSubscriptionMetadata,
+  } = require("@voya/client/mock-seed") as typeof import("@voya/client/mock-seed");
+  /* eslint-enable @typescript-eslint/no-require-imports */
+
   return createMockBackend({
     // Live connections only show while connected, which is exactly when this
     // seed is on screen: connect in a development build and the Activity list

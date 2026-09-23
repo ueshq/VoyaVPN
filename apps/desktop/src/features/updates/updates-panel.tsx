@@ -17,7 +17,7 @@ import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 
 import { DisabledReason } from "@/components/disabled-reason";
 import { SettingsGroup } from "@/features/settings/settings-form";
-import type { AppUpdaterState } from "@/ipc/bindings";
+import type { AppUpdaterState } from "@voya/contracts";
 
 import type { AppUpdateProgress } from "./app-update-flow";
 import {

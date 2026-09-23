@@ -1,11 +1,10 @@
-import { spawnSync } from "node:child_process";
 import { readFileSync, statSync, utimesSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { repoRootFromScript } from "../lib/common.mjs";
+import { capture, repoRootFromScript } from "../lib/common.mjs";
 import {
   coreSeedBundleResources,
   hasExpectedSeedExecutable,
@@ -27,7 +26,7 @@ describe("tauri core seed overlay", () => {
     // CI included, which is how CI stayed red after docs/ was ignored.
     for (const source of Object.keys(requiredBundleResources)) {
       const path = relative(repoRoot, resolve(tauriDir, source)).split(sep).join("/");
-      const tracked = spawnSync("git", ["ls-files", "--error-unmatch", "--", path], { cwd: repoRoot });
+      const tracked = capture("git", ["ls-files", "--error-unmatch", "--", path], { cwd: repoRoot });
       expect(tracked.status, `${path} must be tracked by git`).toBe(0);
     }
   });

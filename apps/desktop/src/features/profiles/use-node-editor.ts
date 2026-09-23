@@ -1,8 +1,8 @@
 import { useRef, useState, type RefObject } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { restoreFocus } from "@voya/ui/lib/focus";
-import { deleteProfiles, getProfile, listProfileSummaries, saveProfile } from "@/ipc/commands";
-import type { ImportProfilesResult, Profile } from "@/ipc/bindings";
+import { voyaCommands } from "@voya/client/transport";
+import type { ImportProfilesResult, Profile } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { useProfileActivation } from "@voya/client/runtime-action";
 import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
@@ -56,7 +56,7 @@ export function useNodeEditor(
   async function openEditor(indexId: string) {
     const request = ++openEditorRequestRef.current;
     const trigger = focusedElement();
-    const details = getProfile(indexId);
+    const details = voyaCommands().getProfile(indexId);
     if (await runOperation(() => details)) {
       if (request !== openEditorRequestRef.current) return;
       setDialogState({ mode: "edit", profile: (await details).profile }, trigger);
@@ -75,7 +75,7 @@ export function useNodeEditor(
     const indexIds = pendingDelete;
     setPendingDelete(null);
     if (indexIds && indexIds.length > 0) {
-      void runOperation(() => deleteProfiles(indexIds));
+      void runOperation(() => voyaCommands().deleteProfiles(indexIds));
     }
   }
 
@@ -83,7 +83,7 @@ export function useNodeEditor(
     setSaveError(null);
     // The editor remounts its form whenever `open` toggles, so closing it on a
     // rejected save would discard every in-progress edit.
-    if (await runOperation(() => saveProfile(profile), setSaveError)) {
+    if (await runOperation(() => voyaCommands().saveProfile(profile), setSaveError)) {
       setDialogStateInternal(null);
     }
   }
@@ -96,7 +96,7 @@ export function useNodeEditor(
     if (importedIndexIds.length > 0) {
       // Refresh the complete list after import. `import_profiles_from_text` still emits profiles +
       // subscriptions + subscriptionMetadata for every other cache.
-      const refreshedProfiles = await listProfileSummaries();
+      const refreshedProfiles = await voyaCommands().listProfileSummaries();
       if (isActive()) queryClient.setQueryData(queryKeys.profileList, refreshedProfiles);
     }
   }

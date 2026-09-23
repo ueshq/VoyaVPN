@@ -175,6 +175,19 @@ export type VoyaCommands = {
 	 */
 	applySelfHostFirewallRule: () => Promise<SelfHostState>,
 	/**
+	 *  The five window-chrome actions the custom title bar drives.
+	 * 
+	 *  They used to go through `@tauri-apps/api/window`'s `getCurrentWindow()`,
+	 *  which pulls `window.js`/`dpi.js`/`image.js` into the startup vendor chunk.
+	 *  A thin Rust command keeps the same behavior and leaves those modules out.
+	 */
+	minimizeWindow: () => Promise<null>,
+	toggleMaximizeWindow: () => Promise<null>,
+	closeWindow: () => Promise<null>,
+	isWindowMaximized: () => Promise<boolean>,
+	/**  Whether the window is on screen rather than hidden into the tray. */
+	isWindowVisible: () => Promise<boolean>,
+	/**
 	 *  macOS overlays native traffic lights on the webview; Windows renders caption
 	 *  buttons in its borderless window. Linux and the web fallback use `none`.
 	 */

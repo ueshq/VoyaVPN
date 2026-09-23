@@ -4,8 +4,8 @@ import { ClipboardCopy } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { Spinner } from "@voya/ui/components/spinner";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { tunProviderDiagnostics } from "@/ipc/commands";
-import type { TunProviderDiagnostics } from "@/ipc/bindings";
+import { voyaCommands } from "@voya/client/transport";
+import type { TunProviderDiagnostics } from "@voya/contracts";
 import { writeClipboard } from "@/lib/clipboard";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { toastError, useToastStore } from "@voya/client/toast-store";
@@ -29,7 +29,7 @@ export function TunDiagnosticsButton() {
 
     setCopying(true);
     try {
-      const diagnostics = await tunProviderDiagnostics();
+      const diagnostics = await voyaCommands().tunProviderDiagnostics();
       await writeClipboard(formatTunDiagnosticsForClipboard(diagnostics));
       pushToast({
         description: t("status.copyTunDiagnosticsCopied"),

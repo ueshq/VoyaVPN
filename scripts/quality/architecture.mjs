@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
+import { repoRootFromScript, walkFilesSync } from "../lib/common.mjs";
 import { productionLineCount, splitRustProduction } from "./architecture-analyzer.mjs";
 import {
   cargoPackageVersion,
@@ -22,11 +23,11 @@ import {
   voyaCoreRules,
 } from "./architecture-rules.mjs";
 
-const root = resolve(import.meta.dirname, "../..");
+const root = repoRootFromScript(import.meta.url);
 const failures = [];
 
 const rustSources = ["crates", "apps/desktop/src-tauri/src"]
-  .flatMap((directory) => walk(resolve(root, directory)))
+  .flatMap((directory) => walkFilesSync(resolve(root, directory)))
   .filter((path) => path.endsWith(".rs"))
   .filter((path) => !path.includes("/migrations/"));
 
@@ -145,7 +146,7 @@ applyManifestRules(
 
 checkReleaseVersionAlignment();
 
-for (const path of walk(resolve(root, "crates/voya-contracts/src")).filter((item) => item.endsWith(".rs"))) {
+for (const path of walkFilesSync(resolve(root, "crates/voya-contracts/src")).filter((item) => item.endsWith(".rs"))) {
   const source = readFileSync(path, "utf8");
   applyRules(path, source, source, [contractsCasingRule]);
 }
@@ -209,13 +210,6 @@ function requireSafetyComments(path, source) {
   for (const finding of findUndocumentedUnsafe(source)) {
     failures.push(`${display(path)}:${finding.line}: unsafe code requires a nearby SAFETY comment`);
   }
-}
-
-function walk(directory) {
-  return readdirSync(directory).flatMap((entry) => {
-    const path = resolve(directory, entry);
-    return statSync(path).isDirectory() ? walk(path) : [path];
-  });
 }
 
 function display(path) {

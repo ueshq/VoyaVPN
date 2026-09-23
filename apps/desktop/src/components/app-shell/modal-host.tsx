@@ -12,7 +12,7 @@ import {
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { connectActiveProfile, installCoreSeed } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { getErrorMessage } from "@voya/utils/error";
 
@@ -41,14 +41,14 @@ function MissingCoreDialog() {
     setBusy(true);
     setError(null);
     try {
-      const result = await installCoreSeed();
+      const result = await voyaCommands().installCoreSeed();
       if (result.status === "seedMissing") {
         setSeedMissing(true);
 
         return;
       }
 
-      await connectActiveProfile();
+      await voyaCommands().connectActiveProfile();
       closeMissingCore();
     } catch (error) {
       setError(getErrorMessage(error));

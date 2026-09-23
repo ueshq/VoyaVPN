@@ -80,6 +80,11 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::get_self_host_stats,
         commands::run_self_host_environment_check::<tauri::Wry>,
         commands::apply_self_host_firewall_rule::<tauri::Wry>,
+        window::minimize_window,
+        window::toggle_maximize_window,
+        window::close_window,
+        window::is_window_maximized,
+        window::is_window_visible,
         window::get_window_chrome_config,
         window::set_window_acrylic,
     ]

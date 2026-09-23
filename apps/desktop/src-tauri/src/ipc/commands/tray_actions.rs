@@ -28,7 +28,11 @@ pub async fn resolve_close_request<R: tauri::Runtime>(
             })
             .await?;
         if committed.config_changed {
-            emit_settings_bundle_invalidation(&app, "close-action-remembered");
+            emit_invalidation(
+                &app,
+                "close-action-remembered",
+                invalidation::settings_bundle_scopes(),
+            );
         }
     }
     match action {
@@ -246,7 +250,13 @@ pub(crate) async fn tray_activate_node<R: tauri::Runtime>(
         app,
         &state,
         activated,
-        |app| emit_profile_invalidation(app, "active-profile-changed", true),
+        |app| {
+            emit_invalidation(
+                app,
+                "active-profile-changed",
+                invalidation::profile_scopes(true),
+            )
+        },
         ConfigChange::ACTIVE_PROFILE,
     )
     .await;
@@ -275,7 +285,13 @@ pub(crate) async fn tray_activate_group<R: tauri::Runtime>(
         app,
         &state,
         activated,
-        |app| emit_policy_group_invalidation(app, "active-policy-group-changed", true),
+        |app| {
+            emit_invalidation(
+                app,
+                "active-policy-group-changed",
+                invalidation::policy_group_scopes(true),
+            )
+        },
         ConfigChange::POLICY_GROUP,
     )
     .await;

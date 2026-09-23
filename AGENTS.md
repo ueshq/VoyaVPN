@@ -11,7 +11,6 @@ The package manager is **pnpm 11.5.0** (pinned via Corepack). Rust toolchain is 
 ## Monorepo Layout
 
 - `apps/desktop/` — `@voya/desktop`, the Tauri desktop app. It owns `apps/desktop/src`, `apps/desktop/src-tauri`, `apps/desktop/public`, `apps/desktop/e2e`, Vite, Playwright, shadcn, and desktop tsconfigs.
-- `apps/web/` — `@voya/web`, placeholder for a future web management surface. Do not copy desktop IPC here; the current backend surface is Tauri IPC only.
 - `apps/mobile/` — `@voya/mobile`, the bare React Native app (RN 0.87, no Expo). It does not consume `@voya/ui`, which is DOM/Radix-specific; it consumes `@voya/client`, `@voya/contracts` and `@voya/i18n/native`. Metro needs `watchFolders` plus `unstable_enablePackageExports` for the source-only workspace packages, and hierarchical resolution must stay on — see the reasoning in `apps/mobile/metro.config.js`. Its gates (`check:mobile:test`, `check:mobile:bundle`) are not part of `verify:local`; CI runs them in the `mobile` job, and `check:mobile:swift` on the `mobile-rust` iOS leg. The Rust backend runs in-process through `crates/voya-mobile-ffi` (ADR 0012) and the tunnel runs sing-box inside a platform provider (ADR 0013): an iOS PacketTunnel appex sharing `native/apple/`, and an Android foreground `VpnService` in the app's own process.
 - `apps/probe/` — `@voya/probe`, the Cloudflare Worker the self-hosted node's network check calls (`POST /v1/probe`, stateless, connects back only to the caller). Its wire contract is `tests/probe-contract/*.json`, shared with `crates/voya-net`. Deploy per `docs/release/self-host-probe-worker.md`; wrangler is not a workspace dependency.
 - `packages/ui/` — `@voya/ui`, source-only shadcn primitives, design tokens, shared CSS, fonts, and `cn()`.
@@ -21,7 +20,6 @@ The package manager is **pnpm 11.5.0** (pinned via Corepack). Rust toolchain is 
 - `packages/i18n/` — `@voya/i18n`, source-only i18next setup and imported locale JSON.
 - `packages/utils/` — `@voya/utils`, source-only shared formatting/redaction/error helpers.
 - `native/apple/` — the `NEPacketTunnelProvider` Swift sources, shared by the macOS desktop app and the iOS app. The two ship the same provider under different bundle ids and App Groups, so nothing there hardcodes an identifier: the App Group comes from each extension's own `Info.plist` (`VoyaAppGroupIdentifier`). See `native/apple/README.md`.
-- `tools/skills/` — tracked agent skills that are not part of the product build: `rollout/` plans multi-phase refactors and generates a resumable `rollout.py` runner (Python; its output goes to the untracked `.agents/rollouts/`).
 - `crates/`, `tests/`, `docs/`, and `scripts/` remain rooted at the workspace.
 - `docs/` is tracked and holds only what governs or ships with the product: ADRs, release runbooks and legal notices, and design references. `docs/release/THIRD_PARTY_NOTICES.md` is a Tauri bundle resource, so an untracked copy breaks every clean build (`scripts/tauri/core-seeds.test.mjs` guards this). Development-process notes — verification logs, before/after screenshots, usability checks — go in the untracked `.agents/docs/`.
 
@@ -55,7 +53,7 @@ pnpm run check:rust:deps           # cargo-machete 0.9.2; install it locally fir
 pnpm run check:rust:test           # Workspace tests (see note below) + shell binary test targets
 pnpm run check:frontend:typecheck  # pnpm -r run typecheck
 pnpm run check:frontend:coverage   # Vitest once + global thresholds + per-module coverage floors
-pnpm run check:frontend:lint       # ESLint, uncached: type-aware rules make its per-file cache unsound (`pnpm lint` caches)
+pnpm run check:frontend:lint       # ESLint, uncached: type-aware rules make its per-file cache unsound
 pnpm run check:frontend:bundle     # Production build + bundle size budgets
 pnpm run check:frontend:smoke:mock # Playwright renderer smoke against the Tauri IPC mock
 pnpm run check:dead-code           # Knip workspace scan + strict production scan

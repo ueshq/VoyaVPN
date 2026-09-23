@@ -15,7 +15,7 @@ import type {
   ProfileSummaryEntry,
   Subscription,
   RuntimeStatusResponse,
-} from "@/ipc/bindings";
+} from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
@@ -23,22 +23,18 @@ import { useNodeListStore } from "@voya/client/node-list-store";
 import { makeProfileFixture } from "@voya/features/test/profile-fixture";
 import { ProfilesScreen } from "./server-table";
 import { nodeListRows, nodeSearchText, LOCAL_GROUP_KEY } from "@voya/features/profiles/node-list-rows";
+import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 
-const mocks = vi.hoisted(() => ({
+const mocks = installFakeCommands({
   exportProfileShareLinks: vi.fn(),
   generateQrCode: vi.fn(),
-  listProfileSummaries: vi.fn(),
-  listSubscriptions: vi.fn(),
+  ...seedListCommands(),
   listSubscriptionMetadata: vi.fn(),
   runSpeedtest: vi.fn(),
   setActiveProfile: vi.fn(),
   connectActiveProfile: vi.fn(),
   restartCore: vi.fn(),
-}));
-vi.mock("@/ipc/commands", async (original) => ({
-  ...(await original<typeof import("@/ipc/commands")>()),
-  ...mocks,
-}));
+});
 
 const profiles = [
   makeProfileFixture(0, { remarks: "Tokyo", subscriptionId: "a" }),

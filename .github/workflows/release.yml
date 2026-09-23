@@ -66,13 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
+      - uses: ./.github/actions/setup-node-pnpm
 
       - name: Reject stable dry runs
         if: ${{ inputs.channel == 'stable' && inputs.dry_run == true }}
@@ -105,7 +99,9 @@ jobs:
 
       # This step only checks that signing material exists, so it receives
       # presence booleans instead of the secrets themselves: nothing here can
-      # leak a certificate or password it never held.
+      # leak a certificate or password it never held. Host/placeholder/updater
+      # key rules live in `pnpm release -- check-hosts` so the workflow does
+      # not re-implement scripts/release/validation.mjs inline.
       - name: Validate stable release prerequisites
         if: ${{ inputs.channel == 'stable' && inputs.dry_run == false }}
         env:
@@ -123,104 +119,7 @@ jobs:
           HAS_WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
           HAS_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
         run: |
-          node --input-type=module <<'NODE'
-          import { resolve } from "node:path";
-          import { pathToFileURL } from "node:url";
-
-          const placeholder = /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i;
-
-          function requireValue(name) {
-            const value = process.env[name]?.trim() ?? "";
-            if (!value) {
-              throw new Error(`${name} is required for stable releases.`);
-            }
-            if (placeholder.test(value)) {
-              throw new Error(`${name} must not be a placeholder.`);
-            }
-            return value;
-          }
-
-          function isPresent(name) {
-            return (process.env[`HAS_${name}`]?.trim() ?? "").toLowerCase() === "true";
-          }
-
-          function requirePresent(name) {
-            if (!isPresent(name)) {
-              throw new Error(`${name} is required for stable releases.`);
-            }
-          }
-
-          function requireOneOfPresent(...names) {
-            if (!names.some(isPresent)) {
-              throw new Error(`${names.join(" or ")} is required for stable releases.`);
-            }
-          }
-
-          function forbiddenHost(hostname) {
-            const host = hostname.toLowerCase();
-            return (
-              host === "example.com" ||
-              host.endsWith(".example.com") ||
-              host.endsWith(".example") ||
-              host.includes("example") ||
-              host === "github.com" ||
-              host.endsWith(".github.com") ||
-              host === "githubusercontent.com" ||
-              host.endsWith(".githubusercontent.com") ||
-              host === "github.io" ||
-              host.endsWith(".github.io") ||
-              host === "localhost" ||
-              host === "127.0.0.1" ||
-              host === "::1" ||
-              host.endsWith(".test") ||
-              host.includes("placeholder") ||
-              host.includes(":") ||
-              /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
-            );
-          }
-
-          function requireHttpsUrl(name) {
-            const value = requireValue(name);
-            let parsed;
-            try {
-              parsed = new URL(value);
-            } catch {
-              throw new Error(`${name} must be a valid URL.`);
-            }
-            if (parsed.protocol !== "https:") {
-              throw new Error(`${name} must use https.`);
-            }
-            if (forbiddenHost(parsed.hostname)) {
-              throw new Error(`${name} must use an approved non-placeholder CDN host.`);
-            }
-          }
-
-          requireHttpsUrl("VOYAVPN_CDN_BASE_URL");
-          requireHttpsUrl("VOYAVPN_UPDATES_BASE_URL");
-          requireValue("VOYAVPN_UPDATER_PUBLIC_KEY");
-          // The same resolver the overlay generator and the staging verifier
-          // use, so a key that cannot decode fails here rather than hours
-          // later in the build that was supposed to ship it.
-          const { resolveApprovedUpdaterPublicKey } = await import(
-            pathToFileURL(resolve("scripts/release/updater-signatures.mjs")).href
-          );
-          resolveApprovedUpdaterPublicKey(process.env);
-          const coreAssets = JSON.parse(requireValue("VOYAVPN_CORE_ASSETS_JSON"));
-          if (!Array.isArray(coreAssets.assets) || coreAssets.assets.length === 0) {
-            throw new Error("VOYAVPN_CORE_ASSETS_JSON must contain a non-empty assets array.");
-          }
-          requireOneOfPresent("TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PATH");
-          [
-            "APPLE_CERTIFICATE",
-            "APPLE_CERTIFICATE_PASSWORD",
-            "APPLE_ID",
-            "APPLE_PASSWORD",
-            "APPLE_TEAM_ID",
-            "WINDOWS_CERTIFICATE_BASE64",
-            "WINDOWS_CERTIFICATE_PASSWORD",
-          ].forEach(requirePresent);
-          NODE
-
+          pnpm release -- check-hosts
           pnpm release -- updater-config
 
   package:
@@ -257,49 +156,21 @@ jobs:
 
       - name: Install Linux Tauri dependencies
         if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libclang-dev \
-            libxcb1-dev \
-            libxrandr-dev \
-            libdbus-1-dev \
-            libpipewire-0.3-dev \
-            libwayland-dev \
-            libegl-dev \
-            pkg-config \
-            libxdo-dev \
-            wget
+        uses: ./.github/actions/setup-linux-deps
 
       # This job deliberately has no Swatinem/rust-cache step: six release
       # runners saving release-profile target/ trees would evict the CI caches
       # from the shared 10 GB repository cache budget, and releases are
       # dispatch-only while CI runs on every pull request.
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: ./.github/actions/setup-rust
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          cache: "false"
 
       - name: Install Rust target
         run: rustup target add ${{ matrix.rust_target }}
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-node-pnpm
 
       - name: Build Tauri package
         env:
@@ -368,13 +239,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: ./.github/actions/setup-node-pnpm
         with:
           node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
 
       - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -414,13 +282,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: ./.github/actions/setup-node-pnpm
         with:
           node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
 
       - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -471,13 +336,10 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: ./.github/actions/setup-node-pnpm
         with:
           node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
 
       - name: Generate core asset metadata
         env:
@@ -528,67 +390,31 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
+      - uses: ./.github/actions/setup-node-pnpm
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Download darwin x64 package artifact
+      # Pattern downloads instead of nine named steps. Each artifact still
+      # lands in its own `voyavpn-<channel>-<target>-<profile>/` directory, and
+      # readiness's artifact-manifest walk is recursive, so the package root can
+      # be the download parent.
+      - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: voyavpn-${{ inputs.channel }}-darwin-x86_64-${{ inputs.build_profile }}
-          path: dist/final-readiness/packages/darwin-x86_64
+          pattern: voyavpn-${{ inputs.channel }}-darwin-*-${{ inputs.build_profile }}
+          path: dist/final-readiness/packages
 
-      - name: Download darwin arm64 package artifact
+      - name: Download package artifacts (Windows and Linux)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: voyavpn-${{ inputs.channel }}-darwin-aarch64-${{ inputs.build_profile }}
-          path: dist/final-readiness/packages/darwin-aarch64
+          pattern: |
+            voyavpn-${{ inputs.channel }}-windows-*-${{ inputs.build_profile }}
+            voyavpn-${{ inputs.channel }}-linux-*-${{ inputs.build_profile }}
+          path: dist/final-readiness/packages
 
-      - name: Download Windows x64 package artifact
+      - name: Download release metadata artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          name: voyavpn-${{ inputs.channel }}-windows-x86_64-${{ inputs.build_profile }}
-          path: dist/final-readiness/packages/windows-x86_64
-
-      - name: Download Windows arm64 package artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: voyavpn-${{ inputs.channel }}-windows-aarch64-${{ inputs.build_profile }}
-          path: dist/final-readiness/packages/windows-aarch64
-
-      - name: Download Linux x64 package artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: voyavpn-${{ inputs.channel }}-linux-x86_64-${{ inputs.build_profile }}
-          path: dist/final-readiness/packages/linux-x86_64
-
-      - name: Download Linux arm64 package artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: voyavpn-${{ inputs.channel }}-linux-aarch64-${{ inputs.build_profile }}
-          path: dist/final-readiness/packages/linux-aarch64
-
-      - name: Download CDN staging metadata
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: voyavpn-${{ inputs.channel }}-cdn-staging-metadata-${{ inputs.build_profile }}
-          path: dist/final-readiness/cdn-staging-metadata
-
-      - name: Download updater metadata
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: voyavpn-${{ inputs.channel }}-updater-metadata-${{ inputs.build_profile }}
-          path: dist/final-readiness/updater-metadata
-
-      - name: Download core staging metadata
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: voyavpn-${{ inputs.channel }}-core-staging-metadata-${{ inputs.build_profile }}
-          path: dist/final-readiness/core-staging-metadata
+          pattern: voyavpn-${{ inputs.channel }}-*-metadata-${{ inputs.build_profile }}
+          path: dist/final-readiness/metadata
 
       - name: Validate final stable readiness
         env:
@@ -608,6 +434,20 @@ jobs:
           HAS_WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
           HAS_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
         run: |
+          # Each metadata artifact extracts under its artifact name; readiness
+          # wants the payload files themselves.
+          for dir in dist/final-readiness/metadata/voyavpn-${{ inputs.channel }}-*-metadata-${{ inputs.build_profile }}; do
+            name="$(basename "$dir")"
+            case "$name" in
+              *-cdn-staging-metadata-*) dest=dist/final-readiness/cdn-staging-metadata ;;
+              *-updater-metadata-*) dest=dist/final-readiness/updater-metadata ;;
+              *-core-staging-metadata-*) dest=dist/final-readiness/core-staging-metadata ;;
+              *) echo "unexpected metadata artifact: $name" >&2; exit 1 ;;
+            esac
+            mkdir -p "$dest"
+            cp -R "$dir"/. "$dest"/
+          done
+
           pnpm release -- readiness \
             --mode stable \
             --cdn-base-url "$VOYAVPN_CDN_BASE_URL" \
@@ -618,7 +458,7 @@ jobs:
             --release-index dist/final-readiness/cdn-staging-metadata/release-index.json \
             --updater-metadata dist/final-readiness/updater-metadata/latest.json \
             --core-manifest dist/final-readiness/core-staging-metadata/core-assets.json \
-            --tauri-config dist/final-readiness/packages/darwin-x86_64/stable-updater-config.json \
+            --tauri-config dist/final-readiness/packages/voyavpn-${{ inputs.channel }}-darwin-x86_64-${{ inputs.build_profile }}/stable-updater-config.json \
             --work-dir dist/final-readiness/readiness-output
 
       - name: Upload final readiness evidence

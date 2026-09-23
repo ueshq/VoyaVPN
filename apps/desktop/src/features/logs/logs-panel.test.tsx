@@ -3,10 +3,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { LogLevel } from "@/ipc/bindings";
+import type { LogLevel } from "@voya/contracts";
 import type { StoredLogLine } from "@voya/client/runtime-event-store";
 
 import { LogsPanel, type LogFilter } from "./logs-panel";
+import { installFakeCommands } from "@voya/features/test/backend";
+
+installFakeCommands({ setLogStreaming: vi.fn(async () => null) });
 
 type LogsState = { clearLogs: () => void; logLines: StoredLogLine[] };
 

@@ -19,14 +19,13 @@ pub use policy_groups::{
 pub use profiles::{profile_from_contract, profile_to_contract};
 
 use voya_contracts::{
-    AppNoticeLevel, ConnectionIpResult, CoreState, LogLevel, MoveAction, ProfileDetails,
-    ProfileKind, ProfileMetrics, ProfileSummary, ProfileSummaryEntry,
-    ProfileSummaryListing as ProfileSummaryListingContract, ProfileTraffic, SpeedtestOutcome,
+    CoreState, LogLevel, MoveAction, ProfileDetails, ProfileKind, ProfileMetrics, ProfileSummary,
+    ProfileSummaryEntry, ProfileSummaryListing as ProfileSummaryListingContract, ProfileTraffic,
+    SpeedtestOutcome,
 };
 use voya_core::{ConfigType, MoveAction as CoreMoveAction, ProfileExItem, ProfileListItem};
 use voya_platform::process::ProcessLogLevel;
 
-use crate::core_flow::{CoreFlowLevel, CoreFlowState};
 use crate::profiles::{ProfileSummaryItem, ProfileSummaryListing};
 
 #[must_use]
@@ -151,50 +150,6 @@ pub const fn supervisor_state_to_contract(
     }
 }
 
-/// The core flow's own severity, as the Logs panel and the notices read it.
-#[must_use]
-pub const fn core_flow_log_level(level: CoreFlowLevel) -> LogLevel {
-    match level {
-        CoreFlowLevel::Info => LogLevel::Info,
-        CoreFlowLevel::Warn => LogLevel::Warn,
-        CoreFlowLevel::Error => LogLevel::Error,
-    }
-}
-
-/// The core flow's own severity, as a user-facing toast reads it.
-#[must_use]
-pub const fn core_flow_notice_level(level: CoreFlowLevel) -> AppNoticeLevel {
-    match level {
-        CoreFlowLevel::Info => AppNoticeLevel::Info,
-        CoreFlowLevel::Warn => AppNoticeLevel::Warning,
-        CoreFlowLevel::Error => AppNoticeLevel::Error,
-    }
-}
-
-/// A mid-transition core-flow state in the contract's vocabulary.
-///
-/// Unlike [`supervisor_state_to_contract`] this covers `Connecting` and
-/// `Disconnecting`, which only the flow announces.
-#[must_use]
-pub const fn core_state_to_contract(state: CoreFlowState) -> CoreState {
-    match state {
-        CoreFlowState::CleanupPending => CoreState::CleanupPending,
-        CoreFlowState::Connecting => CoreState::Connecting,
-        CoreFlowState::Connected => CoreState::Connected,
-        CoreFlowState::Disconnecting => CoreState::Disconnecting,
-        CoreFlowState::Disconnected => CoreState::Disconnected,
-    }
-}
-
-/// The exit address of the running connection, as the command returns it.
-#[must_use]
-pub fn connection_ip_to_contract(exit: crate::connection_ip::ConnectionIp) -> ConnectionIpResult {
-    ConnectionIpResult {
-        ip: exit.ip,
-        country_code: exit.country_code,
-    }
-}
-
 /// Map a classified core log line onto the public log severity.
 #[must_use]
 pub const fn process_log_level_to_contract(level: ProcessLogLevel) -> LogLevel {
@@ -289,23 +244,6 @@ pub fn server_stat_to_contract(value: voya_core::ServerStatItem) -> voya_contrac
         today_up: value.today_up,
         today_down: value.today_down,
         date_now: value.date_now,
-    }
-}
-
-/// One statistics tick, as the transient `statistics` stream carries it.
-#[must_use]
-pub fn statistics_snapshot_to_contract(
-    snapshot: crate::statistics::StatisticsSnapshot,
-) -> voya_contracts::StatisticsSnapshot {
-    voya_contracts::StatisticsSnapshot {
-        active_profile_id: snapshot.active_profile_id,
-        proxy_upload_bytes_per_second: snapshot.proxy_upload_bytes_per_second,
-        proxy_download_bytes_per_second: snapshot.proxy_download_bytes_per_second,
-        direct_upload_bytes_per_second: snapshot.direct_upload_bytes_per_second,
-        direct_download_bytes_per_second: snapshot.direct_download_bytes_per_second,
-        upload_bytes_per_second: snapshot.upload_bytes_per_second,
-        download_bytes_per_second: snapshot.download_bytes_per_second,
-        server_stat: snapshot.server_stat.map(server_stat_to_contract),
     }
 }
 

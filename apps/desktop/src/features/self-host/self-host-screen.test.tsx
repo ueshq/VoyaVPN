@@ -8,13 +8,14 @@ import type {
   SelfHostFamilyReport,
   SelfHostShareLink,
   SelfHostState,
-} from "@/ipc/bindings";
+} from "@voya/contracts";
 import { useToastStore } from "@voya/client/toast-store";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 
 import { SelfHostScreen } from "./self-host-screen";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({
+const ipc = installFakeCommands({
   applySelfHostFirewallRule: vi.fn(),
   generateQrCode: vi.fn(),
   getSelfHostState: vi.fn(),
@@ -23,11 +24,6 @@ const ipc = vi.hoisted(() => ({
   runSelfHostEnvironmentCheck: vi.fn(),
   saveSelfHostConfig: vi.fn(),
   setSelfHostEnabled: vi.fn(),
-}));
-vi.mock("@/ipc/commands", async () => {
-  return {
-    ...ipc,
-  };
 });
 
 const clients = new Set<QueryClient>();

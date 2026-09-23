@@ -13,8 +13,8 @@ import {
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
-import type { CloseRequestAction } from "@/ipc/bindings";
-import { resolveCloseRequest } from "@/ipc/commands";
+import type { CloseRequestAction } from "@voya/contracts";
+import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 
@@ -42,7 +42,7 @@ export function CloseRequestDialog() {
     setBusy(true);
     setError(null);
     try {
-      await resolveCloseRequest(action, remember);
+      await voyaCommands().resolveCloseRequest(action, remember);
       close();
     } catch (reason) {
       setError(getErrorMessage(reason));

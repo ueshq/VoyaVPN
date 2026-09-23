@@ -107,27 +107,58 @@ Required stable overlay inputs:
 
 The checker writes generated release index, updater metadata, core manifest, and evidence files to a temporary directory by default. It does not upload artifacts, access cloud consoles, sign packages, notarize apps, or approve external release gates.
 
-### Release Evidence Helpers
+### Release Readiness Checklist
 
-Generate a fillable stable release record from the current commit before external signing and smoke work starts:
-
-```sh
-pnpm release -- record
-```
-
-The default output is `dist/release/stable-release-record.md`. It records the current version, branch, commit, worktree status, required command evidence, target artifact rows, CDN pointer rows, external gate rows, and final Go/No-Go fields. It is evidence scaffolding only and does not approve any gate.
-
-Validate staged metadata before stable pointer promotion:
+`pnpm release -- readiness` is the gate that replaced the old `record` and
+`verify-staging` helpers (retired: they were never on CI and 0.1.0 has not
+shipped a stable). Before external signing and smoke work starts, and again
+before stable pointer promotion, confirm each item below — locally in dry-run
+mode, and in the workflow's `final-stable-readiness` job for a real stable run:
 
 ```sh
-pnpm release -- verify-staging --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json>
-pnpm release -- verify-staging --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json> --probe
-pnpm release -- verify-staging --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json> --download-and-hash
+pnpm release -- readiness --mode dry-run
+pnpm release -- readiness --mode stable \
+  --cdn-base-url "$VOYAVPN_CDN_BASE_URL" \
+  --updates-base-url "$VOYAVPN_UPDATES_BASE_URL" \
+  --release-artifacts dist/release/packages \
+  --updater-artifacts dist/release/packages \
+  --core-assets dist/release/core-assets/source-core-assets.json \
+  --release-index dist/cdn-staging/release-index.json \
+  --updater-metadata dist/updater/latest.json \
+  --core-manifest dist/core-staging/core-assets.json \
+  --tauri-config target/release-config/tauri.updater.stable.generated.json \
+  --work-dir dist/release/readiness-output
 ```
 
-The approved CDN base must be supplied externally through `VOYAVPN_CDN_BASE_URL` (or `--cdn-base-url`) and `VOYAVPN_UPDATES_BASE_URL` (or `--updates-base-url`): the verifier refuses to take the base URL from the very document it is checking, and additionally requires the `baseUrl` recorded in `release-index.json` and `core-assets.json` to equal the approved value.
+Checklist the readiness command asserts (check manually when a step is outside
+the command's inputs):
 
-The staging verifier checks stable target completeness, approved HTTPS CDN hosts, no GitHub/example/local/test production artifact URLs, updater signature presence, core asset matrix completeness, byte sizes, and SHA-256 shape. `--probe` validates URL reachability without full downloads; `--download-and-hash` downloads referenced assets and verifies checksums. It does not upload, purge, mutate pointers, sign, notarize, or approve publication.
+1. **Required release documents** exist and are non-empty (packaging, secrets,
+   signing, OS smoke matrix, rollback, runbook, notices, stable gate).
+2. **Third-party notices** cover the app, sing-box scope, and GPL family.
+3. **Bundled sing-box seed** matches the SHA-256 pinned in
+   `scripts/core/sing-box-installer.mjs`.
+4. **Stable env inputs** — `VOYAVPN_CDN_BASE_URL`, `VOYAVPN_UPDATES_BASE_URL`,
+   updater public key, and every signing input (`TAURI_SIGNING_*`, Apple, and
+   Windows) — are present. `pnpm release -- check-hosts` additionally rejects
+   placeholder URLs/hosts and undecodable updater keys.
+5. **Tauri updater overlay** carries the approved HTTPS endpoints, a
+   non-placeholder public key, and `createUpdaterArtifacts` enabled.
+6. **Generated metadata** — `release-index.json`, `latest.json`, and
+   `core-assets.json` — has complete first-stable target coverage, URLs derived
+   from the approved base, real signatures (not dry-run placeholders), valid
+   SHA-256 values, and matching byte sizes. Optional `--probe` /
+   `--download-and-hash` behavior from the retired verifier is covered by the
+   OS smoke matrix's manual download smoke instead.
+7. **Target artifact rows** — each x64/arm64 platform's package name, SHA-256,
+   signature/notarization evidence, and clean-machine smoke result — are
+   recorded in [external-evidence-checklist.md](external-evidence-checklist.md).
+8. **CDN pointer rows** — before/after pointer object hashes for the release
+   index, `latest.json`, core/geo/SRS manifests — are recorded before promotion.
+
+The readiness command writes generated check output to a temporary directory by
+default. It does not upload artifacts, access cloud consoles, sign packages,
+notarize apps, or approve external release gates.
 
 ## Local Debug Packaging
 

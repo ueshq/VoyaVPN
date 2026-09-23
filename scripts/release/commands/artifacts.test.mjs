@@ -1,16 +1,13 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { capture, repoRootFromScript } from "../../lib/common.mjs";
 import { classifyArtifact, main, selectUpdaterPayloadPath, updaterPayloadPlatform } from "./artifacts.mjs";
 import { selectUpdaterPayload } from "../validation.mjs";
 
-const execFileAsync = promisify(execFile);
-const repoRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
+const repoRoot = repoRootFromScript(import.meta.url);
 const workDirs = [];
 
 afterEach(async () => {
@@ -109,7 +106,7 @@ describe("release artifacts", () => {
       throw error;
     }
 
-    await execFileAsync(
+    capture(
       process.execPath,
       [
         "scripts/release/cli.mjs",

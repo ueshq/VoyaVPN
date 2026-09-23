@@ -6,12 +6,12 @@ import { PreferencesBridge } from "@/components/preferences-bridge";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@voya/client/query-keys";
 import { usePreferencesStore } from "@voya/client/preferences-store";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const preferencesMocks = vi.hoisted(() => ({
+const preferencesMocks = installFakeCommands({
   loadUiPreferences: vi.fn(),
-}));
+});
 
-vi.mock("@/ipc/commands", () => preferencesMocks);
 
 describe("PreferencesBridge", () => {
   beforeEach(async () => {

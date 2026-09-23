@@ -34,6 +34,50 @@ pub(crate) fn install_native_caption_inset(app: &tauri::AppHandle) {
     }
 }
 
+/// The five window-chrome actions the custom title bar drives.
+///
+/// They used to go through `@tauri-apps/api/window`'s `getCurrentWindow()`,
+/// which pulls `window.js`/`dpi.js`/`image.js` into the startup vendor chunk.
+/// A thin Rust command keeps the same behavior and leaves those modules out.
+#[tauri::command]
+#[specta::specta]
+pub fn minimize_window(window: tauri::WebviewWindow) -> Result<(), AppError> {
+    window.minimize().map_err(window_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn toggle_maximize_window(window: tauri::WebviewWindow) -> Result<(), AppError> {
+    if window.is_maximized().map_err(window_error)? {
+        window.unmaximize().map_err(window_error)
+    } else {
+        window.maximize().map_err(window_error)
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn close_window(window: tauri::WebviewWindow) -> Result<(), AppError> {
+    window.close().map_err(window_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn is_window_maximized(window: tauri::WebviewWindow) -> Result<bool, AppError> {
+    window.is_maximized().map_err(window_error)
+}
+
+/// Whether the window is on screen rather than hidden into the tray.
+#[tauri::command]
+#[specta::specta]
+pub fn is_window_visible(window: tauri::WebviewWindow) -> Result<bool, AppError> {
+    window.is_visible().map_err(window_error)
+}
+
+fn window_error(error: tauri::Error) -> AppError {
+    AppError::internal(voya_contracts::AppErrorSubsystem::App, error.to_string())
+}
+
 /// macOS overlays native traffic lights on the webview; Windows renders caption
 /// buttons in its borderless window. Linux and the web fallback use `none`.
 #[tauri::command]
@@ -78,9 +122,7 @@ pub fn set_window_acrylic(window: tauri::WebviewWindow, dark: bool) -> Result<()
                     .color(color)
                     .build(),
             )
-            .map_err(|error| {
-                AppError::internal(voya_contracts::AppErrorSubsystem::App, error.to_string())
-            })?;
+            .map_err(window_error)?;
     }
     Ok(())
 }

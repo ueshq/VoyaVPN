@@ -1,5 +1,5 @@
 import { placeholderText } from "../../validation.mjs";
-import { defaultTauriConfig, resolveRepoPath, readJson, displayPath, isDryRun } from "./inputs.mjs";
+import { defaultTauriConfig, resolveRepoPath, readJsonAsync, displayPath, isDryRun } from "./inputs.mjs";
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -30,7 +30,7 @@ function isCredentialFreeUpdaterConfig(updater) {
 async function loadTauriConfig(options) {
   const basePath = resolveRepoPath(defaultTauriConfig);
   const requestedPath = resolveRepoPath(options.tauriConfig);
-  const baseConfig = await readJson(basePath);
+  const baseConfig = await readJsonAsync(basePath);
 
   if (requestedPath === basePath) {
     return {
@@ -40,7 +40,7 @@ async function loadTauriConfig(options) {
     };
   }
 
-  const overlay = await readJson(requestedPath);
+  const overlay = await readJsonAsync(requestedPath);
   return {
     config: mergeConfig(baseConfig, overlay),
     label: `${displayPath(basePath)} + ${displayPath(requestedPath)}`,

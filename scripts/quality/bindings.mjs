@@ -1,8 +1,7 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { repoRootFromScript } from "../lib/common.mjs";
+import { repoRootFromScript, runOrExit } from "../lib/common.mjs";
 import {
   generateCommandNames,
   generateCommandWire,
@@ -36,15 +35,10 @@ const derived = [
 function runExport(outputPath) {
   // A cargo example rather than a bin: Tauri bundles every bin target, and this
   // codegen tool has no business in a shipped package.
-  const result = spawnSync("cargo", ["run", "-p", "voyavpn", "--example", "export-bindings", "--", outputPath], {
+  runOrExit("cargo", ["run", "-p", "voyavpn", "--example", "export-bindings", "--", outputPath], {
     cwd: repoRoot,
-    encoding: "utf8",
-    stdio: "inherit",
+    log: false,
   });
-
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
-  }
 }
 
 if (!check) {

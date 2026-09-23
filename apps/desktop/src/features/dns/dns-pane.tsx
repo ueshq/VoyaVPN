@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import { SettingsGroup } from "@/features/settings/settings-form";
-import type { DnsSettings } from "@/ipc/bindings";
+import type { DnsSettings } from "@voya/contracts";
 
 import { DNS_STRATEGIES } from "@voya/features/dns/dns-form-schema";
 import type { useDnsSettings } from "@voya/features/dns/use-dns-settings";

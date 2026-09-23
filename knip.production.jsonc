@@ -9,7 +9,7 @@
   // still reported, and the default scan above still checks reachability with
   // tests included.
   "ignoreExportsUsedInFile": true,
-  "ignoreWorkspaces": [".", "apps/web"],
+  "ignoreWorkspaces": ["."],
   "workspaces": {
     "apps/mobile": {
       "entry": ["index.js!"],
@@ -25,7 +25,7 @@
       "ignore": ["e2e/**", "src/**/*.{test,spec}.{ts,tsx}", "src/**/*.test-fixture.ts", "src/test/**"],
       // See knip.jsonc for `zod`: the schemas live in `@voya/features` and
       // `zodResolver` checks them with `instanceof`.
-      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons", "zod"],
+      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
       "ignoreIssues": {
         "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],
       // `commands.ts` is the desktop's implementation of the whole
@@ -73,7 +73,13 @@
       "project": ["src/**/*.ts!"],
       // `test-storage.ts` is the storage seam tests register; it is deliberately
       // not reachable from a shipped path.
-      "ignore": ["src/**/*.test.ts", "src/test-storage.ts"]
+      "ignore": ["src/**/*.test.ts", "src/test-storage.ts"],
+      // `mock-seed` is reached from `apps/mobile/src/ipc/transport.ts` only via
+      // a `__DEV__`-gated `require`, which keeps it out of a device bundle.
+      // knip cannot see through that call, so the seed helpers look unused.
+      "ignoreIssues": {
+        "src/mock-seed.ts": ["exports"]
+      }
     },
     "packages/features": {
       "entry": ["src/*/*.{ts,tsx}!"],

@@ -6,7 +6,7 @@ import { Button } from "@voya/ui/components/button";
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import { Spinner } from "@voya/ui/components/spinner";
 import { formatDelay } from "@voya/utils/formatting";
-import type { PolicyGroupEntry } from "@/ipc/bindings";
+import type { PolicyGroupEntry } from "@voya/contracts";
 
 import type { ServerTableController } from "./use-server-table";
 import { PolicyGroupDialog } from "./policy-group-dialog";

@@ -1,16 +1,15 @@
 //! Thin adapters over `voya_app::policy_groups` and the running group's Clash API.
 
 use voya_app::contract_map::{
-    policy_group_entry_to_contract, policy_group_from_contract, policy_group_runtime_to_contract,
-    policy_group_to_contract,
+    policy_group_entry_to_contract, policy_group_from_contract, policy_group_to_contract,
 };
-use voya_app::policy_groups::{group_test_url, PolicyGroupManager};
+use voya_app::policy_groups::{
+    running_policy_group_runtime, select_member_use_case, test_running_policy_group_delay,
+    PolicyGroupManager,
+};
 use voya_contracts::{PolicyGroup, PolicyGroupListing, PolicyGroupRuntime};
 
 use super::{post_commit::*, support::*, *};
-
-/// How long the running core waits on each member's probe.
-const GROUP_DELAY_TIMEOUT_MS: u32 = 5_000;
 
 #[tauri::command]
 #[specta::specta]
@@ -55,7 +54,11 @@ pub async fn save_policy_group<R: tauri::Runtime>(
                 .await?)
         })
         .await?;
-    emit_policy_group_invalidation(&app, "policy-group-saved", saved.config_changed);
+    emit_invalidation(
+        &app,
+        "policy-group-saved",
+        invalidation::policy_group_scopes(saved.config_changed),
+    );
     if saved.config.active_group_id == saved.value.id {
         restart_after_config_change(&app, &state, &saved.config, ConfigChange::POLICY_GROUP).await;
     }
@@ -84,7 +87,11 @@ pub async fn delete_policy_groups<R: tauri::Runtime>(
         })
         .await?;
     emit_then_disconnect_removed(&app, &state, |app| {
-        emit_policy_group_invalidation(app, "policy-groups-deleted", deleted.config_changed)
+        emit_invalidation(
+            app,
+            "policy-groups-deleted",
+            invalidation::policy_group_scopes(deleted.config_changed),
+        )
     })
     .await?;
 
@@ -113,7 +120,11 @@ pub async fn set_active_policy_group<R: tauri::Runtime>(
                 .await?)
         })
         .await?;
-    emit_policy_group_invalidation(&app, "active-policy-group-changed", true);
+    emit_invalidation(
+        &app,
+        "active-policy-group-changed",
+        invalidation::policy_group_scopes(true),
+    );
 
     Ok(policy_group_to_contract(active.value))
 }
@@ -138,50 +149,30 @@ pub async fn select_policy_group_member<R: tauri::Runtime>(
         "node id",
         AppErrorSubsystem::PolicyGroup,
     )?;
-    let selected = state
-        .config_mutations()
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(PolicyGroupManager::new_in(unit_of_work)
-                .select_member(&group_id, &profile_id)
-                .await?)
-        })
-        .await?;
-
-    let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
-    if snapshot.state == SupervisorConnectionState::Connected
-        && snapshot.active_group_id.as_deref() == Some(group_id.as_str())
-    {
-        let live = async {
-            let (_, members) = state
-                .services()
-                .policy_groups()
-                .resolve(&group_id)
-                .await
-                .map_err(AppError::from)?;
-            state
-                .proxy_runtime()
-                .select_group_member(&snapshot.clash_api_access(), &members, &profile_id)
-                .await
-                .map_err(AppError::from)
-        }
-        .await;
-        if let Err(error) = live {
-            report_post_commit_error(
-                &app,
-                NoticeCode::PolicyGroupSelectionRuntimeUpdateFailed,
-                &format!("{error:?}"),
-                AppNoticeLevel::Warning,
-            );
-        }
+    let (group, live_error) = select_member_use_case(
+        state.config_mutations(),
+        &state.supervisor(),
+        &state.services().policy_groups(),
+        state.proxy_runtime(),
+        &group_id,
+        &profile_id,
+    )
+    .await?;
+    if let Some(message) = live_error {
+        report_post_commit_error(
+            &app,
+            NoticeCode::PolicyGroupSelectionRuntimeUpdateFailed,
+            &message,
+            AppNoticeLevel::Warning,
+        );
     }
     emit_invalidation(
         &app,
-        NoticeCode::PolicyGroupRefreshFailed,
         "policy-group-member-selected",
         invalidation::policy_group_runtime_scopes(),
     );
 
-    Ok(policy_group_to_contract(selected.value))
+    Ok(group)
 }
 
 /// The running group's current member and delays; `None` while no group runs.
@@ -191,22 +182,13 @@ pub async fn policy_group_runtime(
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<PolicyGroupRuntime>, AppError> {
     let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
-    let Some(group_id) = running_group_id(&snapshot) else {
-        return Ok(None);
-    };
-    let (_, members) = state
-        .services()
-        .policy_groups()
-        .resolve(&group_id)
-        .await
-        .map_err(AppError::from)?;
-    let runtime = state
-        .proxy_runtime()
-        .group_state(&snapshot.clash_api_access(), &members)
-        .await
-        .map_err(AppError::from)?;
-
-    Ok(Some(policy_group_runtime_to_contract(group_id, runtime)))
+    running_policy_group_runtime(
+        &snapshot,
+        &state.services().policy_groups(),
+        state.proxy_runtime(),
+    )
+    .await
+    .map_err(AppError::from)
 }
 
 /// Probes every member of the running group through the core and returns the
@@ -218,49 +200,19 @@ pub async fn test_policy_group_delay<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<PolicyGroupRuntime>, AppError> {
     let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
-    let Some(group_id) = running_group_id(&snapshot) else {
-        return Ok(None);
-    };
-    let (group, members) = state
-        .services()
-        .policy_groups()
-        .resolve(&group_id)
-        .await
-        .map_err(AppError::from)?;
-    let access = snapshot.clash_api_access();
-    let delays = state
-        .proxy_runtime()
-        .test_group_delay(
-            &access,
-            &members,
-            group_test_url(&group),
-            GROUP_DELAY_TIMEOUT_MS,
-        )
-        .await
-        .map_err(AppError::from)?;
-    let mut runtime = state
-        .proxy_runtime()
-        .group_state(&access, &members)
-        .await
-        .map_err(AppError::from)?;
-    for member in &mut runtime.members {
-        if let Some(delay) = delays.get(&member.profile_id) {
-            member.delay_ms = Some(*delay);
-        }
+    let runtime = test_running_policy_group_delay(
+        &snapshot,
+        &state.services().policy_groups(),
+        state.proxy_runtime(),
+    )
+    .await
+    .map_err(AppError::from)?;
+    if runtime.is_some() {
+        emit_invalidation(
+            &app,
+            "policy-group-delay-tested",
+            invalidation::policy_group_runtime_scopes(),
+        );
     }
-    emit_invalidation(
-        &app,
-        NoticeCode::PolicyGroupRefreshFailed,
-        "policy-group-delay-tested",
-        invalidation::policy_group_runtime_scopes(),
-    );
-
-    Ok(Some(policy_group_runtime_to_contract(group_id, runtime)))
-}
-
-fn running_group_id(snapshot: &SupervisorSnapshot) -> Option<String> {
-    snapshot
-        .active_group_id
-        .clone()
-        .filter(|_| snapshot.state == SupervisorConnectionState::Connected)
+    Ok(runtime)
 }

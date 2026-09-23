@@ -209,6 +209,17 @@ impl SupervisorEventSink for NoopSupervisorEventSink {
 }
 
 impl SupervisorSnapshot {
+    /// The policy group the connected core is using, if any.
+    ///
+    /// Shared by both hosts so "which group is running" cannot drift: a
+    /// disconnected snapshot never names a group even if one is still recorded.
+    #[must_use]
+    pub fn running_group_id(&self) -> Option<String> {
+        self.active_group_id
+            .clone()
+            .filter(|_| self.state == SupervisorConnectionState::Connected)
+    }
+
     #[must_use]
     pub const fn disconnected() -> Self {
         Self {

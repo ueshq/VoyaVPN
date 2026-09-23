@@ -200,6 +200,18 @@ impl From<crate::policy_groups::PolicyGroupManagerError> for AppError {
                 },
             ),
             E::TestUrlInvalid => rejected("testUrl", Code::PolicyGroupTestUrlInvalid),
+            E::ProxyRuntime(source) => match source {
+                ProxyRuntimeError::Api(api) => network(Sub::ProxyRuntime, api),
+                ProxyRuntimeError::InvalidTrafficMode(_) => {
+                    invalid(Sub::ProxyRuntime, "mode", source)
+                }
+                ProxyRuntimeError::UnknownGroupMember(_) => {
+                    invalid(Sub::ProxyRuntime, "profileId", source)
+                }
+                ProxyRuntimeError::MonitorLockPoisoned
+                | ProxyRuntimeError::MonitorRuntimeUnavailable
+                | ProxyRuntimeError::InvalidStatePort => internal(Sub::ProxyRuntime, source),
+            },
         }
     }
 }

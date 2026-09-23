@@ -1,14 +1,11 @@
-import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
+import { capture, repoRootFromScript } from "../../lib/common.mjs";
 import { stableTargets } from "../matrix.mjs";
 
-const execFileAsync = promisify(execFile);
-const repoRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
+const repoRoot = repoRootFromScript(import.meta.url);
 const updatesBaseUrl = "https://updates.voyavpn.dev/stable";
 const expectedStableUpdaterTargets = stableTargets
   .map((target) => target.updater)
@@ -25,7 +22,7 @@ describe("release updater metadata", () => {
     const latestPath = join(workDir, "latest.json");
 
     try {
-      const { stdout } = await execFileAsync(
+      const { stdout } = capture(
         process.execPath,
         [
           "scripts/release/cli.mjs",
@@ -69,7 +66,7 @@ describe("release updater metadata", () => {
     const workDir = await mkdtemp(join(tmpdir(), "voyavpn-updater-placeholder-"));
     const latestPath = join(workDir, "latest.json");
     const run = (args) =>
-      execFileAsync(process.execPath, ["scripts/release/cli.mjs", "updater", ...args], { cwd: repoRoot });
+      capture(process.execPath, ["scripts/release/cli.mjs", "updater", ...args], { cwd: repoRoot });
 
     try {
       await run([
@@ -97,21 +94,21 @@ describe("release updater metadata", () => {
       );
       expect(Object.values(evidence.platforms).every((entry) => entry.source === "placeholder")).toBe(true);
 
-      await expect(
-        run([
-          "--input",
-          workDir,
-          "--out",
-          latestPath,
-          "--channel",
-          "stable",
-          "--base-url",
-          updatesBaseUrl,
-          "--target",
-          "darwin-x86_64",
-          "--placeholder-signatures",
-        ]),
-      ).rejects.toThrow(/cannot use --placeholder-signatures/);
+      const failure = run([
+        "--input",
+        workDir,
+        "--out",
+        latestPath,
+        "--channel",
+        "stable",
+        "--base-url",
+        updatesBaseUrl,
+        "--target",
+        "darwin-x86_64",
+        "--placeholder-signatures",
+      ]);
+      expect(failure.status).not.toBe(0);
+      expect(`${failure.stderr}${failure.stdout}`).toMatch(/cannot use --placeholder-signatures/);
     } finally {
       await rm(workDir, { force: true, recursive: true });
     }
@@ -122,7 +119,7 @@ describe("release updater metadata", () => {
     const latestPath = join(workDir, "latest.json");
 
     try {
-      await expect(execFileAsync(
+      const failure = capture(
         process.execPath,
         [
           "scripts/release/cli.mjs",
@@ -137,7 +134,9 @@ describe("release updater metadata", () => {
           "https://cdn.voyavpn.test/beta/updater",
         ],
         { cwd: repoRoot },
-      )).rejects.toThrow(/No signed updater payload found/);
+      );
+      expect(failure.status).not.toBe(0);
+      expect(`${failure.stderr}${failure.stdout}`).toMatch(/No signed updater payload found/);
     } finally {
       await rm(workDir, { force: true, recursive: true });
     }

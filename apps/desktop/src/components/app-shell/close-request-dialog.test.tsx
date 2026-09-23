@@ -7,9 +7,9 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { CloseRequestDialog } from "./close-request-dialog";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({ resolveCloseRequest: vi.fn() }));
-vi.mock("@/ipc/commands", () => ipc);
+const ipc = installFakeCommands({ resolveCloseRequest: vi.fn() });
 
 describe("CloseRequestDialog", () => {
   beforeEach(async () => {

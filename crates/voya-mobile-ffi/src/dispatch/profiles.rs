@@ -5,14 +5,11 @@ use serde_json::Value;
 use voya_app::{
     contract_map::{
         import_profiles_to_contract, move_action_from_contract, policy_group_entry_to_contract,
-        policy_group_runtime_to_contract, profile_details_to_contract, profile_from_contract,
-        profile_summary_listing_to_contract,
+        profile_details_to_contract, profile_from_contract, profile_summary_listing_to_contract,
     },
     invalidation,
     profiles::ProfileManager,
-    proxy_runtime::ProxyRuntimeManager,
     subscriptions::SubscriptionManager,
-    supervisor::SupervisorConnectionState,
 };
 use voya_contracts::{AppError, PolicyGroupListing};
 
@@ -110,22 +107,14 @@ pub(super) async fn list_policy_groups(state: &MobileState) -> Result<Value, App
 /// which is reachable per device rather than per process.
 pub(super) async fn policy_group_runtime(state: &MobileState) -> Result<Value, AppError> {
     let snapshot = state.supervisor.status().await?;
-    let Some(group_id) = snapshot
-        .active_group_id
-        .clone()
-        .filter(|_| snapshot.state == SupervisorConnectionState::Connected)
-    else {
-        return Ok(Value::Null);
-    };
-    let (_, members) = state.services.policy_groups().resolve(&group_id).await?;
-    let runtime = ProxyRuntimeManager::new()
-        .group_state(&snapshot.clash_api_access(), &members)
-        .await?;
-
-    answer(
-        "policy_group_runtime",
-        &Some(policy_group_runtime_to_contract(group_id, runtime)),
+    let runtime = voya_app::policy_groups::running_policy_group_runtime(
+        &snapshot,
+        &state.services.policy_groups(),
+        &state.proxy_runtime,
     )
+    .await?;
+
+    answer("policy_group_runtime", &runtime)
 }
 
 #[derive(Debug, Deserialize)]

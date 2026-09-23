@@ -26,6 +26,8 @@ pub type Result<T> = std::result::Result<T, PolicyGroupManagerError>;
 pub enum PolicyGroupManagerError {
     #[error(transparent)]
     Database(#[from] DbError),
+    #[error(transparent)]
+    ProxyRuntime(#[from] crate::proxy_runtime::ProxyRuntimeError),
     #[error("policy group {0} was not found")]
     GroupNotFound(String),
     #[error("a policy group needs a name")]
@@ -398,6 +400,128 @@ fn validate(group: &PolicyGroupItem) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Default delay-probe timeout shared by both hosts.
+pub const GROUP_DELAY_TIMEOUT_MS: u32 = 5_000;
+
+/// Stores a selector's member and switches the running group live when that
+/// is the group the core is using.
+///
+/// Returns the saved group and, when the live switch failed, the message each
+/// host reports its way; the stored choice is kept either way.
+pub async fn select_member_use_case(
+    mutations: &crate::config_mutation::ConfigMutationCoordinator,
+    supervisor: &crate::supervisor::CoreSupervisor,
+    policy_groups: &PolicyGroupManager<'_>,
+    proxy_runtime: &crate::proxy_runtime::ProxyRuntimeManager,
+    group_id: &str,
+    profile_id: &str,
+) -> std::result::Result<(voya_contracts::PolicyGroup, Option<String>), voya_contracts::AppError> {
+    let selected = mutations
+        .mutate(
+            async |unit_of_work,
+                   _config|
+                   -> std::result::Result<PolicyGroupItem, voya_contracts::AppError> {
+                Ok(PolicyGroupManager::new_in(unit_of_work)
+                    .select_member(group_id, profile_id)
+                    .await?)
+            },
+        )
+        .await?;
+    let snapshot = supervisor
+        .status()
+        .await
+        .map_err(voya_contracts::AppError::from)?;
+    let live_error = select_member_live_if_running(
+        &snapshot,
+        policy_groups,
+        proxy_runtime,
+        group_id,
+        profile_id,
+    )
+    .await
+    .map_err(voya_contracts::AppError::from)?;
+    Ok((
+        crate::contract_map::policy_group_to_contract(selected.value),
+        live_error,
+    ))
+}
+
+/// After a member selection is stored, switch the running group live when that
+/// is the group the core is using. `Ok(None)` when there was nothing to switch
+/// or the switch landed; `Ok(Some(message))` when the live switch failed —
+/// the choice is kept either way, and each host reports the message its way.
+pub async fn select_member_live_if_running(
+    snapshot: &crate::supervisor::SupervisorSnapshot,
+    policy_groups: &PolicyGroupManager<'_>,
+    proxy_runtime: &crate::proxy_runtime::ProxyRuntimeManager,
+    group_id: &str,
+    profile_id: &str,
+) -> Result<Option<String>> {
+    if snapshot.running_group_id().as_deref() != Some(group_id) {
+        return Ok(None);
+    }
+    let (_, members) = policy_groups.resolve(group_id).await?;
+    match proxy_runtime
+        .select_group_member(&snapshot.clash_api_access(), &members, profile_id)
+        .await
+    {
+        Ok(()) => Ok(None),
+        Err(error) => Ok(Some(format!("{error:?}"))),
+    }
+}
+
+/// The running group as the core sees it, or `None` while no group runs.
+///
+/// Shared by both hosts so the "which members and delays" body cannot drift;
+/// each host keeps only its envelope (Tauri result vs JSON `null`).
+pub async fn running_policy_group_runtime(
+    snapshot: &crate::supervisor::SupervisorSnapshot,
+    policy_groups: &PolicyGroupManager<'_>,
+    proxy_runtime: &crate::proxy_runtime::ProxyRuntimeManager,
+) -> Result<Option<voya_contracts::PolicyGroupRuntime>> {
+    let Some(group_id) = snapshot.running_group_id() else {
+        return Ok(None);
+    };
+    let (_, members) = policy_groups.resolve(&group_id).await?;
+    let runtime = proxy_runtime
+        .group_state(&snapshot.clash_api_access(), &members)
+        .await?;
+    Ok(Some(crate::contract_map::policy_group_runtime_to_contract(
+        group_id, runtime,
+    )))
+}
+
+/// Probes every member of the running group and returns the runtime with those
+/// delays; `None` while no group runs.
+pub async fn test_running_policy_group_delay(
+    snapshot: &crate::supervisor::SupervisorSnapshot,
+    policy_groups: &PolicyGroupManager<'_>,
+    proxy_runtime: &crate::proxy_runtime::ProxyRuntimeManager,
+) -> Result<Option<voya_contracts::PolicyGroupRuntime>> {
+    let Some(group_id) = snapshot.running_group_id() else {
+        return Ok(None);
+    };
+    let (group, members) = policy_groups.resolve(&group_id).await?;
+    let access = snapshot.clash_api_access();
+    let delays = proxy_runtime
+        .test_group_delay(
+            &access,
+            &members,
+            group_test_url(&group),
+            GROUP_DELAY_TIMEOUT_MS,
+        )
+        .await?;
+    let mut runtime = proxy_runtime.group_state(&access, &members).await?;
+    for member in &mut runtime.members {
+        if let Some(delay) = delays.get(&member.profile_id) {
+            member.delay_ms = Some(*delay);
+        }
+    }
+    Ok(Some(crate::contract_map::policy_group_runtime_to_contract(
+        group_id, runtime,
+    )))
 }
 
 #[cfg(test)]

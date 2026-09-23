@@ -60,7 +60,11 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     }
 
     if outcome.changed {
-        emit_settings_bundle_invalidation(&app, "app-settings-saved");
+        emit_invalidation(
+            &app,
+            "app-settings-saved",
+            invalidation::settings_bundle_scopes(),
+        );
     }
 
     Ok(outcome.settings)
@@ -87,7 +91,11 @@ pub async fn apply_pending_settings<R: tauri::Runtime>(
     let captured = state.config_mutations().current_config();
     let flow = core_flow(&app, &state);
     let result = flow.apply_pending_settings(&captured).await;
-    emit_settings_bundle_invalidation(&app, "settings-applied");
+    emit_invalidation(
+        &app,
+        "settings-applied",
+        invalidation::settings_bundle_scopes(),
+    );
     result.map_err(AppError::from)?;
     flow.settings_apply_status(&state.config_mutations().current_config())
         .await

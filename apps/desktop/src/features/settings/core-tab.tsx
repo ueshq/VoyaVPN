@@ -11,7 +11,7 @@ import {
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import type { TlsFragmentMode } from "@/ipc/bindings";
+import type { TlsFragmentMode } from "@voya/contracts";
 
 import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
 

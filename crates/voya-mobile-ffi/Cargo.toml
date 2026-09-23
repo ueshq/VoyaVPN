@@ -6,10 +6,17 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
-# `lib` for the host-side tests, `staticlib` for the iOS xcframework and
-# `cdylib` for the Android `.so`.
+# `lib` for the host-side tests. The iOS `staticlib` and Android `cdylib` are
+# requested explicitly by `scripts/native/mobile/build-rust-*.mjs` via
+# `cargo rustc --crate-type`, so a plain workspace build no longer links two
+# extra library artifacts.
 [lib]
-crate-type = ["lib", "staticlib", "cdylib"]
+crate-type = ["lib"]
+
+[features]
+# `uniffi/cli` carries clap and the bindings generator (~75 crates). Phone
+# library builds leave this off; only `src/bin/uniffi-bindgen.rs` needs it.
+bindgen = ["uniffi/cli"]
 
 [dependencies]
 serde.workspace = true
@@ -17,15 +24,18 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing.workspace = true
-# `cli` carries the bindings generator, which `src/bin/uniffi-bindgen.rs`
-# exposes for the two mobile build scripts.
-uniffi = { version = "0.32", features = ["cli", "tokio"] }
+uniffi = { version = "0.32", features = ["tokio"] }
 voya-app.workspace = true
 voya-contracts.workspace = true
 voya-platform.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
 
 [lints]
 workspace = true

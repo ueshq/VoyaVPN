@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { setWindowAcrylic } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 
 /** CSS scope hook class: marks "this window has Windows Acrylic enabled" so the veil overrides in globals.css match. */
 const ACRYLIC_SCOPE_CLASS = "voyavpn-acrylic";
@@ -22,7 +22,7 @@ export function useAcrylicWindow(enabled: boolean): void {
     root.classList.add(ACRYLIC_SCOPE_CLASS);
 
     const syncTheme = () => {
-      void setWindowAcrylic(root.classList.contains("dark")).catch(() => undefined);
+      void voyaCommands().setWindowAcrylic(root.classList.contains("dark")).catch(() => undefined);
     };
     syncTheme();
 

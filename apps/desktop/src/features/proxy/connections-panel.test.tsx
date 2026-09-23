@@ -6,19 +6,19 @@ import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@voya/client/query-client";
-import type { ProxyConnectionItem, ProxyConnectionsSnapshot, Routing_Serialize, RuntimeStatusResponse } from "@/ipc/bindings";
+import type { ProxyConnectionItem, ProxyConnectionsSnapshot, Routing_Serialize, RuntimeStatusResponse } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { ConnectionsPanel } from "./connections-panel";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({
+const ipc = installFakeCommands({
   listRoutings: vi.fn(async (): Promise<Routing_Serialize[]> => []),
   proxyCloseConnection: vi.fn(),
   proxyListConnections: vi.fn(),
-}));
-vi.mock("@/ipc/commands", () => ipc);
+});
 const core: RuntimeStatusResponse = {
   state: "connected",
   activeProfileId: null,

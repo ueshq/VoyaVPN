@@ -1,4 +1,4 @@
-import type { SubscriptionMetadata } from "@/ipc/bindings";
+import type { SubscriptionMetadata } from "@voya/contracts";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { formatBytes } from "@voya/utils/formatting";
 import { cn } from "@voya/ui/lib/utils";

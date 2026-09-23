@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { Button } from "@voya/ui/components/button";
-import { getSettingsApplyStatus } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
@@ -21,7 +21,7 @@ export function HomeModeSummary() {
   const connected = core?.state === "connected";
   const apply = useQuery({
     queryKey: queryKeys.settingsApply,
-    queryFn: getSettingsApplyStatus,
+    queryFn: () => voyaCommands().getSettingsApplyStatus(),
     enabled: connected,
     refetchOnMount: "always",
   });

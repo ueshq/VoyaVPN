@@ -12,17 +12,17 @@ use std::sync::{
 };
 
 use voya_app::{
-    contract_map::{process_log_level_to_contract, statistics_snapshot_to_contract},
+    contract_map::process_log_level_to_contract,
     invalidation,
     proxy_runtime::ProxyRuntimeEventSink,
     redaction::{redact_url_userinfo, redact_urls},
-    statistics::{StatisticsEventSink, StatisticsSnapshot as AppStatisticsSnapshot},
+    statistics::StatisticsEventSink,
     subscriptions::{AutoUpdateOutcome, SubscriptionAutoUpdateSink},
     supervisor::{CoreExitEvent, NativeTunExitEvent, SupervisorEventSink},
 };
 use voya_contracts::{
-    AppNotice, AppNoticeLevel, InvalidationScope, LogCode, LogLevel, LogLineBody, LogLineEvent,
-    NoticeCode, ProxyConnectionsSnapshot, QueryInvalidation,
+    AppNotice, AppNoticeLevel, LogCode, LogLevel, LogLineBody, LogLineEvent, NoticeCode,
+    ProxyConnectionsSnapshot, QueryInvalidation, StatisticsSnapshot,
 };
 use voya_platform::process::{ProcessLogLevel, ProcessLogSink, ProcessOutputStream, ProcessRole};
 
@@ -71,7 +71,8 @@ impl HostSinks {
     }
 
     /// Announces a committed change, exactly as `voya_app::invalidation` says.
-    pub(crate) fn invalidate(&self, reason: &str, scopes: Vec<InvalidationScope>) {
+    pub(crate) fn invalidate(&self, reason: &str, bundle: invalidation::InvalidationBundle) {
+        let scopes = bundle.1;
         self.emit(
             EventChannel::Invalidate,
             &InvalidateEvent {
@@ -111,10 +112,10 @@ impl HostSinks {
 }
 
 impl StatisticsEventSink for HostSinks {
-    fn emit_statistics(&self, snapshot: AppStatisticsSnapshot) {
+    fn emit_statistics(&self, snapshot: StatisticsSnapshot) {
         self.emit(
             EventChannel::TransientStream,
-            &TransientStreamEvent::Statistics(statistics_snapshot_to_contract(snapshot)),
+            &TransientStreamEvent::Statistics(snapshot),
         );
     }
 }

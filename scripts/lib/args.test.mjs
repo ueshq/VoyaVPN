@@ -60,5 +60,13 @@ describe("shared CLI argument reader", () => {
     expect(() => parseArgs(["--input"], spec, defaults)).toThrow("--input requires a value");
     expect(() => parseArgs(["--input", "--output", "out"], spec, defaults)).toThrow("--input requires a value");
     expect(parseArgs(["--help"], spec, defaults).help).toBe(true);
+    expect(parseArgs(["-h"], spec, defaults).help).toBe(true);
+  });
+
+  it("accepts the --flag=value form", () => {
+    expect(parseArgs(["--input=bundle", "--timeout-ms=2500"], spec, defaults)).toMatchObject({
+      input: "bundle",
+      timeoutMs: 2500,
+    });
   });
 });

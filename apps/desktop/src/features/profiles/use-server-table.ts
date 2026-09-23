@@ -1,5 +1,5 @@
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { ImportProfilesResult } from "@/ipc/bindings";
+import type { ImportProfilesResult } from "@voya/contracts";
 import { useNodeGroups } from "./use-node-groups";
 import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";

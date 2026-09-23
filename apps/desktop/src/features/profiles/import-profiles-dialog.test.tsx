@@ -10,21 +10,21 @@ import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
-import type { ImportProfilesResult } from "@/ipc/bindings";
+import type { ImportProfilesResult } from "@voya/contracts";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
 import { QrScanError } from "@voya/features/profiles/qr-errors";
+import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 
-const ipcMocks = vi.hoisted(() => ({
+const ipcMocks = installFakeCommands({
   importProfilesFromText: vi.fn(),
-  listSubscriptions: vi.fn(),
-}));
+  ...seedListCommands(),
+});
 
 const scannerMocks = vi.hoisted(() => ({
   scanQrBlob: vi.fn(),
 }));
 
-vi.mock("@/ipc/commands", () => ipcMocks);
 vi.mock("./qr-scanner", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./qr-scanner")>();
 

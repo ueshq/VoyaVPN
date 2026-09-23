@@ -13,8 +13,8 @@ import {
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { listRoutings } from "@/ipc/commands";
-import type { ProxyConnectionItem } from "@/ipc/bindings";
+import { voyaCommands } from "@voya/client/transport";
+import type { ProxyConnectionItem } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { outboundLabelKey } from "@voya/features/routing/rule-outbound";
 import { connectionBytes } from "@voya/features/proxy/connection-display";
@@ -52,7 +52,7 @@ export function ConnectionDetails({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const routingsQuery = useQuery({
     enabled: connection !== null,
-    queryFn: listRoutings,
+    queryFn: () => voyaCommands().listRoutings(),
     queryKey: queryKeys.routings,
   });
   const activeRules =

@@ -28,7 +28,11 @@ pub async fn run_speedtest<R: tauri::Runtime>(
         .await
         .map_err(AppError::from)?;
 
-    emit_profile_invalidation(&app, "speedtest-updated", false);
+    emit_invalidation(
+        &app,
+        "speedtest-updated",
+        invalidation::profile_scopes(false),
+    );
 
     Ok(result)
 }
@@ -69,5 +73,5 @@ pub async fn check_connection_ip(
         .await
         .map_err(AppError::from)?;
 
-    Ok(voya_app::contract_map::connection_ip_to_contract(exit))
+    Ok(exit)
 }

@@ -43,31 +43,49 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * behind the screen scan), so the 456.8 KiB `vendor-qr` chunk and its budget
  * line are gone, and the world map's path data was rounded to one decimal.
  * Sizes recorded then: total emitted JS 1275.9 KiB, whole `dist` 3039.9 KiB.
+ *
+ * 2026-09-23 (batch 1 slimming): type-only imports moved to `@voya/contracts`
+ * and Button/Badge dropped `asChild`/Slot. JS chunks were already at the
+ * 09-22 ratchet, so the budgets move down to the measured sizes with a small
+ * headroom. Measured: index 59.7, locales 45.7, zh-Hans 44.7, zh-Hant 45.3,
+ * server-table 129.9, settings-screen 66.4, vendor-data 78.2, vendor-react
+ * 185.4, vendor-radix 59.0, vendor-forms 96.9, vendor-menus 96.3; total
+ * emitted JS 1282.6 KiB; startup JavaScript 505.7 KiB; CSS 80.5 KiB; whole
+ * `dist` 3046.6 KiB.
+ *
+ * 2026-09-23 (batch 2): window chrome moved to five Rust commands and the
+ * feature layer talks to `voyaCommands()`, so `window.js`/`dpi.js`/`image.js`
+ * left the startup path. Measured after: index 56.1, startup JavaScript
+ * 489.4 KiB (was 505.7), total emitted JS 1267.1 KiB, whole `dist` 3031.1 KiB.
+ *
+ * 2026-09-23 (batch 6a): react-hook-form and @hookform/resolvers left the
+ * profile editor, so `vendor-forms` is zod alone. Measured: vendor-forms 65.9
+ * (was 96.9), total emitted JS 1231.9 KiB, whole `dist` 2995.8 KiB.
  */
 const budgets = [
-  { label: "application entry", maxKiB: 60, prefix: "index-" },
-  { label: "English locale (startup)", maxKiB: 55, prefix: "locales-" },
-  { label: "Simplified Chinese locale", maxKiB: 55, prefix: "zh-Hans-" },
-  { label: "Traditional Chinese locale", maxKiB: 55, prefix: "zh-Hant-" },
-  { label: "profiles screen", maxKiB: 170, prefix: "server-table-" },
-  { label: "settings screen", maxKiB: 85, prefix: "settings-screen-" },
-  { label: "data vendor chunk", maxKiB: 110, prefix: "vendor-data-" },
-  { label: "React vendor chunk", maxKiB: 240, prefix: "vendor-react-" },
-  { label: "Radix vendor chunk", maxKiB: 85, prefix: "vendor-radix-" },
-  { label: "form vendor chunk", maxKiB: 135, prefix: "vendor-forms-" },
-  { label: "menu vendor chunk", maxKiB: 135, prefix: "vendor-menus-" },
+  { label: "application entry", maxKiB: 58, prefix: "index-" },
+  { label: "English locale (startup)", maxKiB: 48, prefix: "locales-" },
+  { label: "Simplified Chinese locale", maxKiB: 48, prefix: "zh-Hans-" },
+  { label: "Traditional Chinese locale", maxKiB: 48, prefix: "zh-Hant-" },
+  { label: "profiles screen", maxKiB: 136, prefix: "server-table-" },
+  { label: "settings screen", maxKiB: 72, prefix: "settings-screen-" },
+  { label: "data vendor chunk", maxKiB: 84, prefix: "vendor-data-" },
+  { label: "React vendor chunk", maxKiB: 196, prefix: "vendor-react-" },
+  { label: "Radix vendor chunk", maxKiB: 64, prefix: "vendor-radix-" },
+  { label: "form vendor chunk", maxKiB: 72, prefix: "vendor-forms-" },
+  { label: "menu vendor chunk", maxKiB: 104, prefix: "vendor-menus-" },
 ];
 
-const totalBudgetKiB = 1650;
+const totalBudgetKiB = 1320;
 /**
  * Every script `index.html` loads before the first paint. Tighter than the
  * per-chunk ratchet on purpose: an accidental startup import is exactly what
  * this line exists to catch, and 1.3x of the whole path would let a form
  * library through unnoticed.
  */
-const startupBudgetKiB = 575;
-const cssBudgetKiB = 120;
-const distBudgetKiB = 3500;
+const startupBudgetKiB = 510;
+const cssBudgetKiB = 86;
+const distBudgetKiB = 3150;
 
 export function checkBundleBudgets(assets, { budgets: budgetList = budgets, totalKiB = totalBudgetKiB } = {}) {
   const failures = [];

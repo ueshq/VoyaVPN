@@ -1,7 +1,6 @@
-import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { isCliEntrypoint, readJson, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, readJson, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   incompatiblePacketTunnelBundle,
   packetTunnelLayout,
@@ -45,9 +44,8 @@ function optionalOrRequiredPath(path, label) {
 }
 
 function codesignEntitlements(path) {
-  const result = spawnSync("codesign", ["-d", "--entitlements", ":-", path], {
+  const result = capture("codesign", ["-d", "--entitlements", ":-", path], {
     cwd: repoRoot,
-    encoding: "utf8",
   });
   return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
 }

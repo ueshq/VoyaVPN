@@ -22,56 +22,31 @@ permissions:
 env:
   RUST_TOOLCHAIN_VERSION: "1.96.0"
   RUST_MSRV_VERSION: "1.94.1"
-  CARGO_MACHETE_VERSION: "0.9.2"
-  TAURI_DRIVER_VERSION: "2.0.6"
 
 jobs:
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    env:
-      CARGO_AUDIT_VERSION: 0.22.2
-      CARGO_DENY_VERSION: 0.19.9
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: ./.github/actions/setup-rust
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          cache: "false"
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.5.0
+      - uses: ./.github/actions/setup-node-pnpm
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      # cargo install rebuilds these audit tools from source on every run; the
-      # cache turns the install steps into a no-op once the pinned version is
-      # present. Swatinem/rust-cache deliberately does not cache ~/.cargo/bin.
-      - name: Cache audit tool binaries
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/cargo-deny
-            ~/.cargo/bin/cargo-audit
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-          key: ${{ runner.os }}-cargo-audit-tools-${{ env.RUST_TOOLCHAIN_VERSION }}-deny-${{ env.CARGO_DENY_VERSION }}-audit-${{ env.CARGO_AUDIT_VERSION }}
-
+      # Only cargo-deny runs the RustSec check: it already covers advisories,
+      # and cargo-audit's separate database/filters produced a second, drifting
+      # opinion (deny.toml's ignore list is the single source of truth).
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked --version "$CARGO_DENY_VERSION"
+        uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
+        with:
+          tool: cargo-deny@0.19.9
 
       - name: Run cargo-deny
         run: cargo deny -L error --locked --all-features check advisories bans licenses sources
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked --version "$CARGO_AUDIT_VERSION"
-
-      - name: Run cargo-audit
-        run: cargo audit
 
       - name: Run pnpm audit
         run: pnpm audit --prod --audit-level high
@@ -86,18 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.5.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      # check:i18n parses sources with the workspace's typescript.
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-node-pnpm
 
       - name: Check architecture boundaries
         run: pnpm run check:architecture
@@ -114,63 +78,19 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Install Linux Tauri dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            curl \
-            file \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libclang-dev \
-            libxcb1-dev \
-            libxrandr-dev \
-            libdbus-1-dev \
-            libpipewire-0.3-dev \
-            libwayland-dev \
-            libegl-dev \
-            pkg-config \
-            libxdo-dev \
-            wget
+      - uses: ./.github/actions/setup-linux-deps
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: ./.github/actions/setup-rust
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
           components: clippy, rustfmt
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          cache-on-failure: true
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.5.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      # These gates are cargo and Node builtins only, but pnpm 11 installs the
-      # workspace on the first `pnpm run` when node_modules is missing; doing it
-      # here keeps that install frozen and out of the fmt step's timing.
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache cargo-machete binary
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/cargo-machete
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-          key: ${{ runner.os }}-cargo-machete-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.CARGO_MACHETE_VERSION }}
+      - uses: ./.github/actions/setup-node-pnpm
 
       - name: Install cargo-machete
-        run: cargo install cargo-machete --locked --version "$CARGO_MACHETE_VERSION"
+        uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
+        with:
+          tool: cargo-machete@0.9.2
 
       # check:sing-box downloads and extracts the pinned sing-box archive when no
       # verified seed is staged. The key hashes the installer, which holds the
@@ -208,17 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.5.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-node-pnpm
 
       - name: Typecheck frontend
         run: pnpm run check:frontend:typecheck
@@ -274,17 +184,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.5.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-node-pnpm
 
       - name: Run mobile tests
         run: pnpm run check:mobile:test
@@ -296,68 +196,36 @@ jobs:
       - name: Bundle the mobile app for both platforms
         run: pnpm run check:mobile:bundle
 
-  mobile-rust:
-    # The mobile host has to *cross-compile*, which the Linux baseline cannot
-    # prove: `baseline-rust` builds for the host, and every blocker this job
-    # exists to catch — a desktop-only crate that is not target-gated, a TLS
-    # feature that needs a trust store a phone does not expose — only appears
-    # when the target changes. The host-side tests themselves run in
-    # `baseline-rust` with the rest of the workspace, so this job checks, it
-    # does not test.
-    name: Mobile host cross-compile (${{ matrix.platform }})
-    runs-on: ${{ matrix.os }}
+  # The mobile host has to *cross-compile*, which the Linux baseline cannot
+  # prove: `baseline-rust` builds for the host, and every blocker this job
+  # exists to catch — a desktop-only crate that is not target-gated, a TLS
+  # feature that needs a trust store a phone does not expose — only appears
+  # when the target changes. The host-side tests themselves run in
+  # `baseline-rust` with the rest of the workspace, so this job checks, it
+  # does not test. iOS rides the platform-check macOS leg (same runner family,
+  # already compiling for Apple targets) so one macos-15 machine covers both.
+  mobile-rust-android:
+    name: Mobile host cross-compile (Android)
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # The device and the simulator are both arm64 but different targets,
-          # and a build has to work on both.
-          - platform: iOS
-            os: macos-15
-            targets: aarch64-apple-ios,aarch64-apple-ios-sim
-          - platform: Android
-            os: ubuntu-latest
-            targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: ./.github/actions/setup-rust
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
-          targets: ${{ matrix.targets }}
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          cache-on-failure: true
-          key: mobile-${{ matrix.platform }}
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          cache-key: mobile-Android
 
       # `cargo-ndk` is what turns a Rust target triple into the NDK's clang and
       # sysroot; without it every Android link fails on a missing libc.
       - name: Install cargo-ndk
-        if: ${{ matrix.platform == 'Android' }}
         uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
         with:
           tool: cargo-ndk@3.5.4
 
-      - name: Check the mobile host for iOS
-        if: ${{ matrix.platform == 'iOS' }}
-        run: |
-          for target in aarch64-apple-ios aarch64-apple-ios-sim; do
-            cargo check -p voya-mobile-ffi --target "$target" --locked
-          done
-
       - name: Check the mobile host for Android
-        if: ${{ matrix.platform == 'Android' }}
         run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 check -p voya-mobile-ffi --locked
-
-      # The app-side Swift has no host-side build — it reaches React,
-      # NetworkExtension, Libbox and the uniffi bindings — so this checks the
-      # one thing that can be checked without an Xcode project: that it parses.
-      # It rides the iOS leg because that is the macOS runner already here.
-      - name: Parse the iOS Swift sources
-        if: ${{ matrix.platform == 'iOS' }}
-        run: node scripts/quality/mobile-swift.mjs
 
   desktop-smoke:
     name: Linux native desktop smoke
@@ -366,58 +234,20 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Install Linux desktop test dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libclang-dev \
-            libxcb1-dev \
-            libxrandr-dev \
-            libdbus-1-dev \
-            libpipewire-0.3-dev \
-            libwayland-dev \
-            libegl-dev \
-            pkg-config \
-            libxdo-dev \
-            webkit2gtk-driver \
-            xvfb
+      - uses: ./.github/actions/setup-linux-deps
+        with:
+          extra-packages: webkit2gtk-driver xvfb
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: ./.github/actions/setup-rust
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          cache-on-failure: true
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.5.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install workspace dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache tauri-driver binary
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/bin/tauri-driver
-            ~/.cargo/.crates.toml
-            ~/.cargo/.crates2.json
-          key: ${{ runner.os }}-tauri-driver-${{ env.RUST_TOOLCHAIN_VERSION }}-${{ env.TAURI_DRIVER_VERSION }}
+      - uses: ./.github/actions/setup-node-pnpm
 
       - name: Install tauri-driver
-        run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
+        uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
+        with:
+          tool: tauri-driver@2.0.6
 
       # tauri:build stages the same pinned seed check:sing-box uses; see the
       # baseline-rust cache step for why a restored copy is safe to reuse.
@@ -430,39 +260,22 @@ jobs:
       - name: Run real desktop smoke
         run: xvfb-run -a pnpm run check:desktop:smoke
 
+  # MSRV is a dispatch/release gate only: clippy.toml's `msrv = "1.94"` already
+  # makes `incompatible_msrv` reject newer std APIs on every PR, so re-checking
+  # the whole workspace at 1.94.1 on each push bought no extra safety.
   msrv:
     name: Rust MSRV 1.94.1
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Install Linux Tauri dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libwebkit2gtk-4.1-dev \
-            libclang-dev \
-            libxcb1-dev \
-            libxrandr-dev \
-            libdbus-1-dev \
-            libpipewire-0.3-dev \
-            libwayland-dev \
-            libegl-dev \
-            pkg-config \
-            libxdo-dev
+      - uses: ./.github/actions/setup-linux-deps
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: ./.github/actions/setup-rust
         with:
           toolchain: ${{ env.RUST_MSRV_VERSION }}
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          cache-on-failure: true
 
       - name: Check workspace at MSRV
         run: cargo check --workspace --all-targets --locked
@@ -476,6 +289,8 @@ jobs:
     # here only re-linted identical code. Rust tests stay Linux-only on
     # purpose: no #[cfg(test)] module in the workspace is OS-gated, so running
     # them here would only re-run the same suite at triple the wall-clock cost.
+    # The macOS leg also cross-checks voya-mobile-ffi for iOS and parses the
+    # app-side Swift, which used to need their own macos-15 job.
     name: Rust lint (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -488,17 +303,28 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: ./.github/actions/setup-rust
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
           components: clippy
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          cache-on-failure: true
+          targets: ${{ matrix.os == 'macos-15' && 'aarch64-apple-ios,aarch64-apple-ios-sim' || '' }}
 
       - name: Lint all Rust targets
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Check the mobile host for iOS
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          for target in aarch64-apple-ios aarch64-apple-ios-sim; do
+            cargo check -p voya-mobile-ffi --target "$target" --locked
+          done
+
+      # The app-side Swift has no host-side build — it reaches React,
+      # NetworkExtension, Libbox and the uniffi bindings — so this checks the
+      # one thing that can be checked without an Xcode project: that it parses.
+      - name: Parse the iOS Swift sources
+        if: ${{ runner.os == 'macOS' }}
+        run: node scripts/quality/mobile-swift.mjs
 
       - name: Test macOS tunnel waiter without network changes
         if: ${{ runner.os == 'macOS' }}

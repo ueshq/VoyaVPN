@@ -6,10 +6,11 @@ import { changeLocale } from "@voya/i18n";
 import { createAppQueryClient } from "@voya/client/query-client";
 import { renderWithQuery } from "@/test/render";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
-import type { AppSettingsV1, CoreState, TrafficModeResponse } from "@/ipc/bindings";
+import type { AppSettingsV1, CoreState, TrafficModeResponse } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
+import { installFakeCommands } from "@voya/features/test/backend";
 
 import { TrafficModeBanner } from "./traffic-mode-banner";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
@@ -19,10 +20,10 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   save: vi.fn(),
 }));
-vi.mock("@/ipc/commands", () => ({
+installFakeCommands({
   loadAppSettings: mocks.load,
   proxySetTrafficMode: mocks.save,
-}));
+});
 vi.mock("@voya/client/runtime-event-store", () => ({
   useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) => select({ coreState: { state: mocks.state } }),
   coreStateOf: (coreState: { state: CoreState } | null) => coreState?.state ?? "disconnected",

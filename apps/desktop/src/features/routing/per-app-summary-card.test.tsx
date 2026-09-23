@@ -3,13 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RoutingRule, Routing_Serialize, TunStatus } from "@/ipc/bindings";
+import type { RoutingRule, Routing_Serialize, TunStatus } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { PerAppSummaryCard } from "./per-app-summary-card";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({ connectionModeStatus: vi.fn() }));
-vi.mock("@/ipc/commands", () => ipc);
+const ipc = installFakeCommands({ connectionModeStatus: vi.fn() });
 
 describe("PerAppSummaryCard", () => {
   beforeEach(() => {

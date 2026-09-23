@@ -3,22 +3,16 @@
 use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
-    contract_map::{
-        policy_group_from_contract, policy_group_runtime_to_contract, policy_group_to_contract,
-    },
+    contract_map::{policy_group_from_contract, policy_group_to_contract},
     invalidation,
-    policy_groups::PolicyGroupManager,
+    policy_groups::{select_member_use_case, test_running_policy_group_delay, PolicyGroupManager},
     post_commit::ConfigChange,
-    supervisor::{SupervisorConnectionState, SupervisorSnapshot},
 };
 use voya_contracts::{AppError, AppNoticeLevel, NoticeCode, PolicyGroup};
 
 use crate::app::MobileState;
 
 use super::{answer, arguments, runtime::finish_config_change};
-
-/// How long a member's probe may take before it counts as unreachable.
-const GROUP_DELAY_TIMEOUT_MS: u32 = 5_000;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,86 +122,46 @@ pub(super) async fn select_member(state: &MobileState, args: &Value) -> Result<V
         group_id,
         profile_id,
     } = arguments("select_policy_group_member", args)?;
-    let selected = state
-        .config_mutations
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(PolicyGroupManager::new_in(unit_of_work)
-                .select_member(&group_id, &profile_id)
-                .await?)
-        })
-        .await?;
-
-    let snapshot = state.supervisor.status().await?;
-    if snapshot.state == SupervisorConnectionState::Connected
-        && snapshot.active_group_id.as_deref() == Some(group_id.as_str())
-    {
-        let live = async {
-            let (_, members) = state.services.policy_groups().resolve(&group_id).await?;
-            state
-                .proxy_runtime
-                .select_group_member(&snapshot.clash_api_access(), &members, &profile_id)
-                .await?;
-            Ok::<_, AppError>(())
-        }
-        .await;
-
-        if let Err(error) = live {
-            state.sinks.notice(
-                AppNoticeLevel::Warning,
-                NoticeCode::PolicyGroupSelectionRuntimeUpdateFailed,
-                Some(format!("{error:?}")),
-            );
-        }
+    let (group, live_error) = select_member_use_case(
+        &state.config_mutations,
+        &state.supervisor,
+        &state.services.policy_groups(),
+        &state.proxy_runtime,
+        &group_id,
+        &profile_id,
+    )
+    .await?;
+    if let Some(message) = live_error {
+        state.sinks.notice(
+            AppNoticeLevel::Warning,
+            NoticeCode::PolicyGroupSelectionRuntimeUpdateFailed,
+            Some(message),
+        );
     }
     state.sinks.invalidate(
         "policy-group-member-selected",
         invalidation::policy_group_runtime_scopes(),
     );
 
-    answer(
-        "select_policy_group_member",
-        &policy_group_to_contract(selected.value),
-    )
+    answer("select_policy_group_member", &group)
 }
 
 /// Probes every member of the running group through the core and returns the
 /// group with those delays; `null` while no group runs.
 pub(super) async fn test_delay(state: &MobileState) -> Result<Value, AppError> {
     let snapshot = state.supervisor.status().await?;
-    let Some(group_id) = running_group_id(&snapshot) else {
-        return Ok(Value::Null);
-    };
-    let (group, members) = state.services.policy_groups().resolve(&group_id).await?;
-    let access = snapshot.clash_api_access();
-    let delays = state
-        .proxy_runtime
-        .test_group_delay(
-            &access,
-            &members,
-            voya_app::policy_groups::group_test_url(&group),
-            GROUP_DELAY_TIMEOUT_MS,
-        )
-        .await?;
-    let mut runtime = state.proxy_runtime.group_state(&access, &members).await?;
-    for member in &mut runtime.members {
-        if let Some(delay) = delays.get(&member.profile_id) {
-            member.delay_ms = Some(*delay);
-        }
-    }
-    state.sinks.invalidate(
-        "policy-group-delay-tested",
-        invalidation::policy_group_runtime_scopes(),
-    );
-
-    answer(
-        "test_policy_group_delay",
-        &Some(policy_group_runtime_to_contract(group_id, runtime)),
+    let runtime = test_running_policy_group_delay(
+        &snapshot,
+        &state.services.policy_groups(),
+        &state.proxy_runtime,
     )
-}
+    .await?;
+    if runtime.is_some() {
+        state.sinks.invalidate(
+            "policy-group-delay-tested",
+            invalidation::policy_group_runtime_scopes(),
+        );
+    }
 
-pub(super) fn running_group_id(snapshot: &SupervisorSnapshot) -> Option<String> {
-    snapshot
-        .active_group_id
-        .clone()
-        .filter(|_| snapshot.state == SupervisorConnectionState::Connected)
+    answer("test_policy_group_delay", &runtime)
 }

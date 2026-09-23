@@ -723,29 +723,6 @@ fn server_stat_mapping_keeps_each_counter_in_its_own_field() {
 }
 
 #[test]
-fn statistics_snapshot_mapping_keeps_each_rate_in_its_own_field() {
-    let contract = statistics_snapshot_to_contract(crate::statistics::StatisticsSnapshot {
-        active_profile_id: Some("profile".to_string()),
-        proxy_upload_bytes_per_second: 1.0,
-        proxy_download_bytes_per_second: 2.0,
-        direct_upload_bytes_per_second: 3.0,
-        direct_download_bytes_per_second: 4.0,
-        upload_bytes_per_second: 5.0,
-        download_bytes_per_second: 6.0,
-        server_stat: None,
-    });
-
-    assert_eq!(contract.active_profile_id.as_deref(), Some("profile"));
-    assert_eq!(contract.proxy_upload_bytes_per_second, 1.0);
-    assert_eq!(contract.proxy_download_bytes_per_second, 2.0);
-    assert_eq!(contract.direct_upload_bytes_per_second, 3.0);
-    assert_eq!(contract.direct_download_bytes_per_second, 4.0);
-    assert_eq!(contract.upload_bytes_per_second, 5.0);
-    assert_eq!(contract.download_bytes_per_second, 6.0);
-    assert!(contract.server_stat.is_none());
-}
-
-#[test]
 fn system_proxy_status_mapping_keeps_requested_and_effective_modes_apart() {
     for (management, expected) in [
         (
@@ -782,75 +759,8 @@ fn system_proxy_status_mapping_keeps_requested_and_effective_modes_apart() {
 }
 
 #[test]
-fn core_flow_levels_map_onto_the_contract_vocabulary() {
-    use crate::core_flow::{CoreFlowLevel, CoreFlowState};
-
-    assert!(matches!(
-        core_flow_log_level(CoreFlowLevel::Info),
-        LogLevel::Info
-    ));
-    assert!(matches!(
-        core_flow_log_level(CoreFlowLevel::Warn),
-        LogLevel::Warn
-    ));
-    assert!(matches!(
-        core_flow_log_level(CoreFlowLevel::Error),
-        LogLevel::Error
-    ));
-
-    assert!(matches!(
-        core_flow_notice_level(CoreFlowLevel::Info),
-        AppNoticeLevel::Info
-    ));
-    assert!(matches!(
-        core_flow_notice_level(CoreFlowLevel::Warn),
-        AppNoticeLevel::Warning
-    ));
-    assert!(matches!(
-        core_flow_notice_level(CoreFlowLevel::Error),
-        AppNoticeLevel::Error
-    ));
-
-    assert!(matches!(
-        core_state_to_contract(CoreFlowState::CleanupPending),
-        CoreState::CleanupPending
-    ));
-    assert!(matches!(
-        core_state_to_contract(CoreFlowState::Connecting),
-        CoreState::Connecting
-    ));
-    assert!(matches!(
-        core_state_to_contract(CoreFlowState::Connected),
-        CoreState::Connected
-    ));
-    assert!(matches!(
-        core_state_to_contract(CoreFlowState::Disconnecting),
-        CoreState::Disconnecting
-    ));
-    assert!(matches!(
-        core_state_to_contract(CoreFlowState::Disconnected),
-        CoreState::Disconnected
-    ));
-}
-
-#[test]
-fn connection_ip_and_core_log_levels_map_onto_the_contract() {
+fn core_log_levels_map_onto_the_contract() {
     use voya_platform::process::ProcessLogLevel;
-
-    let exit = crate::connection_ip::ConnectionIp {
-        ip: Some("203.0.113.8".to_string()),
-        country_code: Some("ZZ".to_string()),
-    };
-    let mapped = connection_ip_to_contract(exit);
-    assert_eq!(mapped.ip.as_deref(), Some("203.0.113.8"));
-    assert_eq!(mapped.country_code.as_deref(), Some("ZZ"));
-
-    let empty = connection_ip_to_contract(crate::connection_ip::ConnectionIp {
-        ip: None,
-        country_code: None,
-    });
-    assert_eq!(empty.ip, None);
-    assert_eq!(empty.country_code, None);
 
     assert!(matches!(
         process_log_level_to_contract(ProcessLogLevel::Trace),

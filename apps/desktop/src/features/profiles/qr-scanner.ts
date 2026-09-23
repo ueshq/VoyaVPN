@@ -1,4 +1,4 @@
-import { decodeQrImage } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 
 import { QrScanError } from "@voya/features/profiles/qr-errors";
 
@@ -35,7 +35,7 @@ export async function scanQrBlob(blob: Blob): Promise<string> {
     context.drawImage(bitmap, 0, 0, width, height);
     const luma = rgbaToLuma(context.getImageData(0, 0, width, height).data);
 
-    const result = await decodeQrImage(width, height, bytesToBase64(luma));
+    const result = await voyaCommands().decodeQrImage(width, height, bytesToBase64(luma));
     const text = result.status === "found"
       ? result.texts.map((payload) => payload.trim()).filter(Boolean).join("\n")
       : "";

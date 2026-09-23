@@ -129,7 +129,7 @@ export default defineConfig({
               // Only the editing dialogs and settings validate forms.
               name: "vendor-forms",
               priority: 20,
-              test: /node_modules[\\/](@hookform|react-hook-form|zod)[\\/]/,
+              test: /node_modules[\\/](zod)[\\/]/,
             },
             {
               name: startupGroup("vendor"),

@@ -5,7 +5,7 @@ import type {
   SelfHostReachability,
   SelfHostReasonCode,
   SelfHostRuntimeStatus,
-} from "@/ipc/bindings";
+} from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n";
 
 /**

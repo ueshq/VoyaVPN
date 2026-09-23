@@ -24,10 +24,10 @@
 use std::sync::Arc;
 
 use voya_contracts::{
-    CoreFlowReason, LogCode, NoticeCode, SettingsApplyAction, SettingsApplyStatus, TunStatus,
+    AppNoticeLevel, CoreFlowReason, CoreState, LogCode, LogLevel, NoticeCode, SettingsApplyAction,
+    SettingsApplyStatus, TunStatus,
 };
 use voya_core::AppConfig;
-use voya_net::clash::{ClashHttpTransport, ReqwestClashHttpTransport};
 use voya_platform::sysproxy::SystemProxyStatus;
 
 use crate::{
@@ -40,24 +40,6 @@ use crate::{
     sysproxy::SystemProxyManager,
     tun::TunManager,
 };
-
-/// Severity for the flow's log lines and user notices.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CoreFlowLevel {
-    Info,
-    Warn,
-    Error,
-}
-
-/// Connection state the flow reports to the UI.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CoreFlowState {
-    CleanupPending,
-    Connecting,
-    Connected,
-    Disconnecting,
-    Disconnected,
-}
 
 #[derive(Clone, Copy)]
 enum ProxyAction {
@@ -77,25 +59,25 @@ enum ProxyAction {
 /// only the core process's own output stays raw, and it never comes through
 /// here.
 pub trait CoreFlowSink: Send + Sync {
-    fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>);
+    fn log(&self, level: LogLevel, code: LogCode, detail: Option<&str>);
     fn core_state(
         &self,
-        state: CoreFlowState,
+        state: CoreState,
         active_profile_id: Option<String>,
         snapshot: Option<&SupervisorSnapshot>,
     );
     fn system_proxy_changed(&self, status: &SystemProxyStatus);
     fn tun_changed(&self, status: &TunStatus);
     fn statistics_zero(&self);
-    fn notice(&self, level: CoreFlowLevel, code: NoticeCode, detail: &str);
+    fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str);
 }
 
-pub struct CoreFlow<'flow, T = ReqwestClashHttpTransport> {
+pub struct CoreFlow<'flow> {
     runtime: RuntimeManager<'flow>,
     system_proxy: SystemProxyManager,
     tun: TunManager,
     sink: Arc<dyn CoreFlowSink>,
-    proxy_runtime: ProxyRuntimeManager<T>,
+    proxy_runtime: ProxyRuntimeManager,
 }
 
 impl<'flow> CoreFlow<'flow> {
@@ -114,21 +96,13 @@ impl<'flow> CoreFlow<'flow> {
             proxy_runtime: ProxyRuntimeManager::new(),
         }
     }
-}
 
-impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
+    /// Swaps in a proxy runtime over a test transport.
+    #[cfg(test)]
     #[must_use]
-    pub fn with_proxy_runtime<U: ClashHttpTransport>(
-        self,
-        proxy_runtime: ProxyRuntimeManager<U>,
-    ) -> CoreFlow<'flow, U> {
-        CoreFlow {
-            runtime: self.runtime,
-            system_proxy: self.system_proxy,
-            tun: self.tun,
-            sink: self.sink,
-            proxy_runtime,
-        }
+    pub fn with_proxy_runtime(mut self, proxy_runtime: ProxyRuntimeManager) -> Self {
+        self.proxy_runtime = proxy_runtime;
+        self
     }
 
     pub async fn settings_apply_status(
@@ -212,15 +186,12 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
     /// Stop the core and restore automatic proxies / report manual cleanup.
     pub async fn disconnect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
         let _flow = self.runtime.settings_application().flow_lock.lock().await;
-        self.sink
-            .log(CoreFlowLevel::Info, LogCode::Disconnecting, None);
-        self.sink
-            .core_state(CoreFlowState::Disconnecting, None, None);
+        self.sink.log(LogLevel::Info, LogCode::Disconnecting, None);
+        self.sink.core_state(CoreState::Disconnecting, None, None);
 
         match self.runtime.disconnect().await {
             Ok(snapshot) => {
-                self.sink
-                    .log(CoreFlowLevel::Info, LogCode::Disconnected, None);
+                self.sink.log(LogLevel::Info, LogCode::Disconnected, None);
                 self.settle_disconnected(config, None, Some(&snapshot))
                     .await;
                 Ok(snapshot)
@@ -238,12 +209,14 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         let _flow = self.runtime.settings_application().flow_lock.lock().await;
         match self.runtime.disconnect_removed_profile().await {
             Ok(Some(snapshot)) => {
-                self.sink
-                    .log(CoreFlowLevel::Info, LogCode::Disconnected, None);
+                self.sink.log(LogLevel::Info, LogCode::Disconnected, None);
                 // Deleting a node, a group or a subscription can take the
                 // connection down; say so instead of letting it just drop.
-                self.sink
-                    .notice(CoreFlowLevel::Warn, NoticeCode::ActiveSelectionRemoved, "");
+                self.sink.notice(
+                    AppNoticeLevel::Warning,
+                    NoticeCode::ActiveSelectionRemoved,
+                    "",
+                );
                 self.settle_disconnected(config, None, Some(&snapshot))
                     .await;
                 Ok(())
@@ -263,7 +236,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         match event.outcome {
             CoreExitOutcome::Restarted { attempt, snapshot } => {
                 self.sink.log(
-                    CoreFlowLevel::Warn,
+                    LogLevel::Warn,
                     LogCode::CoreExitRestarted { attempt },
                     Some(&exit),
                 );
@@ -277,14 +250,14 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                     )
                     .await;
                 self.sink.core_state(
-                    CoreFlowState::Connected,
+                    CoreState::Connected,
                     event.active_profile_id,
                     Some(&snapshot),
                 );
             }
             CoreExitOutcome::RestartScheduled { attempt, delay } => {
                 self.sink.log(
-                    CoreFlowLevel::Warn,
+                    LogLevel::Warn,
                     LogCode::CoreExitRetryScheduled {
                         attempt,
                         delay_ms: u32::try_from(delay.as_millis()).unwrap_or(u32::MAX),
@@ -292,14 +265,14 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                     Some(&exit),
                 );
                 self.sink
-                    .core_state(CoreFlowState::Connecting, event.active_profile_id, None);
+                    .core_state(CoreState::Connecting, event.active_profile_id, None);
             }
             CoreExitOutcome::GaveUp(reason) => {
                 let detail = format!("{exit}: {reason}");
                 self.sink
-                    .log(CoreFlowLevel::Error, LogCode::CoreExitGaveUp, Some(&detail));
+                    .log(LogLevel::Error, LogCode::CoreExitGaveUp, Some(&detail));
                 self.sink
-                    .notice(CoreFlowLevel::Error, NoticeCode::CoreStopped, &detail);
+                    .notice(AppNoticeLevel::Error, NoticeCode::CoreStopped, &detail);
                 self.settle_disconnected(config, event.active_profile_id, None)
                     .await;
             }
@@ -309,12 +282,12 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
     /// React to a native TUN provider that reached a terminal state.
     pub async fn handle_native_tun_exit(&self, config: &AppConfig, event: NativeTunExitEvent) {
         self.sink.log(
-            CoreFlowLevel::Error,
+            LogLevel::Error,
             LogCode::NativeTunExited,
             Some(&event.message),
         );
         self.sink.notice(
-            CoreFlowLevel::Error,
+            AppNoticeLevel::Error,
             NoticeCode::NativeTunStopped,
             &event.message,
         );
@@ -322,15 +295,15 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
     }
 
     fn announce_start(&self, config: &AppConfig, code: LogCode) {
-        self.sink.log(CoreFlowLevel::Info, code, None);
+        self.sink.log(LogLevel::Info, code, None);
         self.sink
-            .core_state(CoreFlowState::Connecting, active_profile_id(config), None);
+            .core_state(CoreState::Connecting, active_profile_id(config), None);
     }
 
     /// A failed core operation, logged with the error as its detail.
     fn report_failure(&self, reason: CoreFlowReason, error: &RuntimeError) {
         self.sink.log(
-            CoreFlowLevel::Error,
+            LogLevel::Error,
             LogCode::CoreOperationFailed { reason },
             Some(&error.to_string()),
         );
@@ -363,7 +336,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
         code: LogCode,
     ) {
         self.settle_traffic_mode(config, snapshot).await;
-        self.sink.log(CoreFlowLevel::Info, code, None);
+        self.sink.log(LogLevel::Info, code, None);
         let _ = self
             .settle_system_proxy(
                 config,
@@ -372,7 +345,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
             )
             .await;
         self.sink
-            .core_state(CoreFlowState::Connected, None, Some(snapshot));
+            .core_state(CoreState::Connected, None, Some(snapshot));
         self.report_tun_status(config).await;
     }
 
@@ -386,7 +359,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
             .await
         {
             self.sink.notice(
-                CoreFlowLevel::Warn,
+                AppNoticeLevel::Warning,
                 NoticeCode::ProxyModeSavedRuntimeUpdateFailed,
                 &error.to_string(),
             );
@@ -409,7 +382,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
             )
             .await;
         self.sink
-            .core_state(CoreFlowState::Disconnected, active_profile_id, snapshot);
+            .core_state(CoreState::Disconnected, active_profile_id, snapshot);
         self.report_tun_status(config).await;
         self.sink.statistics_zero();
     }
@@ -426,7 +399,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                     )
                     .await;
                 self.sink
-                    .core_state(CoreFlowState::CleanupPending, None, Some(&snapshot));
+                    .core_state(CoreState::CleanupPending, None, Some(&snapshot));
                 self.report_tun_status(config).await;
                 self.sink.statistics_zero();
             }
@@ -434,7 +407,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                 // The failure happened before the supervisor was touched, so
                 // the previous core is still serving the OS proxy.
                 self.sink.log(
-                    CoreFlowLevel::Warn,
+                    LogLevel::Warn,
                     LogCode::PreviousCoreStillRunning { reason },
                     None,
                 );
@@ -446,7 +419,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
                     )
                     .await;
                 self.sink
-                    .core_state(CoreFlowState::Connected, None, Some(&snapshot));
+                    .core_state(CoreState::Connected, None, Some(&snapshot));
             }
             Ok(snapshot) => {
                 self.settle_disconnected(config, None, Some(&snapshot))
@@ -454,7 +427,7 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
             }
             Err(error) => {
                 self.sink.log(
-                    CoreFlowLevel::Warn,
+                    LogLevel::Warn,
                     LogCode::RuntimeStatusRefreshFailed { reason },
                     Some(&error.to_string()),
                 );
@@ -519,7 +492,8 @@ impl<'flow, T: ClashHttpTransport> CoreFlow<'flow, T> {
             if matches!(action, ProxyAction::Apply) {
                 self.runtime.settings_application().proxy_failed();
             }
-            self.sink.notice(CoreFlowLevel::Warn, failure_code, &error);
+            self.sink
+                .notice(AppNoticeLevel::Warning, failure_code, &error);
             return Err(RuntimeError::SettingsApply(error));
         }
         if matches!(action, ProxyAction::Apply) {

@@ -1,10 +1,63 @@
 use futures_util::{stream, FutureExt, Stream, StreamExt};
+use tokio::task;
 use voya_contracts::DatabaseErrorCode;
 use voya_core::PreparedContextBuilder;
 
-use super::core_backend::reserve_speedtest_ports;
+use super::core_backend::{
+    background_task_failed, reserve_speedtest_ports, wait_for_speedtest_ports,
+};
 
 use super::*;
+
+/// A started probe core held for one page's measurements.
+///
+/// Tears down off the Tokio workers; stopping a child blocks until the reaper
+/// thread has killed and waited it. `Drop` stays as a best-effort fallback for
+/// panics and early returns.
+pub struct ProbeCoreSession {
+    core: Option<Box<dyn ProbeCore>>,
+}
+
+impl ProbeCoreSession {
+    pub async fn close(mut self) {
+        let core = self.core.take();
+        if let Some(core) = core {
+            if let Err(error) = task::spawn_blocking(move || core.stop()).await {
+                tracing::warn!(?error, "failed to close speedtest core session");
+            }
+        }
+    }
+}
+
+impl Drop for ProbeCoreSession {
+    fn drop(&mut self) {
+        if let Some(core) = self.core.take() {
+            core.stop();
+        }
+    }
+}
+
+/// Starts one throwaway probe core for a page of entries and waits for its
+/// SOCKS ports. Shared by the speedtest run and the self-host self-test.
+pub async fn start_probe_core_page(
+    launcher: &Arc<dyn ProbeCoreLauncher>,
+    entries: &[SpeedtestConfigEntry],
+    cancel: &CancellationFlag,
+) -> Result<ProbeCoreSession> {
+    check_cancelled(cancel)?;
+    let ports = entries.iter().map(|entry| entry.port).collect::<Vec<_>>();
+    let config_json = generate_singbox_speedtest_config_json(entries)?;
+    let launcher = Arc::clone(launcher);
+    let core = task::spawn_blocking(move || launcher.start(config_json))
+        .await
+        .map_err(background_task_failed)??;
+    // Bind the session before waiting so an unready core is still torn
+    // down by the `?` below.
+    let session = ProbeCoreSession { core: Some(core) };
+    wait_for_speedtest_ports(&ports, cancel).await?;
+
+    Ok(session)
+}
 
 impl SpeedtestManager {
     /// The desktop's manager: every probe core is a child process.
@@ -28,22 +81,18 @@ impl SpeedtestManager {
     /// nothing: the phones run their probe core inside the app process.
     #[must_use]
     pub fn with_launcher(paths: AppPaths, launcher: Arc<dyn ProbeCoreLauncher>) -> Self {
-        Self::with_probe_and_backend(
-            paths,
-            Arc::new(ReqwestSpeedtestProbe),
-            Arc::new(LauncherCoreBackend::new(launcher)),
-        )
+        Self::with_probe_and_launcher(paths, Arc::new(ReqwestSpeedtestProbe), launcher)
     }
 
     #[must_use]
-    pub(super) fn with_probe_and_backend(
+    pub(super) fn with_probe_and_launcher(
         paths: AppPaths,
         probe: Arc<dyn SpeedtestProbe>,
-        core_backend: Arc<dyn SpeedtestCoreBackend>,
+        launcher: Arc<dyn ProbeCoreLauncher>,
     ) -> Self {
         Self {
             probe,
-            core_backend,
+            launcher,
             running_core: None,
             paths,
             target_os: TargetOs::current(),
@@ -164,7 +213,7 @@ impl SpeedtestManager {
     /// outlive the app holding loopback listeners and open tunnels.
     pub fn shutdown(&self) {
         self.cancel();
-        self.core_backend.stop_all();
+        self.launcher.stop_all();
     }
 
     /// Returns whether a run was active to cancel.
@@ -223,9 +272,12 @@ impl SpeedtestManager {
                 .iter()
                 .map(|prepared| prepared.entry.clone())
                 .collect::<Vec<_>>();
-            let session = match self.core_backend.start(entries, Arc::clone(&cancel)).await {
+            let session = match start_probe_core_page(&self.launcher, &entries, &cancel).await {
                 Ok(session) => session,
-                Err(SpeedtestError::Cancelled) => break,
+                Err(SpeedtestError::Cancelled) => {
+                    cancel.store(true, Ordering::SeqCst);
+                    break;
+                }
                 Err(error) => {
                     // A core that will not start fails this page, not the
                     // whole run: record every profile in it and continue.
@@ -417,7 +469,7 @@ async fn reserve_page_ports(
 /// writes another probe's result, and the write would be counted as latency;
 /// on a task of its own it is polled as soon as the response arrives.
 /// Dropping the handle (a cancelled run) aborts the probe.
-struct ProbeTask(tokio::task::JoinHandle<Result<RealPingProbeResult>>);
+struct ProbeTask(task::JoinHandle<Result<RealPingProbeResult>>);
 
 impl ProbeTask {
     fn spawn(probe: BoxFuture<'static, Result<RealPingProbeResult>>) -> Self {

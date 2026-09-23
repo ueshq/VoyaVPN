@@ -162,7 +162,7 @@ designated installer above, records it as `updaterPayload: true` in
 `artifact-manifest.json` (with `updaterSignature: true` on its `.sig` and
 `updaterPayloadSource` on the manifest), and fails a stable collection when the
 bundle contains no signed payload for its target. `pnpm release -- updater` and
-`pnpm release -- verify-staging` require that explicit flag. Manifests without
+`pnpm release -- readiness` require that explicit flag. Manifests without
 it must be regenerated with the current artifact collector.
 Normalized signature artifacts are named `<payload>.sig`.
 

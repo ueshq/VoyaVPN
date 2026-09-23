@@ -82,8 +82,8 @@ function normalizeBaseUrl(baseUrl, channel) {
   }
 
   // The dry-run lane generates "stable" metadata against the placeholder `.test`
-  // CDN, so local/test hosts stay allowed; verify-staging and readiness are the
-  // gates that reject them for a real stable run.
+  // CDN, so local/test hosts stay allowed; readiness is the gate that rejects
+  // them for a real stable run.
   return normalizeReleaseUrl(value, {
     allowHttp: true,
     allowTestHosts: true,
@@ -173,7 +173,7 @@ function stableReleaseTargetRank(releaseTarget) {
 
 /**
  * `--version` is documented as the *expected* app version, the same contract
- * updater/verify-staging use. Overriding the manifest value instead would let a
+ * the updater command uses. Overriding the manifest value instead would let a
  * typo publish a release index that advertises a version nothing was built for.
  */
 function expectedVersion(manifestVersion, requestedVersion, context) {

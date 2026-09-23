@@ -1,0 +1,37 @@
+name: Setup Rust
+description: Install a Rust toolchain and restore the cargo build cache.
+inputs:
+  toolchain:
+    description: Rust toolchain version.
+    required: false
+    default: "1.96.0"
+  components:
+    description: Extra rustup components (comma-separated).
+    required: false
+    default: ""
+  targets:
+    description: Extra rustup targets (comma-separated).
+    required: false
+    default: ""
+  cache-key:
+    description: Extra Swatinem/rust-cache key segment.
+    required: false
+    default: ""
+  cache:
+    description: Whether to restore/save the cargo build cache.
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      with:
+        toolchain: ${{ inputs.toolchain }}
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      if: ${{ inputs.cache == 'true' }}
+      with:
+        cache-on-failure: true
+        key: ${{ inputs.cache-key }}

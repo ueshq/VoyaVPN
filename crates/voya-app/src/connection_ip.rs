@@ -10,18 +10,13 @@ use std::{
 };
 
 use thiserror::Error;
+use voya_contracts::ConnectionIpResult;
 use voya_core::AppConfig;
 use voya_net::probe::{NetworkProbeError, SocksHttpProbe};
 
 use crate::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
 
 const CONNECTION_IP_TIMEOUT: Duration = Duration::from_secs(8);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConnectionIp {
-    pub ip: Option<String>,
-    pub country_code: Option<String>,
-}
 
 #[derive(Debug, Error)]
 pub enum ConnectionIpError {
@@ -39,7 +34,7 @@ pub enum ConnectionIpError {
 pub async fn check_connection_ip(
     config: &AppConfig,
     snapshot: &SupervisorSnapshot,
-) -> Result<ConnectionIp, ConnectionIpError> {
+) -> Result<ConnectionIpResult, ConnectionIpError> {
     ensure_connected(snapshot.state)?;
     let probe = SocksHttpProbe::new(probe_port(config)?)?;
     let cancel = Arc::new(AtomicBool::new(false));
@@ -52,7 +47,7 @@ pub async fn check_connection_ip(
         .await
         .ok_or(ConnectionIpError::NoResponse)?;
 
-    Ok(ConnectionIp {
+    Ok(ConnectionIpResult {
         ip: lookup.ip,
         country_code: lookup.country_code,
     })

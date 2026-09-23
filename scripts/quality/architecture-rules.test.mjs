@@ -171,17 +171,15 @@ describe("retired v2rayN compatibility", () => {
   it.each([
     ['const SCHEME: &str = "v2rayn://";', "retired-share-scheme"],
     ['if url.starts_with("V2RAYN://") {}', "retired-share-scheme"],
-    ["struct AppConfigStore;", "retired-config-compat"],
-    ["let extra = ProtocolExtraItem::default();", "retired-config-compat"],
-    ["fn remove_retired_voya_config_fields() {}", "retired-config-compat"],
-    ["let id = config.prev_profile;", "retired-config-compat"],
   ])("rejects %s", (source, id) => {
     expect(violates(retiredCompatibilityRules, source)).toContain(id);
   });
 
   it.each([
     "struct AppConfig;",
+    "struct AppConfigStore;",
     "let prev_profile_id = String::new();",
+    "let id = config.prev_profile;",
     'const SCHEME: &str = "vless://";',
   ])("accepts %s", (source) => {
     expect(violates(retiredCompatibilityRules, source)).toEqual([]);
@@ -356,8 +354,6 @@ describe("release version alignment", () => {
 
 describe("SAFETY comment requirement", () => {
   it.each([
-    "unsafe { ptr.read() }",
-    "unsafe impl Send for Handle {}",
     'unsafe extern "C" {',
     "pub unsafe fn release(value: *mut c_char) {",
     'unsafe extern "C" fn callback(value: *mut c_char) {',
@@ -365,13 +361,21 @@ describe("SAFETY comment requirement", () => {
     expect(findUndocumentedUnsafe(line)).toHaveLength(1);
   });
 
+  // Blocks and impls are clippy's `undocumented_unsafe_blocks` job.
+  it.each([
+    "unsafe { ptr.read() }",
+    "unsafe impl Send for Handle {}",
+  ])("leaves %s to clippy", (line) => {
+    expect(findUndocumentedUnsafe(line)).toEqual([]);
+  });
+
   it("accepts a SAFETY comment within the three preceding lines", () => {
-    const source = `// SAFETY: the bridge returns an owned C string.\n//\n//\nunsafe { voya_status() }`;
+    const source = `// SAFETY: the bridge returns an owned C string.\n//\n//\nunsafe fn release() {}`;
     expect(findUndocumentedUnsafe(source)).toEqual([]);
   });
 
   it("reports the line number of each undocumented site", () => {
-    const source = ["fn a() {}", "unsafe { one() }", "fn b() {}", "unsafe impl Sync for B {}"].join("\n");
+    const source = ["fn a() {}", "unsafe fn one() {}", "fn b() {}", 'unsafe extern "C" {'].join("\n");
     expect(findUndocumentedUnsafe(source).map((item) => item.line)).toEqual([2, 4]);
   });
 });

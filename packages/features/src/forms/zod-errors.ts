@@ -1,5 +1,7 @@
 import type { ZodError } from "zod";
 
+export type { ZodError };
+
 import { i18next, type TranslationFunction, type TranslationKey } from "@voya/i18n/core";
 
 /**

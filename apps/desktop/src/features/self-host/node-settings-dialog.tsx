@@ -21,7 +21,7 @@ import {
   SettingsSwitch,
   TextField,
 } from "@/features/settings/settings-form";
-import type { SelfHostConfig, SelfHostState } from "@/ipc/bindings";
+import type { SelfHostConfig, SelfHostState } from "@voya/contracts";
 
 import type { SelfHostController } from "./use-self-host";
 

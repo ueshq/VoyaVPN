@@ -1,6 +1,6 @@
 import type { TranslationKey } from "@voya/i18n";
 
-import type { CoreState } from "@/ipc/bindings";
+import type { CoreState } from "@voya/contracts";
 
 /** One wording for the connection state, shared by the sidebar footer and Home. */
 export const CORE_STATE_TRANSLATION_KEYS = {

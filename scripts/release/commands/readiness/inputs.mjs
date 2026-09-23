@@ -1,7 +1,7 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { repoRootFromScript } from "../../../lib/common.mjs";
+import { readJsonAsync, repoRootFromScript } from "../../../lib/common.mjs";
 import { normalizeReleaseUrl } from "../../validation.mjs";
 export const repoRoot = repoRootFromScript(import.meta.url);
 export const defaultTauriConfig = "apps/desktop/src-tauri/tauri.conf.json";
@@ -68,9 +68,7 @@ export function normalizeUrl(value, label, mode, { defaultDryRunUrl = null, requ
   });
 }
 
-export function readJson(path) {
-  return readFile(path, "utf8").then((text) => JSON.parse(text));
-}
+export { readJsonAsync };
 
 export function forbiddenSerialized(value) {
   const text = JSON.stringify(value).toLowerCase();

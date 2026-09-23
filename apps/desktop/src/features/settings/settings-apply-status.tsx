@@ -6,7 +6,7 @@ import { Button } from "@voya/ui/components/button";
 import { Spinner } from "@voya/ui/components/spinner";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { getErrorMessage } from "@voya/utils/error";
-import { applyPendingSettings, getSettingsApplyStatus } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";
 import { PageSurface } from "@/components/app-shell/page-section";
 
@@ -27,7 +27,7 @@ export function SettingsApplyStatus({
   const coreState = useRuntimeEventStore((state) => state.coreState?.state);
   const query = useQuery({
     queryKey: queryKeys.settingsApply,
-    queryFn: getSettingsApplyStatus,
+    queryFn: () => voyaCommands().getSettingsApplyStatus(),
     refetchOnMount: "always",
   });
   const { refetch } = query;
@@ -43,7 +43,7 @@ export function SettingsApplyStatus({
     setWorking(true);
     setError(null);
     try {
-      await applyPendingSettings();
+      await voyaCommands().applyPendingSettings();
     } catch (cause) {
       setError(getErrorMessage(cause));
     } finally {

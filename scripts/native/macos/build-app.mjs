@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { capture, checkedCapture, readJson, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
@@ -106,9 +105,8 @@ function installedAppExecutableNames() {
 function runningExecutables(executables) {
   const running = [];
   for (const executable of new Set(executables)) {
-    const result = spawnSync("pgrep", ["-x", executable], {
+    const result = capture("pgrep", ["-x", executable], {
       cwd: repoRoot,
-      encoding: "utf8",
     });
     if (result.status === 0) {
       running.push(executable);

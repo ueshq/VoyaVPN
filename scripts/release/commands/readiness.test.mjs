@@ -1,11 +1,9 @@
+import { capture, repoRootFromScript } from "../../lib/common.mjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
+import { join } from "node:path";
 
 import { resolveTauriConfig } from "./readiness.mjs";
 import { blockerScanFiles, findProductionBlockersInText } from "./readiness/blockers.mjs";
@@ -278,8 +276,7 @@ describe("release readiness core seed pinning", () => {
 });
 
 describe("release readiness dry-run gate", () => {
-  const execFileAsync = promisify(execFile);
-  const repoRoot = resolve(fileURLToPath(new URL("../../..", import.meta.url)));
+    const repoRoot = repoRootFromScript(import.meta.url);
   const workDirs = [];
 
   afterEach(async () => {
@@ -290,7 +287,7 @@ describe("release readiness dry-run gate", () => {
     const workDir = await mkdtemp(join(tmpdir(), "voyavpn-readiness-dry-run-"));
     workDirs.push(workDir);
 
-    const { stdout } = await execFileAsync(
+    const { stdout } = capture(
       process.execPath,
       ["scripts/release/cli.mjs", "readiness", "--mode", "dry-run", "--work-dir", workDir],
       { cwd: repoRoot },

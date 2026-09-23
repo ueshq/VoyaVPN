@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installFakeCommands } from "@voya/features/test/backend";
 
 type TestMonitorStatus = {
   message: string | null;
@@ -41,15 +42,11 @@ const storeMock = vi.hoisted(() => {
   };
 });
 
-const ipcMocks = vi.hoisted(() => ({
+const ipcMocks = installFakeCommands({
   proxyStartMonitor: vi.fn(),
   proxyStopMonitor: vi.fn(),
-}));
+});
 
-vi.mock("@/ipc/commands", () => ({
-  proxyStartMonitor: ipcMocks.proxyStartMonitor,
-  proxyStopMonitor: ipcMocks.proxyStopMonitor,
-}));
 vi.mock("@voya/client/runtime-event-store", () => ({ useRuntimeEventStore: { getState: () => storeMock.state } }));
 
 import { createProxyMonitorController } from "./proxy-monitor-controller";

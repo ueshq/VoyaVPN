@@ -1,29 +1,32 @@
+import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useForm, useWatch } from "react-hook-form";
 import { describe, expect, it } from "vitest";
 
-import { type ParsedProfileFormValues, type ProfileFormValues } from "@voya/features/profiles/profile-form-schema";
 import { createDefaultProfile } from "@voya/features/profiles/profile-form-values";
+import {
+  toEditorForm,
+  type ProfileEditorForm,
+} from "./profile-editor-form";
 import { SecurityPanel } from "./profile-security-panel";
 
 function SecurityPanelHarness({ security }: { security: string }) {
-  const form = useForm<ProfileFormValues, unknown, ParsedProfileFormValues>({
-    // The schema input is a discriminated union, so the literal is built from the
-    // same factory the editor uses and asserted once.
-    defaultValues: {
+  const [form, setForm] = useState<ProfileEditorForm>(() =>
+    toEditorForm({
       ...createDefaultProfile("vless"),
       remarks: "Pinned node",
-    } as ProfileFormValues,
-  });
-  const cert = useWatch({ control: form.control, name: "cert" });
+    }),
+  );
 
   return (
     <>
-      <output data-testid="cert">{String(cert ?? "")}</output>
+      <output data-testid="cert">{form.cert}</output>
       <SecurityPanel
-        control={form.control}
-        register={form.register}
+        errors={{}}
+        form={form}
+        onFieldChange={(key, value) =>
+          setForm((current) => ({ ...current, [key]: value }))
+        }
         security={security}
       />
     </>

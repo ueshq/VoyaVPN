@@ -1,7 +1,6 @@
-import { spawnSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 
-import { repoRootFromScript } from "../lib/common.mjs";
+import { capture, repoRootFromScript } from "../lib/common.mjs";
 import { releaseCommandNames, runReleaseCli } from "./cli.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
@@ -40,9 +39,8 @@ describe("release CLI", () => {
   });
 
   it.each(releaseCommandNames)("serves integration help for %s", (command) => {
-    const result = spawnSync(process.execPath, ["scripts/release/cli.mjs", command, "--help"], {
+    const result = capture(process.execPath, ["scripts/release/cli.mjs", command, "--help"], {
       cwd: repoRoot,
-      encoding: "utf8",
     });
 
     expect(result.status, result.stderr).toBe(0);
@@ -50,9 +48,8 @@ describe("release CLI", () => {
   });
 
   it("returns integration exit code 2 for an unknown command", () => {
-    const result = spawnSync(process.execPath, ["scripts/release/cli.mjs", "missing"], {
+    const result = capture(process.execPath, ["scripts/release/cli.mjs", "missing"], {
       cwd: repoRoot,
-      encoding: "utf8",
     });
 
     expect(result.status).toBe(2);

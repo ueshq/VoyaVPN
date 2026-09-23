@@ -1,24 +1,31 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { appVisibilityAdapter, clipboard, requestElevation } from "@voya/client/platform";
 import { voyaCommands } from "@voya/client/transport";
+
+import { registerDesktopBackend } from "./register-backend";
 
 const ipcMocks = vi.hoisted(() => ({
   readClipboardText: vi.fn(),
   tunRequestElevation: vi.fn(),
 }));
 
-vi.mock("@/ipc/commands", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/ipc/commands")>()),
-  ...ipcMocks,
-}));
+// `registerDesktopBackend` puts `ipcCommands` on the shared transport, so the
+// unit under test is that wiring: replace the mapped object itself and then run
+// the same registration `platform-boot` performs at startup.
+vi.mock("@/ipc/commands", () => ({ ipcCommands: ipcMocks }));
 
 const writeText = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/clipboard", () => ({ writeClipboard: writeText }));
 
-// The registration itself runs in `src/test/setup.ts`, per test, exactly as
-// `platform-boot` runs it once at startup.
 describe("registerDesktopBackend", () => {
+  beforeEach(() => {
+    ipcMocks.readClipboardText.mockReset();
+    ipcMocks.tunRequestElevation.mockReset();
+    writeText.mockReset();
+    registerDesktopBackend();
+  });
+
   it("puts the whole Tauri command surface behind the shared transport", () => {
     expect(voyaCommands().readClipboardText).toBe(ipcMocks.readClipboardText);
   });

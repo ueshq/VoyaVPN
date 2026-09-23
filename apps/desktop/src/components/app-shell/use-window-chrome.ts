@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
-import { getWindowChromeConfig } from "@/ipc/commands";
-import type { WindowChromeConfig } from "@/ipc/bindings";
+import { voyaCommands } from "@voya/client/transport";
+import type { WindowChromeConfig } from "@voya/contracts";
 
 /** Web (no Tauri runtime) and the brief pre-resolve window both render native chrome. */
 const DEFAULT_WINDOW_CHROME: WindowChromeConfig = {
@@ -18,7 +18,7 @@ export function useWindowChrome(): WindowChromeConfig {
   useEffect(() => {
     let cancelled = false;
 
-    getWindowChromeConfig()
+    voyaCommands().getWindowChromeConfig()
       .then((config) => {
         if (!cancelled) setChrome(config);
       })

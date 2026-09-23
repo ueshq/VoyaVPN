@@ -4,20 +4,20 @@ import type { QueryClient } from "@tanstack/react-query";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProcessCandidate, Routing_Serialize, RoutingRule } from "@/ipc/bindings";
+import type { ProcessCandidate, Routing_Serialize, RoutingRule } from "@voya/contracts";
 
 import { PerAppProxyDialog } from "./per-app-proxy-dialog";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipcMocks = vi.hoisted(() => ({
+const ipcMocks = installFakeCommands({
   connectionModeStatus: vi.fn(),
   deleteRoutingRules: vi.fn(),
   listProcessCandidates: vi.fn(),
   listRoutings: vi.fn(),
   moveRoutingRule: vi.fn(),
   saveRoutingRule: vi.fn(),
-}));
+});
 
-vi.mock("@/ipc/commands", () => ipcMocks);
 
 const queryClients = new Set<QueryClient>();
 

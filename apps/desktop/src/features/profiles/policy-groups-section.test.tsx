@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale, i18next } from "@voya/i18n";
-import type { PolicyGroupEntry } from "@/ipc/bindings";
+import type { PolicyGroupEntry } from "@voya/contracts";
 
 import type { ServerTableController } from "./use-server-table";
 import { PolicyGroupsSection } from "./policy-groups-section";

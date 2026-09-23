@@ -58,7 +58,7 @@ pub struct QueryInvalidation {
     pub reason: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum LogLevel {
     Trace,
@@ -86,7 +86,7 @@ pub struct LogLineEvent {
     pub body: LogLineBody,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Type)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StatisticsSnapshot {
     pub active_profile_id: Option<String>,
@@ -99,7 +99,7 @@ pub struct StatisticsSnapshot {
     pub server_stat: Option<ServerStatItem>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum AppNoticeLevel {
     Info,

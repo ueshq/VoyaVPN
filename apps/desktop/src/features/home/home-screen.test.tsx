@@ -11,7 +11,7 @@ import type {
   StatisticsSnapshot,
   SystemProxyStatusResponse,
   TunStatus,
-} from "@/ipc/bindings";
+} from "@voya/contracts";
 import { IpcCommandError } from "@voya/client/errors";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
@@ -19,6 +19,7 @@ import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixtu
 import { makeProfileFixture } from "@voya/features/test/profile-fixture";
 
 import { HomeScreen } from "./home-screen";
+import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 
 type RuntimeState = {
   coreState: RuntimeStatusResponse | null;
@@ -50,23 +51,20 @@ const runtimeMock = vi.hoisted(() => {
   return { state, useRuntimeEventStore };
 });
 
-const ipcMock = vi.hoisted(() => {
-  return {
-    connectActiveProfile: vi.fn(),
-    loadAppSettings: vi.fn(),
-    getSettingsApplyStatus: vi.fn(),
-    disconnectCore: vi.fn(),
-    listPolicyGroups: vi.fn(),
-    listProfileSummaries: vi.fn(),
-    policyGroupRuntime: vi.fn(),
-    restartCore: vi.fn(),
-    runtimeStatus: vi.fn(),
-    setActiveProfile: vi.fn(),
-    setConnectionMode: vi.fn(),
-    systemProxyStatus: vi.fn(),
-    tunRequestElevation: vi.fn(),
-    tunStatus: vi.fn(),
-  };
+const ipcMock = installFakeCommands({
+  connectActiveProfile: vi.fn(),
+  loadAppSettings: vi.fn(),
+  getSettingsApplyStatus: vi.fn(),
+  disconnectCore: vi.fn(),
+  ...seedListCommands(),
+  policyGroupRuntime: vi.fn(),
+  restartCore: vi.fn(),
+  runtimeStatus: vi.fn(),
+  setActiveProfile: vi.fn(),
+  setConnectionMode: vi.fn(),
+  systemProxyStatus: vi.fn(),
+  tunRequestElevation: vi.fn(),
+  tunStatus: vi.fn(),
 });
 
 const disconnectedStatus: RuntimeStatusResponse = {
@@ -127,24 +125,6 @@ const missingTunnelMessages = {
 
 // The real error class and kind check: the sudo-retry and missing-core paths
 // branch on `appError.kind`.
-vi.mock("@/ipc/commands", async () => {
-  return {
-    connectActiveProfile: ipcMock.connectActiveProfile,
-    loadAppSettings: ipcMock.loadAppSettings,
-    getSettingsApplyStatus: ipcMock.getSettingsApplyStatus,
-    disconnectCore: ipcMock.disconnectCore,
-    listPolicyGroups: ipcMock.listPolicyGroups,
-    listProfileSummaries: ipcMock.listProfileSummaries,
-    policyGroupRuntime: ipcMock.policyGroupRuntime,
-    restartCore: ipcMock.restartCore,
-    runtimeStatus: ipcMock.runtimeStatus,
-    setActiveProfile: ipcMock.setActiveProfile,
-    setConnectionMode: ipcMock.setConnectionMode,
-    systemProxyStatus: ipcMock.systemProxyStatus,
-    tunRequestElevation: ipcMock.tunRequestElevation,
-    tunStatus: ipcMock.tunStatus,
-  };
-});
 vi.mock("@voya/client/runtime-event-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@voya/client/runtime-event-store")>()),
   useRuntimeEventStore: runtimeMock.useRuntimeEventStore,

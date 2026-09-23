@@ -8,21 +8,21 @@ import type {
   RuntimeStatusResponse,
   SystemProxyStatusResponse,
   TunStatus,
-} from "@/ipc/bindings";
+} from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
 import { CaptureModeSetting } from "./capture-mode-setting";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({
+const ipc = installFakeCommands({
   IpcCommandError: class extends Error {},
   runtimeStatus: vi.fn(),
   setConnectionMode: vi.fn(),
   systemProxyStatus: vi.fn(),
   tunRequestElevation: vi.fn(),
   tunStatus: vi.fn(),
-}));
-vi.mock("@/ipc/commands", () => ipc);
+});
 
 const disconnected: RuntimeStatusResponse = {
   activeProfileId: null,

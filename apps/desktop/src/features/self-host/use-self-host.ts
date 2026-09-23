@@ -4,17 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 
-import type { SelfHostConfig, SelfHostState } from "@/ipc/bindings";
+import type { SelfHostConfig, SelfHostState } from "@voya/contracts";
 import { appErrorOfKind } from "@voya/client/errors";
-import {
-  applySelfHostFirewallRule,
-  getSelfHostState,
-  getSelfHostStats,
-  rotateSelfHostCredentials,
-  runSelfHostEnvironmentCheck,
-  saveSelfHostConfig,
-  setSelfHostEnabled,
-} from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { validationFieldErrors } from "@voya/client/messages";
 import { queryKeys } from "@voya/client/query-keys";
 import { toastError } from "@voya/client/toast-store";
@@ -37,14 +29,14 @@ export function useSelfHost() {
   const { t } = useI18n();
   const queryClient = useQueryClient();
   const stateQuery = useQuery({
-    queryFn: getSelfHostState,
+    queryFn: () => voyaCommands().getSelfHostState(),
     queryKey: queryKeys.selfHost,
   });
   const state = stateQuery.data ?? null;
   const running = state?.runtime.status === "running";
   const statsQuery = useQuery({
     enabled: running,
-    queryFn: getSelfHostStats,
+    queryFn: () => voyaCommands().getSelfHostStats(),
     queryKey: queryKeys.selfHostStats,
     refetchInterval: running ? STATS_INTERVAL_MS : false,
   });
@@ -92,14 +84,14 @@ export function useSelfHost() {
     // and then the cache holds the backend's config instead of the rejected one.
     return enqueue("save", () => {
       const latest = queryClient.getQueryData<SelfHostState>(queryKeys.selfHost) ?? current;
-      return saveSelfHostConfig({ ...latest.config, ...patch });
+      return voyaCommands().saveSelfHostConfig({ ...latest.config, ...patch });
     });
   }
 
   function setEnabled(enabled: boolean) {
     const current = queryClient.getQueryData<SelfHostState>(queryKeys.selfHost);
     if (current) publish({ ...current, config: { ...current.config, enabled } });
-    return enqueue("enable", () => setSelfHostEnabled(enabled));
+    return enqueue("enable", () => voyaCommands().setSelfHostEnabled(enabled));
   }
 
   return {
@@ -108,9 +100,9 @@ export function useSelfHost() {
     pending,
     state,
     stats: running ? (statsQuery.data ?? null) : null,
-    applyFirewallRule: () => enqueue("firewall", applySelfHostFirewallRule),
-    rotateCredentials: () => enqueue("rotate", rotateSelfHostCredentials),
-    runCheck: () => enqueue("check", runSelfHostEnvironmentCheck),
+    applyFirewallRule: () => enqueue("firewall", () => voyaCommands().applySelfHostFirewallRule()),
+    rotateCredentials: () => enqueue("rotate", () => voyaCommands().rotateSelfHostCredentials()),
+    runCheck: () => enqueue("check", () => voyaCommands().runSelfHostEnvironmentCheck()),
     saveConfig,
     setEnabled,
   };

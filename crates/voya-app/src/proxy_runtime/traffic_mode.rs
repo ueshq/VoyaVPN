@@ -24,7 +24,7 @@ pub enum TrafficModeChangeError {
     CloseConnections(#[source] ProxyRuntimeError),
 }
 
-impl<T: ClashHttpTransport> ProxyRuntimeManager<T> {
+impl ProxyRuntimeManager {
     /// An explicit user switch applies to existing connections too. Startup
     /// and config reload use the mode-only helpers below instead.
     pub async fn change_traffic_mode(
@@ -233,7 +233,7 @@ mod tests {
                 config.tun_mode_item.enable_tun = tun;
                 let (database, coordinator) = coordinator(config.clone()).await;
                 let transport = ModeTransport::default();
-                let manager = ProxyRuntimeManager::with_transport(transport.clone());
+                let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
                 for mode in [
                     TrafficMode::Global,
                     TrafficMode::Rule,
@@ -268,7 +268,7 @@ mod tests {
         let (_, coordinator) = coordinator(AppConfig::default()).await;
         let transport = ModeTransport::default();
         transport.0.lock().expect("transport").coordinator = Some(coordinator.clone());
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
         let snapshot = snapshot(true);
         for expected_changed in [true, false] {
             let outcome = manager
@@ -310,7 +310,7 @@ mod tests {
                 state.fail_attempts = usize::from(!close_failure);
                 state.fail_close = close_failure;
             }
-            let manager = ProxyRuntimeManager::with_transport(transport.clone());
+            let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
             let result = manager
                 .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Global)
                 .await
@@ -355,7 +355,7 @@ mod tests {
                 state.hang_close = close_timeout;
             }
             let start = time::Instant::now();
-            let error = ProxyRuntimeManager::with_transport(transport.clone())
+            let error = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()))
                 .apply_traffic_mode_change(&access(), TrafficMode::Global)
                 .await
                 .expect_err("bounded request");
@@ -377,10 +377,12 @@ mod tests {
         sqlx::query("CREATE TRIGGER reject_settings BEFORE INSERT ON app_settings BEGIN SELECT RAISE(ABORT, 'blocked'); END")
             .execute(database.pool()).await.expect("failure trigger");
         let transport = ModeTransport::default();
-        assert!(ProxyRuntimeManager::with_transport(transport.clone())
-            .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Global)
-            .await
-            .is_err());
+        assert!(
+            ProxyRuntimeManager::with_transport(Arc::new(transport.clone()))
+                .change_traffic_mode(&coordinator, &snapshot(true), TrafficMode::Global)
+                .await
+                .is_err()
+        );
         assert_eq!(
             coordinator.current_config().proxy_ui_item.traffic_mode,
             TrafficMode::Rule
@@ -393,7 +395,7 @@ mod tests {
         let (_, coordinator) = coordinator(AppConfig::default()).await;
         let mut snapshot = snapshot(true);
         snapshot.clash_api_port = None;
-        let outcome = ProxyRuntimeManager::with_transport(ModeTransport::default())
+        let outcome = ProxyRuntimeManager::with_transport(Arc::new(ModeTransport::default()))
             .change_traffic_mode(&coordinator, &snapshot, TrafficMode::Global)
             .await
             .expect("save");
@@ -408,7 +410,7 @@ mod tests {
     #[tokio::test]
     async fn disconnected_saves_and_unchanged_preferences_do_not_call_the_core() {
         let transport = ModeTransport::default();
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
         manager
             .set_traffic_mode_if_running(&ClashApiAccess::default(), TrafficMode::Global)
             .await
@@ -429,7 +431,7 @@ mod tests {
             state.fail_attempts = 2;
         }
         let access = access();
-        ProxyRuntimeManager::with_transport(transport.clone())
+        ProxyRuntimeManager::with_transport(Arc::new(transport.clone()))
             .apply_saved_traffic_mode(&access, TrafficMode::Global)
             .await
             .expect("apply saved mode");
@@ -450,7 +452,7 @@ mod tests {
     async fn same_saved_mode_can_retry_a_failed_live_update() {
         let transport = ModeTransport::default();
         transport.0.lock().expect("state").fail_attempts = 1;
-        let manager = ProxyRuntimeManager::with_transport(transport.clone());
+        let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
         let access = access();
         assert!(manager
             .set_traffic_mode_if_running(&access, TrafficMode::Global)
@@ -468,7 +470,7 @@ mod tests {
         let transport = ModeTransport::default();
         transport.0.lock().expect("state").hang = true;
         let start = time::Instant::now();
-        let result = ProxyRuntimeManager::with_transport(transport.clone())
+        let result = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()))
             .apply_saved_traffic_mode(&access(), TrafficMode::Rule)
             .await;
         assert!(result.is_err());

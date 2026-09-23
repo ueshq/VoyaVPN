@@ -33,8 +33,8 @@ import {
   MENUBAR_PRIMITIVES,
   type MenuPrimitives,
 } from "@/components/app-shell/menu-primitives";
-import { moveProfile } from "@/ipc/commands";
-import type { ProfileSummaryEntry, SpeedtestTarget } from "@/ipc/bindings";
+import { voyaCommands } from "@voya/client/transport";
+import type { ProfileSummaryEntry, SpeedtestTarget } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
@@ -235,7 +235,7 @@ function ProfileMenuItems({
             <Item
               onSelect={() =>
                 void runOperation(() =>
-                  moveProfile(null, indexId, MOVE_ACTIONS.Top, null),
+                  voyaCommands().moveProfile(null, indexId, MOVE_ACTIONS.Top, null),
                 )
               }
             >
@@ -245,7 +245,7 @@ function ProfileMenuItems({
             <Item
               onSelect={() =>
                 void runOperation(() =>
-                  moveProfile(null, indexId, MOVE_ACTIONS.Up, null),
+                  voyaCommands().moveProfile(null, indexId, MOVE_ACTIONS.Up, null),
                 )
               }
             >
@@ -255,7 +255,7 @@ function ProfileMenuItems({
             <Item
               onSelect={() =>
                 void runOperation(() =>
-                  moveProfile(null, indexId, MOVE_ACTIONS.Down, null),
+                  voyaCommands().moveProfile(null, indexId, MOVE_ACTIONS.Down, null),
                 )
               }
             >
@@ -265,7 +265,7 @@ function ProfileMenuItems({
             <Item
               onSelect={() =>
                 void runOperation(() =>
-                  moveProfile(null, indexId, MOVE_ACTIONS.Bottom, null),
+                  voyaCommands().moveProfile(null, indexId, MOVE_ACTIONS.Bottom, null),
                 )
               }
             >

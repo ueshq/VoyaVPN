@@ -6,9 +6,8 @@ const commandLoaders = {
   index: () => import("./commands/index.mjs"),
   "core-assets": () => import("./commands/core-assets.mjs"),
   updater: () => import("./commands/updater.mjs"),
-  record: () => import("./commands/record.mjs"),
-  "verify-staging": () => import("./commands/verify-staging.mjs"),
   readiness: () => import("./commands/readiness.mjs"),
+  "check-hosts": () => import("./commands/check-hosts.mjs"),
 };
 
 export const releaseCommandNames = [...Object.keys(commandLoaders), "updater-config"];
@@ -21,9 +20,8 @@ Commands:
   index            Generate the CDN release index and evidence
   core-assets      Generate the core asset manifest and evidence
   updater          Generate updater metadata and evidence
-  record           Generate or validate a stable release record
-  verify-staging   Validate staged release metadata and optional CDN objects
   readiness        Run dry-run or stable release readiness checks
+  check-hosts      Validate stable release host and signing environment inputs
   updater-config   Generate the stable Tauri updater config overlay
 `);
 }

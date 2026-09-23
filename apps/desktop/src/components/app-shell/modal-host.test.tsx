@@ -5,15 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ModalHost } from "@/components/app-shell/modal-host";
 import { changeLocale } from "@voya/i18n";
-import type { CoreSeedInstallStatus } from "@/ipc/bindings";
+import type { CoreSeedInstallStatus } from "@voya/contracts";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipcMocks = vi.hoisted(() => ({
+const ipcMocks = installFakeCommands({
   connectActiveProfile: vi.fn(),
   installCoreSeed: vi.fn(),
-}));
+});
 
-vi.mock("@/ipc/commands", () => ipcMocks);
 
 function seedInstallResult(status: CoreSeedInstallStatus) {
   return { installedFiles: [], status };

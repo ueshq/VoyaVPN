@@ -1,7 +1,7 @@
 //! The Clash REST API: the HTTP transport (a seam for tests) and the typed
 //! client the app drives the running core through.
 
-use std::{future::Future, pin::Pin};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use reqwest::Method;
@@ -68,7 +68,7 @@ impl fmt::Debug for ClashHttpRequest {
     }
 }
 
-pub trait ClashHttpTransport: Clone + Send + Sync + 'static {
+pub trait ClashHttpTransport: Send + Sync + 'static {
     /// Sends `request` and returns the response body as text, empty for a
     /// bodiless reply. The client parses it straight into the type it asks
     /// for: `/proxies` of a large group is hundreds of kilobytes, polled every
@@ -153,25 +153,32 @@ fn clash_body_error(url: &str, error: crate::LimitedBodyReadError) -> ClashError
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ClashRestClient<T = ReqwestClashHttpTransport> {
+#[derive(Clone)]
+pub struct ClashRestClient {
     endpoint: ClashApiEndpoint,
-    transport: T,
+    transport: Arc<dyn ClashHttpTransport>,
 }
 
-impl ClashRestClient<ReqwestClashHttpTransport> {
-    #[must_use]
-    pub fn new(endpoint: ClashApiEndpoint) -> Self {
-        Self::with_transport(endpoint, ReqwestClashHttpTransport::new())
+impl fmt::Debug for ClashRestClient {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ClashRestClient")
+            .field("endpoint", &self.endpoint)
+            .finish_non_exhaustive()
     }
 }
 
-impl<T> ClashRestClient<T>
-where
-    T: ClashHttpTransport,
-{
+impl ClashRestClient {
     #[must_use]
-    pub fn with_transport(endpoint: ClashApiEndpoint, transport: T) -> Self {
+    pub fn new(endpoint: ClashApiEndpoint) -> Self {
+        Self::with_transport(endpoint, Arc::new(ReqwestClashHttpTransport::new()))
+    }
+
+    #[must_use]
+    pub fn with_transport(
+        endpoint: ClashApiEndpoint,
+        transport: Arc<dyn ClashHttpTransport>,
+    ) -> Self {
         Self {
             endpoint,
             transport,

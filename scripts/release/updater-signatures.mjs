@@ -156,36 +156,6 @@ function ed25519KeyObject(rawPublicKey) {
   });
 }
 
-function verifyParsedTauriUpdaterSignature(payload, signature, publicKey, context) {
-  if (!publicKey.keyId.equals(signature.keyId)) {
-    throw new UpdaterSignatureError(`${context} was signed by a different updater key`);
-  }
-
-  const keyObject = ed25519KeyObject(publicKey.key);
-  const signedPayload = signature.isPrehashed ? createHash("blake2b512").update(payload).digest() : payload;
-  if (!verifyEd25519(null, signedPayload, keyObject, signature.signature)) {
-    throw new UpdaterSignatureError(`${context} signature verification failed`);
-  }
-
-  const globalMessage = Buffer.concat([signature.signature, Buffer.from(signature.trustedComment, "utf8")]);
-  if (!verifyEd25519(null, globalMessage, keyObject, signature.globalSignature)) {
-    throw new UpdaterSignatureError(`${context} trusted comment verification failed`);
-  }
-
-  return {
-    algorithm: signature.algorithm,
-    keyId: signature.keyId.toString("hex").toUpperCase(),
-    prehashed: signature.isPrehashed,
-    trustedComment: signature.trustedComment,
-  };
-}
-
-function verifyTauriUpdaterSignature(payload, signatureBase64, publicKeyBase64, context = "updater artifact") {
-  const publicKey = decodeTauriUpdaterPublicKey(publicKeyBase64, `${context} public key`);
-  const signature = decodeTauriUpdaterSignature(signatureBase64, `${context} signature`);
-  return verifyParsedTauriUpdaterSignature(Buffer.from(payload), signature, publicKey, context);
-}
-
 async function hashFileBlake2b512(path) {
   const hash = createHash("blake2b512");
   await new Promise((resolvePromise, rejectPromise) => {
@@ -223,8 +193,4 @@ async function verifyTauriUpdaterSignatureFile(payloadPath, signatureBase64, pub
   };
 }
 
-export {
-  resolveApprovedUpdaterPublicKey,
-  verifyTauriUpdaterSignature,
-  verifyTauriUpdaterSignatureFile,
-};
+export { resolveApprovedUpdaterPublicKey, verifyTauriUpdaterSignatureFile };

@@ -2,21 +2,18 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
-  closeSync,
   cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
-  openSync,
   readdirSync,
-  readSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { readJson, truthy } from "../lib/common.mjs";
+import { readJson, sha256FileChunksSync, truthy } from "../lib/common.mjs";
 
 export const DEFAULT_SING_BOX_VERSION = "v1.13.14";
 const SING_BOX_REPO = "SagerNet/sing-box";
@@ -185,18 +182,7 @@ const HASH_CHUNK_BYTES = 1024 * 1024;
  * that the release readiness check and the tests call directly.
  */
 function sha256OfFile(path) {
-  const hash = createHash("sha256");
-  const chunk = Buffer.allocUnsafe(HASH_CHUNK_BYTES);
-  const fd = openSync(path, "r");
-  try {
-    let bytesRead;
-    while ((bytesRead = readSync(fd, chunk, 0, chunk.length, null)) > 0) {
-      hash.update(chunk.subarray(0, bytesRead));
-    }
-  } finally {
-    closeSync(fd);
-  }
-  return hash.digest("hex");
+  return sha256FileChunksSync(path, HASH_CHUNK_BYTES);
 }
 
 export function readSingBoxSeedManifest(seedDir) {

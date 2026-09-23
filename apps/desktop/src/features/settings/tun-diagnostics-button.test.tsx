@@ -2,16 +2,16 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { TunProviderDiagnostics } from "@/ipc/bindings";
+import type { TunProviderDiagnostics } from "@voya/contracts";
 import { useToastStore } from "@voya/client/toast-store";
 
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipcMocks = vi.hoisted(() => ({
+const ipcMocks = installFakeCommands({
   tunProviderDiagnostics: vi.fn(),
-}));
+});
 
-vi.mock("@/ipc/commands", () => ipcMocks);
 
 const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 

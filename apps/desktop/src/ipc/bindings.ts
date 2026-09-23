@@ -172,6 +172,19 @@ export const commands = {
 	 */
 	applySelfHostFirewallRule: () => typedError<SelfHostState, AppError>(__TAURI_INVOKE("apply_self_host_firewall_rule")),
 	/**
+	 *  The five window-chrome actions the custom title bar drives.
+	 * 
+	 *  They used to go through `@tauri-apps/api/window`'s `getCurrentWindow()`,
+	 *  which pulls `window.js`/`dpi.js`/`image.js` into the startup vendor chunk.
+	 *  A thin Rust command keeps the same behavior and leaves those modules out.
+	 */
+	minimizeWindow: () => typedError<null, AppError>(__TAURI_INVOKE("minimize_window")),
+	toggleMaximizeWindow: () => typedError<null, AppError>(__TAURI_INVOKE("toggle_maximize_window")),
+	closeWindow: () => typedError<null, AppError>(__TAURI_INVOKE("close_window")),
+	isWindowMaximized: () => typedError<boolean, AppError>(__TAURI_INVOKE("is_window_maximized")),
+	/**  Whether the window is on screen rather than hidden into the tray. */
+	isWindowVisible: () => typedError<boolean, AppError>(__TAURI_INVOKE("is_window_visible")),
+	/**
 	 *  macOS overlays native traffic lights on the webview; Windows renders caption
 	 *  buttons in its borderless window. Linux and the web fallback use `none`.
 	 */

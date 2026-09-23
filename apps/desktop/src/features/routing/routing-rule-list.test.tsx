@@ -4,7 +4,7 @@ import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DndContext, DragEndEvent } from "@dnd-kit/core";
-import type { RoutingRule } from "@/ipc/bindings";
+import type { RoutingRule } from "@voya/contracts";
 
 import { RoutingRuleList } from "./routing-rule-list";
 

@@ -8,11 +8,13 @@ use std::{
 use voya_platform::{
     coreinfo::CoreLaunch,
     privilege::ElevationState,
-    process::{
-        ProcessError, ProcessJob, ProcessJobFactory, ProcessOutput, ProcessRunner, StdProcessRunner,
-    },
+    process::{ProcessError, ProcessJob, ProcessJobFactory, ProcessOutput, ProcessRunner},
     tun::NativeTunController,
 };
+// `StdProcessRunner` is only used by the unix-gated crash-restart test below;
+// importing it unconditionally makes Windows clippy fail `-D unused-imports`.
+#[cfg(unix)]
+use voya_platform::process::StdProcessRunner;
 
 use super::*;
 

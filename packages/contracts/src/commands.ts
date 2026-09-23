@@ -86,6 +86,11 @@ export const VOYA_COMMAND_WIRE = {
 	getSelfHostStats: { name: "get_self_host_stats", params: [] },
 	runSelfHostEnvironmentCheck: { name: "run_self_host_environment_check", params: [] },
 	applySelfHostFirewallRule: { name: "apply_self_host_firewall_rule", params: [] },
+	minimizeWindow: { name: "minimize_window", params: [] },
+	toggleMaximizeWindow: { name: "toggle_maximize_window", params: [] },
+	closeWindow: { name: "close_window", params: [] },
+	isWindowMaximized: { name: "is_window_maximized", params: [] },
+	isWindowVisible: { name: "is_window_visible", params: [] },
 	getWindowChromeConfig: { name: "get_window_chrome_config", params: [] },
 	setWindowAcrylic: { name: "set_window_acrylic", params: ["dark"] },
 } as const satisfies Record<keyof VoyaCommands, { name: string; params: readonly string[] }>;

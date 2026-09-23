@@ -19,9 +19,9 @@ import { Textarea } from "@voya/ui/components/textarea";
 import { Spinner } from "@voya/ui/components/spinner";
 import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { importProfilesFromText } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { importLineText } from "@voya/client/messages";
-import type { ImportProfilesResult } from "@/ipc/bindings";
+import type { ImportProfilesResult } from "@voya/contracts";
 
 import { qrScanErrorCode } from "@voya/features/profiles/qr-errors";
 import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
@@ -82,7 +82,7 @@ function ImportProfilesDialogSession({
     setPending("import");
     clearFeedback();
     try {
-      const result = await importProfilesFromText(text, null);
+      const result = await voyaCommands().importProfilesFromText(text, null);
       await onImported(result);
       if (!activeRef.current) return;
       // Subscription URLs are not problems: they are updated right after, and

@@ -5,14 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { RuntimeStatusResponse } from "@/ipc/bindings";
+import type { RuntimeStatusResponse } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 
 import { ExitIpMetric } from "./exit-ip-metric";
+import { installFakeCommands } from "@voya/features/test/backend";
 
-const ipc = vi.hoisted(() => ({ checkConnectionIp: vi.fn(), loadAppSettings: vi.fn() }));
-vi.mock("@/ipc/commands", () => ipc);
+const ipc = installFakeCommands({ checkConnectionIp: vi.fn(), loadAppSettings: vi.fn() });
 
 const connected: RuntimeStatusResponse = {
   activeProfileId: "tokyo",

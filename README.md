@@ -8,7 +8,6 @@ TypeScript, Tailwind v4, and shadcn/ui foundations.
 - `apps/desktop`: `@voya/desktop`, the Tauri desktop application.
 - `apps/desktop/src-tauri`: Tauri shell, commands, tray, capabilities, and packaging.
 - `apps/desktop/src`: React desktop frontend. Only `apps/desktop/src/ipc` may import `@tauri-apps/api`.
-- `apps/web`: `@voya/web`, placeholder for a future web management surface.
 - `apps/mobile`: `@voya/mobile`, the bare React Native app (RN 0.87, no Expo).
 - `packages/ui`: source-only shadcn/ui primitives, design tokens, CSS, fonts, and `cn()`.
 - `packages/features`: source-only frontend logic and controller hooks shared by the desktop and mobile apps; views stay in each app.
@@ -172,8 +171,8 @@ workflow_dispatch inputs: channel, build_profile, dry_run, updater_metadata
 Generate release-owner evidence scaffolding and validate staged metadata:
 
 ```sh
-pnpm release -- record
-pnpm release -- verify-staging --release-index <release-index.json> --updater-metadata <latest.json> --core-manifest <core-assets.json>
+pnpm release -- readiness --mode dry-run
+pnpm release -- check-hosts
 ```
 
 Production stable publication still requires external signing identities, notarization credentials, updater private keys, CDN publication control, platform smoke machines, and rollback readiness. The release runbooks live under `docs/release/`, and the stable gate report is `docs/verification/stable-release-gate.md`.

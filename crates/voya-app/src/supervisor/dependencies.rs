@@ -70,35 +70,11 @@ impl SupervisorDeps {
     }
 
     #[must_use]
-    pub fn with_clock(mut self, clock: Arc<dyn SupervisorClock>) -> Self {
-        self.clock = clock;
-        self
-    }
-
-    #[must_use]
-    pub const fn with_crash_restart_policy(mut self, policy: CrashRestartPolicy) -> Self {
-        self.crash_restart_policy = policy;
-        self
-    }
-
-    #[must_use]
-    pub fn with_job_factory(mut self, job_factory: Arc<dyn ProcessJobFactory>) -> Self {
-        self.job_factory = job_factory;
-        self
-    }
-
-    #[must_use]
     pub fn with_native_tun_controller(
         mut self,
         native_tun_controller: Arc<dyn NativeTunController>,
     ) -> Self {
         self.native_tun_controller = native_tun_controller;
-        self
-    }
-
-    #[must_use]
-    pub const fn with_native_tun_health_interval(mut self, interval: Duration) -> Self {
-        self.native_tun_health_interval = interval;
         self
     }
 
@@ -111,6 +87,37 @@ impl SupervisorDeps {
     #[must_use]
     pub const fn with_target_os(mut self, target_os: TargetOs) -> Self {
         self.target_os = target_os;
+        self
+    }
+
+    /// Test-only knobs: clocks, crash policy, job factory and the TUN health
+    /// poll. Kept in this `impl` so the architecture gate's top-level
+    /// `#[cfg(test)]` rule stays satisfied.
+    #[cfg(test)]
+    #[must_use]
+    pub fn with_clock(mut self, clock: Arc<dyn SupervisorClock>) -> Self {
+        self.clock = clock;
+        self
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub const fn with_crash_restart_policy(mut self, policy: CrashRestartPolicy) -> Self {
+        self.crash_restart_policy = policy;
+        self
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub fn with_job_factory(mut self, job_factory: Arc<dyn ProcessJobFactory>) -> Self {
+        self.job_factory = job_factory;
+        self
+    }
+
+    #[cfg(test)]
+    #[must_use]
+    pub const fn with_native_tun_health_interval(mut self, interval: Duration) -> Self {
+        self.native_tun_health_interval = interval;
         self
     }
 }

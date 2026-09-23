@@ -16,8 +16,8 @@ import {
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { SwitchField, TextField } from "@voya/ui/components/form-fields";
 import { Spinner } from "@voya/ui/components/spinner";
-import { saveSubscription, updateSubscriptions } from "@/ipc/commands";
-import type { Subscription } from "@/ipc/bindings";
+import { voyaCommands } from "@voya/client/transport";
+import type { Subscription } from "@voya/contracts";
 import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
 import { assertSubscriptionUpdated } from "@voya/features/subscriptions/subscription-update-result";
 import { subscriptionFormSchema } from "@voya/features/subscriptions/subscriptions-form-schema";
@@ -122,7 +122,7 @@ function SubscriptionEditor({
     }
     await submit(async () => {
       const create = !form.id;
-      const saved = await saveSubscription({
+      const saved = await voyaCommands().saveSubscription({
         ...form,
         remarks: form.remarks.trim(),
         url: form.url.trim(),
@@ -134,7 +134,7 @@ function SubscriptionEditor({
       setForm(saved);
       if (create || needsUpdate) {
         setNeedsUpdate(true);
-        const result = await updateSubscriptions(saved.id, true, null);
+        const result = await voyaCommands().updateSubscriptions(saved.id, true, null);
         assertSubscriptionUpdated(result, t);
         setNeedsUpdate(false);
       }

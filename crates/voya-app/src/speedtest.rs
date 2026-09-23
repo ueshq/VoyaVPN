@@ -185,30 +185,6 @@ fn latency_test_url(item: &SpeedTestItem) -> &str {
     }
 }
 
-pub trait SpeedtestCoreSession: Send {
-    /// Tears the probe core down off the Tokio workers; stopping a child blocks
-    /// until the reaper thread has killed and waited it. `Drop` stays as a
-    /// best-effort fallback for panics and early returns, and is what the
-    /// default implementation falls back to.
-    fn close(self: Box<Self>) -> BoxFuture<'static, ()> {
-        drop(self);
-        Box::pin(async {})
-    }
-}
-
-pub trait SpeedtestCoreBackend: Send + Sync {
-    fn start(
-        &self,
-        entries: Vec<SpeedtestConfigEntry>,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>>;
-
-    /// Kills every probe core that is still running. Tauri ends the process
-    /// with `std::process::exit`, so neither `Drop` nor the pending speedtest
-    /// future ever reaps them — the shell has to ask for it explicitly.
-    fn stop_all(&self) {}
-}
-
 /// Starts the throwaway sing-box a disconnected probe run measures through.
 ///
 /// The one thing that is not portable about a probe core. The desktop spawns a
@@ -216,7 +192,7 @@ pub trait SpeedtestCoreBackend: Send + Sync {
 /// inside the app process and hands back something it can stop. Everything
 /// around it — generating the config, reserving and waiting for the SOCKS
 /// ports, tearing the core down — is the same on both, and lives in
-/// [`LauncherCoreBackend`].
+/// [`SpeedtestManager`].
 pub trait ProbeCoreLauncher: Send + Sync {
     /// Starts a probe core for a generated sing-box configuration.
     ///
@@ -224,8 +200,10 @@ pub trait ProbeCoreLauncher: Send + Sync {
     /// way writing a config and spawning a child process demand.
     fn start(&self, config_json: String) -> Result<Box<dyn ProbeCore>>;
 
-    /// Stops every probe core this launcher still has running. See
-    /// [`SpeedtestCoreBackend::stop_all`] for why the shell asks explicitly.
+    /// Stops every probe core this launcher still has running. Tauri ends the
+    /// process with `std::process::exit`, so neither `Drop` nor the pending
+    /// speedtest future ever reaps them — the shell has to ask for it
+    /// explicitly.
     fn stop_all(&self) {}
 }
 
@@ -245,7 +223,7 @@ pub trait ProbeCore: Send + Sync {
 #[derive(Clone)]
 pub struct SpeedtestManager {
     probe: Arc<dyn SpeedtestProbe>,
-    core_backend: Arc<dyn SpeedtestCoreBackend>,
+    launcher: Arc<dyn ProbeCoreLauncher>,
     running_core: Option<Arc<dyn RunningCoreProbe>>,
     paths: AppPaths,
     target_os: TargetOs,
@@ -273,8 +251,9 @@ mod core_backend;
 mod manager;
 mod running_core;
 
-pub use core_backend::{LauncherCoreBackend, ProcessProbeCoreLauncher};
-pub use running_core::{RunningCoreDelay, RunningCoreProbe, SupervisorRunningCoreProbe};
+pub use core_backend::ProcessProbeCoreLauncher;
+pub use manager::{start_probe_core_page, ProbeCoreSession};
+pub use running_core::{RunningCoreProbe, SupervisorRunningCoreProbe};
 
 async fn select_test_items(
     database: &Database,
@@ -563,6 +542,18 @@ mod tests {
         pub(super) ports: Vec<i32>,
     }
 
+    fn ports_from_config(config_json: &str) -> Vec<i32> {
+        let value: serde_json::Value =
+            serde_json::from_str(config_json).expect("generated speedtest config");
+        value["inbounds"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|inbound| inbound["listen_port"].as_i64())
+            .map(|port| i32::try_from(port).unwrap_or(i32::MAX))
+            .collect()
+    }
+
     #[derive(Default)]
     pub(super) struct RecordingCoreBackend {
         starts: Arc<StdMutex<Vec<RecordedCoreStart>>>,
@@ -593,20 +584,12 @@ mod tests {
         }
     }
 
-    impl SpeedtestCoreBackend for RecordingCoreBackend {
-        fn start(
-            &self,
-            entries: Vec<SpeedtestConfigEntry>,
-            cancel: CancellationFlag,
-        ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
-            let starts = Arc::clone(&self.starts);
-            let active = Arc::clone(&self.active);
-            let start_failure = self.start_failure;
-            let cancel_in_start = self.cancel_in_start;
+    impl ProbeCoreLauncher for RecordingCoreBackend {
+        fn start(&self, config_json: String) -> Result<Box<dyn ProbeCore>> {
+            let ports = ports_from_config(&config_json);
             if self.occupy_next_port {
-                let next = entries
+                let next = ports
                     .iter()
-                    .map(|entry| entry.port)
                     .max()
                     .and_then(|port| u16::try_from(port + 1).ok())
                     .expect("a page has ports");
@@ -614,26 +597,36 @@ mod tests {
                     self.occupied.lock().expect("occupied").push(listener);
                 }
             }
-            Box::pin(async move {
-                starts
-                    .lock()
-                    .expect("speedtest test operation should succeed")
-                    .push(RecordedCoreStart {
-                        ports: entries.iter().map(|entry| entry.port).collect(),
-                    });
-                if cancel_in_start {
-                    cancel.store(true, Ordering::SeqCst);
-                    return Err(SpeedtestError::Cancelled);
+            // Bind each page port so the readiness wait succeeds the way a real
+            // probe core's SOCKS listeners do.
+            let mut listeners = Vec::new();
+            for port in &ports {
+                if let Ok(listener) =
+                    StdTcpListener::bind((LOOPBACK_ADDR, u16::try_from(*port).unwrap_or(0)))
+                {
+                    listeners.push(listener);
                 }
-                if start_failure {
-                    return Err(SpeedtestError::Io(io::Error::new(
-                        io::ErrorKind::NotFound,
-                        "no probe core",
-                    )));
-                }
-                active.fetch_add(1, Ordering::SeqCst);
-                Ok(Box::new(RecordingCoreSession { active }) as Box<dyn SpeedtestCoreSession>)
-            })
+            }
+            self.starts
+                .lock()
+                .expect("speedtest test operation should succeed")
+                .push(RecordedCoreStart {
+                    ports: ports.clone(),
+                });
+            if self.cancel_in_start {
+                return Err(SpeedtestError::Cancelled);
+            }
+            if self.start_failure {
+                return Err(SpeedtestError::Io(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "no probe core",
+                )));
+            }
+            self.active.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(RecordingCoreSession {
+                active: Arc::clone(&self.active),
+                _listeners: listeners,
+            }))
         }
 
         fn stop_all(&self) {
@@ -643,6 +636,7 @@ mod tests {
 
     struct RecordingCoreSession {
         active: Arc<AtomicUsize>,
+        _listeners: Vec<StdTcpListener>,
     }
 
     impl Drop for RecordingCoreSession {
@@ -651,7 +645,9 @@ mod tests {
         }
     }
 
-    impl SpeedtestCoreSession for RecordingCoreSession {}
+    impl ProbeCore for RecordingCoreSession {
+        fn stop(self: Box<Self>) {}
+    }
 
     struct EditingProbe {
         database: Database,
@@ -694,7 +690,7 @@ mod tests {
             let database = Database::connect_in_memory().await.expect("database");
             insert_profile(&database, "a", 443).await;
             let backend = Arc::new(RecordingCoreBackend::default());
-            let manager = SpeedtestManager::with_probe_and_backend(
+            let manager = SpeedtestManager::with_probe_and_launcher(
                 test_paths(),
                 Arc::new(EditingProbe {
                     database: database.clone(),
@@ -739,7 +735,7 @@ mod tests {
         let probe = Arc::new(RecordingProbe::default());
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let config = AppConfig::default();
 
         let run = manager
@@ -776,7 +772,7 @@ mod tests {
         let probe = Arc::new(RecordingProbe::default());
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
             .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
@@ -809,7 +805,7 @@ mod tests {
         let probe = Arc::new(RecordingProbe::default());
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
 
         manager
             .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
@@ -842,7 +838,7 @@ mod tests {
             occupy_next_port: true,
             ..RecordingCoreBackend::default()
         });
-        let manager = SpeedtestManager::with_probe_and_backend(
+        let manager = SpeedtestManager::with_probe_and_launcher(
             test_paths(),
             Arc::new(RecordingProbe::default()),
             backend.clone(),
@@ -874,7 +870,7 @@ mod tests {
         let probe = Arc::new(RecordingProbe::default());
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe, backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe, backend.clone());
         let mut config = AppConfig::default();
 
         let reserved_base = reserve_speedtest_base_port(&mut config);
@@ -914,7 +910,7 @@ mod tests {
         });
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let task_manager = manager.clone();
         let config = AppConfig::default();
         let database_check = database.clone();
@@ -973,7 +969,7 @@ mod tests {
         });
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let task_manager = manager.clone();
         let task_database = database.clone();
 
@@ -1023,7 +1019,7 @@ mod tests {
             ..RecordingCoreBackend::default()
         });
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let deliveries = StdMutex::new(Vec::<Vec<(String, SpeedtestOutcome)>>::new());
 
         let run = manager
@@ -1080,7 +1076,7 @@ mod tests {
             ..RecordingCoreBackend::default()
         });
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
             .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
@@ -1107,7 +1103,7 @@ mod tests {
         let probe = Arc::new(RecordingProbe::default());
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
 
         let run = manager
             .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
@@ -1147,7 +1143,7 @@ mod tests {
         let probe = Arc::new(RecordingProbe::default());
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let mut config = AppConfig::default();
         config.speed_test_item.speed_test_page_size = Some(1);
         config.speed_test_item.speed_test_delay_interval_seconds = Some(1);
@@ -1192,7 +1188,7 @@ mod tests {
         let probe = Arc::new(RecordingProbe::default());
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let mut config = AppConfig::default();
         config.speed_test_item.speed_test_page_size = Some(1);
         config.speed_test_item.speed_test_delay_interval_seconds = Some(1);
@@ -1232,7 +1228,7 @@ mod tests {
         });
         let backend = Arc::new(RecordingCoreBackend::default());
         let manager =
-            SpeedtestManager::with_probe_and_backend(test_paths(), probe.clone(), backend.clone());
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let config = AppConfig::default();
 
         let first_manager = manager.clone();
@@ -1291,7 +1287,7 @@ mod tests {
             .expect("speedtest test operation should succeed");
         insert_profile(&database, "a", 443).await;
         let backend = Arc::new(RecordingCoreBackend::default());
-        let manager = SpeedtestManager::with_probe_and_backend(
+        let manager = SpeedtestManager::with_probe_and_launcher(
             test_paths(),
             Arc::new(RecordingProbe::default()),
             backend.clone(),
@@ -1328,7 +1324,7 @@ mod tests {
     #[test]
     fn speedtest_manager_shutdown_cancels_and_reaps_probe_cores() {
         let backend = Arc::new(RecordingCoreBackend::default());
-        let manager = SpeedtestManager::with_probe_and_backend(
+        let manager = SpeedtestManager::with_probe_and_launcher(
             test_paths(),
             Arc::new(RecordingProbe::default()),
             backend.clone(),

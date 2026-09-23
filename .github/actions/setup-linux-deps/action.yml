@@ -1,0 +1,34 @@
+name: Setup Linux Tauri dependencies
+description: Install the shared apt package set every Linux Tauri build/test job needs.
+inputs:
+  extra-packages:
+    description: Additional apt packages beyond the shared set.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install Linux Tauri dependencies
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          curl \
+          file \
+          libayatana-appindicator3-dev \
+          librsvg2-dev \
+          libssl-dev \
+          libwebkit2gtk-4.1-dev \
+          libclang-dev \
+          libgbm-dev \
+          libxcb1-dev \
+          libxrandr-dev \
+          libdbus-1-dev \
+          libpipewire-0.3-dev \
+          libwayland-dev \
+          libegl-dev \
+          pkg-config \
+          libxdo-dev \
+          wget \
+          ${{ inputs.extra-packages }}

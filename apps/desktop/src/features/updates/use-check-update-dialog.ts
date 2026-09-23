@@ -10,8 +10,8 @@ import {
   type AppUpdateInstallResult,
   type AppUpdateProgress,
 } from "@/features/updates/app-update-flow";
-import { appUpdateStatus } from "@/ipc/commands";
-import type { AppUpdaterStatus } from "@/ipc/bindings";
+import { voyaCommands } from "@voya/client/transport";
+import type { AppUpdaterStatus } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { relaunch } from "@/ipc/tauri-plugins";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -42,7 +42,7 @@ export function useCheckUpdateDialog() {
   // One fetch per dialog open, like the effect this replaced: no retries, no
   // background refetch, so a status failure shows exactly when it happens.
   const statusQuery = useQuery({
-    queryFn: appUpdateStatus,
+    queryFn: () => voyaCommands().appUpdateStatus(),
     queryKey: queryKeys.appUpdaterStatus,
     refetchOnWindowFocus: false,
     retry: false,

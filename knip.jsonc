@@ -1,15 +1,10 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "includeEntryExports": true,
-  "ignoreWorkspaces": ["apps/web"],
+  "ignoreWorkspaces": [],
   "workspaces": {
     ".": {
-      "ignoreBinaries": [
-        "pgrep",
-        "plutil",
-        "system_profiler",
-        "xcode-select"
-      ]
+      "ignoreBinaries": [],
     },
     "apps/mobile": {
       "entry": ["src/**/*.test.{ts,tsx}"],
@@ -29,7 +24,7 @@
       // no desktop source any more — the schemas live in `@voya/features` —
       // but `zodResolver` checks them with `instanceof`, so the app has to
       // resolve the same copy the schemas were built with.
-      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons", "zod"],
+      "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
       "ignoreBinaries": ["tauri-driver"],
       "ignoreIssues": {
         "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],
@@ -65,7 +60,12 @@
     },
     "packages/client": {
       "entry": ["src/*.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      // `mock-seed` is reached from `apps/mobile/src/ipc/transport.ts` only via
+      // a `__DEV__`-gated `require`. knip cannot see through that call.
+      "ignoreIssues": {
+        "src/mock-seed.ts": ["exports"]
+      }
     },
     "packages/features": {
       "entry": ["src/**/*.test.{ts,tsx}"],

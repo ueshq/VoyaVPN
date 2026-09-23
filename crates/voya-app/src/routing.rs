@@ -1,6 +1,12 @@
 use thiserror::Error;
+use voya_contracts::{AppError, MoveAction as ContractMoveAction, Routing, RoutingRule};
 use voya_core::{AppConfig, MoveAction, RoutingItem, RulesItem};
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
+
+use crate::config_mutation::{CommittedMutation, ConfigMutationCoordinator};
+use crate::contract_map::{
+    move_action_from_contract, routing_from_contract, routing_to_contract, rule_from_contract,
+};
 
 const DEFAULT_ROUTING_SORT_STEP: i32 = 10;
 
@@ -327,6 +333,159 @@ fn generate_routing_id() -> String {
 
 fn generate_rule_id() -> String {
     format!("rule-{}", uuid::Uuid::new_v4().simple())
+}
+
+// The contract-typed routing use cases both hosts share.
+//
+// Each mutation is one `mutate` → `RoutingManager::new_in` → contract map
+// body returning the committed result, so a host keeps only its own input
+// validation and post-commit tail.
+
+/// Every routing profile in list order, as the public DTO.
+pub async fn list_routings_use_case(
+    services: &crate::services::AppServices,
+) -> std::result::Result<Vec<Routing>, AppError> {
+    Ok(services
+        .list_routings()
+        .await?
+        .into_iter()
+        .map(routing_to_contract)
+        .collect())
+}
+
+/// Saves a routing profile; an empty id creates one.
+pub async fn save_routing_use_case(
+    mutations: &ConfigMutationCoordinator,
+    item: Routing,
+) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    mutations
+        .mutate(
+            async |unit_of_work, config| -> std::result::Result<Routing, AppError> {
+                Ok(routing_to_contract(
+                    RoutingManager::new_in(unit_of_work)
+                        .save_routing(config, routing_from_contract(item))
+                        .await?,
+                ))
+            },
+        )
+        .await
+}
+
+/// Deletes routing profiles by id and keeps the active one valid.
+pub async fn delete_routings_use_case(
+    mutations: &ConfigMutationCoordinator,
+    ids: Vec<String>,
+) -> std::result::Result<CommittedMutation<u32>, AppError> {
+    mutations
+        .mutate(
+            async |unit_of_work, config| -> std::result::Result<u32, AppError> {
+                Ok(RoutingManager::new_in(unit_of_work)
+                    .delete_routings(config, &ids)
+                    .await?)
+            },
+        )
+        .await
+}
+
+/// Makes a routing profile the active one.
+pub async fn set_active_routing_use_case(
+    mutations: &ConfigMutationCoordinator,
+    id: String,
+) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    mutations
+        .mutate(
+            async |unit_of_work, config| -> std::result::Result<Routing, AppError> {
+                Ok(routing_to_contract(
+                    RoutingManager::new_in(unit_of_work)
+                        .set_active_routing(config, &id)
+                        .await?,
+                ))
+            },
+        )
+        .await
+}
+
+/// Saves one rule inside a routing profile.
+pub async fn save_routing_rule_use_case(
+    mutations: &ConfigMutationCoordinator,
+    routing_id: String,
+    rule: RoutingRule,
+) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    mutations
+        .mutate(
+            async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
+                Ok(routing_to_contract(
+                    RoutingManager::new_in(unit_of_work)
+                        .save_rule(&routing_id, rule_from_contract(rule))
+                        .await?,
+                ))
+            },
+        )
+        .await
+}
+
+/// Deletes rules from a routing profile.
+pub async fn delete_routing_rules_use_case(
+    mutations: &ConfigMutationCoordinator,
+    routing_id: String,
+    rule_ids: Vec<String>,
+) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    mutations
+        .mutate(
+            async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
+                Ok(routing_to_contract(
+                    RoutingManager::new_in(unit_of_work)
+                        .delete_rules(&routing_id, &rule_ids)
+                        .await?,
+                ))
+            },
+        )
+        .await
+}
+
+/// Moves one rule inside a routing profile.
+pub async fn move_routing_rule_use_case(
+    mutations: &ConfigMutationCoordinator,
+    routing_id: String,
+    rule_id: String,
+    action: ContractMoveAction,
+    position: Option<i32>,
+) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    mutations
+        .mutate(
+            async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
+                Ok(routing_to_contract(
+                    RoutingManager::new_in(unit_of_work)
+                        .move_rule(
+                            &routing_id,
+                            &rule_id,
+                            move_action_from_contract(action),
+                            position,
+                        )
+                        .await?,
+                ))
+            },
+        )
+        .await
+}
+
+/// Replaces a routing profile's rules with the default set, keeping its
+/// per-app proxy rule.
+pub async fn reset_routing_rules_use_case(
+    mutations: &ConfigMutationCoordinator,
+    routing_id: String,
+) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    mutations
+        .mutate(
+            async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
+                Ok(routing_to_contract(
+                    RoutingManager::new_in(unit_of_work)
+                        .reset_rules_to_default(&routing_id)
+                        .await?,
+                ))
+            },
+        )
+        .await
 }
 
 #[cfg(test)]

@@ -57,7 +57,17 @@ function buildSlices() {
   for (const { triple } of IOS_TARGETS) {
     run(
       "cargo",
-      ["build", "-p", "voya-mobile-ffi", "--target", triple, ...(profile === "release" ? ["--release"] : [])],
+      [
+        "rustc",
+        "-p",
+        "voya-mobile-ffi",
+        "--lib",
+        "--target",
+        triple,
+        "--crate-type",
+        "staticlib",
+        ...(profile === "release" ? ["--release"] : []),
+      ],
       { cwd: repoRoot },
     );
   }
@@ -112,6 +122,8 @@ function generateBindings() {
       "run",
       "-p",
       "voya-mobile-ffi",
+      "--features",
+      "bindgen",
       "--bin",
       "uniffi-bindgen",
       "--",

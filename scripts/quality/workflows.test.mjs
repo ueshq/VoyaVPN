@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+import { repoRootFromScript, topLevelBlock, workflowJobs } from "../lib/common.mjs";
+
+const repoRoot = repoRootFromScript(import.meta.url);
 const workflowDir = resolve(repoRoot, ".github", "workflows");
-const jobHeaderPattern = /^ {2}([A-Za-z0-9_-]+):\s*$/;
-const jobBodyPattern = /^ {4}(?:steps|uses):/;
 const pnpmInvocationPattern = /(?:^|[\s"'(&|;])pnpm(?:\s|$)/;
 const pnpmSetupPattern = /uses:\s*pnpm\/action-setup@[0-9a-f]{40}\b/;
 const actionPinPattern = /^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)/;
@@ -19,53 +18,6 @@ function workflowFiles() {
 
 function readWorkflow(name) {
   return readFileSync(resolve(workflowDir, name), "utf8");
-}
-
-/**
- * Splits the top-level `jobs:` mapping into per-job line blocks. This is a
- * deliberately small scanner instead of a YAML parser so the quality gates keep
- * running on Node builtins only.
- */
-function workflowJobs(text) {
-  const lines = text.split(/\r?\n/);
-  const jobsIndex = lines.indexOf("jobs:");
-  const jobs = new Map();
-  if (jobsIndex < 0) {
-    return jobs;
-  }
-
-  let current = null;
-  for (const line of lines.slice(jobsIndex + 1)) {
-    const header = jobHeaderPattern.exec(line);
-    if (header) {
-      current = header[1];
-      jobs.set(current, []);
-      continue;
-    }
-    if (current) {
-      jobs.get(current).push(line);
-    }
-  }
-
-  // Drop anything that does not look like a job definition, so an unexpected
-  // two-space line inside a shell block cannot invent a phantom job.
-  for (const [name, body] of jobs) {
-    if (!body.some((line) => jobBodyPattern.test(line))) {
-      jobs.delete(name);
-    }
-  }
-  return jobs;
-}
-
-/** The lines of one top-level key (`concurrency:`, `permissions:`, ...). */
-function topLevelBlock(text, key) {
-  const lines = text.split(/\r?\n/);
-  const start = lines.indexOf(`${key}:`);
-  if (start < 0) {
-    return [];
-  }
-  const end = lines.findIndex((line, index) => index > start && /^[A-Za-z]/.test(line));
-  return lines.slice(start + 1, end < 0 ? undefined : end).filter((line) => line.trim() && !line.trim().startsWith("#"));
 }
 
 function invokesPnpm(body) {
@@ -82,7 +34,7 @@ function invokesPnpm(body) {
 }
 
 function installsPnpm(body) {
-  return body.some((line) => pnpmSetupPattern.test(line));
+  return body.some((line) => pnpmSetupPattern.test(line) || /uses:\s*\.\/\.github\/actions\/setup-node-pnpm\b/.test(line));
 }
 
 function jobsInvokingPnpm(name) {
@@ -227,7 +179,11 @@ describe("GitHub Actions workflows", () => {
       if (!compilesWorkspace.test(text)) {
         continue;
       }
-      if (!/uses:\s*Swatinem\/rust-cache@[0-9a-f]{40}\b/.test(text)) {
+      // Either an inline cache step or the setup-rust composite that carries it.
+      const cached =
+        /uses:\s*Swatinem\/rust-cache@[0-9a-f]{40}\b/.test(text) ||
+        /uses:\s*\.\/\.github\/actions\/setup-rust\b/.test(text);
+      if (!cached) {
         uncached.push(`ci.yml:${job}`);
       }
     }
@@ -235,27 +191,20 @@ describe("GitHub Actions workflows", () => {
     expect(uncached).toEqual([]);
   });
 
-  // `cargo install` builds these tools from source; the cache turns a pinned
-  // version into a no-op. Swatinem/rust-cache deliberately skips ~/.cargo/bin,
-  // so each tool needs its own actions/cache entry.
-  it("caches the binary of every cargo-installed tool", () => {
-    const missing = [];
-
+  // Toolchain binaries are prebuilt by taiki-e/install-action instead of
+  // `cargo install` + a binary cache that still had to compile on miss.
+  it("installs cargo tools through taiki-e/install-action, not cargo install", () => {
     for (const file of workflowFiles()) {
       for (const [job, body] of workflowJobs(readWorkflow(file))) {
-        const text = body.join("\n");
-        // Comments mention `cargo install` too; only real steps count.
         const commands = body.filter((line) => !line.trim().startsWith("#")).join("\n");
-        for (const match of commands.matchAll(/cargo install (\S+)/gu)) {
-          const tool = match[1];
-          if (!text.includes(`~/.cargo/bin/${tool}`) || !/uses:\s*actions\/cache@[0-9a-f]{40}\b/.test(text)) {
-            missing.push(`${file}:${job}:${tool}`);
-          }
-        }
+        expect(commands, `${file}:${job}`).not.toMatch(/cargo install /);
       }
     }
 
-    expect(missing).toEqual([]);
+    const ci = readWorkflow("ci.yml");
+    for (const tool of ["cargo-deny", "cargo-machete", "tauri-driver"]) {
+      expect(ci, tool).toMatch(new RegExp(`uses:\\s*taiki-e/install-action@[0-9a-f]{40}\\b[\\s\\S]{0,200}tool:\\s*${tool}@`, "u"));
+    }
   });
 
   it("documents why the release package matrix opts out of the Rust build cache", () => {

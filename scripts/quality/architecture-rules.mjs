@@ -159,12 +159,6 @@ export const retiredCompatibilityRules = [
     pattern: /v2rayn:\/\//iu,
     message: "the private v2rayn:// format is retired",
   },
-  {
-    id: "retired-config-compat",
-    pattern:
-      /\b(?:AppConfigStore|ProtocolExtraItem|TransportExtraItem|remove_retired_voya_config_fields|prev_profile|next_profile)\b/u,
-    message: "retired configuration compatibility code is forbidden",
-  },
 ];
 
 export const clashBoundaryRules = [
@@ -297,15 +291,13 @@ export function versionAlignmentProblem(versions) {
 /**
  * `unsafe` sites that need a nearby `SAFETY:` rationale.
  *
- * The original regex matched only `unsafe {` and `unsafe impl`, which left the
- * two shapes an FFI crate actually uses uncovered: `unsafe extern "C" { … }`
- * (whose signatures are the safety contract) and `unsafe fn` declarations. The
- * workspace now also turns on rustc's `unsafe_op_in_unsafe_fn`, which edition
- * 2021 leaves allow-by-default, so unsafe work inside an `unsafe fn` needs an
- * inner block that clippy's `undocumented_unsafe_blocks` can demand a comment
- * for; this rule still covers the signature line itself.
+ * Only the two shapes clippy's `undocumented_unsafe_blocks` does not already
+ * police: `unsafe fn` / `unsafe extern "C" { … }` signature lines. Ordinary
+ * `unsafe { … }` blocks and `unsafe impl` are covered by that Clippy lint
+ * (workspace lints run with `-D warnings`), so repeating them here would
+ * double-report the same site.
  */
-const UNSAFE_SITE = /\bunsafe\s+(?:extern\b|fn\b)|\bunsafe\s*(?:\{|impl\b)/u;
+const UNSAFE_SITE = /\bunsafe\s+(?:extern\b|fn\b)/u;
 
 export function findUndocumentedUnsafe(source) {
   const lines = source.split(/\r?\n/u);

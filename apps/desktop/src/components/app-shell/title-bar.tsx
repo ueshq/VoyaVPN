@@ -9,7 +9,7 @@ import {
   onWindowResized,
   toggleMaximizeWindow,
 } from "@/ipc/window";
-import type { TitleBarLayout } from "@/ipc/bindings";
+import type { TitleBarLayout } from "@voya/contracts";
 
 /**
  * Overlays the content column, inheriting its background without occupying a

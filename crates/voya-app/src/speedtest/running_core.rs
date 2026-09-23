@@ -22,14 +22,13 @@ use crate::supervisor::{CoreSupervisor, SupervisorConnectionState};
 const RUNNING_CORE_TIMEOUT_MS: RangeInclusive<u32> = 1_000..=25_000;
 
 /// Reaches the running core for a speedtest run.
+///
+/// `connect` returns a delay client bound to the core running now, or `None`
+/// while nothing is connected (which sends the run to probe cores). The same
+/// trait carries `delay` so a connected run and its handle are one object.
 pub trait RunningCoreProbe: Send + Sync {
-    /// A delay client bound to the core running now; `None` while nothing is
-    /// connected, which sends the run to probe cores.
-    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreDelay>>>;
-}
+    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>>;
 
-/// One run's view of the running core.
-pub trait RunningCoreDelay: Send + Sync {
     fn delay(
         &self,
         tag: String,
@@ -51,7 +50,7 @@ impl SupervisorRunningCoreProbe {
 }
 
 impl RunningCoreProbe for SupervisorRunningCoreProbe {
-    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreDelay>>> {
+    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>> {
         let supervisor = self.supervisor.clone();
         Box::pin(async move {
             let snapshot = match supervisor.status().await {
@@ -65,18 +64,31 @@ impl RunningCoreProbe for SupervisorRunningCoreProbe {
                 return None;
             }
             let endpoint = proxy_runtime_endpoint(&snapshot.clash_api_access())?;
-            Some(Arc::new(ClashRunningCoreDelay {
+            Some(Arc::new(ClashRunningCoreProbe {
                 client: ClashRestClient::new(endpoint),
-            }) as Arc<dyn RunningCoreDelay>)
+            }) as Arc<dyn RunningCoreProbe>)
         })
+    }
+
+    fn delay(
+        &self,
+        _tag: String,
+        _test_url: String,
+        _timeout_ms: u32,
+    ) -> BoxFuture<'static, std::result::Result<u32, ClashError>> {
+        Box::pin(async { Err(ClashError::WebSocketClosed) })
     }
 }
 
-struct ClashRunningCoreDelay {
+struct ClashRunningCoreProbe {
     client: ClashRestClient,
 }
 
-impl RunningCoreDelay for ClashRunningCoreDelay {
+impl RunningCoreProbe for ClashRunningCoreProbe {
+    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>> {
+        Box::pin(async { None })
+    }
+
     fn delay(
         &self,
         tag: String,
@@ -91,7 +103,7 @@ impl RunningCoreDelay for ClashRunningCoreDelay {
 impl SpeedtestManager {
     pub(super) async fn run_through_running_core<F>(
         &self,
-        core: Arc<dyn RunningCoreDelay>,
+        core: Arc<dyn RunningCoreProbe>,
         database: &Database,
         config: &AppConfig,
         items: &[ServerTestItem],

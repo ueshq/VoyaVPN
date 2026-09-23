@@ -92,7 +92,7 @@ describe("frontend bundle budgets", () => {
     { name: "vendor-data-abc.js", bytes: 79 * 1024 },
     { name: "vendor-react-abc.js", bytes: 186 * 1024 },
     { name: "vendor-radix-abc.js", bytes: 59 * 1024 },
-    { name: "vendor-forms-abc.js", bytes: 97 * 1024 },
+    { name: "vendor-forms-abc.js", bytes: 66 * 1024 },
     { name: "vendor-menus-abc.js", bytes: 97 * 1024 },
   ];
 
@@ -156,8 +156,8 @@ describe("frontend dist budgets", () => {
   const files = [
     { name: "index.html", bytes: 2 * 1024 },
     { name: "index-abc.css", bytes: 80 * 1024 },
-    { name: "index-abc.js", bytes: 1500 * 1024 },
-    { name: "us-abc.svg", bytes: 1700 * 1024 },
+    { name: "index-abc.js", bytes: 1280 * 1024 },
+    { name: "us-abc.svg", bytes: 1650 * 1024 },
   ];
 
   it("accepts the sizes the budgets were ratcheted around", () => {

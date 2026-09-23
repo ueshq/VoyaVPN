@@ -22,7 +22,11 @@ pub async fn save_self_host_config<R: tauri::Runtime>(
     config: SelfHostConfig,
 ) -> Result<SelfHostState, AppError> {
     let saved = state.self_host().save_config(config).await?;
-    emit_self_host_invalidation(&app, "self-host-config-saved");
+    emit_invalidation(
+        &app,
+        "self-host-config-saved",
+        invalidation::self_host_scopes(),
+    );
     Ok(saved)
 }
 
@@ -34,7 +38,11 @@ pub async fn set_self_host_enabled<R: tauri::Runtime>(
     enabled: bool,
 ) -> Result<SelfHostState, AppError> {
     let changed = state.self_host().set_enabled(enabled).await?;
-    emit_self_host_invalidation(&app, "self-host-enabled-changed");
+    emit_invalidation(
+        &app,
+        "self-host-enabled-changed",
+        invalidation::self_host_scopes(),
+    );
     Ok(changed)
 }
 
@@ -45,7 +53,11 @@ pub async fn rotate_self_host_credentials<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
 ) -> Result<SelfHostState, AppError> {
     let rotated = state.self_host().rotate_credentials().await?;
-    emit_self_host_invalidation(&app, "self-host-credentials-rotated");
+    emit_invalidation(
+        &app,
+        "self-host-credentials-rotated",
+        invalidation::self_host_scopes(),
+    );
     Ok(rotated)
 }
 
@@ -64,7 +76,11 @@ pub async fn run_self_host_environment_check<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
 ) -> Result<SelfHostState, AppError> {
     let checked = state.self_host().run_environment_check().await?;
-    emit_self_host_invalidation(&app, "self-host-environment-checked");
+    emit_invalidation(
+        &app,
+        "self-host-environment-checked",
+        invalidation::self_host_scopes(),
+    );
     Ok(checked)
 }
 
@@ -77,6 +93,10 @@ pub async fn apply_self_host_firewall_rule<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
 ) -> Result<SelfHostState, AppError> {
     let applied = state.self_host().apply_firewall_rule().await?;
-    emit_self_host_invalidation(&app, "self-host-firewall-rule-applied");
+    emit_invalidation(
+        &app,
+        "self-host-firewall-rule-applied",
+        invalidation::self_host_scopes(),
+    );
     Ok(applied)
 }

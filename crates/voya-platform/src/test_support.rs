@@ -122,3 +122,31 @@ impl ProcessRunner for RecordingRunner {
 fn event(action: &str, role: ProcessRole) -> String {
     format!("{action}:{role:?}")
 }
+
+/// A native TUN controller that always reports `Stopped` and accepts
+/// start/stop as no-ops. Shared so every test that only needs "the tunnel is
+/// not up" does not restate it.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct StoppedNativeTun;
+
+impl crate::tun::NativeTunController for StoppedNativeTun {
+    fn status(&self, backend: crate::tun::TunBackend) -> crate::tun::NativeTunStatus {
+        crate::tun::NativeTunStatus {
+            backend,
+            provider_state: crate::tun::NativeTunProviderState::Stopped,
+            component_ready: true,
+            message: None,
+        }
+    }
+
+    fn start(
+        &self,
+        _request: crate::tun::NativeTunStartRequest,
+    ) -> Result<(), crate::tun::NativeTunError> {
+        Ok(())
+    }
+
+    fn stop(&self, _backend: crate::tun::TunBackend) -> Result<(), crate::tun::NativeTunError> {
+        Ok(())
+    }
+}

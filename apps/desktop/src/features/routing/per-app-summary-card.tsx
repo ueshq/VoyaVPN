@@ -6,7 +6,7 @@ import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
 
 import { PageSurface } from "@/components/app-shell/page-section";
-import type { Routing_Serialize } from "@/ipc/bindings";
+import type { Routing_Serialize } from "@voya/contracts";
 
 import { PER_APP_MODE_LABEL_KEYS, readPerAppRule } from "@voya/features/routing/per-app-proxy-rule";
 import { useProcessRulesSupported } from "@voya/features/routing/use-process-rules-supported";

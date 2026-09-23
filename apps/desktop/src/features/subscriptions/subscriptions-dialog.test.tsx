@@ -2,16 +2,12 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SubscriptionsDialog } from "./subscriptions-dialog";
-import type { Subscription } from "@/ipc/bindings";
-const ipc = vi.hoisted(() => ({
+import type { Subscription } from "@voya/contracts";
+import { installFakeCommands } from "@voya/features/test/backend";
+const ipc = installFakeCommands({
   saveSubscription: vi.fn(),
   updateSubscriptions: vi.fn(),
-}));
-vi.mock("@/ipc/commands", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/ipc/commands")>()),
-  saveSubscription: ipc.saveSubscription,
-  updateSubscriptions: ipc.updateSubscriptions,
-}));
+});
 const source: Subscription = {
   id: "source",
   remarks: "My source",

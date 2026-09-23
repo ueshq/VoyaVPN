@@ -75,7 +75,11 @@ pub async fn set_tun_enabled<R: tauri::Runtime>(
     }
     // `enable_tun` is committed, and the settings bundle mirrors it; without
     // this a stale bundle would rewrite the flag back on the next Save-all.
-    emit_connection_mode_invalidation(&app, "tun-enabled-changed");
+    emit_invalidation(
+        &app,
+        "tun-enabled-changed",
+        invalidation::connection_mode_scopes(),
+    );
     restart_after_config_change(&app, &state, &config, ConfigChange::TUN).await;
 
     Ok(status)

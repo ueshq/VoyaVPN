@@ -8,16 +8,14 @@ use voya_app::config_mutation::{AppConfig, CommittedMutation};
 use voya_app::contract_map::{
     core_info_error, core_seed_install_result, import_profiles_to_contract, input_text_error,
     move_action_from_contract, profile_details_to_contract, profile_from_contract,
-    profile_summary_listing_to_contract, routing_from_contract, routing_to_contract,
-    rule_from_contract, runtime_status_event, runtime_status_response, simple_dns_from_contract,
-    simple_dns_to_contract, statistics_snapshot_to_contract, subscription_from_contract,
+    profile_summary_listing_to_contract, runtime_status_event, runtime_status_response,
+    simple_dns_from_contract, simple_dns_to_contract, subscription_from_contract,
     subscription_metadata_to_contract, subscription_to_contract, subscription_update_to_contract,
     system_proxy_status_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
 };
 use voya_app::input_safety;
 use voya_app::invalidation;
 use voya_app::profiles::ProfileManager;
-use voya_app::routing::RoutingManager;
 use voya_app::runtime::RuntimeManager;
 use voya_app::settings::save::SettingsSideEffectAdapter;
 use voya_app::subscriptions::SubscriptionManager;
@@ -102,8 +100,6 @@ pub use tray_actions::*;
 pub use tun::*;
 pub use updates::*;
 
-pub(crate) use post_commit::{
-    disconnect_removed_profile, emit_self_host_invalidation, emit_subscription_invalidation,
-};
+pub(crate) use post_commit::{disconnect_removed_profile, emit_invalidation};
 pub(crate) use runtime::core_flow;
 pub(crate) use support::{emit_app_log, emit_core_log, emit_or_warn, queue_log_line};

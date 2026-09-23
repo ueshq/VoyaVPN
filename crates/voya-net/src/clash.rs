@@ -530,8 +530,10 @@ mod tests {
             "/group/proxy/delay?url=https%3A%2F%2Fprobe.example%2Fgenerate_204%3Fa%3D1%26b%3D2&timeout=5000",
             json!({ "Tokyo [a1]": 120 }),
         );
-        let client =
-            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
+        let client = ClashRestClient::with_transport(
+            ClashApiEndpoint::loopback(9090),
+            Arc::new(transport.clone()),
+        );
 
         let proxies = client.get_proxies().await.expect("proxies");
         assert_eq!(proxies.proxies["proxy"].all, ["Tokyo [a1]", "Osaka [b2]"]);
@@ -564,8 +566,10 @@ mod tests {
             "/proxies/probe:node%2F1:00ff/delay?url=https%3A%2F%2Fprobe.example%2Fgenerate_204&timeout=4000",
             json!({ "delay": 142 }),
         );
-        let client =
-            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
+        let client = ClashRestClient::with_transport(
+            ClashApiEndpoint::loopback(9090),
+            Arc::new(transport.clone()),
+        );
 
         let delay = client
             .proxy_delay(
@@ -597,8 +601,10 @@ mod tests {
     async fn clash_rule_mode_uses_patch_configs() {
         let transport = MockTransport::default();
         transport.respond("/configs", Value::Null);
-        let client =
-            ClashRestClient::with_transport(ClashApiEndpoint::loopback(9090), transport.clone());
+        let client = ClashRestClient::with_transport(
+            ClashApiEndpoint::loopback(9090),
+            Arc::new(transport.clone()),
+        );
 
         client
             .set_rule_mode("direct")

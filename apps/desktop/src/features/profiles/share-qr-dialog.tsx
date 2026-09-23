@@ -18,7 +18,7 @@ import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { cn } from "@voya/ui/lib/utils";
 import { getErrorMessage } from "@voya/utils/error";
-import { generateQrCode } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { profileShareQrQueryKey } from "@voya/client/query-keys";
 
 type ShareQrDialogProps = {
@@ -49,7 +49,7 @@ export function ShareQrImage({
     enabled: enabled && content.trim().length > 0,
     gcTime: 0,
     placeholderData: keepPreviousData,
-    queryFn: () => generateQrCode(content),
+    queryFn: () => voyaCommands().generateQrCode(content),
     queryKey: profileShareQrQueryKey(content),
     refetchOnWindowFocus: false,
     retry: false,

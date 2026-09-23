@@ -18,9 +18,9 @@ import { Badge } from "@voya/ui/components/badge";
 import { Skeleton } from "@voya/ui/components/skeleton";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { proxyCloseConnection, proxyListConnections } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@/ipc/bindings";
+import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@voya/contracts";
 import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { queryKeys } from "@voya/client/query-keys";
 import { restoreFocus } from "@voya/ui/lib/focus";
@@ -83,7 +83,7 @@ export function ConnectionsPanel({
     gcTime: 0,
     queryFn: async () => {
       const before = useRuntimeEventStore.getState().proxyConnections;
-      const next = await proxyListConnections();
+      const next = await voyaCommands().proxyListConnections();
       // Seed the initial query as well as manual refreshes, but never replace a
       // newer stream event with a request that was already in flight.
       if (useRuntimeEventStore.getState().proxyConnections === before) {
@@ -157,7 +157,7 @@ export function ConnectionsPanel({
   }
   const closeMutation = useMutation({
     meta: { errorTitle: t("proxy.closeConnectionFailed") },
-    mutationFn: (id: string | null) => proxyCloseConnection(id),
+    mutationFn: (id: string | null) => voyaCommands().proxyCloseConnection(id),
     onSuccess: syncSnapshot,
   });
   async function refresh() {

@@ -1,6 +1,4 @@
-import { spawnSync } from "node:child_process";
-
-import { isCliEntrypoint } from "../lib/common.mjs";
+import { isCliEntrypoint, runOrExit } from "../lib/common.mjs";
 
 /**
  * The canonical gate list. AGENTS.md and README.md mirror this array, the CI
@@ -31,14 +29,9 @@ if (isCliEntrypoint(import.meta.url)) {
     console.log(`$ ${[command, ...args].join(" ")}`);
     const invocation = executable(command, args);
 
-    const result = spawnSync(invocation.file, invocation.args, {
+    runOrExit(invocation.file, invocation.args, {
       env: { ...process.env, CI: process.env.CI ?? "true" },
-      stdio: "inherit",
     });
-
-    if (result.status !== 0) {
-      process.exit(result.status ?? 1);
-    }
   }
 
   console.log("\nLocal verification checks passed.");

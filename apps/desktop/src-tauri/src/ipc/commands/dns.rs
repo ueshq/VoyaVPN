@@ -29,7 +29,7 @@ pub async fn save_dns_settings<R: tauri::Runtime>(
             Ok::<_, AppError>(())
         })
         .await?;
-    emit_dns_invalidation(&app, "dns-settings-saved");
+    emit_invalidation(&app, "dns-settings-saved", invalidation::dns_scopes());
 
     Ok(simple_dns_to_contract(saved))
 }

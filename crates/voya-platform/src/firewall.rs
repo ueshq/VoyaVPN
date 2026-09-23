@@ -99,14 +99,6 @@ impl FirewallService {
         self.run_elevated(&allow_script(program))
     }
 
-    /// Removes the rule, behind a UAC prompt. Absent is fine.
-    pub fn remove_rule(&self) -> Result<(), FirewallError> {
-        if !self.manages_firewall() {
-            return Err(FirewallError::Unsupported);
-        }
-        self.run_elevated(&remove_script())
-    }
-
     fn run_elevated(&self, script: &str) -> Result<(), FirewallError> {
         let output = self
             .runner
@@ -160,10 +152,6 @@ pub(crate) fn allow_script(program: &Path) -> String {
         powershell_literal(SELF_HOST_FIREWALL_RULE_NAME),
         powershell_literal(&program.to_string_lossy())
     )
-}
-
-pub(crate) fn remove_script() -> String {
-    format!("{} exit 0", remove_statement())
 }
 
 fn remove_statement() -> String {
@@ -245,13 +233,14 @@ mod tests {
 
     #[test]
     fn the_elevated_launcher_carries_the_script_encoded() {
-        let launcher = elevated_launcher(&remove_script());
+        let script = allow_script(Path::new("C:\\app\\sing-box.exe"));
+        let launcher = elevated_launcher(&script);
         assert!(launcher.contains("-Verb RunAs"));
         let encoded = launcher
             .split('\'')
             .max_by_key(|part| part.len())
             .expect("encoded script");
-        assert_eq!(decode_utf16_base64(encoded), remove_script());
+        assert_eq!(decode_utf16_base64(encoded), script);
     }
 
     #[test]

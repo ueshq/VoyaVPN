@@ -34,11 +34,11 @@ import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { formatTimeOfDay } from "@voya/utils/formatting";
-import { exportLogs } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { logLineText } from "@voya/client/messages";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { StoredLogLine } from "@voya/client/runtime-event-store";
-import type { LogLevel } from "@/ipc/bindings";
+import type { LogLevel } from "@voya/contracts";
 import { restoreFocus } from "@voya/ui/lib/focus";
 import { cn } from "@voya/ui/lib/utils";
 import { PageHeader } from "@/components/app-shell/page-section";
@@ -135,7 +135,7 @@ export function LogsPanel({
 
   async function exportShown() {
     try {
-      if (await exportLogs(shownText())) {
+      if (await voyaCommands().exportLogs(shownText())) {
         pushToast({
           description: t("panes.logs.exported"),
           severity: "info",

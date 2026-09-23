@@ -455,16 +455,9 @@ fn process_is_running(pid: u32) -> bool {
 
 #[cfg(unix)]
 fn unique_temp_root(name: &str) -> PathBuf {
-    std::env::temp_dir().join(format!(
-        "voyavpn-process-{name}-{}-{}",
-        std::process::id(),
-        monotonic_nanos()
-    ))
-}
-
-#[cfg(unix)]
-fn monotonic_nanos() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_nanos())
+    tempfile::Builder::new()
+        .prefix(&format!("voyavpn-process-{name}-"))
+        .tempdir()
+        .expect("process runner test temp dir")
+        .keep()
 }

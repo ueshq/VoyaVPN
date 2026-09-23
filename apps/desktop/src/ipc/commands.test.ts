@@ -1,143 +1,51 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-const commandMocks = vi.hoisted(() => {
-  const mocks = new Map<PropertyKey, ReturnType<typeof vi.fn>>();
-  return new Proxy({} as Record<string, ReturnType<typeof vi.fn>>, {
-    get(_target, property) {
-      let mock = mocks.get(property);
-      if (!mock) {
-        mock = vi.fn();
-        mocks.set(property, mock);
-      }
-      return mock;
-    },
-  });
+// `ipcCommands` is built from `Object.keys(bindings.commands)`, so the fake
+// binding must be a plain enumerable object — a get-only Proxy would wrap zero
+// commands and leave every `ipcCommands.*` call undefined.
+const commandMocks = vi.hoisted(() => ({} as Record<string, ReturnType<typeof vi.fn>>));
+
+vi.mock("@/ipc/bindings", async () => {
+  const { VOYA_COMMAND_WIRE } = await import("@voya/contracts/commands");
+  for (const key of Object.keys(VOYA_COMMAND_WIRE)) {
+    commandMocks[key] = vi.fn();
+  }
+  return { commands: commandMocks };
 });
 
-vi.mock("@/ipc/bindings", () => ({ commands: commandMocks }));
-
-import type { AppError, AppErrorKind } from "@/ipc/bindings";
-import * as ipc from "@/ipc/commands";
+import type { AppError, AppErrorKind } from "@voya/contracts";
+import { commands as rawCommands } from "@/ipc/bindings";
 import { IpcCommandError, appErrorOfKind } from "@voya/client/errors";
-
-const wrapperNames = [
-  "loadUiPreferences",
-  "loadAppSettings",
-  "getSettingsApplyStatus",
-  "applyPendingSettings",
-  "saveAppSettings",
-  "generateQrCode",
-  "scanScreenQr",
-  "decodeQrImage",
-  "readClipboardText",
-  "setLogStreaming",
-  "connectActiveProfile",
-  "disconnectCore",
-  "restartCore",
-  "runtimeStatus",
-  "systemProxyStatus",
-  "connectionModeStatus",
-  "setConnectionMode",
-  "checkConnectionIp",
-  "resolveCloseRequest",
-  "tunStatus",
-  "tunProviderDiagnostics",
-  "tunRequestElevation",
-  "loadDnsSettings",
-  "saveDnsSettings",
-  "listProfileSummaries",
-  "getProfile",
-  "saveProfile",
-  "deleteProfiles",
-  "exportProfileShareLinks",
-  "setActiveProfile",
-  "listPolicyGroups",
-  "savePolicyGroup",
-  "deletePolicyGroups",
-  "setActivePolicyGroup",
-  "selectPolicyGroupMember",
-  "policyGroupRuntime",
-  "testPolicyGroupDelay",
-  "moveProfile",
-  "listSubscriptions",
-  "listSubscriptionMetadata",
-  "saveSubscription",
-  "deleteSubscriptions",
-  "importProfilesFromText",
-  "updateSubscriptions",
-  "listProcessCandidates",
-  "listRoutings",
-  "saveRoutingRule",
-  "deleteRoutingRules",
-  "moveRoutingRule",
-  "resetRoutingRules",
-  "proxyListConnections",
-  "proxyCloseConnection",
-  "proxySetTrafficMode",
-  "proxyStartMonitor",
-  "proxyStopMonitor",
-  "runSpeedtest",
-  "cancelSpeedtest",
-  "speedtestStatus",
-  "appUpdateStatus",
-  "updateGeoAssets",
-  "updateSrsAssets",
-  "installCoreSeed",
-  "getSelfHostState",
-  "saveSelfHostConfig",
-  "setSelfHostEnabled",
-  "rotateSelfHostCredentials",
-  "getSelfHostStats",
-  "runSelfHostEnvironmentCheck",
-  "applySelfHostFirewallRule",
-  "getWindowChromeConfig",
-  "setWindowAcrylic",
-] as const;
+import { ipcCommands } from "@/ipc/commands";
 
 describe("typed IPC command facade", () => {
-  beforeEach(() => {
-    for (const name of wrapperNames) {
-      commandMocks[name].mockReset();
+  it("wraps every generated binding command", () => {
+    expect(Object.keys(ipcCommands).sort()).toEqual(Object.keys(rawCommands).sort());
+    for (const name of Object.keys(rawCommands) as (keyof typeof rawCommands)[]) {
+      expect(typeof ipcCommands[name as keyof typeof ipcCommands]).toBe("function");
     }
   });
 
-  it("unwraps every generated command through the public facade", async () => {
+  it("unwraps a command result and forwards arguments positionally", async () => {
     const marker = { source: "backend" };
+    commandMocks.getProfile.mockResolvedValueOnce({ data: marker, status: "ok" });
 
-    for (const name of wrapperNames) {
-      commandMocks[name].mockResolvedValueOnce({ data: marker, status: "ok" });
-      const wrapper = ipc[name] as (...args: unknown[]) => Promise<unknown>;
-      const result = await wrapper();
-      expect(result).toBe(marker);
-      expect(commandMocks[name]).toHaveBeenCalledOnce();
-    }
+    await expect(ipcCommands.getProfile("index-1")).resolves.toBe(marker);
+    expect(commandMocks.getProfile).toHaveBeenCalledWith("index-1");
   });
 
-  // 100% coverage on this module proves every wrapper is reachable, not that it
-  // forwards its arguments: several wrappers take multiple same-typed positional
-  // parameters that tsc cannot tell apart, so a transposition would pass the
-  // loop above untouched.
-  it.each(forwardingCases())(
-    "forwards %s to the generated binding positionally",
-    async (name, args, expected) => {
-      commandMocks[name].mockResolvedValueOnce({ data: null, status: "ok" });
-      const wrapper = ipc[name] as (...wrapperArgs: unknown[]) => Promise<unknown>;
+  it("propagates an underlying rejection unchanged", async () => {
+    const failure = new Error("IPC transport unavailable");
+    commandMocks.getProfile.mockRejectedValueOnce(failure);
 
-      await wrapper(...args);
+    await expect(ipcCommands.getProfile("index-1")).rejects.toBe(failure);
+  });
 
-      expect(commandMocks[name]).toHaveBeenCalledWith(...expected);
-    },
-  );
-
-  it.each(wrapperNames)(
-    "propagates an underlying rejection from %s unchanged",
-    async (name) => {
-      const failure = new Error("IPC transport unavailable");
-      commandMocks[name].mockRejectedValueOnce(failure);
-      const wrapper = ipc[name] as (...args: unknown[]) => Promise<unknown>;
-      await expect(wrapper()).rejects.toBe(failure);
-    },
-  );
+  it("forwards multi-argument commands positionally", async () => {
+    commandMocks.decodeQrImage.mockResolvedValueOnce({ data: null, status: "ok" });
+    await ipcCommands.decodeQrImage(640, 480, "AAAA");
+    expect(commandMocks.decodeQrImage).toHaveBeenCalledWith(640, 480, "AAAA");
+  });
 
   it("narrows a rejected command to one backend error kind", () => {
     const [validation, notFound] = appErrors().map(({ error }) => new IpcCommandError(error));
@@ -153,7 +61,7 @@ describe("typed IPC command facade", () => {
   it.each(appErrors())("preserves and formats the $label backend error", async ({ error }) => {
     commandMocks.loadUiPreferences.mockResolvedValueOnce({ error, status: "error" });
 
-    const rejection = ipc.loadUiPreferences();
+    const rejection = ipcCommands.loadUiPreferences();
     await expect(rejection).rejects.toThrow(error.message);
     await expect(rejection).rejects.toMatchObject({
       appError: error,
@@ -161,40 +69,6 @@ describe("typed IPC command facade", () => {
     });
   });
 });
-
-type WrapperName = (typeof wrapperNames)[number];
-
-/** `[wrapper, call arguments, arguments the generated binding must receive]`. */
-function forwardingCases(): Array<[WrapperName, unknown[], unknown[]]> {
-  const rule = { id: "rule-1", remarks: "Managed" };
-
-  return [
-    ["getProfile", ["index-1"], ["index-1"]],
-    ["proxyCloseConnection", [null], [null]],
-    ["updateSubscriptions", ["sub-1", false, "http://proxy.test"], ["sub-1", false, "http://proxy.test"]],
-    ["importProfilesFromText", ["vmess://link", null], ["vmess://link", null]],
-    ["setConnectionMode", ["vpn"], ["vpn"]],
-    // Same-typed positional parameters: a transposition here is invisible to tsc.
-    ["moveProfile", ["sub-1", "index-1", "up", null], ["sub-1", "index-1", "up", null]],
-    ["moveProfile", ["sub-1", "index-1", "position", 3], ["sub-1", "index-1", "position", 3]],
-    ["moveRoutingRule", ["routing-1", "rule-1", "top", null], ["routing-1", "rule-1", "top", null]],
-    ["moveRoutingRule", ["routing-1", "rule-1", "position", 2], ["routing-1", "rule-1", "position", 2]],
-    ["deleteRoutingRules", ["routing-1", ["rule-1", "rule-2"]], ["routing-1", ["rule-1", "rule-2"]]],
-    ["saveRoutingRule", ["routing-1", rule], ["routing-1", rule]],
-    ["setActiveProfile", ["index-1"], ["index-1"]],
-    ["selectPolicyGroupMember", ["group-1", "node-1"], ["group-1", "node-1"]],
-    ["resetRoutingRules", ["routing-1"], ["routing-1"]],
-    ["deleteProfiles", [["index-1"]], [["index-1"]]],
-    ["deleteSubscriptions", [["sub-1"]], [["sub-1"]]],
-    ["installCoreSeed", [], []],
-    ["setSelfHostEnabled", [true], [true]],
-    ["setWindowAcrylic", [true], [true]],
-    ["generateQrCode", ["vmess://link"], ["vmess://link"]],
-    // Width and height share a type: a swap would decode a transposed image.
-    ["decodeQrImage", [640, 480, "AAAA"], [640, 480, "AAAA"]],
-    ["setLogStreaming", [false], [false]],
-  ];
-}
 
 /**
  * One case per `AppErrorKind`, so the message accessor is exercised for the

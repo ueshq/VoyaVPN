@@ -4,7 +4,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { runRuntimeAction, runtimeBusy } from "@voya/client/runtime-action";
-import type { ProfileSummaryListing } from "@/ipc/bindings";
+import type { ProfileSummaryListing } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { coreStateOf, useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { SHELL_TABS, useShellStore } from "@/stores/shell-store";

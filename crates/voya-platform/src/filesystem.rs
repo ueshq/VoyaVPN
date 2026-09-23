@@ -137,9 +137,6 @@ pub fn stage_private_files(work_dir: &Path, files: &[(&Path, &str)]) -> io::Resu
 #[cfg(test)]
 mod tests {
     #[cfg(unix)]
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    #[cfg(unix)]
     use super::*;
 
     #[cfg(unix)]
@@ -233,9 +230,11 @@ mod tests {
 
     #[cfg(unix)]
     fn unique_temp_path(name: &str) -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |duration| duration.as_nanos());
-        std::env::temp_dir().join(format!("voyavpn-{name}-{}-{nonce}", std::process::id()))
+        let dir = tempfile::Builder::new()
+            .prefix(&format!("voyavpn-{name}-"))
+            .tempdir()
+            .expect("filesystem test temp dir")
+            .keep();
+        dir.join("entry")
     }
 }

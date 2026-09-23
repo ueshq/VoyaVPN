@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const ipcMocks = vi.hoisted(() => ({
+const ipcMocks = installFakeCommands({
   decodeQrImage: vi.fn(),
-}));
+});
 
-vi.mock("@/ipc/commands", () => ipcMocks);
 
 import { bytesToBase64, fitWithin, rgbaToLuma, scanQrBlob } from "./qr-scanner";
+import { installFakeCommands } from "@voya/features/test/backend";
 
 let closeBitmap: ReturnType<typeof vi.fn>;
 

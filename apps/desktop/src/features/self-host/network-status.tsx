@@ -8,7 +8,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 import { formatTimeOfDay } from "@voya/utils/formatting";
 
-import type { SelfHostEnvironmentReport, SelfHostFamilyReport, SelfHostState } from "@/ipc/bindings";
+import type { SelfHostEnvironmentReport, SelfHostFamilyReport, SelfHostState } from "@voya/contracts";
 
 import {
   ADDRESS_KIND_KEYS,

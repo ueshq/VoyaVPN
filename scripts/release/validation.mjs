@@ -1,12 +1,14 @@
-import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { stat } from "node:fs/promises";
+import { basename, dirname, join, relative } from "node:path";
+
+import { sha256File, sha256Text, walkFiles } from "../lib/fs.mjs";
 
 // Single source of truth for the release gate's shared validators. Every
 // release command imports from here: when host, placeholder, digest or updater
 // payload rules were copied per command they drifted, and a stable gate that
 // means something different in each file is not a gate.
+
+export { sha256File, sha256Text };
 
 const placeholderPattern =
   /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i;
@@ -243,35 +245,7 @@ export async function walkArtifactManifests(root) {
     return basename(root) === "artifact-manifest.json" ? [root] : [];
   }
 
-  const manifests = [];
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    // Symlinks are skipped so a link planted in an artifact directory cannot
-    // pull a manifest from outside the downloaded release tree.
-    if (entry.isSymbolicLink()) {
-      continue;
-    }
-
-    const path = resolve(root, entry.name);
-    if (entry.isDirectory()) {
-      manifests.push(...(await walkArtifactManifests(path)));
-    } else if (entry.isFile() && entry.name === "artifact-manifest.json") {
-      manifests.push(path);
-    }
-  }
-  return manifests.sort((left, right) => left.localeCompare(right));
-}
-
-export function sha256Text(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-export async function sha256File(path) {
-  const hash = createHash("sha256");
-  await new Promise((resolvePromise, rejectPromise) => {
-    const stream = createReadStream(path);
-    stream.on("data", (chunk) => hash.update(chunk));
-    stream.on("error", rejectPromise);
-    stream.on("end", resolvePromise);
-  });
-  return hash.digest("hex");
+  return walkFiles(root, { match: (name) => name === "artifact-manifest.json" }).then((paths) =>
+    [...paths].sort((left, right) => left.localeCompare(right)),
+  );
 }

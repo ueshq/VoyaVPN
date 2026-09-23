@@ -257,9 +257,7 @@ where
 {
     emit_event(
         app,
-        TransientStreamEvent::Statistics(statistics_snapshot_to_contract(
-            voya_app::statistics::StatisticsSnapshot::zero(),
-        )),
+        TransientStreamEvent::Statistics(voya_app::statistics::zero_statistics_snapshot()),
     )
 }
 

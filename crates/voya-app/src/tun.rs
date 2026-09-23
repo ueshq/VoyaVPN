@@ -131,6 +131,8 @@ impl TunManager {
         self
     }
 
+    /// Test seam for the macOS provider-registration probe.
+    #[cfg(test)]
     #[must_use]
     pub fn with_provider_resolver(
         mut self,

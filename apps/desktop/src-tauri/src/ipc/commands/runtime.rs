@@ -9,10 +9,7 @@
 
 use std::sync::Arc;
 
-use voya_app::{
-    contract_map::{core_flow_log_level, core_flow_notice_level, core_state_to_contract},
-    core_flow::{CoreFlow, CoreFlowLevel, CoreFlowSink, CoreFlowState},
-};
+use voya_app::core_flow::{CoreFlow, CoreFlowSink};
 
 use super::{post_commit::*, support::*, *};
 
@@ -96,22 +93,17 @@ impl<R> CoreFlowSink for TauriCoreFlowSink<R>
 where
     R: tauri::Runtime + 'static,
 {
-    fn log(&self, level: CoreFlowLevel, code: LogCode, detail: Option<&str>) {
-        emit_app_log(&self.app, core_flow_log_level(level), code, detail);
+    fn log(&self, level: LogLevel, code: LogCode, detail: Option<&str>) {
+        emit_app_log(&self.app, level, code, detail);
     }
 
     fn core_state(
         &self,
-        state: CoreFlowState,
+        state: CoreState,
         active_profile_id: Option<String>,
         snapshot: Option<&SupervisorSnapshot>,
     ) {
-        if let Err(error) = emit_core_state(
-            &self.app,
-            core_state_to_contract(state),
-            active_profile_id,
-            snapshot,
-        ) {
+        if let Err(error) = emit_core_state(&self.app, state, active_profile_id, snapshot) {
             tracing::warn!(?error, "failed to emit core state");
         }
         if let Err(error) = crate::refresh_tray_menu(&self.app) {
@@ -137,7 +129,7 @@ where
         }
     }
 
-    fn notice(&self, level: CoreFlowLevel, code: NoticeCode, detail: &str) {
-        report_post_commit_error(&self.app, code, detail, core_flow_notice_level(level));
+    fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
+        report_post_commit_error(&self.app, code, detail, level);
     }
 }

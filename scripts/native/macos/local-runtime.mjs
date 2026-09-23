@@ -1,5 +1,4 @@
-import { commandFailure, validateTiming } from "../../lib/common.mjs";
-import { spawnSync } from "node:child_process";
+import { capture, commandFailure, validateTiming } from "../../lib/common.mjs";
 import { appBundleIdentifier as defaultProviderId } from "./tunnel-layout.mjs";
 
 const packetTunnelExecutable = "VoyaPacketTunnel";
@@ -22,7 +21,7 @@ function escapeRegExp(value) {
 export function defaultIsProcessRunning(executable) {
   const program = "/usr/bin/pgrep";
   const args = ["-x", executable];
-  const result = spawnSync(program, args, { encoding: "utf8" });
+  const result = capture(program, args);
   if (result.error) {
     throw result.error;
   }
@@ -38,7 +37,7 @@ export function defaultIsProcessRunning(executable) {
 function defaultListConnections() {
   const program = "/usr/sbin/scutil";
   const args = ["--nc", "list"];
-  const result = spawnSync(program, args, { encoding: "utf8" });
+  const result = capture(program, args);
   if (result.error) {
     throw result.error;
   }
@@ -51,7 +50,7 @@ function defaultListConnections() {
 function defaultStopConnection(id) {
   const program = "/usr/sbin/scutil";
   const args = ["--nc", "stop", id];
-  const result = spawnSync(program, args, { encoding: "utf8" });
+  const result = capture(program, args);
   if (result.error) {
     throw result.error;
   }

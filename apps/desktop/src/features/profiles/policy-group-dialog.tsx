@@ -16,9 +16,9 @@ import {
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { SelectField, TextField } from "@voya/ui/components/form-fields";
 import { Spinner } from "@voya/ui/components/spinner";
-import type { PolicyGroup, ProfileSummaryEntry, Subscription } from "@/ipc/bindings";
+import type { PolicyGroup, ProfileSummaryEntry, Subscription } from "@voya/contracts";
 import { VirtualScrollList } from "@/components/virtual-scroll-list";
-import { savePolicyGroup } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
 
 import {
@@ -109,7 +109,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
   async function save() {
     if (!canSave || pending) return;
     await submit(async () => {
-      await savePolicyGroup({
+      await voyaCommands().savePolicyGroup({
         ...form,
         name: form.name.trim(),
         testUrl: form.testUrl?.trim() || null,

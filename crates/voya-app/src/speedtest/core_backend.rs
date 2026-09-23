@@ -1,10 +1,11 @@
 //! The throwaway cores that back profile speed tests while disconnected.
 //!
-//! Split in two along the one line that is not portable. [`LauncherCoreBackend`]
-//! generates the config, waits for the SOCKS ports and tears the core down; a
-//! [`ProbeCoreLauncher`] starts it. [`ProcessProbeCoreLauncher`] is the desktop
-//! one, and the mobile host's is a callback into Libbox running in the app
-//! process, because a phone may not spawn a child at all.
+//! [`ProcessProbeCoreLauncher`] is the desktop's launcher: a sing-box child
+//! process per probe run. A phone may not spawn a child at all, so its host
+//! runs Libbox in the app process and supplies its own [`ProbeCoreLauncher`].
+//! Everything around starting a core — generating the config, waiting for the
+//! SOCKS ports, tearing the core down — is portable and lives in
+//! `SpeedtestManager`.
 //!
 //! Starting a probe core writes a config file, may copy the packaged seed
 //! binary and spawns a child process — all blocking syscalls — so the sequence
@@ -31,77 +32,6 @@ const SPEEDTEST_READY_PER_ENTRY: Duration = Duration::from_millis(5);
 const SPEEDTEST_READY_TIMEOUT_MAX: Duration = Duration::from_secs(15);
 const SPEEDTEST_READY_INTERVAL: Duration = Duration::from_millis(50);
 const SPEEDTEST_CONFIG_PREFIX: &str = "configTest";
-
-/// The portable half: config, readiness and teardown around a launcher.
-///
-/// Everything a probe run needs of a core except starting it, which is what
-/// [`ProbeCoreLauncher`] exists for.
-pub struct LauncherCoreBackend {
-    launcher: Arc<dyn ProbeCoreLauncher>,
-}
-
-impl LauncherCoreBackend {
-    #[must_use]
-    pub fn new(launcher: Arc<dyn ProbeCoreLauncher>) -> Self {
-        Self { launcher }
-    }
-}
-
-impl SpeedtestCoreBackend for LauncherCoreBackend {
-    fn start(
-        &self,
-        entries: Vec<SpeedtestConfigEntry>,
-        cancel: CancellationFlag,
-    ) -> BoxFuture<'static, Result<Box<dyn SpeedtestCoreSession>>> {
-        let launcher = Arc::clone(&self.launcher);
-        Box::pin(async move {
-            check_cancelled(&cancel)?;
-            let ports = entries.iter().map(|entry| entry.port).collect::<Vec<_>>();
-            let config_json = generate_singbox_speedtest_config_json(&entries)?;
-            let core = task::spawn_blocking(move || launcher.start(config_json))
-                .await
-                .map_err(background_task_failed)??;
-            // Bind the session before waiting so an unready core is still torn
-            // down by the `?` below.
-            let session = LauncherCoreSession { core: Some(core) };
-            wait_for_speedtest_ports(&ports, &cancel).await?;
-
-            Ok(Box::new(session) as Box<dyn SpeedtestCoreSession>)
-        })
-    }
-
-    fn stop_all(&self) {
-        self.launcher.stop_all();
-    }
-}
-
-struct LauncherCoreSession {
-    core: Option<Box<dyn ProbeCore>>,
-}
-
-impl SpeedtestCoreSession for LauncherCoreSession {
-    fn close(mut self: Box<Self>) -> BoxFuture<'static, ()> {
-        let core = self.core.take();
-        Box::pin(async move {
-            let Some(core) = core else { return };
-            // Stopping blocks until the child has been killed and waited, so it
-            // must not run on a Tokio worker.
-            if let Err(error) = task::spawn_blocking(move || core.stop()).await {
-                tracing::warn!(?error, "failed to close speedtest core session");
-            }
-        })
-    }
-}
-
-impl Drop for LauncherCoreSession {
-    fn drop(&mut self) {
-        // Best-effort fallback for panics and `?` returns; the happy path goes
-        // through `close`, which does the same work off the Tokio workers.
-        if let Some(core) = self.core.take() {
-            core.stop();
-        }
-    }
-}
 
 /// The desktop's launcher: a sing-box child process per probe run.
 #[derive(Clone)]
@@ -357,7 +287,10 @@ fn local_port_available(port: u16) -> bool {
     TcpListener::bind((LOOPBACK_ADDR, port)).is_ok()
 }
 
-async fn wait_for_speedtest_ports(ports: &[i32], cancel: &CancellationFlag) -> Result<()> {
+pub(super) async fn wait_for_speedtest_ports(
+    ports: &[i32],
+    cancel: &CancellationFlag,
+) -> Result<()> {
     let mut socks_ports = Vec::with_capacity(ports.len());
     for port in ports {
         socks_ports
@@ -401,7 +334,7 @@ fn speedtest_ready_timeout(entry_count: usize) -> Duration {
         .min(SPEEDTEST_READY_TIMEOUT_MAX)
 }
 
-fn background_task_failed(error: task::JoinError) -> SpeedtestError {
+pub(super) fn background_task_failed(error: task::JoinError) -> SpeedtestError {
     SpeedtestError::BackgroundTask(error.to_string())
 }
 
@@ -418,6 +351,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::speedtest::start_probe_core_page;
 
     fn test_paths() -> AppPaths {
         AppPaths::new(
@@ -488,13 +422,12 @@ mod tests {
         let paths = test_paths();
         let (seed_root, _) = seed_core_binary(&paths);
         let runner = RecordingRunner::default();
-        let backend = LauncherCoreBackend::new(Arc::new(
+        let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(
             ProcessProbeCoreLauncher::new(paths.clone(), Some(seed_root), Arc::new(runner.clone()))
                 .with_target_os(TargetOs::Linux),
-        ));
+        );
 
-        backend
-            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
+        start_probe_core_page(&launcher, &[], &Arc::new(AtomicBool::new(false)))
             .await
             .expect("speedtest test operation should succeed");
 
@@ -512,13 +445,12 @@ mod tests {
         let paths = test_paths();
         let (seed_root, seed_exe) = seed_core_binary(&paths);
         let runner = RecordingRunner::default();
-        let backend = LauncherCoreBackend::new(Arc::new(
+        let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(
             ProcessProbeCoreLauncher::new(paths.clone(), Some(seed_root), Arc::new(runner.clone()))
                 .with_target_os(TargetOs::Macos),
-        ));
+        );
 
-        backend
-            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
+        start_probe_core_page(&launcher, &[], &Arc::new(AtomicBool::new(false)))
             .await
             .expect("speedtest test operation should succeed");
 
@@ -535,21 +467,20 @@ mod tests {
         let paths = test_paths();
         let (seed_root, _) = seed_core_binary(&paths);
         let runner = RecordingRunner::default();
-        let backend = LauncherCoreBackend::new(Arc::new(ProcessProbeCoreLauncher::new(
+        let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(ProcessProbeCoreLauncher::new(
             paths.clone(),
             Some(seed_root),
             Arc::new(runner.clone()),
-        )));
+        ));
 
-        let session = backend
-            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
+        let session = start_probe_core_page(&launcher, &[], &Arc::new(AtomicBool::new(false)))
             .await
             .expect("speedtest test operation should succeed");
         assert_eq!(runner.spawns().len(), 1, "one probe core was spawned");
         assert!(runner.stops().is_empty(), "a live session is not stopped");
         assert_eq!(speedtest_config_count(&paths), 1);
 
-        backend.stop_all();
+        launcher.stop_all();
 
         assert_eq!(runner.stops().len(), 1, "every live probe core is reaped");
         assert_eq!(
@@ -565,14 +496,13 @@ mod tests {
         let paths = test_paths();
         let (seed_root, _) = seed_core_binary(&paths);
         let runner = RecordingRunner::default();
-        let backend = LauncherCoreBackend::new(Arc::new(ProcessProbeCoreLauncher::new(
+        let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(ProcessProbeCoreLauncher::new(
             paths.clone(),
             Some(seed_root),
             Arc::new(runner.clone()),
-        )));
+        ));
 
-        backend
-            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
+        start_probe_core_page(&launcher, &[], &Arc::new(AtomicBool::new(false)))
             .await
             .expect("speedtest test operation should succeed")
             .close()
@@ -581,7 +511,7 @@ mod tests {
         assert_eq!(runner.stops().len(), 1, "close stops the probe core");
         assert_eq!(speedtest_config_count(&paths), 0);
 
-        backend.stop_all();
+        launcher.stop_all();
 
         assert_eq!(
             runner.stops().len(),
@@ -594,21 +524,19 @@ mod tests {
     async fn probe_core_launcher_removes_config_when_spawn_fails() {
         let paths = test_paths();
         let (seed_root, _) = seed_core_binary(&paths);
-        let backend = LauncherCoreBackend::new(Arc::new(ProcessProbeCoreLauncher::new(
+        let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(ProcessProbeCoreLauncher::new(
             paths.clone(),
             Some(seed_root),
             Arc::new(FailingRunner),
-        )));
+        ));
 
-        // `Box<dyn SpeedtestCoreSession>` is not `Debug`, so unwrap the error by
+        // `ProbeCoreSession` is not `Debug`, so unwrap the error by
         // hand rather than through `expect_err`.
-        let error = match backend
-            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
-            .await
-        {
-            Ok(_) => panic!("a failing spawn must surface as an error"),
-            Err(error) => error,
-        };
+        let error =
+            match start_probe_core_page(&launcher, &[], &Arc::new(AtomicBool::new(false))).await {
+                Ok(_) => panic!("a failing spawn must surface as an error"),
+                Err(error) => error,
+            };
 
         assert!(matches!(error, SpeedtestError::Process(_)));
         assert_eq!(
@@ -651,16 +579,15 @@ mod tests {
 
     #[tokio::test]
     async fn launcher_core_backend_hands_the_generated_config_to_the_launcher() {
-        let launcher = RecordingLauncher::default();
-        let backend = LauncherCoreBackend::new(Arc::new(launcher.clone()));
+        let handle = RecordingLauncher::default();
+        let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(handle.clone());
 
-        let session = backend
-            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
+        let session = start_probe_core_page(&launcher, &[], &Arc::new(AtomicBool::new(false)))
             .await
             .expect("speedtest test operation should succeed");
 
         {
-            let started = lock_ignoring_poison(&launcher.started);
+            let started = lock_ignoring_poison(&handle.started);
             assert_eq!(started.len(), 1, "one core per run");
             // The launcher receives sing-box JSON, not the entries: a host that
             // runs Libbox in-process has nowhere to put a file.
@@ -672,13 +599,13 @@ mod tests {
         }
 
         session.close().await;
-        assert_eq!(*lock_ignoring_poison(&launcher.stopped), 1);
+        assert_eq!(*lock_ignoring_poison(&handle.stopped), 1);
     }
 
     #[tokio::test]
     async fn launcher_core_backend_stops_a_core_the_run_abandoned() {
-        let launcher = RecordingLauncher::default();
-        let backend = LauncherCoreBackend::new(Arc::new(launcher.clone()));
+        let handle = RecordingLauncher::default();
+        let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(handle.clone());
 
         // A port no SOCKS listener can ever answer on. The session is bound
         // before the readiness wait, so the core that did start is still torn
@@ -688,32 +615,30 @@ mod tests {
             port: -1,
             context: CoreConfigContext::default(),
         }];
-        let error = match backend
-            .start(entries, Arc::new(AtomicBool::new(false)))
-            .await
-        {
-            Ok(_) => panic!("an unusable port must not produce a session"),
-            Err(error) => error,
-        };
+        let error =
+            match start_probe_core_page(&launcher, &entries, &Arc::new(AtomicBool::new(false)))
+                .await
+            {
+                Ok(_) => panic!("an unusable port must not produce a session"),
+                Err(error) => error,
+            };
 
         assert!(matches!(error, SpeedtestError::InvalidSocksPort(-1)));
-        assert_eq!(*lock_ignoring_poison(&launcher.stopped), 1);
+        assert_eq!(*lock_ignoring_poison(&handle.stopped), 1);
     }
 
     #[tokio::test]
     async fn launcher_core_backend_surfaces_a_launcher_failure() {
-        let backend = LauncherCoreBackend::new(Arc::new(RecordingLauncher {
+        let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(RecordingLauncher {
             fail: true,
             ..RecordingLauncher::default()
-        }));
+        });
 
-        let error = match backend
-            .start(Vec::new(), Arc::new(AtomicBool::new(false)))
-            .await
-        {
-            Ok(_) => panic!("a failing launcher must surface as an error"),
-            Err(error) => error,
-        };
+        let error =
+            match start_probe_core_page(&launcher, &[], &Arc::new(AtomicBool::new(false))).await {
+                Ok(_) => panic!("a failing launcher must surface as an error"),
+                Err(error) => error,
+            };
 
         assert!(matches!(error, SpeedtestError::EmptySelection));
     }

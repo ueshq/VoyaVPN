@@ -1,8 +1,8 @@
 import { vi, type Mock } from "vitest";
-import type { AppSettingsV1, DnsSettings, VoyaCommands } from "@voya/contracts";
+import type { AppSettingsV1, DnsSettings } from "@voya/contracts";
 import { appErrorOfKind, IpcCommandError } from "@voya/client/errors";
-import { setVoyaCommands } from "@voya/client/transport";
 
+import { installFakeCommands } from "../test/backend";
 import { makeAppSettings } from "./app-settings.test-fixture";
 import { cloneJson } from "./settings-draft";
 
@@ -99,7 +99,7 @@ export function serverSettings() {
  */
 export function installSettingsBackend() {
   resetSettingsBackend();
-  setVoyaCommands(settingsIpc as unknown as VoyaCommands);
+  installFakeCommands(settingsIpc as unknown as Record<string, unknown>);
 }
 export function deferred<T>() {
   let resolve!: (value: T) => void;

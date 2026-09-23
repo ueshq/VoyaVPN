@@ -22,13 +22,7 @@ import { Input } from "@voya/ui/components/input";
 import { Label } from "@voya/ui/components/label";
 import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segmented-control";
 import { Spinner } from "@voya/ui/components/spinner";
-import {
-  deleteRoutingRules,
-  listProcessCandidates,
-  listRoutings,
-  moveRoutingRule,
-  saveRoutingRule,
-} from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { VirtualScrollList } from "@/components/virtual-scroll-list";
 import { useConnectionModeStatus } from "@voya/features/routing/use-connection-mode-status";
 import { queryKeys } from "@voya/client/query-keys";
@@ -78,12 +72,12 @@ export function PerAppProxyDialog({
 
   const routingsQuery = useQuery({
     enabled: open,
-    queryFn: listRoutings,
+    queryFn: () => voyaCommands().listRoutings(),
     queryKey: queryKeys.routings,
   });
   const candidatesQuery = useQuery({
     enabled: open,
-    queryFn: listProcessCandidates,
+    queryFn: () => voyaCommands().listProcessCandidates(),
     queryKey: queryKeys.processCandidates,
     staleTime: 30_000,
   });
@@ -155,16 +149,16 @@ export function PerAppProxyDialog({
           // Turning it off keeps the chosen apps on a disabled rule, so turning
           // it back on does not mean picking them all again.
           if (existing && processes.length > 0) {
-            await saveRoutingRule(activeRouting.id, {
+            await voyaCommands().saveRoutingRule(activeRouting.id, {
               ...existing,
               enabled: false,
               process: processes,
             });
           } else if (existing) {
-            await deleteRoutingRules(activeRouting.id, [existing.id]);
+            await voyaCommands().deleteRoutingRules(activeRouting.id, [existing.id]);
           }
         } else {
-          const saved = await saveRoutingRule(
+          const saved = await voyaCommands().saveRoutingRule(
             activeRouting.id,
             buildPerAppRule(mode, processes, existing),
           );
@@ -175,7 +169,7 @@ export function PerAppProxyDialog({
           // per-app-proxy-rule.ts.
           const savedRule = findPerAppRule(saved);
           if (savedRule && saved.rules[0]?.id !== savedRule.id) {
-            await moveRoutingRule(saved.id, savedRule.id, "top", null);
+            await voyaCommands().moveRoutingRule(saved.id, savedRule.id, "top", null);
           }
         }
         // The routing-rule commands emit the `routings` invalidation.

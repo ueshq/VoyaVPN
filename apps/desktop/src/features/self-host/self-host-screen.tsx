@@ -12,7 +12,7 @@ import {
   PageSurface,
   PageTitle,
 } from "@/components/app-shell/page-section";
-import type { SelfHostState } from "@/ipc/bindings";
+import type { SelfHostState } from "@voya/contracts";
 
 import { ActionTile } from "./action-tile";
 import { HostingCard } from "./hosting-card";

@@ -7,7 +7,7 @@ import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Spinner } from "@voya/ui/components/spinner";
 import { formatDelay } from "@voya/utils/formatting";
-import { listPolicyGroups, selectPolicyGroupMember } from "@/ipc/commands";
+import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
@@ -33,7 +33,7 @@ export function ProxyGroupsPanel() {
   );
   const setActiveTab = useShellStore((state) => state.setActiveTab);
   const groupsQuery = useQuery({
-    queryFn: listPolicyGroups,
+    queryFn: () => voyaCommands().listPolicyGroups(),
     queryKey: queryKeys.policyGroups,
   });
   const active = groupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
@@ -90,7 +90,7 @@ export function ProxyGroupsPanel() {
   async function choose(profileId: string) {
     // The member switches at once; a failure puts the previous one back.
     await memberSwitch(group.id, profileId, () =>
-      runWithToast(() => selectPolicyGroupMember(group.id, profileId)),
+      runWithToast(() => voyaCommands().selectPolicyGroupMember(group.id, profileId)),
     );
   }
 

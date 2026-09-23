@@ -12,18 +12,11 @@ import { afterEach, vi } from "vitest";
 
 import { App } from "./App";
 import { changeLocale } from "@voya/i18n";
-import {
-  proxyCloseConnection,
-  proxyListConnections,
-  proxyStartMonitor,
-  proxyStopMonitor,
-  loadUiPreferences,
-  getWindowChromeConfig,
-} from "@/ipc/commands";
+import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 import type {
   ProxyConnectionItem,
   ProxyConnectionsSnapshot,
-} from "@/ipc/bindings";
+} from "@voya/contracts";
 import type {
   RuntimeEventState,
   RuntimeProxyMonitorStatus,
@@ -151,7 +144,7 @@ const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
   };
 });
 
-vi.mock("@/ipc/commands", () => ({
+const ipc = installFakeCommands({
   connectActiveProfile: vi.fn(),
   appUpdateStatus: vi.fn(() =>
     Promise.resolve({
@@ -160,12 +153,16 @@ vi.mock("@/ipc/commands", () => ({
       message: null,
     }),
   ),
-  proxyCloseConnection: vi.fn(() =>
-    Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 }),
-  ),
-  proxyListConnections: vi.fn(() =>
-    Promise.resolve({ connections: [], downloadTotal: 0, uploadTotal: 0 }),
-  ),
+  proxyCloseConnection: vi.fn(async () => ({
+    connections: [] as ProxyConnectionItem[],
+    downloadTotal: 0,
+    uploadTotal: 0,
+  })),
+  proxyListConnections: vi.fn(async () => ({
+    connections: [] as ProxyConnectionItem[],
+    downloadTotal: 0,
+    uploadTotal: 0,
+  })),
   proxySetTrafficMode: vi.fn(),
   proxyStartMonitor: vi.fn(() =>
     Promise.resolve({
@@ -195,7 +192,6 @@ vi.mock("@/ipc/commands", () => ({
     Promise.resolve({ titleBarLayout: "none" }),
   ),
   importProfilesFromText: vi.fn(),
-  IpcCommandError: class IpcCommandError extends Error {},
   loadDnsSettings: vi.fn(() =>
     Promise.resolve({
       addCommonHosts: null,
@@ -212,14 +208,9 @@ vi.mock("@/ipc/commands", () => ({
     }),
   ),
   listProcessCandidates: vi.fn(() => Promise.resolve([])),
-  listPolicyGroups: vi.fn(() => Promise.resolve({ entries: [] })),
+  ...seedListCommands(),
   policyGroupRuntime: vi.fn(() => Promise.resolve(null)),
-  listRoutings: vi.fn(() => Promise.resolve([])),
-  listProfileSummaries: vi.fn(() =>
-    Promise.resolve({ entries: [], undecodableProfiles: 0 }),
-  ),
   listSubscriptionMetadata: vi.fn(() => Promise.resolve([])),
-  listSubscriptions: vi.fn(() => Promise.resolve([])),
   getSettingsApplyStatus: vi.fn(async () => ({
     action: "none",
     connected: false,
@@ -313,7 +304,7 @@ vi.mock("@/ipc/commands", () => ({
   updateGeoAssets: vi.fn(() => Promise.resolve([])),
   updateSrsAssets: vi.fn(() => Promise.resolve([])),
   updateSubscriptions: vi.fn(),
-}));
+});
 vi.mock("@/ipc/event-bridge", () => ({ EventBridge: () => null }));
 vi.mock("@voya/client/runtime-event-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@voya/client/runtime-event-store")>()),
@@ -340,35 +331,35 @@ describe("App", () => {
     window.history.replaceState({}, "", "/");
     window.localStorage.clear();
     document.documentElement.className = "";
-    vi.mocked(loadUiPreferences).mockReset();
-    vi.mocked(loadUiPreferences).mockResolvedValue({
+    ipc.loadUiPreferences.mockReset();
+    ipc.loadUiPreferences.mockResolvedValue({
       language: "en",
       theme: "system",
     });
-    vi.mocked(getWindowChromeConfig).mockResolvedValue({
+    ipc.getWindowChromeConfig.mockResolvedValue({
       titleBarLayout: "none",
     });
-    vi.mocked(proxyCloseConnection).mockClear();
-    vi.mocked(proxyListConnections).mockClear();
-    vi.mocked(proxyStartMonitor).mockClear();
-    vi.mocked(proxyStopMonitor).mockClear();
-    vi.mocked(proxyCloseConnection).mockResolvedValue({
+    ipc.proxyCloseConnection.mockClear();
+    ipc.proxyListConnections.mockClear();
+    ipc.proxyStartMonitor.mockClear();
+    ipc.proxyStopMonitor.mockClear();
+    ipc.proxyCloseConnection.mockResolvedValue({
       connections: [],
       downloadTotal: 0,
       uploadTotal: 0,
     });
-    vi.mocked(proxyListConnections).mockResolvedValue({
+    ipc.proxyListConnections.mockResolvedValue({
       connections: [],
       downloadTotal: 0,
       uploadTotal: 0,
     });
-    vi.mocked(proxyStartMonitor).mockResolvedValue({
+    ipc.proxyStartMonitor.mockResolvedValue({
       state: "running",
       running: true,
       stale: false,
       message: null,
     });
-    vi.mocked(proxyStopMonitor).mockResolvedValue({
+    ipc.proxyStopMonitor.mockResolvedValue({
       state: "stopped",
       running: false,
       stale: true,
@@ -437,7 +428,7 @@ describe("App", () => {
   it.each(["macos", "windows", "none"] as const)(
     "uses %s chrome without a separate titlebar row",
     async (layout) => {
-      vi.mocked(getWindowChromeConfig).mockResolvedValue({
+      ipc.getWindowChromeConfig.mockResolvedValue({
         titleBarLayout: layout,
       });
       const { container } = renderApp();
@@ -499,7 +490,7 @@ describe("App", () => {
 
   it("falls back to a supported locale when the backend stores a removed language", async () => {
     await changeLocale("zh-Hans", { persist: false });
-    vi.mocked(loadUiPreferences).mockResolvedValue({
+    ipc.loadUiPreferences.mockResolvedValue({
       language: "fa",
       theme: "system",
     });
@@ -513,7 +504,7 @@ describe("App", () => {
   });
 
   it("hydrates the theme through the dedicated preferences query", async () => {
-    vi.mocked(loadUiPreferences).mockResolvedValue({
+    ipc.loadUiPreferences.mockResolvedValue({
       language: "en",
       theme: "dark",
     });
@@ -558,18 +549,18 @@ describe("App", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(200);
     });
-    expect(proxyStartMonitor).not.toHaveBeenCalled();
-    expect(proxyListConnections).not.toHaveBeenCalled();
+    expect(ipc.proxyStartMonitor).not.toHaveBeenCalled();
+    expect(ipc.proxyListConnections).not.toHaveBeenCalled();
 
     await activateTab(/Nodes/);
     runtimeStoreMock.getState().coreState = connectedCore();
     await activateTab(/Network activity/);
-    expect(proxyListConnections).toHaveBeenCalledTimes(1);
-    expect(proxyStartMonitor).not.toHaveBeenCalled();
+    expect(ipc.proxyListConnections).toHaveBeenCalledTimes(1);
+    expect(ipc.proxyStartMonitor).not.toHaveBeenCalled();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
-    expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
+    expect(ipc.proxyStartMonitor).toHaveBeenCalledTimes(1);
     expect(
       runtimeStoreMock.getState().setProxyMonitorStarting,
     ).toHaveBeenCalledTimes(1);
@@ -580,11 +571,11 @@ describe("App", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_999);
     });
-    expect(proxyStopMonitor).not.toHaveBeenCalled();
+    expect(ipc.proxyStopMonitor).not.toHaveBeenCalled();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1);
     });
-    expect(proxyStopMonitor).toHaveBeenCalledTimes(1);
+    expect(ipc.proxyStopMonitor).toHaveBeenCalledTimes(1);
     expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe(
       "stopped",
     );
@@ -614,19 +605,19 @@ describe("App", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(100);
       });
-      expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
+      expect(ipc.proxyStartMonitor).toHaveBeenCalledTimes(1);
 
       await setVisibility("hidden");
       await act(async () => {
         await vi.advanceTimersByTimeAsync(2_000);
       });
-      expect(proxyStopMonitor).toHaveBeenCalledTimes(1);
+      expect(ipc.proxyStopMonitor).toHaveBeenCalledTimes(1);
 
       await setVisibility("visible");
       await act(async () => {
         await vi.advanceTimersByTimeAsync(100);
       });
-      expect(proxyStartMonitor).toHaveBeenCalledTimes(2);
+      expect(ipc.proxyStartMonitor).toHaveBeenCalledTimes(2);
     } finally {
       visibilityState.mockRestore();
     }
@@ -643,8 +634,8 @@ describe("App", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000);
     });
-    expect(proxyStartMonitor).not.toHaveBeenCalled();
-    expect(proxyListConnections).not.toHaveBeenCalled();
+    expect(ipc.proxyStartMonitor).not.toHaveBeenCalled();
+    expect(ipc.proxyListConnections).not.toHaveBeenCalled();
   });
 
   it("keeps the proxy monitor running while viewing the policy group sub-tab", async () => {
@@ -660,7 +651,7 @@ describe("App", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
-    expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
+    expect(ipc.proxyStartMonitor).toHaveBeenCalledTimes(1);
 
     const page = screen.getByRole("region", { name: "Network activity" });
     const groupsTab = within(page).getByRole("tab", { name: "Policy groups" });
@@ -674,7 +665,7 @@ describe("App", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
-    expect(proxyStopMonitor).not.toHaveBeenCalled();
+    expect(ipc.proxyStopMonitor).not.toHaveBeenCalled();
   });
 
   it("marks cached proxy monitor data failed and shows a toast when start fails", async () => {
@@ -682,7 +673,7 @@ describe("App", () => {
     (
       window as typeof window & { __TAURI_INTERNALS__?: unknown }
     ).__TAURI_INTERNALS__ = {};
-    vi.mocked(proxyStartMonitor).mockRejectedValueOnce(
+    ipc.proxyStartMonitor.mockRejectedValueOnce(
       new Error("start unavailable"),
     );
 
@@ -694,7 +685,7 @@ describe("App", () => {
       await vi.advanceTimersByTimeAsync(100);
     });
 
-    expect(proxyStartMonitor).toHaveBeenCalledTimes(1);
+    expect(ipc.proxyStartMonitor).toHaveBeenCalledTimes(1);
     expect(
       runtimeStoreMock.getState().setProxyMonitorStarting,
     ).toHaveBeenCalledTimes(1);
@@ -718,7 +709,7 @@ describe("App", () => {
     (
       window as typeof window & { __TAURI_INTERNALS__?: unknown }
     ).__TAURI_INTERNALS__ = {};
-    vi.mocked(proxyStopMonitor).mockRejectedValueOnce(
+    ipc.proxyStopMonitor.mockRejectedValueOnce(
       new Error("stop unavailable"),
     );
 
@@ -738,7 +729,7 @@ describe("App", () => {
       await vi.advanceTimersByTimeAsync(2_000);
     });
 
-    expect(proxyStopMonitor).toHaveBeenCalledTimes(1);
+    expect(ipc.proxyStopMonitor).toHaveBeenCalledTimes(1);
     expect(
       runtimeStoreMock.getState().setProxyMonitorFailed,
     ).toHaveBeenCalledWith("stop unavailable");
@@ -769,12 +760,12 @@ describe("App", () => {
       uploadTotal: 1024,
     };
     runtimeStoreMock.getState().setProxyConnections(cachedSnapshot);
-    vi.mocked(proxyListConnections)
+    ipc.proxyListConnections
       .mockResolvedValueOnce(cachedSnapshot)
       .mockResolvedValueOnce(refreshedSnapshot);
     renderApp();
     await user.click(mainNavTab(/Network activity/));
-    await waitFor(() => expect(proxyListConnections).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(ipc.proxyListConnections).toHaveBeenCalledTimes(1));
     expect(
       screen.getAllByText("Unable to update connections right now"),
     ).toHaveLength(1);
@@ -797,7 +788,7 @@ describe("App", () => {
       stale: false,
       state: "running",
     });
-    vi.mocked(proxyListConnections).mockResolvedValue({
+    ipc.proxyListConnections.mockResolvedValue({
       connections: makeConnections(2),
       downloadTotal: 2,
       uploadTotal: 1,

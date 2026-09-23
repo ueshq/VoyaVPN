@@ -9,29 +9,25 @@ import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
-import type { AppSettingsV1 } from "@/ipc/bindings";
+import type { AppSettingsV1 } from "@voya/contracts";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@voya/client/toast-store";
 import {
   deferred,
-  resetSettingsBackend,
+  installSettingsBackend,
   serverSettings,
   settingsIpc,
 } from "@voya/features/settings/settings-backend.test-fixture";
 import { SettingsScreen } from "./settings-screen";
 import { saveQueue } from "@voya/features/forms/save-queue";
 
-vi.mock(
-  "@/ipc/commands",
-  async () => (await import("@voya/features/settings/settings-backend.test-fixture")).settingsIpc,
-);
 vi.mock("@/ipc/tauri-plugins", () => ({
   check: vi.fn(),
   getVersion: vi.fn(async () => "0.1.0"),
   relaunch: vi.fn(),
 }));
 beforeEach(async () => {
-  resetSettingsBackend();
+  installSettingsBackend();
   await changeLocale("en");
   useShellStore.setState({ activeTab: "settings", settingsTab: "general" });
   useToastStore.setState({ toasts: [] });

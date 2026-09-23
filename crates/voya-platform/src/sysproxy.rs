@@ -553,16 +553,10 @@ mod tests {
     }
 
     fn unique_temp_root(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "voyavpn-sysproxy-{name}-{}-{}",
-            std::process::id(),
-            monotonic_nanos()
-        ))
-    }
-
-    fn monotonic_nanos() -> u128 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |duration| duration.as_nanos())
+        tempfile::Builder::new()
+            .prefix(&format!("voyavpn-sysproxy-{name}-"))
+            .tempdir()
+            .expect("sysproxy test temp dir")
+            .keep()
     }
 }

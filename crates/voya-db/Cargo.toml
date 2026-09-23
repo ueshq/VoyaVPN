@@ -11,7 +11,10 @@ serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+# Production code only needs `sync` (the executor mutex). `macros`/`rt-multi-thread`
+# ride in through the workspace for `#[tokio::test]` and stay off this crate's
+# own requirement list.
+tokio = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 voya-core.workspace = true
 voya-contracts.workspace = true

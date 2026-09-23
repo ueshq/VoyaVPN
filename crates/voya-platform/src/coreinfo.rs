@@ -83,16 +83,6 @@ impl TargetOs {
         }
     }
 
-    /// Whether this is a phone.
-    ///
-    /// Several decisions turn on it at once: the tunnel is the only capture
-    /// path, there is no system proxy to set, nothing launches at login, and no
-    /// core runs as a child process.
-    #[must_use]
-    pub const fn is_mobile(self) -> bool {
-        matches!(self, Self::Ios | Self::Android)
-    }
-
     /// Whether the core runs inside a tunnel provider rather than as a child
     /// of the app.
     ///
@@ -430,19 +420,12 @@ fn ensure_executable_permission_inner(path: &Path) -> Result<(), CoreInfoError> 
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env,
-        sync::atomic::{AtomicU64, Ordering},
-    };
-
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
     use crate::paths::{core_seed_resources_dir, AppPaths};
 
     use super::*;
-
-    static TEMP_ROOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[test]
     fn sing_box_runs_the_config_from_the_config_dir() {
@@ -634,17 +617,10 @@ mod tests {
     }
 
     fn unique_temp_root(name: &str) -> PathBuf {
-        let counter = TEMP_ROOT_COUNTER.fetch_add(1, Ordering::Relaxed);
-        env::temp_dir().join(format!(
-            "voyavpn-coreinfo-{name}-{}-{}-{counter}",
-            std::process::id(),
-            monotonic_nanos()
-        ))
-    }
-
-    fn monotonic_nanos() -> u128 {
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |duration| duration.as_nanos())
+        tempfile::Builder::new()
+            .prefix(&format!("voyavpn-coreinfo-{name}-"))
+            .tempdir()
+            .expect("coreinfo test temp dir")
+            .keep()
     }
 }

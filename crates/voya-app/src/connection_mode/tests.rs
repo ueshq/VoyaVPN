@@ -14,11 +14,7 @@ use voya_platform::{
     privilege::ElevationState,
     process::ProcessOutput,
     sysproxy::SystemProxyService,
-    test_support::RecordingRunner,
-    tun::{
-        NativeTunController, NativeTunError, NativeTunProviderState, NativeTunStartRequest,
-        NativeTunStatus, TunBackend,
-    },
+    test_support::{RecordingRunner, StoppedNativeTun},
 };
 
 use super::*;
@@ -266,7 +262,7 @@ async fn a_failed_apply_rolls_the_persisted_mode_back() {
 fn macos_offers_neither_the_system_proxy_nor_process_rules() {
     let config = config_with(SysProxyType::Unchanged, true);
     let macos = TunStatus {
-        backend: voya_contracts::TunBackend::MacosPacketTunnel,
+        backend: TunBackend::MacosPacketTunnel,
         enabled: true,
         ..disabled_tun_status()
     };
@@ -440,27 +436,6 @@ impl ConnectionModeSink for RecordingSink {
 
     fn tray_refresh(&self) {
         self.push("tray");
-    }
-}
-
-struct StoppedNativeTun;
-
-impl NativeTunController for StoppedNativeTun {
-    fn status(&self, backend: TunBackend) -> NativeTunStatus {
-        NativeTunStatus {
-            backend,
-            provider_state: NativeTunProviderState::Stopped,
-            component_ready: true,
-            message: None,
-        }
-    }
-
-    fn start(&self, _request: NativeTunStartRequest) -> Result<(), NativeTunError> {
-        Ok(())
-    }
-
-    fn stop(&self, _backend: TunBackend) -> Result<(), NativeTunError> {
-        Ok(())
     }
 }
 

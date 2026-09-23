@@ -6,7 +6,7 @@ import { cn } from "@voya/ui/lib/utils";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { coreStateOf, useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { TitleBarLayout } from "@/ipc/bindings";
+import type { TitleBarLayout } from "@voya/contracts";
 import { formatBytesPerSecond } from "@voya/utils/formatting";
 import { type ShellTab, useShellStore } from "@/stores/shell-store";
 
