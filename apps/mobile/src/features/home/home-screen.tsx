@@ -11,7 +11,15 @@ import { Button } from "heroui-native/button";
 import { Card } from "heroui-native/card";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
+import { ArrowDown, ArrowUp, Clock, Globe, Server, type LucideIcon } from "lucide-react-native";
 import { ScrollView, View } from "react-native";
+
+import { navigateToTab } from "~/app/navigation";
+import { Banner } from "~/components/banner";
+import { EmptyState } from "~/components/empty-state";
+import { PageHeader } from "~/components/page-header";
+import { useToneColor } from "~/components/tone";
+import { useScreenInsets } from "~/components/use-screen-insets";
 
 import { WorldMap } from "./world-map";
 
@@ -26,6 +34,7 @@ import { WorldMap } from "./world-map";
  */
 export function HomeScreen() {
   const { t } = useI18n();
+  const insets = useScreenInsets();
   const runtime = useHomeRuntime();
   const { ipQuery } = useConnectionIp();
   const statistics = useRuntimeEventStore((state) => state.statistics);
@@ -49,92 +58,105 @@ export function HomeScreen() {
   return (
     <ScrollView
       className="flex-1 bg-canvas"
-      contentContainerClassName="gap-4 p-page"
+      contentContainerClassName="gap-4 px-page"
+      contentContainerStyle={insets}
       accessibilityLabel={t("home.aria")}
     >
-      <WorldMap marker={marker} />
+      <PageHeader title={t("tabs.home")} />
 
-      <View className="items-center gap-2 py-6">
-        <Typography className="text-page font-semibold text-foreground">
-          {t(CORE_STATE_KEYS[runtime.state])}
-        </Typography>
-        <Typography className="text-body text-subtle">
-          {runtime.activeGroup
-            ? runtime.activeGroup.group.name
-            : (nodeName ?? t("home.noSelection"))}
-        </Typography>
-        {runtime.activeGroup && runtime.groupRuntime?.nowProfileId ? (
-          <Typography className="text-caption text-subtlest">
-            {t("home.groupVia", { node: groupMemberName(runtime, t) })}
+      <Card className="gap-5 p-5">
+        <WorldMap marker={marker} />
+
+        <View className="items-center gap-1">
+          <View className="max-w-full flex-row items-center gap-2">
+            <View accessible={false} className={`h-2.5 w-2.5 rounded-full ${STATE_DOT[runtime.state]}`} />
+            <Typography maxFontSizeMultiplier={1.6} className="shrink text-2xl font-semibold text-foreground">
+              {t(CORE_STATE_KEYS[runtime.state])}
+            </Typography>
+          </View>
+          <Typography className="text-center text-base text-subtle">
+            {runtime.activeGroup
+              ? runtime.activeGroup.group.name
+              : (nodeName ?? t("home.noSelection"))}
           </Typography>
-        ) : null}
-      </View>
-
-      <Button
-        className="min-h-14 h-auto py-3"
-        size="lg"
-        variant={runtime.connected ? "outline" : "primary"}
-        isDisabled={runtime.busy || runtime.modePending}
-        onPress={runtime.handlePrimaryAction}
-        accessibilityLabel={t(runtime.connected ? "actions.disconnect" : "actions.connect")}
-      >
-        {runtime.inProgress ? <Spinner size="sm" /> : null}
-        <Button.Label>
-          {t(runtime.connected || runtime.state === "cleanupPending"
-            ? "actions.disconnect"
-            : "actions.connect")}
-        </Button.Label>
-      </Button>
-
-      {runtime.modePending ? (
-        <Typography className="text-caption text-subtle">{t("home.modePendingReason")}</Typography>
-      ) : null}
-      {runtime.lastError ? (
-        <View className="gap-2">
-          <Typography className="text-caption text-danger">
-            {t(ACTION_FAILED_KEYS[runtime.lastError.action], {
-              message: runtime.lastError.message,
-            })}
-          </Typography>
-          <Button className="min-h-11 h-auto py-3" size="sm" variant="outline" onPress={runtime.retryLastAction}>
-            <Button.Label>{t("actions.retry")}</Button.Label>
-          </Button>
+          {runtime.activeGroup && runtime.groupRuntime?.nowProfileId ? (
+            <Typography className="text-center text-sm text-subtlest">
+              {t("home.groupVia", { node: groupMemberName(runtime, t) })}
+            </Typography>
+          ) : null}
         </View>
-      ) : null}
-      {runtime.tunIssue ? (
-        <Typography className="text-caption text-warning-soft-foreground">
-          {runtime.tunIssue}
-        </Typography>
-      ) : null}
 
-      <Card className="gap-3">
-        <Metric label={t("home.duration")} value={connectionTime(runtime.state)} />
-        <Metric
-          label={t("home.exitIp")}
-          value={exitIp(ipQuery, t)}
+        <Button
+          // A disconnect is the calm, reversible choice once connected, so it
+          // steps down from the solid accent to the tinted one.
+          className={`min-h-14 h-auto rounded-full py-3 ${runtime.connected ? "bg-accent-soft" : ""}`}
+          size="lg"
+          variant={runtime.connected ? "secondary" : "primary"}
+          isDisabled={runtime.busy || runtime.modePending}
+          onPress={runtime.handlePrimaryAction}
+          accessibilityLabel={t(runtime.connected ? "actions.disconnect" : "actions.connect")}
+        >
+          {runtime.inProgress ? <Spinner size="sm" /> : null}
+          <Button.Label>
+            {t(runtime.connected || runtime.state === "cleanupPending"
+              ? "actions.disconnect"
+              : "actions.connect")}
+          </Button.Label>
+        </Button>
+      </Card>
+
+      {runtime.modePending ? <Banner status="info" message={t("home.modePendingReason")} /> : null}
+      {runtime.lastError ? (
+        <Banner
+          status="danger"
+          message={t(ACTION_FAILED_KEYS[runtime.lastError.action], {
+            message: runtime.lastError.message,
+          })}
+          action={<RetryButton label={t("actions.retry")} onPress={runtime.retryLastAction} />}
         />
-        <Metric
-          label={t("status.upload", { speed: "" }).trim()}
-          value={formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0)}
-        />
-        <Metric
-          label={t("status.download", { speed: "" }).trim()}
-          value={formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0)}
-        />
+      ) : null}
+      {runtime.tunIssue ? <Banner status="warning" message={runtime.tunIssue} /> : null}
+
+      <Card className="gap-4 p-5">
+        <View className="flex-row flex-wrap gap-x-3 gap-y-4">
+          <Metric
+            icon={ArrowUp}
+            label={t("status.upload", { speed: "" }).trim()}
+            value={formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0)}
+          />
+          <Metric
+            icon={ArrowDown}
+            label={t("status.download", { speed: "" }).trim()}
+            value={formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0)}
+          />
+        </View>
+        <View className="h-hairline bg-border-subtle" />
+        <Fact icon={Clock} label={t("home.duration")} value={connectionTime(runtime.state)} />
+        <Fact icon={Globe} label={t("home.exitIp")} value={exitIp(ipQuery, t)} selectable />
       </Card>
 
       {runtime.profilesError ? (
-        <View className="gap-2">
-          <Typography className="text-caption text-danger">
-            {t("home.profilesFailed", { message: String(runtime.profilesError) })}
-          </Typography>
-          <Button className="min-h-11 h-auto py-3" size="sm" variant="outline" onPress={runtime.retryProfiles}>
-            <Button.Label>{t("actions.retry")}</Button.Label>
-          </Button>
-        </View>
+        <Banner
+          status="danger"
+          message={t("home.profilesFailed", { message: String(runtime.profilesError) })}
+          action={<RetryButton label={t("actions.retry")} onPress={runtime.retryProfiles} />}
+        />
       ) : null}
       {runtime.hasNodes ? null : (
-        <Typography className="text-caption text-subtle">{t("home.emptyGuide")}</Typography>
+        <EmptyState
+          icons={[Server]}
+          title={t("panes.profiles.empty")}
+          description={t("home.emptyGuide")}
+          action={
+            <Button
+              className="min-h-12 h-auto rounded-full bg-accent-soft py-3"
+              variant="secondary"
+              onPress={() => navigateToTab("profiles")}
+            >
+              <Button.Label>{t("panes.profiles.importDialog.title")}</Button.Label>
+            </Button>
+          }
+        />
       )}
     </ScrollView>
   );
@@ -162,12 +184,63 @@ const ACTION_FAILED_KEYS = {
   restart: "home.actionFailed.restart",
 } satisfies Record<"connect" | "disconnect" | "restart", TranslationKey>;
 
-function Metric({ label, value }: { label: string; value: string }) {
+/** Each state's dot beside its word: green only when traffic is protected. */
+const STATE_DOT = {
+  cleanupPending: "bg-subtlest",
+  connected: "bg-connected",
+  connecting: "bg-warning",
+  disconnected: "bg-subtlest",
+  disconnecting: "bg-warning",
+} satisfies Record<CoreState, string>;
+
+function MetricLabel({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  const color = useToneColor("neutral");
+
+  return (
+    <View className="max-w-full flex-row items-center gap-1.5">
+      <Icon size={14} color={color} accessible={false} />
+      <Typography className="shrink text-sm text-subtle">{label}</Typography>
+    </View>
+  );
+}
+
+/** A rate, large: the two numbers worth watching while connected. */
+function Metric({ icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <View className="min-w-32 flex-1 gap-1">
+      <MetricLabel icon={icon} label={label} />
+      <Typography className="text-xl font-semibold text-foreground tabular-nums">{value}</Typography>
+    </View>
+  );
+}
+
+/** A label and its value on one line, wrapping under it when too long. */
+function Fact({
+  icon,
+  label,
+  selectable = false,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  selectable?: boolean;
+  value: string;
+}) {
   return (
     <View className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1">
-      <Typography className="max-w-full text-caption text-subtle">{label}</Typography>
-      <Typography className="max-w-full text-body text-foreground">{value}</Typography>
+      <MetricLabel icon={icon} label={label} />
+      <Typography selectable={selectable} className="max-w-full text-base font-medium text-foreground tabular-nums">
+        {value}
+      </Typography>
     </View>
+  );
+}
+
+function RetryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Button className="min-h-9 h-auto rounded-full py-1.5" size="sm" variant="tertiary" onPress={onPress}>
+      <Button.Label>{label}</Button.Label>
+    </Button>
   );
 }
 

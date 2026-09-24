@@ -1100,6 +1100,7 @@
     "disconnectAll": "Disconnect all connections",
     "refresh": "Refresh list",
     "connectToView": "Connect to view network activity",
+    "connectHint": "Each app's connections, the node they exit through and the traffic they carry appear here once you connect.",
     "goHome": "Go to Home",
     "noMatches": "No matching connections",
     "clearSearch": "Clear search",

@@ -45,17 +45,22 @@
 
 @theme {
   /* Theme-independent scale. The desktop's control heights are pointer-sized;
-     these are the touch equivalents, and the type scale is shared. */
+     these are the touch equivalents. */
   --spacing-control: 44px;
   --spacing-page: 16px;
-  --text-page: 24px;
-  --text-page--line-height: 32px;
-  --text-section: 17px;
-  --text-section--line-height: 24px;
-  --text-body: 15px;
-  --text-body--line-height: 20px;
-  --text-caption: 13px;
-  --text-caption--line-height: 18px;
+
+  /* No named type scale here, on purpose. Text is HeroUI's `Typography`, which
+     runs `className` through tailwind-merge, and tailwind-merge only knows the
+     standard size names: it reads `text-body` or `text-caption` as a *colour*,
+     so `text-body text-foreground` merges to `text-foreground` and the size is
+     dropped without a word. Use Tailwind's own sizes — the screens use
+     `text-3xl` (page title), `text-2xl` (Home's state), `text-xl` (section
+     heading), `text-base` (row text) and `text-sm` (secondary text). */
+
+  /* The floating tab bar is the one surface that sits above scrolling
+     content, so it is the one that needs a real lift. Cards keep HeroUI's own
+     `shadow-surface`, which is nearly flat and gone entirely in dark mode. */
+  --shadow-float: 0 8px 24px 0 rgb(0 0 0 / 0.1), 0 1px 3px 0 rgb(0 0 0 / 0.08);
 }
 
 /*
@@ -89,6 +94,37 @@
       --voya-connected: #238636;
       --voya-connected-foreground: #ffffff;
       --voya-map-land: #212830;
+    }
+  }
+}
+
+/*
+ * One accent colour.
+ *
+ * HeroUI paints its buttons, switches and focus rings from its own `--accent`
+ * (a system blue), while every Voya selection state — `text-brand`,
+ * `bg-brand-tint` — uses the brand blue above. Two blues side by side read as
+ * two meanings, so HeroUI's slot takes the brand value.
+ *
+ * This works because Uniwind's native compiler writes each theme's variables
+ * into one map in document order, so a later declaration of the same name
+ * wins, and `var()` resolves lazily: HeroUI's `--color-accent`, and every
+ * `color-mix()` derived from it (`accent-soft`, `accent-hover`, …), follow the
+ * override without being restated. It has to come after the
+ * `heroui-native/styles` import, and both variants must declare the same
+ * names, like the block above. Check it on a device: a primary Button must be
+ * #0969da in light and #4493f8 in dark.
+ */
+@layer theme {
+  :root {
+    @variant light {
+      --accent: var(--voya-brand);
+      --accent-foreground: #ffffff;
+    }
+
+    @variant dark {
+      --accent: var(--voya-brand);
+      --accent-foreground: #ffffff;
     }
   }
 }

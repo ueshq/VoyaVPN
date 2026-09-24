@@ -1100,6 +1100,7 @@
     "disconnectAll": "中斷所有連線",
     "refresh": "重新整理列表",
     "connectToView": "連線後即可查看網路活動",
+    "connectHint": "連線後，這裡會即時列出各應用程式的連線、所經出口節點和流量。",
     "goHome": "前往首頁",
     "noMatches": "找不到符合的連線",
     "clearSearch": "清除搜尋",

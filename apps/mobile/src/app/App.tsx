@@ -7,8 +7,10 @@ import { HeroUINativeProvider } from "heroui-native/provider";
 import { Suspense, use } from "react";
 import { Activity, House, Route, Server, Settings } from "lucide-react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Text, useWindowDimensions } from "react-native";
+
+import { FloatingTabBar } from "~/components/floating-tab-bar";
 
 import { HomeScreen } from "~/features/home/home-screen";
 import { NodesScreen } from "~/features/profiles/nodes-screen";
@@ -57,7 +59,6 @@ function Shell() {
 
   const { t } = useI18n();
   const scheme = useTheme();
-  const { fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const navigationTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
   useRuntimeStatusSeed(["coreState"]);
@@ -65,21 +66,12 @@ function Shell() {
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <EventBridge />
-      <Tab.Navigator screenOptions={{
-        // Navigation chrome stays bounded while page content follows the full
-        // Dynamic Type size. iOS's large-content viewer exposes the full title.
-        headerStyle: fontScale > 1 ? { height: insets.top + 44 * Math.min(fontScale, 1.5) } : undefined,
-        headerTitle: ({ children }) => (
-          <Text
-            accessibilityRole="header"
-            accessibilityShowsLargeContentViewer
-            accessibilityLargeContentTitle={children}
-            maxFontSizeMultiplier={1.5}
-            numberOfLines={1}
-            style={{ fontSize: 17, fontWeight: "600", color: navigationTheme.colors.text }}
-          >{children}</Text>
-        ),
-      }}>
+      {/* No navigation bar: each screen draws its own large title, which
+          scrolls with its content. The tab bar floats over the content. */}
+      <Tab.Navigator
+        tabBar={(props) => <FloatingTabBar {...props} />}
+        screenOptions={{ headerShown: false }}
+      >
         {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => (
           <Tab.Screen key={tab} name={tab} options={{
             title: t(SHELL_TABS[tab].titleKey),
@@ -95,6 +87,16 @@ function Shell() {
           </Tab.Screen>
         ))}
       </Tab.Navigator>
+      {/* Without a navigation bar nothing covers the status bar, so content
+          scrolled up would run under the clock. A band of canvas does what
+          the bar's background did; it is invisible until something is under
+          it, and sheets still cover it because they mount above the shell. */}
+      <View
+        pointerEvents="none"
+        accessible={false}
+        className="absolute inset-x-0 top-0 bg-canvas"
+        style={{ height: insets.top }}
+      />
     </NavigationContainer>
   );
 }

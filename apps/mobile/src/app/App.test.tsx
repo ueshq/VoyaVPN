@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react-native";
+import { render, userEvent } from "@testing-library/react-native";
 
 import { localeReady } from "~/native/platform-boot";
 
@@ -24,5 +24,20 @@ describe("App", () => {
     }
 
     expect(Object.keys(SHELL_TABS) as ShellTab[]).toHaveLength(5);
+  });
+
+  it("marks the current tab selected on the floating bar, the state XCUITest reads", async () => {
+    await localeReady;
+    const view = await render(<App />);
+
+    expect(view.getByTestId("tab-home")).toBeSelected();
+    expect(view.getByTestId("tab-settings")).not.toBeSelected();
+
+    await userEvent.setup().press(view.getByTestId("tab-settings"));
+
+    expect(view.getByTestId("tab-settings")).toBeSelected();
+    expect(view.getByTestId("tab-home")).not.toBeSelected();
+    // The tab keeps its full title for VoiceOver even where the label is short.
+    expect(view.getByRole("button", { name: "Network activity" })).toBeOnTheScreen();
   });
 });

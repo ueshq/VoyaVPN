@@ -10,11 +10,21 @@ import type { TranslationKey } from "@voya/i18n/core";
 import { Button } from "heroui-native/button";
 import { Card } from "heroui-native/card";
 import { Input } from "heroui-native/input";
-import { PressableFeedback } from "heroui-native/pressable-feedback";
 import { Spinner } from "heroui-native/spinner";
 import { Switch } from "heroui-native/switch";
 import { Typography } from "heroui-native/text";
+import { Check, Database, ScrollText } from "lucide-react-native";
 import { ScrollView, View, useWindowDimensions } from "react-native";
+
+import { Banner } from "~/components/banner";
+import { IconBadge } from "~/components/icon-badge";
+import { ListCard } from "~/components/list-card";
+import { ListRow } from "~/components/list-row";
+import { PageHeader } from "~/components/page-header";
+import { SectionHeader } from "~/components/section-header";
+import { SegmentedControl } from "~/components/segmented-control";
+import { useToneColor } from "~/components/tone";
+import { useScreenInsets } from "~/components/use-screen-insets";
 
 /** The three theme choices, in the order the desktop offers them. */
 const THEME_MODES = [
@@ -34,6 +44,8 @@ const THEME_MODES = [
  */
 export function SettingsScreen() {
   const { language, t } = useI18n();
+  const insets = useScreenInsets();
+  const checkColor = useToneColor("brand");
   const { width, fontScale } = useWindowDimensions();
   const stackedChoices = width / fontScale < 360;
   const app = useAppSettings();
@@ -48,7 +60,8 @@ export function SettingsScreen() {
   return (
     <ScrollView
       className="flex-1 bg-canvas"
-      contentContainerClassName="gap-4 p-page"
+      contentContainerClassName="gap-6 px-page"
+      contentContainerStyle={insets}
       // The three DNS fields sit low enough that the keyboard covers them
       // completely once one is focused — measured at y=734 on a 874pt screen
       // against a keyboard whose top edge is at 538 — so without this you
@@ -56,84 +69,77 @@ export function SettingsScreen() {
       // inset itself for the keyboard on its own.
       automaticallyAdjustKeyboardInsets
     >
+      <PageHeader title={t("tabs.settings")} />
+
       {appearance ? (
-        <Card className="gap-3">
-          <Typography className="text-section text-foreground">{t("modal.theme")}</Typography>
-          <View className={stackedChoices ? "gap-2" : "flex-row gap-2"}>
-            {THEME_MODES.map(({ labelKey, value }) => (
-              <PressableFeedback
-                key={value}
-                className={`${stackedChoices ? "" : "flex-1"} items-center rounded-2xl border px-3 py-2 ${
-                  appearance.theme === value
-                    ? "border-brand bg-brand-tint"
-                    : "border-border bg-surface"
-                }`}
-                onPress={() => app.setAppearance({ ...appearance, theme: value })}
-                accessibilityRole="button"
-                accessibilityState={{ selected: appearance.theme === value }}
-              >
-                <PressableFeedback.Highlight />
-                <Typography className="text-caption text-foreground">{t(labelKey)}</Typography>
-              </PressableFeedback>
-            ))}
-          </View>
-        </Card>
+        <View>
+          <SectionHeader title={t("settings.sections.appearance")} />
+          <Card className="gap-3 p-4">
+            <Typography className="text-sm font-medium text-subtle">{t("modal.theme")}</Typography>
+            <SegmentedControl
+              options={THEME_MODES.map(({ labelKey, value }) => ({ label: t(labelKey), value }))}
+              value={appearance.theme}
+              onChange={(theme) => app.setAppearance({ ...appearance, theme })}
+              stacked={stackedChoices}
+            />
+          </Card>
+        </View>
       ) : null}
 
       {appearance ? (
-        <Card className="gap-3">
-          <Typography className="text-section text-foreground">{t("modal.language")}</Typography>
+        <View>
+          <SectionHeader title={t("modal.language")} />
           {/* Theme and language are the same kind of choice, so they go through
               the same write: `setAppearance` previews at once and persists on
               the backend's acknowledgement. */}
-          {localeOptions.map((locale) => (
-            <PressableFeedback
-              key={locale.code}
-              animation="disable-all"
-              className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"
-              onPress={() => app.setAppearance({ ...appearance, language: locale.code })}
-              accessibilityRole="button"
-              accessibilityState={{ selected: appearance.language === locale.code }}
-            >
-              <PressableFeedback.Highlight />
-              <Typography className="max-w-full text-body text-foreground">{locale.nativeName}</Typography>
-              {appearance.language === locale.code ? (
-                <Typography className="max-w-full text-caption text-brand">
-                  {t("panes.profiles.card.default")}
-                </Typography>
-              ) : null}
-            </PressableFeedback>
-          ))}
-        </Card>
+          <ListCard>
+            {localeOptions.map((locale, index) => {
+              const selected = appearance.language === locale.code;
+              return (
+                <ListRow
+                  key={locale.code}
+                  last={index === localeOptions.length - 1}
+                  title={locale.nativeName}
+                  trailing={selected ? <Check size={20} color={checkColor} accessible={false} /> : null}
+                  onPress={() => app.setAppearance({ ...appearance, language: locale.code })}
+                  accessibilityState={{ selected }}
+                />
+              );
+            })}
+          </ListCard>
+        </View>
       ) : null}
 
       {app.settings ? (
-        <Card className="gap-3">
-          <Typography className="text-section text-foreground">
-            {t("settings.sections.behavior")}
-          </Typography>
-          <Toggle
-            label={t("options.autoCheckIp")}
-            value={app.settings.behavior.autoCheckIp}
-            onChange={(autoCheckIp) =>
-              app.update((current) => ({
-                ...current,
-                behavior: { ...current.behavior, autoCheckIp },
-              }))
-            }
-          />
-          <Toggle
-            label={t("settings.core.logEnabled")}
-            value={app.settings.core.logEnabled}
-            onChange={(logEnabled) =>
-              app.update((current) => ({
-                ...current,
-                core: { ...current.core, logEnabled },
-              }))
-            }
-          />
-          {app.error ? <Typography className="text-caption text-danger">{app.error}</Typography> : null}
-        </Card>
+        <View className="gap-3">
+          <View>
+            <SectionHeader title={t("settings.sections.behavior")} />
+            <ListCard>
+              <Toggle
+                label={t("options.autoCheckIp")}
+                value={app.settings.behavior.autoCheckIp}
+                onChange={(autoCheckIp) =>
+                  app.update((current) => ({
+                    ...current,
+                    behavior: { ...current.behavior, autoCheckIp },
+                  }))
+                }
+              />
+              <Toggle
+                last
+                label={t("settings.core.logEnabled")}
+                value={app.settings.core.logEnabled}
+                onChange={(logEnabled) =>
+                  app.update((current) => ({
+                    ...current,
+                    core: { ...current.core, logEnabled },
+                  }))
+                }
+              />
+            </ListCard>
+          </View>
+          {app.error ? <Banner status="danger" message={app.error} /> : null}
+        </View>
       ) : null}
 
       {/* The three resolvers and the two switches that change what gets
@@ -142,70 +148,75 @@ export function SettingsScreen() {
           for; the desktop stays the place to do it, and what is set there is
           kept as it is. */}
       {dns.form ? (
-        <Card className="gap-3">
-          <Typography className="text-section text-foreground">{t("panes.dns.title")}</Typography>
-          <DnsField
-            label={t("panes.dns.remoteDns")}
-            value={dns.form.remote}
-            error={dns.fieldErrors.remote}
-            onChange={(remote) => dns.updateSimple({ remote })}
-          />
-          <DnsField
-            label={t("panes.dns.directDns")}
-            value={dns.form.direct}
-            error={dns.fieldErrors.direct}
-            onChange={(direct) => dns.updateSimple({ direct })}
-          />
-          <DnsField
-            label={t("panes.dns.bootstrapDns")}
-            value={dns.form.bootstrap}
-            error={dns.fieldErrors.bootstrap}
-            onChange={(bootstrap) => dns.updateSimple({ bootstrap })}
-          />
-          <Toggle
-            label={t("panes.dns.fakeIp")}
-            value={dns.form.fakeIp ?? false}
-            onChange={(fakeIp) => dns.updateSimple({ fakeIp })}
-          />
-          <Toggle
-            label={t("panes.dns.blockBindingQuery")}
-            value={dns.form.blockBindingQuery ?? false}
-            onChange={(blockBindingQuery) => dns.updateSimple({ blockBindingQuery })}
-          />
-          {dns.operationError ? (
-            <Typography className="text-caption text-danger">{dns.operationError}</Typography>
-          ) : null}
-        </Card>
+        <View className="gap-3">
+          <View>
+            <SectionHeader title={t("panes.dns.title")} />
+            <Card className="gap-4 p-4">
+              <DnsField
+                label={t("panes.dns.remoteDns")}
+                value={dns.form.remote}
+                error={dns.fieldErrors.remote}
+                onChange={(remote) => dns.updateSimple({ remote })}
+              />
+              <DnsField
+                label={t("panes.dns.directDns")}
+                value={dns.form.direct}
+                error={dns.fieldErrors.direct}
+                onChange={(direct) => dns.updateSimple({ direct })}
+              />
+              <DnsField
+                label={t("panes.dns.bootstrapDns")}
+                value={dns.form.bootstrap}
+                error={dns.fieldErrors.bootstrap}
+                onChange={(bootstrap) => dns.updateSimple({ bootstrap })}
+              />
+            </Card>
+          </View>
+          <ListCard>
+            <Toggle
+              label={t("panes.dns.fakeIp")}
+              value={dns.form.fakeIp ?? false}
+              onChange={(fakeIp) => dns.updateSimple({ fakeIp })}
+            />
+            <Toggle
+              last
+              label={t("panes.dns.blockBindingQuery")}
+              value={dns.form.blockBindingQuery ?? false}
+              onChange={(blockBindingQuery) => dns.updateSimple({ blockBindingQuery })}
+            />
+          </ListCard>
+          {dns.operationError ? <Banner status="danger" message={dns.operationError} /> : null}
+        </View>
       ) : null}
 
       {/* The app itself is updated by the store, so only the rule library is
           offered here — the desktop's self-update has no equivalent. */}
-      <Card className="gap-3">
-        <Typography className="text-section text-foreground">
-          {t("updates.ruleLibraryTitle")}
-        </Typography>
-        <Typography className="text-caption text-subtle">
-          {t("updates.ruleLibraryDescription")}
-        </Typography>
-        <Typography className="text-caption text-subtlest">
-          {ruleLibrary.updatedAt === null
-            ? t("updates.neverUpdated")
-            : t("updates.lastUpdated", {
-                time: new Date(ruleLibrary.updatedAt).toLocaleString(language),
-              })}
-        </Typography>
-        {ruleLibrary.files?.length ? (
-          <Typography className="text-caption text-subtle">
-            {t("updates.resourceUpdated", { count: ruleLibrary.files.length })}
+      <Card className="gap-4 p-5">
+        <IconBadge icon={Database} />
+        <View className="gap-1">
+          <Typography accessibilityRole="header" maxFontSizeMultiplier={2} className="text-lg font-semibold text-foreground">
+            {t("updates.ruleLibraryTitle")}
           </Typography>
-        ) : null}
-        {ruleLibrary.error ? (
-          <Typography className="text-caption text-danger">{ruleLibrary.error}</Typography>
-        ) : null}
+          <Typography className="text-base text-subtle">{t("updates.ruleLibraryDescription")}</Typography>
+        </View>
+        <View className="gap-1">
+          <Typography className="text-sm text-subtlest">
+            {ruleLibrary.updatedAt === null
+              ? t("updates.neverUpdated")
+              : t("updates.lastUpdated", {
+                  time: new Date(ruleLibrary.updatedAt).toLocaleString(language),
+                })}
+          </Typography>
+          {ruleLibrary.files?.length ? (
+            <Typography className="text-sm text-connected">
+              {t("updates.resourceUpdated", { count: ruleLibrary.files.length })}
+            </Typography>
+          ) : null}
+        </View>
+        {ruleLibrary.error ? <Banner status="danger" message={ruleLibrary.error} /> : null}
         <Button
-          className="min-h-11 h-auto py-3"
-          size="sm"
-          variant="outline"
+          className="min-h-12 h-auto rounded-full bg-accent-soft py-3"
+          variant="secondary"
           isDisabled={ruleLibrary.updating}
           onPress={() => void ruleLibrary.update()}
         >
@@ -214,14 +225,17 @@ export function SettingsScreen() {
         </Button>
       </Card>
 
-      <Card className="gap-1">
-        <Typography className="text-section text-foreground">{t("tabs.logs")}</Typography>
+      <ListCard>
         {/* The lines themselves get a screen of their own; this says whether
             the backend is delivering any, which the switch above decides. */}
-        <Typography className="text-caption text-subtle">
-          {!app.settings?.core.logEnabled ? t("settings.logs.coreLogOff") : hasCoreLogs ? t("settings.logs.coreLogReceived") : t("settings.logs.coreLogWaiting")}
-        </Typography>
-      </Card>
+        <ListRow
+          last
+          leading={<IconBadge icon={ScrollText} size="sm" tone="neutral" />}
+          title={t("tabs.logs")}
+          description={!app.settings?.core.logEnabled ? t("settings.logs.coreLogOff") : hasCoreLogs ? t("settings.logs.coreLogReceived") : t("settings.logs.coreLogWaiting")}
+          descriptionLines={0}
+        />
+      </ListCard>
     </ScrollView>
   );
 }
@@ -245,9 +259,10 @@ function DnsField({
   value: string | null;
 }) {
   return (
-    <View className="gap-1">
-      <Typography className="text-caption text-subtle">{label}</Typography>
+    <View className="gap-1.5">
+      <Typography className="text-sm font-medium text-subtle">{label}</Typography>
       <Input
+        variant="secondary"
         className="min-h-12 h-auto py-3"
         value={value ?? ""}
         onChangeText={onChange}
@@ -256,29 +271,35 @@ function DnsField({
         accessibilityLabel={label}
         isInvalid={Boolean(error)}
       />
-      {error ? <Typography className="text-caption text-danger">{error}</Typography> : null}
+      {error ? <Typography className="text-sm text-danger">{error}</Typography> : null}
     </View>
   );
 }
 
+/** A setting that is on or off: a list row whose trailing control is the switch. */
 function Toggle({
   label,
+  last = false,
   onChange,
   value,
 }: {
   label: string;
+  last?: boolean;
   onChange: (value: boolean) => void;
   value: boolean;
 }) {
   return (
-    <View className="flex-row items-center justify-between">
-      <Typography className="flex-1 pr-3 text-body text-foreground">{label}</Typography>
-      <Switch
-        isSelected={value}
-        onSelectedChange={onChange}
-        accessibilityLabel={label}
-        hitSlop={10}
-      />
-    </View>
+    <ListRow
+      last={last}
+      title={label}
+      trailing={
+        <Switch
+          isSelected={value}
+          onSelectedChange={onChange}
+          accessibilityLabel={label}
+          hitSlop={10}
+        />
+      }
+    />
   );
 }

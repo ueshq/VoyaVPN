@@ -11,9 +11,14 @@ import { Button } from "heroui-native/button";
 import { Typography } from "heroui-native/text";
 import { AccessibilityInfo, findNodeHandle, StyleSheet, View, useWindowDimensions, type Text } from "react-native";
 import { BottomSheetScrollView, type BottomSheetBackgroundProps } from "@gorhom/bottom-sheet";
+import { QrCode, Share2, Trash2, type LucideIcon } from "lucide-react-native";
 import { useRef, type ReactNode } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
+
+import { ListCard } from "~/components/list-card";
+import { ListRow } from "~/components/list-row";
+import { useToneColor } from "~/components/tone";
 
 /**
  * What a node row can do beyond being selected.
@@ -59,6 +64,10 @@ export function NodeActionsSheet({
   const { height, fontScale } = useWindowDimensions();
   const scrollable = fontScale > 1.2 || height < 700;
   const titleRef = useRef<Text>(null);
+  // Resolved here, where the sheet is declared: the body renders at the
+  // portal host, so it takes finished values rather than reading context.
+  const actionColor = useToneColor("brand");
+  const dangerColor = useToneColor("danger");
 
   // Rendered by the backend so both shells show the same code; a phone has no
   // canvas to draw one on anyway.
@@ -140,13 +149,18 @@ export function NodeActionsSheet({
             onChange={(index) => {
               if (index >= 0) focusTitle();
             }}
+            // The canvas, not a card surface: the actions inside are white
+            // cards of their own, the grouped look the rest of the app uses.
+            // It goes through HeroUI's class because gorhom hands the
+            // background a style that would override a class set on it.
+            backgroundClassName="bg-canvas"
             backgroundComponent={SheetBackground}
             handleComponent={SheetHandle}
           >
             <SheetBody scrollable={scrollable} bottomInset={insets.bottom}>
               {share ? (
-                <View className="items-center gap-3">
-                  <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" className="text-section text-foreground">{qrTitle}</Typography>
+                <View className="items-center gap-4">
+                  <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground">{qrTitle}</Typography>
                   {qrQuery.data ? (
                     <View
                       // `accessible` is what turns the label into something a
@@ -155,47 +169,68 @@ export function NodeActionsSheet({
                       // React Native, so the label would be dropped on the floor.
                       accessible
                       accessibilityRole="image"
-                      className="aspect-square w-full max-w-72 bg-white p-3"
+                      className="aspect-square w-full max-w-72 rounded-3xl bg-white p-4 shadow-surface"
                       accessibilityLabel={qrAlt}
                     >
                       <SvgXml xml={qrQuery.data.svg} width="100%" height="100%" />
                     </View>
                   ) : (
-                    <Typography className="text-caption text-subtle">
+                    <Typography className="text-sm text-subtle">
                       {qrQuery.error ? failedLabel : loadingLabel}
                     </Typography>
                   )}
                 </View>
               ) : entry ? (
                 <>
-                  <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" className="text-section text-foreground" numberOfLines={2}>
-                    {title}
-                  </Typography>
-                  <SheetAction
-                    label={shareLabel}
-                    onPress={() => {
-                      void exports.handleExport([entry.profile.id]);
-                      close();
-                    }}
-                  />
-                  <SheetAction
-                    label={showQrLabel}
-                    onPress={() => void exports.handleExport([entry.profile.id], "qr")}
-                  />
-                  {entry.profile.subscriptionId === null ? (
+                  <View className="gap-1 px-1">
+                    <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground" numberOfLines={2}>
+                      {title}
+                    </Typography>
+                    <Typography className="text-sm text-subtle" numberOfLines={1}>{entry.profile.address}</Typography>
+                  </View>
+                  <ListCard>
                     <SheetAction
-                      destructive
-                      label={deleteLabel}
-                      onPress={() => void remove(entry.profile.id)}
+                      icon={Share2}
+                      color={actionColor}
+                      label={shareLabel}
+                      onPress={() => {
+                        void exports.handleExport([entry.profile.id]);
+                        close();
+                      }}
                     />
-                  ) : (
-                    <Typography className="text-caption text-subtle">
+                    <SheetAction
+                      icon={QrCode}
+                      color={actionColor}
+                      label={showQrLabel}
+                      last={entry.profile.subscriptionId !== null}
+                      onPress={() => void exports.handleExport([entry.profile.id], "qr")}
+                    />
+                    {entry.profile.subscriptionId === null ? (
+                      <SheetAction
+                        destructive
+                        icon={Trash2}
+                        color={dangerColor}
+                        label={deleteLabel}
+                        last
+                        onPress={() => void remove(entry.profile.id)}
+                      />
+                    ) : null}
+                  </ListCard>
+                  {entry.profile.subscriptionId === null ? null : (
+                    <Typography className="px-1 text-sm text-subtle">
                       {subscriptionReadOnly}
                     </Typography>
                   )}
                 </>
               ) : null}
-              <SheetAction label={closeLabel} onPress={close} />
+              <Button
+                className="min-h-12 h-auto rounded-full py-3"
+                variant="tertiary"
+                onPress={close}
+                accessibilityRole="button"
+              >
+                <Button.Label>{closeLabel}</Button.Label>
+              </Button>
             </SheetBody>
           </BottomSheet.Content>
         </View>
@@ -206,16 +241,16 @@ export function NodeActionsSheet({
 
 /** Unlabelled surface so VoiceOver does not announce a bare "BottomSheet". */
 function SheetBackground({ style, pointerEvents }: BottomSheetBackgroundProps) {
-  return <View accessible={false} pointerEvents={pointerEvents} style={style} className="rounded-t-3xl bg-surface" />;
+  return <View accessible={false} pointerEvents={pointerEvents} style={style} />;
 }
 
 function SheetBody({ children, scrollable, bottomInset }: { children: ReactNode; scrollable: boolean; bottomInset: number }) {
   const paddingBottom = Math.max(16, bottomInset);
   return scrollable ? (
-    <BottomSheetScrollView contentContainerStyle={{ padding: 16, paddingBottom, gap: 12 }}>
+    <BottomSheetScrollView contentContainerStyle={{ padding: 16, paddingBottom, gap: 16 }}>
       {children}
     </BottomSheetScrollView>
-  ) : <View style={{ paddingBottom }} className="gap-3 p-page">{children}</View>;
+  ) : <View style={{ paddingBottom }} className="gap-4 p-page">{children}</View>;
 }
 
 /** Unlabelled grabber; the drag itself is the affordance. */
@@ -229,25 +264,31 @@ function SheetHandle() {
 
 /**
  * One sheet row. Pure props — the portal body cannot read context, so the
- * label is already a string by the time it gets here.
+ * label and the icon colour are already values by the time they get here.
  */
 function SheetAction({
+  color,
   destructive = false,
+  icon: Icon,
   label,
+  last = false,
   onPress,
 }: {
+  color: string | undefined;
   destructive?: boolean;
+  icon: LucideIcon;
   label: string;
+  last?: boolean;
   onPress: () => void;
 }) {
   return (
-    <Button
-      className="min-h-11 h-auto py-3"
-      variant={destructive ? "danger-soft" : "tertiary"}
+    <ListRow
+      last={last}
+      title={label}
+      titleClassName={destructive ? "text-danger" : "text-foreground"}
+      leading={<Icon size={20} color={color} accessible={false} />}
       onPress={onPress}
-      accessibilityRole="button"
-    >
-      <Button.Label>{label}</Button.Label>
-    </Button>
+      accessibilityLabel={label}
+    />
   );
 }

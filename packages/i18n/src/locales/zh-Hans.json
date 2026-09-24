@@ -1100,6 +1100,7 @@
     "disconnectAll": "断开全部连接",
     "refresh": "刷新列表",
     "connectToView": "连接后可查看网络活动",
+    "connectHint": "连接后，这里会实时列出各应用的连接、所经出口节点和流量。",
     "goHome": "前往主页",
     "noMatches": "未找到匹配连接",
     "clearSearch": "清除搜索",
