@@ -30,6 +30,16 @@ function clipboard(device, text) {
   });
 }
 
+function appearance(device, value) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("xcrun", ["simctl", "ui", device, "appearance", ...(value ? [value] : [])]);
+    let output = "";
+    child.stdout.on("data", (data) => { output += data; });
+    child.once("error", reject);
+    child.once("close", (code) => code === 0 ? resolve(output.trim()) : reject(new Error(`simctl appearance: ${code}`)));
+  });
+}
+
 export async function startFixtures({ device, address, record }) {
   let delay = 0;
   let downloads = 0;
@@ -38,7 +48,7 @@ export async function startFixtures({ device, address, record }) {
     try {
       // Only the subscription endpoint needs LAN access. Clipboard/control
       // requests belong to the local XCTest runner, never another LAN client.
-      if (["/clipboard", "/delay"].includes(request.url) && request.socket.remoteAddress !== "127.0.0.1") {
+      if (["/clipboard", "/delay", "/appearance"].includes(request.url) && request.socket.remoteAddress !== "127.0.0.1") {
         response.writeHead(403); response.end(); return;
       }
       const chunks = [];
@@ -46,6 +56,10 @@ export async function startFixtures({ device, address, record }) {
       const body = Buffer.concat(chunks).toString();
       record(`${request.method} ${request.url}`);
       switch (request.url) {
+        case "/appearance":
+          if (request.method === "POST" && !["light", "dark"].includes(body)) { response.writeHead(400); response.end(); break; }
+          response.end(await appearance(device(), request.method === "POST" ? body : undefined));
+          break;
         case "/clipboard":
           response.end(await clipboard(device(), request.method === "POST" ? body : undefined));
           break;

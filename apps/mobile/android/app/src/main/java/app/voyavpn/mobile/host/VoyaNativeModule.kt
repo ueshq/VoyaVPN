@@ -119,11 +119,22 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
                 action = VoyaVpnService.ACTION_START
                 putExtra(VoyaVpnService.EXTRA_CONFIG_JSON, handoffJson)
             }
-            context.startForegroundService(intent)
+            VoyaVpnService.lastError = null
+            VoyaVpnService.state = VoyaVpnService.State.STARTING
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(context, intent)
+            } catch (error: Throwable) {
+                VoyaVpnService.lastError = error.message
+                VoyaVpnService.state = VoyaVpnService.State.FAILED
+                throw TunnelException.Failed(error.message ?: "could not start the tunnel service")
+            }
             awaitState(VoyaVpnService.State.RUNNING, START_TIMEOUT_MS)
         }
 
         override fun stop() {
+            if (VoyaVpnService.state == VoyaVpnService.State.STOPPED) return
+            VoyaVpnService.lastError = null
+            VoyaVpnService.state = VoyaVpnService.State.STOPPING
             context.startService(
                 Intent(context, VoyaVpnService::class.java).apply {
                     action = VoyaVpnService.ACTION_STOP
@@ -134,6 +145,7 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
 
         override fun status(): String = when (VoyaVpnService.state) {
             VoyaVpnService.State.RUNNING -> "running"
+            VoyaVpnService.State.STARTING, VoyaVpnService.State.STOPPING -> "starting"
             VoyaVpnService.State.STOPPED -> "stopped"
             VoyaVpnService.State.FAILED -> "error"
         }
@@ -182,7 +194,12 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
 
         @Synchronized
         override fun stop(coreId: String) {
-            cores.remove(coreId)?.stop()
+            try {
+                cores[coreId]?.stop()
+                cores.remove(coreId)
+            } catch (error: Throwable) {
+                throw ProbeCoreException.Failed(error.message ?: "the probe core did not stop")
+            }
         }
     }
 

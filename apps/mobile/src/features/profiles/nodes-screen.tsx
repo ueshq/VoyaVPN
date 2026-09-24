@@ -1,28 +1,32 @@
-import { useProfileActivation } from "@voya/client/runtime-action";
+import { ErrorNotice } from "~/components/error-notice";
+import { openPage } from "~/app/navigation";
+import { Input } from "heroui-native/input";
+import { MoreHorizontal } from "lucide-react-native";
+import { voyaCommands } from "@voya/client/transport";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { runtimeBusy, useProfileActivation } from "@voya/client/runtime-action";
 import type { NodeListRow } from "@voya/features/profiles/node-list-rows";
-import type { ImportProfilesResult, ProfileSummaryEntry } from "@voya/contracts";
+import type { ProfileSummaryEntry } from "@voya/contracts";
 import { profileLatency, profileLatencyTone, profileTitle } from "@voya/features/profiles/profile-display";
-import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
-import { useNodeImport } from "@voya/features/profiles/use-node-import";
 import { useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
 import { useNodeExport } from "@voya/features/profiles/use-node-export";
-import { useNodeSubscriptions } from "@voya/features/profiles/use-node-subscriptions";
+import { POLICY_GROUP_STRATEGY_HINT_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "heroui-native/button";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
-import { Circle, CircleCheck, ClipboardPaste, Gauge, Rss, RefreshCw, Server } from "lucide-react-native";
+import { Circle, CircleCheck, ClipboardPaste, Gauge, Server } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, findNodeHandle, FlatList, View, useWindowDimensions } from "react-native";
 import { useResolveClassNames } from "uniwind";
 
 import { Banner } from "~/components/banner";
 import { EmptyState } from "~/components/empty-state";
-import { IconBadge } from "~/components/icon-badge";
 import { ListCard } from "~/components/list-card";
 import { ListRow } from "~/components/list-row";
 import { PageHeader } from "~/components/page-header";
@@ -53,6 +57,18 @@ export function NodesScreen() {
   const speedtest = useNodeSpeedtest(operation);
   const activation = useProfileActivation(t);
   const queryClient = useQueryClient();
+  const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
+  const select = useCallback(async (id: string) => {
+    if (connected) { await activation.activateProfile(id); return; }
+    if (runtimeBusy(useRuntimeEventStore.getState().coreState?.state ?? "disconnected")) return;
+    useRuntimeActionStore.getState().startSwitch(id);
+    try {
+      await operation.runOperation(async () => {
+        await voyaCommands().setActiveProfile(id);
+        await queryClient.invalidateQueries();
+      });
+    } finally { useRuntimeActionStore.getState().finishSwitch(); }
+  }, [activation, connected, operation, queryClient]);
 
   // Groups are headers, not nodes; a run tests what the list is showing.
   const testableIds = useMemo(
@@ -60,19 +76,9 @@ export function NodesScreen() {
     [data.rows],
   );
 
-  const subscriptions = useNodeSubscriptions(operation, t);
-  async function onImported(result: ImportProfilesResult, isActive: () => boolean) {
-    if (!isActive()) return;
-    operation.setOperationMessage(formatImportSummary(result, t));
-    await queryClient.invalidateQueries();
-    await subscriptions.updateImportedSubscriptions(result.addedSubscriptionIds, isActive);
-    if (isActive()) await queryClient.invalidateQueries();
-  }
-  const imports = useNodeImport(operation, onImported, t);
+  const selected = data.profiles.find((entry) => entry.isActive);
   const groups = usePolicyGroups(operation, t);
-  // The subscriptions a group could be refreshed from; the same list the
-  // policy-group editor offers, so both read one query rather than two.
-  const subscriptionRows = groups.policyGroupSubscriptions;
+  const [groupsExpanded, setGroupsExpanded] = useState(false);
   const exports = useNodeExport(operation, t);
   const [actionsFor, setActionsFor] = useState<ProfileSummaryEntry | null>(null);
 
@@ -110,15 +116,20 @@ export function NodesScreen() {
           last={item.last}
           stacked={stackedActions}
           title={profileTitle(item.item.profile.remarks, t)}
-          titleLines={1}
+          titleLines={stackedActions ? 0 : 2}
           description={item.item.profile.address}
           leading={
             <SelectionMark
               state={activation.runningId === item.item.profile.id ? "inUse" : item.item.isActive ? "selected" : "none"}
             />
           }
+          trailingInteractive
+          accessibilityLabel={`${profileTitle(item.item.profile.remarks, t)}, ${item.item.profile.address}, ${profileLatency(item.item, t)}`}
           trailing={
             <View className={`gap-1 ${stackedActions ? "flex-row items-center" : "items-end"}`}>
+              <Button isIconOnly className="h-12 w-12" variant="ghost" accessibilityLabel={actionsLabel(item.item, t)} onPress={() => { returnFocusId.current = item.item.profile.id; setActionsFor(item.item); }}>
+                <MoreHorizontal size={20} color={accentForeground} />
+              </Button>
               {(!item.item.metrics.outcome || item.item.metrics.outcome === "completed") ? (
                 <LatencyPill tone={LATENCY_TONE[profileLatencyTone(item.item)]} text={profileLatency(item.item, t)} />
               ) : null}
@@ -133,8 +144,9 @@ export function NodesScreen() {
               ) : null}
             </View>
           }
+          accessibilityState={{ selected: item.item.isActive, busy: activation.busy }}
           isDisabled={activation.busy}
-          onPress={() => void activation.activateProfile(item.item.profile.id)}
+          onPress={() => void select(item.item.profile.id)}
           // A phone has no right-click, so the desktop's row menu is a long
           // press; the sheet says what it offers.
           onLongPress={() => {
@@ -154,7 +166,7 @@ export function NodesScreen() {
           ) : null}
         </ListRow>
       ),
-    [activation, selection, stackedActions, t],
+    [activation, selection, stackedActions, t, accentForeground, select, setActionsFor],
   );
 
   const testAllLabel = speedtest.speedtestRunning
@@ -183,7 +195,7 @@ export function NodesScreen() {
                 // One button, two jobs: while a run is in flight it is the way
                 // to stop it, and it counts the nodes that have answered.
                 <Button
-                  className="min-h-10 h-auto rounded-full bg-accent-soft py-2"
+                  className="min-h-12 h-auto rounded-3xl bg-accent-soft py-2"
                   size="sm"
                   variant="secondary"
                   isDisabled={testableIds.length === 0}
@@ -198,35 +210,47 @@ export function NodesScreen() {
                 </Button>
               }
             />
+            {selected && !selection.search ? <ListCard><ListRow
+              title={`${t("mobile.currentSelection")}: ${profileTitle(selected.profile.remarks, t)}`}
+              titleLines={0} description={selected.profile.address} last
+              onPress={() => { returnFocusId.current = selected.profile.id; setActionsFor(selected); }}
+            /></ListCard> : null}
             <Button
               ref={importRef}
-              className="min-h-12 h-auto rounded-full py-3"
+              className="min-h-12 h-auto rounded-3xl py-3"
               variant="primary"
-              isDisabled={imports.directImportPending !== null || subscriptions.updatingSubscriptions.size > 0}
-              accessibilityLabel={t("panes.profiles.import.clipboard")}
-              onPress={() => void imports.handleDirectImport("clipboard")}
+              accessibilityLabel={t("mobile.add")}
+              onPress={() => openPage("import")}
             >
-              {imports.directImportPending ? <Spinner size="sm" /> : <ClipboardPaste size={18} color={typeof onAccent === "string" ? onAccent : undefined} />}
-              <Button.Label>{t("panes.profiles.import.clipboard")}</Button.Label>
+              <ClipboardPaste size={18} color={typeof onAccent === "string" ? onAccent : undefined} />
+              <Button.Label>{t("mobile.add")}</Button.Label>
             </Button>
+            <Input className="min-h-12 h-auto" accessibilityLabel={t("mobile.search")} placeholder={t("mobile.search")} value={selection.search} onChangeText={selection.setSearch} autoCorrect={false} />
+            <View className="flex-row flex-wrap gap-2">
+              <Button variant="secondary" className="min-h-12 h-auto" onPress={() => selection.setSortByLatency(!selection.sortByLatency)}><Button.Label>{t(selection.sortByLatency ? "mobile.sortLatency" : "mobile.sortDefault")}</Button.Label></Button>
+              <Button variant="ghost" className="min-h-12 h-auto" onPress={() => openPage("subscriptions")}><Button.Label>{t("mobile.subscriptions")}</Button.Label></Button>
+            </View>
             {operation.operationMessage ? (
               <Banner status="info" liveRegion message={operation.operationMessage} />
             ) : null}
-            {operation.operationError ? <Banner status="danger" message={operation.operationError} /> : null}
+            <ErrorNotice error={operation.operationError} />
+            <ErrorNotice error={data.profilesQuery.error} retry={() => void data.profilesQuery.refetch()} />
 
             {/* A group replaces the single selected node, so its controls precede
                 the node rows: picking one is picking *instead* of a row.
                 Editing a group is a desktop job; a phone uses what is there. */}
             {groups.policyGroupEntries.length > 0 ? (
               <View>
-                <SectionHeader title={t("policyGroups.title")} />
-                <ListCard>
+                <SectionHeader title={t("policyGroups.title")} expanded={groupsExpanded} onToggle={() => setGroupsExpanded(!groupsExpanded)} />
+                {groupsExpanded ? <ListCard>
                   {groups.policyGroupEntries.map((entry, index, all) => (
                     <ListRow
                       key={entry.group.id}
                       last={index === all.length - 1}
                       title={entry.group.name}
                       titleLines={2}
+                      description={t(POLICY_GROUP_STRATEGY_HINT_KEYS[entry.group.strategy])}
+                      descriptionLines={0}
                       leading={<SelectionMark state={entry.isActive ? (groups.coreConnected ? "inUse" : "selected") : "none"} />}
                       trailing={entry.isActive ? (
                         <Typography className={`text-sm font-medium ${groups.coreConnected ? "text-connected" : "text-brand"}`}>
@@ -238,62 +262,14 @@ export function NodesScreen() {
                       accessibilityState={{ selected: entry.isActive }}
                     />
                   ))}
-                </ListCard>
+                </ListCard> : null}
               </View>
             ) : null}
 
-            {/* Source editing stays on the desktop; imported subscriptions
-                can also be refreshed individually or together here. */}
-            {subscriptionRows.length > 0 ? (
-              <View>
-                <SectionHeader
-                  title={t("panes.profiles.subscriptionSources")}
-                  trailing={
-                    <Button
-                      className="min-h-10 h-auto py-2"
-                      variant="ghost"
-                      size="sm"
-                      isDisabled={imports.directImportPending !== null || subscriptions.updatingSubscriptions.size > 0}
-                      onPress={() => void subscriptions.updateAllSubscriptions()}
-                    >
-                      <Button.Label className="text-brand">
-                        {t("panes.profiles.toolbar.updateAllSubscriptions")}
-                      </Button.Label>
-                    </Button>
-                  }
-                />
-                <ListCard>
-                  {subscriptionRows.map((subscription, index) => {
-                    const updating = subscriptions.updatingAllSubscriptions || subscriptions.updatingSubscriptions.has(subscription.id);
-                    return (
-                      <ListRow
-                        key={subscription.id}
-                        last={index === subscriptionRows.length - 1}
-                        title={subscription.remarks}
-                        titleLines={1}
-                        leading={<IconBadge icon={Rss} size="sm" />}
-                        trailing={
-                          <Button
-                            isIconOnly
-                            className="h-11 w-11"
-                            variant="ghost"
-                            size="sm"
-                            isDisabled={imports.directImportPending !== null || updating}
-                            onPress={() => void subscriptions.updateSubscription(subscription.id)}
-                            accessibilityLabel={`${t("home.subscriptionCard.update")} ${subscription.remarks}`}
-                          >
-                            {updating ? <Spinner size="sm" /> : <RefreshCw size={18} color={accentForeground} />}
-                          </Button>
-                        }
-                      />
-                    );
-                  })}
-                </ListCard>
-              </View>
-            ) : null}
+
           </View>
         }
-        ListEmptyComponent={
+        ListEmptyComponent={data.profilesQuery.isPending ? <Typography className="px-page py-4 text-base text-subtle">{t("panes.profiles.loadingNodes")}</Typography> : data.profilesQuery.error ? undefined :
           <View className="px-page pt-4">
             <EmptyState
               icons={[Server]}
@@ -316,6 +292,7 @@ export function NodesScreen() {
           if (target != null) AccessibilityInfo.setAccessibilityFocus(target);
         }}
         operation={operation}
+        onTest={(id) => void speedtest.handleSpeedtest({ profileIds: [id], scope: "profiles" })}
       />
     </View>
   );

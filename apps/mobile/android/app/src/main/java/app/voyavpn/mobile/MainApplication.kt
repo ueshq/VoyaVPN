@@ -25,6 +25,7 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    go.Seq.setContext(this)
     loadReactNative(this)
   }
 }

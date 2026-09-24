@@ -35,10 +35,12 @@ export function ListRow({
   onPress,
   ref,
   stacked = false,
+  testID,
   title,
   titleClassName = "text-foreground",
   titleLines,
   trailing,
+  trailingInteractive = false,
 }: {
   accessibilityActions?: readonly AccessibilityActionInfo[];
   accessibilityLabel?: string;
@@ -63,32 +65,48 @@ export function ListRow({
   ref?: Ref<View>;
   /** Put `trailing` under the text instead of beside it, for narrow or large-text layouts. */
   stacked?: boolean;
+  testID?: string;
   title: string;
   titleClassName?: string;
   titleLines?: number;
   trailing?: ReactNode;
+  /** Keep a trailing switch/button outside the row's accessibility element. */
+  trailingInteractive?: boolean;
 }) {
   const shape = `bg-surface ${inset ? "mx-page" : ""} ${first ? "rounded-t-3xl" : ""} ${
     last ? "rounded-b-3xl" : ""
   } ${dimmed ? "opacity-40" : ""}`;
 
+  const text = (
+    <View className="min-w-0 flex-1 flex-row items-center gap-3">
+      {leading ? <View className="w-7 items-center">{leading}</View> : null}
+      <View className="min-w-0 flex-1 gap-0.5">
+        <Typography className={`text-base ${titleClassName}`} numberOfLines={titleLines}>{title}</Typography>
+        {description ? <Typography className="text-sm text-subtle" numberOfLines={descriptionLines}>{description}</Typography> : null}
+        {children}
+      </View>
+    </View>
+  );
+  const divider = last ? null : <View accessible={false} className={`absolute bottom-0 right-0 h-hairline bg-border-subtle ${leading ? "left-14" : "left-4"}`} />;
+
+  if (trailingInteractive && (onPress || onLongPress)) {
+    return <View className={shape}>
+      <View className={`gap-2 ${stacked ? "" : "flex-row items-center"}`}>
+        <PressableFeedback ref={ref} testID={testID} animation="disable-all" className="min-h-control flex-1 px-4 py-3"
+          isDisabled={isDisabled} onPress={onPress} onLongPress={onLongPress}
+          onAccessibilityAction={onAccessibilityAction} accessibilityActions={accessibilityActions}
+          accessibilityLabel={accessibilityLabel} accessibilityRole={accessibilityRole ?? "button"} accessibilityState={accessibilityState}>
+          <PressableFeedback.Highlight />{text}
+        </PressableFeedback>
+        <View className={stacked ? "px-4 pb-3" : "shrink-0 pr-4 py-3"}>{trailing}</View>
+      </View>{divider}
+    </View>;
+  }
+
   const content = (
     <>
       <View className={`min-h-control gap-3 px-4 py-3 ${stacked ? "" : "flex-row items-center"}`}>
-        <View className="min-w-0 flex-1 flex-row items-center gap-3">
-          {leading ? <View className="w-7 items-center">{leading}</View> : null}
-          <View className="min-w-0 flex-1 gap-0.5">
-            <Typography className={`text-base ${titleClassName}`} numberOfLines={titleLines}>
-              {title}
-            </Typography>
-            {description ? (
-              <Typography className="text-sm text-subtle" numberOfLines={descriptionLines}>
-                {description}
-              </Typography>
-            ) : null}
-            {children}
-          </View>
-        </View>
+        {text}
         {trailing ? (
           <View className={stacked ? (leading ? "pl-10" : "") : "shrink-0 items-end"}>{trailing}</View>
         ) : null}
@@ -104,6 +122,7 @@ export function ListRow({
 
   return onPress || onLongPress ? (
     <PressableFeedback
+        testID={testID}
       ref={ref}
       animation="disable-all"
       className={shape}

@@ -62,6 +62,14 @@ struct ImportText {
     subscription_id: Option<String>,
 }
 
+pub(super) fn preview_import(args: &Value) -> Result<Value, AppError> {
+    let ImportText { text, .. } = arguments("preview_import_profiles", args)?;
+    answer(
+        "preview_import_profiles",
+        &SubscriptionManager::preview_import(&text)?,
+    )
+}
+
 pub(super) async fn import_from_text(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let ImportText {
         text,

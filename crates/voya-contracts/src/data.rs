@@ -65,6 +65,37 @@ pub struct SubscriptionUpdateResult {
     pub imported: u32,
     pub removed_existing: u32,
     pub messages: Vec<String>,
+    pub outcomes: Vec<SubscriptionUpdateOutcome>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub enum SubscriptionUpdateStatus {
+    Success,
+    Skipped,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub enum SubscriptionUpdateReason {
+    Updated,
+    InvalidSource,
+    SourceChanged,
+    EmptyContent,
+    DownloadFailed,
+    NoImportableNodes,
+    InvalidFilter,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubscriptionUpdateOutcome {
+    pub subscription_id: String,
+    pub status: SubscriptionUpdateStatus,
+    pub reason: SubscriptionUpdateReason,
+    pub imported: u32,
+    pub removed_existing: u32,
+    pub diagnostic: Option<String>,
 }
 
 impl Default for Subscription {
@@ -208,6 +239,24 @@ pub struct DnsSettings {
     pub proxy_strategy: Option<String>,
     pub hosts: Option<String>,
     pub direct_expected_ips: Option<String>,
+}
+
+/// A read-only preview. Credentials are deliberately excluded.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImportPreview {
+    pub nodes: Vec<ImportPreviewNode>,
+    pub subscription_urls: Vec<String>,
+    pub failed: u32,
+    pub line_issues: Vec<crate::ImportLineIssue>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImportPreviewNode {
+    pub name: String,
+    pub protocol: String,
+    pub address: String,
 }
 
 #[cfg(test)]

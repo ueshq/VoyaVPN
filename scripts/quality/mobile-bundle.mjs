@@ -18,6 +18,7 @@ const mobileRoot = resolve(repoRoot, "apps/mobile");
 const outputDir = mkdtempSync(join(tmpdir(), "voyavpn-mobile-bundle-"));
 
 try {
+  run("node", ["scripts/native/mobile/legal-assets.mjs", "--check"], { cwd: repoRoot });
   for (const platform of ["ios", "android"]) {
     run(
       "pnpm",

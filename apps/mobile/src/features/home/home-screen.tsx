@@ -11,12 +11,13 @@ import { Button } from "heroui-native/button";
 import { Card } from "heroui-native/card";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
-import { ArrowDown, ArrowUp, Clock, Globe, Server, type LucideIcon } from "lucide-react-native";
-import { ScrollView, View } from "react-native";
+import { ArrowDown, ArrowUp, Clock, Globe, type LucideIcon } from "lucide-react-native";
+import { Pressable, ScrollView, View } from "react-native";
 
-import { navigateToTab } from "~/app/navigation";
+import { ErrorNotice } from "~/components/error-notice";
+import { useTrafficMode } from "@voya/features/routing/use-traffic-mode";
+import { navigateToTab, openPage } from "~/app/navigation";
 import { Banner } from "~/components/banner";
-import { EmptyState } from "~/components/empty-state";
 import { PageHeader } from "~/components/page-header";
 import { useToneColor } from "~/components/tone";
 import { useScreenInsets } from "~/components/use-screen-insets";
@@ -36,6 +37,8 @@ export function HomeScreen() {
   const { t } = useI18n();
   const insets = useScreenInsets();
   const runtime = useHomeRuntime();
+  const trafficMode = useTrafficMode();
+  const primaryLabel = runtime.connected || runtime.state === "cleanupPending" ? "actions.disconnect" : !runtime.hasNodes ? "mobile.add" : !runtime.ready ? "mobile.select" : "actions.connect";
   const { ipQuery } = useConnectionIp();
   const statistics = useRuntimeEventStore((state) => state.statistics);
 
@@ -65,20 +68,25 @@ export function HomeScreen() {
       <PageHeader title={t("tabs.home")} />
 
       <Card className="gap-5 p-5">
-        <WorldMap marker={marker} />
+        {runtime.hasNodes ? <WorldMap marker={marker} /> : null}
 
         <View className="items-center gap-1">
           <View className="max-w-full flex-row items-center gap-2">
             <View accessible={false} className={`h-2.5 w-2.5 rounded-full ${STATE_DOT[runtime.state]}`} />
             <Typography maxFontSizeMultiplier={1.6} className="shrink text-2xl font-semibold text-foreground">
-              {t(CORE_STATE_KEYS[runtime.state])}
+              {runtime.hasNodes ? t(CORE_STATE_KEYS[runtime.state]) : t("panes.profiles.empty")}
             </Typography>
           </View>
-          <Typography className="text-center text-base text-subtle">
+          {runtime.hasNodes ? <>
+          <Pressable accessibilityRole="button" onPress={() => navigateToTab("profiles")} className="min-h-12 justify-center">
+          <Typography className="text-center text-base text-brand">
             {runtime.activeGroup
               ? runtime.activeGroup.group.name
               : (nodeName ?? t("home.noSelection"))}
           </Typography>
+          </Pressable>
+          <Typography className="text-sm text-subtle">{t(trafficMode.mode === "global" ? "proxy.trafficModeGlobal" : "panes.routing.trafficModeRule")}</Typography>
+          </> : null}
           {runtime.activeGroup && runtime.groupRuntime?.nowProfileId ? (
             <Typography className="text-center text-sm text-subtlest">
               {t("home.groupVia", { node: groupMemberName(runtime, t) })}
@@ -89,34 +97,30 @@ export function HomeScreen() {
         <Button
           // A disconnect is the calm, reversible choice once connected, so it
           // steps down from the solid accent to the tinted one.
-          className={`min-h-14 h-auto rounded-full py-3 ${runtime.connected ? "bg-accent-soft" : ""}`}
+          className={`min-h-14 h-auto rounded-3xl py-3 ${runtime.connected ? "bg-accent-soft" : ""}`}
           size="lg"
           variant={runtime.connected ? "secondary" : "primary"}
-          isDisabled={runtime.busy || runtime.modePending}
-          onPress={runtime.handlePrimaryAction}
-          accessibilityLabel={t(runtime.connected ? "actions.disconnect" : "actions.connect")}
+          isDisabled={runtime.busy || runtime.modePending || (!runtime.connected && runtime.state !== "cleanupPending" && (runtime.profilesPending || Boolean(runtime.profilesError)))}
+          onPress={() => runtime.connected || runtime.state === "cleanupPending" ? runtime.handlePrimaryAction() : !runtime.hasNodes ? openPage("import") : !runtime.ready ? navigateToTab("profiles") : runtime.handlePrimaryAction()}
+          accessibilityLabel={t(primaryLabel)}
         >
-          {runtime.inProgress ? <Spinner size="sm" /> : null}
+          {runtime.inProgress || runtime.profilesPending ? <Spinner size="sm" /> : null}
           <Button.Label>
-            {t(runtime.connected || runtime.state === "cleanupPending"
-              ? "actions.disconnect"
-              : "actions.connect")}
+            {t(primaryLabel)}
           </Button.Label>
         </Button>
       </Card>
 
       {runtime.modePending ? <Banner status="info" message={t("home.modePendingReason")} /> : null}
-      {runtime.lastError ? (
-        <Banner
-          status="danger"
-          message={t(ACTION_FAILED_KEYS[runtime.lastError.action], {
-            message: runtime.lastError.message,
-          })}
-          action={<RetryButton label={t("actions.retry")} onPress={runtime.retryLastAction} />}
-        />
-      ) : null}
-      {runtime.tunIssue ? <Banner status="warning" message={runtime.tunIssue} /> : null}
+      {runtime.lastError ? <View className="gap-2">
+        <ErrorNotice error={runtime.lastError.message} reason={runtime.lastError.reason}
+          message={runtime.lastError.reason === "elevationRequired" ? t("home.authorizationDeclined") : undefined}
+          retryLabel={runtime.lastError.reason === "notFound" ? t("mobile.select") : runtime.lastError.reason === "elevationRequired" ? t("mobile.authorizeAgain") : undefined}
+          retry={runtime.lastError.reason === "notFound" ? () => navigateToTab("profiles") : runtime.retryLastAction} />
+        <Button variant="secondary" className="min-h-12 h-auto" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
+      </View> : runtime.tunIssue ? <ErrorNotice error={runtime.tunIssue} /> : null}
 
+      {runtime.connected ? <>
       <Card className="gap-4 p-5">
         <View className="flex-row flex-wrap gap-x-3 gap-y-4">
           <Metric
@@ -135,28 +139,18 @@ export function HomeScreen() {
         <Fact icon={Globe} label={t("home.exitIp")} value={exitIp(ipQuery, t)} selectable />
       </Card>
 
+      </> : null}
+      <Button testID="home-activity" variant="secondary" className="min-h-12 h-auto" onPress={() => openPage("activity")}><Button.Label>{t("tabs.connections")}</Button.Label></Button>
+
       {runtime.profilesError ? (
         <Banner
           status="danger"
-          message={t("home.profilesFailed", { message: String(runtime.profilesError) })}
+          message={t("mobile.failed")}
           action={<RetryButton label={t("actions.retry")} onPress={runtime.retryProfiles} />}
         />
       ) : null}
-      {runtime.hasNodes ? null : (
-        <EmptyState
-          icons={[Server]}
-          title={t("panes.profiles.empty")}
-          description={t("home.emptyGuide")}
-          action={
-            <Button
-              className="min-h-12 h-auto rounded-full bg-accent-soft py-3"
-              variant="secondary"
-              onPress={() => navigateToTab("profiles")}
-            >
-              <Button.Label>{t("panes.profiles.importDialog.title")}</Button.Label>
-            </Button>
-          }
-        />
+      {runtime.hasNodes || runtime.profilesPending || runtime.profilesError ? null : (
+        <Typography className="text-base text-subtle">{t("home.emptyGuide")}</Typography>
       )}
     </ScrollView>
   );
@@ -177,12 +171,6 @@ const CORE_STATE_KEYS = {
   disconnected: "status.disconnected",
   disconnecting: "status.disconnecting",
 } satisfies Record<CoreState, TranslationKey>;
-
-const ACTION_FAILED_KEYS = {
-  connect: "home.actionFailed.connect",
-  disconnect: "home.actionFailed.disconnect",
-  restart: "home.actionFailed.restart",
-} satisfies Record<"connect" | "disconnect" | "restart", TranslationKey>;
 
 /** Each state's dot beside its word: green only when traffic is protected. */
 const STATE_DOT = {
@@ -238,7 +226,7 @@ function Fact({
 
 function RetryButton({ label, onPress }: { label: string; onPress: () => void }) {
   return (
-    <Button className="min-h-9 h-auto rounded-full py-1.5" size="sm" variant="tertiary" onPress={onPress}>
+    <Button className="min-h-12 h-auto rounded-3xl py-1.5" size="sm" variant="tertiary" onPress={onPress}>
       <Button.Label>{label}</Button.Label>
     </Button>
   );

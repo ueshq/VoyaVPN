@@ -1,3 +1,5 @@
+import { deleteSafely } from "./delete-safely";
+import { openPage } from "~/app/navigation";
 import { voyaCommands } from "@voya/client/transport";
 import { profileTitle } from "@voya/features/profiles/profile-display";
 import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
@@ -9,10 +11,10 @@ import { useQuery } from "@tanstack/react-query";
 import { BottomSheet } from "heroui-native/bottom-sheet";
 import { Button } from "heroui-native/button";
 import { Typography } from "heroui-native/text";
-import { AccessibilityInfo, findNodeHandle, StyleSheet, View, useWindowDimensions, type Text } from "react-native";
+import { AccessibilityInfo, Alert, Share, findNodeHandle, StyleSheet, View, useWindowDimensions, type Text } from "react-native";
 import { BottomSheetScrollView, type BottomSheetBackgroundProps } from "@gorhom/bottom-sheet";
-import { QrCode, Share2, Trash2, type LucideIcon } from "lucide-react-native";
-import { useRef, type ReactNode } from "react";
+import { QrCode, Copy, Gauge, Share2, Trash2, type LucideIcon } from "lucide-react-native";
+import { useRef, useState, type ReactNode } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
@@ -45,19 +47,27 @@ import { useToneColor } from "~/components/tone";
  * the explicit Close button is the accessible way out.
  */
 export function NodeActionsSheet({
-  entry,
+  entry: activeEntry,
   exports,
   onClose,
   onClosed,
   operation,
+  onTest,
 }: {
   entry: ProfileSummaryEntry | null;
   exports: ReturnType<typeof useNodeExport>;
   onClose: () => void;
   onClosed: () => void;
   operation: NodeOperation;
+  onTest: (id: string) => void;
 }) {
   const { t } = useI18n();
+  // Preserve the measured content while the sheet closes. Removing the rows
+  // during the close animation can leave the bounded scroll sheet without a
+  // usable layout when the same node is opened again on a small screen.
+  const [lastEntry, setLastEntry] = useState(activeEntry);
+  if (activeEntry !== null && activeEntry !== lastEntry) setLastEntry(activeEntry);
+  const entry = activeEntry ?? lastEntry;
   const queryClient = useQueryClient();
   const share = exports.shareQrContent;
   const insets = useSafeAreaInsets();
@@ -92,15 +102,15 @@ export function NodeActionsSheet({
 
   async function remove(indexId: string) {
     const removed = await operation.runOperation(async () => {
-      await voyaCommands().deleteProfiles([indexId]);
+      await deleteSafely([indexId], () => voyaCommands().deleteProfiles([indexId]));
       await queryClient.invalidateQueries();
     });
     if (removed) close();
   }
 
-  const open = entry !== null || share !== null;
+  const open = activeEntry !== null || share !== null;
 
-  const shareLabel = t("panes.profiles.export.shareLinks");
+  const shareLabel = t("mobile.copy");
   const showQrLabel = t("panes.profiles.export.showQr");
   const deleteLabel = t("actions.delete");
   const closeLabel = t("actions.close");
@@ -161,6 +171,8 @@ export function NodeActionsSheet({
               {share ? (
                 <View className="items-center gap-4">
                   <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground">{qrTitle}</Typography>
+                  <Typography className="text-base text-foreground">{title}</Typography>
+                  <Typography className="text-sm text-subtle">{entry?.profile.kind} · {entry?.profile.address}</Typography>
                   {qrQuery.data ? (
                     <View
                       // `accessible` is what turns the label into something a
@@ -190,7 +202,7 @@ export function NodeActionsSheet({
                   </View>
                   <ListCard>
                     <SheetAction
-                      icon={Share2}
+                      icon={Copy}
                       color={actionColor}
                       label={shareLabel}
                       onPress={() => {
@@ -198,6 +210,13 @@ export function NodeActionsSheet({
                         close();
                       }}
                     />
+                    <SheetAction icon={Share2} color={actionColor} label={t("mobile.share")} onPress={() => {
+                      void operation.runOperation(async () => {
+                        const result = await voyaCommands().exportProfileShareLinks([entry.profile.id]);
+                        await Share.share({ message: result.text });
+                      });
+                    }} />
+                    <SheetAction icon={Gauge} color={actionColor} label={t("mobile.testNode")} onPress={() => { onTest(entry.profile.id); close(); }} />
                     <SheetAction
                       icon={QrCode}
                       color={actionColor}
@@ -212,19 +231,23 @@ export function NodeActionsSheet({
                         color={dangerColor}
                         label={deleteLabel}
                         last
-                        onPress={() => void remove(entry.profile.id)}
+                        onPress={() => Alert.alert(t("mobile.deleteConfirm"), t("mobile.deleteHint"), [
+                          { text: t("actions.cancel"), style: "cancel" },
+                          { text: deleteLabel, style: "destructive", onPress: () => void remove(entry.profile.id) },
+                        ])}
                       />
                     ) : null}
                   </ListCard>
                   {entry.profile.subscriptionId === null ? null : (
-                    <Typography className="px-1 text-sm text-subtle">
-                      {subscriptionReadOnly}
-                    </Typography>
+                    <View className="gap-2">
+                      <Typography className="px-1 text-sm text-subtle">{subscriptionReadOnly}</Typography>
+                      <Button className="min-h-12 h-auto" variant="secondary" onPress={() => { const id = entry.profile.subscriptionId; close(); if (id) openPage("subscription", { id }); }}><Button.Label>{t("mobile.subscriptions")}</Button.Label></Button>
+                    </View>
                   )}
                 </>
               ) : null}
               <Button
-                className="min-h-12 h-auto rounded-full py-3"
+                className="min-h-12 h-auto rounded-3xl py-3"
                 variant="tertiary"
                 onPress={close}
                 accessibilityRole="button"

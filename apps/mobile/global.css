@@ -43,10 +43,19 @@
 @import "uniwind";
 @import "heroui-native/styles";
 
+/* Labels must shrink inside row buttons before wrapping at accessibility
+   sizes; the upstream label otherwise keeps an unconstrained natural width. */
+@layer components {
+  .button__label {
+    flex-shrink: 1;
+    text-align: center;
+  }
+}
+
 @theme {
   /* Theme-independent scale. The desktop's control heights are pointer-sized;
      these are the touch equivalents. */
-  --spacing-control: 44px;
+  --spacing-control: 48px;
   --spacing-page: 16px;
 
   /* No named type scale here, on purpose. Text is HeroUI's `Typography`, which
@@ -75,11 +84,11 @@
     @variant light {
       --voya-canvas: #f6f8fa;
       --voya-subtle: #59636e;
-      --voya-subtlest: #818b98;
+      --voya-subtlest: #59636e;
       --voya-border-subtle: rgb(209 217 224 / 0.7);
       --voya-brand: #0969da;
       --voya-brand-tint: rgb(9 105 218 / 0.08);
-      --voya-connected: #1f883d;
+      --voya-connected: #1a7434;
       --voya-connected-foreground: #ffffff;
       --voya-map-land: #e0e6eb;
     }
@@ -87,12 +96,12 @@
     @variant dark {
       --voya-canvas: #0d1117;
       --voya-subtle: #9198a1;
-      --voya-subtlest: #656c76;
+      --voya-subtlest: #9198a1;
       --voya-border-subtle: rgb(61 68 77 / 0.7);
       --voya-brand: #4493f8;
       --voya-brand-tint: rgb(68 147 248 / 0.16);
-      --voya-connected: #238636;
-      --voya-connected-foreground: #ffffff;
+      --voya-connected: #3fb950;
+      --voya-connected-foreground: #0d1117;
       --voya-map-land: #212830;
     }
   }
@@ -124,7 +133,7 @@
 
     @variant dark {
       --accent: var(--voya-brand);
-      --accent-foreground: #ffffff;
+      --accent-foreground: #0d1117;
     }
   }
 }

@@ -1,3 +1,6 @@
+import { useIsFocused } from "@react-navigation/native";
+import { ErrorNotice } from "~/components/error-notice";
+import { closeAllConnections } from "./connection-actions";
 import { useQuery } from "@tanstack/react-query";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useAppVisible } from "@voya/client/use-app-visible";
@@ -17,13 +20,12 @@ import { SearchField } from "heroui-native/search-field";
 import { Typography } from "heroui-native/text";
 import { Activity, ArrowDownUp, Globe, SearchX } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FlatList, ScrollView, View } from "react-native";
+import { Alert, FlatList, ScrollView, View } from "react-native";
 
-import { navigateToTab } from "~/app/navigation";
+import { navigateToTab, openPage } from "~/app/navigation";
 import { EmptyState } from "~/components/empty-state";
 import { withListPositions } from "~/components/list-positions";
 import { ListRow } from "~/components/list-row";
-import { PageHeader } from "~/components/page-header";
 import { useScreenInsets } from "~/components/use-screen-insets";
 
 /**
@@ -52,20 +54,26 @@ export function ActivityScreen() {
   const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const streamed = useRuntimeEventStore((state) => state.proxyConnections);
   const visible = useAppVisible();
+  const focused = useIsFocused();
+  const monitor = useRuntimeEventStore((state) => state.proxyMonitorStatus);
+  const [error, setError] = useState<unknown>(null);
+  const [closeError, setCloseError] = useState<unknown>(null);
+  const [closing, setClosing] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (!connected || !visible) return undefined;
+    if (!connected || !visible || !focused) return undefined;
 
-    void voyaCommands().proxyStartMonitor().catch(() => undefined);
+    void voyaCommands().proxyStartMonitor().catch(setError);
     return () => {
       void voyaCommands().proxyStopMonitor().catch(() => undefined);
     };
-  }, [connected, visible]);
+  }, [connected, visible, focused, attempt]);
 
   // The stream is the live source; the query is the first paint before the
   // first push arrives, and the fallback while the monitor is starting.
   const snapshotQuery = useQuery({
-    enabled: connected,
+    enabled: connected && visible && focused,
     queryFn: () => voyaCommands().proxyListConnections(),
     queryKey: queryKeys.proxyConnections,
   });
@@ -86,13 +94,15 @@ export function ActivityScreen() {
   );
   const positioned = useMemo(() => withListPositions(rows), [rows]);
 
-  // `null` is the command's own way of saying "all of them", so closing one
-  // row and clearing the list are the same call.
-  const close = useCallback((connectionId: string | null) => {
-    void voyaCommands()
-      .proxyCloseConnection(connectionId)
-      .catch(() => undefined);
-  }, []);
+  function confirmCloseAll() {
+    Alert.alert(t("activity.disconnectAll"), t("mobile.closeAllConfirm"), [
+      { text: t("actions.cancel"), style: "cancel" },
+      { text: t("activity.disconnectAll"), style: "destructive", onPress: () => {
+        setClosing(true); setCloseError(null);
+        void closeAllConnections().catch(setCloseError).finally(() => setClosing(false));
+      } },
+    ]);
+  }
 
   const renderRow = useCallback(
     ({ item: { first, item, last } }: { item: { first: boolean; item: ProxyConnectionItem; last: boolean } }) => (
@@ -105,27 +115,27 @@ export function ActivityScreen() {
         description={[item.process, routeNode(item)].filter(Boolean).join(" · ")}
         trailing={
           <Typography className="text-sm text-subtle tabular-nums">
-            {`${connectionBytes(item.upload)} / ${connectionBytes(item.download)}`}
+            {`${t("mobile.upload")} ${connectionBytes(item.upload)} · ${t("mobile.download")} ${connectionBytes(item.download)}`}
           </Typography>
         }
-        onPress={() => close(item.id)}
-        accessibilityLabel={t("activity.disconnectRow", { target: item.host })}
+        onPress={() => openPage("connectionDetails", { connection: item })}
+        accessibilityLabel={`${t("mobile.connectionDetails")} ${item.host}`}
       />
     ),
-    [close, t],
+    [t],
   );
 
   if (!connected) {
     return (
       <ScrollView className="flex-1 bg-canvas" contentContainerClassName="gap-4 px-page" contentContainerStyle={insets}>
-        <PageHeader title={t("tabs.connections")} />
+
         <EmptyState
           icons={[Globe, Activity, ArrowDownUp]}
           title={t("activity.connectToView")}
           description={t("activity.connectHint")}
           action={
             <Button
-              className="min-h-12 h-auto rounded-full bg-accent-soft py-3"
+              className="min-h-12 h-auto rounded-3xl bg-accent-soft py-3"
               variant="secondary"
               onPress={() => navigateToTab("home")}
             >
@@ -148,12 +158,14 @@ export function ActivityScreen() {
         keyboardDismissMode="on-drag"
         ListHeaderComponent={
           <View className="gap-3 px-page pb-3">
-            <PageHeader title={t("tabs.connections")} />
+
+            <ErrorNotice error={closeError} />
+            <ErrorNotice error={error ?? snapshotQuery.error ?? (monitor.state === "failed" ? monitor.message || true : null)} message={t("mobile.monitorFailed")} retry={() => { setError(null); setAttempt(attempt + 1); void snapshotQuery.refetch(); }} />
             <SearchField value={search} onChange={setSearch}>
               <SearchField.Group>
                 <SearchField.SearchIcon />
                 <SearchField.Input
-                  className="min-h-12 rounded-full"
+                  className="min-h-12 h-auto rounded-3xl"
                   placeholder={t("proxy.filterConnections")}
                   accessibilityLabel={t("proxy.filterConnections")}
                   autoCapitalize="none"
@@ -171,13 +183,13 @@ export function ActivityScreen() {
                     })
                   : t("activity.connectionCount", { count: connections.length })}
               </Typography>
-              <Button className="min-h-10 h-auto py-2" size="sm" variant="ghost" onPress={() => close(null)}>
+              <Button className="min-h-12 h-auto py-2" size="sm" variant="ghost" isDisabled={closing || connections.length === 0} onPress={confirmCloseAll}>
                 <Button.Label className="text-danger">{t("activity.disconnectAll")}</Button.Label>
               </Button>
             </View>
           </View>
         }
-        ListEmptyComponent={
+        ListEmptyComponent={monitor.state === "failed" || error || snapshotQuery.error ? undefined :
           <View className="px-page">
             <EmptyState
               icons={[needle ? SearchX : Activity]}

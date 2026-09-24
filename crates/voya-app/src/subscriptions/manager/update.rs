@@ -1,9 +1,12 @@
 //! Fetch outside the configuration lock, then apply only unchanged source snapshots.
 use super::super::update_flow::{
-    persist_subscription_metadata, prepare_subscription_snapshot, PreparedSubscriptionUpdate,
+    persist_subscription_metadata, prepare_subscription_snapshot, record_outcome,
+    PreparedSubscriptionUpdate,
 };
 use super::{Result, SubscriptionManager, SubscriptionManagerError};
-use voya_core::{AppConfig, SubscriptionUpdateResult};
+use voya_core::{
+    AppConfig, SubscriptionUpdateReason, SubscriptionUpdateResult, SubscriptionUpdateStatus,
+};
 
 impl SubscriptionManager<'_> {
     pub async fn prepare_subscription_update(
@@ -29,6 +32,14 @@ impl SubscriptionManager<'_> {
                 .get(&prepared_import.item.id)
                 .await?;
             if current.as_ref() != Some(&prepared_import.item) {
+                record_outcome(
+                    &mut result,
+                    &prepared_import.item.id,
+                    SubscriptionUpdateStatus::Skipped,
+                    SubscriptionUpdateReason::SourceChanged,
+                    0,
+                    0,
+                );
                 result.skipped = result.skipped.saturating_add(1);
                 result.messages.push(format!(
                     "{}->subscription changed while the update was downloading; prepared content was discarded",
@@ -47,6 +58,14 @@ impl SubscriptionManager<'_> {
                 .await;
             match import {
                 Ok(import) if import.imported > 0 => {
+                    record_outcome(
+                        &mut result,
+                        &prepared_import.item.id,
+                        SubscriptionUpdateStatus::Success,
+                        SubscriptionUpdateReason::Updated,
+                        import.imported,
+                        import.removed_existing,
+                    );
                     persist_subscription_metadata(self.database, &prepared_import, true).await?;
                     result.updated = result.updated.saturating_add(1);
                     result.imported = result.imported.saturating_add(import.imported);
@@ -59,6 +78,14 @@ impl SubscriptionManager<'_> {
                     ));
                 }
                 Ok(_) => {
+                    record_outcome(
+                        &mut result,
+                        &prepared_import.item.id,
+                        SubscriptionUpdateStatus::Failed,
+                        SubscriptionUpdateReason::NoImportableNodes,
+                        0,
+                        0,
+                    );
                     persist_subscription_metadata(self.database, &prepared_import, false).await?;
                     result.skipped = result.skipped.saturating_add(1);
                     result.messages.push(format!(
@@ -67,6 +94,14 @@ impl SubscriptionManager<'_> {
                     ));
                 }
                 Err(SubscriptionManagerError::NoImportableProfiles) => {
+                    record_outcome(
+                        &mut result,
+                        &prepared_import.item.id,
+                        SubscriptionUpdateStatus::Failed,
+                        SubscriptionUpdateReason::NoImportableNodes,
+                        0,
+                        0,
+                    );
                     persist_subscription_metadata(self.database, &prepared_import, false).await?;
                     result.skipped = result.skipped.saturating_add(1);
                     result.messages.push(format!(
@@ -77,6 +112,14 @@ impl SubscriptionManager<'_> {
                 // A bad filter belongs to one subscription; failing the whole
                 // batch would roll back every sibling's successful import.
                 Err(SubscriptionManagerError::InvalidFilter(reason)) => {
+                    record_outcome(
+                        &mut result,
+                        &prepared_import.item.id,
+                        SubscriptionUpdateStatus::Failed,
+                        SubscriptionUpdateReason::InvalidFilter,
+                        0,
+                        0,
+                    );
                     persist_subscription_metadata(self.database, &prepared_import, false).await?;
                     result.skipped = result.skipped.saturating_add(1);
                     result.messages.push(format!(

@@ -40,7 +40,7 @@ import Network
             lock.lock()
             guard !starting, instances.isEmpty else {
                 lock.unlock()
-                throw ProbeCoreError.Failed(message: "a probe core is already running")
+                throw ProbeCoreError.Failed(detail: "a probe core is already running")
             }
             starting = true
             lock.unlock()
@@ -69,7 +69,7 @@ import Network
             var setupError: NSError?
             LibboxSetup(options, &setupError)
             if let setupError {
-                throw ProbeCoreError.Failed(message: "libbox setup failed: \(setupError.localizedDescription)")
+                throw ProbeCoreError.Failed(detail: "libbox setup failed: \(setupError.localizedDescription)")
             }
 
             let platform = ProbePlatformInterface()
@@ -77,11 +77,11 @@ import Network
             let server = LibboxNewCommandServer(platform, platform, &serverError)
             if let serverError {
                 throw ProbeCoreError.Failed(
-                    message: "the probe core could not be created: \(serverError.localizedDescription)",
+                    detail: "the probe core could not be created: \(serverError.localizedDescription)",
                 )
             }
             guard let server else {
-                throw ProbeCoreError.Failed(message: "LibboxNewCommandServer returned nil")
+                throw ProbeCoreError.Failed(detail: "LibboxNewCommandServer returned nil")
             }
 
             do {
@@ -91,7 +91,7 @@ import Network
             } catch {
                 server.close()
                 throw ProbeCoreError.Failed(
-                    message: "the probe core did not start: \(error.localizedDescription)",
+                    detail: "the probe core did not start: \(error.localizedDescription)",
                 )
             }
 
@@ -132,7 +132,7 @@ import Network
             } catch {
                 try? FileManager.default.removeItem(at: base)
                 throw ProbeCoreError.Failed(
-                    message: "the probe working directory could not be created: \(error.localizedDescription)",
+                    detail: "the probe working directory could not be created: \(error.localizedDescription)",
                 )
             }
 

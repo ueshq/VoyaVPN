@@ -9,18 +9,21 @@ import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
 import { localeReady } from "~/native/platform-boot";
 import { makeTestQueryClient, TestProviders } from "~/test/providers";
 
-import { SettingsScreen } from "./settings-screen";
+import { GeneralScreen, MaintenanceScreen } from "./preferences-screens";
+import { DnsScreen } from "./dns-screen";
+import { LogsScreen } from "./logs-screen";
 
 let activeQueryClient: QueryClient | null = null;
 
-async function renderSettings() {
+async function renderSettings(section: "general" | "dns" | "maintenance" | "logs" = "general") {
+  const Screen = section === "dns" ? DnsScreen : section === "maintenance" ? MaintenanceScreen : section === "logs" ? LogsScreen : GeneralScreen;
   const queryClient = makeTestQueryClient();
   activeQueryClient = queryClient;
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <TestProviders queryClient={queryClient}>{children}</TestProviders>
   );
 
-  return { queryClient, ...(await render(<SettingsScreen />, { wrapper })) };
+  return { queryClient, ...(await render(<Screen />, { wrapper })) };
 }
 
 function backend() {
@@ -90,7 +93,7 @@ describe("SettingsScreen", () => {
   });
 
   it("refreshes the rule library and says what arrived", async () => {
-    await renderSettings();
+    await renderSettings("maintenance");
     const user = userEvent.setup();
 
     await user.press(await screen.findByText("Update now"));
@@ -103,31 +106,69 @@ describe("SettingsScreen", () => {
     expect(screen.queryByText("Not updated from this device yet")).toBeNull();
   });
 
-  it("saves a resolver as it is typed", async () => {
-    await renderSettings();
+  it("keeps DNS edits local until Save and preserves hidden fields", async () => {
+    backend().state.settings.dns.hosts = "127.0.0.1 internal.test";
+    await renderSettings("dns");
     const user = userEvent.setup();
+    await user.press(await screen.findByText("Custom & advanced"));
     const remote = await screen.findByLabelText("Remote DNS");
 
     await user.clear(remote);
     await user.type(remote, "1.1.1.1");
 
-    // The shared draft debounces and writes; nothing here is a save button.
+    expect(backend().state.settings.dns.remote).not.toBe("1.1.1.1");
+    await user.press(screen.getByText("Save"));
     await waitFor(() => expect(backend().state.settings.dns.remote).toBe("1.1.1.1"));
-    expect(remote.props.value).toBe("1.1.1.1");
+    expect(backend().state.settings.dns.hosts).toBe("127.0.0.1 internal.test");
   });
 
-  it("switches FakeIP through the same draft", async () => {
-    await renderSettings();
+  it("restores only DNS fields owned by this page and still requires Save", async () => {
+    backend().state.settings.dns.hosts = "127.0.0.1 retained.test";
+    backend().state.settings.dns.remote = "9.9.9.9";
+    await renderSettings("dns");
+    const user = userEvent.setup();
+    await user.press(await screen.findByText("Restore DNS defaults"));
+    expect(backend().state.settings.dns.remote).toBe("9.9.9.9");
+    await user.press(screen.getByText("Save"));
+    await waitFor(() => expect(backend().state.settings.dns.remote).not.toBe("9.9.9.9"));
+    expect(backend().state.settings.dns.hosts).toBe("127.0.0.1 retained.test");
+  });
+
+  it("distinguishes saved DNS from an unsuccessful apply and allows retry", async () => {
+    const status = jest.spyOn(backend().commands, "getSettingsApplyStatus").mockResolvedValue({ action: "reconnect", connected: true });
+    const apply = jest.spyOn(backend().commands, "applyPendingSettings")
+      .mockRejectedValueOnce(new Error("reconnect failed"))
+      .mockImplementationOnce(async () => {
+        status.mockResolvedValue({ action: "none", connected: true });
+        return { action: "none", connected: true };
+      });
+    await renderSettings("dns");
+    const user = userEvent.setup();
+    await user.press(await screen.findByText("Reconnect & apply"));
+    expect(await screen.findByText("Settings saved, but they could not be applied to the current connection")).toBeOnTheScreen();
+    expect(screen.getByText("Saved")).toBeOnTheScreen();
+    expect(screen.queryByText("Applied to the current connection")).toBeNull();
+    await user.press(screen.getByText("Reconnect & apply"));
+    expect(await screen.findByText("Applied to the current connection")).toBeOnTheScreen();
+    expect(screen.queryByText("Settings saved, but they could not be applied to the current connection")).toBeNull();
+    status.mockRestore(); apply.mockRestore();
+  });
+
+  it("saves advanced DNS switches explicitly", async () => {
+    await renderSettings("dns");
     const user = userEvent.setup();
 
+    await user.press(await screen.findByText("Custom & advanced"));
     await user.press(await screen.findByRole("switch", { name: "FakeIP" }));
+    expect(backend().state.settings.dns.fakeIp).toBe(false);
+    await user.press(screen.getByText("Save"));
 
     await waitFor(() => expect(backend().state.settings.dns.fakeIp).toBe(true));
   });
 
   it("derives log status from the saved switch and only core log sources", async () => {
     backend().state.settings.core.logEnabled = true;
-    await renderSettings();
+    await renderSettings("maintenance");
     expect(await screen.findByText("Detailed connection logging is enabled; no core logs yet.")).toBeOnTheScreen();
     for (const source of ["diagnostic", "app", "core"] as const) {
       await act(() => useRuntimeEventStore.setState({ logLines: [{
@@ -139,21 +180,12 @@ describe("SettingsScreen", () => {
         ? "Detailed connection logging is enabled; core logs have been received."
         : "Detailed connection logging is enabled; no core logs yet.")).toBeOnTheScreen();
     }
-    await userEvent.setup().press(screen.getByRole("switch", { name: "Record detailed connection log" }));
-    await waitFor(() => expect(backend().state.settings.core.logEnabled).toBe(false));
-    expect(await screen.findByText(/Detailed connection logging is off/)).toBeOnTheScreen();
   });
 
-  it("streams the core log only while it is open, and says when there is none", async () => {
-    const { unmount } = await renderSettings();
-
+  it("streams logs only while the log page is open", async () => {
+    const { unmount } = await renderSettings("logs");
     await waitFor(() => expect(backend().state.logStreaming).toBe(true));
-    expect(
-      screen.getByText(
-        "Detailed connection logging is off, so only VoyaVPN's own messages appear here. Turn on “Record detailed connection log” above for connection details.",
-      ),
-    ).toBeOnTheScreen();
-
+    expect(screen.getByText(/Keeps the latest 500 entries/)).toBeOnTheScreen();
     await unmount();
     await waitFor(() => expect(backend().state.logStreaming).toBe(false));
   });

@@ -3,6 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   fullyParallel: false,
+  // Leave capacity for the Vite server when native verification shares a host.
+  workers: process.env.CI ? 2 : undefined,
   reporter: [["list"]],
   testDir: "./e2e",
   timeout: 30_000,

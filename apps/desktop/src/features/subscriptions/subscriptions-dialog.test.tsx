@@ -32,6 +32,7 @@ beforeEach(() => {
     skipped: 0,
     removedExisting: 0,
     messages: [],
+      outcomes: [],
   });
 });
 function fill() {

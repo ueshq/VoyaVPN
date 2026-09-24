@@ -1,5 +1,6 @@
 import XCTest
 import Vision
+import UIKit
 
 /// Release app, real native host, no mock transport or production test hooks.
 /// Every flow imports its own fixture; no test depends on another test's data.
@@ -18,7 +19,7 @@ final class VoyaVPNUITests: XCTestCase {
         }
         app.launch()
         XCTAssertTrue(app.buttons["tab-settings"].waitForExistence(timeout: timeout))
-        open("settings")
+        open("general")
         visible(row("English")).tap()
         let system = app.buttons["Follow system"]
         XCTAssertTrue(system.waitForExistence(timeout: timeout))
@@ -38,7 +39,7 @@ final class VoyaVPNUITests: XCTestCase {
     func testLaunchAndAllPages() {
         open("profiles")
         XCTAssertFalse(row("🇯🇵 Tokyo").exists, "the mock backend must not be installed")
-        for page in ["home", "profiles", "rules", "connections", "settings"] {
+        for page in ["home", "profiles", "rules", "settings"] {
             open(page)
             capture(page)
             XCUIDevice.shared.press(.home)
@@ -58,9 +59,9 @@ final class VoyaVPNUITests: XCTestCase {
         let title = "QA Lifecycle"
         open("profiles")
         try importText("")
-        XCTAssertTrue(app.staticTexts["Clipboard is empty."].waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.buttons["Preview"].isEnabled)
         try importText("not-a-node")
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'no importable'")).firstMatch.waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'No importable'")).firstMatch.waitForExistence(timeout: timeout))
         let link = "vless://22222222-2222-2222-2222-222222222222@qa.example.test:443?security=tls#QA%20Lifecycle"
         try importText(link)
         XCTAssertTrue(row(title).waitForExistence(timeout: timeout))
@@ -68,8 +69,8 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).count, 1)
         row(title).press(forDuration: 1.2)
         _ = try fixture("clipboard", body: "QA export pending")
-        tap("Share links")
-        XCTAssertTrue(wait { !self.app.buttons["Share links"].exists })
+        tap("Copy link")
+        XCTAssertTrue(wait { !self.app.buttons["Copy link"].exists })
         let exported = try exportedLink(containing: "qa.example.test")
         row(title).press(forDuration: 1.2)
         tap("Show QR")
@@ -81,15 +82,17 @@ final class VoyaVPNUITests: XCTestCase {
         row(title).tap()
         relaunch()
         open("profiles")
-        XCTAssertTrue(row(title).label.contains("Selected"))
+        XCTAssertTrue(row(title).isSelected)
         open("home")
         tap("Connect")
-        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'VPN unsupported:' OR label BEGINSWITH 'Could not connect:'")).firstMatch.waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons["Technical details"].waitForExistence(timeout: timeout))
         tap("Connect")
         XCTAssertTrue(app.staticTexts["Disconnected"].exists)
         open("profiles")
         row(title).press(forDuration: 1.2)
         tap("Delete")
+        XCTAssertTrue(app.alerts.firstMatch.waitForExistence(timeout: timeout))
+        app.alerts.buttons["Delete"].tap()
         XCTAssertTrue(wait { !self.row(title).exists })
         relaunch()
         open("profiles")
@@ -101,21 +104,25 @@ final class VoyaVPNUITests: XCTestCase {
         try importText(required("QA_SUBSCRIPTION_URL"))
         XCTAssertTrue(row("QA Subscription A").waitForExistence(timeout: timeout))
         XCTAssertTrue(row("QA Subscription B").exists)
+        tap("Policy groups")
         let group = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Auto' AND NOT (label CONTAINS 'tab')")).firstMatch
         XCTAssertTrue(group.waitForExistence(timeout: timeout))
         group.tap()
         XCTAssertTrue(wait { group.isSelected })
         relaunch()
         open("profiles")
+        tap("Policy groups")
         XCTAssertTrue(group.isSelected)
-        let update = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Update subscription '")).firstMatch
-        XCTAssertTrue(ready(update))
-        update.tap()
-        XCTAssertTrue(row("QA Subscription Updated").waitForExistence(timeout: timeout))
+        tap("Manage subscriptions")
         tap("Update all subscriptions")
+        open("profiles")
+        XCTAssertTrue(row("QA Subscription Updated").waitForExistence(timeout: timeout))
+        tap("Manage subscriptions")
+        tap("Update all subscriptions")
+        open("profiles")
         XCTAssertTrue(row("QA Subscription Refreshed").waitForExistence(timeout: timeout))
         visible(row("QA Subscription Refreshed")).press(forDuration: 1.2)
-        XCTAssertTrue(app.buttons["Share links"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons["Copy link"].waitForExistence(timeout: timeout))
         XCTAssertTrue(app.buttons["Show QR"].exists)
         XCTAssertFalse(app.buttons["Delete"].exists)
         capture("subscription-read-only")
@@ -164,68 +171,135 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Global"].isSelected)
         tap("Rule")
         for (label, value) in values { XCTAssertEqual(visible(app.switches[label]).value as? String, value) }
-        open("settings")
-        for label in ["Check the exit IP after connecting", "Record detailed connection log", "FakeIP", "Block HTTPS/SVCB"] {
+        open("general")
+        for label in ["Check the exit IP after connecting", "Record detailed connection log"] {
             let control = visible(app.switches[label])
             let before = control.value as? String
             control.tap()
             XCTAssertTrue(wait { control.value as? String != before })
             let expected = control.value as? String
             relaunch()
-            open("settings")
+            open("general")
             XCTAssertEqual(visible(app.switches[label]).value as? String, expected)
         }
         tap("Dark")
         relaunch()
-        open("settings")
+        open("general")
         XCTAssertTrue(app.buttons["Dark"].isSelected)
     }
 
     func testDnsValidationAndPersistence() {
-        open("settings")
-        for label in ["Remote DNS", "Direct DNS", "Bootstrap DNS"] {
-            let field = visible(app.textFields[label])
-            XCTAssertTrue(field.exists)
-            let original = field.value as? String ?? ""
-            let prefix = original.hasPrefix("https://") ? "https://" : String(original.prefix(1))
-            let tail = prefix == "https://" ? "1.1.1.1/dns-query" : ".1.1.1"
-            field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-            let count = max(0, original.count - prefix.count)
-            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: count) + tail + "\n")
-            open("home")
-            relaunch()
-            open("settings")
-            XCTAssertEqual(visible(app.textFields[label]).value as? String, prefix + tail)
-        }
-        let bootstrap = visible(app.textFields["Bootstrap DNS"])
-        bootstrap.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
-        bootstrap.typeText(":99999")
+        open("dns")
+        tap("Custom & advanced")
+        let field = visible(app.textFields["Bootstrap DNS"])
+        XCTAssertTrue(field.exists)
+        let original = field.value as? String ?? ""
+        field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: original.count) + "1.1.1.1:99999\n")
+        tap("Save")
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '65535' OR label CONTAINS '65,535' OR label CONTAINS '99999'")).firstMatch.waitForExistence(timeout: timeout))
+        field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "1.1.1.1:99999".count) + "1.1.1.1\n")
+        tap("Save")
+        capture("dns-save-feedback")
+        XCTAssertTrue(app.staticTexts["Saved"].waitForExistence(timeout: timeout))
         relaunch()
-        open("settings")
-        XCTAssertFalse((visible(app.textFields["Bootstrap DNS"]).value as? String ?? "").contains(":99999"))
+        open("dns")
+        tap("Custom & advanced")
+        XCTAssertEqual(app.textFields["Bootstrap DNS"].value as? String, "1.1.1.1")
+    }
+
+    func testSecondaryPagesAndImportCancellation() {
+        for page in ["subscriptions", "connections", "dns", "maintenance", "logs", "about"] {
+            open(page)
+            captureStable(page)
+            XCTAssertFalse(app.buttons["tab-home"].isHittable)
+        }
+        open("profiles")
+        tap("Add nodes or subscription")
+        let input = app.textViews["Add nodes or subscription"]
+        XCTAssertTrue(input.waitForExistence(timeout: timeout))
+        input.tap()
+        input.typeText("trojan://test@cancel.example.test:443#Cancelled")
+        tap("Preview")
+        XCTAssertTrue(app.buttons["Confirm import"].waitForExistence(timeout: timeout))
+        open("profiles")
+        XCTAssertFalse(row("Cancelled").exists)
+    }
+
+    func testSystemThemeAndForegroundRecovery() throws {
+        let original = String(data: try fixture("appearance"), encoding: .utf8) ?? "light"
+        defer { _ = try? fixture("appearance", body: original) }
+        open("general")
+        _ = try fixture("appearance", body: "light")
+        tap("Light")
+        let light = backgroundPixel()
+        tap("Dark")
+        let dark = backgroundPixel()
+        XCTAssertNotEqual(light, dark, "Explicit themes must produce different backgrounds")
+        tap("Follow system")
+        XCTAssertTrue(wait { self.backgroundPixel() == light }, "Follow system must clear the dark override")
+        _ = try fixture("appearance", body: "dark")
+        XCTAssertTrue(wait { self.backgroundPixel() == dark }, "System changes must update the app")
+        XCUIDevice.shared.press(.home)
+        _ = try fixture("appearance", body: "light")
+        app.activate()
+        XCTAssertTrue(wait { self.backgroundPixel() == light }, "Appearance must refresh after foregrounding")
+        capture("system-theme-restored")
+    }
+
+    private func backgroundPixel() -> [UInt8] {
+        guard let image = app.screenshot().image.cgImage,
+              image.bitsPerPixel == 32,
+              let data = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else { return [] }
+        // The page gutter is canvas in all supported phone/tablet layouts.
+        let scale = Double(image.width) / app.frame.width
+        let offset = Int(200 * scale) * image.bytesPerRow + Int(2 * scale) * 4
+        return Array(UnsafeBufferPointer(start: bytes + offset, count: 3))
+    }
+
+    func testTabletOrientations() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "Tablet directions are iPad-only")
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for orientation in [UIDeviceOrientation.portrait, .landscapeLeft, .landscapeRight, .portraitUpsideDown] {
+            XCUIDevice.shared.orientation = orientation
+            let landscape = orientation == .landscapeLeft || orientation == .landscapeRight
+            XCTAssertTrue(wait { (self.app.frame.width > self.app.frame.height) == landscape })
+            for page in ["home", "profiles", "rules", "settings"] {
+                open(page)
+                XCTAssertTrue(app.buttons["tab-" + page].isHittable)
+                captureStable("ipad-\(orientation.rawValue)-\(page)")
+            }
+        }
     }
 
     func testVisualMatrix() throws {
         open("profiles")
-        try importText("vless://77777777-7777-7777-7777-777777777777@visual.example.test:443?security=tls#QA%20Visual")
+        let batch = (0..<120).map { index in
+            "vless://77777777-7777-7777-7777-777777777777@\(index).visual.example.test:443?security=tls#QA%20Visual%20\(index)%20-%20Long%20international%20node%20name%20for%20accessibility"
+        }.joined(separator: "\n")
+        try importText(batch)
         for (language, _) in [("English", "en"), ("简体中文", "zh-Hans"), ("繁體中文", "zh-Hant")] {
-            open("settings")
+            open("general")
             visible(row(language)).tap()
             for dark in [false, true] {
-                open("settings")
+                open("general")
                 let label = language == "English" ? (dark ? "Dark" : "Light") : language == "简体中文" ? (dark ? "深色" : "浅色") : (dark ? "深色" : "淺色")
                 visible(app.buttons[label]).tap()
-                for page in ["home", "profiles", "rules", "connections", "settings"] {
+                for page in ["home", "profiles", "rules", "settings"] {
                     open(page)
                     captureStable("\(language)-\(dark ? "dark" : "light")-\(page)")
                     if page == "profiles" {
                         visible(row("QA Visual")).press(forDuration: 1.2)
                         let showQr = language == "English" ? "Show QR" : language == "简体中文" ? "显示二维码" : "顯示 QR Code"
                         let close = language == "English" ? "Close" : language == "简体中文" ? "关闭" : "關閉"
-                        XCTAssertTrue(ready(app.buttons[showQr]))
+                        // Small phones with accessibility text legitimately
+                        // scroll the actions. Reveal the row before checking
+                        // reachability, just as the subsequent tap does.
+                        XCTAssertTrue(ready(visible(app.buttons[showQr])))
                         captureStable("\(language)-\(dark)-actions")
-                        let share = language == "English" ? "Share links" : language == "简体中文" ? "分享链接" : "分享連結"
+                        let share = language == "English" ? "Copy link" : language == "简体中文" ? "复制链接" : "複製連結"
                         // A previous import/export must not make a broken copy
                         // action pass by leaving the expected link behind.
                         _ = try fixture("clipboard", body: "QA export pending")
@@ -248,7 +322,7 @@ final class VoyaVPNUITests: XCTestCase {
     }
 
     func testRuleLibraryUpdate() {
-        open("settings")
+        open("maintenance")
         let update = visible(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Update now'")).firstMatch)
         XCTAssertTrue(ready(update))
         update.tap()
@@ -258,6 +332,16 @@ final class VoyaVPNUITests: XCTestCase {
     }
 
     private func assertQr(_ qr: XCUIElement, equals expected: String) {
+        // Large text puts identity details above the QR in a scrollable sheet.
+        // Reveal the entire image before decoding, not just its tappable edge.
+        for _ in 0..<8 {
+            let overflow = qr.frame.maxY - (app.frame.maxY - 48)
+            if overflow <= 0 { break }
+            let distance = min(overflow + 8, app.frame.height * 0.3) / app.frame.height
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8))
+            let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8 - distance))
+            start.press(forDuration: 0.1, thenDragTo: end)
+        }
         // Decode the rendered native image; accessibility labels alone do not
         // prove the exported link is scannable or belongs to the selected node.
         let request = VNDetectBarcodesRequest()
@@ -297,14 +381,19 @@ final class VoyaVPNUITests: XCTestCase {
     private func importText(_ value: String) throws {
         _ = try fixture("clipboard", body: value)
         XCTAssertEqual(String(data: try fixture("clipboard"), encoding: .utf8), value, "Simulator clipboard fixture changed before import")
-        tap("Import from clipboard")
-        // The paste prompt blocks the target app's main thread. Query SpringBoard
-        // first; asking the blocked app for its hierarchy deadlocks automation.
+        if !app.buttons["Read clipboard"].exists { tap("Add nodes or subscription") }
+        tap("Read clipboard")
         for host in [XCUIApplication(bundleIdentifier: "com.apple.springboard")] {
             let allow = host.buttons["Allow Paste"]
             if allow.waitForExistence(timeout: 1) { allow.tap() }
         }
-        XCTAssertTrue(ready(app.buttons["Import from clipboard"]))
+        if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
+        tap("Preview")
+        if value == "not-a-node" { return }
+        XCTAssertTrue(app.buttons["Confirm import"].waitForExistence(timeout: timeout))
+        tap("Confirm import")
+        XCTAssertTrue(app.buttons["Choose a node"].waitForExistence(timeout: timeout))
+        tap("Choose a node")
     }
 
     private func exportedLink(containing host: String) throws -> String {
@@ -325,11 +414,23 @@ final class VoyaVPNUITests: XCTestCase {
     }
 
     private func open(_ page: String) {
-        let tab = app.buttons["tab-" + page]
+        for _ in 0..<5 {
+            if app.buttons["tab-home"].isHittable { break }
+            let back = app.navigationBars.buttons.firstMatch
+            if back.exists { back.tap() }
+            if app.alerts.buttons["Discard changes"].exists { app.alerts.buttons["Discard changes"].tap() }
+        }
+        let settingsPages = ["general", "dns", "maintenance", "about"]
+        let target = settingsPages.contains(page) || page == "logs" ? "settings" : page == "connections" ? "home" : page == "subscriptions" ? "profiles" : page
+        let tab = app.buttons["tab-" + target]
         XCTAssertTrue(tab.exists || tab.waitForExistence(timeout: timeout))
         XCTAssertTrue(ready(tab))
         tab.tap()
         XCTAssertTrue(wait { tab.isSelected })
+        if settingsPages.contains(page) { visible(app.buttons["settings-" + page]).tap() }
+        if page == "connections" { visible(app.buttons["home-activity"]).tap() }
+        if page == "subscriptions" { tap("Manage subscriptions") }
+        if page == "logs" { visible(app.buttons["settings-maintenance"]).tap(); visible(app.buttons["maintenance-logs"]).tap() }
     }
 
     private func tap(_ label: String) {

@@ -101,7 +101,7 @@ fn a_failed_start_is_remembered_until_the_next_one_succeeds() {
     let temp = TempDir::new().expect("temp dir");
     let host = Arc::new(FakeHost::with_state("stopped"));
     *host.start_result.lock().expect("lock") = Some(TunnelError::Failed {
-        message: "provider crashed".to_string(),
+        detail: "provider crashed".to_string(),
     });
     let controller = HostTunController::new(host.clone(), temp.path().to_path_buf());
     let config = config_file(temp.path());

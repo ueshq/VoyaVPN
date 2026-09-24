@@ -26,4 +26,13 @@ describe("operational redaction", () => {
       }),
     ).toBe("download failed at [URL]");
   });
+  it("removes JSON credentials, authorization headers and every mobile share scheme", () => {
+    const input = '{"password":"escaped\\"secret","uuid":"private-id","privateKey":"key"} Authorization: Bearer abc.def hy2://credential@host tuic://credential@host wireguard://credential@host socks5://credential@host';
+    const output = redactOperationalMessage(input);
+    for (const secret of ["secret", "private-id", '"key"', "abc.def", "credential", "@host"]) {
+      expect(output).not.toContain(secret);
+    }
+    expect(output).toContain('[redacted]');
+  });
+
 });

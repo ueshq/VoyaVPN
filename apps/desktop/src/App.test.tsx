@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithQuery } from "@/test/render";
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeAll, vi } from "vitest";
 
 import { App } from "./App";
 import { changeLocale } from "@voya/i18n";
@@ -316,6 +316,14 @@ function renderApp() {
 }
 
 describe("App", () => {
+  // Coverage transformation of real lazy screens is setup work, not UI
+  // latency. Finish it before Testing Library starts its interaction timeout.
+  beforeAll(async () => {
+    await Promise.all([
+      import("@/features/home/home-screen"),
+      import("@/features/settings/settings-screen"),
+    ]);
+  }, 30000);
   beforeEach(async () => {
     vi.useRealTimers();
     resetTestDom();

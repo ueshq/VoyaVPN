@@ -43,8 +43,8 @@ pub enum TunnelError {
     PermissionDenied,
     #[error("the tunnel provider is not installed in this build")]
     MissingProvider,
-    #[error("the tunnel could not be started or stopped: {message}")]
-    Failed { message: String },
+    #[error("the tunnel could not be started or stopped: {detail}")]
+    Failed { detail: String },
 }
 
 /// Bridges `NativeTunController` onto the host's callback.

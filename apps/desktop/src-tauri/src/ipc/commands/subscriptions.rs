@@ -176,3 +176,9 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
 
     Ok(subscription_update_to_contract(updated.value))
 }
+
+#[tauri::command]
+#[specta::specta]
+pub fn preview_import_profiles(text: String) -> Result<voya_contracts::ImportPreview, AppError> {
+    SubscriptionManager::preview_import(&text).map_err(AppError::from)
+}

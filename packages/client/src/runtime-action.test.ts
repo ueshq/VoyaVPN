@@ -283,6 +283,7 @@ describe("runRuntimeAction", () => {
     expect(useRuntimeActionStore.getState().lastError).toEqual({
       action: "connect",
       message: "home.authorizationDeclined",
+      reason: "elevationRequired",
     });
   });
 });

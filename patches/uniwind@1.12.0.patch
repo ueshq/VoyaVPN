@@ -1,0 +1,117 @@
+diff --git a/dist/common/core/config/config.common.js b/dist/common/core/config/config.common.js
+index cb8d3961be40dc06b720605dc044d81c487f650f..1058f3dec7323778bb937298b457949c7222db72 100644
+--- a/dist/common/core/config/config.common.js
++++ b/dist/common/core/config/config.common.js
+@@ -18,7 +18,7 @@ class UniwindConfigBuilder {
+   constructor() {
+     _reactNative.Appearance.addChangeListener(event => {
+       const eventColorScheme = event.colorScheme;
+-      const colorScheme = eventColorScheme === "unspecified" ? _consts.ColorScheme.Light : eventColorScheme ?? _consts.ColorScheme.Light;
++      const colorScheme = eventColorScheme === "light" || eventColorScheme === "dark" ? eventColorScheme : this.colorScheme;
+       const prevTheme = this.#currentTheme;
+       if (this.#hasAdaptiveThemes && prevTheme !== colorScheme) {
+         this.#currentTheme = colorScheme;
+@@ -38,7 +38,7 @@ class UniwindConfigBuilder {
+   }
+   get colorScheme() {
+     const colorScheme = _reactNative.Appearance.getColorScheme();
+-    if (colorScheme === "unspecified") {
++    if (colorScheme !== "light" && colorScheme !== "dark") {
+       return _consts.ColorScheme.Light;
+     }
+     return colorScheme ?? _consts.ColorScheme.Light;
+@@ -51,10 +51,10 @@ class UniwindConfigBuilder {
+     try {
+       if (theme === SYSTEM_THEME) {
+         this.#hasAdaptiveThemes = true;
+-        this.#currentTheme = this.colorScheme;
+         if (_reactNative.Platform.OS !== "web") {
+           _reactNative.Appearance.setColorScheme(SYSTEM_COLOR_SCHEME);
+         }
++        this.#currentTheme = this.colorScheme;
+         return;
+       }
+       if (!this._themes.includes(theme)) {
+diff --git a/dist/module/core/config/config.common.js b/dist/module/core/config/config.common.js
+index 6a9da23f20e1e690d27a97c7bd88d204a1f6631d..ca3c138242577b6cd57f46e1661b10a5bd196848 100644
+--- a/dist/module/core/config/config.common.js
++++ b/dist/module/core/config/config.common.js
+@@ -12,7 +12,7 @@ export class UniwindConfigBuilder {
+   constructor() {
+     Appearance.addChangeListener((event) => {
+       const eventColorScheme = event.colorScheme;
+-      const colorScheme = eventColorScheme === "unspecified" ? ColorScheme.Light : eventColorScheme ?? ColorScheme.Light;
++      const colorScheme = eventColorScheme === "light" || eventColorScheme === "dark" ? eventColorScheme : this.colorScheme;
+       const prevTheme = this.#currentTheme;
+       if (this.#hasAdaptiveThemes && prevTheme !== colorScheme) {
+         this.#currentTheme = colorScheme;
+@@ -32,7 +32,7 @@ export class UniwindConfigBuilder {
+   }
+   get colorScheme() {
+     const colorScheme = Appearance.getColorScheme();
+-    if (colorScheme === "unspecified") {
++    if (colorScheme !== "light" && colorScheme !== "dark") {
+       return ColorScheme.Light;
+     }
+     return colorScheme ?? ColorScheme.Light;
+@@ -45,10 +45,10 @@ export class UniwindConfigBuilder {
+     try {
+       if (theme === SYSTEM_THEME) {
+         this.#hasAdaptiveThemes = true;
+-        this.#currentTheme = this.colorScheme;
+         if (Platform.OS !== "web") {
+           Appearance.setColorScheme(SYSTEM_COLOR_SCHEME);
+         }
++        this.#currentTheme = this.colorScheme;
+         return;
+       }
+       if (!this._themes.includes(theme)) {
+diff --git a/src/core/config/config.common.ts b/src/core/config/config.common.ts
+index 1e37e0e7eb8f9c091b7432a95e768ca626b548bb..483ed902454fedffe395967c4543c820a55a08ba 100644
+--- a/src/core/config/config.common.ts
++++ b/src/core/config/config.common.ts
+@@ -17,7 +17,7 @@ const SYSTEM_COLOR_SCHEME = RN_VERSION >= 87
+     : undefined
+ 
+ // RN <0.87 also reports 'unspecified'
+-type RNColorScheme = 'light' | 'dark' | 'unspecified' | null | undefined
++type RNColorScheme = 'light' | 'dark' | 'auto' | 'unspecified' | null | undefined
+ 
+ export class UniwindConfigBuilder {
+     protected _themes = ['light', 'dark']
+@@ -27,9 +27,9 @@ export class UniwindConfigBuilder {
+     constructor() {
+         Appearance.addChangeListener(event => {
+             const eventColorScheme = event.colorScheme as RNColorScheme
+-            const colorScheme = eventColorScheme === 'unspecified'
+-                ? ColorScheme.Light
+-                : eventColorScheme ?? ColorScheme.Light
++            const colorScheme = eventColorScheme === 'light' || eventColorScheme === 'dark'
++                ? eventColorScheme
++                : this.colorScheme
+             const prevTheme = this.#currentTheme
+ 
+             if (this.#hasAdaptiveThemes && prevTheme !== colorScheme) {
+@@ -55,7 +55,7 @@ export class UniwindConfigBuilder {
+     private get colorScheme() {
+         const colorScheme = Appearance.getColorScheme() as RNColorScheme
+ 
+-        if (colorScheme === 'unspecified') {
++        if (colorScheme !== 'light' && colorScheme !== 'dark') {
+             return ColorScheme.Light
+         }
+ 
+@@ -71,12 +71,11 @@ export class UniwindConfigBuilder {
+         try {
+             if (theme === SYSTEM_THEME) {
+                 this.#hasAdaptiveThemes = true
+-                this.#currentTheme = this.colorScheme
+-
+                 if (Platform.OS !== 'web') {
+                     // @ts-expect-error RN >0.82 - breaking change
+                     Appearance.setColorScheme(SYSTEM_COLOR_SCHEME)
+                 }
++                this.#currentTheme = this.colorScheme
+ 
+                 return
+             }

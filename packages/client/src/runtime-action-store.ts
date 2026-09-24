@@ -1,3 +1,4 @@
+import type { AppErrorKind } from "@voya/contracts";
 import { create } from "zustand";
 
 export type RuntimeAction = "connect" | "disconnect" | "restart";
@@ -11,14 +12,14 @@ type RuntimeActionState = {
   modePending: boolean;
   switchingId: string | null;
   /** The last Home action that failed, shown next to the button until retried. */
-  lastError: { action: RuntimeAction; message: string } | null;
+  lastError: { action: RuntimeAction; message: string; reason?: AppErrorKind["type"] } | null;
   /** What the missing-core dialog repairs; `null` while it is closed. */
   missingCore: MissingCorePayload | null;
   /** A connect, disconnect or restart starts; the previous failure no longer applies. */
   startAction: (action: RuntimeAction) => void;
   finishAction: () => void;
   /** Keeps a failed Home action next to its button. */
-  failInline: (action: RuntimeAction, message: string) => void;
+  failInline: (action: RuntimeAction, message: string, reason?: AppErrorKind["type"]) => void;
   /** A node, or a policy group by its prefixed id, is becoming the active selection. */
   startSwitch: (id: string) => void;
   finishSwitch: () => void;
@@ -37,8 +38,8 @@ export const useRuntimeActionStore = create<RuntimeActionState>((set) => ({
   missingCore: null,
   startAction: (pendingAction) => set({ pendingAction, lastError: null }),
   finishAction: () => set({ pendingAction: null }),
-  failInline: (action, message) => set({ lastError: { action, message } }),
-  startSwitch: (switchingId) => set({ switchingId }),
+  failInline: (action, message, reason) => set({ lastError: { action, message, ...(reason ? { reason } : {}) } }),
+  startSwitch: (switchingId) => set({ switchingId, lastError: null }),
   finishSwitch: () => set({ switchingId: null }),
   setModePending: (modePending) => set({ modePending }),
   showMissingCore: (missingCore) => set({ missingCore }),

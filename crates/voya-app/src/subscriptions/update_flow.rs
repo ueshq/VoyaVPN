@@ -5,7 +5,8 @@
 use futures_util::{stream, StreamExt};
 use voya_core::{
     parse_profile_update_interval_minutes, parse_subscription_userinfo, SubItem, SubMetadataItem,
-    SubscriptionUpdateResult, SubscriptionUserInfo,
+    SubscriptionUpdateOutcome, SubscriptionUpdateReason, SubscriptionUpdateResult,
+    SubscriptionUpdateStatus, SubscriptionUserInfo,
 };
 use voya_db::DatabaseSession;
 use voya_net::{
@@ -75,6 +76,14 @@ pub(super) async fn prepare_subscription_snapshot(
         }
         if item.id.trim().is_empty() || item.url.trim().is_empty() || !is_http_url(&item.url) {
             result.skipped = result.skipped.saturating_add(1);
+            record_outcome(
+                &mut result,
+                &item.id,
+                SubscriptionUpdateStatus::Failed,
+                SubscriptionUpdateReason::InvalidSource,
+                0,
+                0,
+            );
             continue;
         }
         // `enabled` only switches automatic updates, which the scheduler checks
@@ -122,6 +131,14 @@ pub(super) async fn prepare_subscription_snapshot(
                 });
             }
             Ok(fetch) => {
+                record_outcome(
+                    &mut result,
+                    &item.id,
+                    SubscriptionUpdateStatus::Failed,
+                    SubscriptionUpdateReason::EmptyContent,
+                    0,
+                    0,
+                );
                 result.skipped = result.skipped.saturating_add(1);
                 // The warnings precede the outcome note because
                 // `unusable_update_message` reports the last message as the
@@ -132,16 +149,49 @@ pub(super) async fn prepare_subscription_snapshot(
                     .push(subscription_message(&item.remarks, EMPTY_FETCH_MESSAGE));
             }
             Err(error) => {
+                record_outcome(
+                    &mut result,
+                    &item.id,
+                    SubscriptionUpdateStatus::Failed,
+                    if error.is_empty_response() {
+                        SubscriptionUpdateReason::EmptyContent
+                    } else {
+                        SubscriptionUpdateReason::DownloadFailed
+                    },
+                    0,
+                    0,
+                );
                 result.skipped = result.skipped.saturating_add(1);
-                result.messages.push(subscription_message(
-                    &item.remarks,
-                    &fetch_failure_message(&error),
-                ));
+                let diagnostic = redact_urls(&fetch_failure_message(&error));
+                if let Some(outcome) = result.outcomes.last_mut() {
+                    outcome.diagnostic = Some(diagnostic.clone());
+                }
+                result
+                    .messages
+                    .push(subscription_message(&item.remarks, &diagnostic));
             }
         }
     }
 
     Ok(PreparedSubscriptionUpdate { imports, result })
+}
+
+pub(super) fn record_outcome(
+    result: &mut SubscriptionUpdateResult,
+    id: &str,
+    status: SubscriptionUpdateStatus,
+    reason: SubscriptionUpdateReason,
+    imported: u32,
+    removed_existing: u32,
+) {
+    result.outcomes.push(SubscriptionUpdateOutcome {
+        subscription_id: id.to_string(),
+        status,
+        reason,
+        imported,
+        removed_existing,
+        diagnostic: None,
+    });
 }
 
 /// Records server-reported usage headers for a fetched subscription. The

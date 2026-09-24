@@ -1,3 +1,5 @@
+import { act } from "@testing-library/react-native";
+import { Alert } from "react-native";
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MockBackend } from "@voya/client/mock-backend";
@@ -59,7 +61,7 @@ describe("NodesScreen", () => {
 
     // Twice on purpose: the group header over its nodes, and the row in the
     // subscriptions section that refreshes it.
-    expect(await screen.findAllByText("Example provider")).toHaveLength(2);
+    expect(await screen.findAllByText("Example provider")).toHaveLength(1);
     expect(screen.getByText("Local nodes")).toBeOnTheScreen();
     expect(screen.getByText("🇯🇵 Tokyo")).toBeOnTheScreen();
     expect(screen.getByText("🇺🇸 Los Angeles")).toBeOnTheScreen();
@@ -79,31 +81,10 @@ describe("NodesScreen", () => {
     expect(backend.state.profiles.find((entry) => entry.isActive)?.profile.id).toBe("profile-1");
   });
 
-  it("imports a share link pasted on the clipboard", async () => {
-    readText.mockResolvedValue("vless://token@example.test:443#Osaka");
+  it("does not read the clipboard merely by opening the list", async () => {
     await renderNodes();
-    const user = userEvent.setup();
-
-    await user.press(await screen.findByLabelText("Import from clipboard"));
-
-    // The import, the invalidation it triggers and the refetches behind it all
-    // have to settle before the new node can appear.
-    expect(await screen.findByText("Osaka", {}, { timeout: 5000 })).toBeOnTheScreen();
-  });
-
-  it("downloads newly imported subscriptions but does not update sources for plain links", async () => {
-    readText.mockResolvedValue("https://provider.example.test/new\nvless://token@example.test:443#Mixed");
-    await renderNodes();
-    const user = userEvent.setup();
-    await user.press(await screen.findByLabelText("Import from clipboard"));
-    await waitFor(() => expect(backend().state.calls.filter((call) => call.command === "updateSubscriptions")).toHaveLength(1));
-    const source = backend().state.subscriptions.find((subscription) => subscription.url.endsWith("/new"));
-    expect(backend().state.calls.find((call) => call.command === "updateSubscriptions")?.args[0]).toBe(source?.id);
-    expect(await screen.findByText("Mixed")).toBeOnTheScreen();
-    readText.mockResolvedValue("vless://token@example.test:443#Ordinary");
-    await user.press(screen.getByLabelText("Import from clipboard"));
-    expect(await screen.findByText("Ordinary")).toBeOnTheScreen();
-    expect(backend().state.calls.filter((call) => call.command === "updateSubscriptions")).toHaveLength(1);
+    await screen.findByLabelText("Add nodes or subscription");
+    expect(readText).not.toHaveBeenCalled();
   });
 
   it("measures every listed node and fills the latencies back in", async () => {
@@ -124,15 +105,12 @@ describe("NodesScreen", () => {
     expect(await screen.findByText("40 ms")).toBeOnTheScreen();
   });
 
-  it("refreshes a subscription without leaving the list", async () => {
+  it("filters nodes through the visible search", async () => {
     await renderNodes();
-    const user = userEvent.setup();
-
-    await user.press(await screen.findByLabelText("Update subscription Example provider"));
-
-    await waitFor(() =>
-      expect(backend().state.calls.map((call) => call.command)).toContain("updateSubscriptions"),
-    );
+    await screen.findByText("🇯🇵 Tokyo");
+    await userEvent.setup().type(screen.getByLabelText("Search nodes"), "Tokyo");
+    expect(screen.getByText("🇯🇵 Tokyo")).toBeOnTheScreen();
+    expect(screen.queryByText("🇸🇬 Singapore")).toBeNull();
   });
 
   it("uses a policy group instead of the selected node", async () => {
@@ -143,6 +121,7 @@ describe("NodesScreen", () => {
     await renderNodes();
     const user = userEvent.setup();
 
+    await user.press(await screen.findByText("Policy groups"));
     await user.press(await screen.findByRole("button", { name: /Fastest/ }));
 
     await waitFor(() =>
@@ -158,7 +137,7 @@ describe("NodesScreen", () => {
 
     await user.longPress(await screen.findByText("🇯🇵 Tokyo"));
 
-    await user.press(await screen.findByText("Share links"));
+    await user.press(await screen.findByText("Copy link"));
 
     // The link the backend exported, handed straight to the system clipboard.
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("#🇯🇵 Tokyo"));
@@ -189,25 +168,21 @@ describe("NodesScreen", () => {
     expect(screen.queryByText("Delete")).toBeNull();
   });
 
-  it("deletes a local node from the sheet", async () => {
+  it("deletes a local node only after confirmation", async () => {
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
     await renderNodes();
     const user = userEvent.setup();
 
     await user.longPress(await screen.findByText("🇸🇬 Singapore"));
     await user.press(await screen.findByText("Delete"));
+    expect(backend().state.profiles.map((entry) => entry.profile.id)).toContain("profile-1");
+    const confirm = alert.mock.calls.at(-1)?.[2]?.find((button) => button.style === "destructive");
+    await act(() => confirm?.onPress?.());
+    alert.mockRestore();
 
     await waitFor(() =>
       expect(backend().state.profiles.map((entry) => entry.profile.id)).not.toContain("profile-1"),
     );
   });
 
-  it("reports a clipboard that holds nothing importable", async () => {
-    readText.mockResolvedValue("   ");
-    await renderNodes();
-    const user = userEvent.setup();
-
-    await user.press(await screen.findByLabelText("Import from clipboard"));
-
-    expect(await screen.findByText("Clipboard is empty.")).toBeOnTheScreen();
-  });
 });

@@ -17,5 +17,5 @@ export function useScreenInsets() {
   const safeArea = useSafeAreaInsets();
   const tabBar = useContext(BottomTabBarHeightContext) ?? 0;
 
-  return { paddingBottom: tabBar + 24, paddingTop: safeArea.top };
+  return { paddingBottom: Math.max(tabBar, safeArea.bottom) + 24, paddingTop: tabBar ? safeArea.top : 16 };
 }

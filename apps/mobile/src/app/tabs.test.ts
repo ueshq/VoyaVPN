@@ -3,9 +3,9 @@ import { i18next } from "@voya/i18n/core";
 import { SHELL_TABS, type ShellTab } from "./tabs";
 
 describe("SHELL_TABS", () => {
-  it("names the five phone sections", () => {
+  it("names the four phone sections", () => {
     // `selfHost` is deliberately absent: a phone is not an exit node.
-    expect(Object.keys(SHELL_TABS)).toEqual(["home", "profiles", "rules", "connections", "settings"]);
+    expect(Object.keys(SHELL_TABS)).toEqual(["home", "profiles", "rules", "settings"]);
   });
 
   it("labels every tab with a key the shipped locale defines", () => {

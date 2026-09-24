@@ -11,11 +11,11 @@ import { useAppVisible } from "@voya/client/use-app-visible";
  * those over when streaming resumes, so opening the panel still shows what
  * just happened.
  */
-export function useLogStream() {
+export function useLogStream(enabled = true) {
   const visible = useAppVisible();
 
   useEffect(() => {
-    if (!visible || !backendAvailable()) {
+    if (!enabled || !visible || !backendAvailable()) {
       return undefined;
     }
 
@@ -24,5 +24,5 @@ export function useLogStream() {
     return () => {
       void voyaCommands().setLogStreaming(false).catch(() => undefined);
     };
-  }, [visible]);
+  }, [visible, enabled]);
 }

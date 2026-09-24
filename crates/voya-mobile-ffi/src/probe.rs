@@ -39,8 +39,8 @@ pub trait ProbeCoreHost: Send + Sync {
 pub enum ProbeCoreError {
     #[error("this build cannot run a probe core in the app process")]
     Unsupported,
-    #[error("the probe core could not be started or stopped: {message}")]
-    Failed { message: String },
+    #[error("the probe core could not be started or stopped: {detail}")]
+    Failed { detail: String },
 }
 
 /// Bridges [`ProbeCoreLauncher`] onto the host's callback.

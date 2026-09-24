@@ -4,8 +4,7 @@ import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-import { navigateToTab } from "~/app/navigation";
-import type { ShellTab } from "~/app/tabs";
+import { navigateToTab, openPage } from "~/app/navigation";
 
 import { voyaTransport } from "./platform";
 
@@ -31,7 +30,7 @@ export function EventBridge() {
       onCloseRequested: () => {
         // Desktop-only: a phone has no window to ask about closing.
       },
-      onSelectTab: (target) => navigateToTab(mobileTab(target)),
+      onSelectTab: navigateTarget,
       queryClient,
       t: () => translateRef.current,
     });
@@ -51,19 +50,7 @@ export function EventBridge() {
   return null;
 }
 
-/**
- * Where each deep-link target lands in the five tabs.
- *
- * The runtime log is a desktop Settings pane and a Settings row here, so both
- * `logs` and anything settings-shaped resolve to the same tab.
- */
-function mobileTab(target: ShellTarget): ShellTab {
-  switch (target.tab) {
-    case "logs":
-      return "settings";
-    case "profiles":
-      return "profiles";
-    case "connections":
-      return "connections";
-  }
+function navigateTarget(target: ShellTarget) {
+  if (target.tab === "profiles") navigateToTab("profiles");
+  else openPage(target.tab === "logs" ? "logs" : "activity");
 }

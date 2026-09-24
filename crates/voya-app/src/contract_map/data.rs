@@ -79,7 +79,7 @@ pub fn import_profiles_to_contract(result: ImportProfilesResult) -> ImportProfil
     }
 }
 
-fn import_line_issue_to_contract(
+pub fn import_line_issue_to_contract(
     issue: voya_core::ImportLineIssue,
 ) -> voya_contracts::ImportLineIssue {
     voya_contracts::ImportLineIssue {
@@ -117,6 +117,50 @@ pub fn subscription_update_to_contract(
         imported: result.imported,
         removed_existing: result.removed_existing,
         messages: result.messages,
+        outcomes: result
+            .outcomes
+            .into_iter()
+            .map(|outcome| voya_contracts::SubscriptionUpdateOutcome {
+                subscription_id: outcome.subscription_id,
+                status: match outcome.status {
+                    voya_core::SubscriptionUpdateStatus::Success => {
+                        voya_contracts::SubscriptionUpdateStatus::Success
+                    }
+                    voya_core::SubscriptionUpdateStatus::Skipped => {
+                        voya_contracts::SubscriptionUpdateStatus::Skipped
+                    }
+                    voya_core::SubscriptionUpdateStatus::Failed => {
+                        voya_contracts::SubscriptionUpdateStatus::Failed
+                    }
+                },
+                reason: match outcome.reason {
+                    voya_core::SubscriptionUpdateReason::Updated => {
+                        voya_contracts::SubscriptionUpdateReason::Updated
+                    }
+                    voya_core::SubscriptionUpdateReason::InvalidSource => {
+                        voya_contracts::SubscriptionUpdateReason::InvalidSource
+                    }
+                    voya_core::SubscriptionUpdateReason::SourceChanged => {
+                        voya_contracts::SubscriptionUpdateReason::SourceChanged
+                    }
+                    voya_core::SubscriptionUpdateReason::EmptyContent => {
+                        voya_contracts::SubscriptionUpdateReason::EmptyContent
+                    }
+                    voya_core::SubscriptionUpdateReason::DownloadFailed => {
+                        voya_contracts::SubscriptionUpdateReason::DownloadFailed
+                    }
+                    voya_core::SubscriptionUpdateReason::NoImportableNodes => {
+                        voya_contracts::SubscriptionUpdateReason::NoImportableNodes
+                    }
+                    voya_core::SubscriptionUpdateReason::InvalidFilter => {
+                        voya_contracts::SubscriptionUpdateReason::InvalidFilter
+                    }
+                },
+                imported: outcome.imported,
+                removed_existing: outcome.removed_existing,
+                diagnostic: outcome.diagnostic,
+            })
+            .collect(),
     }
 }
 
@@ -188,6 +232,11 @@ pub fn rule_from_contract(item: RoutingRuleContract) -> RulesItem {
         remarks: item.remarks,
         rule_type: item.scope.map(rule_scope_from_contract),
     }
+}
+
+#[must_use]
+pub fn default_dns_settings() -> DnsContract {
+    simple_dns_to_contract(crate::dns::normalize_simple_dns(SimpleDnsItem::default()))
 }
 
 #[must_use]

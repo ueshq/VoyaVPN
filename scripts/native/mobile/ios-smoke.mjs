@@ -9,7 +9,7 @@ import { lanAddress, startFixtures, unusedPort } from "./ios-fixtures.mjs";
 const root = repoRootFromScript(import.meta.url);
 const ios = resolve(root, "apps/mobile/ios");
 const bundleId = "app.voyavpn.mobile";
-const smokeTests = ["testLaunchAndAllPages", "testNodeImportShareQrDelete", "testSubscriptionAutoRefreshAndPolicyGroup", "testRealLatencyTimeoutCancelAndRetry", "testRulesAndSettingsPersist", "testDnsValidationAndPersistence"];
+const smokeTests = ["testSecondaryPagesAndImportCancellation", "testLaunchAndAllPages", "testNodeImportShareQrDelete", "testSubscriptionAutoRefreshAndPolicyGroup", "testRealLatencyTimeoutCancelAndRetry", "testRulesAndSettingsPersist", "testDnsValidationAndPersistence", "testSystemThemeAndForegroundRecovery"];
 
 export function selectRuntime(runtimes) {
   const runtime = runtimes.filter((item) => item.isAvailable && item.identifier.includes(".iOS-"))
@@ -19,6 +19,12 @@ export function selectRuntime(runtimes) {
 }
 
 export async function main() {
+  const requestedTests = process.argv.filter((value) => value.startsWith("--test=")).map((value) => value.slice(7));
+  const allowedTests = [...smokeTests, "testRuleLibraryUpdate", "testVisualMatrix", "testTabletOrientations"];
+  if (requestedTests.some((test) => !allowedTests.includes(test))) throw new Error("Unknown --test case");
+  const requestedDevices = process.argv.filter((value) => value.startsWith("--device=")).map((value) => value.slice(9));
+  const requestedSizes = process.argv.filter((value) => value.startsWith("--content-size=")).map((value) => value.slice(15));
+  if (requestedSizes.some((size) => !["large", "accessibility-extra-extra-extra-large"].includes(size))) throw new Error("Unknown --content-size category");
   const matrixOnly = process.argv.includes("--matrix-only");
   const full = process.argv.includes("--full") || matrixOnly;
   const output = resolve(root, process.env.VOYA_IOS_QA_OUTPUT || `.agents/docs/ios-repair-${new Date().toISOString().replace(/[:.]/g, "-")}`);
@@ -30,6 +36,7 @@ export async function main() {
   let fixtures;
   let phase = "environment";
   let commandNumber = 0;
+  let interrupted = false;
   const record = (line) => appendFileSync(resolve(output, "fixtures.log"), line + "\n");
   // Async child processes keep the local HTTP fixture responsive during XCTest.
   async function run(command, args, { cwd = root, input, allowFailure = false, label = command, env = {}, timeoutMs = 30 * 60 * 1000 } = {}) {
@@ -44,14 +51,15 @@ export async function main() {
       child.once("error", reject);
       child.once("close", (code) => {
         children.delete(child);
-        if (code !== 0 && !allowFailure) reject(new Error(`${label} exited ${code}; see ${log}`));
+        if (interrupted) reject(new Error("iOS regression interrupted"));
+        else if (code !== 0 && !allowFailure) reject(new Error(`${label} exited ${code}; see ${log}`));
         else accept({ stdout: stdout.trim(), code });
       });
       child.stdin.end(input);
     });
   }
   const sim = (args, options) => run("xcrun", ["simctl", ...args], { label: `simctl-${args[0]}`, ...options });
-  const cleanupSignal = () => { for (const child of children) child.kill("SIGTERM"); };
+  const cleanupSignal = () => { interrupted = true; for (const child of children) child.kill("SIGTERM"); };
   process.once("SIGINT", cleanupSignal);
   process.once("SIGTERM", cleanupSignal);
   try {
@@ -69,7 +77,7 @@ export async function main() {
     await run("python3", ["-c", "import sqlite3, plistlib"]);
     const runtime = selectRuntime(JSON.parse((await sim(["list", "runtimes", "--json"])).stdout).runtimes);
     const types = JSON.parse((await sim(["list", "devicetypes", "--json"])).stdout).devicetypes;
-    const names = full ? ["iPhone 17", "iPhone SE (3rd generation)", "iPhone 17 Pro Max"] : ["iPhone 17"];
+    const names = requestedDevices.length ? requestedDevices : full ? ["iPhone 17", "iPhone SE (3rd generation)", "iPhone 17 Pro Max", "iPad Pro 11-inch (M4)"] : ["iPhone 17"];
     const selected = names.map((name) => {
       const type = types.find((item) => item.name === name);
       if (!type) throw new Error(`Missing simulator device type: ${name}`);
@@ -150,10 +158,12 @@ export async function main() {
         phase = "product";
         await sim(["spawn", activeDevice, executable, resolve(container, "Documents"), String(await unusedPort())]);
       }
-      const categories = full ? ["large", "accessibility-extra-extra-extra-large"] : ["large"];
+      // Exercise the most constrained layout first so a regression fails early.
+      const categories = requestedSizes.length ? requestedSizes : full ? ["accessibility-extra-extra-extra-large", "large"] : ["large"];
       for (const category of categories) {
         await sim(["ui", activeDevice, "content_size", category]);
-        const tests = !matrixOnly && index === 0 && category === "large" ? [...smokeTests, ...(full ? ["testRuleLibraryUpdate", "testVisualMatrix"] : [])] : ["testVisualMatrix"];
+        const tests = requestedTests.length ? requestedTests : !matrixOnly && index === 0 && category === "large" ? [...smokeTests, ...(full ? ["testRuleLibraryUpdate", "testVisualMatrix"] : [])] : ["testSystemThemeAndForegroundRecovery", "testVisualMatrix"];
+        if (!requestedTests.length && type.name.startsWith("iPad")) tests.push("testTabletOrientations");
         const resultPath = resolve(output, `${index}-${category}.xcresult`);
         const result = await run("xcodebuild", ["test-without-building", "-xctestrun", testRun, "-destination", `platform=iOS Simulator,id=${activeDevice}`, "-parallel-testing-enabled", "NO", "-resultBundlePath", resultPath, ...tests.map((test) => `-only-testing:VoyaVPNUITests/VoyaVPNUITests/${test}`)], { label: `tests-${index}-${category}`, allowFailure: true });
         results.push({ device: type.name, category, tests, passed: result.code === 0, resultPath });
@@ -171,13 +181,14 @@ export async function main() {
       await sim(["shutdown", activeDevice]);
     }
     if (results.some((result) => !result.passed)) throw new Error("One or more XCTest cases failed; see the complete results and attachments.");
-    writeFileSync(resolve(output, "summary.json"), JSON.stringify({ status: "passed", scope: matrixOnly ? "display-matrix" : full ? "full" : "smoke", results, deviceOnly: "VPN authorization/data plane, kill switch and network transitions require a physical iPhone" }, null, 2));
+    writeFileSync(resolve(output, "summary.json"), JSON.stringify({ status: "passed", scope: requestedTests.length ? "selected-tests" : matrixOnly ? "display-matrix" : full ? "full" : "smoke", results, deviceOnly: "VPN authorization/data plane, kill switch and network transitions require a physical iPhone" }, null, 2));
     console.log(`PASS: ${output}`);
   } catch (error) {
     writeFileSync(resolve(output, "summary.json"), JSON.stringify({ status: "failed", classification: phase, error: String(error), results }, null, 2));
     throw error;
   } finally {
     cleanupSignal();
+    interrupted = false;
     if (fixtures) await fixtures.close();
     for (const device of devices) {
       await sim(["shutdown", device], { allowFailure: true });

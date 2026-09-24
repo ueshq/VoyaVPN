@@ -1,3 +1,5 @@
+import { act } from "@testing-library/react-native";
+import { Alert } from "react-native";
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MockBackend } from "@voya/client/mock-backend";
@@ -84,7 +86,7 @@ describe("ActivityScreen", () => {
 
     expect(await screen.findByText("news.example")).toBeOnTheScreen();
     expect(screen.getByText("app-0 · Node 0")).toBeOnTheScreen();
-    expect(screen.getByText("1.0 KB / 2.0 KB")).toBeOnTheScreen();
+    expect(screen.getByText("Upload 1.0 KB · Download 2.0 KB")).toBeOnTheScreen();
     expect(screen.getByText("1 connections")).toBeOnTheScreen();
   });
 
@@ -113,27 +115,18 @@ describe("ActivityScreen", () => {
     expect(await screen.findByText("No matching connections")).toBeOnTheScreen();
   });
 
-  it("closes one connection by tapping it, and all of them from the header", async () => {
-    backend().state.connections = {
-      connections: [
-        makeConnection(0, { host: "news.example" }),
-        makeConnection(1, { host: "mail.example" }),
-      ],
-      downloadTotal: 0,
-      uploadTotal: 0,
-    };
+  it("opening a row never closes a connection and close-all requires confirmation", async () => {
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    backend().state.connections = { connections: [makeConnection(0, { host: "news.example" })], downloadTotal: 0, uploadTotal: 0 };
     connect();
     await renderActivity();
     const user = userEvent.setup();
-
-    await user.press(await screen.findByLabelText("Disconnect news.example"));
-    await waitFor(() =>
-      expect(backend().state.connections.connections.map((item) => item.host)).toEqual([
-        "mail.example",
-      ]),
-    );
-
+    await user.press(await screen.findByText("news.example"));
+    expect(backend().state.calls.some((call) => call.command === "proxyCloseConnection")).toBe(false);
     await user.press(screen.getByText("Disconnect all connections"));
-    await waitFor(() => expect(backend().state.connections.connections).toEqual([]));
+    expect(backend().state.calls.some((call) => call.command === "proxyCloseConnection")).toBe(false);
+    await act(() => alert.mock.calls.at(-1)?.[2]?.find((button) => button.style === "destructive")?.onPress?.());
+    await waitFor(() => expect(backend().state.calls.find((call) => call.command === "proxyCloseConnection")?.args).toEqual([null]));
+    alert.mockRestore();
   });
 });

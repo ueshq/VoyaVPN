@@ -43,6 +43,15 @@ afterEach(() => {
 });
 
 describe("HomeScreen", () => {
+  it("does not offer a connection without nodes", async () => {
+    (voyaTransport() as MockBackend).state.profiles = [];
+    await renderHome();
+    await screen.findByLabelText("Add nodes or subscription");
+    expect(screen.queryByText("Connect")).toBeNull();
+    expect(screen.queryByText("No node selected")).toBeNull();
+    expect(screen.getByText("No nodes")).toBeOnTheScreen();
+    expect((voyaTransport() as MockBackend).state.calls.some((call) => call.command === "connectActiveProfile")).toBe(false);
+  });
   it("names the selected node and offers to connect", async () => {
     await renderHome();
 
@@ -69,6 +78,8 @@ describe("HomeScreen", () => {
 
   it("shows the live transfer rates the statistics stream reports", async () => {
     await renderHome();
+    await userEvent.setup().press(await screen.findByText("Connect"));
+    await screen.findByText("Connected");
 
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "statistics",
@@ -87,4 +98,14 @@ describe("HomeScreen", () => {
     expect(await screen.findByText("2.0 KB/s")).toBeOnTheScreen();
     expect(screen.getByText("1.0 KB/s")).toBeOnTheScreen();
   });
+  it("keeps a listing failure distinct from an empty configuration", async () => {
+    const backend = voyaTransport() as MockBackend;
+    const listing = jest.spyOn(backend.commands, "listProfileSummaries").mockRejectedValue(new Error("offline"));
+    await renderHome();
+    await screen.findByText("Could not complete this action. Retry or view diagnostics.");
+    expect(screen.queryByText("No nodes")).toBeNull();
+    expect(backend.state.calls.some((call) => call.command === "connectActiveProfile")).toBe(false);
+    listing.mockRestore();
+  });
+
 });

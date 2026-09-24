@@ -1,0 +1,788 @@
+<!-- AI生成 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0B1220" />
+  <title>VoyaVPN · App Encryption Documentation</title>
+  <style>
+    :root {
+      --bg: #0B1220;
+      --bg-elevated: #121A2B;
+      --bg-card: #151C2C;
+      --bg-code: #0A0F1A;
+      --ink: #F4F7FB;
+      --ink-muted: #94A3B8;
+      --ink-faint: #64748B;
+      --accent: #3B82F6;
+      --accent-soft: rgba(59, 130, 246, 0.14);
+      --success: #34D399;
+      --success-soft: rgba(52, 211, 153, 0.12);
+      --warning: #FBBF24;
+      --warning-soft: rgba(251, 191, 36, 0.12);
+      --border: rgba(148, 163, 184, 0.14);
+      --radius: 16px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
+      background: #060A12;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+
+    body {
+      display: flex;
+      justify-content: center;
+    }
+
+    .phone {
+      width: 100%;
+      max-width: 430px;
+      min-height: 100vh;
+      min-height: 100dvh;
+      background:
+        radial-gradient(1200px 480px at 50% -120px, rgba(59, 130, 246, 0.18), transparent 60%),
+        var(--bg);
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.04);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      padding: calc(12px + var(--safe-top)) 20px 12px;
+      background: rgba(11, 18, 32, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .app-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(145deg, #3B82F6, #1D4ED8);
+      display: grid;
+      place-items: center;
+      box-shadow: 0 8px 20px rgba(59, 130, 246, 0.28);
+      flex-shrink: 0;
+    }
+
+    .app-icon svg { width: 20px; height: 20px; }
+
+    .topbar h1 {
+      font-size: 17px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+
+    .topbar p {
+      font-size: 12px;
+      color: var(--ink-muted);
+      margin-top: 1px;
+    }
+
+    .badge {
+      margin-left: auto;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: var(--success-soft);
+      color: var(--success);
+      border: 1px solid rgba(52, 211, 153, 0.28);
+      white-space: nowrap;
+    }
+
+    .content {
+      padding: 18px 16px calc(28px + var(--safe-bottom));
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .hero {
+      background: linear-gradient(165deg, rgba(59, 130, 246, 0.16), rgba(21, 28, 44, 0.96) 48%);
+      border: 1px solid rgba(59, 130, 246, 0.22);
+      border-radius: 20px;
+      padding: 20px 18px;
+    }
+
+    .hero-kicker {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+
+    .hero h2 {
+      margin-top: 8px;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+    }
+
+    .hero-sub {
+      margin-top: 8px;
+      color: var(--ink-muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .status-grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .status-card {
+      background: rgba(10, 15, 26, 0.55);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .status-card .label {
+      font-size: 11px;
+      color: var(--ink-faint);
+      margin-bottom: 6px;
+    }
+
+    .status-card .value {
+      font-size: 14px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .status-card .value.ok { color: var(--success); }
+    .status-card .value.warn { color: var(--warning); }
+
+    .section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 15px 16px 0;
+    }
+
+    .section-head h3 {
+      font-size: 15px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+    }
+
+    .section-head .tag {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--ink-muted);
+      background: rgba(148, 163, 184, 0.1);
+      border-radius: 999px;
+      padding: 4px 8px;
+    }
+
+    .section-body {
+      padding: 12px 16px 16px;
+    }
+
+    .hint {
+      font-size: 13px;
+      color: var(--ink-muted);
+      line-height: 1.55;
+      margin-bottom: 12px;
+    }
+
+    .qa {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .qa-item {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      background: var(--bg-elevated);
+    }
+
+    .qa-item .q {
+      font-size: 13px;
+      color: var(--ink-muted);
+      line-height: 1.45;
+    }
+
+    .qa-item .a {
+      margin-top: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .choice {
+      flex: 1;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      background: var(--accent-soft);
+      color: var(--ink);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 13.5px;
+      line-height: 1.45;
+      font-weight: 550;
+    }
+
+    .choice small {
+      display: block;
+      margin-top: 6px;
+      color: var(--ink-muted);
+      font-weight: 400;
+      font-size: 12px;
+    }
+
+    .copy-btn {
+      border: 0;
+      background: rgba(59, 130, 246, 0.16);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 650;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      white-space: nowrap;
+      min-height: 34px;
+    }
+
+    .copy-btn:active { transform: scale(0.97); }
+
+    .code-block {
+      position: relative;
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 14px 16px;
+      overflow: auto;
+    }
+
+    .code-block pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      color: #D7E3F4;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .code-block .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+
+    .doc-text {
+      font-size: 13.5px;
+      line-height: 1.65;
+      color: #DCE5F2;
+      white-space: pre-wrap;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      font-size: 12px;
+      color: var(--ink);
+      background: rgba(148, 163, 184, 0.1);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 7px 10px;
+    }
+
+    .chip code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11.5px;
+      color: #B8D4FF;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--ink-faint);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    td code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #B8D4FF;
+      font-size: 11.5px;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .checklist {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .check-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px;
+      border-radius: 14px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+    }
+
+    .check-dot {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--success-soft);
+      color: var(--success);
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .check-item strong {
+      display: block;
+      font-size: 13.5px;
+      font-weight: 650;
+      margin-bottom: 4px;
+    }
+
+    .check-item p {
+      font-size: 12.5px;
+      color: var(--ink-muted);
+      line-height: 1.5;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(24px + var(--safe-bottom));
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--ink);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 50;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .footer-note {
+      text-align: center;
+      color: var(--ink-faint);
+      font-size: 11.5px;
+      line-height: 1.5;
+      padding: 4px 8px 8px;
+    }
+
+    @media (min-width: 431px) {
+      .phone {
+        margin: 18px 0;
+        min-height: calc(100vh - 36px);
+        min-height: calc(100dvh - 36px);
+        border-radius: 28px;
+        overflow: hidden;
+      }
+    }
+  </style>
+</head>
+<body>
+<p data-aigc-mark="1" style="margin:0 0 8px;font-size:10px;line-height:1.3;color:#6b6560;font-weight:400;">AI生成</p>
+
+  <div class="phone">
+    <header class="topbar">
+      <div class="topbar-row">
+        <div class="app-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 3l7 3v5c0 5-3.2 8.4-7 10-3.8-1.6-7-5-7-10V6l7-3z" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/>
+            <path d="M9.5 12.2l1.8 1.8 3.4-3.6" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <h1>App Encryption Documentation</h1>
+          <p>VoyaVPN · macOS · App Store Connect</p>
+        </div>
+        <div class="badge">可直接提交</div>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="hero">
+        <div class="hero-kicker">Export Compliance</div>
+        <h2>使用标准加密算法</h2>
+        <p class="hero-sub">
+          VoyaVPN 通过 sing-box 建立 VPN/代理隧道，使用 IETF / IEEE / NIST 等国际标准加密算法保护网络流量。不含专有加密算法。
+        </p>
+        <div class="status-grid">
+          <div class="status-card">
+            <div class="label">App Uses Non-Exempt Encryption</div>
+            <div class="value ok">YES / true</div>
+          </div>
+          <div class="status-card">
+            <div class="label">Encryption Type</div>
+            <div class="value">Standard only</div>
+          </div>
+          <div class="status-card">
+            <div class="label">Proprietary Crypto</div>
+            <div class="value ok">None</div>
+          </div>
+          <div class="status-card">
+            <div class="label">France Distribution</div>
+            <div class="value warn">Yes · 需申报</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h3>App Store Connect 选项</h3>
+          <span class="tag">单选题答案</span>
+        </div>
+        <div class="section-body">
+          <p class="hint">提交加密说明时，算法类型选择第二项；法国分发按销售范围如实填写。</p>
+          <div class="qa">
+            <div class="qa-item">
+              <div class="q">What type of encryption algorithms does your app implement?</div>
+              <div class="a">
+                <div class="choice">
+                  Standard encryption algorithms instead of, or in addition to, using or accessing the encryption within Apple's operating system
+                  <small>不要选 proprietary，也不要选 both / none。VPN 隧道使用的是 TLS、AES、ChaCha20 等标准算法。</small>
+                </div>
+                <button class="copy-btn" data-copy="Standard encryption algorithms instead of, or in addition to, using or accessing the encryption within Apple's operating system">复制</button>
+              </div>
+            </div>
+            <div class="qa-item">
+              <div class="q">Is your app going to be available for distribution in France?</div>
+              <div class="a">
+                <div class="choice">
+                  Yes
+                  <small>若 App Store 销售范围包含法国。若在「价格与销售范围」关闭法国，才选 No。</small>
+                </div>
+                <button class="copy-btn" data-copy="Yes">复制</button>
+              </div>
+            </div>
+            <div class="qa-item">
+              <div class="q">Does your app implement encryption algorithms that are accepted as standard by international standard bodies?</div>
+              <div class="a">
+                <div class="choice">
+                  Yes — IEEE / IETF / ITU / NIST 等标准算法
+                  <small>无自研、无非标准、无专有算法。</small>
+                </div>
+                <button class="copy-btn" data-copy="Yes">复制</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h3>Info.plist 配置</h3>
+          <span class="tag">Xcode</span>
+        </div>
+        <div class="section-body">
+          <p class="hint">在 macOS App 的 Info.plist 中声明使用非豁免加密（VPN 隧道加密不属于豁免用途）。</p>
+          <div class="code-block">
+            <button class="copy-btn" data-copy="ITSAppUsesNonExemptEncryption">复制</button>
+            <pre>&lt;key&gt;ITSAppUsesNonExemptEncryption&lt;/key&gt;
+&lt;true/&gt;</pre>
+          </div>
+          <p class="hint" style="margin-top:12px;margin-bottom:0;">
+            值为 <strong style="color:#DCE5F2">true / YES</strong> 表示使用非豁免加密，需要提供加密文档。若仅用系统 TLS 做认证且不含隧道加密，才是 false —— VoyaVPN 不属于该情况。
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h3>加密算法清单</h3>
+          <span class="tag">Standard</span>
+        </div>
+        <div class="section-body">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>算法</th>
+                  <th>标准</th>
+                  <th>用途</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>TLS 1.2 / TLS 1.3</code></td>
+                  <td>IETF RFC 5246 / 8446</td>
+                  <td>传输层安全通道</td>
+                </tr>
+                <tr>
+                  <td><code>AES-128-GCM</code> / <code>AES-256-GCM</code></td>
+                  <td>NIST FIPS 197 · IETF RFC 5116</td>
+                  <td>流量机密性与完整性</td>
+                </tr>
+                <tr>
+                  <td><code>ChaCha20-Poly1305</code></td>
+                  <td>IETF RFC 8439</td>
+                  <td>AEAD 流量加密</td>
+                </tr>
+                <tr>
+                  <td><code>X25519</code></td>
+                  <td>IETF RFC 7748</td>
+                  <td>密钥协商</td>
+                </tr>
+                <tr>
+                  <td><code>SHA-256 / SHA-384 / SHA-512</code></td>
+                  <td>NIST FIPS 180-4</td>
+                  <td>摘要与密钥派生</td>
+                </tr>
+                <tr>
+                  <td><code>HMAC</code></td>
+                  <td>IETF RFC 2104</td>
+                  <td>消息认证</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="chip-row" style="margin-top:14px;">
+            <span class="chip"><code>Shadowsocks AEAD</code></span>
+            <span class="chip"><code>VMess</code></span>
+            <span class="chip"><code>VLESS / XTLS</code></span>
+            <span class="chip"><code>Trojan</code></span>
+            <span class="chip"><code>Reality</code></span>
+          </div>
+          <p class="hint" style="margin-top:12px;margin-bottom:0;">
+            上述协议均由 sing-box 核心承载，仅组合上述国际标准算法，不引入专有密码学实现。
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h3>正式说明全文</h3>
+          <span class="tag">English</span>
+        </div>
+        <div class="section-body">
+          <p class="hint">可粘贴到 App Store Connect 的加密文档 / Export Compliance 说明，或整理为 PDF 附件。</p>
+          <div class="code-block">
+            <button class="copy-btn" data-copy-target="full-doc">复制全文</button>
+            <pre class="doc-text" id="full-doc">App Encryption Documentation
+Product: VoyaVPN (macOS)
+Bundle ID: app.voyavpn.desktop
+
+1. Summary
+VoyaVPN uses encryption solely to protect user network traffic transmitted through VPN and proxy tunnels. The application implements standard encryption algorithms accepted by international standard bodies (IETF, IEEE, ITU, NIST). It does not implement proprietary or non-standard encryption algorithms.
+
+2. Classification
+- Encryption type: Standard encryption algorithms (instead of, or in addition to, encryption within Apple's operating system)
+- Proprietary encryption: None
+- Non-standard algorithms: None
+- Apple's requested export compliance choice: "Standard encryption algorithms instead of, or in addition to, using or accessing the encryption within Apple's operating system"
+
+3. Algorithms Implemented
+All cryptographic primitives used by the application and its embedded sing-box core are international standards, including:
+- TLS 1.2 and TLS 1.3 (IETF RFC 5246, RFC 8446)
+- AES-128-GCM and AES-256-GCM (NIST FIPS 197; AEAD per IETF RFC 5116)
+- ChaCha20-Poly1305 (IETF RFC 8439)
+- X25519 Elliptic Curve Diffie-Hellman (IETF RFC 7748)
+- SHA-256 / SHA-384 / SHA-512 (NIST FIPS 180-4)
+- HMAC (IETF RFC 2104)
+
+These primitives are combined only through standard VPN/proxy protocol stacks (for example Shadowsocks AEAD, VMess, VLESS/XTLS, Trojan, and TLS-based transports). No custom cipher designs or non-standard cryptographic constructions are introduced.
+
+4. Purpose of Encryption
+- Confidentiality and integrity of user network traffic between the client and the user-configured remote endpoint
+- Peer authentication and session key establishment for tunnel setup
+- Optional local storage protection of user configuration data using platform-provided mechanisms
+
+The encryption is not used for copy protection, DRM, or specialized government/military-only functionality.
+
+5. Availability
+- The application is intended for distribution on the Mac App Store in all available territories, including France (subject to the developer's App Store Connect availability settings).
+- Encryption documentation can be provided before build submission as requested by App Review.
+
+6. Declaration
+We declare that VoyaVPN uses only standard encryption algorithms as listed above, and does not contain proprietary encryption that would require additional classification beyond standard-algorithm disclosure.
+
+Developer: [Your Legal Entity Name]
+Contact: [Compliance Contact Email]
+Date: [YYYY-MM-DD]
+Version: 1.0</pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <h3>提交前检查清单</h3>
+          <span class="tag">Checklist</span>
+        </div>
+        <div class="section-body">
+          <div class="checklist">
+            <div class="check-item">
+              <div class="check-dot">1</div>
+              <div>
+                <strong>Info.plist</strong>
+                <p>确认 <code style="color:#B8D4FF">ITSAppUsesNonExemptEncryption = true</code>，并打在提交的 build 中。</p>
+              </div>
+            </div>
+            <div class="check-item">
+              <div class="check-dot">2</div>
+              <div>
+                <strong>App Store Connect 选项</strong>
+                <p>算法类型选 Standard encryption algorithms…；法国分发按实际销售范围选 Yes/No。</p>
+              </div>
+            </div>
+            <div class="check-item">
+              <div class="check-dot">3</div>
+              <div>
+                <strong>加密说明文档</strong>
+                <p>将上方英文全文中的方括号字段替换为公司法定名称、合规联系人邮箱和日期，可另存 PDF 随 build 提交。</p>
+              </div>
+            </div>
+            <div class="check-item">
+              <div class="check-dot">4</div>
+              <div>
+                <strong>美国出口自分类（BIS）</strong>
+                <p>标准加密通常需在一年内向美国 BIS 做 Self-Classification Report（年度汇总，不是每次提交都做）。</p>
+              </div>
+            </div>
+            <div class="check-item">
+              <div class="check-dot">5</div>
+              <div>
+                <strong>法国 / 欧盟</strong>
+                <p>若在法国分发，按 ANSSI / 欧盟双用途物项规则准备加密进口声明；标准算法一般适用简化路径。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p class="footer-note">
+        VoyaVPN · App Encryption Documentation<br />
+        仅供 App Store / TestFlight 提交时使用
+      </p>
+    </main>
+  </div>
+
+  <div class="toast" id="toast">已复制</div>
+
+  <script>
+    (function () {
+      var toast = document.getElementById("toast");
+      var timer = null;
+
+      function showToast(message) {
+        toast.textContent = message || "已复制";
+        toast.classList.add("show");
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          toast.classList.remove("show");
+        }, 1600);
+      }
+
+      function copyText(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function () {
+            showToast("已复制");
+          }).catch(function () {
+            fallbackCopy(text);
+          });
+        } else {
+          fallbackCopy(text);
+        }
+      }
+
+      function fallbackCopy(text) {
+        var area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.left = "-9999px";
+        document.body.appendChild(area);
+        area.select();
+        try {
+          document.execCommand("copy");
+          showToast("已复制");
+        } catch (e) {
+          showToast("复制失败");
+        }
+        document.body.removeChild(area);
+      }
+
+      document.addEventListener("click", function (event) {
+        var btn = event.target.closest("[data-copy], [data-copy-target]");
+        if (!btn) return;
+
+        var text = "";
+        if (btn.hasAttribute("data-copy")) {
+          text = btn.getAttribute("data-copy");
+        } else if (btn.hasAttribute("data-copy-target")) {
+          var target = document.getElementById(btn.getAttribute("data-copy-target"));
+          text = target ? target.textContent : "";
+        }
+        if (text) copyText(text);
+      });
+    })();
+  </script>
+</body>
+</html>

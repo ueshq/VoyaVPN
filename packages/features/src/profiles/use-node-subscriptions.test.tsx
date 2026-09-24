@@ -15,7 +15,7 @@ const ipc = installFakeCommands({
 });
 
 const source: Subscription = { id: "source", remarks: "Source", url: "https://example.test/sub", additionalUrl: "", userAgent: "", enabled: true, sort: 0, filter: null, converterTarget: null, autoUpdateIntervalMinutes: null };
-const success: SubscriptionUpdateResult = { imported: 2, updated: 1, skipped: 0, removedExisting: 0, messages: [] };
+const success: SubscriptionUpdateResult = { imported: 2, updated: 1, skipped: 0, removedExisting: 0, messages: ["Source->imported 2 nodes"], outcomes: [{ subscriptionId: "source", status: "success", reason: "updated", imported: 2, removedExisting: 0, diagnostic: null }] };
 function setup() {
   return renderHook(() => {
     const operation = useNodeOperation();
@@ -58,17 +58,17 @@ it("deduplicates an in-flight source update and releases it after completion", a
 });
 
 it("reports a failed source update and permits a retry", async () => {
-  ipc.updateSubscriptions.mockResolvedValueOnce({ ...success, imported: 0, updated: 0, skipped: 1, messages: ["download failed"] }).mockResolvedValueOnce(success);
+  ipc.updateSubscriptions.mockResolvedValueOnce({ ...success, imported: 0, updated: 0, skipped: 1, outcomes: [{ ...success.outcomes[0], status: "failed", reason: "downloadFailed" }], messages: ["download failed"] }).mockResolvedValueOnce(success);
   const { result } = setup();
   await act(() => result.current.updateSubscription(source.id));
-  expect(result.current.operationError).toBe("download failed");
+  expect(result.current.operationError).toBe(i18next.t("mobile.updateFailed"));
   expect(result.current.updatingSubscriptions.size).toBe(0);
   await act(() => result.current.updateSubscription(source.id));
   expect(result.current.operationError).toBeNull();
 });
 
 it("explains a skipped update even when the backend supplied no message", async () => {
-  ipc.updateSubscriptions.mockResolvedValue({ ...success, imported: 0, updated: 0, skipped: 1 });
+  ipc.updateSubscriptions.mockResolvedValue({ ...success, imported: 0, updated: 0, skipped: 1, outcomes: [{ ...success.outcomes[0], status: "failed", reason: "emptyContent" }] });
   const { result } = setup();
   await act(() => result.current.updateSubscription(source.id));
   expect(result.current.operationError).toBeTruthy();
@@ -121,13 +121,13 @@ it("updates every subscription at once and ignores a second request while runnin
 it("updates only newly imported sources once, aggregates success and preserves every failure", async () => {
   ipc.updateSubscriptions.mockResolvedValueOnce(success)
     .mockRejectedValueOnce(new Error("failed https://secret.example/sub?token=hidden"))
-    .mockResolvedValueOnce({ ...success, imported: 0, updated: 0, skipped: 1, messages: ["timed out"] })
+    .mockResolvedValueOnce({ ...success, imported: 0, updated: 0, skipped: 1, outcomes: [{ ...success.outcomes[0], status: "failed", reason: "downloadFailed" }], messages: ["timed out"] })
     .mockResolvedValueOnce(success);
   const { result } = setup();
   await act(() => result.current.updateImportedSubscriptions(["a", "b", "a", "c", "d"], () => true));
   expect(ipc.updateSubscriptions.mock.calls.map(([id]) => id)).toEqual(["a", "b", "c", "d"]);
   expect(result.current.operationMessage).toContain("4");
-  expect(result.current.operationError).toContain("timed out");
+  expect(result.current.operationError).toContain(i18next.t("mobile.updateFailed"));
   expect(result.current.operationError).not.toContain("hidden");
   expect(result.current.updatingSubscriptions.size).toBe(0);
 });

@@ -14,7 +14,8 @@
       "project": ["src/**/*.{ts,tsx}", "global.css"],
       // Babel rewrites helper calls into `@babel/runtime` imports, so no
       // source file names it.
-      "ignoreDependencies": ["@babel/runtime"]
+      // Gradle resolves both packages by path from settings.gradle/build.gradle.
+      "ignoreDependencies": ["@babel/runtime", "@react-native/codegen", "@react-native/gradle-plugin"]
     },
     "apps/desktop": {
       "entry": ["src/**/*.{test,spec}.{ts,tsx}"],

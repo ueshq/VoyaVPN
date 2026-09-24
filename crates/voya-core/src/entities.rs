@@ -538,6 +538,34 @@ pub struct SubscriptionUpdateResult {
     pub imported: u32,
     pub removed_existing: u32,
     pub messages: Vec<String>,
+    pub outcomes: Vec<SubscriptionUpdateOutcome>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubscriptionUpdateStatus {
+    Success,
+    Skipped,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SubscriptionUpdateReason {
+    Updated,
+    InvalidSource,
+    SourceChanged,
+    EmptyContent,
+    DownloadFailed,
+    NoImportableNodes,
+    InvalidFilter,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubscriptionUpdateOutcome {
+    pub subscription_id: String,
+    pub status: SubscriptionUpdateStatus,
+    pub reason: SubscriptionUpdateReason,
+    pub imported: u32,
+    pub removed_existing: u32,
+    pub diagnostic: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]

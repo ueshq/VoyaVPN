@@ -2,7 +2,7 @@ import { BottomTabBarHeightCallbackContext, type BottomTabBarProps } from "@reac
 import { CommonActions } from "@react-navigation/native";
 import { Typography } from "heroui-native/text";
 import { useContext } from "react";
-import { Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 
 import { useToneColor } from "./tone";
 
@@ -29,9 +29,9 @@ export function FloatingTabBar({ descriptors, insets, navigation, state }: Botto
     <View
       pointerEvents="box-none"
       className="absolute inset-x-0 bottom-0 px-page"
-      // The home indicator is a gesture area, not a keep-out zone: iOS's own
-      // floating bars sit partly over it.
-      style={{ paddingBottom: Math.max(insets.bottom - 10, 12) }}
+      // Android's three-button bar occupies the full inset; iOS leaves room
+      // around its thin home indicator even with the floating design's offset.
+      style={{ paddingBottom: Math.max(insets.bottom - (Platform.OS === "ios" ? 10 : 0), 12) }}
       onLayout={(event) => reportHeight?.(event.nativeEvent.layout.height)}
     >
       <View className="flex-row rounded-full border border-border-subtle bg-surface p-1.5 shadow-float">
@@ -70,9 +70,9 @@ export function FloatingTabBar({ descriptors, insets, navigation, state }: Botto
                 size: 22,
               })}
               <Typography
-                allowFontScaling={false}
-                numberOfLines={1}
-                className={`text-[11px] font-medium ${focused ? "text-brand" : "text-subtle"}`}
+                maxFontSizeMultiplier={1.5}
+                numberOfLines={2}
+                className={`text-xs font-medium ${focused ? "text-brand" : "text-subtle"}`}
               >
                 {label}
               </Typography>

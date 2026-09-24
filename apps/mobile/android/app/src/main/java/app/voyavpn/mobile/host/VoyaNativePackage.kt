@@ -12,7 +12,7 @@ import com.facebook.react.uimanager.ViewManager
  */
 class VoyaNativePackage : ReactPackage {
     override fun createNativeModules(context: ReactApplicationContext): List<NativeModule> =
-        listOf(VoyaNativeModule(context))
+        listOf(VoyaNativeModule(context), VoyaDeviceActions(context))
 
     override fun createViewManagers(context: ReactApplicationContext): List<ViewManager<*, *>> =
         emptyList()

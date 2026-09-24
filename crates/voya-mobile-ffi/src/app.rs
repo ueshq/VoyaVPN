@@ -57,12 +57,12 @@ const UNENCODABLE_FAILURE: &str = r#"{"kind":{"type":"internal"},"subsystem":"ap
 /// A startup that never produced an app.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum StartupError {
-    #[error("could not prepare the application directories: {message}")]
-    Paths { message: String },
-    #[error("could not open the database: {message}")]
-    Database { message: String },
-    #[error("could not start the runtime: {message}")]
-    Runtime { message: String },
+    #[error("could not prepare the application directories: {detail}")]
+    Paths { detail: String },
+    #[error("could not open the database: {detail}")]
+    Database { detail: String },
+    #[error("could not start the runtime: {detail}")]
+    Runtime { detail: String },
 }
 
 /// Everything a dispatcher needs, behind one handle.
@@ -122,12 +122,12 @@ impl VoyaApp {
             .enable_all()
             .build()
             .map_err(|error| StartupError::Runtime {
-                message: error.to_string(),
+                detail: error.to_string(),
             })?;
         let data_dir = PathBuf::from(data_dir);
         let paths = AppPaths::new(&data_dir);
         paths.ensure_dirs().map_err(|error| StartupError::Paths {
-            message: error.to_string(),
+            detail: error.to_string(),
         })?;
 
         let state = runtime.block_on(connect(
@@ -276,7 +276,7 @@ impl ProcessRunner for NoProcessRunner {
 
 fn database_failure(error: impl std::fmt::Display) -> StartupError {
     StartupError::Database {
-        message: error.to_string(),
+        detail: error.to_string(),
     }
 }
 

@@ -11,7 +11,6 @@ export const SHELL_TABS = {
   home: { titleKey: "tabs.home" },
   profiles: { titleKey: "tabs.profiles" },
   rules: { titleKey: "tabs.rules" },
-  connections: { titleKey: "tabs.connections" },
   settings: { titleKey: "tabs.settings" },
 } as const satisfies Record<string, { titleKey: TranslationKey }>;
 

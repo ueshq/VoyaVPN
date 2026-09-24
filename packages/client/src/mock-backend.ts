@@ -171,6 +171,13 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
         ),
       ),
 
+    previewImportProfiles: (text) => {
+      const links = text.split(/\s+/).filter((line) => line.includes("://"));
+      return resolve(record("previewImportProfiles", [text], {
+        nodes: links.filter((link) => !/^https?:/.test(link)).map((link) => ({ name: profileNameFromShareLink(link) ?? "Imported", protocol: link.split(":")[0], address: "example.test" })),
+        subscriptionUrls: links.filter((link) => /^https?:/.test(link)), failed: 0, lineIssues: [],
+      }));
+    },
     importProfilesFromText: (text, subscriptionId) => {
       const links = text
         .split(/\s+/)
@@ -274,6 +281,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
 
     listRoutings: () => resolve(record("listRoutings", [], state.routings)),
 
+    getDefaultDnsSettings: () => resolve(record("getDefaultDnsSettings", [], { ...makeMockSeed().settings.dns })),
     loadDnsSettings: () => resolve(record("loadDnsSettings", [], state.settings.dns)),
 
     saveDnsSettings: (settings) => {
@@ -401,6 +409,21 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       resolve(record("listSubscriptionMetadata", [], state.subscriptionMetadata)),
 
     listSubscriptions: () => resolve(record("listSubscriptions", [], state.subscriptions)),
+    saveSubscription: (source) => {
+      const existing = state.subscriptions.findIndex((item) => item.id === source.id);
+      const saved = { ...source };
+      if (existing >= 0) state.subscriptions[existing] = saved;
+      else state.subscriptions.push(saved);
+      invalidate("saveSubscription", "subscriptions");
+      return resolve(record("saveSubscription", [source], saved));
+    },
+    deleteSubscriptions: (ids) => {
+      const removed = state.subscriptions.filter((source) => ids.includes(source.id)).length;
+      state.subscriptions = state.subscriptions.filter((source) => !ids.includes(source.id));
+      state.profiles = state.profiles.filter((entry) => !ids.includes(entry.profile.subscriptionId ?? ""));
+      invalidate("deleteSubscriptions", "subscriptions", "profiles");
+      return resolve(record("deleteSubscriptions", [ids], removed));
+    },
 
     loadAppSettings: () => resolve(record("loadAppSettings", [], state.settings)),
 
@@ -539,6 +562,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
 
       const result: SubscriptionUpdateResult = {
         imported: imported.length,
+        outcomes: targets.map((id) => ({ subscriptionId: id, status: "success", reason: "updated", imported: 1, removedExisting: 0, diagnostic: null })),
         messages: [],
         removedExisting: 0,
         skipped: targets.length - imported.length,

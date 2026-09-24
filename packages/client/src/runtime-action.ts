@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { PolicyGroupListing, RuntimeStatusResponse } from "@voya/contracts";
 import type { TranslationFunction } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { appErrorOfKind } from "./errors";
+import { IpcCommandError, appErrorOfKind } from "./errors";
 import { requestElevation } from "./platform";
 import { queryKeys } from "./query-keys";
 import {
@@ -137,7 +137,7 @@ function reportRuntimeActionError(
   if (missingCore) {
     useRuntimeActionStore.getState().showMissingCore(missingCore);
   } else if (inline) {
-    useRuntimeActionStore.getState().failInline(action, runtimeActionMessage(error, t));
+    useRuntimeActionStore.getState().failInline(action, runtimeActionMessage(error, t), error instanceof IpcCommandError ? error.appError.kind.type : undefined);
   } else {
     toastError(
       {

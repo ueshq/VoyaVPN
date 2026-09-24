@@ -57,7 +57,7 @@ export function SectionHeader({
       {onToggle ? (
         <PressableFeedback
           animation="disable-all"
-          className="min-w-0 flex-1 rounded-xl"
+          className="min-h-12 min-w-0 flex-1 justify-center rounded-xl"
           onPress={onToggle}
           accessibilityRole="button"
           accessibilityState={{ expanded }}

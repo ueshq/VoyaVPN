@@ -4,7 +4,8 @@ buildscript {
         minSdkVersion = 24
         compileSdkVersion = 37
         targetSdkVersion = 36
-        ndkVersion = "27.1.12297006"
+        // The pinned Cronet archive uses relocations supported by LLVM 19+.
+        ndkVersion = "29.0.14206865"
         kotlinVersion = "2.2.0"
     }
     repositories {

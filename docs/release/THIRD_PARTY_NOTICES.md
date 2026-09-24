@@ -10,6 +10,15 @@ This document is bundled with release packages as attribution. It is not a legal
 - TypeScript, Vite, Tailwind CSS, Radix UI, TanStack, Zustand, i18next, and Lucide React: bundled through npm dependencies under their published package licenses.
 - Rust crates: bundled through Cargo dependencies under their published crate licenses. The self-hosted node adds `x25519-dalek` and `curve25519-dalek` (BSD-3-Clause), `igd-next` and `xmltree` (MIT), `if-addrs` (MIT OR BSD-3-Clause), and `attohttpc` (MPL-2.0, unmodified; source at https://github.com/sbstp/attohttpc).
 
+## Mobile application components
+
+- React Native and Uniwind are included under MIT; HeroUI Native is included under Apache-2.0. Their source packages and notices are pinned by `pnpm-lock.yaml`.
+- AndroidX Activity and CameraX are included under Apache-2.0; source and notices: https://android.googlesource.com/platform/frameworks/support/.
+- Android barcode recognition uses the bundled `com.google.mlkit:barcode-scanning:17.3.0` model and SDK, subject to [ML Kit Terms of Service](https://developers.google.com/ml-kit/terms). The published AAR includes `third_party_licenses.json` and `third_party_licenses.txt`; retain them with the exact release dependency artifacts. This SDK is not described as an Apache-licensed model.
+- ML Kit processes input images and decoded results on-device. Its SDK sends performance/use metrics to Google and may contact Google for updates and compatibility information; the Android About page discloses this behavior. See [ML Kit privacy information](https://developers.google.com/ml-kit/terms#privacy).
+- iOS uses Apple's system AVFoundation, Vision, PhotosUI and sharing frameworks.
+- Mobile Libbox is built from the same pinned sing-box source and carries GPL-3.0-or-later obligations. The build scripts and source pin are described in [mobile-libbox-pinning.md](mobile-libbox-pinning.md).
+
 ## Runtime Cores
 
 Every VoyaVPN package built by `pnpm tauri:build` includes a sing-box core seed, debug and dry-run builds included: the build wrapper stages the seed before invoking Tauri and adds it to `bundle.resources`. The seed archive is downloaded from the upstream release named below and verified against the SHA-256 pinned in `scripts/core/sing-box-installer.mjs`; see [sing-box-seed-pinning.md](sing-box-seed-pinning.md). Packaged seed assets are copied from the read-only app resources into the user app data `bin/` tree before execution on Windows and Linux; macOS executes the signed packaged seed directly from the app bundle. Production stable packages may be published only after the stable legal approval checkpoint below is recorded.

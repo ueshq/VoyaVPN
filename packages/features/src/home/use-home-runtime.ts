@@ -64,7 +64,10 @@ export function useHomeRuntime() {
     policyGroupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
   const groupRuntime = usePolicyGroupRuntime(activeGroup?.group.id ?? null);
 
+  const ready = profilesQuery.isSuccess && policyGroupsQuery.isSuccess && (activeProfile !== null || activeGroup !== null);
+
   function handlePrimaryAction() {
+    if (!connected && state !== "cleanupPending" && !ready) return;
     const action = connected || state === "cleanupPending" ? "disconnect" : "connect";
     void runRuntimeAction(action, t, { inline: true });
   }
@@ -94,6 +97,7 @@ export function useHomeRuntime() {
 
   return {
     activeGroup,
+    ready,
     hasNodes,
     groupRuntime,
     nodeEntry,
@@ -106,11 +110,11 @@ export function useHomeRuntime() {
     mainPid: coreState?.mainPid ?? null,
     modePending,
     profiles: profilesQuery.data?.entries ?? [],
-    profilesPending: profilesQuery.isPending,
-    profilesError: profilesQuery.error,
+    profilesPending: profilesQuery.isPending || policyGroupsQuery.isPending,
+    profilesError: profilesQuery.error ?? policyGroupsQuery.error,
     restart,
     retryLastAction,
-    retryProfiles: () => void profilesQuery.refetch(),
+    retryProfiles: () => { void profilesQuery.refetch(); void policyGroupsQuery.refetch(); },
     runningId,
     state,
     tunProviderSummary,

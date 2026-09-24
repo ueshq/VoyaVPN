@@ -49,6 +49,27 @@ Both mobile builds need the Go toolchain sing-box's `make lib_install`
 installs (gomobile), and the iOS one needs Xcode command line tools and runs
 only on macOS.
 
+Android's pinned Libbox build requires JDK 17, SDK platform 23 (gomobile's
+binding target), and NDK r29 (`29.0.14206865`); the pinned Cronet archive uses
+relocations the older r27 linker cannot read. Set `ANDROID_HOME` and
+`ANDROID_NDK_HOME` to these installations. The React Native Gradle build uses
+Android Studio's bundled JDK and the NDK version in `android/build.gradle`.
+Only arm64-v8a and x86_64 are packaged, matching the Rust host slices.
+
+After staging both native libraries, build and run the Android UI smoke on a
+connected test device or emulator (this writes only the app's test data):
+
+```sh
+cd apps/mobile/android
+./gradlew :app:assembleRelease :app:assembleReleaseAndroidTest
+./gradlew :app:connectedReleaseAndroidTest
+```
+
+The release test target bundles JavaScript and the ML Kit barcode model;
+Metro and a first-run model download are not required. Physical camera,
+photo-picker, share-sheet and VPN data-plane checks remain part of the
+release device matrix.
+
 ```sh
 pnpm native:mobile:libbox:ios       # Libbox.xcframework  → apps/mobile/ios/Frameworks/
 pnpm native:mobile:libbox:android   # libbox.aar          → apps/mobile/android/app/libs/

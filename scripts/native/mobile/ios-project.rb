@@ -125,12 +125,24 @@ raise "No #{APP_TARGET} target in #{project_path}" unless app
 # children spell the directory out themselves. New subgroups have to do the
 # same or their files resolve a level too high.
 app_group = project.main_group.children.find { |child| child.display_name == APP_TARGET }
+# Localized permission rationale is bundled, with no photo-library permission.
+permission_strings = app_group.children.find { |child| child.display_name == 'InfoPlist.strings' } ||
+                     app_group.new_variant_group('InfoPlist.strings')
+%w[en zh-Hans zh-Hant].each do |locale|
+  ref = permission_strings.children.find { |child| child.name == locale } ||
+        permission_strings.new_reference("VoyaVPN/#{locale}.lproj/InfoPlist.strings")
+  ref.name = locale
+end
+unless app.resources_build_phase.files_references.include?(permission_strings)
+  app.resources_build_phase.add_file_reference(permission_strings)
+end
+
 native_group = app_group.children.find { |child| child.display_name == 'Native' } ||
                app_group.new_group('Native', "#{APP_TARGET}/Native")
 generated_group = app_group.children.find { |child| child.display_name == 'Generated' } ||
                   app_group.new_group('Generated', "#{APP_TARGET}/Generated")
 
-%w[VoyaNative.swift VoyaNative.m SystemTunnelHost.swift LibboxProbeCoreHost.swift].each do |name|
+%w[VoyaNative.swift VoyaNative.m VoyaDeviceActions.swift VoyaDeviceActions.m SystemTunnelHost.swift LibboxProbeCoreHost.swift].each do |name|
   ensure_source(app, file_ref(native_group, name))
 end
 # Hand-written, not generated: it is what lets the generated Swift see the C

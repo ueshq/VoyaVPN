@@ -61,12 +61,17 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * 2026-09-23 (batch 6a): react-hook-form and @hookform/resolvers left the
  * profile editor, so `vendor-forms` is zod alone. Measured: vendor-forms 65.9
  * (was 96.9), total emitted JS 1231.9 KiB, whole `dist` 2995.8 KiB.
+ * 2026-09-25: mobile import/management/diagnostics and typed error guidance
+ * add localized product copy to the three canonical, shared locale files.
+ * Measured locale chunks: English 50.4, zh-Hans 49.2, zh-Hant 49.9 KiB.
+ * Only their per-locale allowance increases from 48 to 52 KiB; startup,
+ * total JavaScript, CSS and whole-dist budgets remain unchanged.
  */
 const budgets = [
   { label: "application entry", maxKiB: 58, prefix: "index-" },
-  { label: "English locale (startup)", maxKiB: 48, prefix: "locales-" },
-  { label: "Simplified Chinese locale", maxKiB: 48, prefix: "zh-Hans-" },
-  { label: "Traditional Chinese locale", maxKiB: 48, prefix: "zh-Hant-" },
+  { label: "English locale (startup)", maxKiB: 52, prefix: "locales-" },
+  { label: "Simplified Chinese locale", maxKiB: 52, prefix: "zh-Hans-" },
+  { label: "Traditional Chinese locale", maxKiB: 52, prefix: "zh-Hant-" },
   { label: "profiles screen", maxKiB: 136, prefix: "server-table-" },
   { label: "settings screen", maxKiB: 72, prefix: "settings-screen-" },
   { label: "data vendor chunk", maxKiB: 84, prefix: "vendor-data-" },

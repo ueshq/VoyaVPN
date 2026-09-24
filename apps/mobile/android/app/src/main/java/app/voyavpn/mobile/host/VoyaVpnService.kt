@@ -49,7 +49,9 @@ class VoyaVpnService : VpnService() {
 
         startForeground(NOTIFICATION_ID, notification())
         return try {
-            tunnel.start(config)
+            val handoff = org.json.JSONObject(config)
+            require(handoff.getInt("version") == 1) { "unsupported tunnel handoff version" }
+            tunnel.start(handoff.getString("singboxConfigJson"))
             state = State.RUNNING
             START_STICKY
         } catch (error: Throwable) {
@@ -74,8 +76,14 @@ class VoyaVpnService : VpnService() {
     }
 
     private fun stopTunnel() {
-        tunnel.stop()
-        if (state != State.FAILED) state = State.STOPPED
+        try {
+            tunnel.stop()
+            if (state != State.FAILED) state = State.STOPPED
+        } catch (error: Throwable) {
+            lastError = error.message ?: error.toString()
+            state = State.FAILED
+            return
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -109,7 +117,7 @@ class VoyaVpnService : VpnService() {
             .build()
     }
 
-    enum class State { STOPPED, RUNNING, FAILED }
+    enum class State { STOPPED, STARTING, RUNNING, STOPPING, FAILED }
 
     companion object {
         const val ACTION_START = "app.voyavpn.mobile.START"

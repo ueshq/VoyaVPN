@@ -610,6 +610,7 @@ export async function installTauriSmokeMock(
           }
           return Promise.resolve({
             imported: sources.length,
+            outcomes: sources.map((source) => ({ subscriptionId: source.id, status: "success", reason: "updated", imported: 1, removedExisting: 0, diagnostic: null })),
             messages: [],
             removedExisting: 0,
             skipped: 0,

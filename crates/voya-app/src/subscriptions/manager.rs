@@ -7,6 +7,7 @@ use crate::profiles::{ProfileManager, ProfileManagerError};
 
 mod import;
 mod parse;
+mod preview;
 mod update;
 
 use import::compile_filter;

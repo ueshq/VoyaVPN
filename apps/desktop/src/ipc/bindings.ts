@@ -74,6 +74,7 @@ export const commands = {
 	tunProviderDiagnostics: () => typedError<TunProviderDiagnostics, AppError>(__TAURI_INVOKE("tun_provider_diagnostics")),
 	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
 	loadDnsSettings: () => typedError<DnsSettings, AppError>(__TAURI_INVOKE("load_dns_settings")),
+	getDefaultDnsSettings: () => typedError<DnsSettings, AppError>(__TAURI_INVOKE("get_default_dns_settings")),
 	saveDnsSettings: (settings: DnsSettings) => typedError<DnsSettings, AppError>(__TAURI_INVOKE("save_dns_settings", { settings })),
 	/**  Every node as the node table shows it; `get_profile` has one in full. */
 	listProfileSummaries: () => typedError<ProfileSummaryListing, AppError>(__TAURI_INVOKE("list_profile_summaries")),
@@ -123,6 +124,7 @@ export const commands = {
 	saveSubscription: (item: Subscription) => typedError<Subscription, AppError>(__TAURI_INVOKE("save_subscription", { item })),
 	deleteSubscriptions: (ids: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_subscriptions", { ids })),
 	importProfilesFromText: (text: string, subscriptionId: string | null) => typedError<ImportProfilesResult, AppError>(__TAURI_INVOKE("import_profiles_from_text", { text, subscriptionId })),
+	previewImportProfiles: (text: string) => typedError<ImportPreview, AppError>(__TAURI_INVOKE("preview_import_profiles", { text })),
 	updateSubscriptions: (subscriptionId: string | null, preferProxy: boolean, proxyUrl: string | null) => typedError<SubscriptionUpdateResult, AppError>(__TAURI_INVOKE("update_subscriptions", { subscriptionId, preferProxy, proxyUrl })),
 	listRoutings: () => typedError<Routing_Serialize[], AppError>(__TAURI_INVOKE("list_routings")),
 	saveRouting: (item: Routing_Deserialize) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("save_routing", { item })),
@@ -517,6 +519,20 @@ export type ImportLineCode =
 export type ImportLineIssue = {
 	line: number,
 	code: ImportLineCode,
+};
+
+/**  A read-only preview. Credentials are deliberately excluded. */
+export type ImportPreview = {
+	nodes: ImportPreviewNode[],
+	subscriptionUrls: string[],
+	failed: number,
+	lineIssues: ImportLineIssue[],
+};
+
+export type ImportPreviewNode = {
+	name: string,
+	protocol: string,
+	address: string,
 };
 
 export type ImportProfilesResult = {
@@ -1362,13 +1378,27 @@ export type SubscriptionMetadata = {
 	profileTitle: string | null,
 };
 
+export type SubscriptionUpdateOutcome = {
+	subscriptionId: string,
+	status: SubscriptionUpdateStatus,
+	reason: SubscriptionUpdateReason,
+	imported: number,
+	removedExisting: number,
+	diagnostic: string | null,
+};
+
+export type SubscriptionUpdateReason = "updated" | "invalidSource" | "sourceChanged" | "emptyContent" | "downloadFailed" | "noImportableNodes" | "invalidFilter";
+
 export type SubscriptionUpdateResult = {
 	updated: number,
 	skipped: number,
 	imported: number,
 	removedExisting: number,
 	messages: string[],
+	outcomes: SubscriptionUpdateOutcome[],
 };
+
+export type SubscriptionUpdateStatus = "success" | "skipped" | "failed";
 
 export type SystemProxyManagement = "automatic" | "unsupported";
 

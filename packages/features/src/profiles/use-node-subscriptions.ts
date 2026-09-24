@@ -5,6 +5,7 @@ import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import {
   assertSubscriptionUpdated,
+  subscriptionUpdateMessages,
   formatSubscriptionUpdateSummary,
 } from "@voya/features/subscriptions/subscription-update-result";
 import type { TranslationFunction } from "@voya/i18n/core";
@@ -69,6 +70,8 @@ export function useNodeSubscriptions<Trigger = never>(
         const result = await voyaCommands().updateSubscriptions(id, true, null);
         assertSubscriptionUpdated(result, t);
         setOperationMessage(formatSubscriptionUpdateSummary(result, t));
+        const failure = subscriptionUpdateMessages(result, t);
+        if (failure) setOperationError(failure);
       });
     } finally {
       releasePending(id ?? UPDATING_ALL);
@@ -88,7 +91,7 @@ export function useNodeSubscriptions<Trigger = never>(
     const active = () => mounted.current && isActive();
     if (ids.length === 0 || !active() || !claimPending(IMPORTED)) return;
     const total: SubscriptionUpdateResult = {
-      imported: 0, updated: 0, skipped: 0, removedExisting: 0, messages: [],
+      imported: 0, updated: 0, skipped: 0, removedExisting: 0, messages: [], outcomes: [],
     };
     const failures: string[] = [];
     setOperationError(null);
@@ -102,13 +105,15 @@ export function useNodeSubscriptions<Trigger = never>(
           total.imported += result.imported;
           total.updated += result.updated;
           total.removedExisting += result.removedExisting;
-          failures.push(...result.messages.map((message) => redactOperationalError(message)));
+          total.outcomes.push(...result.outcomes);
+          const failure = subscriptionUpdateMessages(result, t);
+          if (failure) failures.push(failure);
         } catch (error) {
           failures.push(redactOperationalError(error));
         }
       }
       if (!active()) return;
-      setOperationMessage(formatSubscriptionUpdateSummary(total, t));
+      setOperationMessage(total.updated > 0 || failures.length === 0 ? formatSubscriptionUpdateSummary(total, t) : null);
       if (failures.length > 0) {
         setOperationError(`${t("panes.subscriptions.importUpdateFailed")}\n${[...new Set(failures)].join("\n")}`);
       }

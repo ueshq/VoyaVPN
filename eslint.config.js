@@ -52,7 +52,7 @@ const tauriGlobalSelectors = [
 ];
 
 export default tseslint.config(
-  { ignores: ["**/dist", "**/node_modules", ".agents/**", "target", "apps/desktop/src-tauri/gen"] },
+  { ignores: ["**/dist", "**/node_modules", ".agents/**", "target", "apps/desktop/src-tauri/gen", "apps/mobile/android/**/build/**", "apps/mobile/ios/build/**"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

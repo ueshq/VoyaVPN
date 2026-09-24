@@ -19,11 +19,11 @@ describe("App", () => {
     // the tab labels come from.
     const view = await render(<App />);
 
-    for (const label of ["Home", "Nodes", "Rules", "Activity", "Settings"]) {
+    for (const label of ["Home", "Nodes", "Rules", "Settings"]) {
       expect(view.getAllByText(label).length).toBeGreaterThan(0);
     }
 
-    expect(Object.keys(SHELL_TABS) as ShellTab[]).toHaveLength(5);
+    expect(Object.keys(SHELL_TABS) as ShellTab[]).toHaveLength(4);
   });
 
   it("marks the current tab selected on the floating bar, the state XCUITest reads", async () => {
@@ -38,6 +38,6 @@ describe("App", () => {
     expect(view.getByTestId("tab-settings")).toBeSelected();
     expect(view.getByTestId("tab-home")).not.toBeSelected();
     // The tab keeps its full title for VoiceOver even where the label is short.
-    expect(view.getByRole("button", { name: "Network activity" })).toBeOnTheScreen();
+    expect(view.queryByTestId("tab-connections")).toBeNull();
   });
 });

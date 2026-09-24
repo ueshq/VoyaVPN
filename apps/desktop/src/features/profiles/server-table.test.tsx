@@ -250,6 +250,7 @@ describe("ProfilesScreen", () => {
     ipcMocks.updateSubscriptions.mockResolvedValue({
       imported: 0,
       messages: [],
+      outcomes: [],
       removedExisting: 0,
       skipped: 0,
       updated: 0,
@@ -1091,6 +1092,7 @@ describe("ProfilesScreen", () => {
     ipcMocks.updateSubscriptions.mockResolvedValue({
       imported: 4,
       messages: [],
+      outcomes: [],
       skipped: 0,
       updated: 1,
     });

@@ -783,3 +783,20 @@ fn core_log_levels_map_onto_the_contract() {
         LogLevel::Error
     ));
 }
+
+#[test]
+fn mobile_dns_defaults_are_the_resolved_product_defaults() {
+    let defaults = default_dns_settings();
+    assert_eq!(
+        defaults.bootstrap.as_deref(),
+        Some(voya_core::DEFAULT_BOOTSTRAP_DNS)
+    );
+    assert_eq!(
+        defaults.direct.as_deref(),
+        Some(voya_core::DEFAULT_DIRECT_DNS)
+    );
+    assert_eq!(
+        defaults.remote.as_deref(),
+        Some(voya_core::DEFAULT_REMOTE_DNS)
+    );
+}

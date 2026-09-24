@@ -33,3 +33,9 @@ pub async fn save_dns_settings<R: tauri::Runtime>(
 
     Ok(simple_dns_to_contract(saved))
 }
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_default_dns_settings() -> Result<voya_contracts::DnsSettings, AppError> {
+    Ok(voya_app::contract_map::default_dns_settings())
+}

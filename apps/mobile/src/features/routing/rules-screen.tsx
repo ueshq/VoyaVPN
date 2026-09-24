@@ -1,12 +1,15 @@
+import { ErrorNotice } from "~/components/error-notice";
+import { outboundLabelKey } from "@voya/features/routing/rule-outbound";
+import { openPage } from "~/app/navigation";
 import { useTrafficMode } from "@voya/features/routing/use-traffic-mode";
 import { useRoutingScreen } from "@voya/features/routing/use-routing-screen";
-import { ruleMatchChips, type MatchChip } from "@voya/features/routing/rule-match-summary";
 import { ruleDisplayName } from "@voya/features/routing/sentinel-rules";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n/core";
 import type { RoutingRule, TrafficMode } from "@voya/contracts";
 import { Card } from "heroui-native/card";
 import { Switch } from "heroui-native/switch";
+import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import { Route } from "lucide-react-native";
 import { useCallback, useMemo } from "react";
@@ -20,28 +23,6 @@ import { PageHeader } from "~/components/page-header";
 import { SectionHeader } from "~/components/section-header";
 import { SegmentedControl } from "~/components/segmented-control";
 import { useScreenInsets } from "~/components/use-screen-insets";
-
-/**
- * What a rule matches, in one line.
- *
- * The chips are the shared shaping; a phone row has no space for the desktop's
- * separate badges, so they read as text. Nothing here is translated because
- * nothing here is a word: they are the user's own domains, addresses and ports.
- */
-function matchSummary(rule: RoutingRule) {
-  return ruleMatchChips(rule).map(chipText).join(" · ");
-}
-
-function chipText(chip: MatchChip) {
-  switch (chip.kind) {
-    case "list":
-      return chip.more > 0 ? `${chip.first} +${chip.more}` : chip.first;
-    case "port":
-      return [chip.network, chip.port].filter(Boolean).join(":");
-    case "scope":
-      return chip.scope;
-  }
-}
 
 /**
  * The two modes a user can pick, in order.
@@ -78,6 +59,8 @@ export function RulesScreen() {
       // and the like — which are an identity, not a name. The shared helper is
       // what turns them into the words the desktop shows.
       const name = ruleDisplayName(item, t);
+      const outboundKey = outboundLabelKey(item.outbound ?? "proxy");
+      const target = outboundKey ? t(outboundKey) : item.outbound;
       return (
         <ListRow
           inset
@@ -85,7 +68,10 @@ export function RulesScreen() {
           last={last}
           dimmed={!rulesApply}
           title={name}
-          description={matchSummary(item)}
+          description={t("mobile.ruleEffect", { target })}
+          descriptionLines={0}
+          onPress={() => openPage("ruleDetails", { rule: item })}
+          trailingInteractive
           trailing={
             <Switch
               isSelected={item.enabled}
@@ -130,8 +116,8 @@ export function RulesScreen() {
               </Card>
             </View>
             {rulesApply ? null : <Banner status="warning" message={t("panes.routing.globalModeBanner")} />}
-            {routing.loadError ? <Banner status="danger" message={routing.loadError} /> : null}
-            {routing.operationError ? <Banner status="danger" message={routing.operationError} /> : null}
+            <ErrorNotice error={routing.loadError} />
+            <ErrorNotice error={routing.operationError} />
           </View>
         }
         ListFooterComponent={
@@ -143,7 +129,7 @@ export function RulesScreen() {
         }
         ListEmptyComponent={
           <View className="px-page">
-            <EmptyState icons={[Route]} title={t("panes.routing.emptyRules")} />
+            {routing.loading ? <Spinner /> : routing.loadError ? null : <EmptyState icons={[Route]} title={t("panes.routing.emptyRules")} />}
           </View>
         }
       />

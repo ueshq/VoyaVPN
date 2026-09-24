@@ -60,6 +60,9 @@ function buildLibraries() {
       "--crate-type",
       "cdylib",
       ...(profile === "release" ? ["--release"] : []),
+      // bindgen reads UniFFI metadata from the ELF symbol table. Gradle strips
+      // the packaged JNI library later, after the bindings have been generated.
+      "--", "-C", "strip=none",
     ],
     { cwd: repoRoot },
   );

@@ -33,3 +33,5 @@ optimisticRepeatInstall: false
 # drop it when heroui-native is next bumped.
 minimumReleaseAgeExclude:
   - heroui-native@1.0.10
+patchedDependencies:
+  uniwind@1.12.0: patches/uniwind@1.12.0.patch

@@ -34,7 +34,7 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
                 "runtimeConfigJson": handoffJson as NSString,
             ])
         } catch {
-            throw TunnelError.Failed(message: "the tunnel did not start: \(error.localizedDescription)")
+            throw TunnelError.Failed(detail: "the tunnel did not start: \(error.localizedDescription)")
         }
 
         switch waitForSettled(starting: true, timeout: Self.startTimeout, connection: manager.connection) {
@@ -43,9 +43,9 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         case .invalid:
             throw TunnelError.PermissionDenied
         case .disconnected:
-            throw TunnelError.Failed(message: "the tunnel stopped immediately after starting")
+            throw TunnelError.Failed(detail: "the tunnel stopped immediately after starting")
         case .timedOut:
-            throw TunnelError.Failed(message: "the tunnel did not come up within \(Int(Self.startTimeout))s")
+            throw TunnelError.Failed(detail: "the tunnel did not come up within \(Int(Self.startTimeout))s")
         }
     }
 
@@ -60,7 +60,7 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         case .disconnected, .invalid:
             return
         case .ready, .timedOut:
-            throw TunnelError.Failed(message: "the tunnel was still up after \(Int(Self.stopTimeout))s")
+            throw TunnelError.Failed(detail: "the tunnel was still up after \(Int(Self.stopTimeout))s")
         }
     }
 
@@ -154,7 +154,7 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         }
         if semaphore.wait(timeout: .now() + Self.callTimeout) == .timedOut {
             throw TunnelError.Failed(
-                message: "the system did not answer within \(Int(Self.callTimeout))s",
+                detail: "the system did not answer within \(Int(Self.callTimeout))s",
             )
         }
 
@@ -165,7 +165,7 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
             if code == NEVPNError.configurationReadWriteFailed.rawValue {
                 throw TunnelError.PermissionDenied
             }
-            throw TunnelError.Failed(message: failure.localizedDescription)
+            throw TunnelError.Failed(detail: failure.localizedDescription)
         }
     }
 

@@ -39,9 +39,6 @@
 	<string></string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
-	<!-- The container the app shares with its PacketTunnel extension. Must
-	     match the App Group in VoyaVPN.entitlements and the one the extension
-	     declares; never the desktop's. -->
 	<key>VoyaAppGroupIdentifier</key>
 	<string>group.app.voyavpn.mobile</string>
 	<key>UILaunchStoryboardName</key>
@@ -63,5 +60,7 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a node or subscription QR code to import your configuration.</string>
 </dict>
 </plist>

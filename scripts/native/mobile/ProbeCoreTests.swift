@@ -4,7 +4,7 @@ protocol ProbeCoreHost {
     func start(configJson: String) throws -> String
     func stop(coreId: String) throws
 }
-enum ProbeCoreError: Error { case Failed(message: String); case Unsupported }
+enum ProbeCoreError: Error { case Failed(detail: String); case Unsupported }
 enum VoyaContainer {
     static func dataDirectory() -> URL { URL(fileURLWithPath: CommandLine.arguments[1]) }
 }

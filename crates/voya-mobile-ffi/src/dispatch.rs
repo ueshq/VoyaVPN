@@ -118,6 +118,10 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
         "apply_pending_settings" => settings::apply_pending_settings(state).await,
         "set_log_streaming" => settings::set_log_streaming(state, args),
 
+        "get_default_dns_settings" => answer(
+            "get_default_dns_settings",
+            &voya_app::contract_map::default_dns_settings(),
+        ),
         "load_dns_settings" => dns::load(state).await,
         "save_dns_settings" => dns::save(state, args).await,
 
@@ -127,6 +131,7 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
         "delete_profiles" => profiles::delete(state, args).await,
         "move_profile" => profiles::move_profile(state, args).await,
         "set_active_profile" => profiles::set_active(state, args).await,
+        "preview_import_profiles" => profiles::preview_import(args),
         "import_profiles_from_text" => profiles::import_from_text(state, args).await,
         "export_profile_share_links" => profiles::export_share_links(state, args).await,
         "generate_qr_code" => profiles::generate_qr_code(args),

@@ -77,6 +77,7 @@ export type VoyaCommands = {
 	tunProviderDiagnostics: () => Promise<TunProviderDiagnostics>,
 	setTunEnabled: (enabled: boolean) => Promise<TunStatus>,
 	loadDnsSettings: () => Promise<DnsSettings>,
+	getDefaultDnsSettings: () => Promise<DnsSettings>,
 	saveDnsSettings: (settings: DnsSettings) => Promise<DnsSettings>,
 	/**  Every node as the node table shows it; `get_profile` has one in full. */
 	listProfileSummaries: () => Promise<ProfileSummaryListing>,
@@ -126,6 +127,7 @@ export type VoyaCommands = {
 	saveSubscription: (item: Subscription) => Promise<Subscription>,
 	deleteSubscriptions: (ids: string[]) => Promise<number>,
 	importProfilesFromText: (text: string, subscriptionId: string | null) => Promise<ImportProfilesResult>,
+	previewImportProfiles: (text: string) => Promise<ImportPreview>,
 	updateSubscriptions: (subscriptionId: string | null, preferProxy: boolean, proxyUrl: string | null) => Promise<SubscriptionUpdateResult>,
 	listRoutings: () => Promise<Routing_Serialize[]>,
 	saveRouting: (item: Routing_Deserialize) => Promise<Routing_Serialize>,
@@ -529,6 +531,20 @@ export type ImportLineCode =
 export type ImportLineIssue = {
 	line: number,
 	code: ImportLineCode,
+};
+
+/**  A read-only preview. Credentials are deliberately excluded. */
+export type ImportPreview = {
+	nodes: ImportPreviewNode[],
+	subscriptionUrls: string[],
+	failed: number,
+	lineIssues: ImportLineIssue[],
+};
+
+export type ImportPreviewNode = {
+	name: string,
+	protocol: string,
+	address: string,
 };
 
 export type ImportProfilesResult = {
@@ -1374,13 +1390,27 @@ export type SubscriptionMetadata = {
 	profileTitle: string | null,
 };
 
+export type SubscriptionUpdateOutcome = {
+	subscriptionId: string,
+	status: SubscriptionUpdateStatus,
+	reason: SubscriptionUpdateReason,
+	imported: number,
+	removedExisting: number,
+	diagnostic: string | null,
+};
+
+export type SubscriptionUpdateReason = "updated" | "invalidSource" | "sourceChanged" | "emptyContent" | "downloadFailed" | "noImportableNodes" | "invalidFilter";
+
 export type SubscriptionUpdateResult = {
 	updated: number,
 	skipped: number,
 	imported: number,
 	removedExisting: number,
 	messages: string[],
+	outcomes: SubscriptionUpdateOutcome[],
 };
+
+export type SubscriptionUpdateStatus = "success" | "skipped" | "failed";
 
 export type SystemProxyManagement = "automatic" | "unsupported";
 

@@ -24,6 +24,7 @@ function mockBackend(): MockBackend {
 // module factory to reach.
 const mockNavigate = jest.fn();
 jest.mock("~/app/navigation", () => ({
+  openPage: (page: string) => mockNavigate(page),
   navigateToTab: (tab: string) => mockNavigate(tab),
   navigationRef: { isReady: () => true, navigate: mockNavigate },
 }));
@@ -88,7 +89,7 @@ describe("EventBridge", () => {
     expect(useToastStore.getState().toasts).toMatchObject([
       { description: "the tray handle is gone", severity: "info" },
     ]);
-    expect(mockNavigate.mock.calls.flat()).toEqual(["connections", "settings"]);
+    expect(mockNavigate.mock.calls.flat()).toEqual(["activity", "logs"]);
     await unmount();
   });
 
