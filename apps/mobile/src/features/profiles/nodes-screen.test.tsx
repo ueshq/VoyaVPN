@@ -79,22 +79,6 @@ describe("NodesScreen", () => {
     expect(backend.state.profiles.find((entry) => entry.isActive)?.profile.id).toBe("profile-1");
   });
 
-  it("filters the list by name and says so when nothing matches", async () => {
-    await renderNodes();
-    const user = userEvent.setup();
-    const search = await screen.findByPlaceholderText(
-      "Search node name, address or subscription",
-    );
-
-    await user.type(search, "Tokyo");
-    expect(await screen.findByText("🇯🇵 Tokyo")).toBeOnTheScreen();
-    expect(screen.queryByText("🇸🇬 Singapore")).not.toBeOnTheScreen();
-
-    await user.clear(search);
-    await user.type(search, "Reykjavik");
-    expect(await screen.findByText("No matching nodes")).toBeOnTheScreen();
-  });
-
   it("imports a share link pasted on the clipboard", async () => {
     readText.mockResolvedValue("vless://token@example.test:443#Osaka");
     await renderNodes();

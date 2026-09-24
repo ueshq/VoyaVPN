@@ -54,7 +54,7 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Connect to view network activity"].exists)
     }
 
-    func testNodeImportSearchShareQrDelete() throws {
+    func testNodeImportShareQrDelete() throws {
         let title = "QA Lifecycle"
         open("profiles")
         try importText("")
@@ -66,13 +66,6 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertTrue(row(title).waitForExistence(timeout: timeout))
         try importText(link)
         XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).count, 1)
-        let search = app.textFields["Search node name, address or subscription"]
-        search.tap()
-        search.typeText("qa.example.test")
-        XCTAssertTrue(row(title).exists)
-        search.typeText("missing")
-        XCTAssertTrue(app.staticTexts["No matching nodes"].waitForExistence(timeout: timeout))
-        clearSearch(search)
         row(title).press(forDuration: 1.2)
         _ = try fixture("clipboard", body: "QA export pending")
         tap("Share links")
@@ -134,9 +127,6 @@ final class VoyaVPNUITests: XCTestCase {
         let port = required("QA_VLESS_PORT")
         try importText("vless://44444444-4444-4444-4444-444444444444@127.0.0.1:\(port)?security=none#QA%20Latency")
         XCTAssertTrue(row("QA Latency").waitForExistence(timeout: timeout))
-        let search = app.textFields["Search node name, address or subscription"]
-        search.tap()
-        search.typeText("QA Latency\n")
         _ = try fixture("delay", body: "0")
         tap("Test all")
         XCTAssertTrue(wait { self.row("QA Latency").label.contains(" ms") }, "a real probe must return a successful measurement")
@@ -372,12 +362,6 @@ final class VoyaVPNUITests: XCTestCase {
         if condition() { return true }
         let predicate = NSPredicate { _, _ in condition() }
         return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: seconds) == .completed
-    }
-
-    private func clearSearch(_ field: XCUIElement) {
-        guard let value = field.value as? String, value != field.placeholderValue else { return }
-        field.tap()
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: value.count) + "\n")
     }
 
     private func captureStable(_ title: String) {

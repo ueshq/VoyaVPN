@@ -13,12 +13,11 @@ import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "heroui-native/button";
-import { Input } from "heroui-native/input";
 import { PressableFeedback } from "heroui-native/pressable-feedback";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, findNodeHandle, FlatList, View, useWindowDimensions, type TextInput } from "react-native";
+import { AccessibilityInfo, findNodeHandle, FlatList, View, useWindowDimensions } from "react-native";
 
 import { NodeActionsSheet } from "./node-actions-sheet";
 import { useNodeSelection } from "@voya/features/profiles/use-node-selection";
@@ -64,7 +63,7 @@ export function NodesScreen() {
   const [actionsFor, setActionsFor] = useState<ProfileSummaryEntry | null>(null);
 
   const returnFocusId = useRef<string | null>(null);
-  const searchRef = useRef<TextInput>(null);
+  const importRef = useRef<View>(null);
   const nodeRefs = useRef(new Map<string, View>());
   const { width, fontScale } = useWindowDimensions();
   const stackedActions = width / fontScale < 360;
@@ -157,18 +156,9 @@ export function NodesScreen() {
         keyboardDismissMode="on-drag"
         ListHeaderComponent={
           <View className="gap-2 p-page">
-            <Input
-              className="min-h-12 h-auto py-3"
-              ref={searchRef}
-              placeholder={t("panes.profiles.search.placeholder")}
-              accessibilityLabel={t("panes.profiles.search.placeholder")}
-              value={selection.search}
-              onChangeText={selection.setSearch}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
             <View className={stackedActions ? "gap-2" : "flex-row gap-2"}>
               <Button
+                ref={importRef}
                 className={`min-h-11 h-auto py-3 ${stackedActions ? "w-full" : "flex-1"}`}
                 variant="outline"
                 isDisabled={imports.directImportPending !== null || subscriptions.updatingSubscriptions.size > 0}
@@ -290,12 +280,10 @@ export function NodesScreen() {
         ListEmptyComponent={
           <View className="items-center gap-1 p-page">
             <Typography className="text-body text-foreground">
-              {selection.search ? t("panes.profiles.search.empty") : t("panes.profiles.empty")}
+              {t("panes.profiles.empty")}
             </Typography>
             <Typography className="text-caption text-subtle">
-              {selection.search
-                ? t("panes.profiles.search.emptyHint")
-                : t("panes.profiles.emptyDescription")}
+              {t("panes.profiles.emptyDescription")}
             </Typography>
           </View>
         }
@@ -307,9 +295,9 @@ export function NodesScreen() {
         onClose={() => setActionsFor(null)}
         onClosed={() => {
           const node = returnFocusId.current ? nodeRefs.current.get(returnFocusId.current) : null;
-          // Deleting the trigger leaves no row to return to; focus the search
-          // control without opening its keyboard instead of a stale native id.
-          const target = findNodeHandle(node ?? searchRef.current);
+          // Deleting the trigger leaves no row to return to; focus the import
+          // button instead of a stale native id.
+          const target = findNodeHandle(node ?? importRef.current);
           if (target != null) AccessibilityInfo.setAccessibilityFocus(target);
         }}
         operation={operation}
