@@ -196,19 +196,60 @@ class MobileSmokeTest {
         assertTrue(device.wait(Until.hasObject(By.res("tab-home")), 5000))
     }
 
-    private fun profileIds(): List<String> {
+    @Test fun nodeActionsReopenAndSystemBackDismissesQr() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        context.startActivity(context.packageManager.getLaunchIntentForPackage(context.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
+        assertTrue(device.wait(Until.hasObject(By.res("tab-profiles")), 30000))
+        val before = profileIds()
+        val name = "QA Modal long international node name for accessibility"
+        val link = "trojan://test@modal.example.test:443#" + android.net.Uri.encode(name)
+        invokeNative("import_profiles_from_text", org.json.JSONObject().put("text", link).put("subscriptionId", org.json.JSONObject.NULL).toString())
+        val created = profileIds().filter { it !in before }
+        assertEquals(1, created.size)
+        try {
+            clickResource(device, "tab-profiles")
+            repeat(2) { iteration ->
+                clickLabel(device, "Actions for $name")
+                assertTrue(device.wait(Until.hasObject(By.desc("Copy link")), 10000))
+                clickLabel(device, "Copy link")
+                assertTrue(device.wait(Until.gone(By.desc("Copy link")), 10000))
+                clickLabel(device, "Actions for $name")
+                assertTrue(device.wait(Until.hasObject(By.desc("Copy link")), 10000))
+                clickLabel(device, "Show QR")
+                assertTrue(device.wait(Until.gone(By.desc("Copy link")), 10000))
+                revealLabel(device, "Generated QR code")
+                assertTrue(device.hasObject(By.desc("Generated QR code")))
+                capture(device, "node-qr-$iteration")
+                device.pressBack()
+                assertTrue("Back dismisses the modal", device.wait(Until.gone(By.desc("Generated QR code")), 10000))
+                // The list remains scrolled to its node, so its page title
+                // may be outside the accessibility viewport at large sizes.
+                assertTrue("Back keeps the node list open", device.hasObject(By.res("tab-profiles").selected(true)))
+            }
+        } finally {
+            invokeNative("delete_profiles", org.json.JSONObject().put("indexIds", org.json.JSONArray(created)).toString())
+        }
+    }
+
+    private fun invokeNative(command: String, arguments: String = "{}"): String {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val react = (context.applicationContext as MainApplication).reactHost.currentReactContext as com.facebook.react.bridge.ReactApplicationContext
         val module = react.getNativeModule("VoyaNative") as? app.voyavpn.mobile.host.VoyaNativeModule
         assertNotNull("Use the running app's real Rust host", module)
         val latch = java.util.concurrent.CountDownLatch(1)
         val response = java.util.concurrent.atomic.AtomicReference<String?>()
-        module!!.invoke("list_profile_summaries", "{}", com.facebook.react.bridge.PromiseImpl(
+        module!!.invoke(command, arguments, com.facebook.react.bridge.PromiseImpl(
             com.facebook.react.bridge.Callback { values -> response.set(values.firstOrNull() as? String); latch.countDown() },
             com.facebook.react.bridge.Callback { latch.countDown() }))
         assertTrue(latch.await(10, java.util.concurrent.TimeUnit.SECONDS))
-        assertNotNull("Profile query must succeed", response.get())
-        val entries = org.json.JSONObject(response.get()!!).getJSONArray("entries")
+        assertNotNull("Native command $command must succeed", response.get())
+        return response.get()!!
+    }
+
+    private fun profileIds(): List<String> {
+        val entries = org.json.JSONObject(invokeNative("list_profile_summaries")).getJSONArray("entries")
         return (0 until entries.length()).map { entries.getJSONObject(it).getJSONObject("profile").getString("id") }.sorted()
     }
 

@@ -8,13 +8,11 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ProfileSummaryEntry } from "@voya/contracts";
 import { useQuery } from "@tanstack/react-query";
-import { BottomSheet } from "heroui-native/bottom-sheet";
 import { Button } from "heroui-native/button";
 import { Typography } from "heroui-native/text";
-import { AccessibilityInfo, Alert, Share, findNodeHandle, StyleSheet, View, useWindowDimensions, type Text } from "react-native";
-import { BottomSheetScrollView, type BottomSheetBackgroundProps } from "@gorhom/bottom-sheet";
+import { AccessibilityInfo, Alert, Modal, Pressable, ScrollView, Share, findNodeHandle, StyleSheet, View, useWindowDimensions, type Text } from "react-native";
 import { QrCode, Copy, Gauge, Share2, Trash2, type LucideIcon } from "lucide-react-native";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
@@ -22,32 +20,11 @@ import { ListCard } from "~/components/list-card";
 import { ListRow } from "~/components/list-row";
 import { useToneColor } from "~/components/tone";
 
-/**
- * What a node row can do beyond being selected.
- *
- * A phone has no right-click and no hover, so the desktop's row menu becomes a
- * long press and this sheet. It carries the two actions that are useful away
- * from a keyboard — hand the link to another app, or show it as a QR for a
- * device that cannot be pasted into — and deleting, which is the one
- * destructive thing a phone should still be able to do.
- *
- * Editing is not here. The desktop dialog is a protocol, transport and TLS
- * form; retyping one of those on a phone is not a feature, and every ordinary
- * way a node arrives — a share link, a subscription, a QR — already works.
- *
- * The sheet is a HeroUI `BottomSheet` (gorhom under the hood) rather than a
- * hand-rolled `Modal`: dynamic height, drag-to-dismiss, and the portal host
- * that keeps the panel above the tab bar. Portal content renders at the host,
- * not where it is declared — so this file takes already-translated strings as
- * props and calls no context hook inside the sheet body.
- *
- * The default gorhom background and handle announce themselves to VoiceOver
- * as "BottomSheet" / "Bottom sheet handle". Both are replaced with unlabelled
- * views (`accessible={false}`) so a screen reader only lands on the actions;
- * the explicit Close button is the accessible way out.
- */
+/** Node actions use a native modal boundary so opening during a long press
+ * cannot race a closing bottom-sheet gesture. HeroUI rows/buttons retain the
+ * app's grouped styling; bounded scrolling keeps every action reachable. */
 export function NodeActionsSheet({
-  entry: activeEntry,
+  entry,
   exports,
   onClose,
   onClosed,
@@ -62,20 +39,12 @@ export function NodeActionsSheet({
   onTest: (id: string) => void;
 }) {
   const { t } = useI18n();
-  // Preserve the measured content while the sheet closes. Removing the rows
-  // during the close animation can leave the bounded scroll sheet without a
-  // usable layout when the same node is opened again on a small screen.
-  const [lastEntry, setLastEntry] = useState(activeEntry);
-  if (activeEntry !== null && activeEntry !== lastEntry) setLastEntry(activeEntry);
-  const entry = activeEntry ?? lastEntry;
   const queryClient = useQueryClient();
   const share = exports.shareQrContent;
   const insets = useSafeAreaInsets();
-  const { height, fontScale } = useWindowDimensions();
-  const scrollable = fontScale > 1.2 || height < 700;
+  const { height } = useWindowDimensions();
   const titleRef = useRef<Text>(null);
-  // Resolved here, where the sheet is declared: the body renders at the
-  // portal host, so it takes finished values rather than reading context.
+  // Resolve semantic colors once for every action in this modal.
   const actionColor = useToneColor("brand");
   const dangerColor = useToneColor("danger");
 
@@ -95,8 +64,8 @@ export function NodeActionsSheet({
   function close() {
     exports.setShareQrContent(null);
     onClose();
-    // HeroUI's Content.onClose only covers swipe dismissal. Restore after the
-    // parent has rendered the background accessible again for every exit path.
+    // Restore after React has made the background accessible again. iOS also
+    // restores onDismiss after the native presentation has fully disappeared.
     requestAnimationFrame(onClosed);
   }
 
@@ -108,7 +77,7 @@ export function NodeActionsSheet({
     if (removed) close();
   }
 
-  const open = activeEntry !== null || share !== null;
+  const open = entry !== null || share !== null;
 
   const shareLabel = t("mobile.copy");
   const showQrLabel = t("panes.profiles.export.showQr");
@@ -122,52 +91,11 @@ export function NodeActionsSheet({
   const subscriptionReadOnly = t("panes.profiles.menu.subscriptionReadOnly");
 
   return (
-    <BottomSheet
-      isOpen={open}
-      onOpenChange={(next) => {
-        if (!next) close();
-      }}
-    >
-      <BottomSheet.Portal
-        // A plain View is what XCUITest can see into; FullWindowOverlay puts
-        // the panel in another window the test runner does not walk.
-        disableFullWindowOverlay
-      >
-        <View
-          style={StyleSheet.absoluteFill}
-          accessible={false}
-          accessibilityViewIsModal={open}
-          accessibilityElementsHidden={!open}
-          // Gorhom keeps the closed sheet mounted below its container. Its
-          // dynamic resize can leave a hit region over the tabs during close.
-          // Gate the whole portal, including gestures, as soon as it closes.
-          pointerEvents={open ? "box-none" : "none"}
-        >
-          <BottomSheet.Overlay accessible={false} />
-          <BottomSheet.Content
-            // Ordinary sheets size to content; large text gets a bounded
-            // scroll view so the close action stays reachable.
-            accessible={false}
-            accessibilityViewIsModal={open}
-            accessibilityElementsHidden={!open}
-            contentContainerProps={{ accessible: false, accessibilityViewIsModal: open, accessibilityElementsHidden: !open }}
-            enableDynamicSizing={!scrollable}
-            enableOverDrag={false}
-            snapPoints={scrollable ? ["85%"] : undefined}
-            contentContainerClassName={scrollable ? "h-full" : undefined}
-            maxDynamicContentSize={height - insets.top - 16}
-            onChange={(index) => {
-              if (index >= 0) focusTitle();
-            }}
-            // The canvas, not a card surface: the actions inside are white
-            // cards of their own, the grouped look the rest of the app uses.
-            // It goes through HeroUI's class because gorhom hands the
-            // background a style that would override a class set on it.
-            backgroundClassName="bg-canvas"
-            backgroundComponent={SheetBackground}
-            handleComponent={SheetHandle}
-          >
-            <SheetBody scrollable={scrollable} bottomInset={insets.bottom}>
+    <Modal visible={open} transparent animationType="fade" onRequestClose={close} onShow={focusTitle} onDismiss={onClosed}>
+      <View style={{ flex: 1, justifyContent: "flex-end", paddingTop: insets.top + 16 }}>
+        <Pressable accessible={false} style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.3)" }]} onPress={close} />
+        <View accessibilityViewIsModal className="rounded-t-3xl bg-canvas" style={{ maxHeight: height - insets.top - 16 }}>
+          <ScrollView key={share ? "qr" : "actions"} style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 16 }}>
               {share ? (
                 <View className="items-center gap-4">
                   <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground">{qrTitle}</Typography>
@@ -254,34 +182,10 @@ export function NodeActionsSheet({
               >
                 <Button.Label>{closeLabel}</Button.Label>
               </Button>
-            </SheetBody>
-          </BottomSheet.Content>
+          </ScrollView>
         </View>
-      </BottomSheet.Portal>
-    </BottomSheet>
-  );
-}
-
-/** Unlabelled surface so VoiceOver does not announce a bare "BottomSheet". */
-function SheetBackground({ style, pointerEvents }: BottomSheetBackgroundProps) {
-  return <View accessible={false} pointerEvents={pointerEvents} style={style} />;
-}
-
-function SheetBody({ children, scrollable, bottomInset }: { children: ReactNode; scrollable: boolean; bottomInset: number }) {
-  const paddingBottom = Math.max(16, bottomInset);
-  return scrollable ? (
-    <BottomSheetScrollView contentContainerStyle={{ padding: 16, paddingBottom, gap: 16 }}>
-      {children}
-    </BottomSheetScrollView>
-  ) : <View style={{ paddingBottom }} className="gap-4 p-page">{children}</View>;
-}
-
-/** Unlabelled grabber; the drag itself is the affordance. */
-function SheetHandle() {
-  return (
-    <View accessible={false} className="items-center py-2">
-      <View className="h-1 w-10 rounded-full bg-subtlest" />
-    </View>
+      </View>
+    </Modal>
   );
 }
 

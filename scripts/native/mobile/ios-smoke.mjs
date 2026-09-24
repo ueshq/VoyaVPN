@@ -143,7 +143,8 @@ export async function main() {
       await run("python3", ["-c", "import socket,sys,time\nfor i in range(100):\n try:\n  s=socket.create_connection(('127.0.0.1',int(sys.argv[1])),.2);s.close();break\n except OSError: time.sleep(.1)\nelse: raise RuntimeError('VLESS fixture did not start')", String(vlessPort)]);
       const template = readdirSync(products).find((file) => file.endsWith(".xctestrun") && !file.startsWith("VoyaRegression-"));
       if (!template) throw new Error("build-for-testing did not produce an xctestrun file");
-      const testRun = resolve(products, `VoyaRegression-${index}.xctestrun`);
+      // Independent device runs must not overwrite each other's fixture URLs.
+      const testRun = resolve(products, `VoyaRegression-${activeDevice}.xctestrun`);
       cpSync(resolve(products, template), testRun);
       await run("python3", [resolve(root, "scripts/native/mobile/ios-test-settings.py"), "xctestrun", testRun, JSON.stringify({ QA_CONTROL_URL: fixtures.controlUrl, QA_SUBSCRIPTION_URL: fixtures.subscriptionUrl, QA_VLESS_PORT: String(vlessPort) })]);
       phase = "product";

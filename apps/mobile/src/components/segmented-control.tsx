@@ -34,7 +34,7 @@ export function SegmentedControl<T extends string>({
           <PressableFeedback
             key={option.value}
             animation="disable-all"
-            className={`min-h-10 items-center justify-center rounded-full px-3 py-2 ${stacked ? "" : "grow basis-auto"} ${
+            className={`min-h-12 items-center justify-center rounded-full px-3 py-2 ${stacked ? "" : "grow basis-auto"} ${
               selected ? "bg-segment shadow-surface" : ""
             }`}
             isDisabled={isDisabled}
