@@ -10,6 +10,7 @@ export function SettingsScreen() {
   return <DetailScreen>
     <PageHeader title={t("tabs.settings")} />
     <ListCard>
+      <ListRow title={t("mobile.subscriptions")} testID="settings-subscriptions" onPress={() => openPage("subscriptions")} />
       <ListRow title={t("mobile.general")} testID="settings-general" onPress={() => openPage("general")} />
       <ListRow title={t("mobile.connection")} testID="settings-dns" onPress={() => openPage("dns")} />
       <ListRow title={t("mobile.maintenance")} testID="settings-maintenance" onPress={() => openPage("maintenance")} />

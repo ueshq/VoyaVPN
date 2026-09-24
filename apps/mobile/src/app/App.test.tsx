@@ -40,4 +40,15 @@ describe("App", () => {
     // The tab keeps its full title for VoiceOver even where the label is short.
     expect(view.queryByTestId("tab-connections")).toBeNull();
   });
+
+  it("reaches the subscription list from Settings", async () => {
+    await localeReady;
+    const view = await render(<App />);
+    const user = userEvent.setup();
+
+    await user.press(view.getByTestId("tab-settings"));
+    await user.press(view.getByTestId("settings-subscriptions"));
+
+    expect(await view.findByText("Update all subscriptions")).toBeOnTheScreen();
+  });
 });

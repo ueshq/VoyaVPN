@@ -113,11 +113,11 @@ final class VoyaVPNUITests: XCTestCase {
         open("profiles")
         tap("Policy groups")
         XCTAssertTrue(group.isSelected)
-        tap("Manage subscriptions")
+        open("subscriptions")
         tap("Update all subscriptions")
         open("profiles")
         XCTAssertTrue(row("QA Subscription Updated").waitForExistence(timeout: timeout))
-        tap("Manage subscriptions")
+        open("subscriptions")
         tap("Update all subscriptions")
         open("profiles")
         XCTAssertTrue(row("QA Subscription Refreshed").waitForExistence(timeout: timeout))
@@ -420,8 +420,8 @@ final class VoyaVPNUITests: XCTestCase {
             if back.exists { back.tap() }
             if app.alerts.buttons["Discard changes"].exists { app.alerts.buttons["Discard changes"].tap() }
         }
-        let settingsPages = ["general", "dns", "maintenance", "about"]
-        let target = settingsPages.contains(page) || page == "logs" ? "settings" : page == "connections" ? "home" : page == "subscriptions" ? "profiles" : page
+        let settingsPages = ["subscriptions", "general", "dns", "maintenance", "about"]
+        let target = settingsPages.contains(page) || page == "logs" ? "settings" : page == "connections" ? "home" : page
         let tab = app.buttons["tab-" + target]
         XCTAssertTrue(tab.exists || tab.waitForExistence(timeout: timeout))
         XCTAssertTrue(ready(tab))
@@ -429,7 +429,6 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertTrue(wait { tab.isSelected })
         if settingsPages.contains(page) { visible(app.buttons["settings-" + page]).tap() }
         if page == "connections" { visible(app.buttons["home-activity"]).tap() }
-        if page == "subscriptions" { tap("Manage subscriptions") }
         if page == "logs" { visible(app.buttons["settings-maintenance"]).tap(); visible(app.buttons["maintenance-logs"]).tap() }
     }
 

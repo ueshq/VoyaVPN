@@ -1,6 +1,5 @@
 import { ErrorNotice } from "~/components/error-notice";
 import { openPage } from "~/app/navigation";
-import { Input } from "heroui-native/input";
 import { MoreHorizontal } from "lucide-react-native";
 import { voyaCommands } from "@voya/client/transport";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,9 +17,10 @@ import { POLICY_GROUP_STRATEGY_HINT_KEYS } from "@voya/features/profiles/policy-
 import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "heroui-native/button";
+import { Menu } from "heroui-native/menu";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
-import { Circle, CircleCheck, ClipboardPaste, Gauge, Server } from "lucide-react-native";
+import { Circle, CircleCheck, ClipboardPaste, Gauge, LayoutArrowDown, Server } from "lucide-react-native";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, findNodeHandle, FlatList, View, useWindowDimensions } from "react-native";
 import { useResolveClassNames } from "uniwind";
@@ -183,34 +183,39 @@ export function NodesScreen() {
         keyExtractor={({ row }) => row.key}
         renderItem={renderRow}
         contentContainerStyle={insets}
-        // The toolbar and subscription controls scroll with rows. A fixed
-        // header can consume the entire small-screen viewport at large text.
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
+        // The header controls scroll with rows. A fixed header can consume
+        // the entire small-screen viewport at large text.
         ListHeaderComponent={
           <View className="gap-4 px-page">
             <PageHeader
               title={t("tabs.profiles")}
               trailing={
-                // One button, two jobs: while a run is in flight it is the way
-                // to stop it, and it counts the nodes that have answered.
-                <Button
-                  className="min-h-12 h-auto rounded-3xl bg-accent-soft py-2"
-                  size="sm"
-                  variant="secondary"
-                  isDisabled={testableIds.length === 0}
-                  onPress={() =>
-                    speedtest.speedtestRunning
-                      ? void speedtest.handleCancelSpeedtest()
-                      : void speedtest.handleSpeedtest({ profileIds: testableIds, scope: "profiles" })
-                  }
-                >
-                  {speedtest.speedtestRunning ? <Spinner size="sm" /> : <Gauge size={16} color={accentForeground} />}
-                  <Button.Label>{testAllLabel}</Button.Label>
-                </Button>
+                <View className="flex-row items-center gap-2">
+                  <NodeSortMenu
+                    color={accentForeground}
+                    sortByLatency={selection.sortByLatency}
+                    setSortByLatency={selection.setSortByLatency}
+                  />
+                  {/* One button, two jobs: while a run is in flight it is the way
+                      to stop it, and it counts the nodes that have answered. */}
+                  <Button
+                    className="min-h-12 h-auto rounded-3xl bg-accent-soft py-2"
+                    size="sm"
+                    variant="secondary"
+                    isDisabled={testableIds.length === 0}
+                    onPress={() =>
+                      speedtest.speedtestRunning
+                        ? void speedtest.handleCancelSpeedtest()
+                        : void speedtest.handleSpeedtest({ profileIds: testableIds, scope: "profiles" })
+                    }
+                  >
+                    {speedtest.speedtestRunning ? <Spinner size="sm" /> : <Gauge size={16} color={accentForeground} />}
+                    <Button.Label>{testAllLabel}</Button.Label>
+                  </Button>
+                </View>
               }
             />
-            {selected && !selection.search ? <ListCard><ListRow
+            {selected ? <ListCard><ListRow
               title={`${t("mobile.currentSelection")}: ${profileTitle(selected.profile.remarks, t)}`}
               titleLines={0} description={selected.profile.address} last
               onPress={() => { returnFocusId.current = selected.profile.id; setActionsFor(selected); }}
@@ -225,11 +230,6 @@ export function NodesScreen() {
               <ClipboardPaste size={18} color={typeof onAccent === "string" ? onAccent : undefined} />
               <Button.Label>{t("mobile.add")}</Button.Label>
             </Button>
-            <Input className="min-h-12 h-auto" accessibilityLabel={t("mobile.search")} placeholder={t("mobile.search")} value={selection.search} onChangeText={selection.setSearch} autoCorrect={false} />
-            <View className="flex-row flex-wrap gap-2">
-              <Button variant="secondary" className="min-h-12 h-auto" onPress={() => selection.setSortByLatency(!selection.sortByLatency)}><Button.Label>{t(selection.sortByLatency ? "mobile.sortLatency" : "mobile.sortDefault")}</Button.Label></Button>
-              <Button variant="ghost" className="min-h-12 h-auto" onPress={() => openPage("subscriptions")}><Button.Label>{t("mobile.subscriptions")}</Button.Label></Button>
-            </View>
             {operation.operationMessage ? (
               <Banner status="info" liveRegion message={operation.operationMessage} />
             ) : null}
@@ -332,4 +332,61 @@ function SelectionMark({ state }: { state: "inUse" | "none" | "selected" }) {
   return state === "none"
     ? <Circle size={22} color={color} strokeWidth={1.5} accessible={false} />
     : <CircleCheck size={22} color={color} strokeWidth={2} accessible={false} />;
+}
+
+/**
+ * The list's order, behind an icon: a popover anchored to the button, with a
+ * check on the order in effect. The choice is the shared persisted one, so the
+ * desktop's "Sort by latency" and this agree.
+ */
+function NodeSortMenu({
+  color,
+  setSortByLatency,
+  sortByLatency,
+}: {
+  color: string | undefined;
+  setSortByLatency: (sortByLatency: boolean) => void;
+  sortByLatency: boolean;
+}) {
+  const { t } = useI18n();
+  const label = t("mobile.sortOrder");
+
+  return (
+    <Menu>
+      <Menu.Trigger asChild>
+        <Button
+          isIconOnly
+          className="h-12 w-12 rounded-full bg-accent-soft"
+          variant="secondary"
+          accessibilityLabel={label}
+          accessibilityValue={{ text: t(sortByLatency ? "mobile.sortLatency" : "mobile.sortDefault") }}
+        >
+          <LayoutArrowDown size={18} color={color} accessible={false} />
+        </Button>
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Overlay />
+        <Menu.Content presentation="popover" placement="bottom" align="end" width={220}>
+          <Menu.Label>{label}</Menu.Label>
+          {/* A second tap on the order in effect must not clear the group and
+              silently fall back to the other one. */}
+          <Menu.Group
+            selectionMode="single"
+            disallowEmptySelection
+            selectedKeys={[sortByLatency ? "latency" : "default"]}
+            onSelectionChange={(keys) => setSortByLatency(keys.has("latency"))}
+          >
+            <Menu.Item id="default">
+              <Menu.ItemIndicator />
+              <Menu.ItemTitle>{t("mobile.sortDefault")}</Menu.ItemTitle>
+            </Menu.Item>
+            <Menu.Item id="latency">
+              <Menu.ItemIndicator />
+              <Menu.ItemTitle>{t("mobile.sortLatency")}</Menu.ItemTitle>
+            </Menu.Item>
+          </Menu.Group>
+        </Menu.Content>
+      </Menu.Portal>
+    </Menu>
+  );
 }

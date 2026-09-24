@@ -7,7 +7,7 @@ import { View, useWindowDimensions } from "react-native";
  *
  * It stands in for a navigation bar — there is none — so it carries the
  * header role VoiceOver uses to jump between screens' titles. `trailing` holds
- * the one page-level action a screen may have.
+ * the screen's page-level actions.
  */
 export function PageHeader({ title, trailing }: { title: string; trailing?: ReactNode }) {
   const { width, fontScale } = useWindowDimensions();
