@@ -50,17 +50,45 @@ class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {
     // Mint the Metro URL directly. The shared-settings helper probes /status
     // and returns nil when that probe fails — including when a system HTTP
     // proxy RSTs localhost — which surfaces as "No script URL provided".
-    RCTBundleURLProvider.jsBundleURL(
+    let host = Self.metroHost()
+    NSLog("[VoyaVPN] Metro host: %@", host)
+    return RCTBundleURLProvider.jsBundleURL(
       forBundleRoot: "index",
-      packagerHost: "localhost:8081",
+      packagerHost: host,
       enableDev: true,
       enableMinification: false,
       inlineSourceMap: false
     )
 #else
-    Bundle.main.url(forResource: "main", withExtension: "jsbundle")
+    return Bundle.main.url(forResource: "main", withExtension: "jsbundle")
 #endif
   }
+
+#if DEBUG
+  /// Where Metro runs, without probing it. On a device `localhost` is the
+  /// phone, so the Mac's address has to come from somewhere else:
+  /// 1. the Dev Menu's "Configure Bundler" value (`RCT_jsLocation`), so a
+  ///    wrong guess can be fixed without rebuilding;
+  /// 2. `ip.txt`, which react-native-xcode.sh writes with the Mac's LAN
+  ///    address into Debug builds for a device (never for the simulator);
+  /// 3. `localhost`, which on the simulator is the Mac.
+  private static func metroHost() -> String {
+    let port = "8081"
+    if let location = UserDefaults.standard.string(forKey: "RCT_jsLocation")?
+      .trimmingCharacters(in: .whitespacesAndNewlines), !location.isEmpty
+    {
+      return location.contains(":") ? location : "\(location):\(port)"
+    }
+    if let url = Bundle.main.url(forResource: "ip", withExtension: "txt"),
+      let ip = try? String(contentsOf: url, encoding: .utf8)
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      !ip.isEmpty
+    {
+      return "\(ip):\(port)"
+    }
+    return "localhost:\(port)"
+  }
+#endif
 }
 
 #if DEBUG

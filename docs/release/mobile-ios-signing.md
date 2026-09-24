@@ -164,8 +164,15 @@ product you get the same nil script URL. Keep `127.0.0.1, localhost` in the
 system proxy bypass list if you also need the host browser or other tools to
 reach Metro.
 
-For a device, open `apps/mobile/ios/VoyaVPN.xcworkspace`, select the device and
-run. The first connection raises the system's "VoyaVPN would like to add VPN
+For a device, start Metro (`pnpm --filter @voya/mobile start`), open
+`apps/mobile/ios/VoyaVPN.xcworkspace`, select the device and run. On a device
+`localhost` is the phone, so a Debug build reads the Mac's LAN address from
+`ip.txt`, which `react-native-xcode.sh` writes into every Debug device build.
+The phone and the Mac must be on the same network, the Mac's firewall must let
+`node` accept incoming connections, and the app's first launch raises the
+"Local Network" prompt, which must be allowed. If `ip.txt` picked the wrong
+interface, set the right `IP:8081` under Dev Menu → Configure Bundler; that
+value wins over `ip.txt` until it is reset. The first connection raises the system's "VoyaVPN would like to add VPN
 configurations" prompt; declining it surfaces as a permission failure on the
 Home screen rather than as an error.
 

@@ -90,8 +90,8 @@
 		D69BEAD0F5C9D92DA12EBDE3 /* VoyaNative.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = VoyaNative.m; sourceTree = "<group>"; };
 		DBEBC064102B39B1CCE093D8 /* VoyaVPNUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoyaVPNUITests.swift; sourceTree = "<group>"; };
 		DDC0BACB3A3F05714704D984 /* LibboxProbeCoreHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LibboxProbeCoreHost.swift; sourceTree = "<group>"; };
-		DF1D8107720952E131412334 /* Libbox.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; path = Libbox.xcframework; sourceTree = "<group>"; };
-		E5D567F08A5BB2472A3195D1 /* VoyaMobile.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; path = VoyaMobile.xcframework; sourceTree = "<group>"; };
+		DF1D8107720952E131412334 /* Libbox.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; path = Libbox.xcframework; sourceTree = "<group>"; };
+		E5D567F08A5BB2472A3195D1 /* VoyaMobile.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; path = VoyaMobile.xcframework; sourceTree = "<group>"; };
 		E99A8BD66DC9F940B396688F /* PacketTunnel.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = PacketTunnel.entitlements; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EF131E8A8403724863AC75BD /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
@@ -196,7 +196,6 @@
 				4F8DD884BFE8E4921CCD0A1A /* Info.plist */,
 				E99A8BD66DC9F940B396688F /* PacketTunnel.entitlements */,
 			);
-			name = PacketTunnel;
 			path = PacketTunnel;
 			sourceTree = SOURCE_ROOT;
 		};
@@ -268,7 +267,6 @@
 			children = (
 				DBEBC064102B39B1CCE093D8 /* VoyaVPNUITests.swift */,
 			);
-			name = VoyaVPNUITests;
 			path = VoyaVPNUITests;
 			sourceTree = SOURCE_ROOT;
 		};
@@ -418,9 +416,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -457,9 +459,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -525,6 +531,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LUKJ56532;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/Frameworks",
@@ -579,6 +586,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = VoyaVPN/VoyaVPN.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LUKJ56532;
 				ENABLE_BITCODE = NO;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
@@ -621,6 +629,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = VoyaVPN/VoyaVPN.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LUKJ56532;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/Frameworks",
@@ -659,6 +668,7 @@
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_ENTITLEMENTS = PacketTunnel/PacketTunnel.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4LUKJ56532;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/Frameworks",
