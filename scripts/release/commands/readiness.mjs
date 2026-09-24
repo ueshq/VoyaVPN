@@ -13,6 +13,7 @@ import {
   checkRequiredDocs,
   checkNotices,
   checkCoreSeedPinning,
+  checkRuleSetSeedPinning,
   checkStableEnvironment,
 } from "./readiness/prerequisites.mjs";
 import { checkTauriConfig } from "./readiness/config.mjs";
@@ -142,6 +143,7 @@ async function main(argv = []) {
   await checkRequiredDocs(reporter);
   await checkNotices(reporter);
   await checkCoreSeedPinning(reporter);
+  await checkRuleSetSeedPinning(reporter);
   await checkStableEnvironment(reporter, options);
   await checkTauriConfig(reporter, options, updatesBaseUrl);
   await scanProductionBlockers(reporter);

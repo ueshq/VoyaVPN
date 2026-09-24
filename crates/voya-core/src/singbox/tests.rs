@@ -878,8 +878,8 @@ fn singbox_dns_bootstrap_and_expected_ips_reach_servers_and_rules() {
     assert_eq!(remote.detour.as_deref(), Some(PROXY_TAG));
 
     // The expected-IP split clones the direct rule so the matching geosite half
-    // is constrained to the expected regions and CIDRs. IPv6 is off here, so
-    // the rule-level strategy is suppressed.
+    // is constrained to the expected regions and CIDRs, strategy included:
+    // IPv6 is on by default, so the explicit direct strategy reaches it.
     let expected = dns
         .rules
         .iter()
@@ -894,7 +894,7 @@ fn singbox_dns_bootstrap_and_expected_ips_reach_servers_and_rules() {
         expected.ip_cidr.as_ref(),
         Some(&vec!["192.0.2.0/24".to_string()])
     );
-    assert_eq!(expected.strategy, None);
+    assert_eq!(expected.strategy.as_deref(), Some("prefer_ipv4"));
 }
 
 #[test]
@@ -1364,27 +1364,62 @@ fn singbox_dns_strategy_yields_to_the_ipv6_master_switch() {
         let mut config = AppConfig::default();
         config.tun_mode_item.enable_ipv6_address = false;
         let context = test_context(config, base_remote_node());
+        assert_eq!(context.ipv6_mode(), Ipv6Mode::Off);
         assert_eq!(
-            dns_strategy(&context, explicit),
+            direct_dns_strategy(&context, explicit),
             None,
-            "IPv6 off suppresses {explicit:?}"
+            "IPv6 off suppresses direct {explicit:?}"
+        );
+        assert_eq!(
+            proxy_dns_strategy(&context, explicit),
+            None,
+            "IPv6 off suppresses proxy {explicit:?}"
         );
     }
 
-    // On: the explicit preference is mapped through.
+    // On: the explicit preference is mapped through on both paths.
     let mut config = AppConfig::default();
     config.tun_mode_item.enable_ipv6_address = true;
     let context = test_context(config, base_remote_node());
-    assert_eq!(dns_strategy(&context, None), None);
-    assert_eq!(dns_strategy(&context, Some("AsIs")), None);
+    assert_eq!(context.ipv6_mode(), Ipv6Mode::Full);
+    for strategy in [direct_dns_strategy, proxy_dns_strategy] {
+        assert_eq!(strategy(&context, None), None);
+        assert_eq!(strategy(&context, Some("AsIs")), None);
+        assert_eq!(
+            strategy(&context, Some("UseIPv6")).as_deref(),
+            Some("prefer_ipv6")
+        );
+        assert_eq!(
+            strategy(&context, Some("ForceIPv4")).as_deref(),
+            Some("ipv4_only")
+        );
+    }
+}
+
+#[test]
+fn singbox_node_without_ipv6_egress_keeps_ipv6_on_the_direct_path_only() {
+    let mut config = AppConfig::default();
+    config.tun_mode_item.enable_ipv6_address = true;
+    let mut context = test_context(config, base_remote_node());
+    context.ipv6_egress_unsupported = true;
+    assert_eq!(context.ipv6_mode(), Ipv6Mode::DirectOnly);
+
+    for explicit in [None, Some("AsIs"), Some("UseIPv6"), Some("ForceIPv6")] {
+        assert_eq!(
+            proxy_dns_strategy(&context, explicit).as_deref(),
+            Some("ipv4_only"),
+            "the node cannot reach IPv6 whatever {explicit:?} asks for"
+        );
+    }
+    assert_eq!(direct_dns_strategy(&context, None), None);
     assert_eq!(
-        dns_strategy(&context, Some("UseIPv6")).as_deref(),
+        direct_dns_strategy(&context, Some("UseIPv6")).as_deref(),
         Some("prefer_ipv6")
     );
-    assert_eq!(
-        dns_strategy(&context, Some("ForceIPv4")).as_deref(),
-        Some("ipv4_only")
-    );
+
+    // The switch still wins: off is off whatever the node can do.
+    context.app_config.tun_mode_item.enable_ipv6_address = false;
+    assert_eq!(context.ipv6_mode(), Ipv6Mode::Off);
 }
 
 #[test]
@@ -1517,53 +1552,113 @@ fn singbox_ipv6_on_emits_explicit_rule_strategies_and_the_final_catch_all() {
 }
 
 #[test]
-fn singbox_ipv6_off_rejects_ipv6_before_global_mode() {
-    for tun in [false, true] {
-        let mut app_config = AppConfig::default();
-        app_config.tun_mode_item.enable_tun = tun;
-        app_config.tun_mode_item.enable_ipv6_address = false;
-        let mut context = test_context(app_config, base_remote_node());
-        context.is_tun_enabled = tun;
+fn singbox_ipv6_reject_lets_direct_rules_claim_ipv6_first() {
+    let routing = RoutingItem {
+        rule_set: vec![
+            RulesItem {
+                outbound_tag: Some(PROXY_TAG.to_string()),
+                domain: Some(vec!["domain:proxied.example".to_string()]),
+                enabled: true,
+                ..RulesItem::default()
+            },
+            RulesItem {
+                outbound_tag: Some(DIRECT_TAG.to_string()),
+                ip: Some(vec!["geoip:cn".to_string()]),
+                enabled: true,
+                ..RulesItem::default()
+            },
+        ],
+        ..RoutingItem::default()
+    };
+    let is_plain_reject = |rule: &SingboxRule| {
+        rule.ip_version == Some(6)
+            && rule.action.as_deref() == Some("reject")
+            && rule.clash_mode.is_none()
+    };
+    let is_global_reject = |rule: &SingboxRule| {
+        rule.ip_version == Some(6)
+            && rule.action.as_deref() == Some("reject")
+            && rule.clash_mode.as_deref() == Some("Global")
+    };
 
-        let generated = generate_singbox_config(&context).expect("sing-box config should generate");
-        let reject_index = generated
-            .route
-            .rules
-            .iter()
-            .position(|rule| rule.ip_version == Some(6) && rule.action.as_deref() == Some("reject"))
-            .expect("IPv6 reject rule");
-        let global_index = generated
-            .route
-            .rules
-            .iter()
-            .position(|rule| {
-                rule.outbound.as_deref() == Some(PROXY_TAG)
-                    && rule.clash_mode.as_deref() == Some("Global")
-            })
-            .expect("Global mode rule");
-        assert!(reject_index < global_index, "tun={tun}");
-        if tun {
-            let hijack_index = generated
-                .route
-                .rules
-                .iter()
-                .position(|rule| rule.action.as_deref() == Some("hijack-dns"))
-                .expect("DNS hijack");
-            assert!(hijack_index < reject_index, "reject sits after DNS hijack");
+    for (ipv6_enabled, unsupported) in [(false, false), (false, true), (true, true)] {
+        for tun in [false, true] {
+            for strategy in ["AsIs", IP_IF_NON_MATCH] {
+                let mut app_config = AppConfig::default();
+                app_config.tun_mode_item.enable_tun = tun;
+                app_config.tun_mode_item.enable_ipv6_address = ipv6_enabled;
+                app_config.routing_basic_item.domain_strategy = strategy.to_string();
+                let mut context = test_context(app_config, base_remote_node());
+                context.is_tun_enabled = tun;
+                context.ipv6_egress_unsupported = unsupported;
+                context.routing_item = Some(routing.clone());
+                let case =
+                    format!("ipv6={ipv6_enabled} unsupported={unsupported} tun={tun} {strategy}");
+
+                let rules = generate_singbox_config(&context)
+                    .expect("sing-box config should generate")
+                    .route
+                    .rules;
+                let position = |label: &str, matches: &dyn Fn(&SingboxRule) -> bool| {
+                    rules
+                        .iter()
+                        .position(matches)
+                        .unwrap_or_else(|| panic!("{case}: missing {label}"))
+                };
+                let global = position("Global mode", &|rule| {
+                    rule.outbound.as_deref() == Some(PROXY_TAG)
+                        && rule.clash_mode.as_deref() == Some("Global")
+                });
+                let global_reject = position("Global-mode reject", &is_global_reject);
+                let reject = position("IPv6 reject", &is_plain_reject);
+                let last_direct = rules
+                    .iter()
+                    .rposition(|rule| {
+                        rule.rule_set.as_deref() == Some(&["geoip-cn".to_string()][..])
+                    })
+                    .unwrap_or_else(|| panic!("{case}: missing direct rule"));
+
+                assert!(global_reject < global, "{case}: Global mode refuses IPv6");
+                assert!(
+                    last_direct < reject,
+                    "{case}: direct rules claim IPv6 first"
+                );
+                assert_eq!(
+                    reject,
+                    rules.len() - 1,
+                    "{case}: the reject sits just before final"
+                );
+                if tun {
+                    let hijack = position("DNS hijack", &|rule| {
+                        rule.action.as_deref() == Some("hijack-dns")
+                    });
+                    assert!(hijack < global_reject, "{case}: DNS is unaffected");
+                }
+            }
         }
     }
 
+    // No routing profile: the reject still guards `final`.
+    let mut app_config = AppConfig::default();
+    app_config.tun_mode_item.enable_ipv6_address = false;
+    let rules = generate_singbox_config(&test_context(app_config, base_remote_node()))
+        .expect("sing-box config should generate")
+        .route
+        .rules;
+    assert!(rules.last().is_some_and(is_plain_reject));
+
     let mut app_config = AppConfig::default();
     app_config.tun_mode_item.enable_ipv6_address = true;
-    let generated = generate_singbox_config(&test_context(app_config, base_remote_node()))
-        .expect("sing-box config should generate");
+    let mut context = test_context(app_config, base_remote_node());
+    context.routing_item = Some(routing);
+    let generated = generate_singbox_config(&context).expect("sing-box config should generate");
     assert!(
         !generated
             .route
             .rules
             .iter()
             .any(|rule| rule.ip_version == Some(6)),
-        "IPv6 on: no reject rule"
+        "IPv6 on with a capable node: no reject rule"
     );
 }
 
@@ -2111,6 +2206,33 @@ fn singbox_macos_leaves_out_app_conditions_the_network_extension_cannot_match() 
     };
     assert!(has_app_rule(&linux));
     assert!(!has_app_rule(&macos));
+}
+
+#[test]
+fn singbox_macos_tun_leaves_out_the_core_process_rule() {
+    let mut app_config = AppConfig::default();
+    app_config.tun_mode_item.enable_tun = true;
+    let mut linux = test_context(app_config, base_remote_node());
+    linux.is_tun_enabled = true;
+    let mut macos = linux.clone();
+    macos.platform = CoreGenPlatform::MacOS;
+
+    let core_rule = |context: &CoreConfigContext| {
+        generate_singbox_config(context)
+            .expect("config")
+            .route
+            .rules
+            .iter()
+            .any(|rule| rule.process_name.as_deref() == Some(&["sing-box".to_string()][..]))
+    };
+    assert!(
+        core_rule(&linux),
+        "a process TUN sends the core's own sockets direct"
+    );
+    assert!(
+        !core_rule(&macos),
+        "the NetworkExtension cannot match a process"
+    );
 }
 
 #[test]

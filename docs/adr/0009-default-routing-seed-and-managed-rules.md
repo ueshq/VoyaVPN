@@ -104,8 +104,50 @@ locally**, matching mihomo `ipv6: false`:
 
 When the switch is on, explicit UseIPv4/UseIPv6/ForceIPv4/ForceIPv6 still map
 through `domain_strategy4_sbox` on each rule, and the IPv6 reject rule is
-absent. The TUN IPv6 address itself follows the switch on every platform,
-including macOS.
+absent. The TUN address is dual-stack whatever the switch says (see above).
+
+## Revision 2026-09-24: IPv6 on by default, reject after the rules, QUIC last
+
+This supersedes the default and the reject placement of the previous
+revision.
+
+Observed on a network with native IPv6: WeChat image and file transfers hung.
+WeChat's servers hand out CDN addresses, IPv6 ones included, without DNS, so
+`ipv4_only` never touched them. The reject sat ahead of the user's rules, so
+a China CDN address that `geoip:cn` would have sent direct was refused. Under
+TUN the reject is not fast either: gVisor completes the TCP handshake, then
+the connection closes, and the client keeps retrying the same address instead
+of falling back to IPv4.
+
+- `network.tun.ipv6Enabled` now defaults to **on**. Stored settings are not
+  migrated: an install that saved `false` keeps it.
+- `CoreConfigContext::ipv6_mode()` derives three modes: `Full` (switch on),
+  `Off` (switch off), and `DirectOnly` (switch on, but the active node, or
+  any member of the active group, is recorded as having no IPv6 egress; see
+  ADR 0014). The Linux pre-socks TUN config inherits the main config's mode.
+- `Off` and `DirectOnly` emit two rejects: `{clash_mode: Global, ip_version: 6}`
+  ahead of the Global rule, and `{ip_version: 6}` after the user's rules
+  (after the `IPIfNonMatch` repeat too), just before `final`. Direct rules
+  therefore claim their IPv6 destinations first; only IPv6 bound for the node
+  is refused.
+- DNS: `Off` keeps the top-level `ipv4_only`. `DirectOnly` leaves the direct
+  path dual-stack and puts `ipv4_only` on every proxy-path rule (Global, rules
+  whose outbound is not `direct`/`block`, and the trailing `remote_dns`
+  catch-all), whatever strategy the DNS page chose: the node cannot reach an
+  IPv6 answer. `Full` maps explicit strategies as before.
+- The seed order is now AI services, ads (disabled), China DNS, LAN, China
+  direct, **then** QUIC blocked. Blocking QUIC last refuses only UDP 443 bound
+  for the node; direct destinations keep QUIC. AI services stay ahead of
+  `geoip:cn` because some sit behind CDN addresses it lists, so their QUIC now
+  reaches the node instead of being blocked; clients fall back to TCP if the
+  node drops it. `voya_core::reorder_legacy_seed` moves a profile still in
+  the old order into the new one at startup, but only when it holds nothing
+  but managed rules in their original relative order (optionally after the
+  per-app rule). Any other profile keeps its order until "Restore defaults".
+- On macOS the TUN route no longer carries `process_name: sing-box`: the
+  PacketTunnel cannot resolve a connection's owner, so the rule never matched.
+- The rule-library update no longer downloads `geoip-private.srs`; the
+  generator emits `geoip:private` as `ip_is_private`.
 
 ## Revision 2026-09-23: Managed rules content refresh
 

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { hasStagedRuleSets } from "../core/rule-sets-installer.mjs";
 import { singBoxExecutableName } from "../core/sing-box-installer.mjs";
 
 export const requiredBundleResources = {
@@ -9,8 +10,17 @@ export const requiredBundleResources = {
 const optionalCoreSeedResources = [
   {
     dir: "sing_box",
+    isStaged: (dir, platform) => hasExpectedSeedExecutable(dir, platform),
     source: "resources/core-seeds/sing_box/*",
     target: "core-seeds/sing_box/",
+  },
+  {
+    // The default routing profile's rule sets; the app copies them into app
+    // data on first run. Only the `.srs` files: the manifest stays behind.
+    dir: "rule_sets",
+    isStaged: (dir) => hasStagedRuleSets(dir),
+    source: "resources/core-seeds/rule_sets/*.srs",
+    target: "core-seeds/rule_sets/",
   },
 ];
 
@@ -31,7 +41,7 @@ export function coreSeedBundleResources(repoRoot, { platform = process.platform 
   const resources = {};
 
   for (const seed of optionalCoreSeedResources) {
-    if (hasExpectedSeedExecutable(join(seedRoot, seed.dir), platform)) {
+    if (seed.isStaged(join(seedRoot, seed.dir), platform)) {
       resources[seed.source] = seed.target;
     }
   }

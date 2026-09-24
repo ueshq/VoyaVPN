@@ -207,7 +207,7 @@ impl Default for TunSettings {
             strict_route: false,
             stack: String::new(),
             mtu: 1500,
-            ipv6_enabled: false,
+            ipv6_enabled: true,
             icmp_routing: "rule".to_string(),
         }
     }

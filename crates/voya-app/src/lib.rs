@@ -16,6 +16,7 @@ pub mod elevation;
 pub(crate) mod exports;
 pub mod input_safety;
 pub mod invalidation;
+pub mod ipv6_egress;
 pub(crate) mod language;
 pub mod lifecycle;
 pub mod log_batch;

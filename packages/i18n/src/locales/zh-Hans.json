@@ -43,7 +43,8 @@
     "settingsSaved": "设置保存",
     "tunChanged": "VPN 设置变更",
     "activeProfileChanged": "切换节点",
-    "policyGroupChanged": "策略组变更"
+    "policyGroupChanged": "策略组变更",
+    "ipv6EgressChanged": "节点 IPv6 检测"
   },
   "home": {
     "aria": "连接主页",
@@ -182,7 +183,9 @@
     "activeSelectionRemoved": "正在使用的节点或策略组已被删除，连接已断开。",
     "selfHostAddressChanged": "本机公网地址已变化。之前分享的链接仍指向旧地址，请重新分享新链接。",
     "selfHostGaveUp": "自建节点反复停止，已停止运行。",
-    "selfHostRefreshFailed": "自建节点已更改，但页面未能刷新。"
+    "selfHostRefreshFailed": "自建节点已更改，但页面未能刷新。",
+    "nodeIpv6Unsupported": "{{remarks}} 不支持 IPv6，使用该节点时 IPv6 只走直连。",
+    "nodeIpv6Restored": "{{remarks}} 已支持 IPv6，IPv6 恢复经该节点发出。"
   },
   "options": {
     "autostart": "开机自启",
@@ -826,7 +829,7 @@
       },
       "icmpHint": "ping 等 ICMP 流量的去向。",
       "tunAutoRouteHint": "自动把系统流量导入 VPN，通常保持开启。",
-      "enableIpv6Hint": "关闭时只解析 IPv4，IPv6 流量在本地拒绝且不会绕过 VPN。节点支持 IPv6 时再开启。"
+      "enableIpv6Hint": "关闭时只解析 IPv4；命中直连规则的 IPv6 目标仍直连，其余 IPv6 流量在本地拒绝，不会经节点发出。开启时，若检测到节点不支持 IPv6，该节点只在直连线路上使用 IPv6。"
     },
     "startup": "启动",
     "tabGeneral": "通用",

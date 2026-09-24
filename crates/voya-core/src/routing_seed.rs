@@ -139,6 +139,13 @@ pub fn refresh_managed_rule(rule: &mut RulesItem) -> bool {
 
 /// The seeded rule set, in evaluation order. Anything no rule matches falls
 /// through to the proxy.
+///
+/// QUIC is blocked last, so only UDP 443 that would have gone through the
+/// node is refused (clients fall back to TCP through the proxy); China, LAN
+/// and China-DNS destinations keep their direct QUIC. The AI-service rule
+/// stays first: some of those services sit behind CDN addresses that
+/// `geoip:cn` also lists. Its QUIC therefore goes to the node rather than
+/// being blocked.
 #[must_use]
 pub fn default_rule_set() -> Vec<RulesItem> {
     vec![
@@ -153,16 +160,6 @@ pub fn default_rule_set() -> Vec<RulesItem> {
                         .map(|suffix| format!("domain:{suffix}"))
                         .collect(),
                 ),
-                ..RulesItem::default()
-            },
-        ),
-        sentinel_rule(
-            SENTINEL_BLOCK_QUIC,
-            BLOCK_TAG,
-            RuleType::Routing,
-            RulesItem {
-                network: Some("udp".to_string()),
-                port: Some("443".to_string()),
                 ..RulesItem::default()
             },
         ),
@@ -201,7 +198,79 @@ pub fn default_rule_set() -> Vec<RulesItem> {
                 ..RulesItem::default()
             },
         ),
+        sentinel_rule(
+            SENTINEL_BLOCK_QUIC,
+            BLOCK_TAG,
+            RuleType::Routing,
+            RulesItem {
+                network: Some("udp".to_string()),
+                port: Some("443".to_string()),
+                ..RulesItem::default()
+            },
+        ),
     ]
+}
+
+/// The seed order before 2026-09-24, when QUIC was blocked ahead of the
+/// direct rules.
+const LEGACY_SEED_ORDER: [&str; 6] = [
+    SENTINEL_AI_SERVICES,
+    SENTINEL_BLOCK_QUIC,
+    SENTINEL_BLOCK_ADS,
+    SENTINEL_CN_DNS,
+    SENTINEL_BYPASS_LAN,
+    SENTINEL_CN_DIRECT,
+];
+
+/// Moves a profile the user never rearranged into the current seed order.
+///
+/// Only a profile made of managed rules still in the legacy relative order
+/// qualifies: an optional per-app rule first, then seed rules (any of them
+/// may have been deleted). A profile with a rule of the user's own, or with
+/// seed rules the user dragged into another order, is left alone; "reset to
+/// default" gives it the new order. Returns whether the order changed.
+#[must_use]
+pub fn reorder_legacy_seed(rules: &mut [RulesItem]) -> bool {
+    let offset = usize::from(
+        rules
+            .first()
+            .is_some_and(|rule| rule.remarks.as_deref() == Some(SENTINEL_PER_APP_PROXY)),
+    );
+    let Some(seed_rules) = rules.get_mut(offset..) else {
+        return false;
+    };
+    let legacy_positions = seed_rules
+        .iter()
+        .map(|rule| {
+            let remarks = rule.remarks.as_deref()?;
+            LEGACY_SEED_ORDER
+                .iter()
+                .position(|legacy| *legacy == remarks)
+        })
+        .collect::<Option<Vec<_>>>();
+    let Some(legacy_positions) = legacy_positions else {
+        return false;
+    };
+    if !legacy_positions.windows(2).all(|pair| pair[0] < pair[1]) {
+        return false;
+    }
+
+    let current = default_rule_set();
+    let rank = |rule: &RulesItem| {
+        current
+            .iter()
+            .position(|seed| seed.remarks == rule.remarks)
+            .unwrap_or(usize::MAX)
+    };
+    let before = seed_rules
+        .iter()
+        .map(|rule| rule.remarks.clone())
+        .collect::<Vec<_>>();
+    seed_rules.sort_by_key(rank);
+    seed_rules
+        .iter()
+        .map(|rule| &rule.remarks)
+        .ne(before.iter())
 }
 
 /// Private destinations, reached directly.
@@ -285,11 +354,11 @@ mod tests {
                 .collect::<Vec<_>>(),
             [
                 Some(SENTINEL_AI_SERVICES),
-                Some(SENTINEL_BLOCK_QUIC),
                 Some(SENTINEL_BLOCK_ADS),
                 Some(SENTINEL_CN_DNS),
                 Some(SENTINEL_BYPASS_LAN),
                 Some(SENTINEL_CN_DIRECT),
+                Some(SENTINEL_BLOCK_QUIC),
             ]
         );
         // Blocking ads is opt-in: the rule is listed so its switch has a row,
@@ -311,6 +380,88 @@ mod tests {
         assert!(domains.iter().all(|domain| domain.starts_with("domain:")));
         assert_eq!(rules[0].outbound_tag.as_deref(), Some(PROXY_TAG));
         assert_eq!(rules[0].rule_type, Some(RuleType::ALL));
+    }
+
+    fn legacy_rules(remarks: &[&str]) -> Vec<RulesItem> {
+        remarks
+            .iter()
+            .map(|remarks| RulesItem {
+                id: format!("id-{remarks}"),
+                remarks: Some((*remarks).to_string()),
+                ..RulesItem::default()
+            })
+            .collect()
+    }
+
+    fn remarks_of(rules: &[RulesItem]) -> Vec<&str> {
+        rules
+            .iter()
+            .filter_map(|rule| rule.remarks.as_deref())
+            .collect()
+    }
+
+    #[test]
+    fn an_untouched_legacy_profile_moves_quic_blocking_after_the_direct_rules() {
+        let current = default_rule_set();
+        let current_order = remarks_of(&current);
+
+        let mut rules = legacy_rules(&LEGACY_SEED_ORDER);
+        assert!(reorder_legacy_seed(&mut rules));
+        assert_eq!(remarks_of(&rules), current_order);
+        assert!(!reorder_legacy_seed(&mut rules), "already current");
+
+        // The per-app rule stays first; ids and content travel with the rule.
+        let mut with_per_app = legacy_rules(&[SENTINEL_PER_APP_PROXY]);
+        with_per_app.extend(legacy_rules(&LEGACY_SEED_ORDER));
+        assert!(reorder_legacy_seed(&mut with_per_app));
+        assert_eq!(
+            with_per_app[0].remarks.as_deref(),
+            Some(SENTINEL_PER_APP_PROXY)
+        );
+        assert_eq!(remarks_of(&with_per_app[1..]), current_order);
+        assert!(with_per_app
+            .iter()
+            .all(|rule| rule.id == format!("id-{}", rule.remarks.as_deref().unwrap_or_default())));
+
+        // A deleted seed rule is not recreated.
+        let mut without_ads = legacy_rules(&LEGACY_SEED_ORDER);
+        without_ads.retain(|rule| rule.remarks.as_deref() != Some(SENTINEL_BLOCK_ADS));
+        assert!(reorder_legacy_seed(&mut without_ads));
+        assert_eq!(without_ads.len(), LEGACY_SEED_ORDER.len() - 1);
+        assert_eq!(
+            without_ads.last().and_then(|rule| rule.remarks.as_deref()),
+            Some(SENTINEL_BLOCK_QUIC)
+        );
+    }
+
+    #[test]
+    fn a_profile_the_user_shaped_keeps_its_order() {
+        // A rule of the user's own.
+        let mut own = legacy_rules(&LEGACY_SEED_ORDER);
+        own.insert(2, legacy_rules(&["My rule"]).remove(0));
+        let before = own.clone();
+        assert!(!reorder_legacy_seed(&mut own));
+        assert_eq!(own, before);
+
+        // Seed rules dragged into another order.
+        let mut dragged = legacy_rules(&[
+            SENTINEL_AI_SERVICES,
+            SENTINEL_CN_DIRECT,
+            SENTINEL_BLOCK_QUIC,
+        ]);
+        let before = dragged.clone();
+        assert!(!reorder_legacy_seed(&mut dragged));
+        assert_eq!(dragged, before);
+
+        // A per-app rule the user moved away from the top.
+        let mut moved = legacy_rules(&[
+            SENTINEL_AI_SERVICES,
+            SENTINEL_PER_APP_PROXY,
+            SENTINEL_BLOCK_QUIC,
+        ]);
+        assert!(!reorder_legacy_seed(&mut moved));
+
+        assert!(!reorder_legacy_seed(&mut []));
     }
 
     #[test]

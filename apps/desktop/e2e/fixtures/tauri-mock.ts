@@ -1156,11 +1156,11 @@ export async function installTauriSmokeMock(
     function defaultSeedRules(): Rule[] {
       return [
         { remarks: "voya:ai-services", outbound: "proxy", scope: "all", domain: ["domain:openai.com"] },
-        { remarks: "voya:block-quic", outbound: "block", scope: "routing", network: "udp", port: "443" },
         { remarks: "voya:block-ads", outbound: "block", scope: "all", domain: ["geosite:category-ads-all"], enabled: false },
         { remarks: "voya:cn-dns", outbound: "direct", scope: "all", ip: ["119.29.29.29"] },
         { remarks: "voya:bypass-lan", outbound: "direct", scope: "all", ip: ["geoip:private"], domain: ["geosite:private"] },
         { remarks: "voya:cn-direct", outbound: "direct", scope: "all", ip: ["geoip:cn"], domain: ["geosite:cn"] },
+        { remarks: "voya:block-quic", outbound: "block", scope: "routing", network: "udp", port: "443" },
       ].map((rule) => normalizeRule(rule));
     }
 
@@ -1229,7 +1229,7 @@ export async function installTauriSmokeMock(
             enabled: false,
             icmpRouting: "rule",
             mtu: 1500,
-            ipv6Enabled: false,
+            ipv6Enabled: true,
             stack: "system",
             strictRoute: false,
           },

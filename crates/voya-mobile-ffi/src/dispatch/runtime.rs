@@ -139,6 +139,7 @@ pub(super) fn core_flow(state: &MobileState) -> CoreFlow<'_> {
         tun_manager(state),
         Arc::new(HostCoreFlowSink {
             sinks: Arc::clone(&state.sinks),
+            state: state.this.get().cloned(),
         }),
     )
 }
@@ -157,6 +158,9 @@ fn tun_manager(state: &MobileState) -> TunManager {
 
 struct HostCoreFlowSink {
     sinks: Arc<HostSinks>,
+    /// For the background IPv6 egress check; `None` before the state is
+    /// shared, when no core can be connected yet.
+    state: Option<std::sync::Weak<MobileState>>,
 }
 
 impl CoreFlowSink for HostCoreFlowSink {
@@ -212,6 +216,23 @@ impl CoreFlowSink for HostCoreFlowSink {
                 level,
             }),
         );
+    }
+
+    fn request_ipv6_egress_check(&self) {
+        let Some(state) = self.state.as_ref().and_then(std::sync::Weak::upgrade) else {
+            return;
+        };
+        // Called from a command running on the app's runtime. The probe takes
+        // seconds and may reconnect, which needs the flow lock the settling
+        // connect still holds: run it on its own flow, later.
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        runtime.spawn(async move {
+            core_flow(&state)
+                .check_ipv6_egress(|| state.config_mutations.current_config())
+                .await;
+        });
     }
 }
 

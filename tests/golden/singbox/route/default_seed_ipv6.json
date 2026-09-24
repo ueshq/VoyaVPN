@@ -1,0 +1,460 @@
+{
+  "directOnly": {
+    "dns": {
+      "rules": [
+        {
+          "ip_accept_any": true,
+          "server": "hosts_dns"
+        },
+        {
+          "clash_mode": "Global",
+          "server": "remote_dns",
+          "strategy": "ipv4_only"
+        },
+        {
+          "action": "predefined",
+          "query_type": [
+            64,
+            65
+          ],
+          "rcode": "NOERROR"
+        },
+        {
+          "domain_suffix": [
+            "anthropic.com",
+            "claude.ai",
+            "claude.com",
+            "claudeusercontent.com",
+            "openai.com",
+            "chatgpt.com",
+            "oaistatic.com",
+            "oaiusercontent.com",
+            "openai.azure.com",
+            "githubcopilot.com",
+            "copilot-proxy.githubusercontent.com",
+            "copilot-telemetry.githubusercontent.com",
+            "cursor.com",
+            "cursor.sh",
+            "codeium.com",
+            "windsurf.com",
+            "sourcegraph.com",
+            "perplexity.ai",
+            "generativelanguage.googleapis.com",
+            "aistudio.google.com",
+            "gemini.google.com",
+            "ai.google.dev",
+            "poe.com",
+            "x.ai",
+            "grok.com",
+            "cohere.ai",
+            "mistral.ai",
+            "huggingface.co"
+          ],
+          "server": "remote_dns",
+          "strategy": "ipv4_only"
+        },
+        {
+          "domain": [
+            "dns.alidns.com",
+            "dot.pub"
+          ],
+          "domain_suffix": [
+            "alidns.com",
+            "doh.pub"
+          ],
+          "server": "direct_dns"
+        },
+        {
+          "rule_set": [
+            "geosite-private"
+          ],
+          "server": "direct_dns"
+        },
+        {
+          "rule_set": [
+            "geosite-cn"
+          ],
+          "server": "direct_dns"
+        },
+        {
+          "server": "remote_dns",
+          "strategy": "ipv4_only"
+        }
+      ],
+      "strategy": null
+    },
+    "route": {
+      "final": "proxy",
+      "rule_set": [
+        {
+          "download_detour": "proxy",
+          "format": "binary",
+          "tag": "geoip-cn",
+          "type": "remote",
+          "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geoip/geoip-cn.srs"
+        },
+        {
+          "download_detour": "proxy",
+          "format": "binary",
+          "tag": "geosite-cn",
+          "type": "remote",
+          "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geosite/geosite-cn.srs"
+        },
+        {
+          "download_detour": "proxy",
+          "format": "binary",
+          "tag": "geosite-private",
+          "type": "remote",
+          "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geosite/geosite-private.srs"
+        }
+      ],
+      "rules": [
+        {
+          "action": "sniff"
+        },
+        {
+          "action": "hijack-dns",
+          "mode": "or",
+          "rules": [
+            {
+              "port": [
+                53
+              ]
+            },
+            {
+              "protocol": [
+                "dns"
+              ]
+            }
+          ],
+          "type": "logical"
+        },
+        {
+          "action": "reject",
+          "clash_mode": "Global",
+          "ip_version": 6
+        },
+        {
+          "clash_mode": "Global",
+          "outbound": "proxy"
+        },
+        {
+          "domain_suffix": [
+            "anthropic.com",
+            "claude.ai",
+            "claude.com",
+            "claudeusercontent.com",
+            "openai.com",
+            "chatgpt.com",
+            "oaistatic.com",
+            "oaiusercontent.com",
+            "openai.azure.com",
+            "githubcopilot.com",
+            "copilot-proxy.githubusercontent.com",
+            "copilot-telemetry.githubusercontent.com",
+            "cursor.com",
+            "cursor.sh",
+            "codeium.com",
+            "windsurf.com",
+            "sourcegraph.com",
+            "perplexity.ai",
+            "generativelanguage.googleapis.com",
+            "aistudio.google.com",
+            "gemini.google.com",
+            "ai.google.dev",
+            "poe.com",
+            "x.ai",
+            "grok.com",
+            "cohere.ai",
+            "mistral.ai",
+            "huggingface.co"
+          ],
+          "outbound": "proxy"
+        },
+        {
+          "domain": [
+            "dns.alidns.com",
+            "dot.pub"
+          ],
+          "domain_suffix": [
+            "alidns.com",
+            "doh.pub"
+          ],
+          "outbound": "direct"
+        },
+        {
+          "ip_cidr": [
+            "223.5.5.5",
+            "223.6.6.6",
+            "119.29.29.29",
+            "180.76.76.76",
+            "2400:3200::1",
+            "2400:3200:baba::1"
+          ],
+          "outbound": "direct"
+        },
+        {
+          "outbound": "direct",
+          "rule_set": [
+            "geosite-private"
+          ]
+        },
+        {
+          "ip_is_private": true,
+          "outbound": "direct"
+        },
+        {
+          "outbound": "direct",
+          "rule_set": [
+            "geosite-cn"
+          ]
+        },
+        {
+          "outbound": "direct",
+          "rule_set": [
+            "geoip-cn"
+          ]
+        },
+        {
+          "action": "reject",
+          "network": [
+            "udp"
+          ],
+          "port": [
+            443
+          ]
+        },
+        {
+          "action": "reject",
+          "ip_version": 6
+        }
+      ]
+    }
+  },
+  "off": {
+    "dns": {
+      "rules": [
+        {
+          "ip_accept_any": true,
+          "server": "hosts_dns"
+        },
+        {
+          "clash_mode": "Global",
+          "server": "remote_dns"
+        },
+        {
+          "action": "predefined",
+          "query_type": [
+            64,
+            65
+          ],
+          "rcode": "NOERROR"
+        },
+        {
+          "domain_suffix": [
+            "anthropic.com",
+            "claude.ai",
+            "claude.com",
+            "claudeusercontent.com",
+            "openai.com",
+            "chatgpt.com",
+            "oaistatic.com",
+            "oaiusercontent.com",
+            "openai.azure.com",
+            "githubcopilot.com",
+            "copilot-proxy.githubusercontent.com",
+            "copilot-telemetry.githubusercontent.com",
+            "cursor.com",
+            "cursor.sh",
+            "codeium.com",
+            "windsurf.com",
+            "sourcegraph.com",
+            "perplexity.ai",
+            "generativelanguage.googleapis.com",
+            "aistudio.google.com",
+            "gemini.google.com",
+            "ai.google.dev",
+            "poe.com",
+            "x.ai",
+            "grok.com",
+            "cohere.ai",
+            "mistral.ai",
+            "huggingface.co"
+          ],
+          "server": "remote_dns"
+        },
+        {
+          "domain": [
+            "dns.alidns.com",
+            "dot.pub"
+          ],
+          "domain_suffix": [
+            "alidns.com",
+            "doh.pub"
+          ],
+          "server": "direct_dns"
+        },
+        {
+          "rule_set": [
+            "geosite-private"
+          ],
+          "server": "direct_dns"
+        },
+        {
+          "rule_set": [
+            "geosite-cn"
+          ],
+          "server": "direct_dns"
+        }
+      ],
+      "strategy": "ipv4_only"
+    },
+    "route": {
+      "final": "proxy",
+      "rule_set": [
+        {
+          "download_detour": "proxy",
+          "format": "binary",
+          "tag": "geoip-cn",
+          "type": "remote",
+          "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geoip/geoip-cn.srs"
+        },
+        {
+          "download_detour": "proxy",
+          "format": "binary",
+          "tag": "geosite-cn",
+          "type": "remote",
+          "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geosite/geosite-cn.srs"
+        },
+        {
+          "download_detour": "proxy",
+          "format": "binary",
+          "tag": "geosite-private",
+          "type": "remote",
+          "url": "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-geosite/geosite-private.srs"
+        }
+      ],
+      "rules": [
+        {
+          "action": "sniff"
+        },
+        {
+          "action": "hijack-dns",
+          "mode": "or",
+          "rules": [
+            {
+              "port": [
+                53
+              ]
+            },
+            {
+              "protocol": [
+                "dns"
+              ]
+            }
+          ],
+          "type": "logical"
+        },
+        {
+          "action": "reject",
+          "clash_mode": "Global",
+          "ip_version": 6
+        },
+        {
+          "clash_mode": "Global",
+          "outbound": "proxy"
+        },
+        {
+          "domain_suffix": [
+            "anthropic.com",
+            "claude.ai",
+            "claude.com",
+            "claudeusercontent.com",
+            "openai.com",
+            "chatgpt.com",
+            "oaistatic.com",
+            "oaiusercontent.com",
+            "openai.azure.com",
+            "githubcopilot.com",
+            "copilot-proxy.githubusercontent.com",
+            "copilot-telemetry.githubusercontent.com",
+            "cursor.com",
+            "cursor.sh",
+            "codeium.com",
+            "windsurf.com",
+            "sourcegraph.com",
+            "perplexity.ai",
+            "generativelanguage.googleapis.com",
+            "aistudio.google.com",
+            "gemini.google.com",
+            "ai.google.dev",
+            "poe.com",
+            "x.ai",
+            "grok.com",
+            "cohere.ai",
+            "mistral.ai",
+            "huggingface.co"
+          ],
+          "outbound": "proxy"
+        },
+        {
+          "domain": [
+            "dns.alidns.com",
+            "dot.pub"
+          ],
+          "domain_suffix": [
+            "alidns.com",
+            "doh.pub"
+          ],
+          "outbound": "direct"
+        },
+        {
+          "ip_cidr": [
+            "223.5.5.5",
+            "223.6.6.6",
+            "119.29.29.29",
+            "180.76.76.76",
+            "2400:3200::1",
+            "2400:3200:baba::1"
+          ],
+          "outbound": "direct"
+        },
+        {
+          "outbound": "direct",
+          "rule_set": [
+            "geosite-private"
+          ]
+        },
+        {
+          "ip_is_private": true,
+          "outbound": "direct"
+        },
+        {
+          "outbound": "direct",
+          "rule_set": [
+            "geosite-cn"
+          ]
+        },
+        {
+          "outbound": "direct",
+          "rule_set": [
+            "geoip-cn"
+          ]
+        },
+        {
+          "action": "reject",
+          "network": [
+            "udp"
+          ],
+          "port": [
+            443
+          ]
+        },
+        {
+          "action": "reject",
+          "ip_version": 6
+        }
+      ]
+    }
+  }
+}

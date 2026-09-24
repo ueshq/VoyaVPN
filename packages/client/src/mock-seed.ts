@@ -178,7 +178,7 @@ function makeAppSettings(): AppSettingsV1 {
         autoRoute: true,
         enabled: false,
         icmpRouting: "rule",
-        ipv6Enabled: false,
+        ipv6Enabled: true,
         mtu: 1500,
         stack: "system",
         strictRoute: false,

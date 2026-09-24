@@ -122,6 +122,20 @@ Greying out every latency test until the user connects was the wrong trade for
   the code-signing context. `sign-app.mjs` signs it and `verify-tunnel.mjs`
   requires it.
 
+### Follow-up (2026-09-24): Default Rule Sets Ship With the Seed
+
+The default routing profile (ADR 0009) names `geosite-cn`, `geoip-cn` and
+`geosite-private`. Until a rule-library update ran, the generated config
+pointed at remote rule sets that sing-box fetches through the proxy on first
+start, so a node that could not reach GitHub left the China and LAN rules
+without data. Packages now bundle those three files next to the seed
+(`core-seeds/rule_sets/`, pinned in `scripts/core/rule-sets-installer.mjs`),
+and every desktop OS, macOS included, copies any missing one into app data
+`bin/srss/` at startup (`voya_app::updates::install_seed_rule_sets`), where the
+generator already looks for local rule sets. Existing files are never
+replaced. The mobile apps still fetch them remotely: neither has a bundled
+resource path yet.
+
 ## Amendment (2026-09): Passwordless Unix Elevation
 
 The original decision described a `sudo -S` flow that piped a collected admin

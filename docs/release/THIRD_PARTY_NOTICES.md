@@ -22,6 +22,15 @@ Stable core manifests are empty for this rollout. sing-box is distributed only a
 
 Other cores are not part of the stable seed asset approval for this rollout. They require a separate notice update, source availability plan, implementation change, and approval checkpoint before any redistribution path is added.
 
+## Routing Rule Data
+
+Every package also bundles three sing-box rule sets for the default routing profile, copied into app data `bin/srss/` on first run. They are data, not executables, and are pinned by upstream commit and SHA-256 in `scripts/core/rule-sets-installer.mjs`. The same files can be replaced at runtime by the in-app rule-library update, which downloads them from the same upstream.
+
+| Component | Redistribution scope | Source | License name | Attribution and obligations |
+| --- | --- | --- | --- | --- |
+| `geosite-cn.srs`, `geosite-private.srs` | Bundled data files. | Converted by https://github.com/2dust/sing-box-rules (branch `rule-set-geosite`) from https://github.com/Loyalsoldier/v2ray-rules-dat, which builds on https://github.com/v2fly/domain-list-community (MIT). | GNU General Public License v3.0 (`GPL-3.0`), the license of Loyalsoldier/v2ray-rules-dat. The converting repository publishes no license file of its own. | Keep this attribution and the source links. Corresponding source is the upstream repositories at the pinned commit. |
+| `geoip-cn.srs` | Bundled data file. | Converted by https://github.com/2dust/sing-box-rules (branch `rule-set-geoip`) from https://github.com/Loyalsoldier/geoip. | Creative Commons Attribution-ShareAlike 4.0 (`CC-BY-SA-4.0`), the license of Loyalsoldier/geoip. | Attribution: "Contains data from Loyalsoldier/geoip, licensed under CC BY-SA 4.0." Loyalsoldier/geoip is generated from MaxMind GeoLite2 data with additions; the release owner must confirm that the GeoLite2 End User License Agreement permits redistributing this derived country list, and add MaxMind's required notice ("This product includes GeoLite2 data created by MaxMind, available from https://www.maxmind.com") if it does. |
+
 ## Stable Approval Checkpoint
 
 Before any stable package redistributes sing-box binaries, the release owner must attach an approval record to the stable release evidence. The approval record must include:

@@ -101,6 +101,16 @@ impl<'runtime> RuntimeManager<'runtime> {
     }
 
     #[must_use]
+    pub(crate) const fn database(&self) -> &'runtime Database {
+        self.database
+    }
+
+    #[must_use]
+    pub(crate) const fn paths(&self) -> &AppPaths {
+        &self.paths
+    }
+
+    #[must_use]
     pub fn settings_application(&self) -> &crate::settings::apply::SettingsApplication {
         &self.settings_application
     }
@@ -458,14 +468,18 @@ pub(crate) async fn load_runtime_core_gen_env(
     config: &AppConfig,
     target_os: TargetOs,
 ) -> Result<SnapshotCoreGenEnv, DbError> {
+    let profiles = database.profiles().list().await?;
+    let ipv6_unsupported_nodes =
+        crate::ipv6_egress::Ipv6EgressStore::new(paths).unsupported_nodes(&profiles);
     Ok(SnapshotCoreGenEnv::new(
         config,
         core_gen_platform(target_os),
-        database.profiles().list().await?,
+        profiles,
         database.routings().list().await?,
     )
     .with_policy_groups(database.policy_groups().list().await?)
-    .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths)))
+    .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths))
+    .with_ipv6_unsupported_nodes(ipv6_unsupported_nodes))
 }
 
 pub(crate) const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {

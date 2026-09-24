@@ -559,6 +559,9 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     tail.windows(needle.len()).any(|window| window == needle)
 }
 
+/// The `geoip:` name the config generator turns into `ip_is_private`.
+const GEOIP_PRIVATE_NAME: &str = "private";
+
 fn collect_srs_from_rule(
     rule: &RulesItem,
     geoip: &mut BTreeSet<String>,
@@ -566,7 +569,11 @@ fn collect_srs_from_rule(
 ) {
     if let Some(items) = &rule.ip {
         for item in items {
-            if let Some(value) = nonempty_str(item.strip_prefix("geoip:")) {
+            // `geoip:private` is generated as `ip_is_private`, never as a rule
+            // set, so its `.srs` would be downloaded and never read.
+            if let Some(value) = nonempty_str(item.strip_prefix("geoip:"))
+                .filter(|value| *value != GEOIP_PRIVATE_NAME)
+            {
                 geoip.insert(value.to_string());
             }
         }
@@ -615,7 +622,10 @@ mod tests {
             .map(|asset| asset.file_name.as_str())
             .collect::<BTreeSet<_>>();
 
-        assert!(names.contains("geoip-private.srs"));
+        assert!(
+            !names.contains("geoip-private.srs"),
+            "geoip:private is generated as ip_is_private and needs no rule set"
+        );
         assert!(names.contains("geosite-cn.srs"));
         assert!(names.contains("geosite-google.srs"));
         assert!(names.contains("geosite-category-ads-all.srs"));

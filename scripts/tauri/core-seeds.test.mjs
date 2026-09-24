@@ -57,6 +57,33 @@ describe("tauri core seed overlay", () => {
     }
   });
 
+  it("bundles staged rule sets with or without a sing-box seed", async () => {
+    const repoRoot = await mkdtemp(join(tmpdir(), "voyavpn-tauri-rule-sets-"));
+    try {
+      const seedRoot = join(repoRoot, "apps", "desktop", "src-tauri", "resources", "core-seeds");
+      const ruleSetDir = join(seedRoot, "rule_sets");
+      await mkdir(ruleSetDir, { recursive: true });
+      await writeFile(join(ruleSetDir, "rule-sets.seed.json"), "{}");
+      expect(coreSeedBundleResources(repoRoot, { platform: "linux" })).toEqual({});
+
+      await writeFile(join(ruleSetDir, "geosite-cn.srs"), "SRS");
+      expect(coreSeedBundleResources(repoRoot, { platform: "linux" })).toEqual({
+        "resources/core-seeds/rule_sets/*.srs": "core-seeds/rule_sets/",
+      });
+      const overlayPath = join(repoRoot, "target", "tauri-config", "tauri.core-seeds.generated.json");
+      expect(writeOptionalCoreSeedOverlay(repoRoot, overlayPath, { platform: "linux" })).toBe(overlayPath);
+
+      await mkdir(join(seedRoot, "sing_box"), { recursive: true });
+      await writeFile(join(seedRoot, "sing_box", "sing-box"), "fake executable");
+      expect(coreSeedBundleResources(repoRoot, { platform: "linux" })).toEqual({
+        "resources/core-seeds/rule_sets/*.srs": "core-seeds/rule_sets/",
+        "resources/core-seeds/sing_box/*": "core-seeds/sing_box/",
+      });
+    } finally {
+      await rm(repoRoot, { force: true, recursive: true });
+    }
+  });
+
   it("rewrites the overlay only when its content changes", async () => {
     const repoRoot = await mkdtemp(join(tmpdir(), "voyavpn-tauri-overlay-"));
     try {

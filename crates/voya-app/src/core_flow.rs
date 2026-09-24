@@ -41,6 +41,8 @@ use crate::{
     tun::TunManager,
 };
 
+mod ipv6;
+
 #[derive(Clone, Copy)]
 enum ProxyAction {
     Apply,
@@ -70,6 +72,10 @@ pub trait CoreFlowSink: Send + Sync {
     fn tun_changed(&self, status: &TunStatus);
     fn statistics_zero(&self);
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str);
+    /// The core just connected, possibly on another node. A host that can run
+    /// work in the background starts [`CoreFlow::check_ipv6_egress`] on a
+    /// fresh flow here; the default leaves IPv6 egress unprobed.
+    fn request_ipv6_egress_check(&self) {}
 }
 
 pub struct CoreFlow<'flow> {
@@ -165,8 +171,13 @@ impl<'flow> CoreFlow<'flow> {
         self.announce_start(config, LogCode::RestartingAfterChange { reason });
         match self.runtime.restart_if_connected(config).await {
             Ok(Some(snapshot)) => {
-                self.settle_connected(config, &snapshot, LogCode::RestartedAfterChange { reason })
-                    .await;
+                self.settle_connected(
+                    config,
+                    &snapshot,
+                    LogCode::RestartedAfterChange { reason },
+                    reason,
+                )
+                .await;
                 Ok(())
             }
             // A disconnect won the runtime lock between the check above and the
@@ -318,7 +329,8 @@ impl<'flow> CoreFlow<'flow> {
     ) -> Result<SupervisorSnapshot, RuntimeError> {
         match result {
             Ok(snapshot) => {
-                self.settle_connected(config, &snapshot, success_code).await;
+                self.settle_connected(config, &snapshot, success_code, reason)
+                    .await;
                 Ok(snapshot)
             }
             Err(error) => {
@@ -334,6 +346,7 @@ impl<'flow> CoreFlow<'flow> {
         config: &AppConfig,
         snapshot: &SupervisorSnapshot,
         code: LogCode,
+        reason: CoreFlowReason,
     ) {
         self.settle_traffic_mode(config, snapshot).await;
         self.sink.log(LogLevel::Info, code, None);
@@ -347,6 +360,9 @@ impl<'flow> CoreFlow<'flow> {
         self.sink
             .core_state(CoreState::Connected, None, Some(snapshot));
         self.report_tun_status(config).await;
+        if ipv6::probes_ipv6_egress_after(reason) {
+            self.sink.request_ipv6_egress_check();
+        }
     }
 
     async fn settle_traffic_mode(&self, config: &AppConfig, snapshot: &SupervisorSnapshot) {

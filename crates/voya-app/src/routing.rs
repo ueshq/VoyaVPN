@@ -117,9 +117,11 @@ impl<'db> RoutingManager<'db> {
 
     /// Unions each managed rule's matchers with the current seed at startup.
     ///
-    /// Profile structure, switches, order, outbounds and deletions stay as the
-    /// user left them; only the seed's `domain`/`ip` entries missing from an
-    /// existing managed rule are appended. Returns how many profiles changed.
+    /// Profile structure, switches, outbounds and deletions stay as the user
+    /// left them; only the seed's `domain`/`ip` entries missing from an
+    /// existing managed rule are appended. A profile still in the legacy seed
+    /// order, untouched by the user, also takes the current order (see
+    /// [`voya_core::reorder_legacy_seed`]). Returns how many profiles changed.
     pub async fn refresh_managed_rules(&self) -> Result<u32> {
         let mut updated = 0;
         for mut routing in self.database.routings().list().await? {
@@ -127,6 +129,7 @@ impl<'db> RoutingManager<'db> {
             for rule in &mut routing.rule_set {
                 changed |= voya_core::refresh_managed_rule(rule);
             }
+            changed |= voya_core::reorder_legacy_seed(&mut routing.rule_set);
             if !changed {
                 continue;
             }
@@ -622,6 +625,59 @@ mod tests {
         let routings = database.routings().list().await.expect("routings");
         assert_eq!(routings.len(), 1);
         assert_eq!(routings[0].remarks, "Mine");
+    }
+
+    #[tokio::test]
+    async fn startup_refresh_moves_an_untouched_legacy_seed_into_the_current_order() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
+        let manager = RoutingManager::new(&database);
+        let mut config = AppConfig::default();
+        // The seed as installs before 2026-09-24 stored it: QUIC blocked second.
+        let mut legacy = voya_core::default_rule_set();
+        let quic = legacy
+            .iter()
+            .position(|rule| rule.remarks.as_deref() == Some(voya_core::SENTINEL_BLOCK_QUIC))
+            .expect("QUIC rule");
+        let quic_rule = legacy.remove(quic);
+        legacy.insert(1, quic_rule);
+        let saved = manager
+            .save_routing(
+                &mut config,
+                RoutingItem {
+                    remarks: "Seed".to_string(),
+                    rule_set: legacy,
+                    ..RoutingItem::default()
+                },
+            )
+            .await
+            .expect("legacy routing");
+
+        assert_eq!(manager.refresh_managed_rules().await.expect("refresh"), 1);
+        let routing = database
+            .routings()
+            .get(&saved.id)
+            .await
+            .expect("load routing")
+            .expect("routing still exists");
+        let order = |rules: &[RulesItem]| {
+            rules
+                .iter()
+                .map(|rule| rule.remarks.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            order(&routing.rule_set),
+            order(&voya_core::default_rule_set())
+        );
+        assert_eq!(
+            manager
+                .refresh_managed_rules()
+                .await
+                .expect("second refresh"),
+            0
+        );
     }
 
     #[tokio::test]

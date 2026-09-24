@@ -123,6 +123,7 @@ pub(crate) fn generated_value_for_case(case: &GoldenCase) -> Value {
         "singbox.inbounds.tun_macos" => singbox_tun_inbounds_macos(),
         "singbox.route.tun" => singbox_tun_route(),
         "singbox.route.default_seed" => singbox_default_seed_snapshot(),
+        "singbox.route.default_seed_ipv6" => singbox_default_seed_ipv6_snapshot(),
         "singbox.outbound.policy_groups" => singbox_policy_groups_snapshot(),
         "singbox.outbound.latency_probes" => singbox_latency_probes_snapshot(),
         "singbox.outbound.tuic_tls" => singbox_tuic_tls_outbound(),
@@ -632,8 +633,31 @@ fn singbox_default_seed_context() -> CoreConfigContext {
 }
 
 fn singbox_default_seed_snapshot() -> Value {
-    let config = generate_singbox_config_value(&singbox_default_seed_context())
-        .expect("default seed config should generate");
+    seed_route_and_dns_snapshot(&singbox_default_seed_context())
+}
+
+/// The default seed where IPv6 is limited: switched off, and switched on with
+/// a node recorded as having no IPv6 egress.
+fn singbox_default_seed_ipv6_contexts() -> [(&'static str, CoreConfigContext); 2] {
+    let mut off = singbox_default_seed_context();
+    off.app_config.tun_mode_item.enable_ipv6_address = false;
+    let mut direct_only = singbox_default_seed_context();
+    direct_only.ipv6_egress_unsupported = true;
+    [("off", off), ("directOnly", direct_only)]
+}
+
+fn singbox_default_seed_ipv6_snapshot() -> Value {
+    Value::Object(
+        singbox_default_seed_ipv6_contexts()
+            .iter()
+            .map(|(label, context)| ((*label).to_string(), seed_route_and_dns_snapshot(context)))
+            .collect(),
+    )
+}
+
+fn seed_route_and_dns_snapshot(context: &CoreConfigContext) -> Value {
+    let config =
+        generate_singbox_config_value(context).expect("default seed config should generate");
     serde_json::json!({
         "route": {
             "rules": config["route"]["rules"],
@@ -1056,6 +1080,13 @@ fn acceptance_configs_for_case(case: &GoldenCase) -> Vec<Value> {
                     .expect("default seed acceptance config should generate"),
             ]
         }
+        "singbox.route.default_seed_ipv6" => singbox_default_seed_ipv6_contexts()
+            .iter()
+            .map(|(_, context)| {
+                generate_singbox_config_value(context)
+                    .expect("default seed IPv6 acceptance config should generate")
+            })
+            .collect(),
         "singbox.outbound.policy_groups" => singbox_policy_group_configs(),
         "singbox.outbound.latency_probes" => vec![singbox_latency_probes_config()],
         "singbox.routing.per_rule_outbound" => vec![singbox_per_rule_outbound_config()],

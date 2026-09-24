@@ -291,8 +291,10 @@ pub struct TunModeItem {
     pub strict_route: bool,
     pub stack: String,
     pub mtu: i32,
-    /// Whether IPv6 traffic is allowed. Off means dual-stack capture with
-    /// local reject of IPv6 and dual-path DNS forced to `ipv4_only`.
+    /// Whether IPv6 traffic is allowed (default on). Off forces DNS to
+    /// `ipv4_only` and refuses IPv6 destinations that no direct rule claims;
+    /// see [`crate::Ipv6Mode`], which also narrows "on" for a node without
+    /// IPv6 egress.
     pub enable_ipv6_address: bool,
     pub icmp_routing: String,
 }
@@ -305,7 +307,7 @@ impl Default for TunModeItem {
             strict_route: false,
             stack: String::new(),
             mtu: 1500,
-            enable_ipv6_address: false,
+            enable_ipv6_address: true,
             icmp_routing: DEFAULT_TUN_ICMP_ROUTING.to_string(),
         }
     }

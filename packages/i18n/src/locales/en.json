@@ -43,7 +43,8 @@
     "settingsSaved": "Settings save",
     "tunChanged": "VPN settings change",
     "activeProfileChanged": "Node switch",
-    "policyGroupChanged": "Policy group change"
+    "policyGroupChanged": "Policy group change",
+    "ipv6EgressChanged": "Node IPv6 check"
   },
   "home": {
     "aria": "Connection home",
@@ -182,7 +183,9 @@
     "activeSelectionRemoved": "The node or policy group in use was deleted, so the connection stopped.",
     "selfHostAddressChanged": "This device's public address changed. Links shared earlier point to the old address; share the new links.",
     "selfHostGaveUp": "The self-hosted node kept stopping and was left off.",
-    "selfHostRefreshFailed": "The self-hosted node changed, but the page could not be refreshed."
+    "selfHostRefreshFailed": "The self-hosted node changed, but the page could not be refreshed.",
+    "nodeIpv6Unsupported": "{{remarks}} cannot reach IPv6, so IPv6 now goes direct only while you use it.",
+    "nodeIpv6Restored": "{{remarks}} reaches IPv6 again, so IPv6 goes through it again."
   },
   "options": {
     "autostart": "Autostart",
@@ -826,7 +829,7 @@
       },
       "icmpHint": "Where ping and other ICMP traffic goes.",
       "tunAutoRouteHint": "Sends system traffic into the VPN automatically; usually keep this on.",
-      "enableIpv6Hint": "When off, only IPv4 is resolved and IPv6 traffic is rejected locally so it cannot bypass the VPN. Turn this on only if your node supports IPv6."
+      "enableIpv6Hint": "When off, only IPv4 is resolved. IPv6 destinations a direct rule matches still go direct; all other IPv6 traffic is rejected locally and never reaches the node. When on, a node found to have no IPv6 egress uses IPv6 on direct routes only."
     },
     "startup": "Startup",
     "tabGeneral": "General",

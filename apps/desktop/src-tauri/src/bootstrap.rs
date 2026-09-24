@@ -111,6 +111,14 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
             );
         }
     }
+    // The default rule sets go into app data on every OS, macOS included: the
+    // PacketTunnel reads local rule sets from there (staged into its App Group
+    // at connect). Existing files are newer and stay.
+    if let Err(error) = timed("stage rule sets", || {
+        voya_app::updates::install_seed_rule_sets(&runtime_paths, &seed_dir)
+    }) {
+        tracing::warn!(?error, "failed to copy packaged rule sets at startup");
+    }
     let core_seed_resource_dir = Some(seed_dir);
     let runner: Arc<dyn ProcessRunner> = Arc::new(StdProcessRunner::with_log_sink(Arc::new(
         TauriProcessLogSink {

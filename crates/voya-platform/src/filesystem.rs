@@ -88,6 +88,53 @@ pub fn remove_dir_all_if_exists(path: &Path) -> io::Result<()> {
     }
 }
 
+/// Copies every `*.{extension}` file in `source_dir` that `target_dir` lacks,
+/// and returns the copies. Files already in `target_dir` are never replaced.
+///
+/// Each copy is written beside its target and renamed into place, so a crash
+/// mid-copy cannot leave a truncated file that later passes for a good one. A
+/// missing `source_dir` copies nothing.
+pub fn copy_missing_files(
+    source_dir: &Path,
+    target_dir: &Path,
+    extension: &str,
+) -> io::Result<Vec<PathBuf>> {
+    let entries = match fs::read_dir(source_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+    };
+    let mut copied = Vec::new();
+    for entry in entries {
+        let entry = entry?;
+        let source = entry.path();
+        if !entry.file_type()?.is_file()
+            || source.extension().and_then(|value| value.to_str()) != Some(extension)
+        {
+            continue;
+        }
+        let target = target_dir.join(entry.file_name());
+        if file_exists(&target)? {
+            continue;
+        }
+        fs::create_dir_all(target_dir)?;
+        let partial = target.with_extension(format!("{extension}.partial"));
+        fs::copy(&source, &partial)?;
+        fs::rename(&partial, &target)?;
+        copied.push(target);
+    }
+    Ok(copied)
+}
+
+/// The file's bytes, or `None` when it does not exist.
+pub fn read_file_if_exists(path: &Path) -> io::Result<Option<Vec<u8>>> {
+    match fs::read(path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
 pub fn file_exists(path: &Path) -> io::Result<bool> {
     match fs::metadata(path) {
         Ok(_) => Ok(true),
@@ -138,6 +185,60 @@ pub fn stage_private_files(work_dir: &Path, files: &[(&Path, &str)]) -> io::Resu
 mod tests {
     #[cfg(unix)]
     use super::*;
+
+    #[test]
+    fn copying_missing_files_fills_gaps_and_never_replaces() {
+        use super::{copy_missing_files, read_file_if_exists, write_file_with_parent};
+
+        let dir = tempfile::Builder::new()
+            .prefix("voyavpn-copy-missing-")
+            .tempdir()
+            .expect("filesystem test temp dir");
+        let source = dir.path().join("seed");
+        let target = dir.path().join("bin").join("srss");
+
+        assert!(copy_missing_files(&source, &target, "srs")
+            .expect("missing source")
+            .is_empty());
+
+        write_file_with_parent(&source.join("geosite-cn.srs"), b"seed cn").expect("seed");
+        write_file_with_parent(&source.join("geoip-cn.srs"), b"seed ip").expect("seed");
+        write_file_with_parent(&source.join("rule-sets.seed.json"), b"{}").expect("manifest");
+        write_file_with_parent(&target.join("geoip-cn.srs"), b"updated ip").expect("newer");
+
+        let copied = copy_missing_files(&source, &target, "srs").expect("copy");
+        assert_eq!(copied, vec![target.join("geosite-cn.srs")]);
+        assert_eq!(
+            read_file_if_exists(&target.join("geoip-cn.srs")).expect("read"),
+            Some(b"updated ip".to_vec()),
+            "a file already in place is newer than the seed"
+        );
+        assert_eq!(
+            read_file_if_exists(&target.join("rule-sets.seed.json")).expect("read"),
+            None
+        );
+        assert!(copy_missing_files(&source, &target, "srs")
+            .expect("second copy")
+            .is_empty());
+    }
+
+    #[test]
+    fn reading_a_missing_file_is_none_and_an_existing_one_its_bytes() {
+        use super::{read_file_if_exists, write_file_with_parent};
+
+        let dir = tempfile::Builder::new()
+            .prefix("voyavpn-read-if-exists-")
+            .tempdir()
+            .expect("filesystem test temp dir");
+        let path = dir.path().join("state.json");
+
+        assert_eq!(read_file_if_exists(&path).expect("missing file"), None);
+        write_file_with_parent(&path, b"{}").expect("write file");
+        assert_eq!(
+            read_file_if_exists(&path).expect("existing file"),
+            Some(b"{}".to_vec())
+        );
+    }
 
     #[cfg(unix)]
     #[test]

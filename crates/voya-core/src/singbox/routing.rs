@@ -5,7 +5,7 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
     let simple_dns = &context.simple_dns_item;
     config.route.default_domain_resolver = Some(SingboxRule {
         server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
-        strategy: dns_strategy(context, simple_dns.strategy4_freedom.as_deref()),
+        strategy: direct_dns_strategy(context, simple_dns.strategy4_freedom.as_deref()),
         ..SingboxRule::default()
     });
 
@@ -13,11 +13,17 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         config.route.auto_detect_interface = Some(true);
         config.route.rules.extend(tun_route_rules());
 
-        config.route.rules.push(SingboxRule {
-            outbound: Some(DIRECT_TAG.to_string()),
-            process_name: Some(vec!["sing-box".to_string()]),
-            ..SingboxRule::default()
-        });
+        // The core's own sockets go direct. The macOS NetworkExtension tunnel
+        // cannot tell which process a packet came from (the PacketTunnel's
+        // connection-owner lookup always fails), so the rule could never
+        // match there and is left out.
+        if !context.platform.is_macos() {
+            config.route.rules.push(SingboxRule {
+                outbound: Some(DIRECT_TAG.to_string()),
+                process_name: Some(vec!["sing-box".to_string()]),
+                ..SingboxRule::default()
+            });
+        }
         let icmp_routing = tun_icmp_routing(&context.app_config.tun_mode_item.icmp_routing);
         match icmp_routing {
             "direct" => config.route.rules.push(SingboxRule {
@@ -80,12 +86,12 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         config.route.rules.push(hosts_resolve_rule);
     }
 
-    // IPv6 off: reject every IPv6 destination at the routing layer so a
-    // literal v6 address fails fast instead of leaking out of the physical
-    // NIC. Placed after DNS hijack so DNS is unaffected, and before Global
-    // so the reject wins in every traffic mode.
-    if !context.app_config.tun_mode_item.enable_ipv6_address {
+    let rejects_proxied_ipv6 = context.ipv6_mode().rejects_proxied_ipv6();
+    // Global mode sends everything to the node, so an IPv6 destination the
+    // node cannot reach is refused here rather than dialled through it.
+    if rejects_proxied_ipv6 {
         config.route.rules.push(SingboxRule {
+            clash_mode: Some("Global".to_string()),
             ip_version: Some(6),
             action: Some("reject".to_string()),
             ..SingboxRule::default()
@@ -111,25 +117,41 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         config.route.rules.push(resolve_rule.clone());
     }
 
-    let Some(routing) = context.routing_item.clone() else {
-        return;
-    };
-    let mut ip_rules = Vec::new();
-    for item in routing
-        .rule_set
-        .iter()
-        .filter(|item| item.enabled && item.rule_type != Some(RuleType::DNS))
-    {
-        gen_routing_user_rule(config, context, item);
-        if item.ip.as_ref().is_some_and(|ips| !ips.is_empty()) {
-            ip_rules.push(item.clone());
+    if let Some(routing) = context.routing_item.clone() {
+        let mut ip_rules = Vec::new();
+        for item in routing
+            .rule_set
+            .iter()
+            .filter(|item| item.enabled && item.rule_type != Some(RuleType::DNS))
+        {
+            gen_routing_user_rule(config, context, item);
+            if item.ip.as_ref().is_some_and(|ips| !ips.is_empty()) {
+                ip_rules.push(item.clone());
+            }
+        }
+        if context.app_config.routing_basic_item.domain_strategy == IP_IF_NON_MATCH {
+            config.route.rules.push(resolve_rule);
+            for item in &ip_rules {
+                gen_routing_user_rule(config, context, item);
+            }
         }
     }
-    if context.app_config.routing_basic_item.domain_strategy == IP_IF_NON_MATCH {
-        config.route.rules.push(resolve_rule);
-        for item in &ip_rules {
-            gen_routing_user_rule(config, context, item);
-        }
+
+    // An IPv6 destination no rule sent elsewhere would reach `final`, the
+    // node, which has no IPv6 egress (or IPv6 is switched off). Refuse it
+    // here, after the user's rules, so a direct rule still claims its IPv6
+    // destinations: apps such as WeChat receive CDN addresses from their own
+    // servers rather than from DNS, and rejecting those before the rules ran
+    // left transfers retrying a dead IPv6 connection. Under TUN the reject
+    // cannot fail fast either way: the local stack completes the handshake
+    // first, so rejecting only what would have failed at the node is the
+    // one placement that loses nothing.
+    if rejects_proxied_ipv6 {
+        config.route.rules.push(SingboxRule {
+            ip_version: Some(6),
+            action: Some("reject".to_string()),
+            ..SingboxRule::default()
+        });
     }
 }
 

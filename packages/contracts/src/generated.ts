@@ -431,7 +431,9 @@ export type ConnectionModeStatus = {
  *  changed") into its log sentences; the fragment is a code now so the whole
  *  sentence can be assembled in the reader's language.
  */
-export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "activeProfileChanged" | "policyGroupChanged" | "settingsSaved";
+export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "activeProfileChanged" | "policyGroupChanged" | "settingsSaved" | 
+/**  The connected node's IPv6 egress turned out different from its record. */
+"ipv6EgressChanged";
 
 export type CoreSeedInstallResult = {
 	status: CoreSeedInstallStatus,
@@ -704,6 +706,13 @@ export type NetworkSettings = {
 export type NoticeCode = { code: "profileRefreshFailed" } | { code: "policyGroupRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "policyGroupSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "policyGroupSelectionRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | 
 /**  The running node or policy group was deleted, so the connection stopped. */
 { code: "activeSelectionRemoved" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string } | 
+/**
+ *  The connected node could not reach IPv6 destinations, so IPv6 is kept
+ *  to direct routes while it is in use.
+ */
+{ code: "nodeIpv6Unsupported"; remarks: string } | 
+/**  A node recorded without IPv6 egress reached IPv6 again. */
+{ code: "nodeIpv6Restored"; remarks: string } | 
 /**  The node's core kept exiting and was left stopped. */
 { code: "selfHostGaveUp" } | 
 /**

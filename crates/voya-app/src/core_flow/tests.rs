@@ -88,6 +88,10 @@ impl CoreFlowSink for RecordingSink {
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, _detail: &str) {
         self.push(format!("notice:{level:?}:{}", code_tag(&code)));
     }
+
+    fn request_ipv6_egress_check(&self) {
+        self.push("ipv6-check");
+    }
 }
 
 /// The serde tag of a code, plus the parameters that make two uses of the same
@@ -436,6 +440,8 @@ async fn connect_publishes_the_system_proxy_before_connected_then_tun() {
             "sysproxy".to_string(),
             format!("state:Connected:profile=active:pid={:?}", snapshot.main_pid),
             "tun".to_string(),
+            // Last, once the connection is fully reported.
+            "ipv6-check".to_string(),
         ]
     );
 }
@@ -785,3 +791,5 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
     );
     flow.disconnect(&config).await.expect("cleanup");
 }
+
+mod ipv6;

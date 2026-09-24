@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::io;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 use voya_contracts::ResourceUpdateFile;
@@ -8,7 +9,10 @@ use voya_net::ruleset::{
     collect_singbox_ruleset_assets, discover_local_singbox_ruleset_paths, geo_assets,
     AcquiredRulesetGeoAsset, AssetAcquisitionOptions, RulesetGeoClient, RulesetGeoError,
 };
-use voya_platform::paths::AppPaths;
+use voya_platform::{
+    filesystem,
+    paths::{AppPaths, RULE_SET_SEED_DIR_NAME},
+};
 
 pub type Result<T> = std::result::Result<T, UpdateManagerError>;
 
@@ -76,6 +80,24 @@ impl<'db> UpdateManager<'db> {
     }
 }
 
+/// Copies the packaged rule sets (see `core_seed_resources_dir`) into the
+/// app-data rule-set directory, skipping any already there: a rule-library
+/// update may have replaced them with newer ones. Returns the copies.
+///
+/// Until these exist the generated config names remote rule sets that the
+/// core fetches through the proxy, so the default China and LAN rules would
+/// not apply on a first start whose proxy cannot reach GitHub.
+pub fn install_seed_rule_sets(
+    paths: &AppPaths,
+    core_seed_resources_dir: &Path,
+) -> io::Result<Vec<PathBuf>> {
+    filesystem::copy_missing_files(
+        &core_seed_resources_dir.join(RULE_SET_SEED_DIR_NAME),
+        &srs_dir(paths),
+        "srs",
+    )
+}
+
 #[must_use]
 pub fn local_singbox_ruleset_paths(paths: &AppPaths) -> BTreeMap<String, String> {
     discover_local_singbox_ruleset_paths(srs_dir(paths))
@@ -132,6 +154,31 @@ mod tests {
                 .expect("SRS asset");
             assert_eq!(asset.url, format!("https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-{kind}/{tag}.srs"));
         }
+    }
+
+    #[test]
+    fn packaged_rule_sets_become_local_rule_sets() {
+        let dir = tempfile::Builder::new()
+            .prefix("voyavpn-seed-rule-sets-")
+            .tempdir()
+            .expect("temp dir");
+        let seeds = dir.path().join("resources").join("core-seeds");
+        let paths = AppPaths::new(dir.path().join("app"));
+        filesystem::write_file_with_parent(
+            &seeds.join(RULE_SET_SEED_DIR_NAME).join("geosite-cn.srs"),
+            b"SRS",
+        )
+        .expect("packaged rule set");
+        assert!(local_singbox_ruleset_paths(&paths).is_empty());
+
+        let copied = install_seed_rule_sets(&paths, &seeds).expect("install");
+
+        assert_eq!(copied.len(), 1);
+        let local = local_singbox_ruleset_paths(&paths);
+        assert_eq!(
+            local.get("geosite-cn").map(PathBuf::from),
+            Some(srs_dir(&paths).join("geosite-cn.srs"))
+        );
     }
 
     #[test]

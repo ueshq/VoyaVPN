@@ -10,6 +10,7 @@ import { blockerScanFiles, findProductionBlockersInText } from "./readiness/bloc
 import { validateStableUpdaterConfigMetadata } from "./readiness/evidence.mjs";
 import {
   checkCoreSeedPinning,
+  checkRuleSetSeedPinning,
   checkStableEnvironment,
   hasSigningInput,
 } from "./readiness/prerequisites.mjs";
@@ -245,6 +246,31 @@ describe("release readiness core seed pinning", () => {
     });
     expect(verified.results.fail).toEqual([]);
     expect(verified.results.pass[0].details[0]).toContain("matches the pinned SHA-256");
+  });
+
+  it("checks staged rule sets against their pins", async () => {
+    const absent = recordingReporter("stable");
+    await checkRuleSetSeedPinning(absent, { isStaged: () => false, verify: () => ({ ok: false }) });
+    expect(absent.results.fail).toEqual([]);
+
+    const verified = recordingReporter("stable");
+    await checkRuleSetSeedPinning(verified, { isStaged: () => true, verify: () => ({ code: "verified", ok: true }) });
+    expect(verified.results.pass).toHaveLength(1);
+
+    const tampered = recordingReporter("dry-run");
+    await checkRuleSetSeedPinning(tampered, {
+      isStaged: () => true,
+      verify: () => ({ code: "digest-mismatch", ok: false, reason: "geoip-cn.srs does not match" }),
+    });
+    expect(tampered.results.fail).toHaveLength(1);
+
+    const partial = recordingReporter("dry-run");
+    await checkRuleSetSeedPinning(partial, {
+      isStaged: () => true,
+      verify: () => ({ code: "missing", ok: false, reason: "geosite-cn.srs is not staged" }),
+    });
+    expect(partial.results.fail).toEqual([]);
+    expect(partial.results.warn).toHaveLength(1);
   });
 
   it("fails outright on a digest mismatch and blocks a stale or unpinned seed", async () => {

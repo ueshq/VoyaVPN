@@ -52,11 +52,16 @@
     },
     {
       "action": "reject",
+      "clash_mode": "Global",
       "ip_version": 6
     },
     {
       "outbound": "proxy",
       "clash_mode": "Global"
+    },
+    {
+      "action": "reject",
+      "ip_version": 6
     }
   ],
   "final": "proxy"

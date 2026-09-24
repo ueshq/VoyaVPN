@@ -92,3 +92,33 @@ genuine hash cannot be obtained stays absent from the table.
 app-data binary back into the repository seed directory. It is off by default:
 the app owns that directory and may replace the binary, so a back-fill would let
 an unverified binary flow into the next package build.
+
+## Default rule sets
+
+Packages also bundle the three rule sets the default routing profile names
+(`geosite-cn`, `geoip-cn`, `geosite-private`), so a fresh install routes China
+and LAN destinations directly before any download. The pins live in
+`RULE_SET_PINS` in `scripts/core/rule-sets-installer.mjs`: one upstream commit
+and one SHA-256 per file. Upstream (`2dust/sing-box-rules`) publishes them on
+the `rule-set-geosite` and `rule-set-geoip` branches and has no release tags,
+so a branch name alone would change under the build every day.
+
+`pnpm install` stages them into
+`apps/desktop/src-tauri/resources/core-seeds/rule_sets/` (skipped on CI unless
+`VOYAVPN_FETCH_RULE_SETS_ON_INSTALL=1`, and whenever
+`VOYAVPN_SKIP_RULE_SETS_POSTINSTALL=1`), and every `tauri build` re-stages any
+file that is missing or does not match its pin. `pnpm core:rule-sets:install`
+forces a fresh download. At startup the desktop app copies any bundled file
+that app data `bin/srss/` lacks; it never replaces one, because a rule-library
+update may have put a newer file there.
+
+To bump them:
+
+1. `git ls-remote https://github.com/2dust/sing-box-rules.git` and note the
+   `refs/heads/rule-set-geosite` and `refs/heads/rule-set-geoip` commits.
+2. Download each file from
+   `https://raw.githubusercontent.com/2dust/sing-box-rules/<commit>/<tag>.srs`,
+   check that it starts with `SRS`, and record its SHA-256.
+3. Update `RULE_SET_PINS` in one commit, then run
+   `pnpm core:rule-sets:install` and `pnpm release -- readiness --dry-run`.
+

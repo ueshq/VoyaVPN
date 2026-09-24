@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, net::IpAddr};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    net::IpAddr,
+};
 
 use crate::{
     singbox::support::state_port2,
@@ -95,6 +98,30 @@ impl TunTopology {
     }
 }
 
+/// How the generated config treats IPv6, derived from the TUN IPv6 switch and
+/// what is known about the active node's IPv6 egress.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ipv6Mode {
+    /// IPv6 resolves and routes on every path.
+    Full,
+    /// The switch is on but the active node (or a member of the active group)
+    /// is recorded as having no IPv6 egress: direct paths stay dual-stack,
+    /// proxy-path DNS defaults to `ipv4_only`, and IPv6 destinations that no
+    /// direct rule claims are rejected locally.
+    DirectOnly,
+    /// The switch is off: DNS is `ipv4_only` everywhere and IPv6 destinations
+    /// that no direct rule claims are rejected locally.
+    Off,
+}
+
+impl Ipv6Mode {
+    /// Whether IPv6 destinations left to the proxy are refused locally.
+    #[must_use]
+    pub const fn rejects_proxied_ipv6(self) -> bool {
+        !matches!(self, Self::Full)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct NodeValidatorResult {
     pub errors: Vec<ValidationMessage>,
@@ -176,6 +203,10 @@ pub struct CoreConfigContext {
     /// so the running core can measure them. Empty unless the orchestration
     /// layer asks for it; the builder never fills it.
     pub latency_probe_nodes: Vec<ProfileItem>,
+    /// The active node, or any member of the active group, is recorded as
+    /// having no IPv6 egress. Filled by the builder from
+    /// [`CoreGenEnv::ipv6_unsupported_nodes`]; see [`Self::ipv6_mode`].
+    pub ipv6_egress_unsupported: bool,
 }
 
 /// How a routing rule names a policy group as its outbound: this prefix and
@@ -212,6 +243,7 @@ impl Default for CoreConfigContext {
             policy_group: None,
             rule_policy_groups: Vec::new(),
             latency_probe_nodes: Vec::new(),
+            ipv6_egress_unsupported: false,
         }
     }
 }
@@ -235,6 +267,19 @@ impl CoreConfigContext {
     #[must_use]
     pub fn clash_api_port(&self) -> i32 {
         state_port2(&self.app_config, self.is_tun_enabled)
+    }
+
+    /// How this config treats IPv6: the switch decides between on and off,
+    /// and a node without IPv6 egress narrows "on" to the direct paths.
+    #[must_use]
+    pub const fn ipv6_mode(&self) -> Ipv6Mode {
+        if !self.app_config.tun_mode_item.enable_ipv6_address {
+            Ipv6Mode::Off
+        } else if self.ipv6_egress_unsupported {
+            Ipv6Mode::DirectOnly
+        } else {
+            Ipv6Mode::Full
+        }
     }
 }
 
@@ -307,6 +352,11 @@ pub trait CoreGenEnv {
     fn get_singbox_ruleset_paths(&self) -> BTreeMap<String, String> {
         BTreeMap::new()
     }
+    /// Ids of the nodes recorded as having no IPv6 egress. Injected by the
+    /// orchestration layer, which probes a node after connecting to it.
+    fn ipv6_unsupported_nodes(&self) -> BTreeSet<String> {
+        BTreeSet::new()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -346,6 +396,7 @@ where
             policy_group: None,
             rule_policy_groups: Vec::new(),
             latency_probe_nodes: Vec::new(),
+            ipv6_egress_unsupported: false,
         };
         let routing_item = self.env.get_default_routing(config);
 
@@ -360,6 +411,7 @@ where
         PreparedContextBuilder {
             base,
             routing_item,
+            ipv6_unsupported_nodes: self.env.ipv6_unsupported_nodes(),
             rules: prepared::RuleOutbounds {
                 all_proxies_map: resolved.all_proxies_map,
                 protect_domain_list: resolved.protect_domain_list,
@@ -423,6 +475,12 @@ where
             return result;
         };
         result.context.node = first;
+        // A group can switch members at any time, so one member without IPv6
+        // egress is enough to keep IPv6 off the proxy path for the group.
+        let unsupported = self.env.ipv6_unsupported_nodes();
+        result.context.ipv6_egress_unsupported = usable
+            .iter()
+            .any(|member| unsupported.contains(&member.index_id));
         result.context.policy_group = Some(ContextPolicyGroup {
             group: group.clone(),
             members: usable,
@@ -468,6 +526,9 @@ where
         let config = &node_context.app_config;
         let pre_socks_item = pre_socks_item(config, self.env)?;
         let mut pre_socks_result = self.build(config, &pre_socks_item);
+        // The TUN process forwards into the main process, so it answers DNS
+        // and rejects IPv6 exactly as the node behind it requires.
+        pre_socks_result.context.ipv6_egress_unsupported = node_context.ipv6_egress_unsupported;
         let pre_socks_domains = pre_socks_result.context.protect_domain_list.clone();
         pre_socks_result.context.protect_domain_list = node_context.protect_domain_list.clone();
         merge_protect_domains(
@@ -697,6 +758,7 @@ mod tests {
         profiles: Vec<ProfileItem>,
         routings: Vec<RoutingItem>,
         local_socks_port: i32,
+        ipv6_unsupported: BTreeSet<String>,
     }
 
     impl Default for MemoryEnv {
@@ -706,6 +768,7 @@ mod tests {
                 profiles: Vec::new(),
                 routings: Vec::new(),
                 local_socks_port: 10808,
+                ipv6_unsupported: BTreeSet::new(),
             }
         }
     }
@@ -735,6 +798,54 @@ mod tests {
                 _ => self.local_socks_port + protocol.port_offset(),
             }
         }
+
+        fn ipv6_unsupported_nodes(&self) -> BTreeSet<String> {
+            self.ipv6_unsupported.clone()
+        }
+    }
+
+    #[test]
+    fn context_records_a_node_without_ipv6_egress_for_every_config_it_reaches() {
+        let capable = vless_profile("capable", "Capable", "capable.example.com");
+        let limited = vless_profile("limited", "Limited", "limited.example.com");
+        let mut config = app_config("limited");
+        config.tun_mode_item.enable_tun = true;
+        let env = MemoryEnv {
+            profiles: vec![capable.clone(), limited.clone()],
+            ipv6_unsupported: BTreeSet::from(["limited".to_string()]),
+            ..MemoryEnv::default()
+        };
+        let builder = CoreConfigContextBuilder::new(&env);
+
+        assert_eq!(
+            builder.build(&config, &capable).context.ipv6_mode(),
+            Ipv6Mode::Full
+        );
+        // Linux TUN splits into two configs; the TUN one answers DNS and
+        // routes for the node behind it, so it inherits the node's limit.
+        let split = builder.build_all(&config, &limited);
+        assert_eq!(split.main_result.context.ipv6_mode(), Ipv6Mode::DirectOnly);
+        let pre_socks = &split.pre_socks_result.as_ref().expect("pre-socks").context;
+        assert_eq!(pre_socks.ipv6_mode(), Ipv6Mode::DirectOnly);
+
+        // A group may switch to any member, so one limited member limits it.
+        let group = crate::PolicyGroupItem {
+            id: "group".to_string(),
+            name: "Group".to_string(),
+            member_ids: vec!["capable".to_string(), "limited".to_string()],
+            ..crate::PolicyGroupItem::default()
+        };
+        let grouped = builder.build_for_group(&config, &group, &[capable.clone(), limited]);
+        assert!(grouped.success());
+        assert_eq!(grouped.context.ipv6_mode(), Ipv6Mode::DirectOnly);
+        let capable_only = builder.build_for_group(&config, &group, std::slice::from_ref(&capable));
+        assert_eq!(capable_only.context.ipv6_mode(), Ipv6Mode::Full);
+
+        config.tun_mode_item.enable_ipv6_address = false;
+        assert_eq!(
+            builder.build(&config, &capable).context.ipv6_mode(),
+            Ipv6Mode::Off
+        );
     }
 
     #[test]

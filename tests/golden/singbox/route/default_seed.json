@@ -74,7 +74,7 @@
         "server": "direct_dns"
       }
     ],
-    "strategy": "ipv4_only"
+    "strategy": null
   },
   "route": {
     "final": "proxy",
@@ -123,10 +123,6 @@
         "type": "logical"
       },
       {
-        "action": "reject",
-        "ip_version": 6
-      },
-      {
         "clash_mode": "Global",
         "outbound": "proxy"
       },
@@ -162,15 +158,6 @@
           "huggingface.co"
         ],
         "outbound": "proxy"
-      },
-      {
-        "action": "reject",
-        "network": [
-          "udp"
-        ],
-        "port": [
-          443
-        ]
       },
       {
         "domain": [
@@ -214,6 +201,15 @@
         "outbound": "direct",
         "rule_set": [
           "geoip-cn"
+        ]
+      },
+      {
+        "action": "reject",
+        "network": [
+          "udp"
+        ],
+        "port": [
+          443
         ]
       }
     ]

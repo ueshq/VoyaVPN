@@ -17,3 +17,4 @@ These ADRs are baseline contracts for the VoyaVPN full rewrite, based on the ini
 - [0011 - Self-Hosted Node](0011-self-hosted-node.md)
 - [0012 - Mobile Host and the FFI Boundary](0012-mobile-host-and-ffi-boundary.md)
 - [0013 - Mobile Tunnel Backends](0013-mobile-tunnel-backends.md)
+- [0014 - Node IPv6 Egress Detection](0014-node-ipv6-egress-detection.md)

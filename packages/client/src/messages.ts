@@ -43,6 +43,8 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   dnsRefreshFailed: "notices.dnsRefreshFailed",
   dnsSavedRestartFailed: "notices.dnsSavedRestartFailed",
   nativeTunStopped: "notices.nativeTunStopped",
+  nodeIpv6Restored: "notices.nodeIpv6Restored",
+  nodeIpv6Unsupported: "notices.nodeIpv6Unsupported",
   profileRefreshFailed: "notices.profileRefreshFailed",
   proxyModeSavedRuntimeUpdateFailed:
     "notices.proxyModeSavedRuntimeUpdateFailed",
@@ -109,6 +111,7 @@ export const CORE_FLOW_REASON_KEYS: Record<CoreFlowReason, TranslationKey> = {
   connectionModeChanged: "coreFlowReason.connectionModeChanged",
   disconnect: "coreFlowReason.disconnect",
   dnsChanged: "coreFlowReason.dnsChanged",
+  ipv6EgressChanged: "coreFlowReason.ipv6EgressChanged",
   restart: "coreFlowReason.restart",
   routingChanged: "coreFlowReason.routingChanged",
   settingsSaved: "coreFlowReason.settingsSaved",

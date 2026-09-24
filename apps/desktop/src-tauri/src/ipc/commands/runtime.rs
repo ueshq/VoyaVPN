@@ -130,6 +130,39 @@ where
     }
 
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
+        // What the IPv6 check found is news, not a failed post-commit step.
+        if matches!(
+            code,
+            NoticeCode::NodeIpv6Unsupported { .. } | NoticeCode::NodeIpv6Restored { .. }
+        ) {
+            tracing::info!(?code, "node IPv6 egress changed");
+            emit_or_warn(
+                &self.app,
+                AppEvent::Notice(AppNotice {
+                    level,
+                    code,
+                    detail: None,
+                }),
+                "IPv6 egress notice",
+            );
+            return;
+        }
         report_post_commit_error(&self.app, code, detail, level);
+    }
+
+    fn request_ipv6_egress_check(&self) {
+        let app = self.app.clone();
+        // The probe takes seconds and may reconnect, which needs the flow lock
+        // the settling connect still holds: run it on its own flow, later.
+        tauri::async_runtime::spawn(async move {
+            use tauri::Manager;
+
+            let Some(state) = app.try_state::<AppState>() else {
+                return;
+            };
+            core_flow(&app, &state)
+                .check_ipv6_egress(|| state.config_mutations().current_config())
+                .await;
+        });
     }
 }

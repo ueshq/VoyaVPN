@@ -112,6 +112,20 @@ impl ProxyRuntimeManager {
             .map_err(Into::into)
     }
 
+    /// Measures `tag` through the running core by loading `test_url`.
+    pub async fn proxy_delay(
+        &self,
+        access: &ClashApiAccess,
+        tag: &str,
+        test_url: &str,
+        timeout_ms: u32,
+    ) -> Result<u32> {
+        self.client(access)?
+            .proxy_delay(tag, test_url, timeout_ms)
+            .await
+            .map_err(Into::into)
+    }
+
     fn client(&self, access: &ClashApiAccess) -> Result<ClashRestClient> {
         let endpoint = proxy_runtime_endpoint(access).ok_or(ProxyRuntimeError::InvalidStatePort)?;
         Ok(ClashRestClient::with_transport(

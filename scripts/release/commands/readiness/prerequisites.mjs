@@ -4,6 +4,11 @@ import {
   DEFAULT_SING_BOX_VERSION,
   verifyStagedSingBoxSeed,
 } from "../../../core/sing-box-installer.mjs";
+import {
+  hasStagedRuleSets,
+  ruleSetSeedDir,
+  verifyStagedRuleSets,
+} from "../../../core/rule-sets-installer.mjs";
 import { repoRoot, resolveRepoPath, isDryRun } from "./inputs.mjs";
 
 const requiredDocs = [
@@ -111,6 +116,39 @@ export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStaged
   reporter.pass("bundled sing-box seed", [
     `${verification.manifest.assetName} matches the pinned SHA-256 ${verification.manifest.sha256}`,
   ]);
+}
+
+/**
+ * Re-verifies the default rule sets `pnpm tauri:build` would bundle, against
+ * the pins in scripts/core/rule-sets-installer.mjs. Like the sing-box seed they
+ * are gitignored, so nothing else looks at the staged bytes.
+ */
+export async function checkRuleSetSeedPinning(
+  reporter,
+  {
+    isStaged = () => hasStagedRuleSets(ruleSetSeedDir(repoRoot)),
+    verify = verifyStagedRuleSets,
+  } = {},
+) {
+  if (!isStaged()) {
+    reporter.pass("bundled rule sets", ["no rule sets staged; the build stages the pinned ones"]);
+    return;
+  }
+
+  const verification = verify({ repoRoot });
+  if (verification.ok) {
+    reporter.pass("bundled rule sets", ["every staged rule set matches its pinned SHA-256"]);
+    return;
+  }
+  const details = [
+    `staged rule sets cannot be trusted: ${verification.reason}`,
+    "run `pnpm core:rule-sets:install` to re-stage the pinned files",
+  ];
+  if (verification.code === "digest-mismatch") {
+    reporter.fail("bundled rule sets", details);
+  } else {
+    reporter.blocker("bundled rule sets", details);
+  }
 }
 
 const signingInputNames = [

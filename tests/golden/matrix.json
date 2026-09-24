@@ -184,7 +184,7 @@
       "core": "sing-box",
       "fixture": "singbox/route/default_seed.json",
       "generated": "singbox.route.default_seed",
-      "summary": "The routing profile a fresh install is seeded with: AI services via proxy, QUIC blocked, China DNS, LAN and China sites direct, as route and DNS rules.",
+      "summary": "The routing profile a fresh install is seeded with: AI services via proxy, China DNS, LAN and China sites direct, then QUIC blocked for what is left, as route and DNS rules.",
       "hotspots": [
         "routing",
         "dns",
@@ -192,6 +192,24 @@
       ],
       "reference_paths": [
         "crates/voya-core/src/routing_seed.rs"
+      ],
+      "core_acceptance": true,
+      "volatile_fields": []
+    },
+    {
+      "id": "singbox-route-default-seed-ipv6",
+      "core": "sing-box",
+      "fixture": "singbox/route/default_seed_ipv6.json",
+      "generated": "singbox.route.default_seed_ipv6",
+      "summary": "The default seed with IPv6 limited, switched off and on with a node without IPv6 egress: IPv6 destinations are refused in Global mode and after the rules, so direct rules still claim theirs; proxy-path DNS is IPv4 only.",
+      "hotspots": [
+        "routing",
+        "dns",
+        "ipv6"
+      ],
+      "reference_paths": [
+        "crates/voya-core/src/singbox/routing.rs",
+        "crates/voya-core/src/singbox/dns.rs"
       ],
       "core_acceptance": true,
       "volatile_fields": []

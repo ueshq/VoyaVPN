@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "node scripts/tauri/cli.mjs dev",
     "dev:web": "pnpm --filter @voya/desktop dev:web",
-    "postinstall": "node scripts/core/install-sing-box.mjs",
+    "postinstall": "node scripts/core/install-sing-box.mjs && node scripts/core/install-rule-sets.mjs",
     "build": "pnpm --filter @voya/desktop build",
     "build:mac": "node scripts/native/macos/build-app.mjs",
     "build:mac:local": "VOYAVPN_SKIP_NOTARIZATION=1 node scripts/native/macos/build-app.mjs",
@@ -39,6 +39,7 @@
     "size:report": "node scripts/quality/package-size.mjs",
     "bench:rust": "cargo bench -p voya-core --bench config_generation && cargo bench -p voya-app --bench subscription_import",
     "core:sing-box:install": "node scripts/core/install-sing-box.mjs --force",
+    "core:rule-sets:install": "node scripts/core/install-rule-sets.mjs --force",
     "verify:local": "node scripts/quality/verify-local.mjs",
     "release": "node scripts/release/cli.mjs",
     "tauri": "node scripts/tauri/cli.mjs",

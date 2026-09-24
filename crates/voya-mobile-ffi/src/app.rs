@@ -12,7 +12,7 @@
 
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, OnceLock, RwLock, Weak},
 };
 
 use voya_app::{
@@ -82,6 +82,10 @@ pub struct MobileState {
     /// phones, so every path through `core_flow` skips the proxy before it
     /// reaches this.
     pub(crate) system_proxy_manager: SystemProxyManager,
+    /// This state itself, for work a command starts but must not wait for
+    /// (the IPv6 egress check after a connect). Set once, right after the
+    /// state is shared; weak so the state does not keep itself alive.
+    pub(crate) this: OnceLock<Weak<MobileState>>,
 }
 
 #[derive(uniffi::Object)]
@@ -129,10 +133,10 @@ impl VoyaApp {
             probe_core,
         ))?;
 
-        Ok(Arc::new(Self {
-            runtime,
-            state: Arc::new(state),
-        }))
+        let state = Arc::new(state);
+        // Only this constructor sets it, once.
+        let _ = state.this.set(Arc::downgrade(&state));
+        Ok(Arc::new(Self { runtime, state }))
     }
 
     /// Runs one backend command.
@@ -229,6 +233,7 @@ async fn connect(
         speedtest,
         supervisor,
         system_proxy_manager,
+        this: OnceLock::new(),
     })
 }
 

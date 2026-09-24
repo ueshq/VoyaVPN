@@ -17,13 +17,15 @@ import { useToastStore } from "./toast-store";
 
 /**
  * Notices a user must not miss even with the app out of sight: the connection
- * stopping, the node or group in use disappearing, a tray action failing, a
- * subscription that stopped updating. The rest are only toasts.
+ * stopping, the node or group in use disappearing, the node turning out to
+ * have no IPv6, a tray action failing, a subscription that stopped updating.
+ * The rest are only toasts.
  */
 const BACKGROUND_NOTICE_CODES = new Set<NoticeCode["code"]>([
   "activeSelectionRemoved",
   "coreStopped",
   "nativeTunStopped",
+  "nodeIpv6Unsupported",
   "subscriptionAutoUpdateFailed",
   "trayActionFailed",
 ]);

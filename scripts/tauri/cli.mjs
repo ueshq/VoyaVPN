@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { ensureSingBoxSeedForBuild } from "../core/sing-box-installer.mjs";
+import { ensureCoreSeedsForBuild } from "../core/rule-sets-installer.mjs";
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
 import { writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
 import { macAppStoreFeature, requestedMacAppStoreBuild, writeMacAppStoreOverlay } from "./mac-app-store-config.mjs";
@@ -68,7 +68,7 @@ export async function prepareTauriInvocation(
   {
     repoRoot = repoRootFromScript(import.meta.url),
     sourceEnv = process.env,
-    ensureSeed = ensureSingBoxSeedForBuild,
+    ensureSeed = ensureCoreSeedsForBuild,
     writeCoreOverlay = writeOptionalCoreSeedOverlay,
     writeUpdaterOverlay = writeStableUpdaterOverlay,
     writeAppStoreOverlay = writeMacAppStoreOverlay,

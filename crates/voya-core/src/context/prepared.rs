@@ -1,7 +1,7 @@
 //! [`CoreConfigContextBuilder::build`] split in two, for runs that build one
 //! context per node.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
     resolve_node, validation::merge_protect_domains, ContextPolicyGroup, CoreConfigContext,
@@ -22,6 +22,7 @@ pub struct PreparedContextBuilder {
     /// The context before any node is registered, without its routing.
     pub(super) base: CoreConfigContext,
     pub(super) routing_item: Option<RoutingItem>,
+    pub(super) ipv6_unsupported_nodes: BTreeSet<String>,
     pub(super) rules: RuleOutbounds,
 }
 
@@ -41,6 +42,7 @@ impl PreparedContextBuilder {
     pub fn build(&self, node: &ProfileItem) -> CoreConfigContextBuilderResult {
         let mut context = self.base.clone();
         context.routing_item.clone_from(&self.routing_item);
+        context.ipv6_egress_unsupported = self.ipv6_unsupported_nodes.contains(&node.index_id);
         let node_result = resolve(&mut context, node);
         if !node_result.success() {
             return CoreConfigContextBuilderResult {

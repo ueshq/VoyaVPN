@@ -257,6 +257,15 @@ jobs:
           path: apps/desktop/src-tauri/resources/core-seeds/sing_box
           key: ${{ runner.os }}-${{ runner.arch }}-sing-box-seed-${{ hashFiles('scripts/core/sing-box-installer.mjs') }}
 
+      # tauri:build also stages the default rule sets. The key hashes the
+      # installer that holds their commit and SHA-256 pins, and a restored copy
+      # is re-verified against those pins and re-staged on any mismatch.
+      - name: Cache rule-set seeds
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apps/desktop/src-tauri/resources/core-seeds/rule_sets
+          key: rule-set-seeds-${{ hashFiles('scripts/core/rule-sets-installer.mjs') }}
+
       - name: Run real desktop smoke
         run: xvfb-run -a pnpm run check:desktop:smoke
 

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use voya_core::{
     AppConfig, ContextPolicyGroup, CoreGenEnv, CoreGenPlatform, InboundProtocol, PolicyGroupItem,
@@ -16,6 +16,7 @@ pub(crate) struct SnapshotCoreGenEnv {
     policy_groups: Vec<PolicyGroupItem>,
     singbox_ruleset_paths: BTreeMap<String, String>,
     clash_api_secret: Option<String>,
+    ipv6_unsupported_nodes: BTreeSet<String>,
 }
 
 impl SnapshotCoreGenEnv {
@@ -41,6 +42,7 @@ impl SnapshotCoreGenEnv {
             policy_groups: Vec::new(),
             singbox_ruleset_paths: BTreeMap::new(),
             clash_api_secret: None,
+            ipv6_unsupported_nodes: BTreeSet::new(),
         }
     }
 
@@ -55,6 +57,12 @@ impl SnapshotCoreGenEnv {
         singbox_ruleset_paths: BTreeMap<String, String>,
     ) -> Self {
         self.singbox_ruleset_paths = singbox_ruleset_paths;
+        self
+    }
+
+    /// Nodes recorded as having no IPv6 egress (see [`crate::ipv6_egress`]).
+    pub(crate) fn with_ipv6_unsupported_nodes(mut self, nodes: BTreeSet<String>) -> Self {
+        self.ipv6_unsupported_nodes = nodes;
         self
     }
 
@@ -113,6 +121,10 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
 
     fn get_clash_api_secret(&self) -> Option<String> {
         self.clash_api_secret.clone()
+    }
+
+    fn ipv6_unsupported_nodes(&self) -> BTreeSet<String> {
+        self.ipv6_unsupported_nodes.clone()
     }
 }
 

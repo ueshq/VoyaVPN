@@ -49,7 +49,7 @@ export function makeAppSettings({
         autoRoute: true,
         enabled: false,
         icmpRouting: "rule",
-        ipv6Enabled: false,
+        ipv6Enabled: true,
         mtu: 9_000,
         stack: "system",
         strictRoute: true,

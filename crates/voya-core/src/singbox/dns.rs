@@ -7,10 +7,9 @@ pub(super) fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let use_direct_dns = final_dns_uses_direct(context);
     let dns = config.dns.get_or_insert_with(SingboxDns::default);
     dns.independent_cache = Some(true);
-    // Master switch: suppress AAAA on every path while IPv6 traffic is off.
-    // Rule-level strategies yield to this (see `dns_strategy`).
-    dns.strategy =
-        (!context.app_config.tun_mode_item.enable_ipv6_address).then(|| "ipv4_only".to_string());
+    // Master switch: suppress AAAA on every path while IPv6 is off. Rule-level
+    // strategies yield to this (see `direct_dns_strategy`/`proxy_dns_strategy`).
+    dns.strategy = (context.ipv6_mode() == Ipv6Mode::Off).then(|| IPV4_ONLY.to_string());
     dns.final_server = Some(
         if use_direct_dns {
             SINGBOX_DIRECT_DNS_TAG
@@ -39,7 +38,7 @@ pub(super) fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
     // reach `final`; with IPv6 off the top-level `ipv4_only` already covers it.
     if !use_direct_dns {
         if let Some(strategy) =
-            dns_strategy(context, context.simple_dns_item.strategy4_proxy.as_deref())
+            proxy_dns_strategy(context, context.simple_dns_item.strategy4_proxy.as_deref())
         {
             dns.rules.push(SingboxRule {
                 server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
@@ -50,18 +49,40 @@ pub(super) fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
     }
 }
 
-/// Rule-level DNS domain strategy under the IPv6 master switch.
+const IPV4_ONLY: &str = "ipv4_only";
+
+/// Rule-level DNS strategy for a query answered on the direct path.
 ///
-/// While `enable_ipv6_address` is off, every rule defers to the top-level
-/// `dns.strategy: "ipv4_only"` — an explicit IPv6 preference would contradict
-/// the switch, and a rule-level override would undo the suppression. When
-/// IPv6 is on, an explicit UseIPv4/UseIPv6/ForceIPv4/ForceIPv6 (or its
+/// While IPv6 is off every rule defers to the top-level
+/// `dns.strategy: "ipv4_only"`: an explicit IPv6 preference would contradict
+/// the switch, and a rule-level override would undo the suppression.
+/// Otherwise an explicit UseIPv4/UseIPv6/ForceIPv4/ForceIPv6 (or its
 /// default-like `AsIs`/`UseIP`) is mapped through `domain_strategy4_sbox`.
-pub(crate) fn dns_strategy(context: &CoreConfigContext, explicit: Option<&str>) -> Option<String> {
-    if !context.app_config.tun_mode_item.enable_ipv6_address {
-        return None;
+pub(crate) fn direct_dns_strategy(
+    context: &CoreConfigContext,
+    explicit: Option<&str>,
+) -> Option<String> {
+    match context.ipv6_mode() {
+        Ipv6Mode::Off => None,
+        Ipv6Mode::Full | Ipv6Mode::DirectOnly => domain_strategy4_sbox(explicit),
     }
-    domain_strategy4_sbox(explicit)
+}
+
+/// Rule-level DNS strategy for a query whose connection goes through a node.
+///
+/// Like [`direct_dns_strategy`], except that a node recorded without IPv6
+/// egress gets `ipv4_only` whatever was chosen: an AAAA answer would send
+/// the client to an address the node cannot reach, and the connection would
+/// die after the local handshake.
+pub(crate) fn proxy_dns_strategy(
+    context: &CoreConfigContext,
+    explicit: Option<&str>,
+) -> Option<String> {
+    match context.ipv6_mode() {
+        Ipv6Mode::Off => None,
+        Ipv6Mode::DirectOnly => Some(IPV4_ONLY.to_string()),
+        Ipv6Mode::Full => domain_strategy4_sbox(explicit),
+    }
 }
 
 fn gen_dns_servers(config: &mut SingboxConfig, context: &CoreConfigContext) {
@@ -170,7 +191,7 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
     if !context.protect_domain_list.is_empty() {
         rules.push(SingboxRule {
             server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
-            strategy: dns_strategy(context, simple_dns.strategy4_freedom.as_deref()),
+            strategy: direct_dns_strategy(context, simple_dns.strategy4_freedom.as_deref()),
             domain: Some(context.protect_domain_list.clone()),
             ..SingboxRule::default()
         });
@@ -179,7 +200,7 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
     // Mirror the route generator: Global mode precedes the user's rules.
     rules.push(SingboxRule {
         server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
-        strategy: dns_strategy(context, simple_dns.strategy4_proxy.as_deref()),
+        strategy: proxy_dns_strategy(context, simple_dns.strategy4_proxy.as_deref()),
         clash_mode: Some("Global".to_string()),
         ..SingboxRule::default()
     });
@@ -286,7 +307,8 @@ fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigCo
         match item.outbound_tag.as_deref() {
             Some(DIRECT_TAG) => {
                 rule.server = Some(SINGBOX_DIRECT_DNS_TAG.to_string());
-                rule.strategy = dns_strategy(context, simple_dns.strategy4_freedom.as_deref());
+                rule.strategy =
+                    direct_dns_strategy(context, simple_dns.strategy4_freedom.as_deref());
                 if !expected_ip_regions.is_empty() && !region_name.is_empty() {
                     if let Some(geosite) = &mut rule.geosite {
                         let matched_geosite = geosite
@@ -324,7 +346,7 @@ fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigCo
                     rules.push(fake_rule);
                 }
                 rule.server = Some(SINGBOX_REMOTE_DNS_TAG.to_string());
-                rule.strategy = dns_strategy(context, simple_dns.strategy4_proxy.as_deref());
+                rule.strategy = proxy_dns_strategy(context, simple_dns.strategy4_proxy.as_deref());
             }
         }
 

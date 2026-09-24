@@ -13,6 +13,8 @@ pub(crate) const BIN_CONFIG_DIR_NAME: &str = "binConfigs";
 pub(crate) const LOG_DIR_NAME: &str = "guiLogs";
 pub(crate) const TEMP_DIR_NAME: &str = "guiTemps";
 pub(crate) const CORE_SEED_RESOURCE_DIR_NAME: &str = "core-seeds";
+/// The default routing profile's rule sets inside the packaged core seeds.
+pub const RULE_SET_SEED_DIR_NAME: &str = "rule_sets";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppPaths {

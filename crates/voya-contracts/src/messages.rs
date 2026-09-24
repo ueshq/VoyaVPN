@@ -81,6 +81,16 @@ pub enum NoticeCode {
     SubscriptionAutoUpdateFailed {
         remarks: String,
     },
+    // ---- node capabilities ----
+    /// The connected node could not reach IPv6 destinations, so IPv6 is kept
+    /// to direct routes while it is in use.
+    NodeIpv6Unsupported {
+        remarks: String,
+    },
+    /// A node recorded without IPv6 egress reached IPv6 again.
+    NodeIpv6Restored {
+        remarks: String,
+    },
     // ---- self-hosted node ----
     /// The node's core kept exiting and was left stopped.
     SelfHostGaveUp,
@@ -108,6 +118,8 @@ pub enum CoreFlowReason {
     ActiveProfileChanged,
     PolicyGroupChanged,
     SettingsSaved,
+    /// The connected node's IPv6 egress turned out different from its record.
+    Ipv6EgressChanged,
 }
 
 /// A log line the **app** wrote, named by code.

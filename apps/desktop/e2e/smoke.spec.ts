@@ -613,22 +613,22 @@ test("edits routing and DNS settings without network or OS side effects", async 
   await expect(ruleSwitches.nth(0)).toHaveAccessibleName(
     "Enable AI services via proxy",
   );
-  const quicHandle = page.getByRole("button", {
-    name: "Reorder Block QUIC (UDP 443)",
+  const adsHandle = page.getByRole("button", {
+    name: "Reorder Block ads",
   });
-  await quicHandle.focus();
+  await adsHandle.focus();
   await page.keyboard.press("Space");
-  await expect(quicHandle).toHaveAttribute("aria-pressed", "true");
+  await expect(adsHandle).toHaveAttribute("aria-pressed", "true");
   await expect(async () => {
     await page.keyboard.press("ArrowUp");
     await expect(
-      page.getByText("Block QUIC (UDP 443) is over position 1."),
+      page.getByText("Block ads is over position 1."),
     ).toBeAttached({ timeout: 500 });
   }).toPass();
   await page.keyboard.press("Space");
-  await expect(quicHandle).not.toHaveAttribute("aria-pressed", "true");
+  await expect(adsHandle).not.toHaveAttribute("aria-pressed", "true");
   await expect(ruleSwitches.nth(0)).toHaveAccessibleName(
-    "Enable Block QUIC (UDP 443)",
+    "Enable Block ads",
   );
   await expect(ruleSwitches.nth(1)).toHaveAccessibleName(
     "Enable AI services via proxy",

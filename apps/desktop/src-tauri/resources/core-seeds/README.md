@@ -45,3 +45,16 @@ On Windows and Linux, if a user's `bin/sing_box/` is empty at connect time, the 
 one-click **Install core** prompt that re-runs the seed copy
 (`install_core_seed` command). There is no core download/update fallback;
 sing-box updates are delivered by shipping a new app package.
+
+## Default rule sets
+
+`rule_sets/` holds the sing-box rule sets the default routing profile names
+(`geosite-cn.srs`, `geoip-cn.srs`, `geosite-private.srs`) and their
+`rule-sets.seed.json` manifest. They are not committed either: `pnpm install`
+and every package build stage them from the commits and SHA-256 values pinned in
+`scripts/core/rule-sets-installer.mjs` (`pnpm core:rule-sets:install` forces a
+fresh download). The package carries only the `.srs` files, and on every OS the
+app copies any of them that app data `bin/srss/` lacks at startup
+(`voya_app::updates::install_seed_rule_sets`). See
+`docs/release/sing-box-seed-pinning.md`.
+
