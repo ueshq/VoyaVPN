@@ -309,9 +309,9 @@ impl<'runtime> RuntimeManager<'runtime> {
         context: &CoreConfigContext,
         config_file_name: &str,
     ) -> Result<CoreProcessSpec, RuntimeError> {
-        let spec = if self.target_os == TargetOs::Macos {
-            // The PacketTunnel extension runs sing-box through Libbox; the
-            // packaged seed only measures nodes while disconnected.
+        let spec = if matches!(self.target_os, TargetOs::Macos | TargetOs::Ios) {
+            // macOS and iOS run sing-box inside the PacketTunnel provider;
+            // connecting never requires a standalone executable on disk.
             CoreProcessSpec::native_tun()
         } else {
             let executable = resolve_core_executable(
@@ -834,12 +834,21 @@ mod tests {
         assert!(contexts.main_result.context.is_tun_enabled);
     }
 
-    /// The PacketTunnel runs the macOS connection: connecting must not look
-    /// for a sing-box executable, and the config it hands the PacketTunnel
+    /// The native provider runs the connection: connecting must not look
+    /// for a sing-box executable, and the config it hands the provider
     /// carries a probe outbound for every node so the speedtest can measure
     /// through it while connected.
     #[tokio::test]
     async fn runtime_macos_native_tun_writes_single_tun_config() {
+        assert_native_tun_writes_single_tun_config(TargetOs::Macos).await;
+    }
+
+    #[tokio::test]
+    async fn runtime_ios_native_tun_writes_single_tun_config() {
+        assert_native_tun_writes_single_tun_config(TargetOs::Ios).await;
+    }
+
+    async fn assert_native_tun_writes_single_tun_config(target_os: TargetOs) {
         let database = Database::connect_in_memory()
             .await
             .expect("runtime test operation should succeed");
@@ -853,11 +862,11 @@ mod tests {
                 Arc::new(runner.clone()),
                 Arc::new(voya_platform::privilege::ElevationState::new()),
             )
-            .with_target_os(TargetOs::Macos)
+            .with_target_os(target_os)
             .with_native_tun_controller(Arc::new(TestNativeTunController)),
         );
         let manager =
-            RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Macos);
+            RuntimeManager::with_target_os(&database, paths.clone(), supervisor, target_os);
         let config = AppConfig {
             index_id: "active".to_string(),
             tun_mode_item: voya_core::TunModeItem {
@@ -894,7 +903,7 @@ mod tests {
                 .expect("inbounds")
                 .iter()
                 .any(|inbound| inbound["type"] == "tun"),
-            "native macOS TUN must pass a tun inbound to PacketTunnel"
+            "native TUN must pass a tun inbound to the provider on {target_os:?}"
         );
         let probes = json["outbounds"]
             .as_array()
