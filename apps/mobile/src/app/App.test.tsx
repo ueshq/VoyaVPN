@@ -19,7 +19,7 @@ describe("App", () => {
     // the tab labels come from.
     const view = await render(<App />);
 
-    for (const label of ["Home", "Nodes", "Rules", "Network activity", "Settings"]) {
+    for (const label of ["Home", "Nodes", "Rules", "Activity", "Settings"]) {
       expect(view.getAllByText(label).length).toBeGreaterThan(0);
     }
 

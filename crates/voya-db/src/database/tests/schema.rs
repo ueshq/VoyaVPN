@@ -391,3 +391,48 @@ async fn retired_profile_transports_and_tls_keys_are_normalized_once() {
         database.close().await;
     }
 }
+
+#[tokio::test]
+async fn cancelled_memory_pool_acquires_preserve_the_migrated_database() {
+    let database = Database::connect_in_memory().await.expect("database");
+    let options = database.pool().options();
+    assert!(!options.get_test_before_acquire());
+    assert_eq!(options.get_idle_timeout(), None);
+    assert_eq!(options.get_max_lifetime(), None);
+    for _ in 0..32 {
+        let held = database.pool().acquire().await.expect("hold connection");
+        let pool = database.pool().clone();
+        let waiting = tokio::spawn(async move { pool.acquire().await });
+        tokio::task::yield_now().await;
+        waiting.abort();
+        let _ = waiting.await;
+        drop(held);
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM self_host")
+            .fetch_one(database.pool())
+            .await
+            .expect("schema survives cancelled acquire");
+        assert_eq!(count, 0);
+    }
+}
+
+#[tokio::test]
+async fn idle_memory_pool_acquire_has_no_cancellation_point() {
+    use std::future::Future;
+    use std::task::{Context, Poll, Waker};
+
+    let database = Database::connect_in_memory().await.expect("database");
+    let mut connection = database.pool().acquire().await.expect("connection");
+    connection.return_to_pool().await;
+    assert_eq!(database.pool().num_idle(), 1);
+
+    // A ping introduces an await after SQLx takes ownership of the sole idle
+    // connection. Cancelling there drops the database. Poll exactly once to
+    // prove that an idle acquisition now completes without that suspension.
+    let mut acquire = Box::pin(database.pool().acquire());
+    let mut context = Context::from_waker(Waker::noop());
+    let Poll::Ready(Ok(mut connection)) = acquire.as_mut().poll(&mut context) else {
+        panic!("an idle in-memory connection must be acquired without suspension");
+    };
+    connection.return_to_pool().await;
+    database.self_host().load().await.expect("schema survives");
+}

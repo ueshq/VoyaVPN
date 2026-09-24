@@ -64,7 +64,9 @@
     "native:mobile:ios:project": "node scripts/native/mobile/ios-project.mjs",
     "check:mobile:test": "pnpm --filter @voya/mobile test",
     "check:mobile:bundle": "node scripts/quality/mobile-bundle.mjs",
-    "check:mobile:swift": "node scripts/quality/mobile-swift.mjs"
+    "check:mobile:swift": "node scripts/quality/mobile-swift.mjs",
+    "check:mobile:ios:smoke": "node scripts/native/mobile/ios-smoke.mjs",
+    "check:mobile:ios:full": "node scripts/native/mobile/ios-smoke.mjs --full"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

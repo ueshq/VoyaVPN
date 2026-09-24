@@ -1,6 +1,8 @@
 import { useRef, useState } from "react";
 import { voyaCommands } from "@voya/client/transport";
-import type { Subscription } from "@voya/contracts";
+import type { Subscription, SubscriptionUpdateResult } from "@voya/contracts";
+import { useMountedRef } from "@voya/utils/use-mounted-ref";
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import {
   assertSubscriptionUpdated,
   formatSubscriptionUpdateSummary,
@@ -16,6 +18,7 @@ import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
  */
 const UPDATING_ALL = "all";
 const DELETING = "delete";
+const IMPORTED = "imported";
 
 /**
  * `Trigger` is whatever the caller wants focus to return to once a dialog
@@ -37,17 +40,20 @@ export function useNodeSubscriptions<Trigger = never>(
   );
   const pendingActionsRef = useRef(new Set<string>());
   const subscriptionTriggerRef = useRef<Trigger | null>(null);
+  const mounted = useMountedRef();
 
   function claimPending(key: string) {
-    if (pendingActionsRef.current.has(key)) return false;
+    if (!mounted.current || pendingActionsRef.current.has(key)) return false;
+    if (pendingActionsRef.current.has(UPDATING_ALL) || pendingActionsRef.current.has(IMPORTED)) return false;
+    if ((key === UPDATING_ALL || key === IMPORTED) && pendingActionsRef.current.size > 0) return false;
     pendingActionsRef.current.add(key);
-    setPendingActions(new Set(pendingActionsRef.current));
+    if (mounted.current) setPendingActions(new Set(pendingActionsRef.current));
     return true;
   }
 
   function releasePending(key: string) {
     pendingActionsRef.current.delete(key);
-    setPendingActions(new Set(pendingActionsRef.current));
+    if (mounted.current) setPendingActions(new Set(pendingActionsRef.current));
   }
 
   function openSubscription(subscription: Subscription | null, trigger?: Trigger) {
@@ -75,6 +81,40 @@ export function useNodeSubscriptions<Trigger = never>(
 
   function updateAllSubscriptions() {
     return runSubscriptionUpdate(null);
+  }
+
+  /** A source import is not complete until its nodes have been downloaded. */
+  async function updateImportedSubscriptions(ids: string[], isActive: () => boolean) {
+    const active = () => mounted.current && isActive();
+    if (ids.length === 0 || !active() || !claimPending(IMPORTED)) return;
+    const total: SubscriptionUpdateResult = {
+      imported: 0, updated: 0, skipped: 0, removedExisting: 0, messages: [],
+    };
+    const failures: string[] = [];
+    setOperationError(null);
+    setOperationMessage(t("panes.subscriptions.importUpdating"));
+    try {
+      for (const id of new Set(ids)) {
+        if (!active()) return;
+        try {
+          const result = await voyaCommands().updateSubscriptions(id, true, null);
+          assertSubscriptionUpdated(result, t);
+          total.imported += result.imported;
+          total.updated += result.updated;
+          total.removedExisting += result.removedExisting;
+          failures.push(...result.messages.map((message) => redactOperationalError(message)));
+        } catch (error) {
+          failures.push(redactOperationalError(error));
+        }
+      }
+      if (!active()) return;
+      setOperationMessage(formatSubscriptionUpdateSummary(total, t));
+      if (failures.length > 0) {
+        setOperationError(`${t("panes.subscriptions.importUpdateFailed")}\n${[...new Set(failures)].join("\n")}`);
+      }
+    } finally {
+      releasePending(IMPORTED);
+    }
   }
 
   async function removeSubscription() {
@@ -107,7 +147,8 @@ export function useNodeSubscriptions<Trigger = never>(
     openSubscription,
     updateAllSubscriptions,
     updateSubscription,
-    updatingAllSubscriptions: pendingActions.has(UPDATING_ALL),
+    updateImportedSubscriptions,
+    updatingAllSubscriptions: pendingActions.has(UPDATING_ALL) || pendingActions.has(IMPORTED),
     updatingSubscriptions: pendingActions,
     subscriptionTriggerRef,
   };

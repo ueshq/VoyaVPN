@@ -4,6 +4,7 @@ module.exports = {
   // stands one in. Jest runs these after the preset's own `setupFiles`.
   setupFiles: ["react-native-gesture-handler/jestSetup"],
   setupFilesAfterEnv: ["<rootDir>/src/test/setup.ts"],
+  transform: { "^.+\\.(js|jsx|ts|tsx|mjs)$": "babel-jest" },
   moduleNameMapper: {
     "^~/(.*)$": "<rootDir>/src/$1",
   },
@@ -19,6 +20,6 @@ module.exports = {
   // are never ignored. Reanimated, Worklets and Gesture Handler are covered by
   // the `react-native` substring already.
   transformIgnorePatterns: [
-    "node_modules/(?!.*(react-native|@react-navigation|test-renderer|uniwind|heroui-native|@gorhom))",
+    "node_modules/(?!.*(react-native|@react-navigation|test-renderer|uniwind|heroui-native|@gorhom|@lucide))",
   ],
 };

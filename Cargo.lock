@@ -6592,7 +6592,6 @@ dependencies = [
  "igd-next",
  "percent-encoding",
  "reqwest",
- "ring",
  "rustls",
  "rustls-native-certs",
  "serde",

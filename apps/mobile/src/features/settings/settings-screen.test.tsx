@@ -1,4 +1,4 @@
-import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { act, render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import type { QueryClient } from "@tanstack/react-query";
 import type { MockBackend } from "@voya/client/mock-backend";
 import { usePreferencesStore } from "@voya/client/preferences-store";
@@ -123,6 +123,25 @@ describe("SettingsScreen", () => {
     await user.press(await screen.findByRole("switch", { name: "FakeIP" }));
 
     await waitFor(() => expect(backend().state.settings.dns.fakeIp).toBe(true));
+  });
+
+  it("derives log status from the saved switch and only core log sources", async () => {
+    backend().state.settings.core.logEnabled = true;
+    await renderSettings();
+    expect(await screen.findByText("Detailed connection logging is enabled; no core logs yet.")).toBeOnTheScreen();
+    for (const source of ["diagnostic", "app", "core"] as const) {
+      await act(() => useRuntimeEventStore.setState({ logLines: [{
+        id: 1, loggedAt: Date.now(), level: "info", body: source === "app"
+          ? { source, code: { code: "disconnected" }, detail: null }
+          : { source, line: "history" },
+      }] }));
+      expect(screen.getByText(source === "core"
+        ? "Detailed connection logging is enabled; core logs have been received."
+        : "Detailed connection logging is enabled; no core logs yet.")).toBeOnTheScreen();
+    }
+    await userEvent.setup().press(screen.getByRole("switch", { name: "Record detailed connection log" }));
+    await waitFor(() => expect(backend().state.settings.core.logEnabled).toBe(false));
+    expect(await screen.findByText(/Detailed connection logging is off/)).toBeOnTheScreen();
   });
 
   it("streams the core log only while it is open, and says when there is none", async () => {

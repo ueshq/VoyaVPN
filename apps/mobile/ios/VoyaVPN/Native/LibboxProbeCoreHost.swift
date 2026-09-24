@@ -14,10 +14,10 @@ import Network
  * links Libbox too and runs a TUN-less instance from the generated probe
  * config, whose only inbounds are the SOCKS listeners the run measures over.
  *
- * The working directory is `PTest/` at the App Group container root, kept
- * apart from the provider's `PT/`: libbox binds `<base>/command.sock`, the OS
- * caps `sun_path` at 104 bytes, and two instances sharing a base would fight
- * over one socket.
+ * Per-run files live under `PTest/`, separate from the provider's `PT/`.
+ * This host calls the service in-process and never starts libbox's optional
+ * command listener. In particular, simulator container paths can exceed the
+ * 104-byte Unix socket limit; no control socket is needed for a probe.
  *
  * While *connected* this is never asked. `speedtest::running_core` measures
  * through the provider's Clash API instead, because a probe core's own
@@ -28,11 +28,33 @@ import Network
         private static let workingDirectoryName = "PTest"
 
         private let lock = NSLock()
-        private var instances: [String: LibboxCommandServer] = [:]
+        private struct Instance {
+            let server: LibboxCommandServer
+            let directory: URL
+        }
+
+        private var instances: [String: Instance] = [:]
+        private var starting = false
 
         func start(configJson: String) throws -> String {
+            lock.lock()
+            guard !starting, instances.isEmpty else {
+                lock.unlock()
+                throw ProbeCoreError.Failed(message: "a probe core is already running")
+            }
+            starting = true
+            lock.unlock()
+            defer {
+                lock.lock()
+                starting = false
+                lock.unlock()
+            }
             let coreId = UUID().uuidString
             let paths = try prepareWorkingDirectory(coreId: coreId)
+            var started = false
+            defer {
+                if !started { try? FileManager.default.removeItem(at: paths.base) }
+            }
 
             // Process-wide, so two probe cores at once would fight over it.
             // Nothing starts two: `SpeedtestManager` runs one core per run and
@@ -63,7 +85,8 @@ import Network
             }
 
             do {
-                try server.start()
+                // start() only opens the external gRPC command listener.
+                // The generated SOCKS probe inbounds belong to the service.
                 try server.startOrReloadService(configJson, options: LibboxOverrideOptions())
             } catch {
                 server.close()
@@ -73,23 +96,23 @@ import Network
             }
 
             lock.lock()
-            instances[coreId] = server
+            instances[coreId] = Instance(server: server, directory: paths.base)
             lock.unlock()
+            started = true
 
             return coreId
         }
 
         func stop(coreId: String) throws {
             lock.lock()
-            let server = instances.removeValue(forKey: coreId)
-            lock.unlock()
+            defer { lock.unlock() }
+            guard let instance = instances.removeValue(forKey: coreId) else { return }
 
-            guard let server else { return }
             // Closing the service first stops the inbounds; closing the server
             // releases the instance behind them.
-            try? server.closeService()
-            server.close()
-            try? FileManager.default.removeItem(at: workingRoot().appendingPathComponent(String(coreId.prefix(8))))
+            try? instance.server.closeService()
+            instance.server.close()
+            try? FileManager.default.removeItem(at: instance.directory)
         }
 
         private func workingRoot() -> URL {
@@ -97,8 +120,8 @@ import Network
         }
 
         private func prepareWorkingDirectory(coreId: String) throws -> (base: URL, working: URL, temp: URL) {
-            // One directory per run: a previous run that was killed rather than
-            // closed would otherwise leave its socket in the way.
+            // Isolate each run's cache and temporary files. No command socket
+            // is created here; normal and failed starts remove their own files.
             let base = workingRoot().appendingPathComponent(String(coreId.prefix(8)), isDirectory: true)
             let working = base.appendingPathComponent("Working", isDirectory: true)
             let temp = base.appendingPathComponent("Temp", isDirectory: true)
@@ -107,6 +130,7 @@ import Network
                     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 }
             } catch {
+                try? FileManager.default.removeItem(at: base)
                 throw ProbeCoreError.Failed(
                     message: "the probe working directory could not be created: \(error.localizedDescription)",
                 )

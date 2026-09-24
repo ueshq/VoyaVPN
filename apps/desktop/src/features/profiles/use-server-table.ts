@@ -29,10 +29,7 @@ export function useServerTable() {
     isActive: () => boolean = () => true,
   ) {
     await editor.handleDialogImport(result, isActive);
-    for (const id of result.addedSubscriptionIds) {
-      if (!isActive()) return;
-      await subscriptions.updateSubscription(id);
-    }
+    await subscriptions.updateImportedSubscriptions(result.addedSubscriptionIds, isActive);
   }
   const imports = useNodeImport(operation, handleImported, t);
   const speedtest = useNodeSpeedtest(operation);

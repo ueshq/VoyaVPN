@@ -72,7 +72,7 @@ export function RulesScreen() {
           }`}
         >
           <View className="flex-1 gap-0.5 pr-3">
-            <Typography className="text-body text-foreground" numberOfLines={1}>
+            <Typography className="text-body text-foreground">
               {name}
             </Typography>
             <Typography className="text-caption text-subtlest" numberOfLines={1}>

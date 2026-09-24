@@ -590,7 +590,9 @@
       "updateResult": "{{updated}} updated, {{imported}} nodes imported",
       "url": "URL",
       "userAgent": "User agent",
-      "updateResultWithRemoved": "{{updated}} updated, {{imported}} nodes imported, {{removed}} nodes no longer offered were removed"
+      "updateResultWithRemoved": "{{updated}} updated, {{imported}} nodes imported, {{removed}} nodes no longer offered were removed",
+      "importUpdating": "Updating imported subscriptions…",
+      "importUpdateFailed": "Some subscriptions could not be updated. Retry them below."
     },
     "selfHost": {
       "enable": "Host a node",
@@ -909,7 +911,9 @@
       "vpnOnly": "Available in VPN mode. Choose it under Connection → Traffic capture."
     },
     "logs": {
-      "coreLogOff": "Detailed connection logging is off, so only VoyaVPN's own messages appear here. Turn on “Record detailed connection log” above for connection details."
+      "coreLogOff": "Detailed connection logging is off, so only VoyaVPN's own messages appear here. Turn on “Record detailed connection log” above for connection details.",
+      "coreLogWaiting": "Detailed connection logging is enabled; no core logs yet.",
+      "coreLogReceived": "Detailed connection logging is enabled; core logs have been received."
     }
   },
   "speedtest": {
@@ -975,7 +979,8 @@
     "profiles": "Nodes",
     "rules": "Rules",
     "settings": "Settings",
-    "selfHost": "Self-hosted node"
+    "selfHost": "Self-hosted node",
+    "activityShort": "Activity"
   },
   "updates": {
     "appInstalled": "App update installed: {{version}}",

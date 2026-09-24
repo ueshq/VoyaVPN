@@ -23,7 +23,6 @@ percent-encoding = "2.3"
 # `tls_backend_preconfigured`, which is also what preserves the 09-19 root
 # cache (startup 420 → 31 ms).
 reqwest = { version = "0.13", default-features = false, features = ["charset", "gzip", "http2", "json", "rustls-no-provider", "socks"] }
-ring = "0.17"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde.workspace = true
 serde_json.workspace = true

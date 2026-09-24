@@ -68,9 +68,9 @@ for (const layout of ["macos", "windows"] as const) {
       );
       expect(calls).toEqual(
         expect.arrayContaining([
-          "plugin:window|minimize",
-          "plugin:window|toggle_maximize",
-          "plugin:window|close",
+          "minimize_window",
+          "toggle_maximize_window",
+          "close_window",
         ]),
       );
     } else {

@@ -1,401 +1,407 @@
 import XCTest
+import Vision
 
-/// The simulator half of the acceptance checks.
-///
-/// What these prove is the one thing the Jest suite cannot: that the screens
-/// are driving the **real** backend — `crates/voya-mobile-ffi` through the
-/// `VoyaNative` TurboModule — rather than the shared in-memory mock that
-/// `transport.ts` falls back to when the module is missing. Every case below
-/// is a round trip into Rust and back.
-///
-/// They run in order and share one install, because the app's database is the
-/// state under test: a node imported by one case is what the next selects,
-/// shares and finally deletes. XCTest runs a class's tests alphabetically,
-/// which is what the numeric prefixes are for. The runner uninstalls the app
-/// first so the database starts empty — see `docs/release/mobile-ios-signing.md`.
-///
-/// Not here, because a simulator cannot do them: starting a tunnel, the VPN
-/// authorization prompt, and anything that needs the extension to run. Those
-/// stay in the device checklist.
+/// Release app, real native host, no mock transport or production test hooks.
+/// Every flow imports its own fixture; no test depends on another test's data.
 final class VoyaVPNUITests: XCTestCase {
     private var app: XCUIApplication!
-
-    /// Generous: a cold React Native launch plus opening SQLite is not fast,
-    /// and a flaky timeout reads as a product failure.
     private let timeout: TimeInterval = 30
 
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-    }
-
-    // MARK: - Cases
-
-    /// The one that decides whether any of the rest means anything.
-    ///
-    /// The mock backend seeds three nodes (🇯🇵 Tokyo, 🇸🇬 Singapore,
-    /// 🇺🇸 Los Angeles). The real one opens an empty database. Seeing Tokyo
-    /// here means `TurboModuleRegistry.get("VoyaNative")` returned null and the
-    /// app quietly fell back to the mock.
-    func test00LaunchesOnTheRealBackend() {
-        launch()
-        open(tab: "Nodes")
-
-        XCTAssertTrue(waitFor(app.staticTexts["No nodes"]), "the node list should start empty")
-        XCTAssertFalse(app.staticTexts["🇯🇵 Tokyo"].exists, "this is the mock backend, not the host")
-    }
-
-    func test01ImportsANodeFromTheClipboard() {
-        UIPasteboard.general.string = Self.shareLink
-        launch()
-        open(tab: "Nodes")
-
-        app.buttons["Import from clipboard"].tap()
-        allowPasteIfAsked()
-
-        XCTAssertTrue(waitFor(nodeRow()), "the imported node should be listed")
-    }
-
-    /// Selecting a node saves it *and* asks to connect. The simulator has no
-    /// tunnel, so the connect half fails — both halves are real round trips,
-    /// and the save is the one that has to stick.
-    func test02SelectsTheImportedNode() {
-        launch()
-        open(tab: "Nodes")
-
-        let node = nodeRow()
-        XCTAssertTrue(waitFor(node))
-        node.tap()
-
-        // The row's label carries its state, so this is the same element
-        // re-read rather than a separate badge.
-        XCTAssertTrue(
-            waitFor(app.buttons.matching(
-                NSPredicate(format: "label BEGINSWITH %@ AND label CONTAINS 'Selected'", Self.nodeName)
-            ).firstMatch),
-            "the backend should have recorded the active node"
-        )
-    }
-
-    func test03SwitchesTrafficMode() {
-        launch()
-        open(tab: "Rules")
-
-        // Both start disabled until the app has read the core's state back;
-        // tapping before then is a no-op that reads as a product failure.
-        let global = app.buttons["Global"]
-        XCTAssertTrue(waitForEnabled(global), "the mode switcher should come out of its pending state")
-        global.tap()
-
-        let banner = app.staticTexts[
-            "Global mode is on: all captured traffic goes through the proxy and these rules are skipped."
-        ]
-        XCTAssertTrue(waitFor(banner), "global mode should say the rules are skipped")
-
-        XCTAssertTrue(waitForEnabled(app.buttons["Rule"]))
-        app.buttons["Rule"].tap()
-        XCTAssertTrue(waitForDisappearance(banner), "leaving global mode should clear the banner")
-    }
-
-    /// The rules a fresh install seeds are the backend's own defaults, so this
-    /// also checks they arrive named rather than as their reserved remarks.
-    func test04TogglesASeededRule() {
-        launch()
-        open(tab: "Rules")
-
-        let rule = app.switches["AI services via proxy"]
-        XCTAssertTrue(waitFor(rule), "the default rule set should be seeded and named")
-
-        let before = rule.value as? String
-        rule.tap()
-
-        open(tab: "Home")
-        open(tab: "Rules")
-        XCTAssertTrue(waitFor(app.switches["AI services via proxy"]))
-        XCTAssertNotEqual(
-            app.switches["AI services via proxy"].value as? String,
-            before,
-            "the new state should have survived leaving the screen"
-        )
-    }
-
-    func test05RunsALatencyTest() {
-        launch()
-        open(tab: "Nodes")
-
-        let run = app.buttons["Test all"]
-        XCTAssertTrue(waitForEnabled(run), "a listed node should make the run available")
-        run.tap()
-
-        // The node points at a hostname that does not resolve, so the outcome
-        // is a failure — but the row moving off "Not tested" at all means the
-        // run reached the probe core and came back per node. Asserting on the
-        // button instead would prove nothing: it is titled "Test all" again the
-        // moment the run ends, and it was titled that before it started.
-        XCTAssertTrue(
-            waitFor(
-                app.buttons.matching(NSPredicate(
-                    format: "label BEGINSWITH %@ AND NOT (label CONTAINS 'Not tested')",
-                    Self.nodeName
-                )).firstMatch,
-                seconds: 120
-            ),
-            "every node should come back with an outcome"
-        )
-    }
-
-    func test06ActivityAsksForAConnectionFirst() {
-        launch()
-        open(tab: "Network activity")
-
-        XCTAssertTrue(waitFor(app.staticTexts["Connect to view network activity"]))
-    }
-
-    func test07SavesADnsResolver() {
-        launch()
-        open(tab: "Settings")
-
-        let field = app.textFields["Remote DNS"]
-        XCTAssertTrue(waitFor(field))
-        XCTAssertEqual(
-            field.value as? String,
-            Self.seededResolver,
-            "a fresh install should carry the backend's own default"
-        )
-
-        tapPastEndOfText(field)
-        deleteDown(to: Self.resolverScheme.count, in: field)
-        type(Self.resolverTail, into: field)
-
-        // The draft debounces and writes on its own; leaving and coming back is
-        // what proves the value went to the backend rather than staying in React.
-        open(tab: "Home")
-        open(tab: "Settings")
-        let reloaded = app.textFields["Remote DNS"]
-        XCTAssertTrue(waitFor(reloaded))
-        XCTAssertEqual(reloaded.value as? String, Self.resolver)
-    }
-
-    func test08SwitchesTheme() {
-        launch()
-        open(tab: "Settings")
-
-        let dark = app.buttons["Dark"]
-        XCTAssertTrue(waitFor(dark))
-        dark.tap()
-
-        XCTAssertTrue(
-            waitFor(app.buttons["Follow system"]),
-            "the other choices stay on screen"
-        )
-        XCTAssertTrue(dark.isSelected, "the chosen theme should be marked")
-    }
-
-    /// The rule library is fetched over the network, so how long it takes is
-    /// not this test's business — on this machine the same download has taken
-    /// under a minute and over three. What is asserted is the round trip: the
-    /// press reached the backend, and the backend came back.
-    func test09RefreshesTheRuleLibrary() {
-        launch()
-        open(tab: "Settings")
-
-        let never = app.staticTexts["Not updated from this device yet"]
-        XCTAssertTrue(waitFor(never), "a fresh install has never updated the rule library")
-
-        // Matched loosely because the spinner prepends "In progress" to the
-        // label for the length of the run — an exact-label query loses the
-        // element at exactly the moment this test is watching it.
-        let update = app.buttons
-            .matching(NSPredicate(format: "label CONTAINS 'Update now'")).firstMatch
-        XCTAssertTrue(waitFor(scrollTo(update)))
-        update.tap()
-
-        // Losing the button to its disabled state is the proof the command was
-        // dispatched rather than swallowed...
-        XCTAssertTrue(
-            wait(until: { !update.isEnabled || !never.exists }, seconds: 30),
-            "pressing should put the card into its updating state"
-        )
-        // ...and getting it back is the proof the backend answered. A failed
-        // download hands it back just as surely as a successful one; only
-        // silence would leave it disabled forever. A success additionally
-        // replaces the "never" line with a timestamp and a file count, which is
-        // what normally happens here.
-        XCTAssertTrue(
-            wait(until: { update.exists && update.isEnabled }, seconds: 300),
-            "the rule library should report an outcome"
-        )
-    }
-
-    func test10ShowsAShareQrCode() {
-        launch()
-        open(tab: "Nodes")
-
-        let node = nodeRow()
-        XCTAssertTrue(waitFor(node))
-        node.press(forDuration: 1.2)
-
-        XCTAssertTrue(waitFor(app.buttons["Show QR"]), "a long press should open the actions sheet")
-        app.buttons["Show QR"].tap()
-
-        // Rendered by `generate_qr_code` in Rust and drawn by react-native-svg;
-        // neither half is exercised anywhere else.
-        XCTAssertTrue(waitFor(app.images["Generated QR code"], seconds: 45))
-    }
-
-    func test11KeepsTheNodeAcrossARelaunch() {
-        launch()
-        open(tab: "Nodes")
-        XCTAssertTrue(waitFor(nodeRow()))
-
-        app.terminate()
-        launch()
-        open(tab: "Nodes")
-
-        XCTAssertTrue(
-            waitFor(nodeRow()),
-            "the node should have been written to the app's own SQLite database"
-        )
-    }
-
-    func test12DeletesTheNode() {
-        launch()
-        open(tab: "Nodes")
-
-        let node = nodeRow()
-        XCTAssertTrue(waitFor(node))
-        node.press(forDuration: 1.2)
-
-        XCTAssertTrue(waitFor(app.buttons["Delete"]))
-        app.buttons["Delete"].tap()
-
-        XCTAssertTrue(waitFor(app.staticTexts["No nodes"]), "the list should be empty again")
-    }
-
-    // MARK: - Fixtures
-
-    private static let nodeName = "Simulator node"
-    private static let seededResolver = "https://cloudflare-dns.com/dns-query"
-    /// The edit keeps the scheme of the value it replaces, and the test deletes
-    /// down to it rather than clearing the field: an empty resolver means "use
-    /// the default" to the backend, which hands the default straight back, so
-    /// the field has to go from one non-empty value to another.
-    private static let resolverScheme = "https://"
-    private static let resolverTail = "9.9.9.9/dns-query"
-    private static let resolver = resolverScheme + resolverTail
-    private static let shareLink =
-        "vless://11111111-1111-1111-1111-111111111111@node.example.test:443"
-            + "?security=tls&sni=node.example.test&type=ws&path=%2Fws#Simulator%20node"
-
-    // MARK: - Helpers
-
-    private func launch() {
+        addUIInterruptionMonitor(withDescription: "Clipboard permission") { alert in
+            let allow = alert.buttons["Allow Paste"]
+            guard allow.exists else { return false }
+            allow.tap()
+            return true
+        }
         app.launch()
-        // The shell suspends on the locale bundle, so the first frame is blank.
-        XCTAssertTrue(waitFor(tab("Home")), "the tab bar should come up")
+        XCTAssertTrue(app.buttons["tab-settings"].waitForExistence(timeout: timeout))
+        open("settings")
+        visible(row("English")).tap()
+        let system = app.buttons["Follow system"]
+        XCTAssertTrue(system.waitForExistence(timeout: timeout))
+        visible(system).tap()
+        open("home")
     }
 
-    private func open(tab name: String) {
-        let button = tab(name)
-        XCTAssertTrue(waitFor(button), "the \(name) tab should exist")
+    override func tearDownWithError() throws {
+        capture(name)
+        let tree = XCTAttachment(string: app.debugDescription)
+        tree.name = name + "-accessibility"
+        tree.lifetime = .keepAlways
+        add(tree)
+        app.terminate()
+    }
+
+    func testLaunchAndAllPages() {
+        open("profiles")
+        XCTAssertFalse(row("🇯🇵 Tokyo").exists, "the mock backend must not be installed")
+        for page in ["home", "profiles", "rules", "connections", "settings"] {
+            open(page)
+            capture(page)
+            XCUIDevice.shared.press(.home)
+            app.activate()
+            XCTAssertTrue(app.wait(for: .runningForeground, timeout: timeout))
+            // Selection alone is already true while SpringBoard is still
+            // restoring the window. Wait for the rendered page to settle
+            // before a subsequent tab tap can be treated as an app action.
+            captureStable("restored-\(page)")
+            XCTAssertTrue(wait { self.app.buttons["tab-" + page].isSelected })
+        }
+        open("connections")
+        XCTAssertTrue(app.staticTexts["Connect to view network activity"].exists)
+    }
+
+    func testNodeImportSearchShareQrDelete() throws {
+        let title = "QA Lifecycle"
+        open("profiles")
+        try importText("")
+        XCTAssertTrue(app.staticTexts["Clipboard is empty."].waitForExistence(timeout: timeout))
+        try importText("not-a-node")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'no importable'")).firstMatch.waitForExistence(timeout: timeout))
+        let link = "vless://22222222-2222-2222-2222-222222222222@qa.example.test:443?security=tls#QA%20Lifecycle"
+        try importText(link)
+        XCTAssertTrue(row(title).waitForExistence(timeout: timeout))
+        try importText(link)
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).count, 1)
+        let search = app.textFields["Search node name, address or subscription"]
+        search.tap()
+        search.typeText("qa.example.test")
+        XCTAssertTrue(row(title).exists)
+        search.typeText("missing")
+        XCTAssertTrue(app.staticTexts["No matching nodes"].waitForExistence(timeout: timeout))
+        clearSearch(search)
+        row(title).press(forDuration: 1.2)
+        _ = try fixture("clipboard", body: "QA export pending")
+        tap("Share links")
+        XCTAssertTrue(wait { !self.app.buttons["Share links"].exists })
+        let exported = try exportedLink(containing: "qa.example.test")
+        row(title).press(forDuration: 1.2)
+        tap("Show QR")
+        let qr = app.images["Generated QR code"]
+        XCTAssertTrue(qr.waitForExistence(timeout: timeout))
+        assertQr(qr, equals: exported)
+        capture("decoded-qr")
+        tap("Close")
+        row(title).tap()
+        relaunch()
+        open("profiles")
+        XCTAssertTrue(row(title).label.contains("Selected"))
+        open("home")
+        tap("Connect")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'VPN unsupported:' OR label BEGINSWITH 'Could not connect:'")).firstMatch.waitForExistence(timeout: timeout))
+        tap("Connect")
+        XCTAssertTrue(app.staticTexts["Disconnected"].exists)
+        open("profiles")
+        row(title).press(forDuration: 1.2)
+        tap("Delete")
+        XCTAssertTrue(wait { !self.row(title).exists })
+        relaunch()
+        open("profiles")
+        XCTAssertFalse(row(title).exists)
+    }
+
+    func testSubscriptionAutoRefreshAndPolicyGroup() throws {
+        open("profiles")
+        try importText(required("QA_SUBSCRIPTION_URL"))
+        XCTAssertTrue(row("QA Subscription A").waitForExistence(timeout: timeout))
+        XCTAssertTrue(row("QA Subscription B").exists)
+        let group = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Auto' AND NOT (label CONTAINS 'tab')")).firstMatch
+        XCTAssertTrue(group.waitForExistence(timeout: timeout))
+        group.tap()
+        XCTAssertTrue(wait { group.isSelected })
+        relaunch()
+        open("profiles")
+        XCTAssertTrue(group.isSelected)
+        let update = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Update subscription '")).firstMatch
+        XCTAssertTrue(ready(update))
+        update.tap()
+        XCTAssertTrue(row("QA Subscription Updated").waitForExistence(timeout: timeout))
+        tap("Update all subscriptions")
+        XCTAssertTrue(row("QA Subscription Refreshed").waitForExistence(timeout: timeout))
+        visible(row("QA Subscription Refreshed")).press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["Share links"].waitForExistence(timeout: timeout))
+        XCTAssertTrue(app.buttons["Show QR"].exists)
+        XCTAssertFalse(app.buttons["Delete"].exists)
+        capture("subscription-read-only")
+        tap("Close")
+    }
+
+    func testRealLatencyTimeoutCancelAndRetry() throws {
+        open("profiles")
+        let port = required("QA_VLESS_PORT")
+        try importText("vless://44444444-4444-4444-4444-444444444444@127.0.0.1:\(port)?security=none#QA%20Latency")
+        XCTAssertTrue(row("QA Latency").waitForExistence(timeout: timeout))
+        let search = app.textFields["Search node name, address or subscription"]
+        search.tap()
+        search.typeText("QA Latency\n")
+        _ = try fixture("delay", body: "0")
+        tap("Test all")
+        XCTAssertTrue(wait { self.row("QA Latency").label.contains(" ms") }, "a real probe must return a successful measurement")
+        _ = try fixture("delay", body: "10000")
+        defer { _ = try? fixture("delay", body: "0") }
+        tap("Test all")
+        let stop = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Stop'")).firstMatch
+        XCTAssertTrue(ready(stop))
+        stop.tap()
+        XCTAssertTrue(ready(app.buttons["Test all"]))
+        tap("Test all")
+        XCTAssertTrue(wait { self.row("QA Latency").label.lowercased().contains("timed out") })
+        _ = try fixture("delay", body: "0")
+        tap("Test all")
+        XCTAssertTrue(wait { self.row("QA Latency").label.contains(" ms") })
+        capture("real-latency-success")
+    }
+
+    func testRulesAndSettingsPersist() {
+        open("rules")
+        tap("Rule")
+        var values: [String: String] = [:]
+        for label in ["AI services via proxy", "Block QUIC (UDP 443)", "China public DNS direct", "Bypass LAN", "Block ads", "China sites direct"] {
+            let control = visible(app.switches[label])
+            XCTAssertTrue(control.exists)
+            let before = control.value as? String
+            control.tap()
+            XCTAssertTrue(wait { control.value as? String != before })
+            values[label] = control.value as? String
+        }
+        tap("Global")
+        XCTAssertFalse(app.switches["AI services via proxy"].isEnabled)
+        relaunch()
+        open("rules")
+        XCTAssertTrue(app.buttons["Global"].isSelected)
+        tap("Rule")
+        for (label, value) in values { XCTAssertEqual(visible(app.switches[label]).value as? String, value) }
+        open("settings")
+        for label in ["Check the exit IP after connecting", "Record detailed connection log", "FakeIP", "Block HTTPS/SVCB"] {
+            let control = visible(app.switches[label])
+            let before = control.value as? String
+            control.tap()
+            XCTAssertTrue(wait { control.value as? String != before })
+            let expected = control.value as? String
+            relaunch()
+            open("settings")
+            XCTAssertEqual(visible(app.switches[label]).value as? String, expected)
+        }
+        tap("Dark")
+        relaunch()
+        open("settings")
+        XCTAssertTrue(app.buttons["Dark"].isSelected)
+    }
+
+    func testDnsValidationAndPersistence() {
+        open("settings")
+        for label in ["Remote DNS", "Direct DNS", "Bootstrap DNS"] {
+            let field = visible(app.textFields[label])
+            XCTAssertTrue(field.exists)
+            let original = field.value as? String ?? ""
+            let prefix = original.hasPrefix("https://") ? "https://" : String(original.prefix(1))
+            let tail = prefix == "https://" ? "1.1.1.1/dns-query" : ".1.1.1"
+            field.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+            let count = max(0, original.count - prefix.count)
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: count) + tail + "\n")
+            open("home")
+            relaunch()
+            open("settings")
+            XCTAssertEqual(visible(app.textFields[label]).value as? String, prefix + tail)
+        }
+        let bootstrap = visible(app.textFields["Bootstrap DNS"])
+        bootstrap.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        bootstrap.typeText(":99999")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '65535' OR label CONTAINS '65,535' OR label CONTAINS '99999'")).firstMatch.waitForExistence(timeout: timeout))
+        relaunch()
+        open("settings")
+        XCTAssertFalse((visible(app.textFields["Bootstrap DNS"]).value as? String ?? "").contains(":99999"))
+    }
+
+    func testVisualMatrix() throws {
+        open("profiles")
+        try importText("vless://77777777-7777-7777-7777-777777777777@visual.example.test:443?security=tls#QA%20Visual")
+        for (language, _) in [("English", "en"), ("简体中文", "zh-Hans"), ("繁體中文", "zh-Hant")] {
+            open("settings")
+            visible(row(language)).tap()
+            for dark in [false, true] {
+                open("settings")
+                let label = language == "English" ? (dark ? "Dark" : "Light") : language == "简体中文" ? (dark ? "深色" : "浅色") : (dark ? "深色" : "淺色")
+                visible(app.buttons[label]).tap()
+                for page in ["home", "profiles", "rules", "connections", "settings"] {
+                    open(page)
+                    captureStable("\(language)-\(dark ? "dark" : "light")-\(page)")
+                    if page == "profiles" {
+                        visible(row("QA Visual")).press(forDuration: 1.2)
+                        let showQr = language == "English" ? "Show QR" : language == "简体中文" ? "显示二维码" : "顯示 QR Code"
+                        let close = language == "English" ? "Close" : language == "简体中文" ? "关闭" : "關閉"
+                        XCTAssertTrue(ready(app.buttons[showQr]))
+                        captureStable("\(language)-\(dark)-actions")
+                        let share = language == "English" ? "Share links" : language == "简体中文" ? "分享链接" : "分享連結"
+                        // A previous import/export must not make a broken copy
+                        // action pass by leaving the expected link behind.
+                        _ = try fixture("clipboard", body: "QA export pending")
+                        tap(share)
+                        XCTAssertTrue(wait { !self.app.buttons[share].exists })
+                        let exported = try exportedLink(containing: "visual.example.test")
+                        visible(row("QA Visual")).press(forDuration: 1.2)
+                        tap(showQr)
+                        let qrLabel = language == "English" ? "Generated QR code" : language == "简体中文" ? "生成的二维码" : "產生的二維碼"
+                        let qr = app.images[qrLabel]
+                        XCTAssertTrue(qr.waitForExistence(timeout: timeout))
+                        assertQr(qr, equals: exported)
+                        captureStable("\(language)-\(dark)-qr")
+                        tap(close)
+                    }
+
+                }
+            }
+        }
+    }
+
+    func testRuleLibraryUpdate() {
+        open("settings")
+        let update = visible(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Update now'")).firstMatch)
+        XCTAssertTrue(ready(update))
+        update.tap()
+        XCTAssertTrue(wait(seconds: 300) {
+            self.app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Updated ' AND label CONTAINS 'files'")).firstMatch.exists
+        }, "a completed download must show its updated resource count")
+    }
+
+    private func assertQr(_ qr: XCUIElement, equals expected: String) {
+        // Decode the rendered native image; accessibility labels alone do not
+        // prove the exported link is scannable or belongs to the selected node.
+        let request = VNDetectBarcodesRequest()
+        // Revision 4 cannot create its inference context in this simulator.
+        // Revision 1 decodes the same rendered image on simulator and device.
+        request.revision = VNDetectBarcodesRequestRevision1
+        request.symbologies = [.qr]
+        var failure: String?
+        XCTAssertTrue(wait {
+            guard let image = qr.screenshot().image.cgImage else { return false }
+            do { try VNImageRequestHandler(cgImage: image).perform([request]) }
+            catch { failure = String(describing: error); return false }
+            return (request.results ?? []).contains { $0.payloadStringValue == expected.trimmingCharacters(in: .whitespacesAndNewlines) }
+        }, failure ?? "Rendered QR must decode to the complete exported share link")
+    }
+
+    private func required(_ key: String) -> String {
+        let value = ProcessInfo.processInfo.environment[key] ?? ""
+        XCTAssertFalse(value.isEmpty, "Run pnpm check:mobile:ios:smoke; missing \(key)")
+        return value
+    }
+
+    private func fixture(_ path: String, body: String? = nil) throws -> Data {
+        let url = URL(string: required("QA_CONTROL_URL") + "/" + path)!
+        var request = URLRequest(url: url)
+        if let body { request.httpMethod = "POST"; request.httpBody = Data(body.utf8) }
+        let done = expectation(description: "fixture \(path)")
+        var result: Result<Data, Error>?
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            result = error.map { .failure($0) } ?? .success(data ?? Data())
+            done.fulfill()
+        }.resume()
+        wait(for: [done], timeout: 15)
+        return try XCTUnwrap(result).get()
+    }
+
+    private func importText(_ value: String) throws {
+        _ = try fixture("clipboard", body: value)
+        XCTAssertEqual(String(data: try fixture("clipboard"), encoding: .utf8), value, "Simulator clipboard fixture changed before import")
+        tap("Import from clipboard")
+        // The paste prompt blocks the target app's main thread. Query SpringBoard
+        // first; asking the blocked app for its hierarchy deadlocks automation.
+        for host in [XCUIApplication(bundleIdentifier: "com.apple.springboard")] {
+            let allow = host.buttons["Allow Paste"]
+            if allow.waitForExistence(timeout: 1) { allow.tap() }
+        }
+        XCTAssertTrue(ready(app.buttons["Import from clipboard"]))
+    }
+
+    private func exportedLink(containing host: String) throws -> String {
+        // Closing the sheet and RN's void setString() can precede the system
+        // pasteboard write. Wait for the actual value, not a closing animation
+        // or a success label; each read is an asynchronous fixture round trip.
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let value = String(data: try fixture("clipboard"), encoding: .utf8) ?? ""
+            if value.contains(host) { return value }
+        }
+        XCTFail("The exported share link must reach the system clipboard")
+        return ""
+    }
+
+    private func row(_ name: String) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", name)).firstMatch
+    }
+
+    private func open(_ page: String) {
+        let tab = app.buttons["tab-" + page]
+        XCTAssertTrue(tab.exists || tab.waitForExistence(timeout: timeout))
+        XCTAssertTrue(ready(tab))
+        tab.tap()
+        XCTAssertTrue(wait { tab.isSelected })
+    }
+
+    private func tap(_ label: String) {
+        let button = app.buttons[label]
+        XCTAssertTrue(button.waitForExistence(timeout: timeout), label)
+        if !button.isHittable { _ = visible(button) }
+        XCTAssertTrue(ready(button), label)
         button.tap()
     }
 
-    /// React Navigation spells a tab's accessibility label out in full —
-    /// `Home, tab, 1 of 5` — so an exact-label query never matches. Matching the
-    /// prefix keeps the queries readable without pinning the tab count.
-    private func tab(_ name: String) -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "\(name), tab")).firstMatch
-    }
+    private func relaunch() { app.terminate(); app.launch(); XCTAssertTrue(app.buttons["tab-home"].waitForExistence(timeout: timeout)) }
 
-    @discardableResult
-    private func waitFor(_ element: XCUIElement, seconds: TimeInterval? = nil) -> Bool {
-        element.waitForExistence(timeout: seconds ?? timeout)
-    }
-
-    private func waitForDisappearance(_ element: XCUIElement, seconds: TimeInterval? = nil) -> Bool {
-        let gone = expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: element)
-        return XCTWaiter().wait(for: [gone], timeout: seconds ?? timeout) == .completed
-    }
-
-    /// Existing is not the same as usable: the mode switcher and the speedtest
-    /// button both render disabled until a backend read lands.
-    private func waitForEnabled(_ element: XCUIElement, seconds: TimeInterval? = nil) -> Bool {
-        let ready = expectation(
-            for: NSPredicate(format: "exists == true AND isEnabled == true"),
-            evaluatedWith: element
-        )
-        return XCTWaiter().wait(for: [ready], timeout: seconds ?? timeout) == .completed
-    }
-
-    /// The imported node's row.
-    ///
-    /// One `Button`, not the three texts it draws: React Native's `Pressable`
-    /// is an accessibility element itself, so the name, the address and the
-    /// latest latency arrive folded into a single label.
-    private func nodeRow() -> XCUIElement {
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", Self.nodeName)).firstMatch
-    }
-
-    private func scrollTo(_ element: XCUIElement) -> XCUIElement {
-        var attempts = 0
-        while !element.exists && attempts < 6 {
+    private func visible(_ element: XCUIElement) -> XCUIElement {
+        for _ in 0..<8 {
+            if element.exists && element.isHittable { break }
             app.swipeUp()
-            attempts += 1
+        }
+        if !element.exists || !element.isHittable {
+            for _ in 0..<12 {
+                if element.exists && element.isHittable { break }
+                app.swipeDown()
+            }
         }
         return element
     }
 
-    /// Polls a condition that no single element's state can express.
-    private func wait(until condition: () -> Bool, seconds: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(seconds)
-        while Date() < deadline {
-            if condition() { return true }
-            Thread.sleep(forTimeInterval: 0.5)
-        }
-        return condition()
+    private func ready(_ element: XCUIElement) -> Bool { wait { element.exists && element.isEnabled && element.isHittable } }
+
+    private func wait(seconds: TimeInterval = 30, _ condition: @escaping () -> Bool) -> Bool {
+        if condition() { return true }
+        let predicate = NSPredicate { _, _ in condition() }
+        return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: predicate, object: nil)], timeout: seconds) == .completed
     }
 
-    /// Focuses a text field with the caret after its last character.
-    ///
-    /// `tap()` hits the field's centre, which drops the caret wherever that
-    /// lands *inside* the text: deleting `value.count` characters from there
-    /// ate the middle of `https://cloudflare-dns.com/dns-query` and left
-    /// `com/dns-query` behind. Tapping past the end of the text puts the caret
-    /// at the end, and it has to be the *first* tap — this field sits low
-    /// enough that the keyboard covers it once it is focused, so a second tap
-    /// lands on the keyboard and takes the focus away again.
-    private func tapPastEndOfText(_ field: XCUIElement) {
-        field.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
+    private func clearSearch(_ field: XCUIElement) {
+        guard let value = field.value as? String, value != field.placeholderValue else { return }
+        field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: value.count) + "\n")
     }
 
-    /// Backspaces a focused field down to its first `length` characters.
-    private func deleteDown(to length: Int, in field: XCUIElement) {
-        for _ in 0 ..< 200 {
-            guard let existing = field.value as? String, existing.count > length else { return }
-            field.typeText(XCUIKeyboardKey.delete.rawValue)
-        }
+    private func captureStable(_ title: String) {
+        // Wait for unchanged rendered pixels, not a guessed animation delay.
+        // Closing sheets may keep painting after their hit regions are gone.
+        var previous: Data?
+        var screenshot = app.screenshot()
+        XCTAssertTrue(wait(seconds: 15) {
+            screenshot = self.app.screenshot()
+            guard let current = screenshot.image.cgImage?.dataProvider?.data as Data? else { return false }
+            let settled = previous == current
+            previous = current
+            return settled
+        }, "The page should reach a stable rendered state")
+        let attachment = XCTAttachment(screenshot: screenshot)
+        attachment.name = title
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
-    /// Types into a focused field, one character at a time.
-    ///
-    /// React Native's `TextInput` is controlled, so every keystroke round-trips
-    /// through JavaScript before the field shows the result, and a single
-    /// `typeText` of a whole string outruns that — a `typeText` of 36
-    /// backspaces deleted 13 characters on one run and none at all on the next.
-    private func type(_ text: String, into field: XCUIElement) {
-        for character in text {
-            field.typeText(String(character))
-        }
-    }
-
-    /// iOS 16 and later asks before letting an app read a pasteboard another
-    /// app filled, which is exactly what the test runner did.
-    private func allowPasteIfAsked() {
-        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let allow = springboard.buttons["Allow Paste"]
-        if allow.waitForExistence(timeout: 5) {
-            allow.tap()
-        }
+    private func capture(_ title: String) {
+        let attachment = XCTAttachment(screenshot: app.screenshot())
+        attachment.name = title
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 }

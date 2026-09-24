@@ -252,6 +252,7 @@ impl HostTunnelState for NoTunnel {
 }
 
 struct Fixture {
+    database: Database,
     manager: SelfHostManager,
     runner: RecordingRunner,
     spawn_gate: Arc<SpawnGate>,
@@ -304,7 +305,8 @@ impl Fixture {
         };
         let database = Database::connect_in_memory().await.expect("database");
         Self {
-            manager: SelfHostManager::spawn(database, deps),
+            manager: SelfHostManager::spawn(database.clone(), deps),
+            database,
             runner,
             spawn_gate,
             sink,
@@ -711,4 +713,25 @@ async fn a_check_request_during_a_check_shares_its_result() {
         before + 1,
         "the second request waited for the first check instead of running its own"
     );
+}
+
+#[tokio::test]
+async fn shutdown_joins_watchers_without_losing_the_in_memory_database() {
+    let fixture = Fixture::new().await;
+    let initial = fixture.manager.set_enabled(true).await.expect("enabled");
+    fixture.manager.shutdown().await;
+    // These reads acquire the very same singleton pool after the background
+    // loops have been cancelled, exercising the former intermittent table loss.
+    for _ in 0..32 {
+        let record = fixture
+            .database
+            .self_host()
+            .load()
+            .await
+            .expect("persisted record");
+        assert_eq!(record.config, initial.config);
+        tokio::task::yield_now().await;
+    }
+    fixture.manager.shutdown().await;
+    assert_eq!(fixture.runner.stops().len(), 1);
 }

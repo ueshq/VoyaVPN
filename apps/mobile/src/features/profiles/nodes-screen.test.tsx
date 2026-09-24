@@ -100,11 +100,26 @@ describe("NodesScreen", () => {
     await renderNodes();
     const user = userEvent.setup();
 
-    await user.press(await screen.findByText("Import from clipboard"));
+    await user.press(await screen.findByLabelText("Import from clipboard"));
 
     // The import, the invalidation it triggers and the refetches behind it all
     // have to settle before the new node can appear.
     expect(await screen.findByText("Osaka", {}, { timeout: 5000 })).toBeOnTheScreen();
+  });
+
+  it("downloads newly imported subscriptions but does not update sources for plain links", async () => {
+    readText.mockResolvedValue("https://provider.example.test/new\nvless://token@example.test:443#Mixed");
+    await renderNodes();
+    const user = userEvent.setup();
+    await user.press(await screen.findByLabelText("Import from clipboard"));
+    await waitFor(() => expect(backend().state.calls.filter((call) => call.command === "updateSubscriptions")).toHaveLength(1));
+    const source = backend().state.subscriptions.find((subscription) => subscription.url.endsWith("/new"));
+    expect(backend().state.calls.find((call) => call.command === "updateSubscriptions")?.args[0]).toBe(source?.id);
+    expect(await screen.findByText("Mixed")).toBeOnTheScreen();
+    readText.mockResolvedValue("vless://token@example.test:443#Ordinary");
+    await user.press(screen.getByLabelText("Import from clipboard"));
+    expect(await screen.findByText("Ordinary")).toBeOnTheScreen();
+    expect(backend().state.calls.filter((call) => call.command === "updateSubscriptions")).toHaveLength(1);
   });
 
   it("measures every listed node and fills the latencies back in", async () => {
@@ -207,7 +222,7 @@ describe("NodesScreen", () => {
     await renderNodes();
     const user = userEvent.setup();
 
-    await user.press(await screen.findByText("Import from clipboard"));
+    await user.press(await screen.findByLabelText("Import from clipboard"));
 
     expect(await screen.findByText("Clipboard is empty.")).toBeOnTheScreen();
   });

@@ -59,8 +59,10 @@ Three consequences follow from the extension being a *separate process*:
 - **A disconnected latency test needs a second Libbox.** The extension is not
   running while disconnected, so the app process links Libbox too and runs a
   TUN-less probe instance under `PTest/` — kept apart from the provider's `PT/`
-  because libbox binds `<base>/command.sock` and the OS caps `sun_path` at 104
-  bytes. This is what `ProbeCoreLauncher` exists for.
+  for independent per-run files. The probe calls `StartOrReloadService`
+  in-process without starting libbox’s optional command listener, so it does
+  not create a Unix socket (simulator container paths exceed its 104-byte
+  limit). This is what `ProbeCoreLauncher` exists for.
 
 ### Android: a `VpnService` in the app's own process
 

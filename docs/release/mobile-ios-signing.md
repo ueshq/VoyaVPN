@@ -177,59 +177,58 @@ through, and it is the one that says the milestone is done.
 
 ### Simulator: automated
 
+Run from the repository root on an Apple silicon Mac with Xcode, an installed
+stable iOS runtime, CocoaPods, Go, Rust, Python 3 and pnpm:
+
 ```sh
-cd apps/mobile/ios
-xcrun simctl uninstall booted app.voyavpn.mobile        # the database is the state under test
-xcodebuild test -workspace VoyaVPN.xcworkspace -scheme VoyaVPN \
-  -configuration Release -destination 'platform=iOS Simulator,name=iPhone 17' \
-  -derivedDataPath build/DerivedData CODE_SIGNING_ALLOWED=NO
+pnpm check:mobile:ios:smoke
+pnpm check:mobile:ios:full # release matrix
+pnpm check:mobile:ios:full --matrix-only # layout iteration; excludes business flows
 ```
 
-Release, not Debug: a Debug build needs Metro running beside it and is not
-sealed. The uninstall matters — the thirteen cases in
-`apps/mobile/ios/VoyaVPNUITests/VoyaVPNUITests.swift` run in order and share one
-install, because a node imported by one case is what the next selects, shares
-and finally deletes. About four minutes end to end.
+The runner creates and deletes its own simulator; it never erases a developer's
+existing device. It builds Release from the real Rust host and pinned Libbox,
+reuses CocoaPods only when dependency/Podfile fingerprints and lockfiles match,
+starts a local VLESS server and a private-LAN HTTP subscription fixture, and
+cleans up the services on completion. A private LAN IPv4 interface is required:
+loopback subscription URLs remain rejected by the product's security policy.
+If Simulator is open, turn off **Edit > Automatically Sync Pasteboard** first;
+the preflight rejects host clipboard synchronization instead of letting unrelated
+clipboard changes alter a test. The runner never changes that global preference.
+For local iteration with an unchanged Libbox pin, `--reuse-libbox` explicitly
+reuses the already staged framework; CI always builds the pinned source.
 
-What they prove, which the Jest suite cannot, is that the screens are driving
-the **real** backend — `crates/voya-mobile-ffi` through the `VoyaNative`
-module — and not the in-memory mock `transport.ts` falls back to when the
-module is missing. Case 00 is the one that decides it: the mock seeds three
-nodes, the real backend opens an empty database.
+Each XCTest business flow imports its own data. Only latency target URLs and
+the timeout are configured in the test device's database; no nodes or
+subscriptions are preseeded. The smoke covers:
 
-| | Case | What a pass means |
-| --- | --- | --- |
-| 00 | Launches on the real backend | The node list is empty, not the mock's three nodes |
-| 01 | Imports from the clipboard | A share link parsed in Rust and written to SQLite |
-| 02 | Selects the node | The backend recorded the active profile |
-| 03 | Switches traffic mode | `proxySetTrafficMode` round trip, and the global banner |
-| 04 | Toggles a seeded rule | The default rule set seeded, named, and the toggle persisted |
-| 05 | Runs a latency test | Every node comes back with an outcome from the probe core |
-| 06 | Activity asks for a connection | The disconnected empty state |
-| 07 | Saves a DNS resolver | `saveDnsSettings`, verified by leaving and returning |
-| 08 | Switches theme | The chosen theme is marked (see the gap below) |
-| 09 | Refreshes the rule library | The command was dispatched and answered |
-| 10 | Shows a share QR | `generate_qr_code` in Rust, drawn by `react-native-svg` |
-| 11 | Survives a relaunch | The node really went to the app's own SQLite file |
-| 12 | Deletes the node | The list is empty again |
+- Real backend launch, all five tabs and foreground restoration.
+- Clipboard validation, node import, duplicate import, search, selection,
+  semantic sheet buttons, exported link, QR image decoding and deletion after
+  a process restart.
+- Subscription download immediately after import, automatic policy group,
+  individual/all refresh and read-only subscription node actions.
+- A successful real VLESS latency measurement, cancellation, timeout and retry;
+  a native host test also checks long paths, failed-start cleanup, overlapping
+  starts, idempotent stop and port reuse.
+- Rule modes/toggles, DNS validation and settings persistence across restarts.
 
-Two things worth knowing before changing these:
+The full run adds rule library download and the five pages in English,
+Simplified/Traditional Chinese, light/dark, default/maximum accessibility text,
+and approximately 375/402/440pt widths. Inspect the resulting screenshots for
+layout clipping and contrast; automated navigation alone is not visual approval.
+VoiceOver focus announcements and return focus also need a manual accessibility
+pass. `.github/workflows/ios-simulator.yml` runs the smoke for relevant PRs and
+accepts a full-matrix manual dispatch; it is deliberately separate from
+`verify:local`.
 
-- React Navigation spells a tab's label out in full — `Home, tab, 1 of 5` — so
-  tab queries match a prefix, not the whole label.
-- A node row is one `Button`, not the three texts it draws. React Native's
-  `Pressable` is an accessibility element itself and folds its children's text
-  into a single label, which is also why the actions sheet's wrappers are
-  explicitly `accessible={false}`.
-
-### Simulator: by hand
-
-- **Dark mode.** `xcrun simctl ui booted appearance dark` and look. Uniwind
-  reports the scheme correctly but keeps resolving the `:root` block, so the
-  colours do not currently change — a known gap, recorded in
-  `apps/mobile/global.css`. The theme buttons in Settings do track the choice,
-  which is what case 08 asserts.
-- **VoiceOver** reading the node row and the long-press actions sheet.
+Every run writes `.agents/docs/ios-repair-<timestamp>/` (override with
+`VOYA_IOS_QA_OUTPUT`): environment, fixtures, build logs, XCTest result bundles,
+screenshots/accessibility attachments, native logs and a classified summary.
+Environment/build failures are reported separately from product assertions.
+A UI assertion failure still allows the remaining independent size/text cases
+to collect evidence; the command exits unsuccessfully if any case failed.
+A simulator VPN rejection is expected and is never counted as tunnel acceptance.
 
 ### Device only
 
@@ -252,8 +251,15 @@ A simulator proves none of this.
    the running core's Clash API.
 8. Connect with a large rule set (a subscription with a full ruleset, not two
    manual nodes) and leave it up. The extension must not be killed for memory.
-9. Refresh a real subscription over the network, and use a policy group — the
-   phone has no screen for creating one, so build it on the desktop first.
+9. Refresh a real subscription over the network and use the policy group
+   automatically created by its import.
+10. Exercise VPN authorization allow, deny and revoke in system Settings.
+11. Confirm exit IP, traffic counters, connection list and close-connection
+    controls against the actual tunnel; verify routing and DNS using controlled
+    domains and destinations.
+12. Switch Wi-Fi/cellular, background/restore, and exercise kill switch behavior
+    during connection loss. Verify recovery and that blocked traffic does not
+    escape through the physical interface.
 
 If step 1 fails only when the kill switch is on, the cause is loopback under
 `includeAllNetworks`. The fallback is libbox's `CommandClient` over

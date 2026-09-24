@@ -71,6 +71,7 @@ export function HomeScreen() {
       </View>
 
       <Button
+        className="min-h-14 h-auto py-3"
         size="lg"
         variant={runtime.connected ? "outline" : "primary"}
         isDisabled={runtime.busy || runtime.modePending}
@@ -95,7 +96,7 @@ export function HomeScreen() {
               message: runtime.lastError.message,
             })}
           </Typography>
-          <Button size="sm" variant="outline" onPress={runtime.retryLastAction}>
+          <Button className="min-h-11 h-auto py-3" size="sm" variant="outline" onPress={runtime.retryLastAction}>
             <Button.Label>{t("actions.retry")}</Button.Label>
           </Button>
         </View>
@@ -127,7 +128,7 @@ export function HomeScreen() {
           <Typography className="text-caption text-danger">
             {t("home.profilesFailed", { message: String(runtime.profilesError) })}
           </Typography>
-          <Button size="sm" variant="outline" onPress={runtime.retryProfiles}>
+          <Button className="min-h-11 h-auto py-3" size="sm" variant="outline" onPress={runtime.retryProfiles}>
             <Button.Label>{t("actions.retry")}</Button.Label>
           </Button>
         </View>
@@ -163,9 +164,9 @@ const ACTION_FAILED_KEYS = {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <View className="flex-row items-center justify-between">
-      <Typography className="text-caption text-subtle">{label}</Typography>
-      <Typography className="text-body text-foreground">{value}</Typography>
+    <View className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1">
+      <Typography className="max-w-full text-caption text-subtle">{label}</Typography>
+      <Typography className="max-w-full text-body text-foreground">{value}</Typography>
     </View>
   );
 }

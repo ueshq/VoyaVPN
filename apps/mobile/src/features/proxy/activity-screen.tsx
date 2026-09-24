@@ -132,7 +132,7 @@ export function ActivityScreen() {
           autoCapitalize="none"
           autoCorrect={false}
         />
-        <View className="flex-row items-center justify-between">
+        <View className="flex-row flex-wrap items-center justify-between gap-2">
           <Typography className="text-caption text-subtle">
             {needle
               ? t("activity.filteredConnections", {
@@ -141,7 +141,7 @@ export function ActivityScreen() {
                 })
               : t("activity.connectionCount", { count: connections.length })}
           </Typography>
-          <Button size="sm" variant="outline" onPress={() => close(null)}>
+          <Button className="min-h-11 h-auto py-3" size="sm" variant="outline" onPress={() => close(null)}>
             <Button.Label>{t("activity.disconnectAll")}</Button.Label>
           </Button>
         </View>

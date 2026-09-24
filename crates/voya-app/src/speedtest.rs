@@ -587,15 +587,15 @@ mod tests {
     impl ProbeCoreLauncher for RecordingCoreBackend {
         fn start(&self, config_json: String) -> Result<Box<dyn ProbeCore>> {
             let ports = ports_from_config(&config_json);
-            if self.occupy_next_port {
+            if self.occupy_next_port && self.starts().is_empty() {
                 let next = ports
                     .iter()
                     .max()
                     .and_then(|port| u16::try_from(port + 1).ok())
                     .expect("a page has ports");
-                if let Ok(listener) = StdTcpListener::bind((LOOPBACK_ADDR, next)) {
-                    self.occupied.lock().expect("occupied").push(listener);
-                }
+                let listener = StdTcpListener::bind((LOOPBACK_ADDR, next))
+                    .expect("the fixture must actually hold the next port");
+                self.occupied.lock().expect("occupied").push(listener);
             }
             // Bind each page port so the readiness wait succeeds the way a real
             // probe core's SOCKS listeners do.
@@ -845,6 +845,18 @@ mod tests {
         );
         let mut config = AppConfig::default();
         config.speed_test_item.speed_test_page_size = Some(1);
+        // Keep this two-port fixture outside both the shared default 108xx
+        // range and the OS ephemeral range: concurrent connect() calls can
+        // consume the port immediately after a bind(..., 0) allocation.
+        let pair = (20000_u16..30000)
+            .find_map(|port| {
+                let first = StdTcpListener::bind((LOOPBACK_ADDR, port)).ok()?;
+                let next = StdTcpListener::bind((LOOPBACK_ADDR, port + 1)).ok()?;
+                Some((port, first, next))
+            })
+            .expect("two available fixture ports");
+        config.inbound[0].local_port = i32::from(pair.0) - InboundProtocol::speedtest.port_offset();
+        drop(pair);
 
         manager
             .run_with_callback(&database, &config, Vec::new(), |_| {})

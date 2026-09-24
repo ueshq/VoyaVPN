@@ -590,7 +590,9 @@
       "updateResult": "已更新 {{updated}} 個訂閱，匯入 {{imported}} 個節點",
       "url": "訂閱地址",
       "userAgent": "客戶端標識（User-Agent）",
-      "updateResultWithRemoved": "已更新 {{updated}} 個訂閱，匯入 {{imported}} 個節點，移除 {{removed}} 個已下架節點"
+      "updateResultWithRemoved": "已更新 {{updated}} 個訂閱，匯入 {{imported}} 個節點，移除 {{removed}} 個已下架節點",
+      "importUpdating": "正在更新匯入的訂閱…",
+      "importUpdateFailed": "部分訂閱更新失敗，請在下方重試。"
     },
     "selfHost": {
       "enable": "託管節點",
@@ -909,7 +911,9 @@
       "vpnOnly": "僅在 VPN 模式下生效，可在「連線 → 網路接管方式」中切換。"
     },
     "logs": {
-      "coreLogOff": "詳細連線日誌未開啟，這裡只顯示 VoyaVPN 自身的記錄。開啟上方「記錄詳細連線日誌」可查看連線細節。"
+      "coreLogOff": "詳細連線日誌未開啟，這裡只顯示 VoyaVPN 自身的記錄。開啟上方「記錄詳細連線日誌」可查看連線細節。",
+      "coreLogWaiting": "詳細連線日誌已開啟，暫未收到核心日誌。",
+      "coreLogReceived": "詳細連線日誌已開啟，已收到核心日誌。"
     }
   },
   "speedtest": {
@@ -975,7 +979,8 @@
     "profiles": "節點",
     "rules": "規則",
     "settings": "設定",
-    "selfHost": "自建節點"
+    "selfHost": "自建節點",
+    "activityShort": "活動"
   },
   "updates": {
     "appInstalled": "應用程式更新已安裝：{{version}}",

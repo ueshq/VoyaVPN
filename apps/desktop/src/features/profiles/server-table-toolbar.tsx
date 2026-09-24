@@ -53,6 +53,7 @@ export function ServerTableToolbar({
     t,
     updateAllSubscriptions,
     updatingAllSubscriptions,
+    updatingSubscriptions,
   } = controller;
   const addMenuOpen = useShellStore((state) => state.profilesAddMenuOpen);
   const focusFirstAddItemRef = useRef(addMenuOpen);
@@ -140,7 +141,7 @@ export function ServerTableToolbar({
         </MenubarMenu>
       </Menubar>
       <Button
-        disabled={updatingAllSubscriptions}
+        disabled={updatingSubscriptions.size > 0 || directImportPending !== null}
         onClick={() => void updateAllSubscriptions()}
         size="sm"
         type="button"
@@ -183,7 +184,7 @@ export function ServerTableToolbar({
               return (
               <MenubarItem
                 key={method}
-                disabled={directImportPending !== null}
+                disabled={directImportPending !== null || updatingSubscriptions.size > 0}
                 ref={index === 0 ? firstAddItemRef : undefined}
                 onSelect={() => {
                   if (method === "clipboard" || method === "qrScreen") {

@@ -590,7 +590,9 @@
       "updateResult": "已更新 {{updated}} 个订阅，导入 {{imported}} 个节点",
       "url": "订阅地址",
       "userAgent": "客户端标识（User-Agent）",
-      "updateResultWithRemoved": "已更新 {{updated}} 个订阅，导入 {{imported}} 个节点，移除 {{removed}} 个已下架节点"
+      "updateResultWithRemoved": "已更新 {{updated}} 个订阅，导入 {{imported}} 个节点，移除 {{removed}} 个已下架节点",
+      "importUpdating": "正在更新导入的订阅…",
+      "importUpdateFailed": "部分订阅更新失败，请在下方重试。"
     },
     "selfHost": {
       "enable": "托管节点",
@@ -909,7 +911,9 @@
       "vpnOnly": "仅在 VPN 模式下生效，可在“连接 → 网络接管方式”中切换。"
     },
     "logs": {
-      "coreLogOff": "详细连接日志未开启，这里只显示 VoyaVPN 自身的记录。开启上方“记录详细连接日志”可查看连接细节。"
+      "coreLogOff": "详细连接日志未开启，这里只显示 VoyaVPN 自身的记录。开启上方“记录详细连接日志”可查看连接细节。",
+      "coreLogWaiting": "详细连接日志已开启，暂未收到核心日志。",
+      "coreLogReceived": "详细连接日志已开启，已收到核心日志。"
     }
   },
   "speedtest": {
@@ -975,7 +979,8 @@
     "profiles": "节点",
     "rules": "规则",
     "settings": "设置",
-    "selfHost": "自建节点"
+    "selfHost": "自建节点",
+    "activityShort": "活动"
   },
   "updates": {
     "appInstalled": "应用更新已安装：{{version}}",

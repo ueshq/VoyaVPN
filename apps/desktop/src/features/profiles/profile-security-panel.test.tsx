@@ -12,22 +12,20 @@ import { SecurityPanel } from "./profile-security-panel";
 
 function SecurityPanelHarness({ security }: { security: string }) {
   const [form, setForm] = useState<ProfileEditorForm>(() =>
-    toEditorForm({
-      ...createDefaultProfile("vless"),
-      remarks: "Pinned node",
-    }),
+    ({ ...toEditorForm({ ...createDefaultProfile("vless"), remarks: "Pinned node" }), streamSecurity: security }),
   );
 
   return (
     <>
       <output data-testid="cert">{form.cert}</output>
+      <output data-testid="form">{JSON.stringify(form)}</output>
       <SecurityPanel
-        errors={{}}
+        errors={{ cert: "Invalid certificate" }}
         form={form}
         onFieldChange={(key, value) =>
           setForm((current) => ({ ...current, [key]: value }))
         }
-        security={security}
+        security={form.streamSecurity}
       />
     </>
   );
@@ -61,4 +59,27 @@ describe("SecurityPanel", () => {
     expect(screen.getByText("Short ID")).toBeInTheDocument();
     expect(screen.queryByText("Spider X")).not.toBeInTheDocument();
   });
+});
+
+it("changes security mode and persists the editable TLS and REALITY fields", async () => {
+  const user = userEvent.setup();
+  render(<SecurityPanelHarness security="tls" />);
+  for (const [label, value, key] of [
+    ["SNI", "example.test", "sni"], ["ALPN", "h2", "alpn"],
+  ]) {
+    await user.type(screen.getByLabelText(label), value);
+    expect(JSON.parse(screen.getByTestId("form").textContent ?? "{}")[key]).toBe(value);
+  }
+  await user.click(screen.getByText("More settings"));
+  await user.type(screen.getByLabelText("ECH config list"), "ech-value");
+  expect(JSON.parse(screen.getByTestId("form").textContent ?? "{}").echConfigList).toBe("ech-value");
+  expect(screen.getByText("Invalid certificate")).toBeInTheDocument();
+  await user.click(screen.getByRole("combobox"));
+  await user.click(screen.getByRole("option", { name: "REALITY" }));
+  for (const [label, value, key] of [
+    ["REALITY public key", "public-key", "publicKey"], ["Short ID", "abcd", "shortId"],
+  ]) {
+    await user.type(screen.getByLabelText(label), value);
+    expect(JSON.parse(screen.getByTestId("form").textContent ?? "{}")[key]).toBe(value);
+  }
 });

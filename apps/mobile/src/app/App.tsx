@@ -5,8 +5,10 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import type { HeroUINativeConfig } from "heroui-native/provider";
 import { HeroUINativeProvider } from "heroui-native/provider";
 import { Suspense, use } from "react";
+import { Activity, House, Route, Server, Settings } from "lucide-react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Text, useWindowDimensions } from "react-native";
 
 import { HomeScreen } from "~/features/home/home-screen";
 import { NodesScreen } from "~/features/profiles/nodes-screen";
@@ -24,6 +26,7 @@ import { useRuntimeStatusSeed } from "@voya/features/shell/use-runtime-status-se
 import { useTheme } from "./use-theme";
 
 const Tab = createBottomTabNavigator();
+const TAB_ICONS = { home: House, profiles: Server, rules: Route, connections: Activity, settings: Settings };
 const queryClient = createAppQueryClient();
 
 /**
@@ -54,14 +57,40 @@ function Shell() {
 
   const { t } = useI18n();
   const scheme = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const navigationTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
   useRuntimeStatusSeed(["coreState"]);
 
   return (
-    <NavigationContainer ref={navigationRef} theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
       <EventBridge />
-      <Tab.Navigator>
+      <Tab.Navigator screenOptions={{
+        // Navigation chrome stays bounded while page content follows the full
+        // Dynamic Type size. iOS's large-content viewer exposes the full title.
+        headerStyle: fontScale > 1 ? { height: insets.top + 44 * Math.min(fontScale, 1.5) } : undefined,
+        headerTitle: ({ children }) => (
+          <Text
+            accessibilityRole="header"
+            accessibilityShowsLargeContentViewer
+            accessibilityLargeContentTitle={children}
+            maxFontSizeMultiplier={1.5}
+            numberOfLines={1}
+            style={{ fontSize: 17, fontWeight: "600", color: navigationTheme.colors.text }}
+          >{children}</Text>
+        ),
+      }}>
         {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => (
-          <Tab.Screen key={tab} name={tab} options={{ title: t(SHELL_TABS[tab].titleKey) }}>
+          <Tab.Screen key={tab} name={tab} options={{
+            title: t(SHELL_TABS[tab].titleKey),
+            tabBarButtonTestID: `tab-${tab}`,
+            tabBarLabel: tab === "connections" ? t("tabs.activityShort") : t(SHELL_TABS[tab].titleKey),
+            tabBarAccessibilityLabel: t(SHELL_TABS[tab].titleKey),
+            tabBarIcon: ({ color, size }) => {
+              const Icon = TAB_ICONS[tab];
+              return <Icon color={color} size={size} accessible={false} />;
+            },
+          }}>
             {() => <TabScreen tab={tab} />}
           </Tab.Screen>
         ))}

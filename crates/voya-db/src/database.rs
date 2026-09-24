@@ -118,6 +118,12 @@ impl Database {
     pub async fn connect_in_memory() -> Result<Self> {
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
+            // This connection owns the database. SQLx can discard it if a
+            // cancelled acquire interrupts its liveness check, or a pool
+            // timer retires it; reconnecting would create an empty schema.
+            .test_before_acquire(false)
+            .idle_timeout(None)
+            .max_lifetime(None)
             .connect_with(
                 SqliteConnectOptions::new()
                     .filename(":memory:")

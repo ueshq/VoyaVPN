@@ -14,7 +14,7 @@ import { PressableFeedback } from "heroui-native/pressable-feedback";
 import { Spinner } from "heroui-native/spinner";
 import { Switch } from "heroui-native/switch";
 import { Typography } from "heroui-native/text";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, useWindowDimensions } from "react-native";
 
 /** The three theme choices, in the order the desktop offers them. */
 const THEME_MODES = [
@@ -34,9 +34,11 @@ const THEME_MODES = [
  */
 export function SettingsScreen() {
   const { language, t } = useI18n();
+  const { width, fontScale } = useWindowDimensions();
+  const stackedChoices = width / fontScale < 360;
   const app = useAppSettings();
   const appearance = app.settings?.appearance;
-  const logLines = useRuntimeEventStore((state) => state.logLines.length);
+  const hasCoreLogs = useRuntimeEventStore((state) => state.logLines.some((line) => line.body.source === "core"));
   const ruleLibrary = useRuleLibraryUpdate();
   const dns = useDnsSettings(true);
 
@@ -57,11 +59,11 @@ export function SettingsScreen() {
       {appearance ? (
         <Card className="gap-3">
           <Typography className="text-section text-foreground">{t("modal.theme")}</Typography>
-          <View className="flex-row gap-2">
+          <View className={stackedChoices ? "gap-2" : "flex-row gap-2"}>
             {THEME_MODES.map(({ labelKey, value }) => (
               <PressableFeedback
                 key={value}
-                className={`flex-1 items-center rounded-2xl border px-3 py-2 ${
+                className={`${stackedChoices ? "" : "flex-1"} items-center rounded-2xl border px-3 py-2 ${
                   appearance.theme === value
                     ? "border-brand bg-brand-tint"
                     : "border-border bg-surface"
@@ -88,15 +90,15 @@ export function SettingsScreen() {
             <PressableFeedback
               key={locale.code}
               animation="disable-all"
-              className="flex-row items-center justify-between py-2"
+              className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2"
               onPress={() => app.setAppearance({ ...appearance, language: locale.code })}
               accessibilityRole="button"
               accessibilityState={{ selected: appearance.language === locale.code }}
             >
               <PressableFeedback.Highlight />
-              <Typography className="text-body text-foreground">{locale.nativeName}</Typography>
+              <Typography className="max-w-full text-body text-foreground">{locale.nativeName}</Typography>
               {appearance.language === locale.code ? (
-                <Typography className="text-caption text-brand">
+                <Typography className="max-w-full text-caption text-brand">
                   {t("panes.profiles.card.default")}
                 </Typography>
               ) : null}
@@ -201,6 +203,7 @@ export function SettingsScreen() {
           <Typography className="text-caption text-danger">{ruleLibrary.error}</Typography>
         ) : null}
         <Button
+          className="min-h-11 h-auto py-3"
           size="sm"
           variant="outline"
           isDisabled={ruleLibrary.updating}
@@ -216,7 +219,7 @@ export function SettingsScreen() {
         {/* The lines themselves get a screen of their own; this says whether
             the backend is delivering any, which the switch above decides. */}
         <Typography className="text-caption text-subtle">
-          {logLines > 0 ? t("proxy.monitorLive") : t("settings.logs.coreLogOff")}
+          {!app.settings?.core.logEnabled ? t("settings.logs.coreLogOff") : hasCoreLogs ? t("settings.logs.coreLogReceived") : t("settings.logs.coreLogWaiting")}
         </Typography>
       </Card>
     </ScrollView>
@@ -245,6 +248,7 @@ function DnsField({
     <View className="gap-1">
       <Typography className="text-caption text-subtle">{label}</Typography>
       <Input
+        className="min-h-12 h-auto py-3"
         value={value ?? ""}
         onChangeText={onChange}
         autoCapitalize="none"

@@ -614,8 +614,13 @@ impl SelfHostManager {
             .lock()
             .map(|mut tasks| std::mem::take(&mut *tasks))
             .unwrap_or_default();
-        for task in tasks {
+        for task in &tasks {
             task.abort();
+        }
+        // Do not return while a cancelled watcher still owns a DB connection
+        // or can publish an event after the host has finished shutting down.
+        for task in tasks {
+            let _ = task.await;
         }
     }
 

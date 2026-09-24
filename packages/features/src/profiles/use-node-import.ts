@@ -99,7 +99,9 @@ export function useNodeImport(
           const result = await voyaCommands().importProfilesFromText(payload, null);
           mergeResult(total, result);
           messages.push(
-            ...result.lineIssues.map((issue) => redactOperationalError(importLineText(t, issue))),
+            ...result.lineIssues
+              .filter((issue) => issue.code.code !== "subscriptionSourceAdded")
+              .map((issue) => redactOperationalError(importLineText(t, issue))),
           );
         } catch (error) {
           total.failed += 1;
@@ -113,7 +115,7 @@ export function useNodeImport(
       } catch (error) {
         issues.push(redactOperationalError(error));
       }
-      if (isActive() && issues.length > 0) setOperationError([...new Set(issues)].join("\n"));
+      if (isActive() && issues.length > 0) setOperationError((current) => [...new Set([current, ...issues].filter(Boolean))].join("\n"));
     } catch (error) {
       if (isActive()) setOperationError(redactOperationalError(error));
     } finally {

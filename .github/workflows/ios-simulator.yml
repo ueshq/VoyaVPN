@@ -1,0 +1,61 @@
+name: iOS simulator
+
+on:
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'crates/**'
+      - 'native/apple/**'
+      - 'scripts/native/**'
+      - 'scripts/core/**'
+      - 'scripts/lib/**'
+      - 'scripts/quality/mobile-*'
+      - 'Cargo.*'
+      - 'rust-toolchain.toml'
+      - 'package.json'
+      - 'pnpm-*.yaml'
+      - '.github/actions/**'
+      - '.github/workflows/ios-simulator.yml'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run the release size, language, theme and large-text matrix
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+concurrency:
+  group: ios-simulator-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 120
+    env:
+      VOYA_IOS_QA_OUTPUT: .agents/docs/ios-ci
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+          cache-key: ios-simulator
+      # CocoaPods, Go and Python ship in the macos-26 image. The runner checks
+      # prerequisites and builds both frameworks from this checkout's pins.
+      - name: Critical native flows
+        if: ${{ !inputs.full }}
+        run: pnpm check:mobile:ios:smoke
+      - name: Full release matrix
+        if: ${{ inputs.full }}
+        run: pnpm check:mobile:ios:full
+      - name: Preserve XCTest, screenshots, accessibility trees and native logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-simulator-evidence
+          path: .agents/docs/ios-ci
+          include-hidden-files: true
+          retention-days: 14

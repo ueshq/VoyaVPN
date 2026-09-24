@@ -117,3 +117,43 @@ it("updates every subscription at once and ignores a second request while runnin
   expect(result.current.updatingAllSubscriptions).toBe(false);
   expect(result.current.operationMessage).toBeTruthy();
 });
+
+it("updates only newly imported sources once, aggregates success and preserves every failure", async () => {
+  ipc.updateSubscriptions.mockResolvedValueOnce(success)
+    .mockRejectedValueOnce(new Error("failed https://secret.example/sub?token=hidden"))
+    .mockResolvedValueOnce({ ...success, imported: 0, updated: 0, skipped: 1, messages: ["timed out"] })
+    .mockResolvedValueOnce(success);
+  const { result } = setup();
+  await act(() => result.current.updateImportedSubscriptions(["a", "b", "a", "c", "d"], () => true));
+  expect(ipc.updateSubscriptions.mock.calls.map(([id]) => id)).toEqual(["a", "b", "c", "d"]);
+  expect(result.current.operationMessage).toContain("4");
+  expect(result.current.operationError).toContain("timed out");
+  expect(result.current.operationError).not.toContain("hidden");
+  expect(result.current.updatingSubscriptions.size).toBe(0);
+});
+
+it("does not update ordinary node imports or imports whose owner has left", async () => {
+  const { result } = setup();
+  await act(() => result.current.updateImportedSubscriptions([], () => true));
+  await act(() => result.current.updateImportedSubscriptions(["a"], () => false));
+  expect(ipc.updateSubscriptions).not.toHaveBeenCalled();
+});
+
+it("blocks duplicate manual updates during import and stops adding work after unmount", async () => {
+  let finish!: (value: SubscriptionUpdateResult) => void;
+  ipc.updateSubscriptions.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const { result, unmount } = setup();
+  let pending!: Promise<void>;
+  act(() => { pending = result.current.updateImportedSubscriptions(["a", "b"], () => true); });
+  expect(result.current.operationMessage).toContain("Updating");
+  await act(async () => {
+    await result.current.updateSubscription("a");
+    await result.current.updateAllSubscriptions();
+    await result.current.updateImportedSubscriptions(["a"], () => true);
+  });
+  expect(ipc.updateSubscriptions).toHaveBeenCalledTimes(1);
+  unmount();
+  finish(success);
+  await pending;
+  expect(ipc.updateSubscriptions).toHaveBeenCalledTimes(1);
+});
