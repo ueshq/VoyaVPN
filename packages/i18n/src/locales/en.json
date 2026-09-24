@@ -956,6 +956,8 @@
     "screenErrorDescription": "This screen stopped unexpectedly. Try again, or reload the app if it keeps happening.",
     "screenErrorTitle": "Something went wrong",
     "sysProxyStatusFailed": "Failed to read system proxy status",
+    "tunBackendAndroid": "Android VpnService",
+    "tunBackendIos": "iOS PacketTunnel",
     "tunBackendMacos": "macOS PacketTunnel",
     "tunBackendProcess": "VPN process",
     "tunBackendUnsupported": "VPN unsupported",

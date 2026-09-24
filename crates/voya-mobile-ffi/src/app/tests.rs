@@ -251,6 +251,81 @@ fn a_share_link_becomes_a_node_that_can_be_connected_and_disconnected() {
     harness.app.shutdown();
 }
 
+/// The TUN status comes from the host's tunnel, not from `voya-platform`.
+///
+/// Only the supervisor used to get the host controller; every status read went
+/// to the platform one, which on a phone answers that the tunnel is not its to
+/// report, and the Home screen showed that as a missing component.
+#[test]
+fn the_tunnel_status_is_what_the_host_reports() {
+    let harness = start_app();
+    harness.invoke(
+        "import_profiles_from_text",
+        serde_json::json!({
+            "text": "vless://11111111-1111-1111-1111-111111111111@example.test:443?security=tls#Tokyo",
+            "subscriptionId": Value::Null,
+        }),
+    );
+    let listing = harness.invoke("list_profile_summaries", serde_json::json!({}));
+    let node_id = listing["entries"][0]["profile"]["id"]
+        .as_str()
+        .expect("id")
+        .to_string();
+    harness.invoke(
+        "set_active_profile",
+        serde_json::json!({ "indexId": node_id }),
+    );
+
+    let before = harness.invoke("tun_status", serde_json::json!({}));
+    assert_eq!(
+        before["providerState"], "stopped",
+        "before connect: {before}"
+    );
+    assert_eq!(
+        before["nativeComponentReady"], true,
+        "before connect: {before}"
+    );
+    assert_eq!(
+        before["lastProviderError"],
+        Value::Null,
+        "before connect: {before}"
+    );
+
+    harness.invoke("connect_active_profile", serde_json::json!({}));
+    let connected = harness.invoke("tun_status", serde_json::json!({}));
+    assert_eq!(
+        connected["providerState"], "running",
+        "connected: {connected}"
+    );
+    assert_eq!(
+        connected["nativeComponentReady"], true,
+        "connected: {connected}"
+    );
+    assert_eq!(
+        connected["lastProviderError"],
+        Value::Null,
+        "connected: {connected}"
+    );
+
+    harness.invoke("disconnect_core", serde_json::json!({}));
+
+    // The core flow announces the status after each transition too.
+    let announced: Vec<Value> = harness
+        .listener
+        .on_channel(EventChannel::TransientStream)
+        .into_iter()
+        .filter(|event| event["kind"] == "tunChanged")
+        .map(|event| event["payload"]["providerState"].clone())
+        .collect();
+    assert_eq!(
+        announced,
+        vec![Value::from("running"), Value::from("stopped")],
+        "the connect and disconnect did not announce the host's tunnel state"
+    );
+
+    harness.app.shutdown();
+}
+
 #[test]
 fn the_clash_api_the_config_declares_is_the_one_the_supervisor_reports() {
     let harness = start_app();

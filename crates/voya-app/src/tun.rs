@@ -131,6 +131,15 @@ impl TunManager {
         self
     }
 
+    /// A host that owns the tunnel itself — a phone's app, which alone can
+    /// start its provider — swaps in its own controller, so status reads ask
+    /// the host rather than `voya-platform`.
+    #[must_use]
+    pub fn with_native_tun_controller(mut self, native_tun: Arc<dyn NativeTunController>) -> Self {
+        self.native_tun = native_tun;
+        self
+    }
+
     /// Test seam for the macOS provider-registration probe.
     #[cfg(test)]
     #[must_use]
@@ -761,5 +770,50 @@ mod tests {
             Err(TunManagerError::ProviderPathMismatch { .. })
         ));
         assert!(!config.tun_mode_item.enable_tun);
+    }
+
+    /// A phone's tunnel belongs to its host app. Its controller replaces the
+    /// platform one here too, or every status read would report the
+    /// `voya-platform` refusal as a missing component.
+    #[test]
+    fn a_host_owned_tunnel_reports_the_host_controller_status() {
+        struct RunningHostTunnel;
+
+        impl NativeTunController for RunningHostTunnel {
+            fn status(&self, backend: PlatformTunBackend) -> voya_platform::tun::NativeTunStatus {
+                voya_platform::tun::NativeTunStatus {
+                    backend,
+                    provider_state: NativeTunProviderState::Running,
+                    component_ready: true,
+                    message: None,
+                }
+            }
+
+            fn start(
+                &self,
+                _request: voya_platform::tun::NativeTunStartRequest,
+            ) -> Result<(), voya_platform::tun::NativeTunError> {
+                Ok(())
+            }
+
+            fn stop(
+                &self,
+                _backend: PlatformTunBackend,
+            ) -> Result<(), voya_platform::tun::NativeTunError> {
+                Ok(())
+            }
+        }
+
+        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Ios)
+            .with_native_tun_controller(Arc::new(RunningHostTunnel));
+
+        let status = manager.status(&AppConfig::default()).expect("status");
+
+        assert_eq!(status.backend, TunBackend::IosPacketTunnel);
+        assert_eq!(status.provider_state, TunProviderState::Running);
+        assert!(status.native_component_ready);
+        assert_eq!(status.last_provider_error, None);
+        assert!(status.allow_enable_tun);
+        assert!(!status.restore_on_disconnect);
     }
 }

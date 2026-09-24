@@ -150,10 +150,13 @@ fn runtime_manager(state: &MobileState) -> RuntimeManager<'_> {
     state.services.runtime(state.supervisor.clone(), None)
 }
 
+/// Every TUN status the phone reports comes from the host's tunnel, the same
+/// controller the supervisor starts it through.
 fn tun_manager(state: &MobileState) -> TunManager {
     state
         .services
         .tun_manager(Arc::clone(&state.elevation), None)
+        .with_native_tun_controller(Arc::clone(&state.native_tun))
 }
 
 struct HostCoreFlowSink {

@@ -28,6 +28,7 @@ use voya_platform::{
     paths::AppPaths,
     privilege::ElevationState,
     process::{ProcessError, ProcessHandle, ProcessOutput, ProcessRunner, ProcessSpawn},
+    tun::NativeTunController,
 };
 
 use crate::{
@@ -71,6 +72,11 @@ pub struct MobileState {
     pub(crate) supervisor: CoreSupervisor,
     pub(crate) sinks: Arc<HostSinks>,
     pub(crate) elevation: Arc<ElevationState>,
+    /// The host's tunnel, shared by the supervisor and every per-command
+    /// `TunManager`. Without it the status reads would fall back to
+    /// `voya-platform`'s controller, which on a phone can only answer that the
+    /// tunnel is not its to report.
+    pub(crate) native_tun: Arc<dyn NativeTunController>,
     /// One manager — and therefore one HTTP client, TLS config and keep-alive
     /// pool — for every proxy command, so the loopback connection into the
     /// running core survives between them.
@@ -205,12 +211,11 @@ async fn connect(
 
     let sinks = Arc::new(HostSinks::new(events));
     let elevation = Arc::new(ElevationState::new());
+    let native_tun: Arc<dyn NativeTunController> =
+        Arc::new(HostTunController::new(tunnel, data_dir.to_path_buf()));
     let supervisor = CoreSupervisor::spawn(
         SupervisorDeps::new(Arc::new(NoProcessRunner), Arc::clone(&elevation))
-            .with_native_tun_controller(Arc::new(HostTunController::new(
-                tunnel,
-                data_dir.to_path_buf(),
-            )))
+            .with_native_tun_controller(Arc::clone(&native_tun))
             .with_event_sink(Arc::clone(&sinks) as Arc<_>),
     );
 
@@ -226,6 +231,7 @@ async fn connect(
     Ok(MobileState {
         config_mutations,
         elevation,
+        native_tun,
         proxy_monitor: ProxyMonitorController::new(),
         proxy_runtime: ProxyRuntimeManager::new(),
         services,

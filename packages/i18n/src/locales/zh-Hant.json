@@ -956,6 +956,8 @@
     "screenErrorDescription": "此頁面意外中斷。請重試，若仍未恢復請重新載入應用程式。",
     "screenErrorTitle": "發生問題",
     "sysProxyStatusFailed": "讀取系統代理狀態失敗",
+    "tunBackendAndroid": "Android VpnService",
+    "tunBackendIos": "iOS PacketTunnel",
     "tunBackendMacos": "macOS PacketTunnel",
     "tunBackendProcess": "VPN 程序",
     "tunBackendUnsupported": "不支援 VPN",

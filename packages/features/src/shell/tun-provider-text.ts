@@ -37,6 +37,10 @@ function tunBackendLabel(backend: TunStatus["backend"], t: TranslationFunction) 
       return t("status.tunBackendMacos");
     case "windowsService":
       return t("status.tunBackendWindows");
+    case "iosPacketTunnel":
+      return t("status.tunBackendIos");
+    case "androidVpnService":
+      return t("status.tunBackendAndroid");
     case "process":
       return t("status.tunBackendProcess");
     case "unsupported":
