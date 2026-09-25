@@ -6,15 +6,18 @@ import { validationFieldErrors } from "@voya/client/messages";
 import type { DnsSettings } from "@voya/contracts";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "heroui-native/button";
+import { FieldError } from "heroui-native/field-error";
 import { Input } from "heroui-native/input";
-import { Switch } from "heroui-native/switch";
+import { Label } from "heroui-native/label";
+import { ListGroup } from "heroui-native/list-group";
+import { TextField } from "heroui-native/text-field";
 import { Typography } from "heroui-native/text";
 import { useRef, useState } from "react";
-import { Keyboard, View } from "react-native";
+import { Keyboard } from "react-native";
 import { DetailScreen } from "~/components/detail-screen";
+import { Disclosure } from "~/components/disclosure";
 import { ErrorNotice } from "~/components/error-notice";
-import { ListCard } from "~/components/list-card";
-import { ListRow } from "~/components/list-row";
+import { SwitchRow } from "~/components/switch-row";
 import { useUnsavedChanges } from "~/components/use-unsaved-changes";
 
 const FIELDS = [{ key: "remote", labelKey: "panes.dns.remoteDns" }, { key: "direct", labelKey: "panes.dns.directDns" }, { key: "bootstrap", labelKey: "panes.dns.bootstrapDns" }] as const;
@@ -64,14 +67,17 @@ export function DnsScreen() {
   return <DetailScreen>
     <ErrorNotice error={query.error} retry={() => void query.refetch()} />
     <Button variant="secondary" className="min-h-12 h-auto" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.recommended")}</Button.Label></Button>
-    <Button variant="ghost" className="min-h-12 h-auto" onPress={() => setAdvanced(!advanced)} accessibilityState={{ expanded: advanced }}><Button.Label>{t("mobile.advanced")}</Button.Label></Button>
     {form ? <>
-      {advanced || dirty ? FIELDS.map(({ key, labelKey }) => <View key={key} className="gap-2">
-        <Typography className="text-base text-foreground">{t(labelKey)}</Typography>
-        <Input className="min-h-12 h-auto" value={form[key] ?? ""} onChangeText={(value) => edit({ [key]: value })} editable={!saving} autoCapitalize="none" autoCorrect={false} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} accessibilityLabel={t(labelKey)} isInvalid={Boolean(fields[key])} />
-        {fields[key] ? <Typography className="text-sm text-danger">{fields[key]}</Typography> : null}
-      </View>) : <Typography className="text-base text-subtle">{FIELDS.map(({ key, labelKey }) => `${t(labelKey)}: ${form[key] ?? "—"}`).join("\n")}</Typography>}
-      {advanced ? <ListCard>{SWITCHES.map(({ key, labelKey }, index) => <ListRow key={key} last={index === SWITCHES.length - 1} title={t(labelKey)} trailing={<Switch accessibilityLabel={t(labelKey)} isDisabled={saving} isSelected={form[key] ?? false} onSelectedChange={(value) => edit({ [key]: value })} />} />)}</ListCard> : null}
+      {/* Unsaved edits keep the fields open: collapsing them would hide what is about to be saved. */}
+      <Disclosure title={t("mobile.advanced")} isExpanded={advanced || dirty} onExpandedChange={setAdvanced}>
+        {FIELDS.map(({ key, labelKey }) => <TextField key={key} isInvalid={Boolean(fields[key])}>
+          <Label>{t(labelKey)}</Label>
+          <Input value={form[key] ?? ""} onChangeText={(value) => edit({ [key]: value })} editable={!saving} autoCapitalize="none" autoCorrect={false} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} accessibilityLabel={t(labelKey)} />
+          <FieldError>{fields[key]}</FieldError>
+        </TextField>)}
+        <ListGroup>{SWITCHES.map(({ key, labelKey }, index) => <SwitchRow key={key} last={index === SWITCHES.length - 1} label={t(labelKey)} isDisabled={saving} value={form[key] ?? false} onChange={(value) => edit({ [key]: value })} />)}</ListGroup>
+      </Disclosure>
+      {advanced || dirty ? null : <Typography className="text-base text-subtle">{FIELDS.map(({ key, labelKey }) => `${t(labelKey)}: ${form[key] ?? "—"}`).join("\n")}</Typography>}
       <Typography accessibilityLiveRegion="polite" className="text-sm text-subtle">{saving ? t("mobile.saving") : dirty ? t("mobile.unsaved") : t("mobile.saved")}</Typography>
       <ErrorNotice error={error} message={t("mobile.saveFailed")} />
       <Button className="min-h-12 h-auto" isDisabled={!dirty || saving} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>

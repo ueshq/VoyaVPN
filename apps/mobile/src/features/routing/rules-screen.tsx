@@ -13,7 +13,7 @@ import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import { Route } from "lucide-react-native";
 import { useCallback, useMemo } from "react";
-import { FlatList, View, useWindowDimensions } from "react-native";
+import { FlatList, View } from "react-native";
 
 import { Banner } from "~/components/banner";
 import { EmptyState } from "~/components/empty-state";
@@ -46,7 +46,6 @@ const TRAFFIC_MODES = [
 export function RulesScreen() {
   const { t } = useI18n();
   const insets = useScreenInsets();
-  const { fontScale, width } = useWindowDimensions();
   const routing = useRoutingScreen();
   const trafficMode = useTrafficMode();
   const rulesApply = trafficMode.mode !== "global";
@@ -108,7 +107,6 @@ export function RulesScreen() {
                   value={trafficMode.mode}
                   onChange={(value) => trafficMode.selectMode(value)}
                   isDisabled={trafficMode.disabled}
-                  stacked={width / fontScale < 320}
                 />
                 {trafficMode.disabledReason ? (
                   <Typography className="text-sm text-subtle">{t(trafficMode.disabledReason)}</Typography>

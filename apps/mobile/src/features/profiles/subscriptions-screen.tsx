@@ -7,15 +7,18 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { formatBytes } from "@voya/utils/formatting";
 import { formatSubscriptionUpdateSummary, subscriptionUpdateMessages } from "@voya/features/subscriptions/subscription-update-result";
 import { Button } from "heroui-native/button";
+import { FieldError } from "heroui-native/field-error";
 import { Input } from "heroui-native/input";
+import { Label } from "heroui-native/label";
+import { ListGroup } from "heroui-native/list-group";
+import { TextField } from "heroui-native/text-field";
 import { Typography } from "heroui-native/text";
 import { useRef, useState } from "react";
-import { Alert, View } from "react-native";
+import { Alert } from "react-native";
 import { openPage, type RootRoutes } from "~/app/navigation";
 import { DetailScreen } from "~/components/detail-screen";
 import { Banner } from "~/components/banner";
 import { ErrorNotice } from "~/components/error-notice";
-import { ListCard } from "~/components/list-card";
 import { ListRow } from "~/components/list-row";
 import { useUnsavedChanges } from "~/components/use-unsaved-changes";
 import { deleteSafely } from "./delete-safely";
@@ -72,9 +75,9 @@ export function SubscriptionsScreen() {
     {failedIds.length ? <Button variant="secondary" className="min-h-12 h-auto" isDisabled={busy} onPress={() => void update(failedIds)}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
     {message ? <Banner status={failedIds.length ? "warning" : "info"} liveRegion message={message} /> : null}
     <ErrorNotice error={error ?? sources.error} retry={() => void sources.refetch()} />
-    <ListCard>{sources.data?.map((item, index, all) => <ListRow key={item.id} title={subscriptionName(item, metadata.data?.find((meta) => meta.subscriptionId === item.id))}
+    <ListGroup>{sources.data?.map((item, index, all) => <ListRow key={item.id} title={subscriptionName(item, metadata.data?.find((meta) => meta.subscriptionId === item.id))}
       description={failedIds.includes(item.id) ? t("mobile.updateFailed") : undefined} descriptionLines={0}
-      last={index === all.length - 1} onPress={() => openPage("subscription", { id: item.id })} />)}</ListCard>
+      last={index === all.length - 1} chevron onPress={() => openPage("subscription", { id: item.id })} />)}</ListGroup>
   </DetailScreen>;
 }
 
@@ -148,8 +151,8 @@ function SubscriptionEditor({ item, metadata, close }: { item: Subscription; met
     ]);
   }
   return <DetailScreen>
-    <View className="gap-2"><Typography className="text-base text-foreground">{t("mobile.name")}</Typography><Input className="min-h-12 h-auto" accessibilityLabel={t("mobile.name")} value={name} onChangeText={setName} editable={!busy} isInvalid={fields.name} />{fields.name ? <Typography className="text-sm text-danger">{t("mobile.nameRequired")}</Typography> : null}</View>
-    <View className="gap-2"><Typography className="text-base text-foreground">{t("mobile.url")}</Typography><Input className="min-h-12 h-auto" accessibilityLabel={t("mobile.url")} value={url} onChangeText={setUrl} editable={!busy} isInvalid={fields.url} autoCorrect={false} autoCapitalize="none" />{fields.url ? <Typography className="text-sm text-danger">{t("mobile.urlRequired")}</Typography> : null}</View>
+    <TextField isInvalid={fields.name}><Label>{t("mobile.name")}</Label><Input accessibilityLabel={t("mobile.name")} value={name} onChangeText={setName} editable={!busy} /><FieldError>{t("mobile.nameRequired")}</FieldError></TextField>
+    <TextField isInvalid={fields.url}><Label>{t("mobile.url")}</Label><Input accessibilityLabel={t("mobile.url")} value={url} onChangeText={setUrl} editable={!busy} autoCorrect={false} autoCapitalize="none" /><FieldError>{t("mobile.urlRequired")}</FieldError></TextField>
     <Typography className="text-sm text-subtle">{busy ? t("mobile.saving") : dirty ? t("mobile.unsaved") : t("mobile.saved")}</Typography>
     <Button className="min-h-12 h-auto" isDisabled={!dirty || busy} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>
     <Typography className="text-base text-subtle">{t("nodeGroups.membersCount", { count: members.length })}</Typography>

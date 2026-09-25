@@ -1,7 +1,7 @@
 import { useResolveClassNames } from "uniwind";
 
 /**
- * The few colour roles a badge, a banner or an icon can take.
+ * The few colour roles a badge or an icon can take.
  *
  * Every class is written out in full: Tailwind finds classes by scanning the
  * source, so a class assembled at runtime would never be generated.
@@ -16,7 +16,7 @@ export const TONE_BACKGROUND = {
   warning: "bg-warning-soft",
 } as const satisfies Record<Tone, string>;
 
-export const TONE_TEXT = {
+const TONE_TEXT = {
   brand: "text-brand",
   connected: "text-connected",
   danger: "text-danger-soft-foreground",

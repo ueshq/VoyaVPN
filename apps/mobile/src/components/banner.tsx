@@ -1,23 +1,22 @@
-import { CircleAlert, Info, TriangleAlert, type LucideIcon } from "lucide-react-native";
-import { Typography } from "heroui-native/text";
+import { Alert } from "heroui-native/alert";
 import type { ReactNode } from "react";
-import { View } from "react-native";
-
-import { TONE_BACKGROUND, TONE_TEXT, useToneColor } from "./tone";
 
 type BannerStatus = "danger" | "info" | "warning";
 
-const STATUS = {
-  danger: { icon: CircleAlert, text: TONE_TEXT.danger, tone: "danger" },
-  info: { icon: Info, text: "text-foreground", tone: "brand" },
-  warning: { icon: TriangleAlert, text: TONE_TEXT.warning, tone: "warning" },
-} as const satisfies Record<BannerStatus, { icon: LucideIcon; text: string; tone: string }>;
+/** HeroUI's name for each status; its `accent` is the Voya brand blue. */
+const ALERT_STATUS = {
+  danger: "danger",
+  info: "accent",
+  warning: "warning",
+} as const satisfies Record<BannerStatus, string>;
 
 /**
  * A message about the screen it sits on — a failure, a warning, the outcome of
- * an action — on a tinted panel with an icon, so it reads as a message rather
- * than as more of the page. `action` is at most one small button, such as a
- * retry.
+ * an action — as a HeroUI `Alert`, so it reads as a message rather than as
+ * more of the page. `action` is at most one small button, such as a retry.
+ *
+ * The alert's root carries `role="alert"` but is not itself an accessibility
+ * element, so the action inside stays reachable on its own.
  */
 export function Banner({
   action,
@@ -31,23 +30,13 @@ export function Banner({
   message: string;
   status: BannerStatus;
 }) {
-  const { icon: Icon, text, tone } = STATUS[status];
-  const color = useToneColor(tone);
-
   return (
-    <View className={`flex-row gap-3 rounded-2xl px-4 py-3 ${TONE_BACKGROUND[tone]}`}>
-      <View className="pt-0.5" accessible={false}>
-        <Icon size={18} color={color} />
-      </View>
-      <View className="min-w-0 flex-1 items-start gap-2">
-        <Typography
-          accessibilityLiveRegion={liveRegion ? "polite" : undefined}
-          className={`text-sm ${text}`}
-        >
-          {message}
-        </Typography>
+    <Alert status={ALERT_STATUS[status]}>
+      <Alert.Indicator accessible={false} />
+      <Alert.Content className="min-w-0 items-start gap-2">
+        <Alert.Title accessibilityLiveRegion={liveRegion ? "polite" : undefined}>{message}</Alert.Title>
         {action}
-      </View>
-    </View>
+      </Alert.Content>
+    </Alert>
   );
 }

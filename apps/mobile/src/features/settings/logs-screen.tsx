@@ -6,11 +6,12 @@ import { useLogStream } from "@voya/features/logs/use-log-stream";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 import { Button } from "heroui-native/button";
-import { Input } from "heroui-native/input";
+import { SearchField } from "heroui-native/search-field";
 import { Typography } from "heroui-native/text";
 import { useMemo, useRef, useState } from "react";
 import { FlatList, View } from "react-native";
 import { ErrorNotice } from "~/components/error-notice";
+import { SegmentedControl } from "~/components/segmented-control";
 import { useScreenInsets } from "~/components/use-screen-insets";
 import { shareDiagnostics } from "~/native/device-actions";
 
@@ -37,10 +38,18 @@ export function LogsScreen() {
     ListEmptyComponent={<Typography className="px-page py-4 text-base text-subtle">{t(lines.length ? "panes.logs.noMatches" : "panes.logs.empty")}</Typography>}
     ListHeaderComponent={<View className="gap-3 px-page pb-3">
       <Typography className="text-sm text-subtle">{t("mobile.logBuffer")}</Typography>
-      <Input className="min-h-12 h-auto" value={search} onChangeText={setSearch} accessibilityLabel={t("mobile.logSearch")} placeholder={t("mobile.logSearch")} />
-      <View className="flex-row flex-wrap gap-2">
-        {([{ value: "all", key: "mobile.allLogs" }, { value: "app", key: "mobile.appLogs" }, { value: "core", key: "mobile.coreLogs" }] as const).map(({ value, key }) => <Button key={value} variant={source === value ? "primary" : "secondary"} className="min-h-12 h-auto" onPress={() => setSource(value)} accessibilityState={{ selected: source === value }}><Button.Label>{t(key)}</Button.Label></Button>)}
-      </View>
+      <SearchField value={search} onChange={setSearch}>
+        <SearchField.Group>
+          <SearchField.SearchIcon />
+          <SearchField.Input accessibilityLabel={t("mobile.logSearch")} placeholder={t("mobile.logSearch")} autoCapitalize="none" autoCorrect={false} />
+          <SearchField.ClearButton accessibilityLabel={t("activity.clearSearch")} />
+        </SearchField.Group>
+      </SearchField>
+      <SegmentedControl
+        options={[{ label: t("mobile.allLogs"), value: "all" }, { label: t("mobile.appLogs"), value: "app" }, { label: t("mobile.coreLogs"), value: "core" }]}
+        value={source}
+        onChange={setSource}
+      />
       <Button variant="secondary" className="min-h-12 h-auto" onPress={() => setPausedAt(pausedAt === null ? lines.at(-1)?.id ?? 0 : null)}><Button.Label>{pausedAt === null ? t("mobile.pause") : t("mobile.follow", { count: added })}</Button.Label></Button>
       <Button variant="secondary" className="min-h-12 h-auto" onPress={() => { void clipboard().writeText(exportText()).catch(setError); }}><Button.Label>{t("mobile.copyDiagnostics")}</Button.Label></Button>
       <Button variant="secondary" className="min-h-12 h-auto" onPress={() => { void shareDiagnostics(exportText()).catch(setError); }}><Button.Label>{t("mobile.share")}</Button.Label></Button>

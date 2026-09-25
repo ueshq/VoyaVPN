@@ -9,17 +9,17 @@ import type { ThemeMode } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n/core";
 import { Button } from "heroui-native/button";
 import { Card } from "heroui-native/card";
+import { ListGroup } from "heroui-native/list-group";
 import { Spinner } from "heroui-native/spinner";
-import { Switch } from "heroui-native/switch";
 import { Typography } from "heroui-native/text";
 import { Check, Database, ScrollText } from "lucide-react-native";
-import { ScrollView, View, useWindowDimensions } from "react-native";
+import { ScrollView, View } from "react-native";
 
 import { IconBadge } from "~/components/icon-badge";
-import { ListCard } from "~/components/list-card";
 import { ListRow } from "~/components/list-row";
 import { SectionHeader } from "~/components/section-header";
 import { SegmentedControl } from "~/components/segmented-control";
+import { SwitchRow } from "~/components/switch-row";
 import { useToneColor } from "~/components/tone";
 import { useScreenInsets } from "~/components/use-screen-insets";
 
@@ -43,8 +43,6 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
   const { language, t } = useI18n();
   const insets = useScreenInsets();
   const checkColor = useToneColor("brand");
-  const { width, fontScale } = useWindowDimensions();
-  const stackedChoices = width / fontScale < 360;
   const app = useAppSettings();
   const appearance = app.settings?.appearance;
   const hasCoreLogs = useRuntimeEventStore((state) => state.logLines.some((line) => line.body.source === "core"));
@@ -80,7 +78,6 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
               options={THEME_MODES.map(({ labelKey, value }) => ({ label: t(labelKey), value }))}
               value={appearance.theme}
               onChange={(theme) => app.setAppearance({ ...appearance, theme })}
-              stacked={stackedChoices}
             />
           </Card>
         </View>
@@ -92,7 +89,7 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
           {/* Theme and language are the same kind of choice, so they go through
               the same write: `setAppearance` previews at once and persists on
               the backend's acknowledgement. */}
-          <ListCard>
+          <ListGroup>
             {localeOptions.map((locale, index) => {
               const selected = appearance.language === locale.code;
               return (
@@ -106,7 +103,7 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
                 />
               );
             })}
-          </ListCard>
+          </ListGroup>
         </View>
       ) : null}
 
@@ -114,8 +111,8 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
         <View className="gap-3">
           <View>
             <SectionHeader title={t("settings.sections.behavior")} />
-            <ListCard>
-              <Toggle
+            <ListGroup>
+              <SwitchRow
                 label={t("options.autoCheckIp")}
                 value={app.settings.behavior.autoCheckIp}
                 onChange={(autoCheckIp) =>
@@ -125,7 +122,7 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
                   }))
                 }
               />
-              <Toggle
+              <SwitchRow
                 last
                 label={t("settings.core.logEnabled")}
                 value={app.settings.core.logEnabled}
@@ -136,7 +133,7 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
                   }))
                 }
               />
-            </ListCard>
+            </ListGroup>
           </View>
 
         </View>
@@ -179,49 +176,22 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
         </Button>
       </Card>
 
-      <ListCard>
+      <ListGroup>
         {/* The lines themselves get a screen of their own; this says whether
             the backend is delivering any, which the switch above decides. */}
         <ListRow
           last
           leading={<IconBadge icon={ScrollText} size="sm" tone="neutral" />}
           testID="maintenance-logs"
+          chevron
           title={t("tabs.logs")}
           onPress={() => openPage("logs")}
           description={!app.settings?.core.logEnabled ? t("settings.logs.coreLogOff") : hasCoreLogs ? t("settings.logs.coreLogReceived") : t("settings.logs.coreLogWaiting")}
           descriptionLines={0}
         />
-      </ListCard>
+      </ListGroup>
       </> : null}
     </ScrollView>
-  );
-}
-
-/** A setting that is on or off: a list row whose trailing control is the switch. */
-function Toggle({
-  label,
-  last = false,
-  onChange,
-  value,
-}: {
-  label: string;
-  last?: boolean;
-  onChange: (value: boolean) => void;
-  value: boolean;
-}) {
-  return (
-    <ListRow
-      last={last}
-      title={label}
-      trailing={
-        <Switch
-          isSelected={value}
-          onSelectedChange={onChange}
-          accessibilityLabel={label}
-          hitSlop={10}
-        />
-      }
-    />
   );
 }
 

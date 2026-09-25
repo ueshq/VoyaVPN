@@ -1,57 +1,57 @@
-import { PressableFeedback } from "heroui-native/pressable-feedback";
-import { Typography } from "heroui-native/text";
-import { View } from "react-native";
+import { Tabs } from "heroui-native/tabs";
 
 /**
- * A choice of one among a few, as a track with the chosen segment raised.
+ * A choice of one among a few: HeroUI's primary `Tabs`, a track with the
+ * chosen segment raised.
  *
- * Each segment is a button marked `selected` when chosen — the same contract
- * the separate choice buttons had, so Testing Library's `toBeSelected()` and
- * XCUITest's `isSelected` read it unchanged. Labels stay on one line, and a
- * segment is as wide as its label plus an equal share of what is left — equal
- * widths truncated "Follow system" beside "Light" and "Dark". With `stacked`,
- * for a narrow screen or large text, the segments stack instead.
+ * Each segment overrides the trigger's `role="tab"` with `button`. React
+ * Native gives `tab` no trait at all on iOS, so VoiceOver would not announce
+ * the segment as something to press, and XCUITest would not find it among
+ * `buttons`. The trigger still marks the chosen segment `selected`, which is
+ * what Testing Library's `toBeSelected()` and XCUITest's `isSelected` read.
+ * There are no panels here — the choice is the whole point — so nothing is
+ * lost by not being a tab.
+ *
+ * Labels stay on one line, and a segment is as wide as its label plus an equal
+ * share of what is left — equal widths truncated "Follow system" beside
+ * "Light" and "Dark". When the labels do not fit, at large text sizes, the
+ * track scrolls sideways.
  */
 export function SegmentedControl<T extends string>({
   isDisabled,
   onChange,
   options,
-  stacked = false,
   value,
 }: {
   isDisabled?: boolean;
   onChange: (value: T) => void;
   options: readonly { label: string; value: T }[];
-  stacked?: boolean;
   value: T | null | undefined;
 }) {
   return (
-    <View className={`gap-1 rounded-3xl bg-surface-secondary p-1 ${stacked ? "" : "flex-row"}`}>
-      {options.map((option) => {
-        const selected = option.value === value;
-
-        return (
-          <PressableFeedback
-            key={option.value}
-            animation="disable-all"
-            className={`min-h-12 items-center justify-center rounded-full px-3 py-2 ${stacked ? "" : "grow basis-auto"} ${
-              selected ? "bg-segment shadow-surface" : ""
-            }`}
-            isDisabled={isDisabled}
-            onPress={() => onChange(option.value)}
-            accessibilityRole="button"
-            accessibilityState={{ selected }}
-          >
-            <PressableFeedback.Highlight />
-            <Typography
-              numberOfLines={stacked ? undefined : 1}
-              className={`text-center text-sm font-medium ${selected ? "text-segment-foreground" : "text-subtle"}`}
+    <Tabs
+      value={value ?? ""}
+      onValueChange={(next) => {
+        const option = options.find((candidate) => candidate.value === next);
+        if (option) onChange(option.value);
+      }}
+    >
+      <Tabs.List className="self-stretch">
+        <Tabs.ScrollView>
+          <Tabs.Indicator />
+          {options.map((option) => (
+            <Tabs.Trigger
+              key={option.value}
+              value={option.value}
+              isDisabled={isDisabled}
+              role="button"
+              className="min-h-12 shrink-0 grow basis-auto"
             >
-              {option.label}
-            </Typography>
-          </PressableFeedback>
-        );
-      })}
-    </View>
+              <Tabs.Label numberOfLines={1}>{option.label}</Tabs.Label>
+            </Tabs.Trigger>
+          ))}
+        </Tabs.ScrollView>
+      </Tabs.List>
+    </Tabs>
   );
 }

@@ -10,6 +10,8 @@ import { subscriptionUpdateMessages } from "@voya/features/subscriptions/subscri
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "heroui-native/button";
 import { Input } from "heroui-native/input";
+import { Label } from "heroui-native/label";
+import { TextField } from "heroui-native/text-field";
 import { Typography } from "heroui-native/text";
 import { Keyboard, Linking, View, useWindowDimensions } from "react-native";
 import { openPage } from "~/app/navigation";
@@ -100,7 +102,7 @@ export function ImportScreen() {
       {preview.data.nodes.length > previewLimit ? <Button variant="secondary" className="min-h-12 h-auto" accessibilityState={{ expanded: allNodes }} onPress={() => setAllNodes(!allNodes)}><Button.Label>{allNodes ? t("mobile.collapsePreview") : t("mobile.expandPreview", { count: preview.data.nodes.length })}</Button.Label></Button> : null}
       {preview.data.subscriptionUrls.map((url) => <View key={url} className="gap-2">
         <Typography selectable className="text-base text-foreground">{new URL(url).hostname}{"\n"}{url}</Typography>
-        <Input className="min-h-12 h-auto" accessibilityLabel={t("mobile.name")} placeholder={t("mobile.name")} value={sourceNames[url] ?? ""} editable={!busy} onChangeText={(value) => setSourceNames((previous) => ({ ...previous, [url]: value }))} />
+        <TextField><Label>{t("mobile.name")}</Label><Input accessibilityLabel={t("mobile.name")} placeholder={t("mobile.name")} value={sourceNames[url] ?? ""} editable={!busy} onChangeText={(value) => setSourceNames((previous) => ({ ...previous, [url]: value }))} /></TextField>
       </View>)}
       <Button variant="secondary" className="min-h-12 h-auto" isDisabled={busy} onPress={() => { setPreview(null); setAllNodes(false); }}><Button.Label>{t("actions.edit")}</Button.Label></Button>
       <Button className="min-h-12 h-auto" isDisabled={busy || !(preview.data.nodes.length || preview.data.subscriptionUrls.length)} onPress={() => void run(commit)}><Button.Label>{t("mobile.confirmImport")}</Button.Label></Button>

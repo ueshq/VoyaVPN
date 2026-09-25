@@ -17,6 +17,8 @@ import { POLICY_GROUP_STRATEGY_HINT_KEYS } from "@voya/features/profiles/policy-
 import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "heroui-native/button";
+import { Chip } from "heroui-native/chip";
+import { ListGroup } from "heroui-native/list-group";
 import { Menu } from "heroui-native/menu";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
@@ -26,12 +28,12 @@ import { AccessibilityInfo, findNodeHandle, FlatList, View, useWindowDimensions 
 import { useResolveClassNames } from "uniwind";
 
 import { Banner } from "~/components/banner";
+import { Disclosure } from "~/components/disclosure";
 import { EmptyState } from "~/components/empty-state";
-import { ListCard } from "~/components/list-card";
 import { ListRow } from "~/components/list-row";
 import { PageHeader } from "~/components/page-header";
 import { SectionHeader } from "~/components/section-header";
-import { TONE_BACKGROUND, TONE_TEXT, useToneColor, type Tone } from "~/components/tone";
+import { useToneColor } from "~/components/tone";
 import { useScreenInsets } from "~/components/use-screen-insets";
 
 import { NodeActionsSheet } from "./node-actions-sheet";
@@ -78,7 +80,6 @@ export function NodesScreen() {
 
   const selected = data.profiles.find((entry) => entry.isActive);
   const groups = usePolicyGroups(operation, t);
-  const [groupsExpanded, setGroupsExpanded] = useState(false);
   const exports = useNodeExport(operation, t);
   const [actionsFor, setActionsFor] = useState<ProfileSummaryEntry | null>(null);
 
@@ -131,7 +132,7 @@ export function NodesScreen() {
                 <MoreHorizontal size={20} color={accentForeground} />
               </Button>
               {(!item.item.metrics.outcome || item.item.metrics.outcome === "completed") ? (
-                <LatencyPill tone={LATENCY_TONE[profileLatencyTone(item.item)]} text={profileLatency(item.item, t)} />
+                <LatencyChip color={LATENCY_COLOR[profileLatencyTone(item.item)]} text={profileLatency(item.item, t)} />
               ) : null}
               {activation.runningId === item.item.profile.id ? (
                 <Typography className="text-sm font-medium text-connected">
@@ -215,11 +216,11 @@ export function NodesScreen() {
                 </View>
               }
             />
-            {selected ? <ListCard><ListRow
+            {selected ? <ListGroup><ListRow
               title={`${t("mobile.currentSelection")}: ${profileTitle(selected.profile.remarks, t)}`}
               titleLines={0} description={selected.profile.address} last
               onPress={() => { returnFocusId.current = selected.profile.id; setActionsFor(selected); }}
-            /></ListCard> : null}
+            /></ListGroup> : null}
             <Button
               ref={importRef}
               className="min-h-12 h-auto rounded-3xl py-3"
@@ -240,9 +241,8 @@ export function NodesScreen() {
                 the node rows: picking one is picking *instead* of a row.
                 Editing a group is a desktop job; a phone uses what is there. */}
             {groups.policyGroupEntries.length > 0 ? (
-              <View>
-                <SectionHeader title={t("policyGroups.title")} expanded={groupsExpanded} onToggle={() => setGroupsExpanded(!groupsExpanded)} />
-                {groupsExpanded ? <ListCard>
+              <Disclosure heading title={t("policyGroups.title")}>
+                <ListGroup>
                   {groups.policyGroupEntries.map((entry, index, all) => (
                     <ListRow
                       key={entry.group.id}
@@ -262,8 +262,8 @@ export function NodesScreen() {
                       accessibilityState={{ selected: entry.isActive }}
                     />
                   ))}
-                </ListCard> : null}
-              </View>
+                </ListGroup>
+              </Disclosure>
             ) : null}
 
 
@@ -305,19 +305,20 @@ function actionsLabel(entry: ProfileSummaryEntry, t: ReturnType<typeof useI18n>[
   });
 }
 
-/** Latency tones: fast is green, slow but reachable is a warning, untested is quiet. */
-const LATENCY_TONE = {
+/** Latency colours: fast is green, slow but reachable is a warning, untested is quiet. */
+const LATENCY_COLOR = {
   fair: "warning",
-  good: "connected",
+  good: "success",
   poor: "danger",
-  unknown: "neutral",
-} as const satisfies Record<ReturnType<typeof profileLatencyTone>, Tone>;
+  unknown: "default",
+} as const satisfies Record<ReturnType<typeof profileLatencyTone>, "danger" | "default" | "success" | "warning">;
 
-function LatencyPill({ text, tone }: { text: string; tone: Tone }) {
+/** A measured latency, as a soft HeroUI `Chip`. It reports; it is not pressable. */
+function LatencyChip({ color, text }: { color: (typeof LATENCY_COLOR)[keyof typeof LATENCY_COLOR]; text: string }) {
   return (
-    <View className={`rounded-full px-2.5 py-0.5 ${TONE_BACKGROUND[tone]}`}>
-      <Typography className={`text-sm font-medium tabular-nums ${TONE_TEXT[tone]}`}>{text}</Typography>
-    </View>
+    <Chip size="sm" variant="soft" color={color}>
+      <Chip.Label className="tabular-nums">{text}</Chip.Label>
+    </Chip>
   );
 }
 

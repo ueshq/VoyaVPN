@@ -1,8 +1,8 @@
 import { render, screen, userEvent } from "@testing-library/react-native";
+import { ListGroup } from "heroui-native/list-group";
 import type { ReactNode } from "react";
 import { Text } from "react-native";
 
-import { ListCard } from "./list-card";
 import { ListRow } from "./list-row";
 import { withListPositions } from "./list-positions";
 import { makeTestQueryClient, TestProviders } from "~/test/providers";
@@ -16,10 +16,10 @@ describe("ListRow", () => {
   it("is a button carrying its selected state when it can be pressed", async () => {
     const onPress = jest.fn();
     await render(
-      <ListCard>
+      <ListGroup>
         <ListRow title="English" onPress={onPress} accessibilityState={{ selected: true }} />
         <ListRow last title="简体中文" onPress={() => {}} accessibilityState={{ selected: false }} />
-      </ListCard>,
+      </ListGroup>,
       { wrapper },
     );
 

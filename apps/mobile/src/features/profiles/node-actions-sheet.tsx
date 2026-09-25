@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { ProfileSummaryEntry } from "@voya/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "heroui-native/button";
+import { ListGroup } from "heroui-native/list-group";
 import { Typography } from "heroui-native/text";
 import { AccessibilityInfo, Alert, Modal, Pressable, ScrollView, Share, findNodeHandle, StyleSheet, View, useWindowDimensions, type Text } from "react-native";
 import { QrCode, Copy, Gauge, Share2, Trash2, type LucideIcon } from "lucide-react-native";
@@ -16,7 +17,6 @@ import { useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
-import { ListCard } from "~/components/list-card";
 import { ListRow } from "~/components/list-row";
 import { useToneColor } from "~/components/tone";
 
@@ -128,7 +128,7 @@ export function NodeActionsSheet({
                     </Typography>
                     <Typography className="text-sm text-subtle" numberOfLines={1}>{entry.profile.address}</Typography>
                   </View>
-                  <ListCard>
+                  <ListGroup>
                     <SheetAction
                       icon={Copy}
                       color={actionColor}
@@ -165,7 +165,7 @@ export function NodeActionsSheet({
                         ])}
                       />
                     ) : null}
-                  </ListCard>
+                  </ListGroup>
                   {entry.profile.subscriptionId === null ? null : (
                     <View className="gap-2">
                       <Typography className="px-1 text-sm text-subtle">{subscriptionReadOnly}</Typography>
@@ -212,7 +212,7 @@ function SheetAction({
     <ListRow
       last={last}
       title={label}
-      titleClassName={destructive ? "text-danger" : "text-foreground"}
+      titleClassName={destructive ? "text-danger" : undefined}
       leading={<Icon size={20} color={color} accessible={false} />}
       onPress={onPress}
       accessibilityLabel={label}

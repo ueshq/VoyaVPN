@@ -183,8 +183,8 @@ export function ActivityScreen() {
                     })
                   : t("activity.connectionCount", { count: connections.length })}
               </Typography>
-              <Button className="min-h-12 h-auto py-2" size="sm" variant="ghost" isDisabled={closing || connections.length === 0} onPress={confirmCloseAll}>
-                <Button.Label className="text-danger">{t("activity.disconnectAll")}</Button.Label>
+              <Button className="min-h-12 h-auto py-2" size="sm" variant="danger-soft" isDisabled={closing || connections.length === 0} onPress={confirmCloseAll}>
+                <Button.Label>{t("activity.disconnectAll")}</Button.Label>
               </Button>
             </View>
           </View>

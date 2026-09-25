@@ -9,10 +9,12 @@ import type { CoreState } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n/core";
 import { Button } from "heroui-native/button";
 import { Card } from "heroui-native/card";
+import { LinkButton } from "heroui-native/link-button";
+import { Separator } from "heroui-native/separator";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import { ArrowDown, ArrowUp, Clock, Globe, type LucideIcon } from "lucide-react-native";
-import { Pressable, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 
 import { ErrorNotice } from "~/components/error-notice";
 import { useTrafficMode } from "@voya/features/routing/use-traffic-mode";
@@ -78,13 +80,13 @@ export function HomeScreen() {
             </Typography>
           </View>
           {runtime.hasNodes ? <>
-          <Pressable accessibilityRole="button" onPress={() => navigateToTab("profiles")} className="min-h-12 justify-center">
-          <Typography className="text-center text-base text-brand">
-            {runtime.activeGroup
-              ? runtime.activeGroup.group.name
-              : (nodeName ?? t("home.noSelection"))}
-          </Typography>
-          </Pressable>
+          <LinkButton className="min-h-12 max-w-full" onPress={() => navigateToTab("profiles")}>
+            <LinkButton.Label className="text-center text-accent">
+              {runtime.activeGroup
+                ? runtime.activeGroup.group.name
+                : (nodeName ?? t("home.noSelection"))}
+            </LinkButton.Label>
+          </LinkButton>
           <Typography className="text-sm text-subtle">{t(trafficMode.mode === "global" ? "proxy.trafficModeGlobal" : "panes.routing.trafficModeRule")}</Typography>
           </> : null}
           {runtime.activeGroup && runtime.groupRuntime?.nowProfileId ? (
@@ -134,7 +136,7 @@ export function HomeScreen() {
             value={formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0)}
           />
         </View>
-        <View className="h-hairline bg-border-subtle" />
+        <Separator />
         <Fact icon={Clock} label={t("home.duration")} value={connectionTime(runtime.state)} />
         <Fact icon={Globe} label={t("home.exitIp")} value={exitIp(ipQuery, t)} selectable />
       </Card>

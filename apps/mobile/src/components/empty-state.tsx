@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react-native";
+import { Surface } from "heroui-native/surface";
 import { Typography } from "heroui-native/text";
 import type { ReactNode } from "react";
 import { View } from "react-native";
@@ -10,8 +11,8 @@ import type { Tone } from "./tone";
 const CLUSTER_TONES: readonly Tone[] = ["neutral", "brand", "connected"];
 
 /**
- * What a screen shows instead of an empty list: a card with a small cluster of
- * icons, what is missing, how to fill it, and at most one way to do so.
+ * What a screen shows instead of an empty list: a HeroUI `Surface` with a small
+ * cluster of icons, what is missing, how to fill it, and at most one way to do so.
  */
 export function EmptyState({
   action,
@@ -26,7 +27,7 @@ export function EmptyState({
   title: string;
 }) {
   return (
-    <View className="items-center gap-4 rounded-3xl bg-surface px-6 py-8 shadow-surface">
+    <Surface className="items-center gap-4 px-6 py-8">
       <View className="flex-row" accessible={false}>
         {icons.map((icon, index) => (
           <View
@@ -51,6 +52,6 @@ export function EmptyState({
         ) : null}
       </View>
       {action ? <View className="w-full">{action}</View> : null}
-    </View>
+    </Surface>
   );
 }
