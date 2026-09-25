@@ -1,13 +1,5 @@
 //! Startup assembly and deferred startup-failure reporting.
-use crate::{
-    event_sinks::{
-        TauriProcessLogSink, TauriSelfHostEventSink, TauriStatisticsEventSink,
-        TauriSubscriptionAutoUpdateSink, TauriSupervisorEventSink,
-    },
-    logging,
-    tray::setup_tray,
-    AppState,
-};
+use crate::{event_sinks::TauriSinks, logging, tray::setup_tray, AppState};
 use std::{
     error::Error,
     path::{Path, PathBuf},
@@ -120,11 +112,10 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         tracing::warn!(?error, "failed to copy packaged rule sets at startup");
     }
     let core_seed_resource_dir = Some(seed_dir);
-    let runner: Arc<dyn ProcessRunner> = Arc::new(StdProcessRunner::with_log_sink(Arc::new(
-        TauriProcessLogSink {
+    let runner: Arc<dyn ProcessRunner> =
+        Arc::new(StdProcessRunner::with_log_sink(Arc::new(TauriSinks {
             app: app.handle().clone(),
-        },
-    )));
+        })));
     let elevation_manager = ElevationManager::new(
         Arc::clone(&runner),
         runtime_paths.temp_dir().to_path_buf(),
@@ -139,7 +130,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // Probe cores get the same kill-with-the-app job object the supervisor
     // gives the real core below via `SupervisorDeps::platform_with_runner`.
     let speedtest_runner = JobAssignedRunner::new(
-        StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
+        StdProcessRunner::with_log_sink(Arc::new(TauriSinks {
             app: app.handle().clone(),
         })),
         &PlatformProcessJobFactory,
@@ -151,14 +142,14 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let runtime_guard = runtime_handle.inner().enter();
     let supervisor = CoreSupervisor::spawn(
         SupervisorDeps::platform_with_runner(Arc::clone(&runner), elevation_manager.state())
-            .with_event_sink(Arc::new(TauriSupervisorEventSink {
+            .with_event_sink(Arc::new(TauriSinks {
                 app: app.handle().clone(),
             })),
     );
     let statistics_manager = services.spawn_statistics(
         supervisor.clone(),
         Arc::clone(&shared_config),
-        Arc::new(TauriStatisticsEventSink {
+        Arc::new(TauriSinks {
             app: app.handle().clone(),
         }),
     );
@@ -166,7 +157,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         Arc::clone(&config_mutations),
         supervisor.clone(),
         TargetOs::current(),
-        Arc::new(TauriSubscriptionAutoUpdateSink {
+        Arc::new(TauriSinks {
             app: app.handle().clone(),
         }),
     );
@@ -226,7 +217,7 @@ fn spawn_self_host(
     log_level: String,
 ) -> SelfHostManager {
     let runner = JobAssignedRunner::new(
-        StdProcessRunner::with_log_sink(Arc::new(TauriProcessLogSink {
+        StdProcessRunner::with_log_sink(Arc::new(TauriSinks {
             app: app.handle().clone(),
         })),
         &PlatformProcessJobFactory,
@@ -248,7 +239,7 @@ fn spawn_self_host(
             supervisor,
             config: shared_config,
         }),
-        sink: Arc::new(TauriSelfHostEventSink {
+        sink: Arc::new(TauriSinks {
             app: app.handle().clone(),
         }),
         self_tester: Arc::new(ProbeCoreSelfTester),

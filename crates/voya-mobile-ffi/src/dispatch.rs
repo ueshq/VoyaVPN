@@ -106,7 +106,7 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
         "save_app_settings" => settings::save_app_settings(state, args).await,
         "get_settings_apply_status" => settings::settings_apply_status(state).await,
         "apply_pending_settings" => settings::apply_pending_settings(state).await,
-        "set_log_streaming" => settings::set_log_streaming(state, args),
+        "set_log_streaming" => settings::set_log_streaming(),
 
         "get_default_dns_settings" => answer(
             "get_default_dns_settings",

@@ -13,7 +13,7 @@ mod tray;
 
 pub(crate) use app_state::AppState;
 use bootstrap::{database_path, initialize, record_startup_failure, report_startup_failure};
-pub(crate) use event_sinks::TauriProxyRuntimeEventSink;
+pub(crate) use event_sinks::TauriSinks;
 use lifecycle::shutdown_for_exit;
 pub(crate) use tray::refresh_tray_menu;
 

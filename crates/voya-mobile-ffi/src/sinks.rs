@@ -7,24 +7,19 @@
 //! instead of `AppHandle::emit`.
 
 use std::sync::{
-    atomic::{AtomicBool, AtomicU32, Ordering},
+    atomic::{AtomicU32, Ordering},
     Arc,
 };
 
 use voya_app::{
-    contract_map::process_log_level_to_contract,
     invalidation,
     proxy_runtime::ProxyRuntimeEventSink,
-    redaction::{redact_url_userinfo, redact_urls},
-    statistics::StatisticsEventSink,
-    subscriptions::{AutoUpdateOutcome, SubscriptionAutoUpdateSink},
     supervisor::{CoreExitEvent, NativeTunExitEvent, SupervisorEventSink},
 };
 use voya_contracts::{
     AppNotice, AppNoticeLevel, LogCode, LogLevel, LogLineBody, LogLineEvent, NoticeCode,
-    ProxyConnectionsSnapshot, QueryInvalidation, StatisticsSnapshot,
+    ProxyConnectionsSnapshot, QueryInvalidation,
 };
-use voya_platform::process::{ProcessLogLevel, ProcessLogSink, ProcessOutputStream, ProcessRole};
 
 use crate::events::{AppEvent, EventChannel, InvalidateEvent, TransientStreamEvent};
 
@@ -41,22 +36,12 @@ pub trait EventListener: Send + Sync {
 
 pub struct HostSinks {
     listener: Arc<dyn EventListener>,
-    /// Whether a Logs screen is open. Core output is the one stream that costs
-    /// something while nobody is reading it, so it is gated at the source.
-    log_streaming: AtomicBool,
 }
 
 impl HostSinks {
     #[must_use]
     pub fn new(listener: Arc<dyn EventListener>) -> Self {
-        Self {
-            listener,
-            log_streaming: AtomicBool::new(false),
-        }
-    }
-
-    pub(crate) fn set_log_streaming(&self, enabled: bool) {
-        self.log_streaming.store(enabled, Ordering::Relaxed);
+        Self { listener }
     }
 
     pub(crate) fn emit<T: serde::Serialize>(&self, channel: EventChannel, payload: &T) {
@@ -111,15 +96,6 @@ impl HostSinks {
     }
 }
 
-impl StatisticsEventSink for HostSinks {
-    fn emit_statistics(&self, snapshot: StatisticsSnapshot) {
-        self.emit(
-            EventChannel::TransientStream,
-            &TransientStreamEvent::Statistics(snapshot),
-        );
-    }
-}
-
 impl ProxyRuntimeEventSink for HostSinks {
     fn emit_connections(&self, event: ProxyConnectionsSnapshot) {
         self.emit(
@@ -146,78 +122,6 @@ impl SupervisorEventSink for HostSinks {
             AppNoticeLevel::Warning,
             NoticeCode::CoreStopped,
             event.exit_code.map(|code| format!("exit code {code}")),
-        );
-    }
-}
-
-impl SubscriptionAutoUpdateSink for HostSinks {
-    fn update_completed(&self, outcome: AutoUpdateOutcome) {
-        if let Some(error) = &outcome.error {
-            // Redacted at the source too; repeated here so a future failure
-            // path cannot put a tokenized subscription URL in a toast.
-            let error = redact_urls(error);
-            self.log(
-                LogLevel::Warn,
-                LogCode::SubscriptionAutoUpdateFailed {
-                    remarks: outcome.remarks.clone(),
-                },
-                Some(error.clone()),
-            );
-            // Only the first failure of a streak surfaces as a user notice;
-            // retries stay in the log until the subscription recovers.
-            if outcome.consecutive_failures == 1 {
-                self.notice(
-                    AppNoticeLevel::Warning,
-                    NoticeCode::SubscriptionAutoUpdateFailed {
-                        remarks: outcome.remarks.clone(),
-                    },
-                    Some(error),
-                );
-            }
-            return;
-        }
-
-        let imported = outcome.result.as_ref().map_or(0, |result| result.imported);
-        self.log(
-            LogLevel::Info,
-            LogCode::SubscriptionAutoUpdateFinished {
-                remarks: outcome.remarks.clone(),
-                imported,
-            },
-            None,
-        );
-        self.invalidate(
-            "subscription-auto-updated",
-            invalidation::subscription_scopes(true, outcome.config_changed),
-        );
-    }
-}
-
-impl ProcessLogSink for HostSinks {
-    fn line(
-        &self,
-        role: ProcessRole,
-        _stream: ProcessOutputStream,
-        level: ProcessLogLevel,
-        line: String,
-    ) {
-        // Nothing spawns a child process here (see `app::NoProcessRunner`), so
-        // this only ever carries the probe core the disconnected speedtest
-        // starts in-process. The desktop drops probe lines for the same reason:
-        // a latency run over a few hundred nodes would drown the log.
-        if role == ProcessRole::Probe || !self.log_streaming.load(Ordering::Relaxed) {
-            return;
-        }
-        self.emit(
-            EventChannel::TransientStream,
-            &TransientStreamEvent::LogLines(vec![LogLineEvent {
-                id: next_log_line_id(),
-                level: process_log_level_to_contract(level),
-                logged_at_ms: now_ms(),
-                body: LogLineBody::Core {
-                    line: redact_url_userinfo(&line),
-                },
-            }]),
         );
     }
 }

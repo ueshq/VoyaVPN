@@ -52,7 +52,7 @@ pub async fn update_srs_assets(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<ResourceUpdateFile>, AppError> {
     let config = state.config_mutations().current_config();
-    let proxy_url = runtime_proxy_url(true, None, &config);
+    let proxy_url = app_runtime_proxy_url(true, None, &config, TargetOs::current());
 
     state
         .services()
@@ -85,7 +85,7 @@ pub async fn install_core_seed(
         // macOS launches the seed inside the signed bundle; nothing is copied.
         if TargetOs::current() == TargetOs::Macos {
             if let Some(executable) = discover_packaged_seed_executable(&seed_dir, TargetOs::Macos)
-                .map_err(core_seed_install_error)?
+                .map_err(|error| core_info_error(&error, AppErrorSubsystem::Runtime))?
             {
                 return Ok(CoreSeedInstallResult {
                     status: CoreSeedInstallStatus::AlreadyInstalled,
@@ -94,8 +94,8 @@ pub async fn install_core_seed(
             }
         }
 
-        let outcome =
-            copy_seed_core_asset(&runtime_paths, &seed_dir).map_err(core_seed_install_error)?;
+        let outcome = copy_seed_core_asset(&runtime_paths, &seed_dir)
+            .map_err(|error| core_info_error(&error, AppErrorSubsystem::Runtime))?;
 
         Ok(core_seed_install_result(outcome))
     })

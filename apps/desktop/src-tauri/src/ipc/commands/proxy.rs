@@ -90,7 +90,7 @@ pub async fn proxy_start_monitor(
     let clash_api = current_clash_api_access(&state).await;
     let result = state.proxy_monitor_controller().start(
         &clash_api,
-        std::sync::Arc::new(crate::TauriProxyRuntimeEventSink { app: app.clone() }),
+        std::sync::Arc::new(crate::TauriSinks { app: app.clone() }),
     );
 
     voya_app::proxy_runtime::report_monitor_result(result, |status| {

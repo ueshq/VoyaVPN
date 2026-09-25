@@ -31,7 +31,13 @@ pub async fn set_connection_mode<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     mode: ConnectionMode,
 ) -> Result<ConnectionModeStatus, AppError> {
-    let connected = supervisor_connection_state(&state).await?;
+    // System proxy and TUN follow the connected core, never the persisted
+    // mode: applying a proxy nobody is listening behind black-holes traffic.
+    let connected = runtime_manager(&state)
+        .status()
+        .await
+        .map_err(AppError::from)?
+        .state;
     let outcome = connection_mode_manager(&app, &state)
         .set_connection_mode(state.config_mutations(), mode, connected)
         .await

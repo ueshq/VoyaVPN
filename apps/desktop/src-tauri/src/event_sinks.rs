@@ -13,31 +13,14 @@ use voya_app::{
 use voya_contracts::{ProxyConnectionsSnapshot, StatisticsSnapshot};
 use voya_platform::process::{ProcessLogLevel, ProcessLogSink, ProcessOutputStream, ProcessRole};
 
-pub(crate) struct TauriProcessLogSink {
+/// Every application event sink the desktop wires up. Each impl turns one
+/// voya-app event into a typed Tauri event on the app's handle.
+#[derive(Clone)]
+pub(crate) struct TauriSinks {
     pub(crate) app: tauri::AppHandle,
 }
 
-pub(crate) struct TauriStatisticsEventSink {
-    pub(crate) app: tauri::AppHandle,
-}
-
-pub(crate) struct TauriProxyRuntimeEventSink {
-    pub(crate) app: tauri::AppHandle,
-}
-
-pub(crate) struct TauriSupervisorEventSink {
-    pub(crate) app: tauri::AppHandle,
-}
-
-pub(crate) struct TauriSubscriptionAutoUpdateSink {
-    pub(crate) app: tauri::AppHandle,
-}
-
-pub(crate) struct TauriSelfHostEventSink {
-    pub(crate) app: tauri::AppHandle,
-}
-
-impl SelfHostEventSink for TauriSelfHostEventSink {
+impl SelfHostEventSink for TauriSinks {
     fn state_changed(&self) {
         ipc::commands::emit_invalidation(
             &self.app,
@@ -70,7 +53,7 @@ impl SelfHostEventSink for TauriSelfHostEventSink {
     }
 }
 
-impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
+impl SubscriptionAutoUpdateSink for TauriSinks {
     fn update_completed(&self, outcome: AutoUpdateOutcome) {
         if let Some(error) = &outcome.error {
             // Redacted at the source too; repeated here so a future failure
@@ -132,7 +115,7 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
 // actor must stay free to process the commands that recovery may issue.
 // `current_config()` reads through a poisoned lock, so recovery still restores
 // the user's own proxy settings rather than the defaults.
-impl SupervisorEventSink for TauriSupervisorEventSink {
+impl SupervisorEventSink for TauriSinks {
     fn native_tun_exited(&self, event: NativeTunExitEvent) {
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
@@ -158,7 +141,7 @@ impl SupervisorEventSink for TauriSupervisorEventSink {
     }
 }
 
-impl StatisticsEventSink for TauriStatisticsEventSink {
+impl StatisticsEventSink for TauriSinks {
     fn emit_statistics(&self, snapshot: StatisticsSnapshot) {
         ipc::commands::emit_or_warn(
             &self.app,
@@ -168,7 +151,7 @@ impl StatisticsEventSink for TauriStatisticsEventSink {
     }
 }
 
-impl ProxyRuntimeEventSink for TauriProxyRuntimeEventSink {
+impl ProxyRuntimeEventSink for TauriSinks {
     fn emit_connections(&self, event: ProxyConnectionsSnapshot) {
         ipc::commands::emit_or_warn(
             &self.app,
@@ -178,7 +161,7 @@ impl ProxyRuntimeEventSink for TauriProxyRuntimeEventSink {
     }
 }
 
-impl ProcessLogSink for TauriProcessLogSink {
+impl ProcessLogSink for TauriSinks {
     fn line(
         &self,
         role: ProcessRole,

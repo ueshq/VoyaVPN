@@ -54,20 +54,6 @@ pub(super) fn map_ipc_input<T>(
     result.map_err(|error| input_text_error(&error, field, subsystem))
 }
 
-/// The supervisor state the OS-facing transactions gate on.
-///
-/// System proxy and TUN follow the *connected core*, never the persisted mode:
-/// applying a proxy nobody is listening behind black-holes every request.
-pub(super) async fn supervisor_connection_state(
-    state: &AppState,
-) -> Result<SupervisorConnectionState, AppError> {
-    runtime_manager(state)
-        .status()
-        .await
-        .map(|snapshot| snapshot.state)
-        .map_err(AppError::from)
-}
-
 pub(super) fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
     state.services().runtime(
         state.supervisor(),
@@ -138,14 +124,6 @@ pub(super) async fn plan_tun_enabled_off_thread(
     })
     .await?
     .map_err(AppError::from)
-}
-
-pub(super) fn runtime_proxy_url(
-    prefer_proxy: bool,
-    proxy_url: Option<String>,
-    config: &AppConfig,
-) -> Option<String> {
-    app_runtime_proxy_url(prefer_proxy, proxy_url, config, TargetOs::current())
 }
 
 /// Emits one typed event, failing the way a command reports its own errors.
@@ -251,26 +229,6 @@ where
     )
 }
 
-pub(crate) fn emit_statistics_zero<R>(app: &tauri::AppHandle<R>) -> Result<(), AppError>
-where
-    R: tauri::Runtime,
-{
-    emit_event(
-        app,
-        TransientStreamEvent::Statistics(voya_app::statistics::zero_statistics_snapshot()),
-    )
-}
-
-pub(super) fn emit_speedtest_results<R>(
-    app: &tauri::AppHandle<R>,
-    results: Vec<SpeedtestResult>,
-) -> Result<(), AppError>
-where
-    R: tauri::Runtime,
-{
-    emit_event(app, TransientStreamEvent::SpeedtestResults(results))
-}
-
 /// A change that was already committed, whose follow-up work failed.
 ///
 /// `code` names the message; `detail` is the untranslated error behind it, so
@@ -317,13 +275,4 @@ pub(super) fn app_updater_state_for_error(error: &tauri_plugin_updater::Error) -
         | tauri_plugin_updater::Error::UnsupportedOs => AppUpdaterState::Unsupported,
         _ => AppUpdaterState::Error,
     }
-}
-
-/// Installing a packaged core seed reports its own failures.
-///
-/// Not a `From` impl: `CoreInfoError` belongs to voya-platform, so the
-/// conversion is a function in `voya_app::contract_map::errors` that the
-/// subsystem is passed into.
-pub(super) fn core_seed_install_error(error: CoreInfoError) -> AppError {
-    core_info_error(&error, AppErrorSubsystem::Runtime)
 }

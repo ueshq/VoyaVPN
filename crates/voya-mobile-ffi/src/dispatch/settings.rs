@@ -24,19 +24,10 @@ pub(super) async fn load_app_settings(state: &MobileState) -> Result<Value, AppE
     answer("load_app_settings", &settings_from_app_config(&config))
 }
 
-#[derive(Debug, Deserialize)]
-struct LogStreaming {
-    enabled: bool,
-}
-
-/// Whether the Logs screen is showing and so wants lines delivered.
-///
-/// The flag is the host's: nothing downstream of it needs the database, and a
-/// stream nobody reads is the one cost worth avoiding on a phone.
-pub(super) fn set_log_streaming(state: &MobileState, args: &Value) -> Result<Value, AppError> {
-    let LogStreaming { enabled } = arguments("set_log_streaming", args)?;
-    state.sinks.set_log_streaming(enabled);
-
+/// The desktop gates core output while its Logs panel is closed. A phone has
+/// none to gate — the tunnel provider runs the core — so this only answers the
+/// shared hook that asks.
+pub(super) fn set_log_streaming() -> Result<Value, AppError> {
     Ok(Value::Null)
 }
 

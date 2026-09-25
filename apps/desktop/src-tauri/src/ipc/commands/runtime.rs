@@ -125,7 +125,10 @@ where
     }
 
     fn statistics_zero(&self) {
-        if let Err(error) = emit_statistics_zero(&self.app) {
+        if let Err(error) = emit_event(
+            &self.app,
+            TransientStreamEvent::Statistics(voya_app::statistics::zero_statistics_snapshot()),
+        ) {
             tracing::warn!(?error, "failed to emit zero statistics");
         }
     }

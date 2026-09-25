@@ -143,7 +143,7 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
         AppErrorSubsystem::Subscription,
     )?;
     let snapshot = state.config_mutations().current_config();
-    let proxy_url = runtime_proxy_url(prefer_proxy, proxy_url, &snapshot);
+    let proxy_url = app_runtime_proxy_url(prefer_proxy, proxy_url, &snapshot, TargetOs::current());
     let prepared = state
         .services()
         .subscriptions()

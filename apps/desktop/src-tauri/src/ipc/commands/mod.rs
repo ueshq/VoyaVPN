@@ -27,13 +27,13 @@ use voya_contracts::{
     MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract, ProfileDetails,
     ProfileSummaryListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,
     ResourceUpdateFile, Routing as RoutingContract, RoutingRule as RoutingRuleContract,
-    RuntimeStatusResponse, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus,
+    RuntimeStatusResponse, SpeedtestRunResult, SpeedtestStatus,
     Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
     SubscriptionUpdateResult as SubscriptionUpdateContract, SystemProxyStatusResponse,
     TunProviderDiagnostics, TunStatus,
 };
 use voya_platform::{
-    coreinfo::{copy_seed_core_asset, discover_packaged_seed_executable, CoreInfoError, TargetOs},
+    coreinfo::{copy_seed_core_asset, discover_packaged_seed_executable, TargetOs},
     sysproxy::SystemProxyStatus,
 };
 
