@@ -1074,7 +1074,7 @@ mod tests {
 
     fn app_config(active_id: &str) -> AppConfig {
         AppConfig {
-            index_id: active_id.to_string(),
+            active_profile_id: active_id.to_string(),
             core: CoreConfig::default(),
             tun: TunConfig::default(),
             ..AppConfig::default()

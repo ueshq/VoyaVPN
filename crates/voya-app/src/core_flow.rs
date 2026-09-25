@@ -523,7 +523,7 @@ impl<'flow> CoreFlow<'flow> {
 }
 
 fn active_profile_id(config: &AppConfig) -> Option<String> {
-    let index_id = config.index_id.trim();
+    let index_id = config.active_profile_id.trim();
     (!index_id.is_empty()).then(|| index_id.to_string())
 }
 

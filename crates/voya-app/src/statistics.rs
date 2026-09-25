@@ -103,7 +103,7 @@ impl StatisticsConfigSnapshot {
     #[must_use]
     fn from_app_config(config: &AppConfig) -> Self {
         Self {
-            active_profile_id: nonempty_string(Some(config.index_id.as_str())),
+            active_profile_id: nonempty_string(Some(config.active_profile_id.as_str())),
         }
     }
 }

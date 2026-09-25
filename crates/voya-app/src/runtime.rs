@@ -535,7 +535,7 @@ mod tests {
         let manager =
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);
         let mut config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             ..AppConfig::default()
         };
         let profile = active_singbox_profile("active");
@@ -572,7 +572,7 @@ mod tests {
         assert_eq!(disconnected.state, SupervisorConnectionState::Disconnected);
         assert!(!paths.bin_config_file(MAIN_CONFIG_FILE_NAME).exists());
         assert_eq!(runner.stops().as_slice(), [10]);
-        config.index_id.clear();
+        config.active_profile_id.clear();
     }
 
     #[tokio::test]
@@ -592,7 +592,7 @@ mod tests {
         let manager = RuntimeManager::with_target_os(&database, paths, supervisor, TargetOs::Linux);
         let profile = active_singbox_profile("active");
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             tun: voya_core::TunConfig {
                 enabled: true,
                 ..voya_core::TunConfig::default()
@@ -639,7 +639,7 @@ mod tests {
         // actually wrote, and this pins the two together.
         let profile = active_singbox_profile("active");
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             tun: voya_core::TunConfig {
                 enabled: true,
                 ..voya_core::TunConfig::default()
@@ -710,7 +710,7 @@ mod tests {
         let manager =
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             ..AppConfig::default()
         };
         database
@@ -767,7 +767,7 @@ mod tests {
     fn runtime_successful_generation_still_reports_its_warnings() {
         let profile = active_singbox_profile("active");
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             ..AppConfig::default()
         };
         // A rule with a blank outbound tag generates fine — it just silently
@@ -806,7 +806,7 @@ mod tests {
     fn runtime_macos_tun_builds_one_context_that_owns_the_tun_inbound() {
         let profile = active_singbox_profile("active");
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             tun: voya_core::TunConfig {
                 enabled: true,
                 ..voya_core::TunConfig::default()
@@ -859,7 +859,7 @@ mod tests {
         let manager =
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, target_os);
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             tun: voya_core::TunConfig {
                 enabled: true,
                 ..voya_core::TunConfig::default()
@@ -923,7 +923,7 @@ mod tests {
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux)
                 .with_core_seed_resource_dir(seed_root);
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             ..AppConfig::default()
         };
         database
@@ -960,7 +960,7 @@ mod tests {
         let manager = RuntimeManager::with_target_os(&database, paths, supervisor, TargetOs::Linux)
             .with_core_seed_resource_dir(seed_root);
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             ..AppConfig::default()
         };
         database
@@ -996,7 +996,7 @@ mod tests {
         let manager =
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);
         let config = AppConfig {
-            index_id: "active".to_string(),
+            active_profile_id: "active".to_string(),
             ..AppConfig::default()
         };
         let profile = active_singbox_profile("active");

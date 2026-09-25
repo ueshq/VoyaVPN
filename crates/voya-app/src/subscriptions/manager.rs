@@ -233,7 +233,7 @@ mod tests {
             .upsert(&old_profile)
             .await
             .expect("subscription manager test operation should succeed");
-        config.index_id = old_profile.index_id.clone();
+        config.active_profile_id = old_profile.index_id.clone();
 
         let text = [
             "vless://uuid@example.test:443?security=tls#US%20node",
@@ -260,7 +260,7 @@ mod tests {
             profiles[0].subscription_id.as_deref(),
             Some(sub.id.as_str())
         );
-        assert!(config.index_id.is_empty());
+        assert!(config.active_profile_id.is_empty());
     }
 
     #[tokio::test]
@@ -865,7 +865,7 @@ mod tests {
             .await
             .expect("profiles")
             .is_empty());
-        assert!(config.index_id.is_empty());
+        assert!(config.active_profile_id.is_empty());
     }
 
     #[tokio::test]
@@ -1297,7 +1297,7 @@ mod tests {
             .set_sort("active", 20)
             .await
             .expect("subscription manager test operation should succeed");
-        config.index_id = "active".to_string();
+        config.active_profile_id = "active".to_string();
 
         let result = manager
             .import_subscription_content(&mut config, text, None)
@@ -1308,7 +1308,7 @@ mod tests {
         assert_eq!(result.updated, 1);
         assert_eq!(result.removed_duplicates, 1);
         assert_eq!(result.imported_profile_ids, vec!["active".to_string()]);
-        assert_eq!(config.index_id, "active");
+        assert_eq!(config.active_profile_id, "active");
 
         let profiles = database
             .profiles()

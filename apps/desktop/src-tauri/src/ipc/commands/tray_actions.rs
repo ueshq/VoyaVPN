@@ -125,7 +125,7 @@ pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
         state.supervisor().status().await,
         Ok(snapshot) if snapshot.state == SupervisorConnectionState::Connected
     );
-    let pinned = Some(config.index_id.as_str()).filter(|id| !id.is_empty());
+    let pinned = Some(config.active_profile_id.as_str()).filter(|id| !id.is_empty());
     let (nodes, total_nodes, active_node_id) = match state
         .services()
         .list_profile_names_head(TRAY_NODE_LIMIT, pinned)

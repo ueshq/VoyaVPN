@@ -124,7 +124,7 @@ impl SubscriptionManager<'_> {
             if let Some(canonical_index_id) = choose_canonical_match_index(
                 &match_indices,
                 &existing_profiles,
-                &config.index_id,
+                &config.active_profile_id,
                 subscription_id,
             ) {
                 let duplicate_index_ids = match_indices

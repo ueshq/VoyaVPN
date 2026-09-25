@@ -101,7 +101,7 @@ impl<'db> ProfileManager<'db> {
                 .items
                 .into_iter()
                 .map(|(profile, profile_ex)| ProfileSummaryItem {
-                    is_active: is_active(&profile, &config.index_id),
+                    is_active: is_active(&profile, &config.active_profile_id),
                     profile,
                     profile_ex,
                 })
@@ -137,7 +137,7 @@ impl<'db> ProfileManager<'db> {
             profile,
             profile_ex,
             server_stat,
-            &config.index_id,
+            &config.active_profile_id,
         ))
     }
 
@@ -176,7 +176,7 @@ impl<'db> ProfileManager<'db> {
             profile,
             profile_ex,
             server_stat,
-            &config.index_id,
+            &config.active_profile_id,
         ))
     }
 
@@ -278,7 +278,7 @@ impl<'db> ProfileManager<'db> {
             profile,
             profile_ex,
             server_stat,
-            &config.index_id,
+            &config.active_profile_id,
         ))
     }
 
@@ -401,12 +401,18 @@ impl<'db> ProfileManager<'db> {
             config.active_group_id.clear();
             return Ok(true);
         }
-        if !config.index_id.is_empty() && self.database.profiles().exists(&config.index_id).await? {
+        if !config.active_profile_id.is_empty()
+            && self
+                .database
+                .profiles()
+                .exists(&config.active_profile_id)
+                .await?
+        {
             return Ok(false);
         }
 
-        let changed = !config.index_id.is_empty();
-        config.index_id.clear();
+        let changed = !config.active_profile_id.is_empty();
+        config.active_profile_id.clear();
         Ok(changed)
     }
 }
@@ -739,7 +745,7 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
 
-        assert!(config.index_id.is_empty());
+        assert!(config.active_profile_id.is_empty());
         assert_eq!(first.profile.network(), "raw");
         assert!(first.profile_ex.sort < second.profile_ex.sort);
 
@@ -753,7 +759,7 @@ mod tests {
         assert_eq!(listed[1].profile.remarks, "B");
 
         // One node in full, and a read leaves no extension row behind.
-        config.index_id = "second".to_string();
+        config.active_profile_id = "second".to_string();
         let details = manager
             .get_profile(&config, "second")
             .await
@@ -798,7 +804,7 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
 
-        assert!(config.index_id.is_empty());
+        assert!(config.active_profile_id.is_empty());
     }
 
     #[tokio::test]
@@ -821,7 +827,7 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
 
-        config.index_id = "a".to_string();
+        config.active_profile_id = "a".to_string();
         manager
             .move_profile(None, &c.profile.index_id, MoveAction::Top, None)
             .await
@@ -838,7 +844,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             ["c", "a", "b"]
         );
-        assert_eq!(config.index_id, "a");
+        assert_eq!(config.active_profile_id, "a");
     }
 
     /// Persisted ownership is authoritative, including mixed batch requests.

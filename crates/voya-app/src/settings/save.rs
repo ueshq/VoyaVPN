@@ -197,7 +197,7 @@ fn validate_inbound(settings: &contracts::AppSettings) -> Result<(), AppSettings
 /// UI alone consumes (node sorting, appearance) must not interrupt traffic.
 #[must_use]
 pub fn saved_config_requires_runtime_restart(original: &AppConfig, updated: &AppConfig) -> bool {
-    original.index_id != updated.index_id
+    original.active_profile_id != updated.active_profile_id
         || original.core != updated.core
         || original.tun != updated.tun
         || original.active_routing_id != updated.active_routing_id
@@ -323,7 +323,8 @@ pub fn config_from_settings(settings: &contracts::AppSettings, current: &AppConf
 
 pub(crate) fn state_from_app_config(config: &AppConfig) -> AppStateRecord {
     AppStateRecord {
-        active_profile_id: (!config.index_id.is_empty()).then(|| config.index_id.clone()),
+        active_profile_id: (!config.active_profile_id.is_empty())
+            .then(|| config.active_profile_id.clone()),
         active_routing_id: (!config.active_routing_id.is_empty())
             .then(|| config.active_routing_id.clone()),
         active_group_id: (!config.active_group_id.is_empty())
@@ -337,7 +338,7 @@ pub fn app_config_from_settings(
     state: &AppStateRecord,
 ) -> AppConfig {
     AppConfig {
-        index_id: state.active_profile_id.clone().unwrap_or_default(),
+        active_profile_id: state.active_profile_id.clone().unwrap_or_default(),
         active_group_id: state.active_group_id.clone().unwrap_or_default(),
         active_routing_id: state.active_routing_id.clone().unwrap_or_default(),
         core: CoreConfig {
@@ -513,7 +514,7 @@ mod tests {
     /// assigned; nothing but distinct values proves it is assigned correctly.
     fn distinctly_valued_config() -> AppConfig {
         AppConfig {
-            index_id: "active-profile-id".to_string(),
+            active_profile_id: "active-profile-id".to_string(),
             active_group_id: String::new(),
             active_routing_id: "active-routing-id".to_string(),
             core: CoreConfig {
@@ -603,7 +604,7 @@ mod tests {
     fn settings_mapping_round_trips_every_distinct_field() {
         let config = distinctly_valued_config();
         let state = AppStateRecord {
-            active_profile_id: Some(config.index_id.clone()),
+            active_profile_id: Some(config.active_profile_id.clone()),
             active_routing_id: Some(config.active_routing_id.clone()),
             active_group_id: None,
         };
@@ -624,7 +625,7 @@ mod tests {
 
         let restored = app_config_from_settings(&settings, &AppStateRecord::default());
 
-        assert!(restored.index_id.is_empty());
+        assert!(restored.active_profile_id.is_empty());
         assert!(restored.active_routing_id.is_empty());
         assert_eq!(
             restored.hysteria.upload_mbps, config.hysteria.upload_mbps,
@@ -642,7 +643,7 @@ mod tests {
 
         let restored = config_from_settings(&settings, &config);
 
-        assert_eq!(restored.index_id, config.index_id);
+        assert_eq!(restored.active_profile_id, config.active_profile_id);
         assert_eq!(restored.active_routing_id, config.active_routing_id);
         assert_eq!(restored.appearance, AppConfig::default().appearance);
     }
@@ -725,7 +726,7 @@ mod tests {
     #[test]
     fn saving_unchanged_settings_never_requires_a_runtime_restart() {
         let mut original = AppConfig {
-            index_id: "profile-a".to_string(),
+            active_profile_id: "profile-a".to_string(),
             active_group_id: String::new(),
             ..AppConfig::default()
         };

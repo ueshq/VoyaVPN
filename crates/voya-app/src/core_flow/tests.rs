@@ -234,7 +234,7 @@ impl Harness {
 
 fn active_config() -> AppConfig {
     AppConfig {
-        index_id: "active".to_string(),
+        active_profile_id: "active".to_string(),
         ..AppConfig::default()
     }
 }
@@ -457,7 +457,7 @@ async fn a_failure_before_the_supervisor_leaves_the_previous_core_connected() {
     // before a config-change restart: `restart` fails while resolving it, long
     // before the supervisor is asked to stop anything.
     let missing = AppConfig {
-        index_id: "gone".to_string(),
+        active_profile_id: "gone".to_string(),
         ..AppConfig::default()
     };
     let sink_before = harness.sink.events().len();
@@ -759,7 +759,7 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
         .delete_profiles(&mut config, &["active".into()])
         .await
         .expect("delete current");
-    assert!(config.index_id.is_empty());
+    assert!(config.active_profile_id.is_empty());
     flow.disconnect_removed_profile(&config)
         .await
         .expect("reconcile");
@@ -771,7 +771,7 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
     assert!(events.contains(&"sysproxy".into()));
     assert!(events.contains(&"notice:Warning:activeSelectionRemoved".into()));
     // A repeated notification must not interrupt a newer valid selection.
-    config.index_id = "other".into();
+    config.active_profile_id = "other".into();
     flow.connect(&config).await.expect("select other");
     flow.disconnect_removed_profile(&config)
         .await

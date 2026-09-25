@@ -331,7 +331,7 @@ mod tests {
         assert_eq!(config.active_target(), ActiveTarget::Node("node"));
         config.set_active_group("group");
         assert_eq!(config.active_target(), ActiveTarget::Group("group"));
-        assert!(config.index_id.is_empty());
+        assert!(config.active_profile_id.is_empty());
         config.set_active_node("node");
         assert!(config.active_group_id.is_empty());
     }

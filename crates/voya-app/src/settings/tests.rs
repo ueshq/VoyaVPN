@@ -160,7 +160,7 @@ async fn a_failed_commit_rolls_back_the_applied_side_effects() {
     // committing with an active profile that was never imported fails inside
     // the transaction — after the side effects have already been applied.
     let harness = Harness::with_config(AppConfig {
-        index_id: "ghost-profile".to_string(),
+        active_profile_id: "ghost-profile".to_string(),
         ..AppConfig::default()
     })
     .await;
