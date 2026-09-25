@@ -28,10 +28,9 @@ use voya_core::AppConfig;
 use crate::{
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
     settings::save::{
-        apply_settings_side_effects, compensate_settings_side_effects, config_from_settings,
-        saved_config_requires_runtime_restart, settings_from_app_config, settings_runtime_action,
-        validate_app_settings, AppSettingsValidationError, SettingsRuntimeAction,
-        SettingsSideEffectAdapter, SettingsSideEffectStage,
+        autostart_changes, config_from_settings, saved_config_requires_runtime_restart,
+        settings_from_app_config, settings_runtime_action, validate_app_settings,
+        AppSettingsValidationError, ApplyAutostart, SettingsRuntimeAction,
     },
 };
 
@@ -52,20 +51,14 @@ pub struct SettingsSaveOutcome {
 }
 
 /// Why a settings save failed.
-///
-/// Generic over the side-effect adapter's error so the shell's typed
-/// `AppError` survives the round trip instead of being flattened into a string.
 #[derive(Debug)]
-pub enum SettingsSaveError<E> {
+pub enum SettingsSaveError {
     /// The submitted contract is not acceptable; nothing was touched.
     Validation(AppSettingsValidationError),
-    /// An OS-level side effect was rejected. Nothing was persisted and the
-    /// side effects applied before it were rolled back.
-    SideEffect {
-        stage: SettingsSideEffectStage,
-        source: E,
-    },
-    /// The database commit failed. The applied side effects were rolled back.
+    /// The OS refused the login entry. Nothing was persisted and the entry was
+    /// restored. The error is already typed, so it is kept as it is.
+    Autostart(voya_contracts::AppError),
+    /// The database commit failed. The login entry was restored.
     Commit(ConfigMutationError),
 }
 
@@ -75,15 +68,11 @@ pub enum SettingsSaveError<E> {
 /// The guard is held across the side effects on purpose: the target config is
 /// derived from the configuration *inside* the guard, so a concurrent mutation
 /// cannot be silently overwritten by a target computed from a stale snapshot.
-pub async fn save_app_settings<A>(
+pub async fn save_app_settings(
     coordinator: &ConfigMutationCoordinator,
-    side_effects: &A,
+    autostart: &dyn ApplyAutostart,
     settings: &AppSettings,
-) -> Result<SettingsSaveOutcome, SettingsSaveError<A::Error>>
-where
-    A: SettingsSideEffectAdapter,
-    A::Error: std::fmt::Debug,
-{
+) -> Result<SettingsSaveOutcome, SettingsSaveError> {
     validate_app_settings(settings).map_err(SettingsSaveError::Validation)?;
 
     let mut mutation = coordinator
@@ -98,33 +87,23 @@ where
     );
 
     // Autostart is applied before the commit so a registration the OS refuses
-    // never becomes the stored truth; it is rolled back below if anything after
-    // it fails.
-    let applied = match apply_settings_side_effects(side_effects, &original, &target) {
-        Ok(applied) => applied,
-        Err(failure) => {
-            tracing::error!(
-                stage = ?failure.stage,
-                error = ?failure.source,
-                "settings side effect failed"
-            );
-            log_compensation_errors(&failure.compensation_errors);
-            return Err(SettingsSaveError::SideEffect {
-                stage: failure.stage,
-                source: failure.source,
-            });
+    // never becomes the stored truth; it is restored if anything after it fails.
+    let autostart_changed = autostart_changes(&original, &target);
+    if autostart_changed {
+        if let Err(error) = autostart.apply_autostart(&target) {
+            tracing::error!(?error, "settings autostart side effect failed");
+            restore_autostart(autostart, &original);
+            return Err(SettingsSaveError::Autostart(error));
         }
-    };
+    }
 
     *mutation.config_mut() = target;
     let config = match mutation.commit().await {
         Ok(config) => config,
         Err(error) => {
-            log_compensation_errors(&compensate_settings_side_effects(
-                side_effects,
-                &original,
-                applied,
-            ));
+            if autostart_changed {
+                restore_autostart(autostart, &original);
+            }
             return Err(SettingsSaveError::Commit(error));
         }
     };
@@ -137,9 +116,12 @@ where
     })
 }
 
-fn log_compensation_errors<E: std::fmt::Debug>(errors: &[E]) {
-    for error in errors {
-        tracing::error!(?error, "failed to compensate settings side effect");
+fn restore_autostart(autostart: &dyn ApplyAutostart, original: &AppConfig) {
+    if let Err(error) = autostart.apply_autostart(original) {
+        tracing::error!(
+            ?error,
+            "failed to restore the login entry after a failed save"
+        );
     }
 }
 

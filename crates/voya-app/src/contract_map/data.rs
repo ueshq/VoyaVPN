@@ -1,13 +1,9 @@
 use voya_contracts::{
-    DnsSettings as DnsContract, ImportProfilesResult as ImportProfilesContract,
-    Routing as RoutingContract, RoutingRule as RoutingRuleContract, RoutingRuleScope,
-    Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
-    SubscriptionUpdateResult as SubscriptionUpdateContract,
+    DnsSettings as DnsContract, Routing as RoutingContract, RoutingRule as RoutingRuleContract,
+    RoutingRuleScope, Subscription as SubscriptionContract,
+    SubscriptionMetadata as SubscriptionMetadataContract,
 };
-use voya_core::{
-    ImportProfilesResult, RoutingItem, RuleType, RulesItem, SimpleDnsItem, SubItem,
-    SubMetadataItem, SubscriptionUpdateResult,
-};
+use voya_core::{RoutingItem, RuleType, RulesItem, SimpleDnsItem, SubItem, SubMetadataItem};
 
 #[must_use]
 pub fn subscription_to_contract(item: SubItem) -> SubscriptionContract {
@@ -51,116 +47,6 @@ pub fn subscription_from_contract(item: SubscriptionContract) -> SubItem {
         filter: item.filter,
         convert_target: item.converter_target,
         auto_update_interval_minutes: item.auto_update_interval_minutes,
-    }
-}
-
-#[must_use]
-pub fn import_profiles_to_contract(result: ImportProfilesResult) -> ImportProfilesContract {
-    ImportProfilesContract {
-        imported: result.imported,
-        updated: result.updated,
-        skipped: result.skipped,
-        parsed: result.parsed,
-        filtered: result.filtered,
-        deduped: result.deduped,
-        failed: result.failed,
-        removed_existing: result.removed_existing,
-        removed_duplicates: result.removed_duplicates,
-        discarded_node_overrides: result.discarded_node_overrides,
-        subscription_id: result.subscription_id,
-        imported_profile_ids: result.imported_index_ids,
-        updated_profile_ids: result.updated_index_ids,
-        line_issues: result
-            .line_issues
-            .into_iter()
-            .map(import_line_issue_to_contract)
-            .collect(),
-        added_subscription_ids: result.added_subscription_ids,
-    }
-}
-
-pub fn import_line_issue_to_contract(
-    issue: voya_core::ImportLineIssue,
-) -> voya_contracts::ImportLineIssue {
-    voya_contracts::ImportLineIssue {
-        line: issue.line,
-        code: match issue.code {
-            voya_core::ImportLineCode::SubscriptionSourceAdded => {
-                voya_contracts::ImportLineCode::SubscriptionSourceAdded
-            }
-            voya_core::ImportLineCode::UnsupportedTransport { transport } => {
-                voya_contracts::ImportLineCode::UnsupportedTransport { transport }
-            }
-            voya_core::ImportLineCode::UnsupportedProtocol => {
-                voya_contracts::ImportLineCode::UnsupportedProtocol
-            }
-            voya_core::ImportLineCode::MissingField { protocol, field } => {
-                voya_contracts::ImportLineCode::MissingField { protocol, field }
-            }
-            voya_core::ImportLineCode::InvalidPort { protocol, port } => {
-                voya_contracts::ImportLineCode::InvalidPort { protocol, port }
-            }
-            voya_core::ImportLineCode::ParseFailed { detail } => {
-                voya_contracts::ImportLineCode::ParseFailed { detail }
-            }
-        },
-    }
-}
-
-#[must_use]
-pub fn subscription_update_to_contract(
-    result: SubscriptionUpdateResult,
-) -> SubscriptionUpdateContract {
-    SubscriptionUpdateContract {
-        updated: result.updated,
-        skipped: result.skipped,
-        imported: result.imported,
-        removed_existing: result.removed_existing,
-        messages: result.messages,
-        outcomes: result
-            .outcomes
-            .into_iter()
-            .map(|outcome| voya_contracts::SubscriptionUpdateOutcome {
-                subscription_id: outcome.subscription_id,
-                status: match outcome.status {
-                    voya_core::SubscriptionUpdateStatus::Success => {
-                        voya_contracts::SubscriptionUpdateStatus::Success
-                    }
-                    voya_core::SubscriptionUpdateStatus::Skipped => {
-                        voya_contracts::SubscriptionUpdateStatus::Skipped
-                    }
-                    voya_core::SubscriptionUpdateStatus::Failed => {
-                        voya_contracts::SubscriptionUpdateStatus::Failed
-                    }
-                },
-                reason: match outcome.reason {
-                    voya_core::SubscriptionUpdateReason::Updated => {
-                        voya_contracts::SubscriptionUpdateReason::Updated
-                    }
-                    voya_core::SubscriptionUpdateReason::InvalidSource => {
-                        voya_contracts::SubscriptionUpdateReason::InvalidSource
-                    }
-                    voya_core::SubscriptionUpdateReason::SourceChanged => {
-                        voya_contracts::SubscriptionUpdateReason::SourceChanged
-                    }
-                    voya_core::SubscriptionUpdateReason::EmptyContent => {
-                        voya_contracts::SubscriptionUpdateReason::EmptyContent
-                    }
-                    voya_core::SubscriptionUpdateReason::DownloadFailed => {
-                        voya_contracts::SubscriptionUpdateReason::DownloadFailed
-                    }
-                    voya_core::SubscriptionUpdateReason::NoImportableNodes => {
-                        voya_contracts::SubscriptionUpdateReason::NoImportableNodes
-                    }
-                    voya_core::SubscriptionUpdateReason::InvalidFilter => {
-                        voya_contracts::SubscriptionUpdateReason::InvalidFilter
-                    }
-                },
-                imported: outcome.imported,
-                removed_existing: outcome.removed_existing,
-                diagnostic: outcome.diagnostic,
-            })
-            .collect(),
     }
 }
 

@@ -185,7 +185,7 @@ mod tests {
         subscription_id: Option<&str>,
         prefer_proxy: bool,
         proxy_url: Option<&str>,
-    ) -> Result<voya_core::SubscriptionUpdateResult> {
+    ) -> Result<voya_contracts::SubscriptionUpdateResult> {
         let prepared = manager
             .prepare_subscription_update(subscription_id, prefer_proxy, proxy_url)
             .await?;
@@ -899,7 +899,8 @@ mod tests {
         assert_eq!(result.failed, 1);
         assert_eq!(result.line_issues.len(), 1);
         assert_eq!(result.line_issues[0].line, 1);
-        let voya_core::ImportLineCode::ParseFailed { detail } = &result.line_issues[0].code else {
+        let voya_contracts::ImportLineCode::ParseFailed { detail } = &result.line_issues[0].code
+        else {
             panic!(
                 "expected a parse failure, got {:?}",
                 result.line_issues[0].code
@@ -938,7 +939,7 @@ mod tests {
         assert_eq!(result.deduped, 0);
         assert_eq!(result.failed, 0);
         assert_eq!(result.discarded_node_overrides, 3);
-        assert_eq!(result.imported_index_ids.len(), 7);
+        assert_eq!(result.imported_profile_ids.len(), 7);
         assert!(result.line_issues.is_empty());
 
         let profiles = database
@@ -1008,8 +1009,8 @@ mod tests {
         assert_eq!(first.updated, 0);
         assert_eq!(second.imported, 7);
         assert_eq!(second.updated, 7);
-        assert_eq!(second.imported_index_ids, first.imported_index_ids);
-        assert_eq!(second.updated_index_ids, first.imported_index_ids);
+        assert_eq!(second.imported_profile_ids, first.imported_profile_ids);
+        assert_eq!(second.updated_profile_ids, first.imported_profile_ids);
 
         let profiles = database
             .profiles()
@@ -1048,7 +1049,7 @@ mod tests {
 
         assert_eq!(result.imported, 1);
         assert_eq!(result.updated, 0);
-        assert_ne!(result.imported_index_ids, manual.imported_index_ids);
+        assert_ne!(result.imported_profile_ids, manual.imported_profile_ids);
         let profiles = database
             .profiles()
             .list()
@@ -1057,7 +1058,7 @@ mod tests {
         assert_eq!(profiles.len(), 2);
         assert!(profiles
             .iter()
-            .any(|profile| profile.index_id == manual.imported_index_ids[0]
+            .any(|profile| profile.index_id == manual.imported_profile_ids[0]
                 && profile.subscription_id.is_none()));
         assert!(profiles
             .iter()
@@ -1111,7 +1112,7 @@ mod tests {
         );
         assert_eq!(first_b.removed_duplicates, 0);
         assert_eq!(second_a.updated, 1);
-        assert_eq!(second_a.imported_index_ids, first_a.imported_index_ids);
+        assert_eq!(second_a.imported_profile_ids, first_a.imported_profile_ids);
         assert_eq!(
             second_a.removed_existing, 0,
             "re-updating the first subscription must not disturb the second"
@@ -1200,8 +1201,8 @@ mod tests {
             .import_subscription_content(&mut config, &first_text, Some(&sub.id))
             .await
             .expect("subscription manager test operation should succeed");
-        let keep_index_id = first.imported_index_ids[0].clone();
-        let stale_index_id = first.imported_index_ids[1].clone();
+        let keep_index_id = first.imported_profile_ids[0].clone();
+        let stale_index_id = first.imported_profile_ids[1].clone();
         let second_text = [
             test_vless_link("keep.example.test", "keep renamed"),
             test_vless_link("new.example.test", "new"),
@@ -1216,8 +1217,8 @@ mod tests {
         assert_eq!(second.imported, 2);
         assert_eq!(second.updated, 1);
         assert_eq!(second.removed_existing, 1);
-        assert!(second.imported_index_ids.contains(&keep_index_id));
-        assert!(!second.imported_index_ids.contains(&stale_index_id));
+        assert!(second.imported_profile_ids.contains(&keep_index_id));
+        assert!(!second.imported_profile_ids.contains(&stale_index_id));
         let profiles = database
             .profiles()
             .list_by_subscription_id(Some(&sub.id))
@@ -1245,7 +1246,7 @@ mod tests {
             .import_subscription_content(&mut config, text, None)
             .await
             .expect("subscription manager test operation should succeed");
-        let original_index_id = initial.imported_index_ids[0].clone();
+        let original_index_id = initial.imported_profile_ids[0].clone();
         let original = database
             .profiles()
             .get(&original_index_id)
@@ -1279,7 +1280,7 @@ mod tests {
         assert_eq!(result.imported, 1);
         assert_eq!(result.updated, 1);
         assert_eq!(result.removed_duplicates, 1);
-        assert_eq!(result.imported_index_ids, vec!["active".to_string()]);
+        assert_eq!(result.imported_profile_ids, vec!["active".to_string()]);
         assert_eq!(config.index_id, "active");
 
         let profiles = database

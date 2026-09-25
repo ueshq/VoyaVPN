@@ -5,8 +5,6 @@ use serde_json::Value;
 use voya_app::settings::save::settings_from_app_config;
 use voya_contracts::AppError;
 
-use voya_app::config_mutation::AppConfig;
-
 use crate::app::MobileState;
 
 use super::{answer, arguments};
@@ -58,7 +56,7 @@ pub(super) async fn save_app_settings(
     let SaveSettings { settings } = arguments("save_app_settings", args)?;
     let outcome = voya_app::settings::save_app_settings(
         &state.config_mutations,
-        &MobileSettingsSideEffects,
+        &voya_app::settings::save::NoAutostart,
         &settings,
     )
     .await?;
@@ -71,24 +69,6 @@ pub(super) async fn save_app_settings(
     }
 
     answer("save_app_settings", &outcome.settings)
-}
-
-/// Nothing a phone's settings can ask for happens outside the app.
-///
-/// Autostart is the desktop's one pre-commit side effect, and a phone has no
-/// login item: an always-on VPN is a system setting the user turns on in
-/// Settings, not something an app arranges for itself.
-struct MobileSettingsSideEffects;
-
-impl voya_app::settings::save::SettingsSideEffectAdapter for MobileSettingsSideEffects {
-    // `AppError` rather than `Infallible`: the conversion into a command
-    // failure is written for it, and a future side effect that *can* fail
-    // needs no change here.
-    type Error = AppError;
-
-    fn apply_autostart(&self, _config: &AppConfig) -> Result<(), Self::Error> {
-        Ok(())
-    }
 }
 
 pub(super) async fn settings_apply_status(state: &MobileState) -> Result<Value, AppError> {

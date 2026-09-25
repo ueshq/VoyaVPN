@@ -592,12 +592,12 @@ impl From<AppSettingsValidationError> for AppError {
     }
 }
 
-impl From<SettingsSaveError<AppError>> for AppError {
-    fn from(error: SettingsSaveError<AppError>) -> Self {
+impl From<SettingsSaveError> for AppError {
+    fn from(error: SettingsSaveError) -> Self {
         match error {
             SettingsSaveError::Validation(source) => Self::from(source),
             // The adapter's already-typed failure keeps its subsystem.
-            SettingsSaveError::SideEffect { source, .. } => source,
+            SettingsSaveError::Autostart(source) => source,
             SettingsSaveError::Commit(source) => Self::from(source),
         }
     }

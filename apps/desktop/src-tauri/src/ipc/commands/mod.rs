@@ -5,18 +5,16 @@ use tauri_specta::Event;
 use voya_app::autostart::AutostartManager;
 use voya_app::config_mutation::{AppConfig, CommittedMutation};
 use voya_app::contract_map::{
-    core_info_error, core_seed_install_result, import_profiles_to_contract, input_text_error,
-    move_action_from_contract, profile_details_to_contract, profile_from_contract,
-    profile_summary_listing_to_contract, runtime_status_event, runtime_status_response,
-    simple_dns_from_contract, simple_dns_to_contract, subscription_from_contract,
-    subscription_metadata_to_contract, subscription_to_contract, subscription_update_to_contract,
+    core_info_error, core_seed_install_result, input_text_error, profile_details_to_contract,
+    profile_from_contract, profile_summary_listing_to_contract, runtime_status_event,
+    runtime_status_response, simple_dns_from_contract, simple_dns_to_contract,
+    subscription_from_contract, subscription_metadata_to_contract, subscription_to_contract,
     system_proxy_status_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
 };
 use voya_app::input_safety;
 use voya_app::invalidation;
 use voya_app::profiles::ProfileManager;
 use voya_app::runtime::RuntimeManager;
-use voya_app::settings::save::SettingsSideEffectAdapter;
 use voya_app::subscriptions::SubscriptionManager;
 use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
 use voya_app::sysproxy::runtime_proxy_url as app_runtime_proxy_url;

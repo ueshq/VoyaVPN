@@ -93,22 +93,15 @@ impl<'flow> CoreFlow<'flow> {
         system_proxy: SystemProxyManager,
         tun: TunManager,
         sink: Arc<dyn CoreFlowSink>,
+        proxy_runtime: ProxyRuntimeManager,
     ) -> Self {
         Self {
             runtime,
             system_proxy,
             tun,
             sink,
-            proxy_runtime: ProxyRuntimeManager::new(),
+            proxy_runtime,
         }
-    }
-
-    /// Swaps in a proxy runtime over a test transport.
-    #[cfg(test)]
-    #[must_use]
-    pub fn with_proxy_runtime(mut self, proxy_runtime: ProxyRuntimeManager) -> Self {
-        self.proxy_runtime = proxy_runtime;
-        self
     }
 
     pub async fn settings_apply_status(

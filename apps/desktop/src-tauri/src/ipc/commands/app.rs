@@ -37,13 +37,13 @@ pub async fn save_app_settings<R: tauri::Runtime>(
         .ui_item
         .current_language
         .clone();
-    let side_effects = TauriSettingsSideEffects {
-        autostart: AutostartManager::new(),
-    };
-    let outcome =
-        voya_app::settings::save_app_settings(state.config_mutations(), &side_effects, &settings)
-            .await
-            .map_err(AppError::from)?;
+    let outcome = voya_app::settings::save_app_settings(
+        state.config_mutations(),
+        &AutostartManager::new(),
+        &settings,
+    )
+    .await
+    .map_err(AppError::from)?;
 
     // The tray is a native menu built from `ui_item.current_language`, so it is
     // the one surface a language change cannot reach on its own: the webview
@@ -100,24 +100,6 @@ pub async fn apply_pending_settings<R: tauri::Runtime>(
     flow.settings_apply_status(&state.config_mutations().current_config())
         .await
         .map_err(AppError::from)
-}
-
-#[derive(Clone)]
-struct TauriSettingsSideEffects {
-    autostart: AutostartManager,
-}
-
-impl SettingsSideEffectAdapter for TauriSettingsSideEffects {
-    type Error = AppError;
-
-    fn apply_autostart(&self, config: &AppConfig) -> Result<(), Self::Error> {
-        let mut config = config.clone();
-        let enabled = config.gui_item.auto_run;
-        self.autostart
-            .set_enabled(&mut config, enabled)
-            .map(|_| ())
-            .map_err(AppError::from)
-    }
 }
 
 #[tauri::command]

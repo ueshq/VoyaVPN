@@ -4,9 +4,10 @@ use super::super::update_flow::{
     PreparedSubscriptionUpdate,
 };
 use super::{Result, SubscriptionManager, SubscriptionManagerError};
-use voya_core::{
-    AppConfig, SubscriptionUpdateReason, SubscriptionUpdateResult, SubscriptionUpdateStatus,
+use voya_contracts::{
+    SubscriptionUpdateReason, SubscriptionUpdateResult, SubscriptionUpdateStatus,
 };
+use voya_core::AppConfig;
 
 impl SubscriptionManager<'_> {
     pub async fn prepare_subscription_update(

@@ -19,11 +19,11 @@ pub use policy_groups::{
 pub use profiles::{profile_from_contract, profile_to_contract};
 
 use voya_contracts::{
-    CoreState, LogLevel, MoveAction, ProfileDetails, ProfileKind, ProfileMetrics, ProfileSummary,
+    CoreState, LogLevel, ProfileDetails, ProfileKind, ProfileMetrics, ProfileSummary,
     ProfileSummaryEntry, ProfileSummaryListing as ProfileSummaryListingContract, ProfileTraffic,
     SpeedtestOutcome,
 };
-use voya_core::{ConfigType, MoveAction as CoreMoveAction, ProfileExItem, ProfileListItem};
+use voya_core::{ConfigType, ProfileExItem, ProfileListItem};
 use voya_platform::process::ProcessLogLevel;
 
 use crate::profiles::{ProfileSummaryItem, ProfileSummaryListing};
@@ -346,17 +346,6 @@ pub fn profile_summary_listing_to_contract(
             .map(profile_summary_to_contract)
             .collect(),
         undecodable_profiles: u32::try_from(listing.undecodable_profiles).unwrap_or(u32::MAX),
-    }
-}
-
-#[must_use]
-pub const fn move_action_from_contract(action: MoveAction) -> CoreMoveAction {
-    match action {
-        MoveAction::Top => CoreMoveAction::Top,
-        MoveAction::Up => CoreMoveAction::Up,
-        MoveAction::Down => CoreMoveAction::Down,
-        MoveAction::Bottom => CoreMoveAction::Bottom,
-        MoveAction::Position => CoreMoveAction::Position,
     }
 }
 

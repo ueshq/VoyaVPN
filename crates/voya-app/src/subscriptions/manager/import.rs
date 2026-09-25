@@ -5,7 +5,8 @@ use crate::policy_groups::PolicyGroupManager;
 use crate::profiles::{normalize_profile, NewProfileSort, ProfileManager, ProfileManagerError};
 use regex::Regex;
 use std::collections::{BTreeSet, HashMap};
-use voya_core::{profile_items_match, AppConfig, ImportProfilesResult, ProfileExItem, ProfileItem};
+use voya_contracts::ImportProfilesResult;
+use voya_core::{profile_items_match, AppConfig, ProfileExItem, ProfileItem};
 
 impl SubscriptionManager<'_> {
     pub async fn import_profiles_from_text(
@@ -98,8 +99,8 @@ impl SubscriptionManager<'_> {
                 discarded_node_overrides: u32::try_from(parsed_import.discarded_node_overrides)
                     .unwrap_or(u32::MAX),
                 subscription_id: subscription_id.map(str::to_string),
-                imported_index_ids: Vec::new(),
-                updated_index_ids: Vec::new(),
+                imported_profile_ids: Vec::new(),
+                updated_profile_ids: Vec::new(),
                 line_issues: parsed_import.line_issues,
                 added_subscription_ids,
             });
@@ -113,8 +114,8 @@ impl SubscriptionManager<'_> {
                 .await?
                 .items,
         );
-        let mut imported_index_ids = Vec::new();
-        let mut updated_index_ids = Vec::new();
+        let mut imported_profile_ids = Vec::new();
+        let mut updated_profile_ids = Vec::new();
         let mut duplicate_index_ids_to_remove = Vec::new();
         let mut new_sort = NewProfileSort::default();
         for mut profile in profiles {
@@ -141,8 +142,8 @@ impl SubscriptionManager<'_> {
                 let (saved, saved_ex) = profile_manager
                     .write_imported_profile(profile, stored, &mut new_sort)
                     .await?;
-                updated_index_ids.push(saved.index_id.clone());
-                imported_index_ids.push(saved.index_id.clone());
+                updated_profile_ids.push(saved.index_id.clone());
+                imported_profile_ids.push(saved.index_id.clone());
                 existing_profiles.store(saved, saved_ex, &duplicate_index_ids);
                 duplicate_index_ids_to_remove.extend(duplicate_index_ids);
             } else {
@@ -151,7 +152,7 @@ impl SubscriptionManager<'_> {
                 let (saved, saved_ex) = profile_manager
                     .write_imported_profile(profile, None, &mut new_sort)
                     .await?;
-                imported_index_ids.push(saved.index_id.clone());
+                imported_profile_ids.push(saved.index_id.clone());
                 existing_profiles.store(saved, saved_ex, &[]);
             }
         }
@@ -167,7 +168,7 @@ impl SubscriptionManager<'_> {
 
         let removed_existing = if let Some(id) = subscription_id {
             let retained_current_sub_index_ids: BTreeSet<&str> =
-                imported_index_ids.iter().map(String::as_str).collect();
+                imported_profile_ids.iter().map(String::as_str).collect();
             let stale_index_ids = old_profiles
                 .iter()
                 .filter(|profile| {
@@ -189,7 +190,7 @@ impl SubscriptionManager<'_> {
         if let Some(id) = subscription_id {
             // Only the first import that brings nodes offers the group, so a
             // group the user deleted stays deleted across later updates.
-            let first_import = !imported_index_ids.is_empty()
+            let first_import = !imported_profile_ids.is_empty()
                 && !old_profiles
                     .iter()
                     .any(|profile| profile.subscription_id.as_deref() == Some(id));
@@ -201,8 +202,8 @@ impl SubscriptionManager<'_> {
         }
 
         Ok(ImportProfilesResult {
-            imported: u32::try_from(imported_index_ids.len()).unwrap_or(u32::MAX),
-            updated: u32::try_from(updated_index_ids.len()).unwrap_or(u32::MAX),
+            imported: u32::try_from(imported_profile_ids.len()).unwrap_or(u32::MAX),
+            updated: u32::try_from(updated_profile_ids.len()).unwrap_or(u32::MAX),
             skipped: u32::try_from(skipped).unwrap_or(u32::MAX),
             parsed: u32::try_from(parsed).unwrap_or(u32::MAX),
             filtered: u32::try_from(filtered).unwrap_or(u32::MAX),
@@ -213,8 +214,8 @@ impl SubscriptionManager<'_> {
             discarded_node_overrides: u32::try_from(parsed_import.discarded_node_overrides)
                 .unwrap_or(u32::MAX),
             subscription_id: subscription_id.map(str::to_string),
-            imported_index_ids,
-            updated_index_ids,
+            imported_profile_ids,
+            updated_profile_ids,
             line_issues,
             added_subscription_ids,
         })

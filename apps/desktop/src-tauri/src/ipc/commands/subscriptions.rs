@@ -120,7 +120,7 @@ pub async fn import_profiles_from_text<R: tauri::Runtime>(
     })
     .await?;
 
-    Ok(import_profiles_to_contract(imported.value))
+    Ok(imported.value)
 }
 
 #[tauri::command]
@@ -155,7 +155,7 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
         .await
         .map_err(AppError::from)?;
     if !prepared.has_imports() {
-        return Ok(subscription_update_to_contract(prepared.into_result()));
+        return Ok(prepared.into_result());
     }
     let updated = state
         .config_mutations()
@@ -174,7 +174,7 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
     })
     .await?;
 
-    Ok(subscription_update_to_contract(updated.value))
+    Ok(updated.value)
 }
 
 #[tauri::command]

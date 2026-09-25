@@ -1,10 +1,6 @@
 use std::{
     fs,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex, RwLock,
-    },
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, Mutex, RwLock},
 };
 
 use voya_db::Database;
@@ -18,8 +14,6 @@ use voya_platform::{
 };
 
 use super::*;
-
-static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn config_with(sys_proxy: SysProxyType, tun: bool) -> AppConfig {
     let mut config = AppConfig::default();
@@ -450,13 +444,9 @@ fn disabled_tun_status() -> TunStatus {
 }
 
 fn temp_paths() -> AppPaths {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    let counter = TEMP_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
-    AppPaths::new(std::env::temp_dir().join(format!(
-        "voyavpn-connection-mode-tests/{}-{nanos}-{counter}",
-        std::process::id()
-    )))
+    let dir = tempfile::Builder::new()
+        .prefix("voyavpn-connection-mode-tests-")
+        .tempdir()
+        .expect("temp dir");
+    AppPaths::new(dir.keep())
 }

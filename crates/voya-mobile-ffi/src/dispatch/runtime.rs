@@ -141,6 +141,7 @@ pub(super) fn core_flow(state: &MobileState) -> CoreFlow<'_> {
             sinks: Arc::clone(&state.sinks),
             state: state.this.get().cloned(),
         }),
+        state.proxy_runtime.clone(),
     )
 }
 

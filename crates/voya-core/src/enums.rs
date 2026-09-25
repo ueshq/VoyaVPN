@@ -96,15 +96,6 @@ impl InboundProtocol {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MoveAction {
-    Top,
-    Up,
-    Down,
-    Bottom,
-    Position,
-}
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TrafficMode {
     #[default]

@@ -171,12 +171,7 @@ pub async fn move_profile<R: tauri::Runtime>(
         .config_mutations()
         .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
             Ok(ProfileManager::new_in(unit_of_work)
-                .move_profile(
-                    subscription_id.as_deref(),
-                    &index_id,
-                    move_action_from_contract(action),
-                    position,
-                )
+                .move_profile(subscription_id.as_deref(), &index_id, action, position)
                 .await?)
         })
         .await?;

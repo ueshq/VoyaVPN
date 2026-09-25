@@ -118,62 +118,50 @@ pub trait AutostartAdapter: Send + Sync {
     ) -> Result<(), AutostartError>;
 }
 
-#[derive(Clone)]
-pub struct AutostartService {
-    adapter: Arc<dyn AutostartAdapter>,
-}
-
-impl AutostartService {
-    #[must_use]
-    pub fn new(adapter: Arc<dyn AutostartAdapter>) -> Self {
-        Self { adapter }
-    }
-
-    pub fn apply(&self, request: &AutostartRequest) -> Result<AutostartPlan, AutostartError> {
-        let plan = plan_autostart(request);
-        for action in &plan.actions {
-            match action {
-                AutostartAction::SetWindowsRunRegistry {
-                    key_path,
-                    value_name,
-                    value,
-                } => self
-                    .adapter
-                    .set_windows_run_registry(key_path, value_name, value)?,
-                AutostartAction::DeleteWindowsRunRegistry {
-                    key_path,
-                    value_name,
-                } => self
-                    .adapter
-                    .delete_windows_run_registry(key_path, value_name)?,
-                AutostartAction::WriteFile { path, contents } => {
-                    self.adapter.write_file(path, contents)?;
-                }
-                AutostartAction::RemoveFile { path } => {
-                    self.adapter.remove_file(path)?;
-                }
-                AutostartAction::RunCommand {
-                    executable,
-                    arguments,
-                } => self.adapter.run_command(executable, arguments)?,
-                AutostartAction::RunCommandBestEffort {
-                    executable,
-                    arguments,
-                } => {
-                    if let Err(error) = self.adapter.run_command(executable, arguments) {
-                        tracing::debug!(
-                            %error,
-                            executable = %executable.display(),
-                            "ignored autostart cleanup command failure"
-                        );
-                    }
-                }
-                AutostartAction::Noop => {}
+/// Plans the login entry for `request` and carries it out through `adapter`.
+pub fn apply_autostart(
+    adapter: &dyn AutostartAdapter,
+    request: &AutostartRequest,
+) -> Result<AutostartPlan, AutostartError> {
+    let plan = plan_autostart(request);
+    for action in &plan.actions {
+        match action {
+            AutostartAction::SetWindowsRunRegistry {
+                key_path,
+                value_name,
+                value,
+            } => adapter.set_windows_run_registry(key_path, value_name, value)?,
+            AutostartAction::DeleteWindowsRunRegistry {
+                key_path,
+                value_name,
+            } => adapter.delete_windows_run_registry(key_path, value_name)?,
+            AutostartAction::WriteFile { path, contents } => {
+                adapter.write_file(path, contents)?;
             }
+            AutostartAction::RemoveFile { path } => {
+                adapter.remove_file(path)?;
+            }
+            AutostartAction::RunCommand {
+                executable,
+                arguments,
+            } => adapter.run_command(executable, arguments)?,
+            AutostartAction::RunCommandBestEffort {
+                executable,
+                arguments,
+            } => {
+                if let Err(error) = adapter.run_command(executable, arguments) {
+                    tracing::debug!(
+                        %error,
+                        executable = %executable.display(),
+                        "ignored autostart cleanup command failure"
+                    );
+                }
+            }
+            AutostartAction::Noop => {}
         }
-
-        Ok(plan)
     }
+
+    Ok(plan)
 }
 
 pub struct StdAutostartAdapter {
@@ -760,12 +748,9 @@ mod autostart_tests {
     }
 
     #[test]
-    fn autostart_service_uses_fake_adapter_for_linux_clear() {
+    fn autostart_uses_fake_adapter_for_linux_clear() {
         let adapter = Arc::new(RecordingAutostartAdapter::default());
-        let service = AutostartService::new(adapter.clone());
-
-        let plan = service
-            .apply(&request(TargetOs::Linux, false))
+        let plan = apply_autostart(adapter.as_ref(), &request(TargetOs::Linux, false))
             .expect("autostart apply");
 
         assert!(!plan.enabled);

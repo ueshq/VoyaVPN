@@ -495,14 +495,7 @@ pub(crate) const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs,
-        sync::{
-            atomic::{AtomicU64, Ordering},
-            Arc,
-        },
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::{fs, sync::Arc};
 
     use voya_core::{
         ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem,
@@ -523,8 +516,6 @@ mod tests {
     use crate::proxy_runtime::proxy_runtime_endpoint;
     use crate::supervisor::{ClashApiAccess, SupervisorDeps};
     use voya_net::clash::ClashApiEndpoint;
-
-    static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     #[tokio::test]
     async fn runtime_connect_writes_generated_config_and_starts_supervisor_path() {
@@ -1053,16 +1044,11 @@ mod tests {
     }
 
     fn temp_paths() -> AppPaths {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("runtime test operation should succeed")
-            .as_nanos();
-        let counter = TEMP_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
-        AppPaths::new(
-            std::env::temp_dir()
-                .join("voyavpn-runtime-tests")
-                .join(format!("{}-{nanos}-{counter}", std::process::id())),
-        )
+        let dir = tempfile::Builder::new()
+            .prefix("voyavpn-runtime-tests-")
+            .tempdir()
+            .expect("temp dir");
+        AppPaths::new(dir.keep())
     }
 
     fn write_fake_core_executable(paths: &AppPaths) {

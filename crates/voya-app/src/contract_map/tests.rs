@@ -572,24 +572,6 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
 }
 
 #[test]
-fn every_move_action_maps_to_its_domain_action() {
-    let cases = [
-        (MoveAction::Top, CoreMoveAction::Top),
-        (MoveAction::Up, CoreMoveAction::Up),
-        (MoveAction::Down, CoreMoveAction::Down),
-        (MoveAction::Bottom, CoreMoveAction::Bottom),
-        (MoveAction::Position, CoreMoveAction::Position),
-    ];
-
-    for (contract, domain) in cases {
-        assert_eq!(move_action_from_contract(contract), domain, "{contract:?}");
-    }
-}
-
-/// `profile_details_to_contract` has no inverse, so the pairing is asserted
-/// directly: four `i64` traffic counters and an `i32`/`f64` metrics pair are
-/// exactly the shape a swap hides in.
-#[test]
 fn profile_details_keep_metrics_and_traffic_in_their_own_fields() {
     let entry = profile_details_to_contract(ProfileListItem {
         profile: ProfileItem {

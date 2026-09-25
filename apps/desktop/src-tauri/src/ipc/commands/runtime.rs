@@ -82,6 +82,7 @@ where
         state.system_proxy_manager(),
         tun_manager(state),
         Arc::new(TauriCoreFlowSink { app: app.clone() }),
+        state.proxy_runtime().clone(),
     )
 }
 

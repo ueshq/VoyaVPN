@@ -597,13 +597,10 @@ fn settings_failures_reach_the_field_and_keep_a_typed_side_effect() {
 
     // A rejected side effect keeps the adapter's own already-typed error rather
     // than being relabelled as a settings problem.
-    let side_effect: AppError = SettingsSaveError::SideEffect {
-        stage: crate::settings::save::SettingsSideEffectStage::Autostart,
-        source: AppError::internal(
-            AppErrorSubsystem::Autostart,
-            "autostart refused".to_string(),
-        ),
-    }
+    let side_effect: AppError = SettingsSaveError::Autostart(AppError::internal(
+        AppErrorSubsystem::Autostart,
+        "autostart refused".to_string(),
+    ))
     .into();
     assert_eq!(side_effect.subsystem, AppErrorSubsystem::Autostart);
 }
@@ -794,10 +791,10 @@ mod guards {
         }
     }
 
-    const fn settings_save(error: &SettingsSaveError<AppError>) {
+    const fn settings_save(error: &SettingsSaveError) {
         match error {
             SettingsSaveError::Validation(_)
-            | SettingsSaveError::SideEffect { .. }
+            | SettingsSaveError::Autostart(_)
             | SettingsSaveError::Commit(_) => (),
         }
     }

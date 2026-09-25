@@ -1,11 +1,8 @@
 use std::{
     fs,
     path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
-    },
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use voya_contracts::{AppNoticeLevel, CoreState, LogLevel};
@@ -28,8 +25,6 @@ use super::*;
 use crate::supervisor::{
     CoreExitGiveUp, CoreSupervisor, SupervisorConnectionState, SupervisorDeps,
 };
-
-static TEMP_PATH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Default)]
 struct RecordingSink(Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<SystemProxyStatus>>>);
@@ -198,7 +193,24 @@ impl Harness {
         self.flow_with_proxy_manager(system_proxy)
     }
 
+    fn flow_with_transport(&self, transport: impl ClashHttpTransport + 'static) -> CoreFlow<'_> {
+        let system_proxy = SystemProxyManager::with_target_os(
+            SystemProxyService::new(Arc::new(RecordingRunner::default())),
+            self.paths.clone(),
+            TargetOs::Linux,
+        );
+        self.flow_with(system_proxy, Arc::new(transport))
+    }
+
     fn flow_with_proxy_manager(&self, system_proxy: SystemProxyManager) -> CoreFlow<'_> {
+        self.flow_with(system_proxy, Arc::new(self.mode_transport.clone()))
+    }
+
+    fn flow_with(
+        &self,
+        system_proxy: SystemProxyManager,
+        transport: Arc<dyn ClashHttpTransport>,
+    ) -> CoreFlow<'_> {
         let tun = TunManager::with_target_os_and_native_tun(
             Arc::new(ElevationState::new()),
             TargetOs::Linux,
@@ -215,10 +227,8 @@ impl Harness {
             system_proxy,
             tun,
             Arc::new(self.sink.clone()),
+            ProxyRuntimeManager::with_transport(transport),
         )
-        .with_proxy_runtime(ProxyRuntimeManager::with_transport(Arc::new(
-            self.mode_transport.clone(),
-        )))
     }
 }
 
@@ -236,11 +246,7 @@ async fn saved_mode_is_applied_before_connect_restart_and_recovery_are_announced
         observe_sink: Some(harness.sink.clone()),
         ..ModeTransport::default()
     };
-    let flow = harness
-        .flow()
-        .with_proxy_runtime(ProxyRuntimeManager::with_transport(Arc::new(
-            transport.clone(),
-        )));
+    let flow = harness.flow_with_transport(transport.clone());
     let mut config = active_config();
     config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
     let first = flow.connect(&config).await.expect("connect");
@@ -298,8 +304,7 @@ async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
     let mut config = active_config();
     config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
     let snapshot = harness
-        .flow()
-        .with_proxy_runtime(ProxyRuntimeManager::with_transport(Arc::new(transport)))
+        .flow_with_transport(transport)
         .connect(&config)
         .await
         .expect("core still connected");
@@ -321,16 +326,11 @@ async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
 }
 
 fn temp_paths() -> AppPaths {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos();
-    let counter = TEMP_PATH_COUNTER.fetch_add(1, Ordering::Relaxed);
-    AppPaths::new(
-        std::env::temp_dir()
-            .join("voyavpn-core-flow-tests")
-            .join(format!("{}-{nanos}-{counter}", std::process::id())),
-    )
+    let dir = tempfile::Builder::new()
+        .prefix("voyavpn-core-flow-tests-")
+        .tempdir()
+        .expect("temp dir");
+    AppPaths::new(dir.keep())
 }
 
 fn write_fake_core_executable(paths: &AppPaths) {

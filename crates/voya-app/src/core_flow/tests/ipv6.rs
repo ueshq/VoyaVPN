@@ -43,10 +43,7 @@ const CONTROL: &str = voya_core::DEFAULT_SPEED_PING_TEST_URL;
 
 impl Harness {
     fn ipv6_flow(&self, transport: &DelayTransport) -> CoreFlow<'_> {
-        self.flow()
-            .with_proxy_runtime(ProxyRuntimeManager::with_transport(Arc::new(
-                transport.clone(),
-            )))
+        self.flow_with_transport(transport.clone())
     }
 
     fn store(&self) -> Ipv6EgressStore {

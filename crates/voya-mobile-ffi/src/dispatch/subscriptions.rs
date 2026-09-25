@@ -5,7 +5,6 @@ use serde_json::Value;
 use voya_app::{
     contract_map::{
         subscription_from_contract, subscription_metadata_to_contract, subscription_to_contract,
-        subscription_update_to_contract,
     },
     invalidation,
     subscriptions::SubscriptionManager,
@@ -70,10 +69,7 @@ pub(super) async fn update(state: &MobileState, args: &Value) -> Result<Value, A
         )
         .await?;
     if !prepared.has_imports() {
-        return answer(
-            "update_subscriptions",
-            &subscription_update_to_contract(prepared.into_result()),
-        );
+        return answer("update_subscriptions", &prepared.into_result());
     }
 
     let updated = state
@@ -89,10 +85,7 @@ pub(super) async fn update(state: &MobileState, args: &Value) -> Result<Value, A
         invalidation::subscription_scopes(true, updated.config_changed),
     );
 
-    answer(
-        "update_subscriptions",
-        &subscription_update_to_contract(updated.value),
-    )
+    answer("update_subscriptions", &updated.value)
 }
 
 #[derive(Debug, Deserialize)]

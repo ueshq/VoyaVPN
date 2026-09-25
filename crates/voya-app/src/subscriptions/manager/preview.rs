@@ -17,11 +17,7 @@ impl SubscriptionManager<'_> {
                 .collect(),
             subscription_urls: parsed.subscription_urls,
             failed: u32::try_from(parsed.failed_lines).unwrap_or(u32::MAX),
-            line_issues: parsed
-                .line_issues
-                .into_iter()
-                .map(crate::contract_map::import_line_issue_to_contract)
-                .collect(),
+            line_issues: parsed.line_issues,
         })
     }
 }

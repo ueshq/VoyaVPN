@@ -3,10 +3,13 @@
 //! persistence. Manual group membership is independent of subscriptions.
 
 use futures_util::{stream, StreamExt};
+use voya_contracts::{
+    SubscriptionUpdateOutcome, SubscriptionUpdateReason, SubscriptionUpdateResult,
+    SubscriptionUpdateStatus,
+};
 use voya_core::{
     parse_profile_update_interval_minutes, parse_subscription_userinfo, SubItem, SubMetadataItem,
-    SubscriptionUpdateOutcome, SubscriptionUpdateReason, SubscriptionUpdateResult,
-    SubscriptionUpdateStatus, SubscriptionUserInfo,
+    SubscriptionUserInfo,
 };
 use voya_db::DatabaseSession;
 use voya_net::{

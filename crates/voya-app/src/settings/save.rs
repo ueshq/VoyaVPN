@@ -468,77 +468,45 @@ pub const fn settings_runtime_action(
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct AppliedSettingsSideEffects {
-    autostart_touched: bool,
+/// The one OS side effect a settings save has: the login entry. A trait so the
+/// save transaction's rollback paths can be tested without touching the machine.
+pub trait ApplyAutostart: Sync {
+    fn apply_autostart(&self, config: &AppConfig) -> Result<(), contracts::AppError>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SettingsSideEffectStage {
-    Autostart,
+impl ApplyAutostart for crate::autostart::AutostartManager {
+    fn apply_autostart(&self, config: &AppConfig) -> Result<(), contracts::AppError> {
+        let mut config = config.clone();
+        let enabled = config.gui_item.auto_run;
+        self.set_enabled(&mut config, enabled)
+            .map(|_| ())
+            .map_err(contracts::AppError::from)
+    }
 }
 
-#[derive(Debug)]
-pub struct SettingsSideEffectFailure<E> {
-    pub stage: SettingsSideEffectStage,
-    pub source: E,
-    pub compensation_errors: Vec<E>,
+/// A host without a login entry. A phone's always-on VPN is a system setting
+/// the user turns on, not something an app arranges for itself.
+pub struct NoAutostart;
+
+impl ApplyAutostart for NoAutostart {
+    fn apply_autostart(&self, _config: &AppConfig) -> Result<(), contracts::AppError> {
+        Ok(())
+    }
 }
 
-pub trait SettingsSideEffectAdapter {
-    type Error;
-
-    fn apply_autostart(&self, config: &AppConfig) -> Result<(), Self::Error>;
-}
-
-pub fn apply_settings_side_effects<A>(
-    adapter: &A,
-    original: &AppConfig,
-    target: &AppConfig,
-) -> Result<AppliedSettingsSideEffects, SettingsSideEffectFailure<A::Error>>
-where
-    A: SettingsSideEffectAdapter,
-{
-    let mut applied = AppliedSettingsSideEffects::default();
-    // The login entry carries the launch flag `start_minimized` is read
-    // against, so an entry written before that flag existed is rewritten when
-    // the option changes.
-    let autostart_changed = original.gui_item.auto_run != target.gui_item.auto_run
+/// Whether saving `target` over `original` has to rewrite the login entry.
+///
+/// The entry carries the launch flag `start_minimized` is read against, so an
+/// enabled entry is also rewritten when that option changes.
+#[must_use]
+pub fn autostart_changes(original: &AppConfig, target: &AppConfig) -> bool {
+    original.gui_item.auto_run != target.gui_item.auto_run
         || (target.gui_item.auto_run
-            && original.gui_item.start_minimized != target.gui_item.start_minimized);
-    if autostart_changed {
-        applied.autostart_touched = true;
-        if let Err(source) = adapter.apply_autostart(target) {
-            return Err(SettingsSideEffectFailure {
-                stage: SettingsSideEffectStage::Autostart,
-                source,
-                compensation_errors: compensate_settings_side_effects(adapter, original, applied),
-            });
-        }
-    }
-    Ok(applied)
-}
-
-pub fn compensate_settings_side_effects<A>(
-    adapter: &A,
-    original: &AppConfig,
-    applied: AppliedSettingsSideEffects,
-) -> Vec<A::Error>
-where
-    A: SettingsSideEffectAdapter,
-{
-    let mut errors = Vec::new();
-    if applied.autostart_touched {
-        if let Err(error) = adapter.apply_autostart(original) {
-            errors.push(error);
-        }
-    }
-    errors
+            && original.gui_item.start_minimized != target.gui_item.start_minimized)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
     use voya_core::SimpleDnsItem;
 
     use voya_core::{SysProxyType, TrafficMode};
@@ -692,28 +660,6 @@ mod tests {
         assert_eq!(restored.ui_item, AppConfig::default().ui_item);
     }
 
-    #[derive(Default)]
-    struct FakeSideEffects {
-        calls: Mutex<Vec<String>>,
-        fail_autostart_for: Mutex<Option<bool>>,
-    }
-
-    impl SettingsSideEffectAdapter for FakeSideEffects {
-        type Error = String;
-
-        fn apply_autostart(&self, config: &AppConfig) -> Result<(), Self::Error> {
-            let enabled = config.gui_item.auto_run;
-            self.calls
-                .lock()
-                .expect("calls lock")
-                .push(format!("autostart:{enabled}"));
-            if *self.fail_autostart_for.lock().expect("autostart lock") == Some(enabled) {
-                return Err(format!("autostart failed for {enabled}"));
-            }
-            Ok(())
-        }
-    }
-
     fn config(autostart: bool) -> AppConfig {
         let mut config = AppConfig::default();
         config.gui_item.auto_run = autostart;
@@ -722,40 +668,15 @@ mod tests {
 
     #[test]
     fn toggling_start_minimized_rewrites_only_an_enabled_login_entry() {
-        let adapter = FakeSideEffects::default();
         let original = config(true);
         let mut target = original.clone();
         target.gui_item.start_minimized = true;
-        assert!(apply_settings_side_effects(&adapter, &original, &target).is_ok());
-        assert_eq!(
-            *adapter.calls.lock().expect("calls lock"),
-            vec!["autostart:true".to_string()]
-        );
+        assert!(autostart_changes(&original, &target));
 
-        let adapter = FakeSideEffects::default();
         let original = config(false);
         let mut target = original.clone();
         target.gui_item.start_minimized = true;
-        assert!(apply_settings_side_effects(&adapter, &original, &target).is_ok());
-        assert!(adapter.calls.lock().expect("calls lock").is_empty());
-    }
-
-    #[test]
-    fn failed_autostart_application_attempts_authoritative_restore() {
-        let original = config(false);
-        let target = config(true);
-        let effects = FakeSideEffects::default();
-        *effects.fail_autostart_for.lock().expect("autostart lock") = Some(true);
-
-        let failure = apply_settings_side_effects(&effects, &original, &target)
-            .expect_err("autostart application should fail");
-
-        assert_eq!(failure.stage, SettingsSideEffectStage::Autostart);
-        assert!(failure.compensation_errors.is_empty());
-        assert_eq!(
-            *effects.calls.lock().expect("calls lock"),
-            ["autostart:true", "autostart:false"]
-        );
+        assert!(!autostart_changes(&original, &target));
     }
 
     #[test]

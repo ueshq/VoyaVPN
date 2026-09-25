@@ -1,7 +1,8 @@
 use thiserror::Error;
+use voya_contracts::MoveAction;
 use voya_core::{
-    AppConfig, MoveAction, ProfileExItem, ProfileItem, ProfileListItem, ProfileProtocol,
-    ProfileTransport, ServerEndpoint, ServerStatItem,
+    AppConfig, ProfileExItem, ProfileItem, ProfileListItem, ProfileProtocol, ProfileTransport,
+    ServerEndpoint, ServerStatItem,
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
@@ -611,8 +612,7 @@ fn empty_server_stat(index_id: &str) -> ServerStatItem {
 #[cfg(test)]
 mod tests {
     use voya_core::{
-        MoveAction, ProfileProtocol, ProfileTransport, ServerEndpoint, SubItem, TlsMode,
-        TlsSettings,
+        ProfileProtocol, ProfileTransport, ServerEndpoint, SubItem, TlsMode, TlsSettings,
     };
 
     use super::*;

@@ -2,9 +2,10 @@
 use super::{is_http_url, Result, SubscriptionManagerError};
 use regex::Regex;
 use std::{collections::BTreeSet, sync::LazyLock};
+use voya_contracts::{ImportLineCode, ImportLineIssue};
 use voya_core::{
     parse_share_link, parse_ss_sip008, parse_wireguard_config, text::decode_base64_payload,
-    ImportLineCode, ImportLineIssue, ProfileItem, ShareError,
+    ProfileItem, ShareError,
 };
 
 #[derive(Debug, Default)]

@@ -8,9 +8,10 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use voya_contracts::SubscriptionUpdateResult;
 
 use tokio::{sync::watch, task::JoinHandle, time};
-use voya_core::{SubItem, SubMetadataItem, SubscriptionUpdateResult};
+use voya_core::{SubItem, SubMetadataItem};
 use voya_db::Database;
 use voya_platform::coreinfo::TargetOs;
 

@@ -1,12 +1,10 @@
 use thiserror::Error;
-use voya_contracts::{AppError, MoveAction as ContractMoveAction, Routing, RoutingRule};
-use voya_core::{AppConfig, MoveAction, RoutingItem, RulesItem};
+use voya_contracts::{AppError, MoveAction, Routing, RoutingRule};
+use voya_core::{AppConfig, RoutingItem, RulesItem};
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
 use crate::config_mutation::{CommittedMutation, ConfigMutationCoordinator};
-use crate::contract_map::{
-    move_action_from_contract, routing_from_contract, routing_to_contract, rule_from_contract,
-};
+use crate::contract_map::{routing_from_contract, routing_to_contract, rule_from_contract};
 
 const DEFAULT_ROUTING_SORT_STEP: i32 = 10;
 
@@ -448,7 +446,7 @@ pub async fn move_routing_rule_use_case(
     mutations: &ConfigMutationCoordinator,
     routing_id: String,
     rule_id: String,
-    action: ContractMoveAction,
+    action: MoveAction,
     position: Option<i32>,
 ) -> std::result::Result<CommittedMutation<Routing>, AppError> {
     mutations
@@ -456,12 +454,7 @@ pub async fn move_routing_rule_use_case(
             async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
                 Ok(routing_to_contract(
                     RoutingManager::new_in(unit_of_work)
-                        .move_rule(
-                            &routing_id,
-                            &rule_id,
-                            move_action_from_contract(action),
-                            position,
-                        )
+                        .move_rule(&routing_id, &rule_id, action, position)
                         .await?,
                 ))
             },

@@ -22,13 +22,14 @@ impl RecordingSideEffects {
     }
 }
 
-impl SettingsSideEffectAdapter for RecordingSideEffects {
-    type Error = String;
-
-    fn apply_autostart(&self, config: &AppConfig) -> Result<(), Self::Error> {
+impl ApplyAutostart for RecordingSideEffects {
+    fn apply_autostart(&self, config: &AppConfig) -> Result<(), voya_contracts::AppError> {
         self.push(format!("autostart:{}", config.gui_item.auto_run));
         if self.fail_autostart {
-            return Err("autostart refused".to_string());
+            return Err(voya_contracts::AppError::internal(
+                voya_contracts::AppErrorSubsystem::Autostart,
+                "autostart refused".to_string(),
+            ));
         }
         Ok(())
     }
@@ -146,13 +147,7 @@ async fn a_refused_side_effect_rolls_back_and_persists_nothing() {
         .await
         .expect_err("autostart refused");
 
-    assert!(matches!(
-        error,
-        SettingsSaveError::SideEffect {
-            stage: SettingsSideEffectStage::Autostart,
-            ..
-        }
-    ));
+    assert!(matches!(error, SettingsSaveError::Autostart(_)));
     assert_eq!(
         side_effects.calls().as_slice(),
         ["autostart:true".to_string(), "autostart:false".to_string()]

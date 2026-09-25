@@ -4,8 +4,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
     contract_map::{
-        import_profiles_to_contract, move_action_from_contract, policy_group_entry_to_contract,
-        profile_details_to_contract, profile_from_contract, profile_summary_listing_to_contract,
+        policy_group_entry_to_contract, profile_details_to_contract, profile_from_contract,
+        profile_summary_listing_to_contract,
     },
     invalidation,
     profiles::ProfileManager,
@@ -88,10 +88,7 @@ pub(super) async fn import_from_text(state: &MobileState, args: &Value) -> Resul
         invalidation::subscription_scopes(true, imported.config_changed),
     );
 
-    answer(
-        "import_profiles_from_text",
-        &import_profiles_to_contract(imported.value),
-    )
+    answer("import_profiles_from_text", &imported.value)
 }
 
 pub(super) async fn list_policy_groups(state: &MobileState) -> Result<Value, AppError> {
@@ -216,12 +213,7 @@ pub(super) async fn move_profile(state: &MobileState, args: &Value) -> Result<Va
         .config_mutations
         .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
             Ok(ProfileManager::new_in(unit_of_work)
-                .move_profile(
-                    subscription_id.as_deref(),
-                    &index_id,
-                    move_action_from_contract(action),
-                    position,
-                )
+                .move_profile(subscription_id.as_deref(), &index_id, action, position)
                 .await?)
         })
         .await?;
