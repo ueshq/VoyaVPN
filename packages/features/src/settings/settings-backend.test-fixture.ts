@@ -22,7 +22,6 @@ export const settingsIpc: {
   | "saveDnsSettings"
   | "loadUiPreferences"
   | "appUpdateStatus"
-  | "updateGeoAssets"
   | "updateSrsAssets"
   | "listRoutings"
   | "listProcessCandidates",
@@ -38,7 +37,6 @@ export const settingsIpc: {
   saveDnsSettings: vi.fn(),
   loadUiPreferences: vi.fn(),
   appUpdateStatus: vi.fn(),
-  updateGeoAssets: vi.fn(),
   updateSrsAssets: vi.fn(),
   listRoutings: vi.fn(),
   listProcessCandidates: vi.fn(),
@@ -80,7 +78,6 @@ export function resetSettingsBackend() {
     message: null,
     state: "ready",
   });
-  settingsIpc.updateGeoAssets.mockResolvedValue([]);
   settingsIpc.updateSrsAssets.mockResolvedValue([]);
   settingsIpc.listRoutings.mockResolvedValue([]);
   settingsIpc.listProcessCandidates.mockResolvedValue([]);

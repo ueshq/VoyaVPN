@@ -47,6 +47,10 @@ apps/web/.output/
 .cxx/
 apps/mobile/ios/Pods/
 apps/mobile/ios/.xcode.env.local
+# Per-user IDE state: Xcode's window layout and scheme order, and the SDK path
+# Android Studio writes for this machine.
+xcuserdata/
+apps/mobile/android/local.properties
 apps/mobile/ios/build/
 apps/mobile/android/.kotlin/
 apps/mobile/.bundle-check/

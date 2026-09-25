@@ -48,22 +48,6 @@ fn updater_status<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn update_geo_assets(
-    state: tauri::State<'_, AppState>,
-) -> Result<Vec<ResourceUpdateFile>, AppError> {
-    let config = state.config_mutations().current_config();
-    let proxy_url = runtime_proxy_url(true, None, &config);
-
-    state
-        .services()
-        .updates()
-        .update_geo_assets(proxy_url)
-        .await
-        .map_err(AppError::from)
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn update_srs_assets(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<ResourceUpdateFile>, AppError> {

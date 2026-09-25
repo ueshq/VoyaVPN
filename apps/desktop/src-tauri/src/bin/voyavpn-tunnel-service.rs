@@ -1,4 +1,7 @@
-use voya_platform::process::command_output_text;
+use voya_platform::{
+    coreinfo::{executable_name_for_current_os, SING_BOX_EXECUTABLES},
+    process::command_output_text,
+};
 
 use std::{
     env, fs, io,
@@ -25,11 +28,6 @@ const SERVICE_NAME: &str = "VoyaVPNTunnelService";
 #[cfg(windows)]
 const SERVICE_ERROR_LOG_NAME: &str = "tunnel-service-error.log";
 const STAGED_CONFIG_NAME: &str = "config.json";
-const SING_BOX_EXES: &[&str] = if cfg!(windows) {
-    &["sing-box.exe", "sing-box-client.exe"]
-} else {
-    &["sing-box", "sing-box-client"]
-};
 
 fn main() {
     if let Err(error) = entry() {
@@ -418,14 +416,11 @@ fn absolute_path(path: &Path) -> Result<PathBuf, ServiceError> {
 /// from `ServiceLayout`, which derives it from the service executable's own
 /// installed location, so no caller argument can influence it.
 fn find_sing_box(core_dir: &Path) -> PathBuf {
-    for executable in SING_BOX_EXES {
-        let candidate = core_dir.join(executable);
-        if candidate.is_file() {
-            return candidate;
-        }
-    }
+    core_dir.join(sing_box_file_name())
+}
 
-    core_dir.join(SING_BOX_EXES[0])
+fn sing_box_file_name() -> String {
+    executable_name_for_current_os(SING_BOX_EXECUTABLES[0])
 }
 
 fn wait_for_child(child: &mut Child) -> Result<(), ServiceError> {
@@ -768,7 +763,7 @@ mod tests {
         assert!(plan.sing_box_path.starts_with(&fixture.layout.core_dir));
         assert_eq!(
             plan.sing_box_path,
-            fixture.layout.core_dir.join(SING_BOX_EXES[0])
+            fixture.layout.core_dir.join(sing_box_file_name())
         );
         let config_parent = config.parent().expect("config parent");
         assert!(!plan.sing_box_path.starts_with(config_parent));
@@ -904,6 +899,6 @@ mod tests {
             .expect_err("missing core must be reported");
 
         assert!(matches!(error, ServiceError::MissingSingBox(path)
-            if path == fixture.layout.core_dir.join(SING_BOX_EXES[0])));
+            if path == fixture.layout.core_dir.join(sing_box_file_name())));
     }
 }

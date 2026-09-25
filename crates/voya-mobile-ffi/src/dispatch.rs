@@ -78,16 +78,6 @@ pub const UNSUPPORTED_ON_MOBILE: &[&str] = &[
     "install_core_seed",
 ];
 
-/// Commands that belong on a phone but have no dispatcher yet.
-///
-/// Separate from [`UNSUPPORTED_ON_MOBILE`] on purpose: putting a command here
-/// says "this is a gap", while putting it there says "this will never work",
-/// and conflating the two would make the unsupported list a lie. Both lists are
-/// checked, so a command cannot quietly fall out of either.
-///
-/// Empty: every command a phone can answer now has a dispatcher.
-pub const NOT_YET_DISPATCHED: &[&str] = &[];
-
 /// Runs one command.
 pub async fn invoke(
     state: &MobileState,
@@ -159,7 +149,6 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
         "proxy_start_monitor" => proxy::start_monitor(state).await,
         "proxy_stop_monitor" => proxy::stop_monitor(state).await,
 
-        "update_geo_assets" => assets::update_geo(state).await,
         "update_srs_assets" => assets::update_srs(state).await,
 
         "list_subscriptions" => subscriptions::list(state).await,
@@ -181,15 +170,9 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
         "speedtest_status" => speedtest::status(state),
         "check_connection_ip" => runtime::check_connection_ip(state).await,
 
-        _ if UNSUPPORTED_ON_MOBILE.contains(&command) => Err(unsupported(command)),
-        // Everything left is either a gap this build has not filled yet or a
-        // command that does not exist; both reach the frontend as the same
-        // typed kind, because from a screen's side they are the same thing.
-        _ => Err(AppError {
-            kind: AppErrorKind::Unsupported,
-            subsystem: AppErrorSubsystem::App,
-            message: format!("{command} has no dispatcher on this platform yet"),
-        }),
+        // `UNSUPPORTED_ON_MOBILE` and unknown names reach the frontend as the
+        // same typed kind; the coverage tests keep the list honest.
+        _ => Err(unsupported(command)),
     }
 }
 

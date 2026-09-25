@@ -156,7 +156,6 @@ export type VoyaCommands = {
 	cancelSpeedtest: () => Promise<SpeedtestStatus>,
 	speedtestStatus: () => Promise<SpeedtestStatus>,
 	appUpdateStatus: () => Promise<AppUpdaterStatus>,
-	updateGeoAssets: () => Promise<ResourceUpdateFile[]>,
 	updateSrsAssets: () => Promise<ResourceUpdateFile[]>,
 	/**
 	 *  Re-install a core binary from the packaged seed (`{resource_dir}/core-seeds/<core>/`)

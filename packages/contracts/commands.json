@@ -79,7 +79,6 @@
   "tun_provider_diagnostics",
   "tun_request_elevation",
   "tun_status",
-  "update_geo_assets",
   "update_srs_assets",
   "update_subscriptions"
 ]

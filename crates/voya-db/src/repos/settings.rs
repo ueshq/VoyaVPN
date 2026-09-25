@@ -7,10 +7,8 @@ use crate::{
 };
 
 /// Stores the current IPC settings DTO verbatim. Database initialization rejects
-/// historical baselines; this repository strictly reads the current payload and
-/// never converts retired keys. Initialization only normalizes the documented
-/// retired keys and values (see [`normalize_retired_settings_value`]) in
-/// otherwise valid current settings. Missing settings use the current defaults.
+/// historical baselines, and this repository strictly reads the current payload:
+/// nothing converts retired keys. Missing settings use the current defaults.
 #[derive(Debug, Clone, Copy)]
 pub struct SettingsRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
@@ -81,143 +79,6 @@ fn payload_error(source: serde_json::Error) -> DbError {
         path: "app_settings.payload".into(),
         source,
     }
-}
-
-/// Keys retired from the settings payload, as JSON object paths.
-const RETIRED_SETTINGS_KEYS: &[&[&str]] = &[
-    &["behavior", "statistics"],
-    &["behavior", "realtimeSpeed"],
-    &["network", "systemProxy", "advancedProtocol"],
-    &["network", "systemProxy", "customPacPath"],
-    &["network", "systemProxy", "customScriptPath"],
-    &["routing", "singboxDomainStrategy"],
-    &["grpc"],
-];
-
-/// Keys retired from every element of a settings array: (array path, key).
-const RETIRED_SETTINGS_ELEMENT_KEYS: &[(&[&str], &str)] = &[(&["network", "inbounds"], "protocol")];
-
-/// Keys added after the baseline: (parent path, key, JSON value an older
-/// payload implies). Inserted only when absent.
-const ADDED_SETTINGS_DEFAULTS: &[(&[&str], &str, &str)] = &[
-    (&["behavior"], "autoCheckIp", "false"),
-    (&["behavior"], "autoCreateSubscriptionGroup", "true"),
-    (&["behavior"], "closeAction", "\"minimizeToTray\""),
-    (&["behavior"], "startMinimized", "false"),
-];
-
-/// Retired enum values and the current value each one maps onto.
-const RETIRED_SETTINGS_VALUES: &[(&[&str], &str, &str)] = &[
-    (&["proxy", "trafficMode"], "direct", "rule"),
-    (&["network", "systemProxy", "mode"], "pac", "forcedChange"),
-];
-
-/// Runs only after the database baseline has been validated. Keep the narrow
-/// upgrade at the persistence boundary so IPC never accepts retired settings.
-pub(crate) async fn normalize_retired_settings(pool: &sqlx::SqlitePool) -> Result<()> {
-    let candidate = sqlx::query_as::<_, (String,)>(
-        "SELECT payload FROM app_settings WHERE id = 1 AND schema_version = ?",
-    )
-    .bind(i64::from(CURRENT_SCHEMA_VERSION))
-    .fetch_optional(pool)
-    .await?;
-    let Some((original,)) = candidate else {
-        return Ok(());
-    };
-    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(&original) else {
-        return Ok(());
-    };
-    if value
-        .get("schemaVersion")
-        .and_then(serde_json::Value::as_u64)
-        != Some(u64::from(CURRENT_SCHEMA_VERSION))
-        || !normalize_retired_settings_value(&mut value)
-    {
-        return Ok(());
-    }
-    // Leave malformed or otherwise unknown settings untouched for the strict
-    // loader to reject: the conversion must never silently discard fields it
-    // does not know about.
-    let Ok(settings) = serde_json::from_value::<AppSettingsV1>(value) else {
-        return Ok(());
-    };
-    let normalized = serde_json::to_string(&settings).map_err(payload_error)?;
-    sqlx::query(
-        "UPDATE app_settings SET payload = ? WHERE id = 1 AND schema_version = ? AND payload = ?",
-    )
-    .bind(normalized)
-    .bind(i64::from(CURRENT_SCHEMA_VERSION))
-    .bind(original)
-    .execute(pool)
-    .await?;
-    Ok(())
-}
-
-/// Applies every retired-key and retired-value conversion to a settings
-/// payload. Returns whether anything changed.
-pub(crate) fn normalize_retired_settings_value(value: &mut serde_json::Value) -> bool {
-    let mut changed = false;
-    for path in RETIRED_SETTINGS_KEYS {
-        if let Some((key, parents)) = path.split_last() {
-            if let Some(object) = json_at(value, parents).and_then(serde_json::Value::as_object_mut)
-            {
-                changed |= object.remove(*key).is_some();
-            }
-        }
-    }
-    for (array_path, key) in RETIRED_SETTINGS_ELEMENT_KEYS {
-        if let Some(elements) = json_at(value, array_path).and_then(serde_json::Value::as_array_mut)
-        {
-            for element in elements {
-                if let Some(object) = element.as_object_mut() {
-                    changed |= object.remove(*key).is_some();
-                }
-            }
-        }
-    }
-    // The boolean fragment switch became a mode: enabled meant TLS record
-    // fragmentation, which is what the generator emitted for it.
-    if let Some(core) = json_at(value, &["core"]).and_then(serde_json::Value::as_object_mut) {
-        if let Some(enabled) = core.remove("fragmentEnabled") {
-            let mode = if enabled.as_bool() == Some(true) {
-                "record"
-            } else {
-                "off"
-            };
-            core.entry("tlsFragment")
-                .or_insert_with(|| serde_json::Value::String(mode.to_string()));
-            core.entry("fragmentFallbackDelayMs")
-                .or_insert_with(|| serde_json::Value::from(500));
-            changed = true;
-        }
-    }
-    for (parents, key, default) in ADDED_SETTINGS_DEFAULTS {
-        if let Some(object) = json_at(value, parents).and_then(serde_json::Value::as_object_mut) {
-            if !object.contains_key(*key) {
-                if let Ok(default) = serde_json::from_str::<serde_json::Value>(default) {
-                    object.insert((*key).to_string(), default);
-                    changed = true;
-                }
-            }
-        }
-    }
-    for (path, retired, current) in RETIRED_SETTINGS_VALUES {
-        if let Some(slot) = json_at(value, path) {
-            if slot.as_str() == Some(retired) {
-                *slot = serde_json::Value::String((*current).to_string());
-                changed = true;
-            }
-        }
-    }
-    changed
-}
-
-fn json_at<'value>(
-    value: &'value mut serde_json::Value,
-    path: &[&str],
-) -> Option<&'value mut serde_json::Value> {
-    path.iter()
-        .try_fold(value, |current, key| current.get_mut(*key))
 }
 
 fn validated_payload(settings: &AppSettingsV1) -> Result<String> {

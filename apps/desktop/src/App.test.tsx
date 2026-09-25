@@ -301,7 +301,6 @@ const ipc = installFakeCommands({
       restoreOnDisconnect: true,
     }),
   ),
-  updateGeoAssets: vi.fn(() => Promise.resolve([])),
   updateSrsAssets: vi.fn(() => Promise.resolve([])),
   updateSubscriptions: vi.fn(),
 });

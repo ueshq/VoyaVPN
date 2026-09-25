@@ -9,7 +9,7 @@ import { getErrorMessage } from "@voya/utils/error";
 import { saveQueue } from "../forms/save-queue";
 
 /**
- * Refreshing the rule library: the IP and domain data, then the rule sets.
+ * Refreshing the rule library: the `.srs` rule sets the routing rules name.
  *
  * Shared because both shells offer it and neither owns it — the desktop from
  * its update dialog, a phone from a Settings row. What is *not* shared is the
@@ -23,9 +23,8 @@ export function useRuleLibraryUpdate() {
   const [updating, setUpdating] = useState(false);
   const updatedAt = usePreferencesStore((state) => state.ruleLibraryUpdatedAt);
 
-  /** A failure part way keeps the files that did arrive on show. */
+  /** The backend publishes the batch all or nothing, so a failure shows no files. */
   async function update() {
-    const arrived: ResourceUpdateFile[] = [];
     setUpdating(true);
     setError(null);
     setFiles(null);
@@ -33,13 +32,12 @@ export function useRuleLibraryUpdate() {
       // A queued settings write would otherwise land on top of the assets
       // this is about to replace.
       await queue.settled();
-      arrived.push(...(await voyaCommands().updateGeoAssets()));
-      arrived.push(...(await voyaCommands().updateSrsAssets()));
+      setFiles(await voyaCommands().updateSrsAssets());
       usePreferencesStore.getState().setRuleLibraryUpdatedAt(Date.now());
     } catch (failure) {
+      setFiles([]);
       setError(getErrorMessage(failure));
     } finally {
-      setFiles(arrived);
       setUpdating(false);
     }
   }

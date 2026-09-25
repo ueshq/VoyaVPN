@@ -25,7 +25,7 @@ use voya_contracts::{AppError, AppErrorEntity, AppErrorKind, AppErrorSubsystem, 
 
 use super::validation_issue_to_contract;
 use voya_db::DbError;
-use voya_net::{ruleset::RulesetGeoError, DownloadError};
+use voya_net::{ruleset::RulesetError, DownloadError};
 use voya_platform::coreinfo::CoreInfoError;
 
 use crate::{
@@ -242,7 +242,6 @@ impl From<ProfileManagerError> for AppError {
                 }],
             ),
             ProfileManagerError::MissingProfileId => invalid(Sub::Profile, "profileId", &error),
-            ProfileManagerError::InvalidMove { .. } => invalid(Sub::Profile, "position", &error),
         }
     }
 }
@@ -324,7 +323,7 @@ impl From<UpdateManagerError> for AppError {
     fn from(error: UpdateManagerError) -> Self {
         match error {
             UpdateManagerError::Database(source) => database_error(&source, Sub::Update),
-            UpdateManagerError::RulesetGeo(source) => ruleset_geo_error(&source),
+            UpdateManagerError::Ruleset(source) => ruleset_error(&source),
         }
     }
 }
@@ -340,10 +339,9 @@ impl From<SpeedtestError> for AppError {
             SpeedtestError::Path(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::Process(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::ProbeCoreHost(_) => io(Sub::Speedtest, &error),
-            SpeedtestError::CreateConfigDir { .. }
-            | SpeedtestError::WriteConfig { .. }
-            | SpeedtestError::RemoveConfig { .. } => io(Sub::Speedtest, &error),
-            SpeedtestError::Validation { .. } => invalid(Sub::Speedtest, "profile", &error),
+            SpeedtestError::CreateConfigDir { .. } | SpeedtestError::WriteConfig { .. } => {
+                io(Sub::Speedtest, &error)
+            }
             SpeedtestError::EmptySelection => invalid(Sub::Speedtest, "profileIds", &error),
             SpeedtestError::SingboxConfig(ref source) => internal(Sub::Speedtest, source),
             SpeedtestError::Cancelled
@@ -614,11 +612,11 @@ fn download_error(error: &DownloadError, subsystem: AppErrorSubsystem) -> AppErr
     }
 }
 
-fn ruleset_geo_error(error: &RulesetGeoError) -> AppError {
+fn ruleset_error(error: &RulesetError) -> AppError {
     match error {
-        RulesetGeoError::Download(source) => download_error(source, Sub::Update),
-        RulesetGeoError::AssetIo { .. } => io(Sub::Update, error),
-        RulesetGeoError::InvalidAsset { .. } => internal(Sub::Update, error),
+        RulesetError::Download(source) => download_error(source, Sub::Update),
+        RulesetError::AssetIo { .. } => io(Sub::Update, error),
+        RulesetError::InvalidAsset { .. } => internal(Sub::Update, error),
     }
 }
 

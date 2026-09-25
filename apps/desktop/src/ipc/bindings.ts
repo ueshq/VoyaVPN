@@ -153,7 +153,6 @@ export const commands = {
 	cancelSpeedtest: () => typedError<SpeedtestStatus, AppError>(__TAURI_INVOKE("cancel_speedtest")),
 	speedtestStatus: () => typedError<SpeedtestStatus, AppError>(__TAURI_INVOKE("speedtest_status")),
 	appUpdateStatus: () => typedError<AppUpdaterStatus, AppError>(__TAURI_INVOKE("app_update_status")),
-	updateGeoAssets: () => typedError<ResourceUpdateFile[], AppError>(__TAURI_INVOKE("update_geo_assets")),
 	updateSrsAssets: () => typedError<ResourceUpdateFile[], AppError>(__TAURI_INVOKE("update_srs_assets")),
 	/**
 	 *  Re-install a core binary from the packaged seed (`{resource_dir}/core-seeds/<core>/`)

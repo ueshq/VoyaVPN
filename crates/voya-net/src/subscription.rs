@@ -17,7 +17,6 @@ pub struct SubscriptionFetchSource {
     pub more_url: String,
     pub user_agent: String,
     pub convert_target: Option<String>,
-    pub sub_convert_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +46,9 @@ pub struct FailedSubscriptionSource {
 #[derive(Debug, Clone, Default)]
 pub struct SubscriptionClient {
     download: DownloadClient,
+    /// The converter a `convert_target` goes through; `None` is the public
+    /// default. Only tests point it elsewhere, at a local fixture.
+    converter: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +63,7 @@ impl SubscriptionClient {
     pub fn new() -> Self {
         Self {
             download: DownloadClient::new(),
+            converter: None,
         }
     }
 
@@ -94,7 +97,7 @@ impl SubscriptionClient {
         let main_url = build_subscription_url(
             raw_url,
             source.convert_target.as_deref(),
-            source.sub_convert_url.as_deref(),
+            self.converter.as_deref(),
         )?;
         if main_url.trim() != raw_url {
             validate_subscription_url(&main_url, url_policy)?;
@@ -224,7 +227,7 @@ fn forbidden_subscription_url(url: &str, reason: impl Into<String>) -> DownloadE
 fn build_subscription_url(
     raw_url: &str,
     convert_target: Option<&str>,
-    sub_convert_url: Option<&str>,
+    converter: Option<&str>,
 ) -> Result<String> {
     let Some(target) = convert_target
         .map(str::trim)
@@ -233,7 +236,7 @@ fn build_subscription_url(
         return Ok(raw_url.trim().to_string());
     };
 
-    let template = sub_convert_url
+    let template = converter
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(DEFAULT_SUB_CONVERT_URL);
@@ -319,7 +322,6 @@ mod tests {
                     more_url: String::new(),
                     user_agent: String::new(),
                     convert_target: None,
-                    sub_convert_url: None,
                 },
                 &SubscriptionFetchOptions {
                     prefer_proxy: false,
@@ -354,7 +356,6 @@ mod tests {
                     more_url: format!("{base}/extra"),
                     user_agent: "SubUA/2".to_string(),
                     convert_target: None,
-                    sub_convert_url: None,
                 },
                 &SubscriptionFetchOptions {
                     prefer_proxy: false,
@@ -397,7 +398,6 @@ mod tests {
                     more_url: format!("{base}/missing, {base}/good"),
                     user_agent: String::new(),
                     convert_target: None,
-                    sub_convert_url: None,
                 },
                 &SubscriptionFetchOptions {
                     prefer_proxy: false,
@@ -431,14 +431,17 @@ mod tests {
         .await;
         let source_url = format!("{base}/raw-sub");
 
-        let result = SubscriptionClient::new()
+        let client = SubscriptionClient {
+            converter: Some(format!("{base}/convert?url={{0}}")),
+            ..SubscriptionClient::new()
+        };
+        let result = client
             .fetch_with_url_policy(
                 &SubscriptionFetchSource {
                     url: source_url.clone(),
                     more_url: format!("{base}/should-not-fetch"),
                     user_agent: String::new(),
                     convert_target: Some("clash".to_string()),
-                    sub_convert_url: Some(format!("{base}/convert?url={{0}}")),
                 },
                 &SubscriptionFetchOptions {
                     prefer_proxy: false,

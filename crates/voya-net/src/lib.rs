@@ -1,5 +1,5 @@
 //! Network service clients for downloads, subscriptions, Clash API,
-//! geo assets, and rulesets.
+//! and rule sets.
 
 mod download;
 pub mod portmap;

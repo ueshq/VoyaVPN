@@ -30,11 +30,7 @@ fn dispatched_commands() -> BTreeSet<String> {
 #[test]
 fn every_registered_command_has_been_decided_about() {
     let dispatched = dispatched_commands();
-    let declared: BTreeSet<&str> = UNSUPPORTED_ON_MOBILE
-        .iter()
-        .chain(NOT_YET_DISPATCHED)
-        .copied()
-        .collect();
+    let declared: BTreeSet<&str> = UNSUPPORTED_ON_MOBILE.iter().copied().collect();
 
     let undecided: Vec<String> = registered_commands()
         .into_iter()
@@ -43,21 +39,17 @@ fn every_registered_command_has_been_decided_about() {
 
     assert!(
         undecided.is_empty(),
-        "these backend commands have no dispatcher and are on neither list — \
-         decide for each one whether a phone can ever answer it, and say so:\n  {}",
+        "these backend commands have no dispatcher and are not on UNSUPPORTED_ON_MOBILE — \
+         add a dispatcher, or say why a phone can never answer it:\n  {}",
         undecided.join("\n  ")
     );
 }
 
 #[test]
-fn a_command_is_in_exactly_one_of_the_three_states() {
+fn no_command_is_both_dispatched_and_unsupported() {
     let dispatched = dispatched_commands();
-    let unsupported: BTreeSet<&str> = UNSUPPORTED_ON_MOBILE.iter().copied().collect();
-    let pending: BTreeSet<&str> = NOT_YET_DISPATCHED.iter().copied().collect();
-
-    let contradictory: Vec<&str> = unsupported
+    let contradictory: Vec<&str> = UNSUPPORTED_ON_MOBILE
         .iter()
-        .chain(&pending)
         .copied()
         .filter(|command| dispatched.contains(*command))
         .collect();
@@ -65,21 +57,14 @@ fn a_command_is_in_exactly_one_of_the_three_states() {
         contradictory.is_empty(),
         "answered and declared unanswerable at once: {contradictory:?}"
     );
-
-    let both: Vec<&&str> = unsupported.intersection(&pending).collect();
-    assert!(
-        both.is_empty(),
-        "a command cannot be both permanently unsupported and merely pending: {both:?}"
-    );
 }
 
 #[test]
-fn neither_list_names_a_command_that_does_not_exist() {
+fn the_unsupported_list_names_only_real_commands() {
     let registered: BTreeSet<String> = registered_commands().into_iter().collect();
 
     let unknown: Vec<&str> = UNSUPPORTED_ON_MOBILE
         .iter()
-        .chain(NOT_YET_DISPATCHED)
         .copied()
         .filter(|command| !registered.contains(*command))
         .collect();
@@ -93,14 +78,13 @@ fn neither_list_names_a_command_that_does_not_exist() {
 }
 
 #[test]
-fn neither_list_repeats_itself() {
-    for (name, list) in [
-        ("UNSUPPORTED_ON_MOBILE", UNSUPPORTED_ON_MOBILE),
-        ("NOT_YET_DISPATCHED", NOT_YET_DISPATCHED),
-    ] {
-        let unique: BTreeSet<&str> = list.iter().copied().collect();
-        assert_eq!(unique.len(), list.len(), "{name} repeats an entry");
-    }
+fn the_unsupported_list_does_not_repeat_itself() {
+    let unique: BTreeSet<&str> = UNSUPPORTED_ON_MOBILE.iter().copied().collect();
+    assert_eq!(
+        unique.len(),
+        UNSUPPORTED_ON_MOBILE.len(),
+        "UNSUPPORTED_ON_MOBILE repeats an entry"
+    );
 }
 
 #[test]

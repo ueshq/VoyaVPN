@@ -8,7 +8,7 @@ use thiserror::Error;
 use crate::paths::{core_seed_resource_dir, AppPaths};
 
 /// Executable names probed for the sing-box core, in order.
-pub const SING_BOX_EXECUTABLES: &[&str] = &["sing-box", "sing-box-client"];
+pub const SING_BOX_EXECUTABLES: &[&str] = &["sing-box"];
 /// The directory under `bin/`, and under the packaged core seeds, that holds sing-box.
 pub const CORE_DIR_NAME: &str = "sing_box";
 const SING_BOX_ARGUMENTS: &str = "run -c {0} --disable-color";
@@ -576,7 +576,7 @@ mod tests {
     fn coreinfo_discovery_chmods_unix_executables() {
         let root = unique_temp_root("chmod");
         let paths = AppPaths::new(root.join("VoyaVPN"));
-        let exe = paths.core_bin_file(CORE_DIR_NAME, "sing-box-client");
+        let exe = paths.core_bin_file(CORE_DIR_NAME, "sing-box");
         fs::create_dir_all(exe.parent().expect("sing-box exe parent"))
             .expect("create sing-box dir");
         fs::write(&exe, b"").expect("write sing-box exe");

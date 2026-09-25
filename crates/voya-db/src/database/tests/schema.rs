@@ -48,126 +48,6 @@ async fn current_baseline_is_the_only_initialization_record() {
 }
 
 #[tokio::test]
-async fn retired_settings_are_normalized_once_without_changing_other_settings() {
-    let fixture = TempDatabase::new("retired-settings.sqlite");
-    let database = Database::connect(fixture.path()).await.expect("database");
-    let mut original: serde_json::Value =
-        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
-    original["proxy"]["trafficMode"] = serde_json::json!("direct");
-    original["network"]["systemProxy"]["mode"] = serde_json::json!("pac");
-    original["network"]["systemProxy"]["advancedProtocol"] = serde_json::json!("");
-    original["network"]["systemProxy"]["customPacPath"] = serde_json::json!("/tmp/proxy.pac");
-    original["network"]["systemProxy"]["customScriptPath"] = serde_json::json!(null);
-    original["network"]["inbounds"][0]["protocol"] = serde_json::json!("socks");
-    original["behavior"]["statistics"] = serde_json::json!(true);
-    original["behavior"]["realtimeSpeed"] = serde_json::json!(false);
-    original["routing"]["singboxDomainStrategy"] = serde_json::json!("prefer_ipv4");
-    original["grpc"] = serde_json::json!({
-        "idleTimeoutSeconds": 60,
-        "healthCheckTimeoutSeconds": 20,
-        "permitWithoutStream": false
-    });
-    original["hysteria"]["uploadMbps"] = serde_json::json!(55);
-    let core = original["core"].as_object_mut().expect("core settings");
-    core.remove("tlsFragment");
-    core.remove("fragmentFallbackDelayMs");
-    core.insert("fragmentEnabled".to_string(), serde_json::json!(true));
-    let behavior = original["behavior"]
-        .as_object_mut()
-        .expect("behavior settings");
-    for key in [
-        "autoCheckIp",
-        "closeAction",
-        "startMinimized",
-        "autoCreateSubscriptionGroup",
-    ] {
-        behavior.remove(key);
-    }
-    sqlx::query("INSERT INTO app_settings VALUES (1, 1, ?)")
-        .bind(original.to_string())
-        .execute(database.pool())
-        .await
-        .expect("old preference");
-    database.close().await;
-
-    let mut expected: serde_json::Value =
-        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
-    expected["network"]["systemProxy"]["mode"] = serde_json::json!("forcedChange");
-    expected["hysteria"]["uploadMbps"] = serde_json::json!(55);
-    expected["core"]["tlsFragment"] = serde_json::json!("record");
-    let original = expected;
-    for _ in 0..2 {
-        let database = Database::connect(fixture.path()).await.expect("reopen");
-        let loaded = database.settings().load().await.expect("current settings");
-        assert_eq!(loaded.proxy.traffic_mode, TrafficMode::Rule);
-        assert_eq!(loaded.hysteria.upload_mbps, 55);
-        let stored: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
-            .fetch_one(database.pool())
-            .await
-            .expect("stored settings");
-        assert_eq!(
-            serde_json::from_str::<serde_json::Value>(&stored).expect("JSON"),
-            original
-        );
-        // Reopening an already normalized database must not rewrite settings.
-        sqlx::query("CREATE TRIGGER IF NOT EXISTS reject_settings_update BEFORE UPDATE ON app_settings BEGIN SELECT RAISE(ABORT, 'unexpected rewrite'); END")
-            .execute(database.pool()).await.expect("write guard");
-        database.close().await;
-    }
-}
-
-#[tokio::test]
-async fn traffic_mode_normalization_preserves_invalid_and_other_current_settings() {
-    let current: serde_json::Value =
-        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("settings");
-    let mut direct = current.clone();
-    direct["proxy"]["trafficMode"] = serde_json::json!("direct");
-    let mut future_payload = direct.clone();
-    future_payload["schemaVersion"] = serde_json::json!(CURRENT_SCHEMA_VERSION + 1);
-    let mut retired_key = direct.clone();
-    retired_key["proxy"]["nodeSorting"] = serde_json::json!(true);
-    let mut invalid_mode = current.clone();
-    invalid_mode["proxy"]["trafficMode"] = serde_json::json!("other");
-    let mut global = current.clone();
-    global["proxy"]["trafficMode"] = serde_json::json!("global");
-    let mut unchanged = current.clone();
-    unchanged["proxy"]["trafficMode"] = serde_json::json!("unchanged");
-
-    for (version, original, valid) in [
-        (1, current.to_string(), true),
-        (1, global.to_string(), true),
-        (1, unchanged.to_string(), true),
-        (2, direct.to_string(), false),
-        (1, future_payload.to_string(), false),
-        (1, retired_key.to_string(), false),
-        (1, invalid_mode.to_string(), false),
-        (1, "{malformed".to_string(), false),
-    ] {
-        let fixture = TempDatabase::new("preserve-settings.sqlite");
-        let database = Database::connect(fixture.path()).await.expect("database");
-        sqlx::query("INSERT INTO app_settings VALUES (1, ?, ?)")
-            .bind(version)
-            .bind(&original)
-            .execute(database.pool())
-            .await
-            .expect("fixture");
-        database.close().await;
-        let database = Database::connect(fixture.path()).await.expect("reopen");
-        assert_eq!(
-            database.settings().load().await.is_ok(),
-            valid,
-            "{original}"
-        );
-        let stored: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
-            .fetch_one(database.pool())
-            .await
-            .expect("stored settings");
-        assert_eq!(stored, original);
-        database.close().await;
-    }
-}
-
-#[tokio::test]
 async fn unsupported_baseline_records_are_rejected_before_any_write() {
     let mutations = [
         "DELETE FROM _sqlx_migrations",
@@ -283,6 +163,8 @@ async fn retired_settings_are_rejected_without_conversion_or_rewrite() {
         ("proxy", "nodeSorting"),
         ("speedTest", "proxyDelayConcurrency"),
         ("speedTest", "mixedConcurrency"),
+        ("core", "fragmentEnabled"),
+        ("behavior", "statistics"),
     ] {
         let mut payload = serde_json::to_value(AppSettingsV1::default()).expect("settings");
         let target = if section.is_empty() {
@@ -306,89 +188,6 @@ async fn retired_settings_are_rejected_without_conversion_or_rewrite() {
             .await
             .expect("stored settings");
         assert_eq!(stored, original);
-    }
-}
-
-#[tokio::test]
-async fn retired_profile_transports_and_tls_keys_are_normalized_once() {
-    let fixture = TempDatabase::new("retired-profiles.sqlite");
-    let database = Database::connect(fixture.path()).await.expect("database");
-    for index_id in ["tls-node", "retired-node"] {
-        let mut profile = sample_profile();
-        profile.index_id = index_id.to_string();
-        database.profiles().upsert(&profile).await.expect("profile");
-    }
-    sqlx::query(
-        "UPDATE profile_items SET tls = json_set(tls, '$.realitySpiderX', '/spider', \
-         '$.mldsa65Verify', NULL, '$.certificateSha256', json('[\"aa\"]'), '$.finalMask', NULL) \
-         WHERE index_id = 'tls-node'",
-    )
-    .execute(database.pool())
-    .await
-    .expect("retired TLS keys");
-    sqlx::query(
-        "UPDATE profile_items SET transport = '{\"kind\":\"xhttp\",\"host\":null,\"path\":null,\"mode\":null,\"extra\":null}' \
-         WHERE index_id = 'retired-node'",
-    )
-    .execute(database.pool())
-    .await
-    .expect("retired transport");
-    // Written after the TLS change so the connection-change trigger cannot
-    // have cleared it already.
-    sqlx::query(
-        "INSERT OR REPLACE INTO profile_ex_items (index_id, delay, sort, message, ip_info, country_code) \
-         VALUES ('tls-node', 123, 0, 'ok', '203.0.113.9', 'JP')",
-    )
-    .execute(database.pool())
-    .await
-    .expect("cached probe");
-    database.close().await;
-
-    for _ in 0..2 {
-        let database = Database::connect(fixture.path()).await.expect("reopen");
-        let listing = database
-            .profiles()
-            .list_with_profile_ex(None)
-            .await
-            .expect("listing");
-        assert_eq!(listing.undecodable_rows, 0);
-        assert_eq!(
-            listing
-                .items
-                .iter()
-                .map(|(profile, _)| profile.index_id.as_str())
-                .collect::<Vec<_>>(),
-            ["tls-node"]
-        );
-        let tls: String =
-            sqlx::query_scalar("SELECT tls FROM profile_items WHERE index_id = 'tls-node'")
-                .fetch_one(database.pool())
-                .await
-                .expect("stored TLS");
-        for key in [
-            "realitySpiderX",
-            "mldsa65Verify",
-            "certificateSha256",
-            "finalMask",
-        ] {
-            assert!(!tls.contains(key), "{key} survived in {tls}");
-        }
-        let probe: (i64, Option<String>) = sqlx::query_as(
-            "SELECT delay, country_code FROM profile_ex_items WHERE index_id = 'tls-node'",
-        )
-        .fetch_one(database.pool())
-        .await
-        .expect("cached probe");
-        assert_eq!((probe.0, probe.1.as_deref()), (123, Some("JP")));
-        let triggers: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' \
-             AND name = 'clear_country_on_connection_change'",
-        )
-        .fetch_one(database.pool())
-        .await
-        .expect("trigger");
-        assert_eq!(triggers, 1);
-        database.close().await;
     }
 }
 

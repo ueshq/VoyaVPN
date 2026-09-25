@@ -42,8 +42,6 @@ pub enum ProfileManagerError {
     MissingProfileId,
     #[error("subscription {0} owns this node; update the subscription instead")]
     SubscriptionReadOnly(String),
-    #[error("cannot move node {index_id}: {reason}")]
-    InvalidMove { index_id: String, reason: String },
 }
 
 /// Hands out sort positions for newly imported profiles.

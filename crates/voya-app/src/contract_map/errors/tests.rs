@@ -254,15 +254,6 @@ fn profile_failures_are_classified() {
             "validation",
             AppErrorSubsystem::Profile,
         ),
-        (
-            "invalid move",
-            ProfileManagerError::InvalidMove {
-                index_id: "p-1".to_string(),
-                reason: "already first".to_string(),
-            },
-            "validation",
-            AppErrorSubsystem::Profile,
-        ),
     ]);
 }
 
@@ -633,7 +624,6 @@ mod guards {
             ProfileManagerError::Database(_)
             | ProfileManagerError::ProfileNotFound(_)
             | ProfileManagerError::MissingProfileId
-            | ProfileManagerError::InvalidMove { .. }
             | ProfileManagerError::SubscriptionReadOnly(_) => (),
         }
     }
@@ -672,7 +662,7 @@ mod guards {
 
     const fn update(error: &UpdateManagerError) {
         match error {
-            UpdateManagerError::Database(_) | UpdateManagerError::RulesetGeo(_) => (),
+            UpdateManagerError::Database(_) | UpdateManagerError::Ruleset(_) => (),
         }
     }
 
@@ -689,8 +679,6 @@ mod guards {
             | SpeedtestError::Cancelled
             | SpeedtestError::CreateConfigDir { .. }
             | SpeedtestError::WriteConfig { .. }
-            | SpeedtestError::RemoveConfig { .. }
-            | SpeedtestError::Validation { .. }
             | SpeedtestError::NoAvailablePort(_)
             | SpeedtestError::InvalidSocksPort(_)
             | SpeedtestError::EmptySelection

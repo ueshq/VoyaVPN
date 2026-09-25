@@ -78,7 +78,6 @@ export const VOYA_COMMAND_WIRE = {
 	cancelSpeedtest: { name: "cancel_speedtest", params: [] },
 	speedtestStatus: { name: "speedtest_status", params: [] },
 	appUpdateStatus: { name: "app_update_status", params: [] },
-	updateGeoAssets: { name: "update_geo_assets", params: [] },
 	updateSrsAssets: { name: "update_srs_assets", params: [] },
 	installCoreSeed: { name: "install_core_seed", params: [] },
 	getSelfHostState: { name: "get_self_host_state", params: [] },

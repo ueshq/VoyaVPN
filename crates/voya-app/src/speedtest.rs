@@ -67,10 +67,6 @@ pub enum SpeedtestError {
     CreateConfigDir { path: PathBuf, source: io::Error },
     #[error("failed to write speedtest config {path}: {source}")]
     WriteConfig { path: PathBuf, source: io::Error },
-    #[error("failed to remove speedtest config {path}: {source}")]
-    RemoveConfig { path: PathBuf, source: io::Error },
-    #[error("speedtest config validation failed for {index_id}: {message}")]
-    Validation { index_id: String, message: String },
     #[error("no available speedtest port at or after {0}")]
     NoAvailablePort(i32),
     #[error("speedtest local SOCKS port {0} is outside the valid range")]
@@ -319,7 +315,7 @@ fn speedtest_delay_interval(config: &AppConfig) -> Duration {
 ///
 /// Exhaustive on purpose. The previous version ended in `_ => raw`, which put
 /// the error's own `Display` in front of the user and into `profile_ex` — and
-/// for `WriteConfig`/`CreateConfigDir`/`RemoveConfig` that text embeds the
+/// for `WriteConfig`/`CreateConfigDir` that text embeds the
 /// app-data path, which embeds the OS user name.
 fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
     match error {
@@ -327,17 +323,14 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
         SpeedtestError::Network(source) => network_probe_outcome(source),
         SpeedtestError::Io(source) => io_outcome(source.kind()),
         // The profile itself could not be turned into a config.
-        SpeedtestError::Validation { .. } | SpeedtestError::SingboxConfig(_) => {
-            SpeedtestOutcome::InvalidProfile
-        }
+        SpeedtestError::SingboxConfig(_) => SpeedtestOutcome::InvalidProfile,
         // The test core could not be found, written out, or launched.
         SpeedtestError::CoreInfo(_)
         | SpeedtestError::Path(_)
         | SpeedtestError::Process(_)
         | SpeedtestError::ProbeCoreHost(_)
         | SpeedtestError::CreateConfigDir { .. }
-        | SpeedtestError::WriteConfig { .. }
-        | SpeedtestError::RemoveConfig { .. } => SpeedtestOutcome::CoreUnavailable,
+        | SpeedtestError::WriteConfig { .. } => SpeedtestOutcome::CoreUnavailable,
         SpeedtestError::NoAvailablePort(_) | SpeedtestError::InvalidSocksPort(_) => {
             SpeedtestOutcome::NoAvailablePort
         }

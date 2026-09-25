@@ -897,10 +897,6 @@ export async function installTauriSmokeMock(
             message: null,
             state: "ready",
           } satisfies AppUpdaterStatus);
-        case "update_geo_assets":
-          return Promise.resolve([
-            { bytes: 1024, name: "geoip.db", usedProxy: false },
-          ] satisfies ResourceUpdateFile[]);
         case "update_srs_assets":
           return Promise.resolve([
             { bytes: 512, name: "rules.srs", usedProxy: false },

@@ -27,11 +27,8 @@ overrides:
 allowBuilds:
   '@swc/core': true
 optimisticRepeatInstall: false
-# 1.0.10 was a day old when the mobile app adopted it, and it carries the
-# BottomSheet fixes for the closed sheet's visibility during layout changes
-# that the node actions sheet relies on. The exclusion names that one version;
-# drop it when heroui-native is next bumped.
-minimumReleaseAgeExclude:
-  - heroui-native@1.0.10
+# The uniwind patch handles React Native 0.87's `auto` colour scheme and the
+# setColorScheme ordering around it; drop it when a uniwind release above
+# 1.12.0 handles `auto`.
 patchedDependencies:
   uniwind@1.12.0: patches/uniwind@1.12.0.patch

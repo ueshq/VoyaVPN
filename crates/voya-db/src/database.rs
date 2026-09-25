@@ -1,8 +1,4 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    time::Duration,
-};
+use std::{fs, path::Path, time::Duration};
 
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions, SqliteSynchronous},
@@ -37,7 +33,6 @@ const BEGIN_IMMEDIATE: &str = "BEGIN IMMEDIATE";
 #[derive(Debug, Clone)]
 pub struct Database {
     pool: SqlitePool,
-    path: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -96,8 +91,7 @@ impl Database {
                 validate_existing_schema(&migration_pool, path).await?;
                 enable_write_ahead_logging(&migration_pool).await?;
                 MIGRATOR.run(&migration_pool).await?;
-                crate::repos::normalize_retired_settings(&migration_pool).await?;
-                crate::repos::normalize_retired_profile_blobs(&migration_pool).await
+                Ok::<(), DbError>(())
             }
             .await;
             migration_pool.close().await;
@@ -109,10 +103,7 @@ impl Database {
             .connect_with(options)
             .await?;
 
-        Ok(Self {
-            pool,
-            path: Some(path.to_path_buf()),
-        })
+        Ok(Self { pool })
     }
 
     pub async fn connect_in_memory() -> Result<Self> {
@@ -131,20 +122,16 @@ impl Database {
             )
             .await?;
         MIGRATOR.run(&pool).await?;
-        crate::repos::normalize_retired_settings(&pool).await?;
-        crate::repos::normalize_retired_profile_blobs(&pool).await?;
 
-        Ok(Self { pool, path: None })
+        Ok(Self { pool })
     }
 
+    /// The raw pool, for tests that need to plant rows the repositories
+    /// would refuse. Production code goes through the repositories.
+    #[cfg(any(test, feature = "test-utils"))]
     #[must_use]
     pub fn pool(&self) -> &SqlitePool {
         &self.pool
-    }
-
-    #[must_use]
-    pub fn path(&self) -> Option<&Path> {
-        self.path.as_deref()
     }
 
     pub async fn begin(&self) -> Result<UnitOfWork> {
@@ -153,6 +140,7 @@ impl Database {
         })
     }
 
+    #[cfg(any(test, feature = "test-utils"))]
     pub async fn close(&self) {
         self.pool.close().await;
     }

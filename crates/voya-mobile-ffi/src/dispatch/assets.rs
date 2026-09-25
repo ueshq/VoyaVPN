@@ -1,4 +1,4 @@
-//! The rule-library updater: the Geo databases and the `.srs` rule sets.
+//! The rule-library updater: the `.srs` rule sets.
 
 use serde_json::Value;
 use voya_app::sysproxy::runtime_proxy_url;
@@ -8,17 +8,6 @@ use voya_platform::coreinfo::TargetOs;
 use crate::app::MobileState;
 
 use super::answer;
-
-pub(super) async fn update_geo(state: &MobileState) -> Result<Value, AppError> {
-    answer(
-        "update_geo_assets",
-        &state
-            .services
-            .updates()
-            .update_geo_assets(through_the_running_core(state))
-            .await?,
-    )
-}
 
 pub(super) async fn update_srs(state: &MobileState) -> Result<Value, AppError> {
     answer(

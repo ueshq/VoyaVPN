@@ -12,7 +12,6 @@ import { installFakeCommands } from "@voya/features/test/backend";
 
 const ipcMocks = installFakeCommands({
   appUpdateStatus: vi.fn(),
-  updateGeoAssets: vi.fn(),
   updateSrsAssets: vi.fn(),
 });
 const tauriMocks = vi.hoisted(() => ({
@@ -108,11 +107,10 @@ describe("UpdatesPanel", () => {
 
   it("updates the whole rule library at once and remembers when", async () => {
     const user = userEvent.setup();
-    ipcMocks.updateGeoAssets.mockResolvedValue([
-      makeResource("geoip.db", 123, true),
-      makeResource("geosite.db", 456, false),
+    ipcMocks.updateSrsAssets.mockResolvedValue([
+      makeResource("geoip-cn.srs", 123, true),
+      makeResource("geosite-cn.srs", 789, false),
     ]);
-    ipcMocks.updateSrsAssets.mockResolvedValue([makeResource("geosite-cn.srs", 789, false)]);
 
     renderPanel();
 
@@ -121,9 +119,8 @@ describe("UpdatesPanel", () => {
     await user.click(within(library).getByRole("button", { name: "Update now" }));
 
     await waitFor(() => expect(ipcMocks.updateSrsAssets).toHaveBeenCalledTimes(1));
-    expect(ipcMocks.updateGeoAssets).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(library).toHaveTextContent("geoip.db, geosite.db, geosite-cn.srs"));
-    expect(library).toHaveTextContent("Updated 3 files");
+    await waitFor(() => expect(library).toHaveTextContent("geoip-cn.srs, geosite-cn.srs"));
+    expect(library).toHaveTextContent("Updated 2 files");
     expect(library).toHaveTextContent("Last updated");
     expect(usePreferencesStore.getState().ruleLibraryUpdatedAt).toEqual(expect.any(Number));
   });
@@ -181,7 +178,6 @@ function mockDefaultIpc() {
     message: null,
     state: "ready",
   } satisfies AppUpdaterStatus);
-  ipcMocks.updateGeoAssets.mockResolvedValue([]);
   ipcMocks.updateSrsAssets.mockResolvedValue([]);
   tauriMocks.check.mockResolvedValue(null);
   tauriMocks.getVersion.mockResolvedValue("1.0.0");

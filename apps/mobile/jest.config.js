@@ -20,6 +20,6 @@ module.exports = {
   // are never ignored. Reanimated, Worklets and Gesture Handler are covered by
   // the `react-native` substring already.
   transformIgnorePatterns: [
-    "node_modules/(?!.*(react-native|@react-navigation|test-renderer|uniwind|heroui-native|@gorhom|@lucide))",
+    "node_modules/(?!.*(react-native|@react-navigation|test-renderer|uniwind|heroui-native))",
   ],
 };

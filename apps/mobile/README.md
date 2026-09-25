@@ -96,13 +96,14 @@ pnpm run check:mobile:swift               # parse the iOS app + UI test Swift (m
 ```
 
 The XCUITest suite is not one of these: it needs a booted simulator and a
-Release build, takes about four minutes, and is run from the iOS runbook. It is
+Release build, takes about four minutes, and runs as `pnpm check:mobile:ios:smoke`
+locally and in the `ios-simulator` workflow. It is
 what proves the screens are driving the real Rust backend rather than the
 in-memory mock.
 
 `typecheck` and lint run inside the repo-wide gates. The three `check:mobile:*`
 gates are not part of `verify:local`; CI runs the first two in the `mobile` job
-and the third on the `mobile-rust` iOS leg, which already has a macOS runner.
+and the third on the macOS leg of `platform-check`, which already has a macOS runner.
 
 iOS needs CocoaPods (`cd ios && pod install`). Android needs an Android SDK;
 `ANDROID_HOME` must be set.

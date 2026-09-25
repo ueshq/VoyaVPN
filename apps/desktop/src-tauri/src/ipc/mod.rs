@@ -72,7 +72,6 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::cancel_speedtest::<tauri::Wry>,
         commands::speedtest_status,
         commands::app_update_status::<tauri::Wry>,
-        commands::update_geo_assets,
         commands::update_srs_assets,
         commands::install_core_seed,
         commands::get_self_host_state,

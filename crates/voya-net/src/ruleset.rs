@@ -15,22 +15,14 @@ static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// First bytes of a sing-box binary rule set (`common/srs`).
 const SRS_MAGIC: &[u8] = b"SRS";
-/// Metadata marker every MaxMind database carries near its end.
-const MMDB_METADATA_MARKER: &[u8] = b"\xab\xcd\xefMaxMind.com";
 /// Bytes that only ever start a text response. A captive portal, a proxy block page or a CDN
-/// error page answers 200 with HTML, and none of the accepted asset formats begin like this.
+/// error page answers 200 with HTML, and a rule set never begins like this.
 const TEXTUAL_BODY_PREFIXES: &[&[u8]] = &[b"<", b"\xef\xbb\xbf<", b"{", b"HTTP/"];
 
-const DEFAULT_GEO_SOURCE_URL: &str =
-    "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/{0}.dat";
-const OTHER_GEO_URLS: &[&str] = &[
-    "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/geoip-only-cn-private.dat",
-    "https://raw.githubusercontent.com/Loyalsoldier/geoip/release/Country.mmdb",
-];
 const DEFAULT_SRS_GEOSITE_TAGS: &[&str] = &["google", "cn", "geolocation-cn", "category-ads-all"];
 
 #[derive(Debug, Error)]
-pub enum RulesetGeoError {
+pub enum RulesetError {
     #[error(transparent)]
     Download(#[from] DownloadError),
     #[error("asset file operation failed for {path}: {source}")]
@@ -43,7 +35,7 @@ pub enum RulesetGeoError {
     InvalidAsset { path: PathBuf, reason: String },
 }
 
-pub type Result<T> = std::result::Result<T, RulesetGeoError>;
+pub type Result<T> = std::result::Result<T, RulesetError>;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AssetAcquisitionOptions {
@@ -51,15 +43,9 @@ pub struct AssetAcquisitionOptions {
     pub proxy_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AcquiredAssetKind {
-    Geo,
-    Ruleset,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AcquiredRulesetGeoAsset {
-    pub kind: AcquiredAssetKind,
+pub struct AcquiredRuleset {
+    /// The rule set's tag (`geosite-cn`).
     pub name: String,
     pub file_name: String,
     pub url: String,
@@ -67,27 +53,6 @@ pub struct AcquiredRulesetGeoAsset {
     pub bytes: u64,
     pub used_proxy: bool,
     pub attempts: Vec<DownloadAttempt>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GeoAsset {
-    pub name: String,
-    pub file_name: String,
-    pub url: String,
-}
-
-impl GeoAsset {
-    pub fn new(
-        name: impl Into<String>,
-        file_name: impl Into<String>,
-        url: impl Into<String>,
-    ) -> Self {
-        Self {
-            name: name.into(),
-            file_name: file_name.into(),
-            url: url.into(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,111 +77,38 @@ impl SrsAsset {
     }
 }
 
-/// What acquiring an asset needs to know about its kind.
-trait AssetSpec {
-    const KIND: AcquiredAssetKind;
-    /// Extensions a downloaded body of this kind may carry.
-    const EXTENSIONS: &'static [&'static str];
-
-    /// The name the acquired asset is reported under.
-    fn acquired_name(&self) -> &str;
-    fn file_name(&self) -> &str;
-    fn url(&self) -> &str;
-}
-
-impl AssetSpec for GeoAsset {
-    const KIND: AcquiredAssetKind = AcquiredAssetKind::Geo;
-    const EXTENSIONS: &'static [&'static str] = &["dat", "mmdb", "metadb"];
-
-    fn acquired_name(&self) -> &str {
-        &self.name
-    }
-
-    fn file_name(&self) -> &str {
-        &self.file_name
-    }
-
-    fn url(&self) -> &str {
-        &self.url
-    }
-}
-
-impl AssetSpec for SrsAsset {
-    const KIND: AcquiredAssetKind = AcquiredAssetKind::Ruleset;
-    const EXTENSIONS: &'static [&'static str] = &["srs"];
-
-    /// A rule set is reported by its tag (`geosite-cn`), not its bare name.
-    fn acquired_name(&self) -> &str {
-        &self.tag
-    }
-
-    fn file_name(&self) -> &str {
-        &self.file_name
-    }
-
-    fn url(&self) -> &str {
-        &self.url
-    }
-}
-
 #[derive(Debug, Clone, Default)]
-pub struct RulesetGeoClient {
+pub struct RulesetClient {
     download: DownloadClient,
 }
 
-impl RulesetGeoClient {
+impl RulesetClient {
     pub fn new() -> Self {
         Self {
             download: DownloadClient::new(),
         }
     }
 
-    pub async fn acquire_geo_assets(
-        &self,
-        assets: &[GeoAsset],
-        target_dir: impl AsRef<Path>,
-        options: &AssetAcquisitionOptions,
-    ) -> Result<Vec<AcquiredRulesetGeoAsset>> {
-        self.acquire_assets(assets, target_dir.as_ref(), options)
-            .await
-    }
-
+    /// Stages every rule set, then publishes the whole batch or none of it.
     pub async fn acquire_srs_assets(
         &self,
         assets: &[SrsAsset],
         target_dir: impl AsRef<Path>,
         options: &AssetAcquisitionOptions,
-    ) -> Result<Vec<AcquiredRulesetGeoAsset>> {
-        self.acquire_assets(assets, target_dir.as_ref(), options)
-            .await
-    }
-
-    /// Stages every asset, then publishes the whole batch or none of it.
-    async fn acquire_assets<A: AssetSpec>(
-        &self,
-        assets: &[A],
-        target_dir: &Path,
-        options: &AssetAcquisitionOptions,
-    ) -> Result<Vec<AcquiredRulesetGeoAsset>> {
+    ) -> Result<Vec<AcquiredRuleset>> {
+        let target_dir = target_dir.as_ref();
         let staging = StagingDir::create(target_dir).await?;
         let mut acquired = Vec::new();
 
         for asset in assets {
             let staged = self
-                .stage_asset(
-                    asset.url(),
-                    asset.file_name(),
-                    staging.path(),
-                    A::EXTENSIONS,
-                    options,
-                )
+                .stage_asset(&asset.url, &asset.file_name, staging.path(), options)
                 .await?;
-            acquired.push(AcquiredRulesetGeoAsset {
-                kind: A::KIND,
-                name: asset.acquired_name().to_string(),
-                file_name: asset.file_name().to_string(),
-                url: asset.url().to_string(),
-                path: target_dir.join(asset.file_name()),
+            acquired.push(AcquiredRuleset {
+                name: asset.tag.clone(),
+                file_name: asset.file_name.clone(),
+                url: asset.url.clone(),
+                path: target_dir.join(&asset.file_name),
                 bytes: staged.bytes,
                 used_proxy: staged.used_proxy,
                 attempts: staged.attempts,
@@ -224,7 +116,10 @@ impl RulesetGeoClient {
         }
 
         staging
-            .commit(target_dir, assets.iter().map(A::file_name))
+            .commit(
+                target_dir,
+                assets.iter().map(|asset| asset.file_name.as_str()),
+            )
             .await?;
         Ok(acquired)
     }
@@ -234,14 +129,13 @@ impl RulesetGeoClient {
         url: &str,
         file_name: &str,
         staging_dir: &Path,
-        allowed_extensions: &[&str],
         options: &AssetAcquisitionOptions,
     ) -> Result<StagedAsset> {
         let response = self
             .download
             .download_bytes(download_request(url, options))
             .await?;
-        let bytes = validate_asset(file_name, &response.body, allowed_extensions)?;
+        let bytes = validate_asset(file_name, &response.body)?;
         let staged_path = staging_dir.join(file_name);
         // Asset bodies run to hundreds of megabytes, so the write goes through tokio's blocking
         // pool instead of stalling the worker that also serves IPC and the statistics stream.
@@ -384,36 +278,11 @@ impl Drop for StagingDir {
     }
 }
 
-fn asset_io(path: &Path, source: std::io::Error) -> RulesetGeoError {
-    RulesetGeoError::AssetIo {
+fn asset_io(path: &Path, source: std::io::Error) -> RulesetError {
+    RulesetError::AssetIo {
         path: path.to_path_buf(),
         source,
     }
-}
-
-pub fn geo_assets(source_url: Option<&str>) -> Vec<GeoAsset> {
-    let source_url = nonempty_str(source_url);
-    let uses_default_source = source_url.is_none();
-    let source_url = source_url.unwrap_or(DEFAULT_GEO_SOURCE_URL);
-    let mut assets = ["geosite", "geoip"]
-        .into_iter()
-        .map(|name| {
-            GeoAsset::new(
-                name,
-                format!("{name}.dat"),
-                format_geo_url(source_url, name),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    if uses_default_source || source_url == DEFAULT_GEO_SOURCE_URL {
-        assets.extend(OTHER_GEO_URLS.iter().map(|url| {
-            let file_name = url.rsplit('/').next().unwrap_or("geo.dat");
-            GeoAsset::new(file_name.trim_end_matches(".dat"), file_name, *url)
-        }));
-    }
-
-    assets
 }
 
 pub fn collect_singbox_ruleset_assets(
@@ -462,10 +331,6 @@ pub fn discover_local_singbox_ruleset_paths(srs_dir: impl AsRef<Path>) -> BTreeM
         .collect()
 }
 
-fn format_geo_url(source_url: &str, name: &str) -> String {
-    source_url.replace("{0}", name).replace("{name}", name)
-}
-
 fn format_srs_url(source_url: &str, kind: &str, name: &str) -> String {
     let tag = format!("{kind}-{name}");
     source_url
@@ -484,16 +349,16 @@ fn download_request(url: &str, options: &AssetAcquisitionOptions) -> DownloadReq
     }
 }
 
-/// Checks that a downloaded body is the asset it claims to be before it can replace a live file.
+/// Checks that a downloaded body is a rule set before it can replace a live file.
 ///
 /// `download_bytes` treats any non-empty 2xx body as a success, so a captive portal or a proxy
 /// block page would otherwise be committed over a working `geosite-cn.srs` and leave the core
-/// unable to start. Each accepted extension therefore carries a cheap structural check.
-fn validate_asset(file_name: &str, body: &[u8], allowed_extensions: &[&str]) -> Result<u64> {
+/// unable to start.
+fn validate_asset(file_name: &str, body: &[u8]) -> Result<u64> {
     let path = Path::new(file_name);
     let mut components = path.components();
     if !matches!(components.next(), Some(Component::Normal(_))) || components.next().is_some() {
-        return Err(RulesetGeoError::InvalidAsset {
+        return Err(RulesetError::InvalidAsset {
             path: path.to_path_buf(),
             reason: "file name must not contain directories".to_string(),
         });
@@ -502,20 +367,20 @@ fn validate_asset(file_name: &str, body: &[u8], allowed_extensions: &[&str]) -> 
         .extension()
         .and_then(|value| value.to_str())
         .unwrap_or_default();
-    if !allowed_extensions.contains(&extension) {
-        return Err(RulesetGeoError::InvalidAsset {
+    if extension != "srs" {
+        return Err(RulesetError::InvalidAsset {
             path: path.to_path_buf(),
             reason: format!("unexpected extension {extension:?}"),
         });
     }
     if body.is_empty() {
-        return Err(RulesetGeoError::InvalidAsset {
+        return Err(RulesetError::InvalidAsset {
             path: path.to_path_buf(),
             reason: "empty file".to_string(),
         });
     }
-    if let Err(reason) = validate_asset_content(extension, body) {
-        return Err(RulesetGeoError::InvalidAsset {
+    if let Err(reason) = validate_srs_content(body) {
+        return Err(RulesetError::InvalidAsset {
             path: path.to_path_buf(),
             reason,
         });
@@ -524,39 +389,20 @@ fn validate_asset(file_name: &str, body: &[u8], allowed_extensions: &[&str]) -> 
     Ok(u64::try_from(body.len()).unwrap_or(u64::MAX))
 }
 
-fn validate_asset_content(extension: &str, body: &[u8]) -> std::result::Result<(), String> {
-    let textual_prefix = TEXTUAL_BODY_PREFIXES
+fn validate_srs_content(body: &[u8]) -> std::result::Result<(), String> {
+    if let Some(prefix) = TEXTUAL_BODY_PREFIXES
         .iter()
         .copied()
-        .find(|prefix| body.starts_with(prefix));
-    if let Some(prefix) = textual_prefix {
+        .find(|prefix| body.starts_with(prefix))
+    {
         return Err(format!(
-            "expected binary {extension} data but the response starts with {:?}",
+            "expected a binary rule set but the response starts with {:?}",
             String::from_utf8_lossy(prefix)
         ));
     }
-
-    match extension {
-        "srs" => body
-            .starts_with(SRS_MAGIC)
-            .then_some(())
-            .ok_or_else(|| "sing-box rule sets must start with the SRS magic bytes".to_string()),
-        "mmdb" | "metadb" => contains(body, MMDB_METADATA_MARKER)
-            .then_some(())
-            .ok_or_else(|| "MaxMind databases must carry the metadata marker".to_string()),
-        // v2ray `.dat` files are protobuf, which has no fixed magic; rejecting textual bodies
-        // above is the strongest check available without parsing the schema.
-        _ => Ok(()),
-    }
-}
-
-/// Reports whether `haystack` contains `needle`. The MaxMind marker sits in the trailing
-/// metadata section, so only the tail of a large database is scanned.
-fn contains(haystack: &[u8], needle: &[u8]) -> bool {
-    const MMDB_METADATA_TAIL_BYTES: usize = 128 * 1024;
-    let tail = &haystack[haystack.len().saturating_sub(MMDB_METADATA_TAIL_BYTES)..];
-
-    tail.windows(needle.len()).any(|window| window == needle)
+    body.starts_with(SRS_MAGIC)
+        .then_some(())
+        .ok_or_else(|| "sing-box rule sets must start with the SRS magic bytes".to_string())
 }
 
 /// The `geoip:` name the config generator turns into `ip_is_private`.
@@ -604,6 +450,10 @@ mod tests {
 
     use super::*;
 
+    fn srs(base: &str, name: &str) -> SrsAsset {
+        SrsAsset::new(&format!("{base}/{{1}}.srs"), "geosite", name)
+    }
+
     #[test]
     fn ruleset_collection_reads_routing_references() {
         let routing = RoutingItem {
@@ -635,11 +485,8 @@ mod tests {
     async fn ruleset_client_downloads_assets_through_proxy_to_direct_fallback() {
         let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
         let base = spawn_http_fixture(
-            HashMap::from([
-                ("/geosite.dat".to_string(), b"geosite-dat".to_vec()),
-                ("/geosite-cn.srs".to_string(), b"SRS-binary".to_vec()),
-            ]),
-            2,
+            HashMap::from([("/geosite-cn.srs".to_string(), b"SRS-binary".to_vec())]),
+            1,
             Arc::clone(&seen_user_agents),
         )
         .await;
@@ -648,43 +495,21 @@ mod tests {
             prefer_proxy: true,
             proxy_url: Some("http://127.0.0.1:9".to_string()),
         };
-        let client = RulesetGeoClient::new();
 
-        let geo = client
-            .acquire_geo_assets(
-                &[GeoAsset::new(
-                    "geosite",
-                    "geosite.dat",
-                    format!("{base}/geosite.dat"),
-                )],
-                &target_root,
-                &options,
-            )
-            .await
-            .expect("geo asset");
-        let srs = client
-            .acquire_srs_assets(
-                &[SrsAsset {
-                    kind: "geosite".to_string(),
-                    name: "cn".to_string(),
-                    tag: "geosite-cn".to_string(),
-                    file_name: "geosite-cn.srs".to_string(),
-                    url: format!("{base}/geosite-cn.srs"),
-                }],
-                target_root.join("srss"),
-                &options,
-            )
+        let srs = RulesetClient::new()
+            .acquire_srs_assets(&[srs(&base, "cn")], target_root.join("srss"), &options)
             .await
             .expect("srs asset");
 
-        assert!(!geo[0].used_proxy);
-        assert_eq!(geo[0].attempts.len(), 2);
+        assert!(!srs[0].used_proxy);
+        assert_eq!(srs[0].attempts.len(), 2);
+        assert_eq!(srs[0].name, "geosite-cn");
         assert_eq!(srs[0].bytes, 10);
-        assert!(target_root.join("geosite.dat").exists());
         assert!(target_root.join("srss/geosite-cn.srs").exists());
+        // The proxy attempt never reaches the fixture; the direct fallback does.
         assert_eq!(
             seen_user_agents.lock().await.as_slice(),
-            [USER_AGENT_PREFIX, USER_AGENT_PREFIX]
+            [USER_AGENT_PREFIX]
         );
 
         let _ = fs::remove_dir_all(target_root);
@@ -694,36 +519,34 @@ mod tests {
     async fn failed_asset_batch_preserves_existing_files() {
         let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
         let base = spawn_http_fixture(
-            HashMap::from([("/geosite.dat".to_string(), b"new-geosite".to_vec())]),
+            HashMap::from([("/geosite-cn.srs".to_string(), b"SRS-new-cn".to_vec())]),
             2,
             Arc::clone(&seen_user_agents),
         )
         .await;
         let target_root = unique_temp_root("ruleset-atomic");
         fs::create_dir_all(&target_root).expect("target directory");
-        fs::write(target_root.join("geosite.dat"), b"old-geosite").expect("old geosite");
-        fs::write(target_root.join("geoip.dat"), b"old-geoip").expect("old geoip");
+        fs::write(target_root.join("geosite-cn.srs"), b"SRS-old-cn").expect("old cn");
+        fs::write(target_root.join("geosite-google.srs"), b"SRS-old-google").expect("old google");
 
-        let error = RulesetGeoClient::new()
-            .acquire_geo_assets(
-                &[
-                    GeoAsset::new("geosite", "geosite.dat", format!("{base}/geosite.dat")),
-                    GeoAsset::new("geoip", "geoip.dat", format!("{base}/missing.dat")),
-                ],
+        // The fixture serves only the first, so the batch fails part way.
+        let error = RulesetClient::new()
+            .acquire_srs_assets(
+                &[srs(&base, "cn"), srs(&base, "google")],
                 &target_root,
                 &AssetAcquisitionOptions::default(),
             )
             .await
             .expect_err("incomplete batch should fail");
 
-        assert!(matches!(error, RulesetGeoError::Download(_)));
+        assert!(matches!(error, RulesetError::Download(_)));
         assert_eq!(
-            fs::read(target_root.join("geosite.dat")).expect("geosite"),
-            b"old-geosite"
+            fs::read(target_root.join("geosite-cn.srs")).expect("cn"),
+            b"SRS-old-cn"
         );
         assert_eq!(
-            fs::read(target_root.join("geoip.dat")).expect("geoip"),
-            b"old-geoip"
+            fs::read(target_root.join("geosite-google.srs")).expect("google"),
+            b"SRS-old-google"
         );
         assert!(fs::read_dir(&target_root)
             .expect("target directory")
@@ -740,38 +563,32 @@ mod tests {
     async fn failed_commit_restores_every_replaced_asset() {
         let target_root = unique_temp_root("ruleset-commit-rollback");
         fs::create_dir_all(&target_root).expect("target directory");
-        fs::write(target_root.join("geosite.dat"), b"old-geosite").expect("old geosite");
-        fs::write(target_root.join("geoip.dat"), b"old-geoip").expect("old geoip");
+        fs::write(target_root.join("a.srs"), b"old-a").expect("old geosite");
+        fs::write(target_root.join("b.srs"), b"old-b").expect("old geoip");
 
         let staging = StagingDir::create(&target_root)
             .await
             .expect("staging directory");
-        fs::write(staging.path().join("geosite.dat"), b"new-geosite").expect("staged geosite");
-        fs::write(staging.path().join("Country.mmdb"), b"new-country").expect("staged country");
-        // "geoip.dat" is deliberately absent from staging, so publishing it fails after the two
+        fs::write(staging.path().join("a.srs"), b"new-a").expect("staged geosite");
+        fs::write(staging.path().join("c.srs"), b"new-c").expect("staged country");
+        // "b.srs" is deliberately absent from staging, so publishing it fails after the two
         // earlier assets have already been moved onto their live paths.
 
         let error = staging
-            .commit(
-                &target_root,
-                ["geosite.dat", "Country.mmdb", "geoip.dat"].into_iter(),
-            )
+            .commit(&target_root, ["a.srs", "c.srs", "b.srs"].into_iter())
             .await
             .expect_err("commit of a missing staged asset should fail");
 
-        assert!(
-            matches!(error, RulesetGeoError::AssetIo { .. }),
-            "{error:?}"
+        assert!(matches!(error, RulesetError::AssetIo { .. }), "{error:?}");
+        assert_eq!(
+            fs::read(target_root.join("a.srs")).expect("geosite"),
+            b"old-a"
         );
         assert_eq!(
-            fs::read(target_root.join("geosite.dat")).expect("geosite"),
-            b"old-geosite"
+            fs::read(target_root.join("b.srs")).expect("geoip"),
+            b"old-b"
         );
-        assert_eq!(
-            fs::read(target_root.join("geoip.dat")).expect("geoip"),
-            b"old-geoip"
-        );
-        assert!(!target_root.join("Country.mmdb").exists());
+        assert!(!target_root.join("c.srs").exists());
 
         drop(staging);
         assert!(fs::read_dir(&target_root)
@@ -789,39 +606,29 @@ mod tests {
     async fn commit_publishes_every_staged_asset() {
         let target_root = unique_temp_root("ruleset-commit");
         fs::create_dir_all(&target_root).expect("target directory");
-        fs::write(target_root.join("geosite.dat"), b"old-geosite").expect("old geosite");
+        fs::write(target_root.join("a.srs"), b"old-a").expect("old geosite");
 
         let staging = StagingDir::create(&target_root)
             .await
             .expect("staging directory");
-        fs::write(staging.path().join("geosite.dat"), b"new-geosite").expect("staged geosite");
-        fs::write(staging.path().join("geoip.dat"), b"new-geoip").expect("staged geoip");
+        fs::write(staging.path().join("a.srs"), b"new-a").expect("staged geosite");
+        fs::write(staging.path().join("b.srs"), b"new-b").expect("staged geoip");
 
         staging
-            .commit(&target_root, ["geosite.dat", "geoip.dat"].into_iter())
+            .commit(&target_root, ["a.srs", "b.srs"].into_iter())
             .await
             .expect("commit");
 
         assert_eq!(
-            fs::read(target_root.join("geosite.dat")).expect("geosite"),
-            b"new-geosite"
+            fs::read(target_root.join("a.srs")).expect("geosite"),
+            b"new-a"
         );
         assert_eq!(
-            fs::read(target_root.join("geoip.dat")).expect("geoip"),
-            b"new-geoip"
+            fs::read(target_root.join("b.srs")).expect("geoip"),
+            b"new-b"
         );
 
         let _ = fs::remove_dir_all(target_root);
-    }
-
-    #[test]
-    fn asset_file_names_cannot_escape_the_target_directory() {
-        assert!(validate_asset("../geoip.dat", b"data", &["dat"]).is_err());
-        assert!(validate_asset("nested/geoip.dat", b"data", &["dat"]).is_err());
-        assert_eq!(
-            validate_asset("geoip.dat", b"data", &["dat"]).expect("valid asset"),
-            4
-        );
     }
 
     /// Captive portals and proxy block pages answer 200 with HTML, which `download_bytes` reports
@@ -834,32 +641,16 @@ mod tests {
             b"{\"message\":\"not found\"}".as_slice(),
         ] {
             assert!(
-                validate_asset("geosite.dat", body, &["dat"]).is_err(),
-                "textual body should not pass as a .dat asset"
-            );
-            assert!(
-                validate_asset("geosite-cn.srs", body, &["srs"]).is_err(),
+                validate_asset("geosite-cn.srs", body).is_err(),
                 "textual body should not pass as a .srs asset"
             );
         }
 
         assert!(
-            validate_asset("geosite-cn.srs", b"\x00binary-but-not-srs", &["srs"]).is_err(),
+            validate_asset("geosite-cn.srs", b"\x00binary-but-not-srs").is_err(),
             "a .srs asset without the SRS magic should be rejected"
         );
-        assert!(
-            validate_asset("Country.mmdb", b"\x00binary-but-not-maxmind", &["mmdb"]).is_err(),
-            "an .mmdb asset without the metadata marker should be rejected"
-        );
-
-        validate_asset("geosite-cn.srs", b"SRS\x03\x00rules", &["srs"]).expect("valid rule set");
-        validate_asset("geosite.dat", b"\x0a\x05china", &["dat"]).expect("valid protobuf dat");
-        validate_asset(
-            "Country.mmdb",
-            b"\x00records\xab\xcd\xefMaxMind.com\x00",
-            &["mmdb"],
-        )
-        .expect("valid MaxMind database");
+        validate_asset("geosite-cn.srs", b"SRS\x03\x00rules").expect("valid rule set");
     }
 
     #[tokio::test]
@@ -877,15 +668,9 @@ mod tests {
         fs::create_dir_all(&target_root).expect("target directory");
         fs::write(target_root.join("geosite-cn.srs"), b"SRS\x03good").expect("live rule set");
 
-        let error = RulesetGeoClient::new()
+        let error = RulesetClient::new()
             .acquire_srs_assets(
-                &[SrsAsset {
-                    kind: "geosite".to_string(),
-                    name: "cn".to_string(),
-                    tag: "geosite-cn".to_string(),
-                    file_name: "geosite-cn.srs".to_string(),
-                    url: format!("{base}/geosite-cn.srs"),
-                }],
+                &[srs(&base, "cn")],
                 &target_root,
                 &AssetAcquisitionOptions::default(),
             )
@@ -893,7 +678,7 @@ mod tests {
             .expect_err("an HTML body should not be accepted as a rule set");
 
         assert!(
-            matches!(error, RulesetGeoError::InvalidAsset { .. }),
+            matches!(error, RulesetError::InvalidAsset { .. }),
             "{error:?}"
         );
         assert_eq!(
@@ -909,27 +694,23 @@ mod tests {
         let declared_length = RULESET_ASSET_RESPONSE_LIMIT_BYTES + 1;
         let base = spawn_raw_http_fixture(
             HashMap::from([(
-                "/geosite.dat".to_string(),
+                "/geosite-cn.srs".to_string(),
                 RawFixtureResponse {
                     status: "200 OK".to_string(),
                     content_length: Some(declared_length),
                     extra_headers: Vec::new(),
-                    body: b"dat".to_vec(),
+                    body: b"SRS".to_vec(),
                 },
             )]),
             1,
         )
         .await;
         let target_root = unique_temp_root("ruleset-oversize");
-        let client = RulesetGeoClient::new();
+        let client = RulesetClient::new();
 
         let error = client
-            .acquire_geo_assets(
-                &[GeoAsset::new(
-                    "geosite",
-                    "geosite.dat",
-                    format!("{base}/geosite.dat"),
-                )],
+            .acquire_srs_assets(
+                &[srs(&base, "cn")],
                 &target_root,
                 &AssetAcquisitionOptions::default(),
             )
@@ -937,7 +718,7 @@ mod tests {
             .expect_err("oversized ruleset asset should fail");
 
         match error {
-            RulesetGeoError::Download(DownloadError::ResponseTooLarge {
+            RulesetError::Download(DownloadError::ResponseTooLarge {
                 limit,
                 content_length,
                 received,
@@ -952,7 +733,7 @@ mod tests {
             }
             other => panic!("unexpected error: {other:?}"),
         }
-        assert!(!target_root.join("geosite.dat").exists());
+        assert!(!target_root.join("geosite-cn.srs").exists());
 
         let _ = fs::remove_dir_all(target_root);
     }

@@ -56,7 +56,3 @@ jest.mock("react-native-worklets", () => require("react-native-worklets/lib/modu
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock("react-native-reanimated", () => require("~/test/reanimated-mock"));
 
-// The real sheet measures its container before it shows anything, which never
-// happens off a device. The shipped mock renders its children as they are.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-jest.mock("@gorhom/bottom-sheet", () => require("@gorhom/bottom-sheet/mock"));

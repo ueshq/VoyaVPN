@@ -21,7 +21,7 @@ import { ListRow } from "~/components/list-row";
 import { useToneColor } from "~/components/tone";
 
 /** Node actions use a native modal boundary so opening during a long press
- * cannot race a closing bottom-sheet gesture. HeroUI rows/buttons retain the
+ * cannot race a closing gesture. HeroUI rows/buttons retain the
  * app's grouped styling; bounded scrolling keeps every action reachable. */
 export function NodeActionsSheet({
   entry,
