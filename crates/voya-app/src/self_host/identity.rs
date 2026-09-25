@@ -8,7 +8,7 @@ use base64::{
     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
     Engine as _,
 };
-use voya_contracts::SelfHostCredentialsV1;
+use voya_contracts::SelfHostCredentials;
 use x25519_dalek::{PublicKey, StaticSecret};
 
 use super::{Result, SelfHostError};
@@ -23,11 +23,11 @@ const SHORT_ID_BYTES: usize = 8;
 /// `2022-blake3-aes-128-gcm` takes a 16-byte key.
 const SHADOWSOCKS_KEY_BYTES: usize = 16;
 
-pub(super) fn mint_credentials() -> Result<SelfHostCredentialsV1> {
+pub(super) fn mint_credentials() -> Result<SelfHostCredentials> {
     let private = random_bytes::<32>()?;
     let short_id = random_bytes::<SHORT_ID_BYTES>()?;
     let shadowsocks_key = random_bytes::<SHADOWSOCKS_KEY_BYTES>()?;
-    Ok(SelfHostCredentialsV1 {
+    Ok(SelfHostCredentials {
         vless_uuid: uuid::Uuid::new_v4().to_string(),
         reality_private_key: URL_SAFE_NO_PAD.encode(StaticSecret::from(private).to_bytes()),
         reality_short_id: hex(&short_id),

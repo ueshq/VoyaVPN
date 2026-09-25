@@ -92,11 +92,8 @@ function renderCard(value: Routing_Serialize, onEdit: () => void, locked?: boole
 
 function routing(overrides: Partial<RoutingRule>): Routing_Serialize {
   return {
-    enabled: true,
-    icon: "",
     id: "route",
     isActive: true,
-    locked: false,
     remarks: "Route",
     rules: [
       {
@@ -116,8 +113,6 @@ function routing(overrides: Partial<RoutingRule>): Routing_Serialize {
         ...overrides,
       },
     ],
-    singboxDomainStrategy: "",
-    singboxRulesetPath: "",
     sort: 0,
   };
 }

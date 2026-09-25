@@ -8,7 +8,7 @@ use std::net::IpAddr;
 
 use voya_contracts::{
     SelfHostAddressKind, SelfHostConfig, SelfHostEnvironmentReport, SelfHostProtocol,
-    SelfHostRecordV1, SelfHostShareLink, ValidationCode, ValidationIssue,
+    SelfHostRecord, SelfHostShareLink, ValidationCode, ValidationIssue,
 };
 use voya_core::{
     export_share_link_with_options, host::is_valid_host, selfhost_share_profiles, ConfigType,
@@ -137,7 +137,7 @@ pub(super) fn enabled_ports(config: &SelfHostConfig) -> Vec<u16> {
 
 /// The core config for `record`, or `None` before credentials and ports exist.
 pub(super) fn selfhost_spec(
-    record: &SelfHostRecordV1,
+    record: &SelfHostRecord,
     clash_api: Option<SelfHostClashApi>,
     log_level: &str,
 ) -> Option<SelfHostSpec> {
@@ -214,7 +214,7 @@ pub(super) fn link_endpoints(
 
 /// One link per enabled protocol per usable address.
 pub(super) fn share_links(
-    record: &SelfHostRecordV1,
+    record: &SelfHostRecord,
     environment: Option<&SelfHostEnvironmentReport>,
 ) -> Vec<SelfHostShareLink> {
     let Some(spec) = selfhost_spec(record, None, "") else {
@@ -270,7 +270,7 @@ fn device_label(config: &SelfHostConfig) -> String {
 #[cfg(test)]
 mod tests {
     use voya_contracts::{
-        SelfHostAddressFamily, SelfHostCredentialsV1, SelfHostFamilyReport, SelfHostFirewallStatus,
+        SelfHostAddressFamily, SelfHostCredentials, SelfHostFamilyReport, SelfHostFirewallStatus,
         SelfHostNatKind, SelfHostPortMappingReport, SelfHostPortMappingStatus,
         SelfHostReachability,
     };
@@ -278,8 +278,8 @@ mod tests {
 
     use super::*;
 
-    fn record() -> SelfHostRecordV1 {
-        SelfHostRecordV1 {
+    fn record() -> SelfHostRecord {
+        SelfHostRecord {
             config: SelfHostConfig {
                 enabled: true,
                 vless_port: 42_443,
@@ -287,13 +287,12 @@ mod tests {
                 device_label: "Tokyo".to_string(),
                 ..SelfHostConfig::default()
             },
-            credentials: Some(SelfHostCredentialsV1 {
+            credentials: Some(SelfHostCredentials {
                 vless_uuid: "bd3a7c33-98cb-4faf-b0b5-853e2707be3f".to_string(),
                 reality_private_key: "sJ2_PK3Bd1use05cc9jK6gcEarznMKgXeVNz9Dt4VF0".to_string(),
                 reality_short_id: "751998bfb8ed69a6".to_string(),
                 shadowsocks_password: "2oYz+Tnxj/q1Y/fi4+DkkQ==".to_string(),
             }),
-            ..SelfHostRecordV1::default()
         }
     }
 
@@ -419,7 +418,7 @@ mod tests {
 
     #[test]
     fn nothing_is_generated_before_credentials_exist() {
-        let fresh = SelfHostRecordV1::default();
+        let fresh = SelfHostRecord::default();
         assert!(selfhost_spec(&fresh, None, "warn").is_none());
         assert!(share_links(&fresh, Some(&environment(Some("203.0.113.7"), None))).is_empty());
     }

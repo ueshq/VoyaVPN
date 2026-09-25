@@ -1,12 +1,11 @@
-import type { AppSettingsV1 } from "@voya/contracts";
+import type { AppSettings } from "@voya/contracts";
 
 export function makeAppSettings({
   defaultUserAgent = "agent-before-edit",
 }: {
   defaultUserAgent?: string;
-} = {}): AppSettingsV1 {
+} = {}): AppSettings {
   return {
-    schemaVersion: 1,
     appearance: { language: "en", theme: "system" },
     behavior: {
       autoCheckIp: false,

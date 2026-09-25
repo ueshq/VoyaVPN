@@ -18,15 +18,13 @@ use crate::{
 
 /// Why a submitted settings bundle was rejected.
 ///
-/// Every variant names the `AppSettingsV1` path it is about, so the settings
+/// Every variant names the `AppSettings` path it is about, so the settings
 /// surface can mark the offending input the way the DNS pane already does
 /// instead of showing one banner for the whole form. `label` stays alongside
 /// `field` because the two audiences differ: the message keeps reading
 /// "invalid UI language", the form keys off `appearance.language`.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AppSettingsValidationError {
-    #[error("unsupported settings schema version {found}; expected {expected}")]
-    UnsupportedSchema { found: u32, expected: u32 },
     #[error("invalid {label}: {}", input_safety_text(reason))]
     InvalidText {
         field: &'static str,
@@ -50,11 +48,10 @@ pub enum AppSettingsValidationError {
 }
 
 impl AppSettingsValidationError {
-    /// The `AppSettingsV1` path the rejection is about.
+    /// The `AppSettings` path the rejection is about.
     #[must_use]
     pub const fn field(&self) -> &'static str {
         match self {
-            Self::UnsupportedSchema { .. } => "schemaVersion",
             Self::InvalidFragmentFallbackDelay => "core.fragmentFallbackDelayMs",
             Self::InboundRequired => "network.inbounds",
             Self::InvalidInboundPort => "network.inbounds.0.localPort",
@@ -73,12 +70,6 @@ impl AppSettingsValidationError {
     #[must_use]
     pub fn code(&self) -> contracts::ValidationCode {
         match self {
-            Self::UnsupportedSchema { found, expected } => {
-                contracts::ValidationCode::UnsupportedSettingsSchema {
-                    found: *found,
-                    expected: *expected,
-                }
-            }
             Self::InvalidText { reason, .. } => reason.clone(),
             Self::InvalidTunMtu => contracts::ValidationCode::TunMtuOutOfRange {
                 min: TUN_MTU_RANGE.0,
@@ -121,14 +112,8 @@ const INBOUND_PORT_RANGE: (u32, u32) = (1024, 65_514);
 const INBOUND_CREDENTIAL_MAX_CHARS: usize = 256;
 
 pub fn validate_app_settings(
-    settings: &contracts::AppSettingsV1,
+    settings: &contracts::AppSettings,
 ) -> Result<(), AppSettingsValidationError> {
-    if settings.schema_version != contracts::CURRENT_SCHEMA_VERSION {
-        return Err(AppSettingsValidationError::UnsupportedSchema {
-            found: settings.schema_version,
-            expected: contracts::CURRENT_SCHEMA_VERSION,
-        });
-    }
     input_safety::validate_required_text(settings.appearance.language.trim(), 256).map_err(
         |error| AppSettingsValidationError::InvalidText {
             field: "appearance.language",
@@ -167,7 +152,7 @@ pub fn validate_app_settings(
     Ok(())
 }
 
-fn validate_inbound(settings: &contracts::AppSettingsV1) -> Result<(), AppSettingsValidationError> {
+fn validate_inbound(settings: &contracts::AppSettings) -> Result<(), AppSettingsValidationError> {
     let Some(inbound) = settings.network.inbounds.first() else {
         return Err(AppSettingsValidationError::InboundRequired);
     };
@@ -249,9 +234,8 @@ fn input_safety_text(code: &contracts::ValidationCode) -> &'static str {
 }
 
 #[must_use]
-pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 {
-    contracts::AppSettingsV1 {
-        schema_version: contracts::CURRENT_SCHEMA_VERSION,
+pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettings {
+    contracts::AppSettings {
         appearance: contracts::AppearanceSettings {
             language: config.ui_item.current_language.clone(),
             theme: theme_from_config(config.ui_item.current_theme.as_deref()),
@@ -337,7 +321,7 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettingsV1 
 /// The active profile and routing ids are not part of the settings contract, so
 /// they are carried over from the configuration being replaced.
 #[must_use]
-pub fn config_from_settings(settings: &contracts::AppSettingsV1, current: &AppConfig) -> AppConfig {
+pub fn config_from_settings(settings: &contracts::AppSettings, current: &AppConfig) -> AppConfig {
     app_config_from_settings(settings, &state_from_app_config(current))
 }
 
@@ -353,7 +337,7 @@ pub(crate) fn state_from_app_config(config: &AppConfig) -> AppStateRecord {
 
 #[must_use]
 pub fn app_config_from_settings(
-    settings: &contracts::AppSettingsV1,
+    settings: &contracts::AppSettings,
     state: &AppStateRecord,
 ) -> AppConfig {
     AppConfig {
@@ -791,17 +775,8 @@ mod tests {
     }
 
     #[test]
-    fn settings_validation_rejects_versions_and_runtime_limits() {
-        let mut settings = contracts::AppSettingsV1 {
-            schema_version: 2,
-            ..contracts::AppSettingsV1::default()
-        };
-        assert!(matches!(
-            validate_app_settings(&settings),
-            Err(AppSettingsValidationError::UnsupportedSchema { .. })
-        ));
-
-        settings.schema_version = contracts::CURRENT_SCHEMA_VERSION;
+    fn settings_validation_rejects_runtime_limits() {
+        let mut settings = contracts::AppSettings::default();
         settings.network.tun.mtu = 575;
         assert_eq!(
             validate_app_settings(&settings),
@@ -858,7 +833,7 @@ mod tests {
     #[test]
     fn contract_defaults_match_domain_defaults() {
         let mut mapped = app_config_from_settings(
-            &contracts::AppSettingsV1::default(),
+            &contracts::AppSettings::default(),
             &AppStateRecord::default(),
         );
         mapped.simple_dns_item = crate::dns::normalize_simple_dns(mapped.simple_dns_item);
@@ -866,24 +841,17 @@ mod tests {
         assert_eq!(
             mapped,
             AppConfig::default(),
-            "a fresh install is configured from AppSettingsV1::default(), so it must \
+            "a fresh install is configured from AppSettings::default(), so it must \
              produce exactly AppConfig::default()"
         );
     }
 
     /// The settings surface marks the input a rejection is about, so every
-    /// rejection has to name an `AppSettingsV1` path — not the human label the
+    /// rejection has to name an `AppSettings` path — not the human label the
     /// message uses, which no form can key off.
     #[test]
     fn every_settings_rejection_names_the_contract_path_it_is_about() {
-        let cases: [(contracts::AppSettingsV1, &str); 10] = [
-            (
-                contracts::AppSettingsV1 {
-                    schema_version: contracts::CURRENT_SCHEMA_VERSION + 1,
-                    ..contracts::AppSettingsV1::default()
-                },
-                "schemaVersion",
-            ),
+        let cases: [(contracts::AppSettings, &str); 9] = [
             (
                 settings_with(|settings| settings.appearance.language = "  ".to_string()),
                 "appearance.language",
@@ -936,10 +904,8 @@ mod tests {
         }
     }
 
-    fn settings_with(
-        patch: impl FnOnce(&mut contracts::AppSettingsV1),
-    ) -> contracts::AppSettingsV1 {
-        let mut settings = contracts::AppSettingsV1::default();
+    fn settings_with(patch: impl FnOnce(&mut contracts::AppSettings)) -> contracts::AppSettings {
+        let mut settings = contracts::AppSettings::default();
         patch(&mut settings);
         settings
     }

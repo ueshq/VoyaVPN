@@ -199,11 +199,8 @@ describe("ConnectionsPanel", () => {
   it("names the matched rule the way the Rules page does", async () => {
     ipc.listRoutings.mockResolvedValue([
       {
-        enabled: true,
-        icon: "",
         id: "routing-1",
         isActive: true,
-        locked: false,
         remarks: "Active",
         rules: [
           {
@@ -222,8 +219,6 @@ describe("ConnectionsPanel", () => {
             scope: "routing",
           },
         ],
-        singboxDomainStrategy: "",
-        singboxRulesetPath: "",
         sort: 0,
       },
     ]);

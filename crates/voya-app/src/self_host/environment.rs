@@ -14,7 +14,7 @@ use std::{
 use voya_contracts::{
     SelfHostAddressFamily, SelfHostAddressScope, SelfHostEnvironmentReport, SelfHostFamilyReport,
     SelfHostFirewallStatus, SelfHostLocalAddress, SelfHostNatKind, SelfHostPortMappingReport,
-    SelfHostPortMappingStatus, SelfHostReachability, SelfHostReasonCode, SelfHostRecordV1,
+    SelfHostPortMappingStatus, SelfHostReachability, SelfHostReasonCode, SelfHostRecord,
     SelfHostSelfTest,
 };
 use voya_net::{
@@ -296,7 +296,7 @@ pub(super) struct CheckInput {
     pub(super) upnp_enabled: bool,
     pub(super) previously_mapped: Vec<u16>,
     /// The running node's record, for the self-test; `None` skips it.
-    pub(super) self_test: Option<SelfHostRecordV1>,
+    pub(super) self_test: Option<SelfHostRecord>,
 }
 
 pub(super) struct CheckOutcome {
@@ -515,7 +515,7 @@ async fn public_address_only(
     }
 }
 
-async fn self_test(deps: &SelfHostDeps, record: Option<&SelfHostRecordV1>) -> SelfHostSelfTest {
+async fn self_test(deps: &SelfHostDeps, record: Option<&SelfHostRecord>) -> SelfHostSelfTest {
     match record {
         Some(record) => deps.self_tester.run(deps, record).await,
         None => SKIPPED,

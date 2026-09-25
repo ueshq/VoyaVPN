@@ -4,7 +4,7 @@ import type { TranslationKey } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { AppSettingsV1, TrafficMode } from "@voya/contracts";
+import type { AppSettings, TrafficMode } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeBusy } from "@voya/client/runtime-action";
@@ -39,7 +39,7 @@ export function useTrafficMode() {
     onSuccess: async ({ mode }) => {
       // An invalidation read may still be in flight when the command returns.
       await client.cancelQueries({ queryKey: queryKeys.appSettings });
-      client.setQueryData<AppSettingsV1>(queryKeys.appSettings, (current) =>
+      client.setQueryData<AppSettings>(queryKeys.appSettings, (current) =>
         current
           ? { ...current, proxy: { ...current.proxy, trafficMode: mode } }
           : current,

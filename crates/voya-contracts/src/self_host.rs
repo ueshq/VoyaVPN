@@ -2,7 +2,7 @@
 //! and the record the database keeps.
 //!
 //! The REALITY private key, the Shadowsocks key and the VLESS UUID live only in
-//! [`SelfHostRecordV1`], which never crosses IPC. The renderer sees them only
+//! [`SelfHostRecord`], which never crosses IPC. The renderer sees them only
 //! inside the finished share links, which carry what a peer needs to connect
 //! and nothing that would let it impersonate the node.
 
@@ -67,7 +67,7 @@ impl Default for SelfHostConfig {
 /// The credentials minted for the node. Persistence only.
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SelfHostCredentialsV1 {
+pub struct SelfHostCredentials {
     pub vless_uuid: String,
     /// base64url X25519 private key.
     pub reality_private_key: String,
@@ -76,29 +76,18 @@ pub struct SelfHostCredentialsV1 {
     pub shadowsocks_password: String,
 }
 
-impl fmt::Debug for SelfHostCredentialsV1 {
+impl fmt::Debug for SelfHostCredentials {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("SelfHostCredentialsV1(<redacted>)")
+        formatter.write_str("SelfHostCredentials(<redacted>)")
     }
 }
 
 /// The stored node: settings plus credentials, `None` until first enabled.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SelfHostRecordV1 {
-    pub schema_version: u32,
+pub struct SelfHostRecord {
     pub config: SelfHostConfig,
-    pub credentials: Option<SelfHostCredentialsV1>,
-}
-
-impl Default for SelfHostRecordV1 {
-    fn default() -> Self {
-        Self {
-            schema_version: crate::CURRENT_SCHEMA_VERSION,
-            config: SelfHostConfig::default(),
-            credentials: None,
-        }
-    }
+    pub credentials: Option<SelfHostCredentials>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -364,15 +353,15 @@ mod tests {
 
     #[test]
     fn credentials_never_print() {
-        let credentials = SelfHostCredentialsV1 {
+        let credentials = SelfHostCredentials {
             vless_uuid: "uuid-value".to_string(),
             reality_private_key: "private-key".to_string(),
             reality_short_id: "short-id".to_string(),
             shadowsocks_password: "ss-key".to_string(),
         };
-        let record = SelfHostRecordV1 {
+        let record = SelfHostRecord {
             credentials: Some(credentials),
-            ..SelfHostRecordV1::default()
+            ..SelfHostRecord::default()
         };
         let printed = format!("{record:?}");
         for secret in ["uuid-value", "private-key", "short-id", "ss-key"] {
@@ -382,7 +371,7 @@ mod tests {
 
     #[test]
     fn record_is_strict_camel_case() {
-        let value = serde_json::to_value(SelfHostRecordV1::default()).expect("serialize");
+        let value = serde_json::to_value(SelfHostRecord::default()).expect("serialize");
         assert_eq!(value["config"]["vlessPort"], 0);
         assert_eq!(
             value["config"]["realityServerName"],
@@ -390,6 +379,6 @@ mod tests {
         );
         let mut extra = value;
         extra["config"]["unknown"] = serde_json::json!(true);
-        assert!(serde_json::from_value::<SelfHostRecordV1>(extra).is_err());
+        assert!(serde_json::from_value::<SelfHostRecord>(extra).is_err());
     }
 }

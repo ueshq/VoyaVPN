@@ -43,11 +43,6 @@ fn distinct_routing() -> RoutingItem {
         id: "routing-id".to_string(),
         remarks: "routing-remarks".to_string(),
         rule_set: vec![distinct_rule()],
-        enabled: true,
-        locked: false,
-        custom_icon: "custom-icon".to_string(),
-        custom_ruleset_path4_singbox: "/tmp/custom-ruleset".to_string(),
-        domain_strategy4_singbox: "singbox-domain-strategy".to_string(),
         sort: 7,
         is_active: true,
     }

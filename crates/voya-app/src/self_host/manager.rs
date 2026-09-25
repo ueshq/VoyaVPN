@@ -20,7 +20,7 @@ use tokio::{
 };
 use voya_contracts::{
     AppNoticeLevel, LogCode, LogLevel, NoticeCode, SelfHostConfig, SelfHostEnvironmentReport,
-    SelfHostProblem, SelfHostRecordV1, SelfHostRuntime, SelfHostRuntimeStatus, SelfHostState,
+    SelfHostProblem, SelfHostRecord, SelfHostRuntime, SelfHostRuntimeStatus, SelfHostState,
     SelfHostStats,
 };
 use voya_core::{SelfHostClashApi, LOOPBACK};
@@ -225,7 +225,7 @@ impl SelfHostManager {
     }
 
     /// Stores `record` and brings the process in line with it.
-    async fn apply(&self, mut record: SelfHostRecordV1, restart: bool) -> Result<SelfHostState> {
+    async fn apply(&self, mut record: SelfHostRecord, restart: bool) -> Result<SelfHostState> {
         if record.config.enabled {
             self.assign_ports(&mut record).await?;
             if record.credentials.is_none() {
@@ -257,7 +257,7 @@ impl SelfHostManager {
         Ok(state)
     }
 
-    async fn ensure_identity(&self, record: &mut SelfHostRecordV1) -> Result<()> {
+    async fn ensure_identity(&self, record: &mut SelfHostRecord) -> Result<()> {
         let before = record.clone();
         self.assign_ports(record).await?;
         if record.credentials.is_none() {
@@ -272,7 +272,7 @@ impl SelfHostManager {
     /// Replaces a `0` port with a free random one. Chosen ports are kept, so
     /// links stay valid across restarts. Each probe binds sockets, so the draw
     /// runs on the blocking pool.
-    async fn assign_ports(&self, record: &mut SelfHostRecordV1) -> Result<()> {
+    async fn assign_ports(&self, record: &mut SelfHostRecord) -> Result<()> {
         let (vless, shadowsocks) = (record.config.vless_port, record.config.shadowsocks_port);
         if vless != 0 && shadowsocks != 0 {
             return Ok(());
@@ -298,7 +298,7 @@ impl SelfHostManager {
 
     /// Starts the core. `node` is only held to publish `Starting` and then the
     /// outcome, so the page can read the state while the core spawns.
-    async fn start_locked(&self, _lifecycle: &MutexGuard<'_, ()>, record: &SelfHostRecordV1) {
+    async fn start_locked(&self, _lifecycle: &MutexGuard<'_, ()>, record: &SelfHostRecord) {
         let ports = enabled_ports(&record.config);
         {
             let mut node = self.inner.node.lock().await;
@@ -624,7 +624,7 @@ impl SelfHostManager {
         }
     }
 
-    fn build_state(&self, record: &SelfHostRecordV1, node: &NodeState) -> SelfHostState {
+    fn build_state(&self, record: &SelfHostRecord, node: &NodeState) -> SelfHostState {
         SelfHostState {
             config: record.config.clone(),
             defaults: SelfHostConfig::default(),

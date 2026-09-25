@@ -1,17 +1,16 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{DnsSettings, SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
+use crate::{DnsSettings, SystemProxyType, TrafficMode};
 
 // Settings use the same strict current shape for IPC and persistence. The
 // database baseline rejects historical installations before reading these DTOs;
 // there are no retired-field conversions. Keep the current settings fixture and
 // generated bindings aligned when changing the contract.
 // Plain comments avoid exporting persistence guidance into TypeScript bindings.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AppSettingsV1 {
-    pub schema_version: u32,
+pub struct AppSettings {
     pub appearance: AppearanceSettings,
     pub behavior: BehaviorSettings,
     pub core: CoreSettings,
@@ -25,24 +24,6 @@ pub struct AppSettingsV1 {
     pub multiplexing: MultiplexingSettings,
     pub hysteria: HysteriaSettings,
     pub proxy: ProxySettings,
-}
-
-impl Default for AppSettingsV1 {
-    fn default() -> Self {
-        Self {
-            schema_version: CURRENT_SCHEMA_VERSION,
-            appearance: AppearanceSettings::default(),
-            behavior: BehaviorSettings::default(),
-            core: CoreSettings::default(),
-            network: NetworkSettings::default(),
-            routing: RoutingSettings::default(),
-            dns: DnsSettings::default(),
-            speed_test: SpeedtestSettings::default(),
-            multiplexing: MultiplexingSettings::default(),
-            hysteria: HysteriaSettings::default(),
-            proxy: ProxySettings::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
@@ -364,9 +345,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn settings_are_strict_and_versioned() {
-        let value = serde_json::to_value(AppSettingsV1::default()).expect("serialize settings");
-        assert_eq!(value["schemaVersion"], CURRENT_SCHEMA_VERSION);
+    fn settings_are_strict() {
+        let value = serde_json::to_value(AppSettings::default()).expect("serialize settings");
         assert_eq!(
             value["network"]["systemProxy"]["mode"],
             serde_json::Value::String("forcedChange".to_string())
@@ -379,6 +359,6 @@ mod tests {
             .as_object_mut()
             .expect("settings object")
             .insert("legacyField".to_string(), serde_json::Value::Bool(true));
-        assert!(serde_json::from_value::<AppSettingsV1>(invalid).is_err());
+        assert!(serde_json::from_value::<AppSettings>(invalid).is_err());
     }
 }

@@ -9,7 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
-import type { AppSettingsV1 } from "@voya/contracts";
+import type { AppSettings } from "@voya/contracts";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@voya/client/toast-store";
 import {
@@ -165,7 +165,7 @@ describe("redesigned automatic settings", () => {
     const { settle } = mount();
     await userEvent.click(screen.getByRole("tab", { name: "Advanced" }));
     const input = await screen.findByLabelText("User-Agent");
-    const pending = deferred<AppSettingsV1>();
+    const pending = deferred<AppSettings>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
     fireEvent.change(input, { target: { value: "failed-agent" } });
     fireEvent.blur(input);

@@ -9,7 +9,7 @@
  */
 export type VoyaCommands = {
 	loadUiPreferences: () => Promise<AppearanceSettings>,
-	loadAppSettings: () => Promise<AppSettingsV1>,
+	loadAppSettings: () => Promise<AppSettings>,
 	getSettingsApplyStatus: () => Promise<SettingsApplyStatus>,
 	applyPendingSettings: () => Promise<SettingsApplyStatus>,
 	/**
@@ -20,7 +20,7 @@ export type VoyaCommands = {
 	 *  things left here are turning `AppError`s back out of it and dispatching the
 	 *  runtime action it selected.
 	 */
-	saveAppSettings: (settings: AppSettingsV1) => Promise<AppSettingsV1>,
+	saveAppSettings: (settings: AppSettings) => Promise<AppSettings>,
 	generateQrCode: (content: string) => Promise<QrCodeImage>,
 	scanScreenQr: () => Promise<QrScanResult>,
 	/**
@@ -325,8 +325,7 @@ export type AppNotice = {
 
 export type AppNoticeLevel = "info" | "warning" | "error";
 
-export type AppSettingsV1 = {
-	schemaVersion: number,
+export type AppSettings = {
 	appearance: AppearanceSettings,
 	behavior: BehaviorSettings,
 	core: CoreSettings,
@@ -1007,11 +1006,6 @@ export type Routing_Deserialize = {
 	id: string,
 	remarks: string,
 	rules: RoutingRule[],
-	enabled: boolean,
-	locked: boolean,
-	icon: string,
-	singboxRulesetPath: string,
-	singboxDomainStrategy: string,
 	sort: number,
 };
 
@@ -1019,11 +1013,6 @@ export type Routing_Serialize = {
 	id: string,
 	remarks: string,
 	rules: RoutingRule[],
-	enabled: boolean,
-	locked: boolean,
-	icon: string,
-	singboxRulesetPath: string,
-	singboxDomainStrategy: string,
 	sort: number,
 	isActive: boolean,
 };
@@ -1570,7 +1559,7 @@ export type TunStatus = {
  *  greppable, it shows the English diagnostic verbatim, and adding a code for
  *  one is a purely additive change.
  */
-export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "policyGroupWithoutValidMembers"; group: string } | { code: "policyGroupWithoutMembers" } | { code: "policyGroupIntervalOutOfRange"; min: number; max: number } | { code: "policyGroupToleranceOutOfRange"; min: number; max: number } | { code: "policyGroupTestUrlInvalid" } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | { code: "inboundPortOutOfRange"; min: number; max: number } | { code: "inboundCredentialsIncomplete" } | { code: "inboundRequired" } | { code: "selfHostPortOutOfRange"; min: number; max: number } | 
+export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "policyGroupWithoutValidMembers"; group: string } | { code: "policyGroupWithoutMembers" } | { code: "policyGroupIntervalOutOfRange"; min: number; max: number } | { code: "policyGroupToleranceOutOfRange"; min: number; max: number } | { code: "policyGroupTestUrlInvalid" } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | { code: "inboundPortOutOfRange"; min: number; max: number } | { code: "inboundCredentialsIncomplete" } | { code: "inboundRequired" } | { code: "selfHostPortOutOfRange"; min: number; max: number } | 
 /**  Two of the node's ports are the same. */
 { code: "selfHostPortsCollide" } | 
 /**  Neither protocol is switched on. */

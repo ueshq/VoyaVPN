@@ -33,5 +33,3 @@ pub use settings_apply::*;
 pub use shell::*;
 pub use speedtest::*;
 pub use tun::*;
-
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;

@@ -182,37 +182,15 @@ impl Default for RoutingRule {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Routing {
     pub id: String,
     pub remarks: String,
     pub rules: Vec<RoutingRule>,
-    pub enabled: bool,
-    pub locked: bool,
-    pub icon: String,
-    pub singbox_ruleset_path: String,
-    pub singbox_domain_strategy: String,
     pub sort: i32,
     #[serde(default, skip_deserializing)]
     pub is_active: bool,
-}
-
-impl Default for Routing {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            remarks: String::new(),
-            rules: Vec::new(),
-            enabled: true,
-            locked: false,
-            icon: String::new(),
-            singbox_ruleset_path: String::new(),
-            singbox_domain_strategy: String::new(),
-            sort: 0,
-            is_active: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]

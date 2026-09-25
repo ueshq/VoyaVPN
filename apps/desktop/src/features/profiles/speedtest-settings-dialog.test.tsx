@@ -7,7 +7,7 @@ import {
   installSettingsBackend,
   settingsIpc,
 } from "@voya/features/settings/settings-backend.test-fixture";
-import type { AppSettingsV1 } from "@voya/contracts";
+import type { AppSettings } from "@voya/contracts";
 import { renderWithQuery } from "@/test/render";
 
 import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
@@ -43,7 +43,7 @@ describe("SpeedtestSettingsDialog", () => {
   });
 
   it("says it is saving while a save is in flight", async () => {
-    const save = deferred<AppSettingsV1>();
+    const save = deferred<AppSettings>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(save.promise);
     renderWithQuery(<SpeedtestSettingsDialog onOpenChange={vi.fn()} />);
 

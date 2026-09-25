@@ -38,30 +38,17 @@ impl<'executor> RoutingRepository<'executor> {
             self.executor,
             sqlx::query(
                 r#"
-            INSERT INTO routing_items (
-                id, remarks, rule_set, enabled, locked,
-                custom_icon, custom_ruleset_path4_singbox,
-                domain_strategy4_singbox, sort
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO routing_items (id, remarks, rule_set, sort)
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 remarks = excluded.remarks,
                 rule_set = excluded.rule_set,
-                enabled = excluded.enabled,
-                locked = excluded.locked,
-                custom_icon = excluded.custom_icon,
-                custom_ruleset_path4_singbox = excluded.custom_ruleset_path4_singbox,
-                domain_strategy4_singbox = excluded.domain_strategy4_singbox,
                 sort = excluded.sort
             "#,
             )
             .bind(&item.id)
             .bind(&item.remarks)
             .bind(rule_set)
-            .bind(item.enabled)
-            .bind(item.locked)
-            .bind(&item.custom_icon)
-            .bind(&item.custom_ruleset_path4_singbox)
-            .bind(&item.domain_strategy4_singbox)
             .bind(item.sort),
             execute
         )?;
@@ -169,11 +156,6 @@ fn row_to_routing(row: &SqliteRow) -> Result<RoutingItem> {
         id: row.try_get("id")?,
         remarks: row.try_get("remarks")?,
         rule_set: rules,
-        enabled: row.try_get("enabled")?,
-        locked: row.try_get("locked")?,
-        custom_icon: row.try_get("custom_icon")?,
-        custom_ruleset_path4_singbox: row.try_get("custom_ruleset_path4_singbox")?,
-        domain_strategy4_singbox: row.try_get("domain_strategy4_singbox")?,
         sort: row.try_get("sort")?,
         is_active: row.try_get("is_active")?,
     })

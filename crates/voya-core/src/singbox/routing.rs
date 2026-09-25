@@ -105,12 +105,8 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         ..SingboxRule::default()
     });
 
-    let routing = context.routing_item.as_ref();
-    let domain_strategy = routing
-        .and_then(|routing| nonempty_string(Some(routing.domain_strategy4_singbox.as_str())));
     let resolve_rule = SingboxRule {
         action: Some("resolve".to_string()),
-        strategy: domain_strategy,
         ..SingboxRule::default()
     };
     if context.app_config.routing_basic_item.domain_strategy == IP_ON_DEMAND {

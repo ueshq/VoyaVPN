@@ -22,7 +22,7 @@ use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
 use voya_app::sysproxy::runtime_proxy_url as app_runtime_proxy_url;
 use voya_app::tun::TunManager;
 use voya_contracts::{
-    AppError, AppErrorSubsystem, AppNotice, AppNoticeLevel, AppSettingsV1, AppUpdaterState,
+    AppError, AppErrorSubsystem, AppNotice, AppNoticeLevel, AppSettings, AppUpdaterState,
     AppUpdaterStatus, AppearanceSettings, CoreSeedInstallResult, CoreSeedInstallStatus,
     DnsSettings as DnsSettingsContract, ExportProfilesResult,
     ImportProfilesResult as ImportProfilesContract, InvalidationScope, LogCode,

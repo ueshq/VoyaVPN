@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { AppSettingsV1, AppearanceSettings, TunStatus } from "@voya/contracts";
+import type { AppSettings, AppearanceSettings, TunStatus } from "@voya/contracts";
 
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 import { CoreTab } from "./core-tab";
@@ -279,7 +279,7 @@ function emptyController(
     setAppearance: vi.fn(),
     settings: null,
     update:
-      vi.fn<(updater: (current: AppSettingsV1) => AppSettingsV1) => void>(),
+      vi.fn<(updater: (current: AppSettings) => AppSettings) => void>(),
     working,
   };
 }

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { voyaCommands } from "@voya/client/transport";
-import type { AppSettingsV1, DnsSettings } from "@voya/contracts";
+import type { AppSettings, DnsSettings } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { applyChanges, changedFields } from "../settings/settings-draft";
 import { settingsFailure, useSettingsDraft } from "../settings/use-settings-draft";
@@ -23,7 +23,7 @@ export function useDnsSettings(enabled = true) {
         client.cancelQueries({ queryKey: queryKeys.appSettings }),
       ]);
       client.setQueryData(queryKeys.dns, saved);
-      client.setQueryData<AppSettingsV1>(queryKeys.appSettings, (current) => current ? { ...current, dns: saved } : current);
+      client.setQueryData<AppSettings>(queryKeys.appSettings, (current) => current ? { ...current, dns: saved } : current);
       return saved;
     },
   });

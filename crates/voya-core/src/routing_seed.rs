@@ -232,7 +232,6 @@ pub fn default_routing_item(remarks: &str) -> RoutingItem {
     RoutingItem {
         remarks: remarks.to_string(),
         rule_set: default_rule_set(),
-        enabled: true,
         ..RoutingItem::default()
     }
 }

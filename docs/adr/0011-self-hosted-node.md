@@ -56,9 +56,9 @@ always get uTLS: sing-box refuses a REALITY client without it.
 
 The node's record — settings plus the VLESS UUID, the X25519 private key, the
 short id and the Shadowsocks key — is one strict JSON row in a new `self_host`
-table (`voya_contracts::SelfHostRecordV1`). It never crosses IPC: the renderer
+table (`voya_contracts::SelfHostRecord`). It never crosses IPC: the renderer
 receives the finished share links and nothing that would let it impersonate
-the node. `AppSettingsV1` was rejected as the home because the whole DTO
+the node. `AppSettings` was rejected as the home because the whole DTO
 round-trips through the renderer on every settings save, which would expose the
 private key and let a stale save overwrite freshly rotated keys.
 

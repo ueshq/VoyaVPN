@@ -12,7 +12,7 @@ pub fn load_ui_preferences(
 
 #[tauri::command]
 #[specta::specta]
-pub fn load_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSettingsV1, AppError> {
+pub fn load_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSettings, AppError> {
     Ok(voya_app::settings::save::settings_from_app_config(
         &state.config_mutations().current_config(),
     ))
@@ -29,8 +29,8 @@ pub fn load_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSetting
 pub async fn save_app_settings<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
-    settings: AppSettingsV1,
-) -> Result<AppSettingsV1, AppError> {
+    settings: AppSettings,
+) -> Result<AppSettings, AppError> {
     let settings_language_before = state
         .config_mutations()
         .current_config()

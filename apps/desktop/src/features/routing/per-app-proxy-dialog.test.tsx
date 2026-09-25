@@ -30,15 +30,10 @@ function renderDialog(onOpenChange: (open: boolean) => void = vi.fn()) {
 
 function routing(rules: RoutingRule[] = [], isActive = true): Routing_Serialize {
   return {
-    enabled: true,
-    icon: "",
     id: "routing-1",
     isActive,
-    locked: false,
     remarks: "Active profile",
     rules,
-    singboxDomainStrategy: "",
-    singboxRulesetPath: "",
     sort: 0,
   };
 }

@@ -45,7 +45,7 @@ pub(super) fn set_log_streaming(state: &MobileState, args: &Value) -> Result<Val
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SaveSettings {
-    settings: voya_contracts::AppSettingsV1,
+    settings: voya_contracts::AppSettings,
 }
 
 /// Validation, the pre-commit side effects, the commit and both rollback paths

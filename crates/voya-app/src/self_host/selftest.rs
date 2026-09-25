@@ -14,7 +14,7 @@ use std::{
 
 use futures_util::future::BoxFuture;
 use tokio::task;
-use voya_contracts::{SelfHostRecordV1, SelfHostSelfTest, SelfHostSelfTestResult};
+use voya_contracts::{SelfHostRecord, SelfHostSelfTest, SelfHostSelfTestResult};
 use voya_core::{
     selfhost_share_profiles, AppConfig, ConfigType, CoreConfigContext, ProfileItem,
     SelfHostEndpoint, SpeedtestConfigEntry, LOOPBACK,
@@ -39,7 +39,7 @@ pub trait NodeSelfTester: Send + Sync {
     fn run<'a>(
         &'a self,
         deps: &'a SelfHostDeps,
-        record: &'a SelfHostRecordV1,
+        record: &'a SelfHostRecord,
     ) -> BoxFuture<'a, SelfHostSelfTest>;
 }
 
@@ -51,7 +51,7 @@ impl NodeSelfTester for ProbeCoreSelfTester {
     fn run<'a>(
         &'a self,
         deps: &'a SelfHostDeps,
-        record: &'a SelfHostRecordV1,
+        record: &'a SelfHostRecord,
     ) -> BoxFuture<'a, SelfHostSelfTest> {
         Box::pin(run_self_test(deps, record))
     }
@@ -62,7 +62,7 @@ pub(super) const SKIPPED: SelfHostSelfTest = SelfHostSelfTest {
     shadowsocks: SelfHostSelfTestResult::Skipped,
 };
 
-async fn run_self_test(deps: &SelfHostDeps, record: &SelfHostRecordV1) -> SelfHostSelfTest {
+async fn run_self_test(deps: &SelfHostDeps, record: &SelfHostRecord) -> SelfHostSelfTest {
     let Some(spec) = selfhost_spec(record, None, &deps.log_level) else {
         return SKIPPED;
     };

@@ -6,7 +6,7 @@ import * as __TAURI_EVENT from "@tauri-apps/api/event";
 /** Commands */
 export const commands = {
 	loadUiPreferences: () => typedError<AppearanceSettings, AppError>(__TAURI_INVOKE("load_ui_preferences")),
-	loadAppSettings: () => typedError<AppSettingsV1, AppError>(__TAURI_INVOKE("load_app_settings")),
+	loadAppSettings: () => typedError<AppSettings, AppError>(__TAURI_INVOKE("load_app_settings")),
 	getSettingsApplyStatus: () => typedError<SettingsApplyStatus, AppError>(__TAURI_INVOKE("get_settings_apply_status")),
 	applyPendingSettings: () => typedError<SettingsApplyStatus, AppError>(__TAURI_INVOKE("apply_pending_settings")),
 	/**
@@ -17,7 +17,7 @@ export const commands = {
 	 *  things left here are turning `AppError`s back out of it and dispatching the
 	 *  runtime action it selected.
 	 */
-	saveAppSettings: (settings: AppSettingsV1) => typedError<AppSettingsV1, AppError>(__TAURI_INVOKE("save_app_settings", { settings })),
+	saveAppSettings: (settings: AppSettings) => typedError<AppSettings, AppError>(__TAURI_INVOKE("save_app_settings", { settings })),
 	generateQrCode: (content: string) => typedError<QrCodeImage, AppError>(__TAURI_INVOKE("generate_qr_code", { content })),
 	scanScreenQr: () => typedError<QrScanResult, AppError>(__TAURI_INVOKE("scan_screen_qr")),
 	/**
@@ -313,8 +313,7 @@ export type AppNotice = {
 
 export type AppNoticeLevel = "info" | "warning" | "error";
 
-export type AppSettingsV1 = {
-	schemaVersion: number,
+export type AppSettings = {
 	appearance: AppearanceSettings,
 	behavior: BehaviorSettings,
 	core: CoreSettings,
@@ -995,11 +994,6 @@ export type Routing_Deserialize = {
 	id: string,
 	remarks: string,
 	rules: RoutingRule[],
-	enabled: boolean,
-	locked: boolean,
-	icon: string,
-	singboxRulesetPath: string,
-	singboxDomainStrategy: string,
 	sort: number,
 };
 
@@ -1007,11 +1001,6 @@ export type Routing_Serialize = {
 	id: string,
 	remarks: string,
 	rules: RoutingRule[],
-	enabled: boolean,
-	locked: boolean,
-	icon: string,
-	singboxRulesetPath: string,
-	singboxDomainStrategy: string,
 	sort: number,
 	isActive: boolean,
 };
@@ -1558,7 +1547,7 @@ export type TunStatus = {
  *  greppable, it shows the English diagnostic verbatim, and adding a code for
  *  one is a purely additive change.
  */
-export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "policyGroupWithoutValidMembers"; group: string } | { code: "policyGroupWithoutMembers" } | { code: "policyGroupIntervalOutOfRange"; min: number; max: number } | { code: "policyGroupToleranceOutOfRange"; min: number; max: number } | { code: "policyGroupTestUrlInvalid" } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "unsupportedSettingsSchema"; found: number; expected: number } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | { code: "inboundPortOutOfRange"; min: number; max: number } | { code: "inboundCredentialsIncomplete" } | { code: "inboundRequired" } | { code: "selfHostPortOutOfRange"; min: number; max: number } | 
+export type ValidationCode = { code: "subscriptionReadOnly"; subscriptionId: string } | { code: "invalidAddress" } | { code: "invalidPort" } | { code: "invalidPassword" } | { code: "invalidFlow" } | { code: "invalidShadowsocksMethod" } | { code: "invalidRealityPublicKey" } | { code: "unsupportedProtocolNetwork"; protocol: string; network: string } | { code: "unsupportedShadowsocksNetwork"; network: string } | { code: "routingRuleWithoutOutbound"; rule: string } | { code: "routingRuleOutboundNotFound"; rule: string; outbound: string } | { code: "policyGroupWithoutValidMembers"; group: string } | { code: "policyGroupWithoutMembers" } | { code: "policyGroupIntervalOutOfRange"; min: number; max: number } | { code: "policyGroupToleranceOutOfRange"; min: number; max: number } | { code: "policyGroupTestUrlInvalid" } | { code: "dnsAddressEmpty" } | { code: "dnsAddressPort"; port: string } | { code: "dnsHostsLine"; line: number } | { code: "dnsExpectedIps" } | { code: "textRequired" } | { code: "textTooLong" } | { code: "textControlCharacters" } | { code: "tooManyItems" } | { code: "tunMtuOutOfRange"; min: number; max: number } | { code: "negativeHysteriaBandwidth" } | { code: "hysteriaHopIntervalTooShort"; minimumSeconds: number } | { code: "fragmentFallbackDelayOutOfRange"; min: number; max: number } | { code: "inboundPortOutOfRange"; min: number; max: number } | { code: "inboundCredentialsIncomplete" } | { code: "inboundRequired" } | { code: "selfHostPortOutOfRange"; min: number; max: number } | 
 /**  Two of the node's ports are the same. */
 { code: "selfHostPortsCollide" } | 
 /**  Neither protocol is switched on. */

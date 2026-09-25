@@ -166,7 +166,7 @@ async fn retired_settings_are_rejected_without_conversion_or_rewrite() {
         ("core", "fragmentEnabled"),
         ("behavior", "statistics"),
     ] {
-        let mut payload = serde_json::to_value(AppSettingsV1::default()).expect("settings");
+        let mut payload = serde_json::to_value(AppSettings::default()).expect("settings");
         let target = if section.is_empty() {
             &mut payload
         } else {
@@ -174,7 +174,7 @@ async fn retired_settings_are_rejected_without_conversion_or_rewrite() {
         };
         target[key] = serde_json::json!(true);
         let original = payload.to_string();
-        sqlx::query("INSERT OR REPLACE INTO app_settings VALUES (1, 1, ?)")
+        sqlx::query("INSERT OR REPLACE INTO app_settings VALUES (1, ?)")
             .bind(&original)
             .execute(database.pool())
             .await

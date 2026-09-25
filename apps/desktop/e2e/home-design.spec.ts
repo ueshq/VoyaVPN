@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import type {
-  AppSettingsV1,
+  AppSettings,
   ProfileDetails,
   RuntimeStatusResponse,
   TunStatus,
@@ -70,7 +70,7 @@ for (const { layout, language } of [
     await page.addInitScript(({ profile, language }) => {
       const state = window.__VOYA_SMOKE__.state as {
         profiles: ProfileDetails[];
-        settings: AppSettingsV1;
+        settings: AppSettings;
         runtime: RuntimeStatusResponse;
         tun: TunStatus;
       };
@@ -259,7 +259,7 @@ test("home points at the Rules page while global mode skips every rule", async (
   await page.addInitScript((profile) => {
     const state = window.__VOYA_SMOKE__.state as {
       profiles: ProfileDetails[];
-      settings: AppSettingsV1;
+      settings: AppSettings;
     };
     state.profiles = [profile];
     state.settings.proxy.trafficMode = "global";

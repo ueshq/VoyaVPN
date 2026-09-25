@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type {
-  AppSettingsV1,
+  AppSettings,
   ProfileDetails,
   RuntimeStatusResponse,
   Subscription,
@@ -243,7 +243,7 @@ for (const viewport of [
             const state = window.__VOYA_SMOKE__.state as {
               profiles: ProfileDetails[];
               subscriptions: Subscription[];
-              settings: AppSettingsV1;
+              settings: AppSettings;
             };
             state.settings.appearance.language = language;
             state.subscriptions = [source];

@@ -2,10 +2,8 @@
   "_comment": [
     "Current format of values voya-db serializes into SQLite TEXT columns.",
     "Optional protocol fields retain their current input defaults.",
-    "Breaking persistence changes require a new baseline, not a historical decoder.",
-    "The DTO version is separate from the database baseline identifier."
+    "Breaking persistence changes require a new baseline, not a historical decoder."
   ],
-  "schemaVersion": 1,
   "protocols": {
     "vmess": {
       "kind": "vmess",

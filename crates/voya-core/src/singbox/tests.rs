@@ -1139,32 +1139,6 @@ fn singbox_ruleset_generation_prefers_resolved_local_asset_paths() {
 }
 
 #[test]
-fn singbox_invalid_inline_custom_rulesets_are_reported() {
-    let (mut dns_context, _) = singbox_routing_dns_snapshot_contexts();
-    dns_context
-        .routing_item
-        .as_mut()
-        .expect("routing item")
-        .custom_ruleset_path4_singbox = "[{\"tag\":\"geosite-cn\"}]".to_string();
-
-    let error = generate_singbox_config(&dns_context)
-        .expect_err("missing custom ruleset fields should fail generation");
-    assert!(matches!(
-        error,
-        SingboxConfigError::CustomRulesetMissingRequiredFields { index: 0 }
-    ));
-
-    dns_context
-        .routing_item
-        .as_mut()
-        .expect("routing item")
-        .custom_ruleset_path4_singbox = "[{\"tag\":\"geosite-cn\"}".to_string();
-    let error = generate_singbox_config(&dns_context)
-        .expect_err("invalid custom ruleset JSON should fail generation");
-    assert!(matches!(error, SingboxConfigError::CustomRulesetJson(_)));
-}
-
-#[test]
 fn singbox_negative_ip_rules_use_and_and_skip_negative_only_rules() {
     let mut context = test_context(AppConfig::default(), base_remote_node());
     context.routing_item = Some(RoutingItem {

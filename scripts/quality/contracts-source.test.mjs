@@ -37,7 +37,7 @@ function fixture({ commands, events, types }) {
 describe("parseCommands", () => {
   it("unwraps the result envelope", () => {
     const parsed = parseCommands(
-      '\tloadAppSettings: () => typedError<AppSettingsV1, AppError>(__TAURI_INVOKE("load_app_settings")),',
+      '\tloadAppSettings: () => typedError<AppSettings, AppError>(__TAURI_INVOKE("load_app_settings")),',
     );
 
     expect(parsed).toEqual([
@@ -46,7 +46,7 @@ describe("parseCommands", () => {
         name: "loadAppSettings",
         params: [],
         parameters: "",
-        returnType: "AppSettingsV1",
+        returnType: "AppSettings",
         wireName: "load_app_settings",
       },
     ]);

@@ -1,5 +1,5 @@
 use sqlx::SqliteConnection;
-use voya_contracts::{AppSettingsV1, CURRENT_SCHEMA_VERSION};
+use voya_contracts::AppSettings;
 
 use crate::{
     executor::{repository_constructors, run_query, with_connection, RepositoryExecutor},
@@ -17,47 +17,34 @@ pub struct SettingsRepository<'executor> {
 repository_constructors!(SettingsRepository);
 
 impl<'executor> SettingsRepository<'executor> {
-    pub async fn load(&self) -> Result<AppSettingsV1> {
+    pub async fn load(&self) -> Result<AppSettings> {
         Ok(self.load_stored().await?.unwrap_or_default())
     }
 
     /// The stored settings, or `None` on a database that never saved any.
-    pub async fn load_stored(&self) -> Result<Option<AppSettingsV1>> {
-        let row = run_query!(
+    pub async fn load_stored(&self) -> Result<Option<AppSettings>> {
+        let payload = run_query!(
             self.executor,
-            sqlx::query_as::<_, (i64, String)>(
-                "SELECT schema_version, payload FROM app_settings WHERE id = 1",
-            ),
+            sqlx::query_scalar::<_, String>("SELECT payload FROM app_settings WHERE id = 1"),
             fetch_optional
         )?;
-        let Some((version, payload)) = row else {
-            return Ok(None);
-        };
-        if version != i64::from(CURRENT_SCHEMA_VERSION) {
-            return Err(schema_mismatch("app_settings", version));
-        }
-        let settings: AppSettingsV1 = serde_json::from_str(&payload).map_err(payload_error)?;
-        if settings.schema_version != CURRENT_SCHEMA_VERSION {
-            return Err(schema_mismatch(
-                "app_settings.payload",
-                i64::from(settings.schema_version),
-            ));
-        }
-        Ok(Some(settings))
+        payload
+            .map(|payload| serde_json::from_str(&payload).map_err(payload_error))
+            .transpose()
     }
 
-    pub async fn save(&self, settings: &AppSettingsV1) -> Result<()> {
-        let payload = validated_payload(settings)?;
+    pub async fn save(&self, settings: &AppSettings) -> Result<()> {
+        let payload = settings_payload(settings)?;
         run_query!(self.executor, settings_upsert_query(&payload), execute)?;
         Ok(())
     }
 
     pub async fn save_with_state(
         &self,
-        settings: &AppSettingsV1,
+        settings: &AppSettings,
         state: &AppStateRecord,
     ) -> Result<()> {
-        let payload = validated_payload(settings)?;
+        let payload = settings_payload(settings)?;
         with_connection(
             self.executor,
             &(payload.as_str(), state),
@@ -81,25 +68,8 @@ fn payload_error(source: serde_json::Error) -> DbError {
     }
 }
 
-fn validated_payload(settings: &AppSettingsV1) -> Result<String> {
-    if settings.schema_version != CURRENT_SCHEMA_VERSION {
-        return Err(schema_mismatch(
-            "app_settings.payload",
-            i64::from(settings.schema_version),
-        ));
-    }
+fn settings_payload(settings: &AppSettings) -> Result<String> {
     serde_json::to_string(settings).map_err(payload_error)
-}
-
-/// A stored or submitted settings version this build does not read.
-fn schema_mismatch(path: &str, found: i64) -> DbError {
-    DbError::UnsupportedDatabaseSchema {
-        path: path.into(),
-        found: Some(found),
-        expected: i64::from(CURRENT_SCHEMA_VERSION),
-        manual_reset_command:
-            "remove the Voya database file reported at startup, then restart VoyaVPN".to_string(),
-    }
 }
 
 fn settings_upsert_query(
@@ -107,14 +77,11 @@ fn settings_upsert_query(
 ) -> sqlx::query::Query<'_, sqlx::Sqlite, sqlx::sqlite::SqliteArguments> {
     sqlx::query(
         r#"
-            INSERT INTO app_settings (id, schema_version, payload)
-            VALUES (1, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                schema_version = excluded.schema_version,
-                payload = excluded.payload
+            INSERT INTO app_settings (id, payload)
+            VALUES (1, ?)
+            ON CONFLICT(id) DO UPDATE SET payload = excluded.payload
             "#,
     )
-    .bind(i64::from(CURRENT_SCHEMA_VERSION))
     .bind(payload)
 }
 

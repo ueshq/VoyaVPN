@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { voyaCommands } from "@voya/client/transport";
-import type { AppSettingsV1, AppearanceSettings } from "@voya/contracts";
+import type { AppSettings, AppearanceSettings } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 
@@ -14,7 +14,7 @@ export function useAppSettings() {
   const client = useQueryClient();
   const [previewOwner] = useState(() => Symbol("settings appearance"));
   const query = useQuery({ queryFn: () => voyaCommands().loadAppSettings(), queryKey: queryKeys.appSettings, refetchOnMount: "always" });
-  const draft = useSettingsDraft<AppSettingsV1>({
+  const draft = useSettingsDraft<AppSettings>({
     data: query.data,
     queryKey: queryKeys.appSettings,
     write: async (change) => {
@@ -48,7 +48,7 @@ export function useAppSettings() {
 
   useEffect(() => () => {
     const previewed = endUiPreferencesPreview(previewOwner);
-    const saved = client.getQueryData<AppSettingsV1>(queryKeys.appSettings);
+    const saved = client.getQueryData<AppSettings>(queryKeys.appSettings);
     if (!saved) return;
     // Leaving drops a preview whose save failed; say so instead of silently
     // switching the theme or language back.
@@ -79,4 +79,4 @@ export function useAppSettings() {
 
 export type AppSettingsController = ReturnType<typeof useAppSettings>;
 
-export type AppSettingsFormController = AppSettingsController & { settings: AppSettingsV1 };
+export type AppSettingsFormController = AppSettingsController & { settings: AppSettings };

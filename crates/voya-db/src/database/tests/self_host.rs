@@ -1,9 +1,9 @@
-use voya_contracts::{SelfHostConfig, SelfHostCredentialsV1, SelfHostRecordV1};
+use voya_contracts::{SelfHostConfig, SelfHostCredentials, SelfHostRecord};
 
 use super::*;
 
-fn stored_record() -> SelfHostRecordV1 {
-    SelfHostRecordV1 {
+fn stored_record() -> SelfHostRecord {
+    SelfHostRecord {
         config: SelfHostConfig {
             enabled: true,
             vless_port: 42_443,
@@ -11,13 +11,12 @@ fn stored_record() -> SelfHostRecordV1 {
             custom_address: Some("node.example".to_string()),
             ..SelfHostConfig::default()
         },
-        credentials: Some(SelfHostCredentialsV1 {
+        credentials: Some(SelfHostCredentials {
             vless_uuid: "bd3a7c33-98cb-4faf-b0b5-853e2707be3f".to_string(),
             reality_private_key: "sJ2_PK3Bd1use05cc9jK6gcEarznMKgXeVNz9Dt4VF0".to_string(),
             reality_short_id: "751998bfb8ed69a6".to_string(),
             shadowsocks_password: "2oYz+Tnxj/q1Y/fi4+DkkQ==".to_string(),
         }),
-        ..SelfHostRecordV1::default()
     }
 }
 
@@ -26,7 +25,7 @@ async fn self_host_defaults_until_saved_then_round_trips() {
     let database = Database::connect_in_memory().await.expect("database");
     assert_eq!(
         database.self_host().load().await.expect("load default"),
-        SelfHostRecordV1::default()
+        SelfHostRecord::default()
     );
 
     let record = stored_record();
@@ -50,16 +49,9 @@ async fn self_host_defaults_until_saved_then_round_trips() {
 }
 
 #[tokio::test]
-async fn self_host_rejects_unknown_versions_and_malformed_payloads() {
+async fn self_host_rejects_malformed_payloads() {
     let database = Database::connect_in_memory().await.expect("database");
-    let mut record = stored_record();
-    record.schema_version = CURRENT_SCHEMA_VERSION + 1;
-    assert!(matches!(
-        database.self_host().save(&record).await,
-        Err(DbError::UnsupportedDatabaseSchema { .. })
-    ));
-
-    sqlx::query("INSERT INTO self_host (id, schema_version, payload) VALUES (1, 1, '{\"schemaVersion\":1}')")
+    sqlx::query("INSERT INTO self_host (id, payload) VALUES (1, '{\"config\":{}}')")
         .execute(database.pool())
         .await
         .expect("insert malformed row");
@@ -83,7 +75,7 @@ async fn self_host_saves_inside_a_unit_of_work() {
     drop(unit_of_work);
     assert_eq!(
         database.self_host().load().await.expect("load"),
-        SelfHostRecordV1::default(),
+        SelfHostRecord::default(),
         "a dropped unit of work rolls the save back"
     );
 }

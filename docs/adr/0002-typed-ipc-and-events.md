@@ -52,7 +52,7 @@ Generated bindings are still owned by Rust `specta`/`tauri-specta` and must not 
 
 ## Amendment (2026-09): Retire Configurable Sources
 
-The Settings Sources tab and its configuration-template import command have been removed. `AppSettingsV1` no longer exposes `sources`; Geo/SRS downloads and subscription conversion use the existing built-in source defaults. Conversion remains conditional on the subscription’s conversion target. Existing routing and DNS records are preserved.
+The Settings Sources tab and its configuration-template import command have been removed. `AppSettings` no longer exposes `sources`; Geo/SRS downloads and subscription conversion use the existing built-in source defaults. Conversion remains conditional on the subscription’s conversion target. Existing routing and DNS records are preserved.
 
 The settings repository accepts only the current strict shape. Historical
 settings conversions have been removed along with the old migration chain;

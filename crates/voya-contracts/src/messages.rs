@@ -290,10 +290,6 @@ pub enum ValidationCode {
     TextTooLong,
     TextControlCharacters,
     TooManyItems,
-    UnsupportedSettingsSchema {
-        found: u32,
-        expected: u32,
-    },
     TunMtuOutOfRange {
         min: u32,
         max: u32,

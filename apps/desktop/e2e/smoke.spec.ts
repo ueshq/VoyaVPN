@@ -750,7 +750,7 @@ test("keeps traffic modes independent of the capture mode chosen in settings", a
   await page.evaluate(() => {
     const state = window.__VOYA_SMOKE__.state as {
       sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
-      settings: import("../src/ipc/bindings").AppSettingsV1;
+      settings: import("../src/ipc/bindings").AppSettings;
     };
     state.sysProxy.requestedMode = "unchanged";
     state.settings.network.systemProxy.mode = "unchanged";
@@ -795,7 +795,7 @@ test("keeps traffic modes independent of the capture mode chosen in settings", a
       () =>
         (
           window.__VOYA_SMOKE__.state as {
-            settings: import("../src/ipc/bindings").AppSettingsV1;
+            settings: import("../src/ipc/bindings").AppSettings;
           }
         ).settings.network.systemProxy.mode,
     );

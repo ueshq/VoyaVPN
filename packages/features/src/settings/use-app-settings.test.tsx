@@ -3,7 +3,7 @@ import { createTestQueryClient, renderHookWithQuery } from "../test/render";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@voya/client/query-keys";
-import type { AppSettingsV1 } from "@voya/contracts";
+import type { AppSettings } from "@voya/contracts";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { useDnsSettings } from "../dns/use-dns-settings";
@@ -82,7 +82,7 @@ describe("automatic app settings", () => {
     async (outcome) => {
       const { result, settle } = mount();
       await waitFor(() => expect(result.current.app.settings).not.toBeNull());
-      const pending = deferred<AppSettingsV1>();
+      const pending = deferred<AppSettings>();
       settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
       const update = (logLevel: string) =>
         act(() =>
@@ -155,7 +155,7 @@ describe("automatic app settings", () => {
   it("retains detached failures and their draft for retry on re-entry", async () => {
     const { result, unmount, settle, client } = mount();
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
-    const pending = deferred<AppSettingsV1>();
+    const pending = deferred<AppSettings>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
     act(() =>
       result.current.app.update((s) => ({
@@ -184,7 +184,7 @@ describe("automatic app settings", () => {
   it("previews appearance, persists after acknowledgement, and restores failed previews on leave", async () => {
     const { result, settle, unmount } = mount();
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
-    const pending = deferred<AppSettingsV1>();
+    const pending = deferred<AppSettings>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
     act(() =>
       result.current.app.setAppearance({ language: "en", theme: "dark" }),
@@ -202,8 +202,8 @@ describe("automatic app settings", () => {
   it("keeps the latest preview while an older appearance save completes", async () => {
     const { result, settle } = mount();
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
-    const first = deferred<AppSettingsV1>();
-    const second = deferred<AppSettingsV1>();
+    const first = deferred<AppSettings>();
+    const second = deferred<AppSettings>();
     settingsIpc.saveAppSettings
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);

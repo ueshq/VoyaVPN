@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { AppSettingsV1 } from "../src/ipc/bindings";
+import type { AppSettings } from "../src/ipc/bindings";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 const languages = [
@@ -18,7 +18,7 @@ for (const language of languages) {
       test(`empty Home opens the Nodes add menu (${language.locale}, ${colorScheme}, ${size.width})`, async ({ page }, testInfo) => {
         await installTauriSmokeMock(page);
         await page.addInitScript((locale) => {
-          (window.__VOYA_SMOKE__.state as { settings: AppSettingsV1 }).settings.appearance.language = locale;
+          (window.__VOYA_SMOKE__.state as { settings: AppSettings }).settings.appearance.language = locale;
         }, language.locale);
         await page.emulateMedia({ colorScheme, reducedMotion: "reduce" });
         await page.setViewportSize(size);

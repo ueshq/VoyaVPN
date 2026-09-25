@@ -352,7 +352,7 @@ impl AppServices {
 mod tests {
     use super::*;
     use crate::settings::save::{app_config_from_settings, settings_from_app_config};
-    use voya_contracts::{AppSettingsV1, SystemProxyType};
+    use voya_contracts::{AppSettings, SystemProxyType};
     use voya_core::SysProxyType;
 
     /// The plain persisted-settings projection, without the platform seeding
@@ -433,7 +433,7 @@ mod tests {
                 .expect("fresh");
             assert_eq!(fresh.tun_mode_item.enable_tun, fresh_tun, "{target_os:?}");
 
-            let mut stored = AppSettingsV1::default();
+            let mut stored = AppSettings::default();
             stored.network.tun.enabled = false;
             stored.network.system_proxy.mode = SystemProxyType::ForcedChange;
             services
@@ -481,7 +481,7 @@ mod tests {
             .expect("no locale");
         assert_eq!(unknown.ui_item.current_language, "en");
 
-        let mut stored = AppSettingsV1::default();
+        let mut stored = AppSettings::default();
         stored.appearance.language = "en".to_string();
         services
             .database
@@ -514,7 +514,7 @@ mod tests {
                 let services = AppServices::connect(&database_path, paths.clone())
                     .await
                     .expect("test database");
-                let mut expected = AppSettingsV1::default();
+                let mut expected = AppSettings::default();
                 expected.network.system_proxy.mode = mode;
                 expected.network.tun.enabled = tun_enabled;
                 expected.network.system_proxy.exceptions = "localhost,example.test".to_string();

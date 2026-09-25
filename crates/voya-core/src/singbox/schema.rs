@@ -2,10 +2,6 @@ use super::*;
 
 #[derive(Debug, Error)]
 pub enum SingboxConfigError {
-    #[error("invalid sing-box custom ruleset JSON: {0}")]
-    CustomRulesetJson(#[source] serde_json::Error),
-    #[error("sing-box custom ruleset at index {index} is missing tag, type, or format")]
-    CustomRulesetMissingRequiredFields { index: usize },
     #[error("sing-box node {remarks} has invalid port {port}")]
     InvalidNodePort { remarks: String, port: i32 },
     #[error("sing-box WireGuard node {remarks} is missing peer public key")]

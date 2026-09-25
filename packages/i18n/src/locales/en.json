@@ -1048,7 +1048,6 @@
     "tooManyItems": "Too many items",
     "tunMtuOutOfRange": "The VPN MTU must be between {{min}} and {{max}}",
     "unsupportedProtocolNetwork": "sing-box does not support {{protocol}} over {{network}}",
-    "unsupportedSettingsSchema": "Unsupported settings version {{found}}; this build expects {{expected}}",
     "unsupportedShadowsocksNetwork": "sing-box does not support Shadowsocks over {{network}}",
     "subscriptionReadOnly": "Subscription nodes are read-only. Update or edit the subscription source instead.",
     "integer": "Enter a whole number",

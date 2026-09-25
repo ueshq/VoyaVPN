@@ -316,15 +316,10 @@ function otherRouting(): Routing_Serialize {
 
 function routing(id: string, isActive: boolean, rules: RoutingRule[]): Routing_Serialize {
   return {
-    enabled: true,
-    icon: "",
     id,
     isActive,
-    locked: false,
     remarks: id,
     rules,
-    singboxDomainStrategy: "",
-    singboxRulesetPath: "",
     sort: 0,
   };
 }

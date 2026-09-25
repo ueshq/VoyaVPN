@@ -7,7 +7,7 @@ import type { Page } from "@playwright/test";
 // smoke assertion with a confusing message.
 import type {
   AppError,
-  AppSettingsV1,
+  AppSettings,
   AppUpdaterStatus,
   ConnectionIpResult,
   ConnectionModeStatus,
@@ -76,8 +76,8 @@ export async function installTauriSmokeMock(
       unhandled: string[];
       routings: Routing[];
       runtime: RuntimeStatusResponse;
-      settings: AppSettingsV1;
-      appliedSettings?: AppSettingsV1;
+      settings: AppSettings;
+      appliedSettings?: AppSettings;
       sysProxy: SystemProxyStatusResponse;
       tun: TunStatus;
       failNextCommand: string | null;
@@ -1111,17 +1111,8 @@ export async function installTauriSmokeMock(
       const existing =
         existingIndex >= 0 ? state.routings[existingIndex] : null;
       const routing = {
-        icon: String(input.icon ?? existing?.icon ?? ""),
-        singboxRulesetPath: String(
-          input.singboxRulesetPath ?? existing?.singboxRulesetPath ?? "",
-        ),
-        singboxDomainStrategy: String(
-          input.singboxDomainStrategy ?? existing?.singboxDomainStrategy ?? "",
-        ),
-        enabled: Boolean(input.enabled ?? existing?.enabled ?? true),
         id,
         isActive: Boolean(existing?.isActive ?? state.routings.length === 0),
-        locked: Boolean(input.locked ?? existing?.locked ?? false),
         remarks: String(input.remarks ?? existing?.remarks ?? "Smoke routing"),
         rules: existing?.rules ?? [],
         sort: Number(input.sort ?? existing?.sort ?? state.routings.length),
@@ -1172,22 +1163,16 @@ export async function installTauriSmokeMock(
       active: boolean,
     ): Routing {
       return {
-        icon: "",
-        singboxRulesetPath: "",
-        singboxDomainStrategy: "",
-        enabled: true,
         id,
         isActive: active,
-        locked: false,
         remarks,
         rules: [],
         sort: 0,
       };
     }
 
-    function makeAppSettings(): AppSettingsV1 {
+    function makeAppSettings(): AppSettings {
       return {
-        schemaVersion: 1,
         appearance: { language: "en", theme: "system" },
         behavior: {
           autoCheckIp: false,

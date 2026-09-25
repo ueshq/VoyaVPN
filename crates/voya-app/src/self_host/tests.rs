@@ -36,7 +36,7 @@ use voya_platform::{
     test_support::RecordingRunner,
 };
 
-use voya_contracts::{SelfHostRecordV1, SelfHostSelfTest, SelfHostSelfTestResult};
+use voya_contracts::{SelfHostRecord, SelfHostSelfTest, SelfHostSelfTestResult};
 
 use super::{
     HostTunnelState, LocalNetwork, NodeSelfTester, ReachabilityProbe, RestartBackoff, SelfHostDeps,
@@ -53,7 +53,7 @@ impl NodeSelfTester for PassingSelfTest {
     fn run<'a>(
         &'a self,
         _deps: &'a SelfHostDeps,
-        record: &'a SelfHostRecordV1,
+        record: &'a SelfHostRecord,
     ) -> BoxFuture<'a, SelfHostSelfTest> {
         let verdict = |enabled| {
             if enabled {

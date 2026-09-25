@@ -1,5 +1,5 @@
 import { vi, type Mock } from "vitest";
-import type { AppSettingsV1, DnsSettings } from "@voya/contracts";
+import type { AppSettings, DnsSettings } from "@voya/contracts";
 import { appErrorOfKind, IpcCommandError } from "@voya/client/errors";
 
 import { installFakeCommands } from "../test/backend";
@@ -58,7 +58,7 @@ export function resetSettingsBackend() {
     cloneJson(settings),
   );
   settingsIpc.saveAppSettings.mockImplementation(
-    async (next: AppSettingsV1) => {
+    async (next: AppSettings) => {
       settings = cloneJson(next);
       return cloneJson(settings);
     },

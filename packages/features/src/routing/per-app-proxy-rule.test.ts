@@ -32,15 +32,10 @@ function rule(overrides: Partial<RoutingRule> = {}): RoutingRule {
 
 function routing(rules: RoutingRule[]): Routing_Serialize {
   return {
-    enabled: true,
-    icon: "",
     id: "routing-1",
     isActive: true,
-    locked: false,
     remarks: "Active",
     rules,
-    singboxDomainStrategy: "",
-    singboxRulesetPath: "",
     sort: 0,
   };
 }

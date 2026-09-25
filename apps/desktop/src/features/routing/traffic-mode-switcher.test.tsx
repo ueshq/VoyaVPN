@@ -6,7 +6,7 @@ import { changeLocale } from "@voya/i18n";
 import { createAppQueryClient } from "@voya/client/query-client";
 import { renderWithQuery } from "@/test/render";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
-import type { AppSettingsV1, CoreState, TrafficModeResponse } from "@voya/contracts";
+import type { AppSettings, CoreState, TrafficModeResponse } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
@@ -127,7 +127,7 @@ describe("rules traffic mode", () => {
     // itself rather than handing React Query the function, which used to pass
     // its own second argument straight through.
     expect(mocks.save).toHaveBeenCalledWith("global");
-    expect(client.getQueryData<AppSettingsV1>(queryKeys.appSettings)?.proxy.trafficMode).toBe("global");
+    expect(client.getQueryData<AppSettings>(queryKeys.appSettings)?.proxy.trafficMode).toBe("global");
     expect(runtimeActionPending()).toBe(false);
   });
 

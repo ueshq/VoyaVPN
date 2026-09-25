@@ -5,7 +5,7 @@ use std::{
 };
 
 use sqlx::Row;
-use voya_contracts::{AppSettingsV1, SystemProxyType, TrafficMode, CURRENT_SCHEMA_VERSION};
+use voya_contracts::{AppSettings, SystemProxyType, TrafficMode};
 use voya_core::{
     ProfileExItem, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RuleType,
     RulesItem, ServerEndpoint, ServerStatItem, SubItem, SubMetadataItem, TlsMode, TlsSettings,
@@ -26,10 +26,10 @@ mod self_host;
 /// no version tag of their own, so a rename or a new required field is a silent
 /// persistence-schema change that only shows up as unreadable rows on a user's
 /// machine. Pinning them here turns that into a failing test.
-const PINNED_BLOB_SHAPES: &str = include_str!("../../fixtures/profile_blobs_v1.json");
+const PINNED_BLOB_SHAPES: &str = include_str!("../../fixtures/profile_blobs.json");
 
 /// The current strict settings payload, pinned for schema drift detection.
-const PINNED_SETTINGS_PAYLOAD: &str = include_str!("../../fixtures/app_settings_v1.json");
+const PINNED_SETTINGS_PAYLOAD: &str = include_str!("../../fixtures/app_settings.json");
 
 /// Canonical persisted and IPC spellings of each system-proxy mode.
 const PINNED_SYSTEM_PROXY_MODES: [(SystemProxyType, &str); 3] = [
@@ -133,7 +133,6 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
             "profile_ex_items",
             "profile_items",
             "routing_items",
-            "schema_metadata",
             "self_host",
             "server_stat_items",
             "subscription_metadata",
@@ -894,7 +893,7 @@ async fn routing_delete_many_rolls_back_on_mid_batch_error() {
 }
 
 #[tokio::test]
-async fn settings_and_active_state_persist_with_schema_version_one() {
+async fn settings_and_active_state_persist() {
     let database = Database::connect_in_memory()
         .await
         .expect("database test operation should succeed");
@@ -915,7 +914,7 @@ async fn settings_and_active_state_persist_with_schema_version_one() {
         .await
         .expect("routing should persist");
 
-    let mut settings = AppSettingsV1::default();
+    let mut settings = AppSettings::default();
     settings.appearance.language = "zh-Hans".to_string();
     database
         .settings()
@@ -946,11 +945,6 @@ async fn settings_and_active_state_persist_with_schema_version_one() {
         state.active_routing_id.as_deref(),
         Some(routing.id.as_str())
     );
-    let version: i64 = sqlx::query_scalar("SELECT version FROM schema_metadata WHERE id = 1")
-        .fetch_one(database.pool())
-        .await
-        .expect("schema version should exist");
-    assert_eq!(version, i64::from(CURRENT_SCHEMA_VERSION));
 }
 
 #[tokio::test]
@@ -959,7 +953,7 @@ async fn unit_of_work_commits_business_rows_settings_and_state_together() {
         .await
         .expect("database test operation should succeed");
     let profile = sample_profile();
-    let mut settings = AppSettingsV1::default();
+    let mut settings = AppSettings::default();
     settings.appearance.language = "zh-Hant".to_string();
     let state = AppStateRecord {
         active_profile_id: Some(profile.index_id.clone()),
@@ -1012,7 +1006,7 @@ async fn dropped_unit_of_work_rolls_back_all_staged_rows() {
         .await
         .expect("database test operation should succeed");
     let profile = sample_profile();
-    let mut settings = AppSettingsV1::default();
+    let mut settings = AppSettings::default();
     settings.appearance.language = "zh-Hant".to_string();
     let state = AppStateRecord {
         active_profile_id: Some(profile.index_id.clone()),
@@ -1043,7 +1037,7 @@ async fn dropped_unit_of_work_rolls_back_all_staged_rows() {
             .load()
             .await
             .expect("settings should load"),
-        AppSettingsV1::default()
+        AppSettings::default()
     );
     assert_eq!(
         database
@@ -1073,7 +1067,7 @@ async fn unit_of_work_failure_rolls_back_business_rows_and_config() {
     .await
     .expect("failure trigger should be created");
     let profile = sample_profile();
-    let mut settings = AppSettingsV1::default();
+    let mut settings = AppSettings::default();
     settings.appearance.language = "zh-Hant".to_string();
     let unit_of_work = database.begin().await.expect("transaction should begin");
     unit_of_work
@@ -1100,7 +1094,7 @@ async fn unit_of_work_failure_rolls_back_business_rows_and_config() {
             .load()
             .await
             .expect("settings should load"),
-        AppSettingsV1::default()
+        AppSettings::default()
     );
 }
 
@@ -1151,7 +1145,7 @@ async fn unit_of_work_business_write_failure_rolls_back_prior_rows() {
             .load()
             .await
             .expect("settings should load"),
-        AppSettingsV1::default()
+        AppSettings::default()
     );
 }
 
@@ -1174,7 +1168,7 @@ async fn unit_of_work_commit_failure_rolls_back_rows_settings_and_state() {
         .await
         .expect("deferred foreign key violation should be staged");
     }
-    let mut settings = AppSettingsV1::default();
+    let mut settings = AppSettings::default();
     settings.appearance.language = "zh-Hant".to_string();
     unit_of_work
         .settings()
@@ -1196,7 +1190,7 @@ async fn unit_of_work_commit_failure_rolls_back_rows_settings_and_state() {
             .load()
             .await
             .expect("settings should load"),
-        AppSettingsV1::default()
+        AppSettings::default()
     );
     assert_eq!(
         database
@@ -1424,7 +1418,7 @@ async fn interrupted_first_launch_is_healed_by_the_migrator() {
             .load()
             .await
             .expect("settings should load"),
-        AppSettingsV1::default()
+        AppSettings::default()
     );
 
     database.close().await;
@@ -1856,7 +1850,7 @@ async fn settings_save_with_state_on_the_pool_is_all_or_nothing() {
     .await
     .expect("failure trigger should be created");
 
-    let mut settings = AppSettingsV1::default();
+    let mut settings = AppSettings::default();
     settings.appearance.language = "pt".to_string();
     assert!(database
         .settings()
@@ -1877,7 +1871,7 @@ async fn settings_save_with_state_on_the_pool_is_all_or_nothing() {
             .load()
             .await
             .expect("settings should load"),
-        AppSettingsV1::default(),
+        AppSettings::default(),
         "the settings half of the pair must roll back with the state half"
     );
     assert_eq!(
@@ -1891,88 +1885,25 @@ async fn settings_save_with_state_on_the_pool_is_all_or_nothing() {
 }
 
 #[tokio::test]
-async fn settings_reject_a_schema_version_this_build_cannot_read() {
-    let database = Database::connect_in_memory()
-        .await
-        .expect("database test operation should succeed");
-    database
-        .settings()
-        .save(&AppSettingsV1::default())
-        .await
-        .expect("settings should persist");
-    let future_version = i64::from(CURRENT_SCHEMA_VERSION) + 1;
-
-    // The stored column disagrees with this build.
-    sqlx::query("UPDATE app_settings SET schema_version = ? WHERE id = 1")
-        .bind(future_version)
-        .execute(database.pool())
-        .await
-        .expect("the version CHECK permits detecting unsupported settings versions");
-    match database.settings().load().await {
-        Err(DbError::UnsupportedDatabaseSchema {
-            found, expected, ..
-        }) => {
-            assert_eq!(found, Some(future_version));
-            assert_eq!(expected, i64::from(CURRENT_SCHEMA_VERSION));
-        }
-        other => panic!("unexpected result: {other:?}"),
-    }
-
-    // The column agrees but the payload inside it does not.
-    let stored: String = sqlx::query_scalar("SELECT payload FROM app_settings WHERE id = 1")
-        .fetch_one(database.pool())
-        .await
-        .expect("the payload should be readable");
-    let mut payload: serde_json::Value =
-        serde_json::from_str(&stored).expect("the stored payload should be JSON");
-    payload["schemaVersion"] = serde_json::json!(future_version);
-    sqlx::query("UPDATE app_settings SET schema_version = ?, payload = ? WHERE id = 1")
-        .bind(i64::from(CURRENT_SCHEMA_VERSION))
-        .bind(payload.to_string())
-        .execute(database.pool())
-        .await
-        .expect("the tampered payload should be storable");
-    match database.settings().load().await {
-        Err(DbError::UnsupportedDatabaseSchema { found, .. }) => {
-            assert_eq!(found, Some(future_version));
-        }
-        other => panic!("unexpected result: {other:?}"),
-    }
-
-    // And this build refuses to write a version it cannot read back.
-    let future_settings = AppSettingsV1 {
-        schema_version: CURRENT_SCHEMA_VERSION + 1,
-        ..AppSettingsV1::default()
-    };
-    assert!(matches!(
-        database.settings().save(&future_settings).await,
-        Err(DbError::UnsupportedDatabaseSchema { .. })
-    ));
-}
-
-#[tokio::test]
 async fn current_settings_payload_matches_the_pinned_shape() {
     let database = Database::connect_in_memory()
         .await
         .expect("database test operation should succeed");
-    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
-        .bind(i64::from(CURRENT_SCHEMA_VERSION))
+    sqlx::query("INSERT INTO app_settings (id, payload) VALUES (1, ?)")
         .bind(PINNED_SETTINGS_PAYLOAD)
         .execute(database.pool())
         .await
         .expect("the pinned payload should be storable");
 
-    let loaded = database
+    database
         .settings()
         .load()
         .await
         .expect("the current settings fixture must load");
-    assert_eq!(loaded.schema_version, CURRENT_SCHEMA_VERSION);
 
     let pinned: serde_json::Value =
         serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("the pinned payload should be JSON");
-    let current =
-        serde_json::to_value(AppSettingsV1::default()).expect("settings should serialize");
+    let current = serde_json::to_value(AppSettings::default()).expect("settings should serialize");
     assert_eq!(
         json_shape(&pinned),
         json_shape(&current),
@@ -1988,8 +1919,7 @@ async fn settings_payload_with_an_unknown_key_is_still_rejected() {
     let mut payload: serde_json::Value =
         serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("the pinned payload should be JSON");
     payload["dns"]["neverAContractKey"] = serde_json::json!(true);
-    sqlx::query("INSERT INTO app_settings (id, schema_version, payload) VALUES (1, ?, ?)")
-        .bind(i64::from(CURRENT_SCHEMA_VERSION))
+    sqlx::query("INSERT INTO app_settings (id, payload) VALUES (1, ?)")
         .bind(payload.to_string())
         .execute(database.pool())
         .await
@@ -2018,7 +1948,7 @@ fn typed_settings_enums_keep_their_persisted_strings() {
 }
 
 /// A typed value and a stored value must round-trip to identical JSON.
-fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&mut AppSettingsV1)) {
+fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&mut AppSettings)) {
     let mut expected: serde_json::Value =
         serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("the pinned payload should be JSON");
     let mut cursor = &mut expected;
@@ -2030,7 +1960,7 @@ fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&m
     *cursor = serde_json::Value::String(stored.to_string());
 
     // Decode the canonical stored spelling.
-    let loaded: AppSettingsV1 = serde_json::from_value(expected.clone()).unwrap_or_else(|error| {
+    let loaded: AppSettings = serde_json::from_value(expected.clone()).unwrap_or_else(|error| {
         panic!(
             "`{}` = \"{stored}\" should still deserialize: {error}",
             path.join(".")
@@ -2047,7 +1977,7 @@ fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&m
     );
 
     // The typed variant produces the same literal from scratch.
-    let mut settings = AppSettingsV1::default();
+    let mut settings = AppSettings::default();
     set(&mut settings);
     let fresh = serde_json::to_value(&settings).expect("settings should serialize");
     let mut cursor = &fresh;
@@ -2066,11 +1996,6 @@ fn assert_pinned_settings_value(path: &[&str], stored: &str, set: impl FnOnce(&m
 fn stored_blob_shapes_match_the_pinned_fixture() {
     let fixture: serde_json::Value =
         serde_json::from_str(PINNED_BLOB_SHAPES).expect("the pinned blob fixture should be JSON");
-    assert_eq!(
-        fixture["schemaVersion"],
-        serde_json::json!(CURRENT_SCHEMA_VERSION),
-        "the pinned blob shapes belong to a different schema version"
-    );
 
     let protocols = sample_protocols();
     let pinned_protocols = fixture["protocols"]
@@ -2084,7 +2009,7 @@ fn stored_blob_shapes_match_the_pinned_fixture() {
     for protocol in &protocols {
         let key = protocol_fixture_key(protocol);
         let Some(pinned) = pinned_protocols.get(key) else {
-            panic!("`{key}` should be pinned in fixtures/profile_blobs_v1.json");
+            panic!("`{key}` should be pinned in fixtures/profile_blobs.json");
         };
         assert_eq!(
             &serde_json::from_str::<serde_json::Value>(
@@ -2114,7 +2039,7 @@ fn stored_blob_shapes_match_the_pinned_fixture() {
     for transport in &transports {
         let key = transport_fixture_key(transport);
         let Some(pinned) = pinned_transports.get(key) else {
-            panic!("`{key}` should be pinned in fixtures/profile_blobs_v1.json");
+            panic!("`{key}` should be pinned in fixtures/profile_blobs.json");
         };
         assert_eq!(
             &serde_json::from_str::<serde_json::Value>(
@@ -2722,7 +2647,7 @@ fn sample_protocols() -> Vec<ProfileProtocol> {
 }
 
 /// Exhaustive on purpose: a new variant fails to compile here until it has a
-/// pinned entry in `fixtures/profile_blobs_v1.json`.
+/// pinned entry in `fixtures/profile_blobs.json`.
 fn protocol_fixture_key(protocol: &ProfileProtocol) -> &'static str {
     match protocol {
         ProfileProtocol::Vmess { .. } => "vmess",

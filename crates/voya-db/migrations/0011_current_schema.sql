@@ -2,7 +2,6 @@
 
 CREATE TABLE app_settings (
     id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version >= 1),
     payload TEXT NOT NULL
 );
 
@@ -67,22 +66,11 @@ CREATE TABLE routing_items (
     id TEXT PRIMARY KEY NOT NULL,
     remarks TEXT NOT NULL DEFAULT '',
     rule_set TEXT NOT NULL DEFAULT '[]',
-    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-    locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
-    custom_icon TEXT NOT NULL DEFAULT '',
-    custom_ruleset_path4_singbox TEXT NOT NULL DEFAULT '',
-    domain_strategy4_singbox TEXT NOT NULL DEFAULT '',
     sort INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE schema_metadata (
-    id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
-    version INTEGER NOT NULL CHECK (version >= 1)
 );
 
 CREATE TABLE self_host (
     id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
-    schema_version INTEGER NOT NULL CHECK (schema_version >= 1),
     payload TEXT NOT NULL
 );
 
@@ -139,5 +127,4 @@ BEGIN
     UPDATE profile_ex_items SET country_code = NULL, delay = 0, message = NULL, ip_info = NULL WHERE index_id = NEW.index_id;
 END;
 
-INSERT INTO schema_metadata (id, version) VALUES (1, 1);
 INSERT INTO app_state (id, active_profile_id, active_routing_id, active_group_id) VALUES (1, NULL, NULL, NULL);

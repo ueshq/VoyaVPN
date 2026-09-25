@@ -22,7 +22,7 @@
 pub mod apply;
 pub mod save;
 
-use voya_contracts::AppSettingsV1;
+use voya_contracts::AppSettings;
 use voya_core::AppConfig;
 
 use crate::{
@@ -42,7 +42,7 @@ pub struct SettingsSaveOutcome {
     pub config: AppConfig,
     /// The committed configuration read back through the contract, so the
     /// caller returns exactly what was stored rather than what was requested.
-    pub settings: AppSettingsV1,
+    pub settings: AppSettings,
     /// Whether the running core must be restarted, the system proxy re-applied,
     /// or nothing done at all.
     pub runtime_action: SettingsRuntimeAction,
@@ -78,7 +78,7 @@ pub enum SettingsSaveError<E> {
 pub async fn save_app_settings<A>(
     coordinator: &ConfigMutationCoordinator,
     side_effects: &A,
-    settings: &AppSettingsV1,
+    settings: &AppSettings,
 ) -> Result<SettingsSaveOutcome, SettingsSaveError<A::Error>>
 where
     A: SettingsSideEffectAdapter,

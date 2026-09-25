@@ -1,5 +1,5 @@
 import type {
-  AppSettingsV1,
+  AppSettings,
   DnsSettings,
   ProxyConnectionItem,
   ProxyConnectionsSnapshot,
@@ -28,7 +28,7 @@ export type MockSeed = {
   subscriptions: Subscription[];
   subscriptionMetadata: SubscriptionMetadata[];
   policyGroups: PolicyGroupEntry[];
-  settings: AppSettingsV1;
+  settings: AppSettings;
   runtime: RuntimeStatusResponse;
   sysProxy: SystemProxyStatusResponse;
   tun: TunStatus;
@@ -135,7 +135,7 @@ function makeDnsSettings(): DnsSettings {
   };
 }
 
-function makeAppSettings(): AppSettingsV1 {
+function makeAppSettings(): AppSettings {
   return {
     appearance: { language: "en", theme: "system" },
     behavior: {
@@ -186,7 +186,6 @@ function makeAppSettings(): AppSettingsV1 {
     },
     proxy: { trafficMode: "rule" },
     routing: { domainStrategy: "AsIs" },
-    schemaVersion: 1,
     speedTest: {
       delayIntervalSeconds: null,
       ipLookupUrl: "",
@@ -276,15 +275,10 @@ export function makeRouting(
   overrides: Partial<Routing_Serialize> = {},
 ): Routing_Serialize {
   return {
-    enabled: true,
-    icon: "",
     id: `routing-${index}`,
     isActive: index === 0,
-    locked: false,
     remarks: index === 0 ? "Default" : `Routing ${index}`,
     rules: [],
-    singboxDomainStrategy: "AsIs",
-    singboxRulesetPath: "",
     sort: index,
     ...overrides,
   };

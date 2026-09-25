@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { AppSettingsV1, ProfileDetails } from "../src/ipc/bindings";
+import type { AppSettings, ProfileDetails } from "../src/ipc/bindings";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 const profiles: ProfileDetails[] = Array.from({ length: 5000 }, (_, index) => ({
@@ -18,7 +18,7 @@ test("profile cards stay usable across themes, window sizes and a 5k node list",
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await installTauriSmokeMock(page, "macos");
   await page.addInitScript((entries) => {
-    const state = window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[]; settings: AppSettingsV1 };
+    const state = window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[]; settings: AppSettings };
     state.profiles = entries;
     state.settings.appearance.language = "zh-Hans";
     localStorage.setItem("voyavpn.profileColumns", JSON.stringify({ state: { columnVisibility: { remarks: false, delay: false } } }));

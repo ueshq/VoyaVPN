@@ -58,7 +58,7 @@ impl Harness {
     }
 }
 
-fn baseline() -> AppSettingsV1 {
+fn baseline() -> AppSettings {
     settings_from_app_config(&AppConfig::default())
 }
 
@@ -132,25 +132,6 @@ async fn saving_the_same_settings_reports_no_change() {
     assert_eq!(outcome.runtime_action, SettingsRuntimeAction::None);
 }
 
-#[tokio::test]
-async fn an_unsupported_schema_is_rejected_before_anything_runs() {
-    let harness = Harness::new().await;
-    let side_effects = RecordingSideEffects::default();
-    let mut settings = baseline();
-    settings.schema_version += 1;
-    settings.behavior.autostart = true;
-
-    let error = save_app_settings(&harness.coordinator, &side_effects, &settings)
-        .await
-        .expect_err("unsupported schema");
-
-    assert!(matches!(error, SettingsSaveError::Validation(_)));
-    assert!(side_effects.calls().is_empty());
-    assert!(!harness.stored().gui_item.auto_run);
-}
-
-/// A refused autostart change must attempt to restore the OS entry and leave
-/// the stored configuration untouched.
 #[tokio::test]
 async fn a_refused_side_effect_rolls_back_and_persists_nothing() {
     let harness = Harness::new().await;

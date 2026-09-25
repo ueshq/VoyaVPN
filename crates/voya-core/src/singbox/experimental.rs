@@ -45,22 +45,10 @@ pub(super) fn convert_geo_to_ruleset(
         return Ok(());
     }
 
-    let custom_rulesets = parse_inline_custom_rulesets(
-        context
-            .routing_item
-            .as_ref()
-            .map(|routing| routing.custom_ruleset_path4_singbox.as_str()),
-    )?;
     config.route.rule_set = Some(
         unique_rule_sets
             .into_iter()
-            .map(|tag| {
-                custom_rulesets
-                    .iter()
-                    .find(|ruleset| ruleset.tag.as_deref() == Some(tag.as_str()))
-                    .cloned()
-                    .unwrap_or_else(|| ruleset_for_tag(&tag, context))
-            })
+            .map(|tag| ruleset_for_tag(&tag, context))
             .collect(),
     );
     Ok(())
@@ -89,25 +77,6 @@ fn convert_rule_geo_to_ruleset(rule: &mut SingboxRule, rule_sets: &mut Vec<Strin
             convert_rule_geo_to_ruleset(nested_rule, rule_sets);
         }
     }
-}
-
-fn parse_inline_custom_rulesets(
-    value: Option<&str>,
-) -> Result<Vec<SingboxRuleset>, SingboxConfigError> {
-    let Some(value) = value.map(str::trim).filter(|value| value.starts_with('[')) else {
-        return Ok(Vec::new());
-    };
-    let rulesets = serde_json::from_str::<Vec<SingboxRuleset>>(value)
-        .map_err(SingboxConfigError::CustomRulesetJson)?;
-    for (index, ruleset) in rulesets.iter().enumerate() {
-        if nonempty_str(ruleset.tag.as_deref()).is_none()
-            || nonempty_str(ruleset.r#type.as_deref()).is_none()
-            || nonempty_str(ruleset.format.as_deref()).is_none()
-        {
-            return Err(SingboxConfigError::CustomRulesetMissingRequiredFields { index });
-        }
-    }
-    Ok(rulesets)
 }
 
 fn ruleset_for_tag(tag: &str, context: &CoreConfigContext) -> SingboxRuleset {

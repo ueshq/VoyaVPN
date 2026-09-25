@@ -118,7 +118,7 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::SpeedtestRunResult>()
         .typ::<voya_contracts::SpeedtestStatus>()
         .typ::<voya_contracts::ResourceUpdateFile>()
-        .typ::<voya_contracts::AppSettingsV1>()
+        .typ::<voya_contracts::AppSettings>()
         .typ::<voya_contracts::AppearanceSettings>()
         .typ::<voya_contracts::AutostartStatus>()
         .typ::<voya_contracts::AutostartPlatform>()

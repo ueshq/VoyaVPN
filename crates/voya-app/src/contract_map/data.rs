@@ -170,11 +170,6 @@ pub fn routing_to_contract(item: RoutingItem) -> RoutingContract {
         id: item.id,
         remarks: item.remarks,
         rules: item.rule_set.into_iter().map(rule_to_contract).collect(),
-        enabled: item.enabled,
-        locked: item.locked,
-        icon: item.custom_icon,
-        singbox_ruleset_path: item.custom_ruleset_path4_singbox,
-        singbox_domain_strategy: item.domain_strategy4_singbox,
         sort: item.sort,
         is_active: item.is_active,
     }
@@ -186,11 +181,6 @@ pub fn routing_from_contract(item: RoutingContract) -> RoutingItem {
         id: item.id,
         remarks: item.remarks,
         rule_set: item.rules.into_iter().map(rule_from_contract).collect(),
-        enabled: item.enabled,
-        locked: item.locked,
-        custom_icon: item.icon,
-        custom_ruleset_path4_singbox: item.singbox_ruleset_path,
-        domain_strategy4_singbox: item.singbox_domain_strategy,
         sort: item.sort,
         is_active: item.is_active,
     }

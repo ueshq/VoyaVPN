@@ -568,37 +568,15 @@ pub struct SubscriptionUpdateOutcome {
     pub diagnostic: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct RoutingItem {
     pub id: String,
     pub remarks: String,
     pub rule_set: Vec<RulesItem>,
-    pub enabled: bool,
-    pub locked: bool,
-    pub custom_icon: String,
-    pub custom_ruleset_path4_singbox: String,
-    pub domain_strategy4_singbox: String,
     pub sort: i32,
     #[serde(default, skip_deserializing)]
     pub is_active: bool,
-}
-
-impl Default for RoutingItem {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            remarks: String::new(),
-            rule_set: Vec::new(),
-            enabled: true,
-            locked: false,
-            custom_icon: String::new(),
-            custom_ruleset_path4_singbox: String::new(),
-            domain_strategy4_singbox: String::new(),
-            sort: 0,
-            is_active: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
