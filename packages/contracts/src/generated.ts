@@ -222,6 +222,8 @@ export type VoyaEventName = keyof VoyaEventChannels;
 export type VoyaEventPayload<Name extends VoyaEventName> = VoyaEventChannels[Name]["payload"];
 
 /* Types */
+export type AppChannel = AppEvent;
+
 /**
  *  One failed IPC command.
  * 
@@ -577,6 +579,9 @@ export type InboundSettings = {
 	secondaryPortEnabled: boolean,
 };
 
+export type InvalidateChannel = InvalidateEvent;
+
+/**  Query caches the frontend must drop. */
 export type InvalidateEvent = {
 	keys: QueryInvalidation[],
 };
@@ -1467,13 +1472,13 @@ export type TrafficModeResponse = {
 	mode: TrafficMode,
 };
 
+export type TransientStreamChannel = TransientStreamEvent;
+
 /**
  *  Live state that is not a query cache.
  * 
  *  The three status variants carry the very structs their commands return, so
  *  the frontend stores an event payload and a command result interchangeably.
- *  They used to be narrower parallel DTOs, which cost a converter in the shell
- *  and another on the frontend for each one.
  */
 export type TransientStreamEvent = 
 /**

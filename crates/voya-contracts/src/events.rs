@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{LogLineBody, NoticeCode, ServerStatItem};
+use crate::{
+    LogLineBody, NoticeCode, ProxyConnectionsSnapshot, ProxyMonitorStatus, RuntimeStatusResponse,
+    ServerStatItem, SpeedtestResult, SystemProxyStatusResponse, TunStatus,
+};
 
 /// One frontend query cache, named on the wire.
 ///
@@ -127,4 +130,48 @@ pub enum ShellTabTarget {
     Profiles,
     ProxyConnections,
     Logs,
+}
+
+// The three event channels. Each host puts these payloads on the wire under
+// its own channel names (`invalidate-event`, `transient-stream-event`,
+// `app-event`); the desktop wraps them for tauri-specta, a phone serializes
+// them as they are. Declaring them once here is what keeps the two hosts'
+// payloads from drifting.
+
+/// Query caches the frontend must drop.
+#[derive(Debug, Clone, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InvalidateEvent {
+    pub keys: Vec<QueryInvalidation>,
+}
+
+/// Live state that is not a query cache.
+///
+/// The three status variants carry the very structs their commands return, so
+/// the frontend stores an event payload and a command result interchangeably.
+#[derive(Debug, Clone, Deserialize, Serialize, Type)]
+#[serde(tag = "kind", content = "payload", rename_all = "camelCase")]
+pub enum TransientStreamEvent {
+    /// Logs-panel lines in the order they were written, delivered at most
+    /// once per batch window instead of one event per line.
+    LogLines(Vec<LogLineEvent>),
+    CoreState(RuntimeStatusResponse),
+    Statistics(StatisticsSnapshot),
+    SysProxyChanged(SystemProxyStatusResponse),
+    TunChanged(TunStatus),
+    ProxyMonitorStatus(ProxyMonitorStatus),
+    ProxyConnections(ProxyConnectionsSnapshot),
+    /// Speedtest results in the order they were reached. A run's start and a
+    /// cancel settle every selected node at once and arrive as one event; a
+    /// measured node arrives on its own.
+    SpeedtestResults(Vec<SpeedtestResult>),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Type)]
+#[serde(tag = "kind", content = "payload", rename_all = "camelCase")]
+pub enum AppEvent {
+    Notice(AppNotice),
+    SelectTab(ShellTabTarget),
+    /// The main window was closed while the close action is "ask".
+    CloseRequested,
 }

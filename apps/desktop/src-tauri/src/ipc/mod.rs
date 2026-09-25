@@ -137,8 +137,8 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::WindowChromeConfig>()
         .commands(ipc_commands())
         .events(collect_events![
-            events::InvalidateEvent,
-            events::TransientStreamEvent,
-            events::AppEvent,
+            events::InvalidateChannel,
+            events::TransientStreamChannel,
+            events::AppChannel,
         ])
 }

@@ -1,7 +1,7 @@
 mod screen_qr;
 use std::collections::BTreeSet;
 
-use tauri_specta::Event;
+use crate::ipc::events::Emit;
 use voya_app::autostart::AutostartManager;
 use voya_app::config_mutation::{AppConfig, CommittedMutation};
 use voya_app::contract_map::{
@@ -37,11 +37,12 @@ use voya_platform::{
     sysproxy::SystemProxyStatus,
 };
 
-use super::events::{
-    next_log_line_id, AppEvent, CoreState, InvalidateEvent, LogLevel, LogLineBody, LogLineEvent,
-    QueryInvalidation, TransientStreamEvent,
-};
+use super::events::next_log_line_id;
 use crate::AppState;
+use voya_contracts::{
+    AppEvent, CoreState, InvalidateEvent, LogLevel, LogLineBody, LogLineEvent, QueryInvalidation,
+    TransientStreamEvent,
+};
 
 const IPC_ID_MAX_CHARS: usize = 128;
 const IPC_PROXY_URL_MAX_CHARS: usize = 2048;

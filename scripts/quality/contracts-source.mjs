@@ -25,9 +25,8 @@
  * command, so a generic transport can rebuild Tauri's named-argument object
  * from a positional call), `commands.json` (the wire names alone, which the
  * Rust mobile host reads to prove it has taken a decision about every one) and
- * `events.json` (each channel's wire name and the `kind` discriminants its
- * payload can carry, which the mobile host's own event enums are checked
- * against — it cannot depend on the Tauri shell where they are declared).
+ * `events.json` (each channel's wire name and payload type, which the mobile
+ * host checks its own channel names against).
  */
 
 const COMMANDS_MARKER = "/** Commands */";
@@ -219,13 +218,23 @@ export function parseCommands(commandsBlock) {
 
 const EVENT_PATTERN = /^\t([A-Za-z0-9_]+): makeEvent<([A-Za-z0-9_]+)>\("([^"]+)"\)/;
 
-export function parseEvents(eventsBlock) {
+/**
+ * The shell wraps each contract payload in a transparent newtype for
+ * tauri-specta, which surfaces as `export type AppChannel = AppEvent;`. The
+ * payload a transport decodes is the contract type behind that alias.
+ */
+function resolveAlias(typeName, typesBlock) {
+  const alias = new RegExp(`^export type ${typeName} = ([A-Za-z0-9_]+);$`, "m").exec(typesBlock);
+  return alias ? alias[1] : typeName;
+}
+
+export function parseEvents(eventsBlock, typesBlock = "") {
   const events = [];
 
   for (const line of eventsBlock.split("\n")) {
     const match = EVENT_PATTERN.exec(line);
     if (match) {
-      events.push({ key: match[1], payloadType: match[2], channel: match[3] });
+      events.push({ key: match[1], payloadType: resolveAlias(match[2], typesBlock), channel: match[3] });
     }
   }
 
@@ -332,35 +341,20 @@ export function generateCommandWire(bindingsSource) {
   return renderCommandWire(parseCommands(sliceBetween(bindingsSource, COMMANDS_MARKER, EVENTS_MARKER)));
 }
 
-const KIND_PATTERN = /\{\s*kind:\s*"([A-Za-z0-9]+)"/g;
-
 /**
- * Each channel's wire name and the `kind` values its payload can take.
+ * Each channel's wire name and payload type.
  *
- * `crates/voya-mobile-ffi` declares the same three payload enums — it cannot
- * reuse the shell's, which carry `tauri_specta::Event` and live behind an
- * orphan rule — and reads this file to prove neither side has drifted. A
- * payload that is a plain struct rather than a tagged union has no kinds, and
- * says so with an empty list.
+ * The payloads themselves are `voya-contracts` types both hosts serialize, so
+ * `crates/voya-mobile-ffi` only has its channel names left to check here.
  */
 function renderEventShapes(events, typesBlock) {
   const shapes = Object.fromEntries(
     events.map((event) => {
-      const declaration = new RegExp(
-        `export type ${event.payloadType}\\s*=([\\s\\S]*?);\\n`,
-      ).exec(typesBlock);
-      if (!declaration) {
+      if (!new RegExp(`^export type ${event.payloadType}\\b`, "m").test(typesBlock)) {
         throw new Error(`Event payload ${event.payloadType} is not declared in bindings.ts`);
       }
 
-      return [
-        event.key,
-        {
-          channel: event.channel,
-          kinds: [...declaration[1].matchAll(KIND_PATTERN)].map((match) => match[1]),
-          payload: event.payloadType,
-        },
-      ];
+      return [event.key, { channel: event.channel, payload: event.payloadType }];
     }),
   );
 
@@ -368,9 +362,10 @@ function renderEventShapes(events, typesBlock) {
 }
 
 export function generateEventShapes(bindingsSource) {
+  const typesBlock = sliceBetween(bindingsSource, TYPES_MARKER, RUNTIME_MARKER);
   return renderEventShapes(
-    parseEvents(sliceBetween(bindingsSource, EVENTS_MARKER, TYPES_MARKER)),
-    sliceBetween(bindingsSource, TYPES_MARKER, RUNTIME_MARKER),
+    parseEvents(sliceBetween(bindingsSource, EVENTS_MARKER, TYPES_MARKER), typesBlock),
+    typesBlock,
   );
 }
 
@@ -384,7 +379,7 @@ export function generateContractsSource(bindingsSource) {
   const typesBlock = sliceBetween(bindingsSource, TYPES_MARKER, RUNTIME_MARKER);
 
   const commands = parseCommands(commandsBlock);
-  const events = parseEvents(eventsBlock);
+  const events = parseEvents(eventsBlock, typesBlock);
 
   return [
     HEADER,

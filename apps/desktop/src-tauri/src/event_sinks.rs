@@ -61,7 +61,7 @@ impl SelfHostEventSink for TauriSelfHostEventSink {
         code: voya_contracts::NoticeCode,
         detail: Option<String>,
     ) {
-        let notice = ipc::events::AppEvent::Notice(voya_contracts::AppNotice {
+        let notice = voya_contracts::AppEvent::Notice(voya_contracts::AppNotice {
             level,
             code,
             detail,
@@ -78,7 +78,7 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
             let error = redact_urls(error);
             ipc::commands::emit_app_log(
                 &self.app,
-                ipc::events::LogLevel::Warn,
+                voya_contracts::LogLevel::Warn,
                 voya_contracts::LogCode::SubscriptionAutoUpdateFailed {
                     remarks: outcome.remarks.clone(),
                 },
@@ -87,7 +87,7 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
             // Only the first failure of a streak surfaces as a user notice;
             // retries stay in the log until the subscription recovers.
             if outcome.consecutive_failures == 1 {
-                let notice = ipc::events::AppEvent::Notice(voya_contracts::AppNotice {
+                let notice = voya_contracts::AppEvent::Notice(voya_contracts::AppNotice {
                     level: voya_contracts::AppNoticeLevel::Warning,
                     code: voya_contracts::NoticeCode::SubscriptionAutoUpdateFailed {
                         remarks: outcome.remarks.clone(),
@@ -102,7 +102,7 @@ impl SubscriptionAutoUpdateSink for TauriSubscriptionAutoUpdateSink {
         let imported = outcome.result.as_ref().map_or(0, |result| result.imported);
         ipc::commands::emit_app_log(
             &self.app,
-            ipc::events::LogLevel::Info,
+            voya_contracts::LogLevel::Info,
             voya_contracts::LogCode::SubscriptionAutoUpdateFinished {
                 remarks: outcome.remarks.clone(),
                 imported,
@@ -162,7 +162,7 @@ impl StatisticsEventSink for TauriStatisticsEventSink {
     fn emit_statistics(&self, snapshot: StatisticsSnapshot) {
         ipc::commands::emit_or_warn(
             &self.app,
-            ipc::events::TransientStreamEvent::Statistics(snapshot),
+            voya_contracts::TransientStreamEvent::Statistics(snapshot),
             "statistics event",
         );
     }
@@ -172,7 +172,7 @@ impl ProxyRuntimeEventSink for TauriProxyRuntimeEventSink {
     fn emit_connections(&self, event: ProxyConnectionsSnapshot) {
         ipc::commands::emit_or_warn(
             &self.app,
-            ipc::events::TransientStreamEvent::ProxyConnections(event),
+            voya_contracts::TransientStreamEvent::ProxyConnections(event),
             "proxy connections event",
         );
     }

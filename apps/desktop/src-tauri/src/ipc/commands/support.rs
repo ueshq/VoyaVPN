@@ -152,7 +152,7 @@ pub(super) fn runtime_proxy_url(
 pub(crate) fn emit_event<R, E>(app: &tauri::AppHandle<R>, event: E) -> Result<(), AppError>
 where
     R: tauri::Runtime,
-    E: Event + serde::Serialize + Clone,
+    E: Emit,
 {
     event
         .emit(app)
@@ -163,7 +163,7 @@ where
 pub(crate) fn emit_or_warn<R, E>(app: &tauri::AppHandle<R>, event: E, what: &'static str)
 where
     R: tauri::Runtime,
-    E: Event + serde::Serialize + Clone,
+    E: Emit,
 {
     if let Err(error) = event.emit(app) {
         tracing::warn!(?error, "failed to emit {what}");

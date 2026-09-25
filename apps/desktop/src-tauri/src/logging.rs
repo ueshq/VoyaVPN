@@ -41,7 +41,8 @@ use voya_app::{
     redaction::redact_url_userinfo,
 };
 
-use crate::ipc::{commands::queue_log_line, events::LogLineBody};
+use crate::ipc::commands::queue_log_line;
+use voya_contracts::LogLineBody;
 
 const LOG_FILE_PREFIX: &str = "voyavpn";
 const LOG_FILE_SUFFIX: &str = "log";

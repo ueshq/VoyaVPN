@@ -195,22 +195,19 @@ describe("generateCommandNames", () => {
 });
 
 describe("generateEventShapes", () => {
-  it("names each channel and the kinds its payload can carry", () => {
+  it("names each channel and the contract payload behind the shell's wrapper", () => {
     const shapes = JSON.parse(
       generateEventShapes(
         fixture({
           commands: '\trestartCore: () => typedError<RuntimeStatusResponse, AppError>(__TAURI_INVOKE("restart_core")),',
-          events: '\tappEvent: makeEvent<AppEvent>("app-event"),',
-          types: 'export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "closeRequested" };\n',
+          events: '\tappEvent: makeEvent<AppChannel>("app-event"),',
+          types:
+            'export type AppChannel = AppEvent;\n\nexport type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "closeRequested" };\n',
         }),
       ),
     );
 
-    expect(shapes.appEvent).toEqual({
-      channel: "app-event",
-      kinds: ["notice", "closeRequested"],
-      payload: "AppEvent",
-    });
+    expect(shapes.appEvent).toEqual({ channel: "app-event", payload: "AppEvent" });
   });
 
   it("refuses an event whose payload type it cannot find", () => {

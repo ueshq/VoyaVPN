@@ -3,14 +3,15 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::ipc::events::Emit;
 use tauri::Manager;
 use tauri_plugin_notification::NotificationExt;
-use tauri_specta::Event;
 use voya_app::lifecycle::{close_request_decision, launch_hidden, CloseDecision};
 use voya_app::tray::{tray_labels, TrayLabels};
 use voya_platform::autostart::launched_by_autostart;
 
-use crate::{ipc::events::AppEvent, tray::TRAY_ID, AppState};
+use crate::{tray::TRAY_ID, AppState};
+use voya_contracts::AppEvent;
 
 const MAIN_WINDOW: &str = "main";
 

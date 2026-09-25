@@ -16,13 +16,8 @@ use tauri::{
 use voya_app::tray::{tray_menu, tray_tooltip, with_connected_badge, TrayEntry, TrayItemId};
 use voya_platform::coreinfo::TargetOs;
 
-use crate::{
-    ipc::{
-        commands,
-        events::{AppEvent, ShellTabTarget},
-    },
-    residency, AppState,
-};
+use crate::{ipc::commands, residency, AppState};
+use voya_contracts::{AppEvent, ShellTabTarget};
 
 pub(crate) const TRAY_ID: &str = "main";
 
