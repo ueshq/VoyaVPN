@@ -146,8 +146,9 @@ import Network
      * Almost every answer is "there is nothing here": the probe config declares
      * SOCKS inbounds only, so libbox never opens a TUN, never looks up a
      * connection owner and never resolves a package name. The interface monitor is
-     * real, because sing-box binds outbound connections to the default interface
-     * and a probe that ignored it would measure the wrong path.
+     * real (`native/apple/DefaultInterfaceMonitor.swift`, shared with the tunnel),
+     * because sing-box binds outbound connections to the default interface and a
+     * probe that ignored it would measure the wrong path.
      *
      * The tunnel's own implementation — the one that answers all of this for real
      * — is `native/apple/PacketTunnel/PacketTunnelPlatform.swift`.
@@ -155,7 +156,7 @@ import Network
     private final class ProbePlatformInterface: NSObject, LibboxPlatformInterfaceProtocol,
         LibboxCommandServerHandlerProtocol
     {
-        private var defaultPathMonitor: NWPathMonitor?
+        private let defaultInterfaceMonitor = VoyaDefaultInterfaceMonitor()
 
         func openTun(_: LibboxTunOptionsProtocol?, ret0_: UnsafeMutablePointer<Int32>?) throws {
             throw probeError("A probe core has no tunnel to open.")
@@ -180,40 +181,11 @@ import Network
         func writeLog(_: String?) {}
 
         func startDefaultInterfaceMonitor(_ listener: LibboxInterfaceUpdateListenerProtocol?) throws {
-            guard let listener else { return }
-
-            let monitor = NWPathMonitor()
-            defaultPathMonitor = monitor
-            // The first path has to be in before `start` returns: libbox dials as
-            // soon as the service is up, and a probe bound to no interface fails.
-            let semaphore = DispatchSemaphore(value: 0)
-            monitor.pathUpdateHandler = { path in
-                self.updateDefaultInterface(listener, path)
-                semaphore.signal()
-                monitor.pathUpdateHandler = { path in
-                    self.updateDefaultInterface(listener, path)
-                }
-            }
-            monitor.start(queue: DispatchQueue.global(qos: .utility))
-            semaphore.wait()
-        }
-
-        private func updateDefaultInterface(_ listener: LibboxInterfaceUpdateListenerProtocol, _ path: Network.NWPath) {
-            guard path.status != .unsatisfied, let defaultInterface = path.availableInterfaces.first else {
-                listener.updateDefaultInterface("", interfaceIndex: -1, isExpensive: false, isConstrained: false)
-                return
-            }
-            listener.updateDefaultInterface(
-                defaultInterface.name,
-                interfaceIndex: Int32(defaultInterface.index),
-                isExpensive: path.isExpensive,
-                isConstrained: path.isConstrained
-            )
+            defaultInterfaceMonitor.start(listener)
         }
 
         func closeDefaultInterfaceMonitor(_: LibboxInterfaceUpdateListenerProtocol?) throws {
-            defaultPathMonitor?.cancel()
-            defaultPathMonitor = nil
+            defaultInterfaceMonitor.close()
         }
 
         func getInterfaces() throws -> LibboxNetworkInterfaceIteratorProtocol {

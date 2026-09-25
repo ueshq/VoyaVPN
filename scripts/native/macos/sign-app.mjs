@@ -8,15 +8,14 @@ import {
   distributionFromIdentityName,
 } from "./tunnel-layout.mjs";
 import {
-  assertProfileCapabilities,
   distributionProfileLabel,
   embedProvisioningProfile,
   formatProfileSelectionError,
   localProvisioningUdid,
   plistBuddy,
-  profileRejectionReason,
   resolveProfileFromEnv,
   resolveSigningIdentity,
+  validateProvisioningProfile,
   writeProfileEntitlements,
 } from "./provisioning.mjs";
 import { findQuarantined, quarantineAttribute } from "./quarantine.mjs";
@@ -46,14 +45,6 @@ function provisioningProfile(bundleIdentifier, explicitEnvName, criteria) {
     profileDir: provisioningProfileDir,
     criteria,
   });
-}
-
-function validateProvisioningProfile(profile, criteria, label, bundleIdentifier) {
-  const reason = profileRejectionReason(profile, { ...criteria, bundleIdentifier });
-  if (reason) {
-    throw new Error(`${label} provisioning profile ${profile.path} cannot be used: ${reason}.`);
-  }
-  assertProfileCapabilities(profile, { label, distribution: criteria.distribution });
 }
 
 function missingProfileError(label, bundleIdentifier, explicitEnvName, rejections) {
@@ -190,7 +181,7 @@ function main() {
     ? writeProfileEntitlements(appProfile, resolve(generatedEntitlementsDir, "macos-app.plist"), appEntitlements)
     : appEntitlements;
   if (appProfile) {
-    validateProvisioningProfile(appProfile, criteria, "macOS app", appBundleIdentifier);
+    validateProvisioningProfile(appProfile, "macOS app", appBundleIdentifier, criteria);
     embedProvisioningProfile(appProfile.path, appProvisioningProfileDestination);
     console.log(`Using macOS app provisioning profile ${appProfile.name || appProfile.path}`);
   } else if (distribution === "app-store" || distribution === "developer-id" || truthy(process.env.VOYAVPN_REQUIRE_PROVISIONING)) {
@@ -202,7 +193,7 @@ function main() {
     );
   }
   if (packetTunnelProfile) {
-    validateProvisioningProfile(packetTunnelProfile, criteria, "PacketTunnel", packetTunnelBundleIdentifier);
+    validateProvisioningProfile(packetTunnelProfile, "PacketTunnel", packetTunnelBundleIdentifier, criteria);
     embedProvisioningProfile(packetTunnelProfile.path, packetTunnelProvisioningProfileDestination);
     console.log(`Using PacketTunnel provisioning profile ${packetTunnelProfile.name || packetTunnelProfile.path}`);
   } else if (existsSync(packetTunnelBundle) && truthy(process.env.VOYAVPN_REQUIRE_PROVISIONING)) {

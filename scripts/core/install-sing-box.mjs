@@ -1,33 +1,20 @@
-import { isCliEntrypoint, repoRootFromScript, truthy } from "../lib/common.mjs";
+import { isCliEntrypoint, truthy } from "../lib/common.mjs";
+import { runSeedInstall } from "./install-entry.mjs";
 import { installSingBoxCore, parseInstallArgs } from "./sing-box-installer.mjs";
 
-async function main() {
-  const args = parseInstallArgs(process.argv.slice(2));
-  const postinstall = process.env.npm_lifecycle_event === "postinstall";
-
-  try {
-    const result = await installSingBoxCore({
-      forceFetch: args.forceFetch || truthy(process.env.VOYAVPN_FORCE_SING_BOX_FETCH),
-      forceInstall: args.forceInstall,
-      postinstall,
-      repoRoot: repoRootFromScript(import.meta.url),
-    });
-    if (result.status === "installed") {
-      console.log(`sing-box installed: ${result.executable}`);
-    }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (postinstall) {
-      console.warn(`sing-box postinstall did not complete: ${message}`);
-      console.warn("Run `pnpm core:sing-box:install` to retry manually.");
-      return;
-    }
-
-    console.error(message);
-    process.exit(1);
-  }
-}
-
 if (isCliEntrypoint(import.meta.url)) {
-  await main();
+  await runSeedInstall({
+    label: "sing-box",
+    retry: "Run `pnpm core:sing-box:install` to retry manually.",
+    install: async ({ postinstall, repoRoot }) => {
+      const args = parseInstallArgs(process.argv.slice(2));
+      const result = await installSingBoxCore({
+        forceFetch: args.forceFetch || truthy(process.env.VOYAVPN_FORCE_SING_BOX_FETCH),
+        forceInstall: args.forceInstall,
+        postinstall,
+        repoRoot,
+      });
+      return result.status === "installed" ? `sing-box installed: ${result.executable}` : null;
+    },
+  });
 }

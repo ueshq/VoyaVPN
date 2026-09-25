@@ -47,6 +47,9 @@ pnpm native:mobile:rust:android     # .so files   → apps/mobile/android/app/sr
                                     # + Kotlin bindings → app/src/main/java/uniffi/
 ```
 
+`native:mobile:rust:*` builds the `release` cargo profile; set
+`VOYAVPN_RUST_PROFILE=debug` for a faster unoptimised library while iterating.
+
 `abiFilters` in `app/build.gradle` is `arm64-v8a` and `x86_64` — a device and
 the emulator. A build for any other ABI would link a library that was never
 staged, so add the Rust target and rebuild before widening it.

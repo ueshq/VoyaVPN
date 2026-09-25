@@ -1,14 +1,12 @@
 import { stat } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 
-import { sha256File, sha256Text, walkFiles } from "../lib/fs.mjs";
+import { walkFiles } from "../lib/fs.mjs";
 
 // Single source of truth for the release gate's shared validators. Every
 // release command imports from here: when host, placeholder, digest or updater
 // payload rules were copied per command they drifted, and a stable gate that
 // means something different in each file is not a gate.
-
-export { sha256File, sha256Text };
 
 const placeholderPattern =
   /placeholder|replace_before_release|replace-before-release|changeme|\btodo\b|\btbd\b|voyavpn\.example/i;
@@ -112,6 +110,109 @@ export function normalizeReleaseUrl(
   parsed.hash = "";
   parsed.search = "";
   return parsed.toString().replace(/\/+$/g, "");
+}
+
+/**
+ * The base URL a metadata command publishes under. Callers keep their own
+ * operator-facing wording (`missing`, `label`); the dry-run lane generates
+ * "stable" metadata against the placeholder `.test` CDN, so local/test hosts
+ * stay allowed here and readiness is the gate that rejects them for a real
+ * stable run. `rejectPlaceholderPath` also refuses a stable URL whose *path*
+ * says placeholder, which the host rule alone would let through.
+ */
+export function normalizeChannelBaseUrl(
+  baseUrl,
+  channel,
+  { missing, label, allowHttp = true, rejectPlaceholderPath = false },
+) {
+  const value = String(baseUrl ?? "").trim();
+  if (!value) {
+    throw new Error(missing);
+  }
+
+  const normalized = normalizeReleaseUrl(value, {
+    allowHttp,
+    allowTestHosts: true,
+    checkHost: isStableChannel(channel),
+    label,
+  });
+
+  if (rejectPlaceholderPath && isStableChannel(channel) && normalized.toLowerCase().includes("placeholder")) {
+    throw new Error(`${label} must not use example, GitHub, or placeholder hosts: ${value}`);
+  }
+
+  return normalized;
+}
+
+/** Whether a document, serialized whole, carries placeholder or GitHub content. */
+export function forbiddenSerializedContent(value) {
+  const text = JSON.stringify(value).toLowerCase();
+  return placeholderText(text) || text.includes("github.com");
+}
+
+/** Fails with `message: <missing>` unless every expected target is present. */
+export function assertStableTargetMatrix(present, expected, message) {
+  const missing = missingExpectedValues(expected, new Set(present));
+  if (missing.length > 0) {
+    throw new Error(`${message}: ${missing.join(", ")}`);
+  }
+}
+
+/** The stable release index: no forbidden content, CDN-derived URLs, full target matrix. */
+export function assertStableIndex(index, baseUrl, { present, expected }) {
+  if (forbiddenSerializedContent(index)) {
+    throw new Error("Stable release index contains forbidden placeholder or GitHub content");
+  }
+
+  for (const artifact of index.artifacts) {
+    if (!isUrlDerivedFromBase(artifact.url, baseUrl)) {
+      throw new Error(`Artifact URL is not derived from CDN base URL: ${artifact.url}`);
+    }
+  }
+
+  assertStableTargetMatrix(present, expected, "Stable release index is missing first-stable target(s)");
+}
+
+/** Stable `latest.json` and its evidence: every platform is a verified signed artifact under the base URL. */
+export function assertStableDocuments(latest, evidenceDocument, baseUrl) {
+  if (forbiddenSerializedContent(latest)) {
+    throw new Error("Stable updater latest.json contains forbidden placeholder or GitHub content");
+  }
+
+  for (const [target, platform] of Object.entries(latest.platforms)) {
+    if (!isUrlDerivedFromBase(platform.url, baseUrl)) {
+      throw new Error(`Stable updater URL for ${target} is not derived from base URL: ${platform.url}`);
+    }
+    const evidence = evidenceDocument.platforms[target];
+    if (evidence?.source !== "signed-artifact") {
+      throw new Error(`Stable updater evidence for ${target} does not map to a signed artifact`);
+    }
+    if (evidence.signatureVerified !== true) {
+      throw new Error(`Stable updater signature for ${target} was not verified with the approved updater public key`);
+    }
+  }
+}
+
+/**
+ * The per-target evidence block the release index and the updater metadata
+ * both record: `{ name, originalName, bytes, sha256 }` entries in, counts,
+ * sorted names and checksums out. Entries without a digest (dry-run
+ * placeholders) are counted and named but carry no checksum.
+ */
+export function artifactEvidence(artifacts) {
+  return {
+    artifactCount: artifacts.length,
+    artifactNames: uniqueSorted(artifacts.map((artifact) => artifact.name)),
+    sourceArtifactNames: uniqueSorted(artifacts.map((artifact) => artifact.originalName)),
+    checksums: artifacts
+      .filter((artifact) => artifact.sha256)
+      .map((artifact) => ({
+        name: artifact.name,
+        sourceArtifactName: artifact.originalName,
+        bytes: artifact.bytes,
+        sha256: artifact.sha256,
+      })),
+  };
 }
 
 export function requiredString(value, field, context) {

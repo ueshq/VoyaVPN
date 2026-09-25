@@ -18,7 +18,7 @@ This document records the manual credentialed steps required before public beta 
 | Apple signing credentials | macOS release owner | Apple Developer account, secure local keychain, or future GitHub secret import | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` are supplied only through approved secure storage. `security find-identity -v -p codesigning` shows the expected Developer ID identity on the signing machine. | Remove the certificate from the runner or keychain, revoke exposed credentials in Apple Developer, and rebuild from clean credentials. |
 | Windows signing credentials | Windows release owner | Authenticode certificate, hardware token, cloud signer, or future GitHub secret import | `WINDOWS_CERTIFICATE_BASE64` and `WINDOWS_CERTIFICATE_PASSWORD` are supplied only through approved secure storage or the external signer. A test file signature verifies with Windows trust tooling. | Revoke or rotate the certificate if exposed. Remove signed artifacts from staging and regenerate packages. |
 | Tauri updater private key | Security owner | Offline key storage, CI secret, or local release machine | `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH` is available to the signing step; `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` is set only when the key requires it. No private key material is printed. | Rotate the updater keypair, restore the previous trusted public key, and publish rollback metadata. |
-| Tauri updater public key | Release engineer | `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` | The generated stable overlay contains the approved public key, while `apps/desktop/src-tauri/tauri.conf.json` remains credential-free. | Regenerate the overlay with the previous approved public key or disable update metadata for the affected channel. |
+| Tauri updater public key | Release engineer | `VOYAVPN_UPDATER_PUBLIC_KEY` | The generated stable overlay contains the approved public key, while `apps/desktop/src-tauri/tauri.conf.json` remains credential-free. | Regenerate the overlay with the previous approved public key or disable update metadata for the affected channel. |
 | CDN release base URL | Release owner | GitHub Actions variable `VOYAVPN_CDN_BASE_URL` and stable CDN host | Generated `release-index.json`, core manifests, and staging evidence derive stable URLs from the approved CDN base URL. | Restore the previous release-index pointer and hold new app/core assets outside public paths. |
 | Update hosting base URL | Release owner | GitHub Actions variable `VOYAVPN_UPDATES_BASE_URL` and stable update host | The generated `latest.json` URLs resolve to signed stable updater payloads on the approved CDN endpoint. | Restore the previous `latest.json`, remove bad payloads from the host, and rerun metadata generation. |
 
@@ -36,7 +36,7 @@ System: Tauri signer, secure key storage, `apps/desktop/src-tauri/tauri.conf.jso
 
 2. Store the private key in the approved secret system as `TAURI_SIGNING_PRIVATE_KEY` or make it available to the signing machine as `TAURI_SIGNING_PRIVATE_KEY_PATH`.
 3. Store `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` only if the generated key is password-protected.
-4. Store the approved public key in `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` for the release build.
+4. Store the approved public key in `VOYAVPN_UPDATER_PUBLIC_KEY` for the release build.
 5. Enable updater artifact creation only through the generated stable overlay. The repository default keeps `bundle.createUpdaterArtifacts` set to `false` so debug packaging remains credential-free and the committed config does not contain populated updater endpoints, public keys, private-key paths, or generated release state.
 6. Generate the stable overlay at `target/release-config/tauri.updater.stable.generated.json` from a prepared shell where release-time environment names have already been supplied by the approved secret system or signing machine:
 
@@ -146,6 +146,12 @@ pnpm native:macos:app:sign
 pnpm native:macos:tunnel:verify
 pnpm native:macos:app:notarize
 ```
+
+Two optional switches for the signing steps: `VOYAVPN_REQUIRE_GATEKEEPER_ASSESSMENT=1`
+makes `native:macos:app:sign` fail on a `spctl` rejection of the Developer ID
+app instead of deferring to post-notarization assessment, and
+`VOYAVPN_DISABLE_CODESIGN_TIMESTAMP=1` omits `--timestamp` from every
+`codesign`/`productbuild` call for offline signing (never for a release).
 
 App Store/TestFlight command shape. `pnpm build:mac:appstore` runs exactly
 these steps; `VOYAVPN_MAC_APP_STORE=1` is what makes `tauri:build` leave out

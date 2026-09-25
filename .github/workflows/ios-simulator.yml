@@ -12,7 +12,6 @@ on:
       - 'scripts/lib/**'
       - 'scripts/quality/mobile-*'
       - 'Cargo.*'
-      - 'rust-toolchain.toml'
       - 'package.json'
       - 'pnpm-*.yaml'
       - '.github/actions/**'

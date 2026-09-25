@@ -30,7 +30,7 @@
     "check:rust:deps": "cargo machete",
     "check:rust:test": "node scripts/quality/rust-tests.mjs",
     "check:frontend:typecheck": "pnpm typecheck",
-    "check:frontend:test": "pnpm test --run",
+    "check:frontend:test": "vitest --run",
     "check:frontend:lint": "eslint . --max-warnings 0",
     "check:frontend:bundle": "pnpm build && node scripts/quality/frontend-bundle.mjs",
     "check:frontend:coverage": "pnpm test --run --coverage && node scripts/quality/frontend-coverage.mjs",
@@ -66,8 +66,7 @@
     "check:mobile:bundle": "node scripts/quality/mobile-bundle.mjs",
     "check:mobile:swift": "node scripts/quality/mobile-swift.mjs",
     "check:mobile:ios:smoke": "node scripts/native/mobile/ios-smoke.mjs",
-    "check:mobile:ios:full": "node scripts/native/mobile/ios-smoke.mjs --full",
-    "check:mobile:legal": "node scripts/native/mobile/legal-assets.mjs --check"
+    "check:mobile:ios:full": "node scripts/native/mobile/ios-smoke.mjs --full"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

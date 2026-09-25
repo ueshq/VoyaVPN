@@ -1,8 +1,9 @@
-import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
 import { readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
-import { isStableChannel, placeholderText, sha256File, sha256Text } from "../validation.mjs";
+import { sha256File, sha256Text, walkFiles, writeJson } from "../../lib/fs.mjs";
+import { isStableChannel, placeholderText } from "../validation.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 
@@ -65,33 +66,6 @@ Options:
 The designated Tauri 2 updater payload (Windows NSIS -setup.exe, Linux .AppImage,
 macOS .app.tar.gz with a sibling .sig) is marked \`updaterPayload: true\` in the
 manifest; a stable collection fails when the bundle has none.`);
-}
-
-async function walkFiles(root) {
-  let entries;
-  try {
-    entries = await readdir(root, { withFileTypes: true });
-  } catch (error) {
-    if (error && error.code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-
-  const files = [];
-  for (const entry of entries) {
-    if (entry.isSymbolicLink()) {
-      continue;
-    }
-
-    const path = join(root, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await walkFiles(path)));
-    } else if (entry.isFile()) {
-      files.push(path);
-    }
-  }
-  return files;
 }
 
 function artifactSuffix(filename) {
@@ -376,7 +350,7 @@ async function main(argv = []) {
 
   const checksumLines = artifacts.map((artifact) => `${artifact.sha256}  ${artifact.name}`);
   await writeFile(join(outputDir, "SHA256SUMS"), `${checksumLines.join("\n")}${checksumLines.length ? "\n" : ""}`);
-  await writeFile(join(outputDir, "artifact-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeJson(join(outputDir, "artifact-manifest.json"), manifest);
 
   console.log(`Collected ${artifacts.length} artifact(s) for ${options.target} in ${relative(repoRoot, outputDir)}`);
 }

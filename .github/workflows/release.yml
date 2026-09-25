@@ -47,9 +47,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  NODE_VERSION: "22"
-  PNPM_VERSION: "11.5.0"
-  RUST_TOOLCHAIN_VERSION: "1.96.0"
 
 defaults:
   run:
@@ -164,19 +161,14 @@ jobs:
       # dispatch-only while CI runs on every pull request.
       - uses: ./.github/actions/setup-rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
+          targets: ${{ matrix.rust_target }}
           cache: "false"
-
-      - name: Install Rust target
-        run: rustup target add ${{ matrix.rust_target }}
 
       - uses: ./.github/actions/setup-node-pnpm
 
       - name: Build Tauri package
         env:
           CI: "true"
-          CHANNEL: ${{ inputs.channel }}
-          DRY_RUN: ${{ inputs.dry_run }}
           VOYAVPN_RELEASE_CHANNEL: ${{ inputs.channel }}
           VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
           VOYAVPN_UPDATER_PUBLIC_KEY: ${{ vars.VOYAVPN_UPDATER_PUBLIC_KEY }}
@@ -240,9 +232,6 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - uses: ./.github/actions/setup-node-pnpm
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
 
       - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -254,11 +243,6 @@ jobs:
           CHANNEL: ${{ inputs.channel }}
           VOYAVPN_CDN_BASE_URL: ${{ vars.VOYAVPN_CDN_BASE_URL }}
         run: |
-          if [ "$CHANNEL" = "stable" ] && [ -z "${VOYAVPN_CDN_BASE_URL:-}" ]; then
-            echo "::error title=Missing variable::VOYAVPN_CDN_BASE_URL is required for stable CDN staging metadata."
-            exit 1
-          fi
-
           base_url="${VOYAVPN_CDN_BASE_URL:-https://cdn.voyavpn.test/${CHANNEL}}"
           pnpm release -- index \
             --input dist/downloaded-release-artifacts \
@@ -283,9 +267,6 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - uses: ./.github/actions/setup-node-pnpm
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
 
       - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -299,15 +280,6 @@ jobs:
           RELEASE_VERSION: ${{ github.ref_name }}
           VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
         run: |
-          if [ "$CHANNEL" = "stable" ] && [ "$DRY_RUN" = "true" ]; then
-            echo "::error title=Invalid stable metadata::Stable updater metadata cannot use dry-run signatures."
-            exit 1
-          fi
-          if [ "$CHANNEL" = "stable" ] && [ -z "${VOYAVPN_UPDATES_BASE_URL:-}" ]; then
-            echo "::error title=Missing variable::VOYAVPN_UPDATES_BASE_URL is required for stable updater metadata."
-            exit 1
-          fi
-
           base_url="${VOYAVPN_UPDATES_BASE_URL:-https://cdn.voyavpn.test/${CHANNEL}/updater}"
           placeholder_flag=""
           if [ "$DRY_RUN" = "true" ]; then
@@ -337,9 +309,6 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - uses: ./.github/actions/setup-node-pnpm
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
 
       - name: Generate core asset metadata
         env:
@@ -349,15 +318,11 @@ jobs:
         run: |
           mkdir -p dist/core-staging
 
+          # Stable inputs were already required by preflight's `check-hosts`
+          # (which rejects an empty or placeholder VOYAVPN_CDN_BASE_URL and
+          # VOYAVPN_CORE_ASSETS_JSON), and the CLI refuses a stable run without
+          # a base URL itself.
           if [ "$CHANNEL" = "stable" ]; then
-            if [ -z "${VOYAVPN_CDN_BASE_URL:-}" ]; then
-              echo "::error title=Missing variable::VOYAVPN_CDN_BASE_URL is required for stable core staging metadata."
-              exit 1
-            fi
-            if [ -z "${VOYAVPN_CORE_ASSETS_JSON:-}" ]; then
-              echo "::error title=Missing variable::VOYAVPN_CORE_ASSETS_JSON is required for stable core staging metadata."
-              exit 1
-            fi
             printf '%s\n' "$VOYAVPN_CORE_ASSETS_JSON" > dist/core-staging/source-core-assets.json
           else
             cp tests/fixtures/release/core-assets.json dist/core-staging/source-core-assets.json

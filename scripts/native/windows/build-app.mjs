@@ -6,10 +6,10 @@ import {
   checkedCapture,
   environmentValue,
   isCliEntrypoint,
-  readJson,
   repoRootFromScript,
   run,
 } from "../../lib/common.mjs";
+import { readJson } from "../../lib/fs.mjs";
 import {
   managedSingBoxPath,
   managedTunnelServicePath,
@@ -26,12 +26,9 @@ const mainExecutableName = "voyavpn.exe";
 const localBuildEnvNames = [
   "CARGO_BUILD_TARGET",
   "VOYAVPN_RELEASE_CHANNEL",
-  "RELEASE_CHANNEL",
-  "CHANNEL",
   "VOYAVPN_TAURI_UPDATER_CONFIG",
   "VOYAVPN_UPDATES_BASE_URL",
   "VOYAVPN_UPDATER_PUBLIC_KEY",
-  "TAURI_UPDATER_PUBLIC_KEY",
   "TAURI_SIGNING_PRIVATE_KEY",
   "TAURI_SIGNING_PRIVATE_KEY_PATH",
   "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",

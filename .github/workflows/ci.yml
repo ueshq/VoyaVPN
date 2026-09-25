@@ -20,7 +20,6 @@ permissions:
   contents: read
 
 env:
-  RUST_TOOLCHAIN_VERSION: "1.96.0"
   RUST_MSRV_VERSION: "1.94.1"
 
 jobs:
@@ -32,7 +31,6 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
           cache: "false"
 
       - uses: ./.github/actions/setup-node-pnpm
@@ -82,7 +80,6 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
           components: clippy, rustfmt
 
       - uses: ./.github/actions/setup-node-pnpm
@@ -92,17 +89,10 @@ jobs:
         with:
           tool: cargo-machete@0.9.2
 
-      # check:sing-box downloads and extracts the pinned sing-box archive when no
-      # verified seed is staged. The key hashes the installer, which holds the
-      # pinned version and digests, so a pin bump starts a fresh entry. A
-      # restored seed is still re-verified before use (manifest against the
-      # pinned archive digest, executable against the manifest) and re-staged on
-      # any mismatch. Only sing_box/ is cached: its parent holds tracked files.
-      - name: Cache sing-box core seed
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # check:sing-box stages only the core, not the rule sets.
+      - uses: ./.github/actions/setup-core-seeds
         with:
-          path: apps/desktop/src-tauri/resources/core-seeds/sing_box
-          key: ${{ runner.os }}-${{ runner.arch }}-sing-box-seed-${{ hashFiles('scripts/core/sing-box-installer.mjs') }}
+          rule-sets: "false"
 
       - name: Check Rust formatting
         run: pnpm run check:rust:fmt
@@ -213,7 +203,6 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
           cache-key: mobile-Android
 
@@ -239,8 +228,6 @@ jobs:
           extra-packages: webkit2gtk-driver xvfb
 
       - uses: ./.github/actions/setup-rust
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
 
       - uses: ./.github/actions/setup-node-pnpm
 
@@ -249,22 +236,7 @@ jobs:
         with:
           tool: tauri-driver@2.0.6
 
-      # tauri:build stages the same pinned seed check:sing-box uses; see the
-      # baseline-rust cache step for why a restored copy is safe to reuse.
-      - name: Cache sing-box core seed
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/desktop/src-tauri/resources/core-seeds/sing_box
-          key: ${{ runner.os }}-${{ runner.arch }}-sing-box-seed-${{ hashFiles('scripts/core/sing-box-installer.mjs') }}
-
-      # tauri:build also stages the default rule sets. The key hashes the
-      # installer that holds their commit and SHA-256 pins, and a restored copy
-      # is re-verified against those pins and re-staged on any mismatch.
-      - name: Cache rule-set seeds
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/desktop/src-tauri/resources/core-seeds/rule_sets
-          key: rule-set-seeds-${{ hashFiles('scripts/core/rule-sets-installer.mjs') }}
+      - uses: ./.github/actions/setup-core-seeds
 
       - name: Run real desktop smoke
         run: xvfb-run -a pnpm run check:desktop:smoke
@@ -314,7 +286,6 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
         with:
-          toolchain: ${{ env.RUST_TOOLCHAIN_VERSION }}
           components: clippy
           targets: ${{ matrix.os == 'macos-15' && 'aarch64-apple-ios,aarch64-apple-ios-sim' || '' }}
 

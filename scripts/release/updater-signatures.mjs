@@ -41,32 +41,11 @@ function assertNonPlaceholderPublicKey(value, label) {
 
 /**
  * The single updater public key resolver. The overlay generator, readiness and
- * the updater metadata command all resolve the key through here so the accepted
- * variable names match what the release docs promise: either
- * VOYAVPN_UPDATER_PUBLIC_KEY or TAURI_UPDATER_PUBLIC_KEY, and when both are set
- * they must be the same key.
+ * the updater metadata command all resolve the key through here, so the one
+ * accepted variable name is the one the release docs promise.
  */
 function approvedUpdaterPublicKeyFromEnv(env = process.env) {
-  const primary = String(env.VOYAVPN_UPDATER_PUBLIC_KEY ?? "").trim();
-  const secondary = String(env.TAURI_UPDATER_PUBLIC_KEY ?? "").trim();
-
-  if (!primary && !secondary) {
-    throw new UpdaterSignatureError(
-      "VOYAVPN_UPDATER_PUBLIC_KEY or TAURI_UPDATER_PUBLIC_KEY must be the approved non-placeholder Tauri updater public key",
-    );
-  }
-
-  const approved = primary
-    ? assertNonPlaceholderPublicKey(primary, "VOYAVPN_UPDATER_PUBLIC_KEY")
-    : assertNonPlaceholderPublicKey(secondary, "TAURI_UPDATER_PUBLIC_KEY");
-
-  if (primary && secondary && assertNonPlaceholderPublicKey(secondary, "TAURI_UPDATER_PUBLIC_KEY") !== approved) {
-    throw new UpdaterSignatureError(
-      "TAURI_UPDATER_PUBLIC_KEY must exactly match the approved VOYAVPN_UPDATER_PUBLIC_KEY",
-    );
-  }
-
-  return approved;
+  return assertNonPlaceholderPublicKey(env.VOYAVPN_UPDATER_PUBLIC_KEY, "VOYAVPN_UPDATER_PUBLIC_KEY");
 }
 
 function resolveApprovedUpdaterPublicKey(env = process.env) {

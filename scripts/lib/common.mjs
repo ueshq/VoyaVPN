@@ -5,16 +5,12 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { readJson } from "./fs.mjs";
 
-export {
-  readJson,
-  readJsonAsync,
-  sha256FileChunksSync,
-  sha256FileSync,
-  walkFilesSync,
-} from "./fs.mjs";
-
 export function truthy(value) {
   return /^(1|true|yes|on)$/i.test(String(value ?? "").trim());
+}
+
+export function falsey(value) {
+  return /^(0|false|no|off)$/i.test(String(value ?? "").trim());
 }
 
 export function requireDarwin(message) {
@@ -53,7 +49,7 @@ const secretFlagPattern = /^--(?:pass|passwd|password|api-key|apikey|token|secre
  * Masks credential values so a failed command can be reported without leaking
  * the secret into stderr, CI logs, or terminal scrollback.
  */
-export function redactArgs(args) {
+function redactArgs(args) {
   const redacted = [];
   let maskNext = false;
 
@@ -138,6 +134,7 @@ export function runOrExit(program, args, options = {}) {
   return result;
 }
 
+/** The first non-empty value of `names` in `env`, matched case-insensitively. */
 export function environmentValue(env, ...names) {
   const wanted = new Set(names.map((name) => name.toLowerCase()));
   for (const [name, value] of Object.entries(env ?? {})) {
@@ -155,6 +152,13 @@ export function commandFailure(program, args, result) {
   );
 }
 
+const sleeper = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+
+/** Blocks the thread for `milliseconds`; for synchronous polling loops. */
+export function sleepSync(milliseconds) {
+  Atomics.wait(sleeper, 0, 0, milliseconds);
+}
+
 export function validateTiming(timeoutMs, pollIntervalMs) {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
     throw new Error("timeoutMs must be a non-negative finite number.");
@@ -162,54 +166,4 @@ export function validateTiming(timeoutMs, pollIntervalMs) {
   if (!Number.isFinite(pollIntervalMs) || pollIntervalMs <= 0) {
     throw new Error("pollIntervalMs must be a positive finite number.");
   }
-}
-
-const jobHeaderPattern = /^ {2}([A-Za-z0-9_-]+):\s*$/;
-const jobBodyPattern = /^ {4}(?:steps|uses):/;
-
-/**
- * Splits the top-level `jobs:` mapping into per-job line blocks. This is a
- * deliberately small scanner instead of a YAML parser so the quality gates keep
- * running on Node builtins only.
- */
-export function workflowJobs(text) {
-  const lines = text.split(/\r?\n/);
-  const jobsIndex = lines.indexOf("jobs:");
-  const jobs = new Map();
-  if (jobsIndex < 0) {
-    return jobs;
-  }
-
-  let current = null;
-  for (const line of lines.slice(jobsIndex + 1)) {
-    const header = jobHeaderPattern.exec(line);
-    if (header) {
-      current = header[1];
-      jobs.set(current, []);
-      continue;
-    }
-    if (current) {
-      jobs.get(current).push(line);
-    }
-  }
-
-  // Drop anything that does not look like a job definition, so an unexpected
-  // two-space line inside a shell block cannot invent a phantom job.
-  for (const [name, body] of jobs) {
-    if (!body.some((line) => jobBodyPattern.test(line))) {
-      jobs.delete(name);
-    }
-  }
-  return jobs;
-}
-
-/** The lines of one top-level key (`concurrency:`, `permissions:`, ...). */
-export function topLevelBlock(text, key) {
-  const lines = text.split(/\r?\n/);
-  const start = lines.indexOf(`${key}:`);
-  if (start < 0) {
-    return [];
-  }
-  const end = lines.findIndex((line, index) => index > start && /^[A-Za-z]/.test(line));
-  return lines.slice(start + 1, end < 0 ? undefined : end).filter((line) => line.trim() && !line.trim().startsWith("#"));
 }

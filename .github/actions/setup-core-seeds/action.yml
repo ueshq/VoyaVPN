@@ -1,0 +1,31 @@
+name: Setup core seeds
+description: Restore the sing-box core seed and the default rule sets from the Actions cache so a build or check does not download them again.
+inputs:
+  rule-sets:
+    description: Also cache the default rule sets (only tauri:build stages them).
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    # check:sing-box and tauri:build download and extract the pinned sing-box
+    # archive when no verified seed is staged. The key hashes the installer,
+    # which holds the pinned version and digests, so a pin bump starts a fresh
+    # entry. A restored seed is still re-verified before use (manifest against
+    # the pinned archive digest, executable against the manifest) and re-staged
+    # on any mismatch. Only sing_box/ is cached: its parent holds tracked files.
+    - name: Cache sing-box core seed
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: apps/desktop/src-tauri/resources/core-seeds/sing_box
+        key: ${{ runner.os }}-${{ runner.arch }}-sing-box-seed-${{ hashFiles('scripts/core/sing-box-installer.mjs') }}
+
+    # tauri:build also stages the default rule sets. The key hashes the
+    # installer that holds their commit and SHA-256 pins, and a restored copy
+    # is re-verified against those pins and re-staged on any mismatch.
+    - name: Cache rule-set seeds
+      if: ${{ inputs.rule-sets == 'true' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: apps/desktop/src-tauri/resources/core-seeds/rule_sets
+        key: ${{ runner.os }}-rule-set-seeds-${{ hashFiles('scripts/core/rule-sets-installer.mjs') }}

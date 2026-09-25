@@ -1,9 +1,10 @@
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { truthy } from "../lib/common.mjs";
-import { ensureSingBoxSeedForBuild } from "./sing-box-installer.mjs";
+import { sha256Text, writeJson } from "../lib/fs.mjs";
+import { download } from "./download.mjs";
+import { coreSeedsDir, ensureSingBoxSeedForBuild } from "./sing-box-installer.mjs";
 
 const RULE_SET_REPO = "2dust/sing-box-rules";
 const RULE_SET_SEED_DIR = "rule_sets";
@@ -40,15 +41,11 @@ export const RULE_SET_PINS = [
 ];
 
 export function ruleSetSeedDir(repoRoot) {
-  return join(repoRoot, "apps", "desktop", "src-tauri", "resources", "core-seeds", RULE_SET_SEED_DIR);
+  return join(coreSeedsDir(repoRoot), RULE_SET_SEED_DIR);
 }
 
 export function ruleSetUrl(pin) {
   return `https://raw.githubusercontent.com/${RULE_SET_REPO}/${pin.commit}/${pin.tag}.srs`;
-}
-
-function sha256(buffer) {
-  return createHash("sha256").update(buffer).digest("hex");
 }
 
 /** Whether every pinned rule set is staged with its pinned bytes. */
@@ -59,7 +56,7 @@ export function verifyStagedRuleSets({ repoRoot, pins = RULE_SET_PINS }) {
     if (!existsSync(file)) {
       return { code: "missing", ok: false, reason: `${pin.tag}.srs is not staged` };
     }
-    if (sha256(readFileSync(file)) !== pin.sha256) {
+    if (sha256Text(readFileSync(file)) !== pin.sha256) {
       return { code: "digest-mismatch", ok: false, reason: `${pin.tag}.srs does not match its pinned SHA-256` };
     }
   }
@@ -76,7 +73,7 @@ function assertPinnedRuleSet(pin, buffer, url) {
   if (buffer.subarray(0, SRS_MAGIC.length).toString("latin1") !== SRS_MAGIC) {
     throw new Error(`${url} is not a sing-box binary rule set`);
   }
-  const digest = sha256(buffer);
+  const digest = sha256Text(buffer);
   if (digest !== pin.sha256) {
     throw new Error(`SHA-256 mismatch for ${url}: expected ${pin.sha256}, got ${digest}`);
   }
@@ -95,14 +92,7 @@ export async function fetchAndStageRuleSets({
   const downloads = [];
   for (const pin of pins) {
     const url = ruleSetUrl(pin);
-    const response = await fetchImpl(url, {
-      headers: { "User-Agent": "voyavpn-rule-set-installer" },
-      redirect: "follow",
-    });
-    if (!response.ok) {
-      throw new Error(`download failed ${response.status} ${response.statusText}: ${url}`);
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const buffer = await download(url, { "User-Agent": "voyavpn-rule-set-installer" }, { fetchImpl });
     assertPinnedRuleSet(pin, buffer, url);
     downloads.push({ buffer, pin, url });
   }
@@ -121,7 +111,7 @@ export async function fetchAndStageRuleSets({
       url,
     })),
   };
-  writeFileSync(join(dir, RULE_SET_SEED_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
+  writeJson(join(dir, RULE_SET_SEED_MANIFEST), manifest);
   logger.log(`  ✓ staged ${downloads.length} rule sets -> ${dir}`);
   return { dir, files: manifest.files };
 }

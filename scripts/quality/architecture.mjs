@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 
-import { repoRootFromScript, walkFilesSync } from "../lib/common.mjs";
+import { repoRootFromScript } from "../lib/common.mjs";
+import { walkFilesSync } from "../lib/fs.mjs";
 import { productionLineCount, splitRustProduction } from "./architecture-analyzer.mjs";
 import {
   cargoPackageVersion,

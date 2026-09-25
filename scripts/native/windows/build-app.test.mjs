@@ -86,8 +86,6 @@ describe("Windows local app build", () => {
     const env = localWindowsBuildEnv({
       LOCALAPPDATA: "C:\\Users\\dev\\AppData\\Local",
       VOYAVPN_RELEASE_CHANNEL: "stable",
-      RELEASE_CHANNEL: "stable",
-      CHANNEL: "stable",
       voyavpn_tauri_updater_config: "stable",
       TAURI_SIGNING_PRIVATE_KEY: "secret",
       WINDOWS_CERTIFICATE_BASE64: "certificate",

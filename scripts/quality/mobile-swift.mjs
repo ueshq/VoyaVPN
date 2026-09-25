@@ -4,39 +4,42 @@ import { resolve } from "node:path";
 import { capture, isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
 
 /**
- * Parses the iOS app's own Swift.
+ * Parses the iOS app's own Swift: the app delegate, the native modules, and
+ * the XCUITest bundle beside them.
  *
  * These sources have no host-side build: they reach React, NetworkExtension,
  * Libbox and the uniffi bindings, none of which typecheck without an Xcode
  * project and the staged frameworks. What *can* be checked anywhere with the
  * command line tools is that they parse — which catches the mistakes that are
  * otherwise found by a twenty-minute Xcode build, or by nobody until someone
- * tries to ship.
+ * tries to ship. The UI tests are included because they are the one place a
+ * mistake stays quiet: they only compile during `xcodebuild test`, which
+ * nothing in CI runs, so a typo in them would surface on someone's machine
+ * minutes into a simulator run.
  *
  * The provider sources shared with macOS are typechecked properly by
  * `pnpm check:native:macos:bridge`; this covers the app-side half.
- */
-/**
- * The app's own Swift, and the XCUITest bundle beside it.
- *
- * The UI tests are here because they are the one place a mistake stays quiet:
- * they only compile during `xcodebuild test`, which nothing in CI runs, so a
- * typo in them would surface on someone's machine minutes into a simulator run.
  */
 const SOURCE_DIRS = [
   ["apps", "mobile", "ios", "VoyaVPN", "Native"],
   ["apps", "mobile", "ios", "VoyaVPNUITests"],
 ];
 
-export function swiftSources(root) {
-  return SOURCE_DIRS.flatMap((segments) => {
-    const directory = resolve(root, ...segments);
+/** Single files outside those directories. */
+const SOURCE_FILES = [["apps", "mobile", "ios", "VoyaVPN", "AppDelegate.swift"]];
 
-    return readdirSync(directory)
-      .filter((name) => name.endsWith(".swift"))
-      .sort()
-      .map((name) => resolve(directory, name));
-  });
+export function swiftSources(root) {
+  return [
+    ...SOURCE_DIRS.flatMap((segments) => {
+      const directory = resolve(root, ...segments);
+
+      return readdirSync(directory)
+        .filter((name) => name.endsWith(".swift"))
+        .sort()
+        .map((name) => resolve(directory, name));
+    }),
+    ...SOURCE_FILES.map((segments) => resolve(root, ...segments)),
+  ];
 }
 
 export function main() {

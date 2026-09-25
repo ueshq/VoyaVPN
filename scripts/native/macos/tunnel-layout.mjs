@@ -1,6 +1,8 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { checkedCapture } from "../../lib/common.mjs";
+import { capture, checkedCapture, repoRootFromScript } from "../../lib/common.mjs";
+
+const repoRoot = repoRootFromScript(import.meta.url);
 
 export const appBundleIdentifier = "app.voyavpn.desktop";
 export const packetTunnelBundleIdentifier = "app.voyavpn.desktop.PacketTunnel";
@@ -31,14 +33,45 @@ function appleNativeRoot(repoRoot) {
   return resolve(repoRoot, "native", "apple");
 }
 
-/** The build and native checks compile exactly the same provider sources. */
+/**
+ * The build and native checks compile exactly the same provider sources.
+ * `DefaultInterfaceMonitor.swift` sits at the `native/apple/` root because the
+ * iOS app target compiles it too (see `scripts/native/mobile/ios-project.rb`).
+ */
 export function packetTunnelSources(repoRoot) {
   return [
-    "PacketTunnelProvider.swift",
-    "PacketTunnelRuntime.swift",
-    "PacketTunnelDiagnostics.swift",
-    "PacketTunnelPlatform.swift",
-  ].map((name) => resolve(appleNativeRoot(repoRoot), "PacketTunnel", name));
+    "DefaultInterfaceMonitor.swift",
+    "PacketTunnel/PacketTunnelProvider.swift",
+    "PacketTunnel/PacketTunnelRuntime.swift",
+    "PacketTunnel/PacketTunnelDiagnostics.swift",
+    "PacketTunnel/PacketTunnelPlatform.swift",
+  ].map((name) => resolve(appleNativeRoot(repoRoot), name));
+}
+
+/** Throws when `path` is missing; `log` prints the line the verifier shows per check. */
+export function requirePath(path, label, { log = false } = {}) {
+  if (!existsSync(path)) {
+    throw new Error(`${label} is missing: ${path}`);
+  }
+  if (log) {
+    console.log(`✓ ${label}: ${path}`);
+  }
+}
+
+/** Throws when `path` exists; `reason` is the caller's wording for why it may not. */
+export function requireAbsent(path, label, { log = false, reason = "must not be packaged" } = {}) {
+  if (existsSync(path)) {
+    throw new Error(`${label} ${reason}: ${path}`);
+  }
+  if (log) {
+    console.log(`✓ ${label} is not packaged`);
+  }
+}
+
+/** The entitlements `codesign` reports for a signed path; codesign splits its output across both streams. */
+export function codesignEntitlements(path) {
+  const result = capture("codesign", ["-d", "--entitlements", ":-", path], { cwd: repoRoot });
+  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
 }
 
 export function normalizeDistribution(value) {
@@ -174,6 +207,15 @@ export function resolvePacketTunnelDeploymentTarget({ appMinimumSystemVersion, f
 export function incompatiblePacketTunnelBundle(appContents, distribution) {
   const oppositeDistribution = distribution === "developer-id" ? "app-store" : "developer-id";
   return packetTunnelLayout(appContents, oppositeDistribution).bundle;
+}
+
+/** The layout a distribution stages, plus the bundle the other distribution would have left behind. */
+export function initializeTunnelLayout(appContents, distribution) {
+  return {
+    distribution,
+    layout: packetTunnelLayout(appContents, distribution),
+    incompatibleBundle: incompatiblePacketTunnelBundle(appContents, distribution),
+  };
 }
 
 export function libboxBinaryPath(frameworkPath) {

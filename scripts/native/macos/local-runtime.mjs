@@ -1,4 +1,4 @@
-import { capture, commandFailure, validateTiming } from "../../lib/common.mjs";
+import { capture, commandFailure, sleepSync, validateTiming } from "../../lib/common.mjs";
 import { appBundleIdentifier as defaultProviderId } from "./tunnel-layout.mjs";
 
 const packetTunnelExecutable = "VoyaPacketTunnel";
@@ -7,7 +7,6 @@ const defaultGuiExecutables = ["voyavpn", "VoyaVPN"];
 
 /** Every VoyaVPN executable whose presence blocks a destructive local mutation. */
 export const voyaRuntimeExecutables = [...defaultGuiExecutables, packetTunnelExecutable];
-const sleeper = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -59,10 +58,6 @@ function defaultStopConnection(id) {
   }
 }
 
-function defaultWait(milliseconds) {
-  Atomics.wait(sleeper, 0, 0, milliseconds);
-}
-
 function isDisconnected(connection) {
   return connection.state.trim().toLowerCase() === "disconnected";
 }
@@ -104,7 +99,7 @@ export function prepareVoyaForLocalBuild({
   isProcessRunning = defaultIsProcessRunning,
   listConnections = defaultListConnections,
   stopConnection = defaultStopConnection,
-  wait = defaultWait,
+  wait = sleepSync,
   logger = console,
   timeoutMs = 20_000,
   pollIntervalMs = 250,

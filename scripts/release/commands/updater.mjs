@@ -1,21 +1,24 @@
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { readJson, readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
+import { readPackageVersion, repoRootFromScript } from "../../lib/common.mjs";
+import { readJson, sha256File, writeJson } from "../../lib/fs.mjs";
 import { resolveApprovedUpdaterPublicKey, verifyTauriUpdaterSignatureFile } from "../updater-signatures.mjs";
 import { stableTargets } from "../matrix.mjs";
 import {
+  artifactEvidence,
+  assertStableDocuments,
+  assertStableTargetMatrix,
   defaultEvidencePath,
   findSignatureArtifact,
   joinUrl,
   isStableChannel,
-  normalizeReleaseUrl,
+  normalizeChannelBaseUrl,
   requiredBytes,
   requiredSha256,
   requiredString,
   safeArtifactPath,
   selectUpdaterPayload,
-  sha256File,
   sourceInputEvidence,
   uniqueSorted,
   walkArtifactManifests,
@@ -74,30 +77,15 @@ Options:
 }
 
 function normalizeBaseUrl(baseUrl, channel) {
-  const value = (baseUrl ?? "").trim();
-  if (!value) {
-    throw new Error(
-      isStableChannel(channel)
-        ? "Stable updater metadata requires --base-url or VOYAVPN_UPDATES_BASE_URL"
-        : "Updater metadata generation requires --base-url or VOYAVPN_UPDATES_BASE_URL",
-    );
-  }
-
-  // The dry-run lane points at the placeholder `.test` updater CDN, so
-  // local/test hosts stay allowed; the whole-URL placeholder check below is what
-  // keeps a stable run off a placeholder path.
-  const normalized = normalizeReleaseUrl(value, {
-    allowHttp: !isStableChannel(channel),
-    allowTestHosts: true,
-    checkHost: isStableChannel(channel),
-    label: isStableChannel(channel) ? "Stable updater base URL" : "Updater base URL",
+  const stable = isStableChannel(channel);
+  return normalizeChannelBaseUrl(baseUrl, channel, {
+    missing: stable
+      ? "Stable updater metadata requires --base-url or VOYAVPN_UPDATES_BASE_URL"
+      : "Updater metadata generation requires --base-url or VOYAVPN_UPDATES_BASE_URL",
+    label: stable ? "Stable updater base URL" : "Updater base URL",
+    allowHttp: !stable,
+    rejectPlaceholderPath: true,
   });
-
-  if (isStableChannel(channel) && normalized.toLowerCase().includes("placeholder")) {
-    throw new Error(`Stable updater base URL must not use example, GitHub, or placeholder hosts: ${value}`);
-  }
-
-  return normalized;
 }
 
 function resolveBaseUrl(options) {
@@ -208,71 +196,22 @@ function assertStableTargetNames(platformKeys) {
   }
 }
 
-function assertStableTargetMatrix(platformKeys) {
-  const keys = [...platformKeys].sort((left, right) => left.localeCompare(right));
-  const missing = stableUpdaterTargets.filter((target) => !keys.includes(target));
-  if (missing.length > 0) {
-    throw new Error(`Stable updater metadata is missing signed payloads for target(s): ${missing.join(", ")}`);
-  }
-}
-
-function assertStableDocuments(latest, evidenceDocument, baseUrl) {
-  const latestSerialized = JSON.stringify(latest).toLowerCase();
-  if (
-    latestSerialized.includes("github.com") ||
-    latestSerialized.includes("voyavpn.example") ||
-    latestSerialized.includes("placeholder")
-  ) {
-    throw new Error("Stable updater latest.json contains forbidden placeholder or GitHub content");
-  }
-
-  for (const [target, platform] of Object.entries(latest.platforms)) {
-    if (!platform.url.startsWith(`${baseUrl}/`)) {
-      throw new Error(`Stable updater URL for ${target} is not derived from base URL: ${platform.url}`);
-    }
-    const evidence = evidenceDocument.platforms[target];
-    if (evidence?.source !== "signed-artifact") {
-      throw new Error(`Stable updater evidence for ${target} does not map to a signed artifact`);
-    }
-    if (evidence.signatureVerified !== true) {
-      throw new Error(`Stable updater signature for ${target} was not verified with the approved updater public key`);
-    }
-  }
-}
-
 function buildTargetEvidence(evidence) {
-  return evidence.map((entry) => {
-    const described = describeStableTarget(entry.target);
-    const artifactNames = [entry.artifact, entry.signatureArtifact].filter(Boolean);
-    const sourceArtifactNames = [entry.sourceArtifactName, entry.sourceSignatureArtifactName].filter(Boolean);
-    const checksums = [
-      entry.sha256
-        ? {
-            name: entry.artifact,
-            sourceArtifactName: entry.sourceArtifactName,
-            bytes: entry.bytes,
-            sha256: entry.sha256,
-          }
-        : null,
-      entry.signatureSha256
-        ? {
-            name: entry.signatureArtifact,
-            sourceArtifactName: entry.sourceSignatureArtifactName,
-            bytes: entry.signatureBytes,
-            sha256: entry.signatureSha256,
-          }
-        : null,
-    ].filter(Boolean);
-
-    return {
-      ...described,
-      source: entry.source,
-      artifactCount: artifactNames.length,
-      artifactNames,
-      sourceArtifactNames,
-      checksums,
-    };
-  });
+  return evidence.map((entry) => ({
+    ...describeStableTarget(entry.target),
+    source: entry.source,
+    ...artifactEvidence(
+      [
+        { name: entry.artifact, originalName: entry.sourceArtifactName, bytes: entry.bytes, sha256: entry.sha256 },
+        {
+          name: entry.signatureArtifact,
+          originalName: entry.sourceSignatureArtifactName,
+          bytes: entry.signatureBytes,
+          sha256: entry.signatureSha256,
+        },
+      ].filter((artifact) => artifact.name),
+    ),
+  }));
 }
 
 async function loadManifests(inputDir) {
@@ -451,7 +390,11 @@ async function main(argv = []) {
   };
 
   if (isStableChannel(options.channel)) {
-    assertStableTargetMatrix(Object.keys(platforms));
+    assertStableTargetMatrix(
+      Object.keys(platforms),
+      stableUpdaterTargets,
+      "Stable updater metadata is missing signed payloads for target(s)",
+    );
   }
 
   const generatedAt = new Date().toISOString();
@@ -494,10 +437,8 @@ async function main(argv = []) {
     assertStableDocuments(latest, evidenceDocument, baseUrl);
   }
 
-  await mkdir(dirname(outputPath), { recursive: true });
-  await mkdir(dirname(evidencePath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(latest, null, 2)}\n`);
-  await writeFile(evidencePath, `${JSON.stringify(evidenceDocument, null, 2)}\n`);
+  writeJson(outputPath, latest);
+  writeJson(evidencePath, evidenceDocument);
 
   console.log(`Wrote updater metadata to ${relative(repoRoot, outputPath)}`);
   console.log(`Wrote updater evidence to ${relative(repoRoot, evidencePath)}`);

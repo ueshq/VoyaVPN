@@ -1,11 +1,11 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { readJson, repoRootFromScript } from "../../lib/common.mjs";
+import { repoRootFromScript } from "../../lib/common.mjs";
+import { readJson, writeJson } from "../../lib/fs.mjs";
 import {
   defaultEvidencePath,
   isStableChannel,
-  normalizeReleaseUrl,
+  normalizeChannelBaseUrl,
   requiredNonPlaceholderString,
   sourceInputEvidence,
 } from "../validation.mjs";
@@ -53,22 +53,12 @@ Nonempty asset lists and unapproved stable CDN base URLs are rejected.`);
 }
 
 function normalizeBaseUrl(baseUrl, channel) {
-  const value = (baseUrl ?? "").trim();
-  if (!value) {
-    throw new Error(
-      isStableChannel(channel)
-        ? "Stable core asset manifest generation requires --base-url or VOYAVPN_CDN_BASE_URL"
-        : "Core asset manifest generation requires --base-url or VOYAVPN_CDN_BASE_URL",
-    );
-  }
-
-  // The dry-run lane generates "stable" metadata against the placeholder `.test`
-  // CDN, so local/test hosts stay allowed here.
-  return normalizeReleaseUrl(value, {
-    allowHttp: true,
-    allowTestHosts: true,
-    checkHost: isStableChannel(channel),
-    label: isStableChannel(channel) ? "Stable CDN base URL" : "CDN base URL",
+  const stable = isStableChannel(channel);
+  return normalizeChannelBaseUrl(baseUrl, channel, {
+    missing: stable
+      ? "Stable core asset manifest generation requires --base-url or VOYAVPN_CDN_BASE_URL"
+      : "Core asset manifest generation requires --base-url or VOYAVPN_CDN_BASE_URL",
+    label: stable ? "Stable CDN base URL" : "CDN base URL",
   });
 }
 
@@ -135,10 +125,8 @@ async function main(argv = []) {
     assets: [],
   };
 
-  await mkdir(dirname(outputPath), { recursive: true });
-  await mkdir(dirname(evidencePath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+  writeJson(outputPath, manifest);
+  writeJson(evidencePath, evidence);
 
   console.log(`Wrote core asset manifest to ${outputPath}`);
   console.log(`Wrote core asset evidence to ${evidencePath}`);

@@ -63,12 +63,13 @@ Required prepared names:
 | `VOYAVPN_RELEASE_CHANNEL` | Selects stable overlay generation for Tauri build wrappers. |
 | `VOYAVPN_CDN_BASE_URL` | Approved HTTPS stable CDN base URL for release index, manual downloads, core assets, and staging evidence. |
 | `VOYAVPN_UPDATES_BASE_URL` | Approved HTTPS stable updater CDN base URL used to derive `latest.json`. |
-| `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` | Approved non-placeholder Tauri updater public key written into the generated overlay. |
+| `VOYAVPN_UPDATER_PUBLIC_KEY` | Approved non-placeholder Tauri updater public key written into the generated overlay. |
 | `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH` | Updater private signing input supplied by the approved secret system or signing machine. |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional updater private-key password when the key requires one. |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | macOS signing and notarization inputs required for stable readiness. |
 | `WINDOWS_CERTIFICATE_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD` | Windows signing inputs required for stable readiness. |
 | `VOYAVPN_RELEASE_ARTIFACTS_DIR`, `VOYAVPN_SIGNED_UPDATER_DIR`, `VOYAVPN_CORE_ASSETS_FILE` | Optional stable artifact input paths when the prepared environment does not use the default `dist/release/...` paths. |
+| `VOYAVPN_STABLE_UPDATER_CONFIG_PATH` | Optional path of the stable updater overlay `pnpm release -- artifacts` copies beside the manifest, when it is not at the generated default `target/release-config/tauri.updater.stable.generated.json`. |
 
 Prepared release shell command sequence:
 
@@ -101,7 +102,7 @@ Required stable overlay inputs:
 | --- | --- |
 | `VOYAVPN_RELEASE_CHANNEL=stable` or `VOYAVPN_TAURI_UPDATER_CONFIG=stable` | Selects the stable updater overlay path in `scripts/tauri/cli.mjs`. |
 | `VOYAVPN_UPDATES_BASE_URL` | Approved HTTPS updater CDN base URL used to derive `<base>/latest.json`. |
-| `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY` | Approved non-placeholder Tauri updater public key written into the generated overlay. |
+| `VOYAVPN_UPDATER_PUBLIC_KEY` | Approved non-placeholder Tauri updater public key written into the generated overlay. |
 | `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH` | Private signing material or path supplied by the approved secret system. It is required for updater artifact creation and must not be committed. |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Optional password when the private key requires one. |
 

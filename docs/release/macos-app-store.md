@@ -136,6 +136,12 @@ VOYAVPN_MACOS_BUILD_NUMBER=412 pnpm build:mac:appstore
 It takes one to three period-separated integers. The PacketTunnel copies both
 version fields from the app, which avoids ITMS-90473.
 
+### Output path
+
+`native:macos:pkg` writes `VoyaVPN_<version>_<build>_<arch>.pkg` into
+`VOYAVPN_MACOS_PKG_DIR` (default `target/release/bundle/pkg`); set
+`VOYAVPN_MACOS_PKG_PATH` to name the file itself instead.
+
 ## Upload
 
 1. Open **Transporter**, sign in with the team's Apple ID, and add the `.pkg`.

@@ -3,18 +3,19 @@ import { resolve } from "node:path";
 import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
-  incompatiblePacketTunnelBundle,
+  codesignEntitlements,
+  initializeTunnelLayout,
   packetTunnelBundleIdentifier,
-  packetTunnelLayout,
+  requireAbsent,
+  requirePath,
   requiredNetworkExtensionValue,
-  distributionFromIdentityName,
-  normalizeDistribution,
 } from "./tunnel-layout.mjs";
 import {
   assertProfileCapabilities,
+  decodeProvisioningProfile,
+  inferDistribution,
   plistBuddy,
   signedNetworkExtensions,
-  decodeProvisioningProfile as decodeProfileWithDir,
 } from "./provisioning.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
@@ -34,32 +35,7 @@ const singBoxCoreSeed = resolve(appContents, "Resources", "core-seeds", "sing_bo
 // Only entry points the provider actually calls: the appex links with
 // `-dead_strip`, which drops Libbox exports nothing references.
 const libboxSymbols = ["_LibboxSetup", "_LibboxNewCommandServer", "_LibboxGetTunnelFileDescriptor"];
-let macosDistribution;
-let tunnelLayout;
-let incompatibleTunnelBundle;
-let appex;
-let appexBinary;
-let packetTunnelProvisioningProfile;
-let libbox;
-
-function requirePath(path, label) {
-  if (!existsSync(path)) {
-    throw new Error(`${label} is missing: ${path}`);
-  }
-  console.log(`✓ ${label}: ${path}`);
-}
-
-function requireAbsent(path, label) {
-  if (existsSync(path)) {
-    throw new Error(`${label} must not be packaged: ${path}`);
-  }
-  console.log(`✓ ${label} is not packaged`);
-}
-
-function decodeProvisioningProfile(profilePath) {
-  const decodedDir = resolve(repoRoot, "target", "native", "macos", "verify-provisioning-profiles");
-  return decodeProfileWithDir(profilePath, decodedDir);
-}
+let tunnel;
 
 function verifyProvisioningProfile(path, label, bundleIdentifier) {
   if (!existsSync(path)) {
@@ -75,7 +51,7 @@ function verifyProvisioningProfile(path, label, bundleIdentifier) {
   if (profile.bundleIdentifier !== bundleIdentifier) {
     throw new Error(`${label} provisioning profile bundle id mismatch: expected ${bundleIdentifier}, got ${profile.bundleIdentifier}.`);
   }
-  assertProfileCapabilities(profile, { label, distribution: macosDistribution });
+  assertProfileCapabilities(profile, { label, distribution: tunnel.distribution });
 
   console.log(`✓ ${label} provisioning profile: ${profile.name || profile.uuid || path}`);
   console.log(`✓ ${label} provisioning profile app id: ${profile.applicationIdentifier}`);
@@ -84,7 +60,7 @@ function verifyProvisioningProfile(path, label, bundleIdentifier) {
 
 function profileRequiredEntitlements(profile) {
   if (!profile) {
-    return [requiredNetworkExtensionValue(macosDistribution)];
+    return [requiredNetworkExtensionValue(tunnel.distribution)];
   }
   const required = [...signedNetworkExtensions(profile)];
   if (profile.systemExtensionInstall) {
@@ -99,44 +75,10 @@ function profileRequiredEntitlements(profile) {
   return required;
 }
 
-function profileDistribution(profile) {
-  if (
-    profile.developerCertificateSubjects?.some((subject) => subject.includes("CN=Developer ID Application:"))
-    || profile.networkExtensions.includes("packet-tunnel-provider-systemextension")
-  ) {
-    return "developer-id";
-  }
-  return "app-store";
-}
-
-function inferDistribution() {
-  const explicit = normalizeDistribution(process.env.VOYAVPN_MACOS_DISTRIBUTION);
-  if (explicit !== "auto") {
-    return explicit;
-  }
-  if (existsSync(appProvisioningProfile)) {
-    return profileDistribution(decodeProvisioningProfile(appProvisioningProfile));
-  }
-  if (existsSync(packetTunnelLayout(appContents, "developer-id").bundle)) {
-    return "developer-id";
-  }
-  return distributionFromIdentityName("", "app-store");
-}
-
-function initializeTunnelLayout() {
-  macosDistribution = inferDistribution();
-  tunnelLayout = packetTunnelLayout(appContents, macosDistribution);
-  incompatibleTunnelBundle = incompatiblePacketTunnelBundle(appContents, macosDistribution);
-  appex = tunnelLayout.bundle;
-  appexBinary = tunnelLayout.binary;
-  packetTunnelProvisioningProfile = tunnelLayout.provisioningProfile;
-  libbox = tunnelLayout.embeddedLibboxFramework;
-}
-
 function verifyNoIncompatibleTunnelBundle() {
-  if (existsSync(incompatibleTunnelBundle)) {
+  if (existsSync(tunnel.incompatibleBundle)) {
     throw new Error(
-      `Incompatible PacketTunnel bundle is present for ${macosDistribution}: ${incompatibleTunnelBundle}. Re-run pnpm native:macos:tunnel to stage only ${tunnelLayout.label}.`,
+      `Incompatible PacketTunnel bundle is present for ${tunnel.distribution}: ${tunnel.incompatibleBundle}. Re-run pnpm native:macos:tunnel to stage only ${tunnel.layout.label}.`,
     );
   }
 }
@@ -159,8 +101,7 @@ function verifySignature(path, label, requiredEntitlements = []) {
     return "";
   }
 
-  const entitlements = capture("codesign", ["-d", "--entitlements", ":-", path], { cwd: repoRoot });
-  const output = `${entitlements.stdout ?? ""}\n${entitlements.stderr ?? ""}`;
+  const output = codesignEntitlements(path);
   for (const entitlement of requiredEntitlements) {
     if (!output.includes(entitlement)) {
       const message = `${label} signature does not include ${entitlement}.`;
@@ -196,6 +137,8 @@ function verifyNotarizationReadySignature(path, label) {
 }
 
 function verifyLibboxRuntime() {
+  const appexBinary = tunnel.layout.binary;
+  const libbox = tunnel.layout.embeddedLibboxFramework;
   const nm = capture("nm", ["-gU", appexBinary], { cwd: repoRoot });
   const symbols = `${nm.stdout ?? ""}\n${nm.stderr ?? ""}`;
   const hasStaticLibbox = nm.status === 0 && libboxSymbols.every((symbol) => symbols.includes(symbol));
@@ -218,7 +161,7 @@ function verifyLibboxRuntime() {
 }
 
 function verifyLaunchServicesMetadata() {
-  requirePath(appInfoPlist, "macOS app Info.plist");
+  requirePath(appInfoPlist, "macOS app Info.plist", { log: true });
   const carbonRequirement = plistBuddy(appInfoPlist, ":LSRequiresCarbon", true);
   if (carbonRequirement) {
     throw new Error("macOS app Info.plist must not include LSRequiresCarbon; LaunchServices may refuse to open modern Tauri apps.");
@@ -229,19 +172,19 @@ function verifyLaunchServicesMetadata() {
 function main() {
   requireDarwin("macOS native tunnel verification must run on macOS.");
   run(process.execPath, [resolve(repoRoot, "scripts/native/macos/test-bridge.mjs")], { cwd: repoRoot });
-  initializeTunnelLayout();
-  requirePath(appBundle, "macOS app bundle");
+  tunnel = initializeTunnelLayout(appContents, inferDistribution({ appContents }));
+  requirePath(appBundle, "macOS app bundle", { log: true });
   verifyLaunchServicesMetadata();
   verifyNoIncompatibleTunnelBundle();
-  requirePath(appex, tunnelLayout.label);
-  requirePath(appexBinary, "PacketTunnel binary");
-  requireAbsent(exportBindings, "Export bindings development tool");
-  requirePath(singBoxCoreSeed, "sing-box core seed");
+  requirePath(tunnel.layout.bundle, tunnel.layout.label, { log: true });
+  requirePath(tunnel.layout.binary, "PacketTunnel binary", { log: true });
+  requireAbsent(exportBindings, "Export bindings development tool", { log: true });
+  requirePath(singBoxCoreSeed, "sing-box core seed", { log: true });
   verifyLibboxRuntime();
 
   const appProfile = verifyProvisioningProfile(appProvisioningProfile, "macOS app", appBundleIdentifier);
   const packetTunnelProfile = verifyProvisioningProfile(
-    packetTunnelProvisioningProfile,
+    tunnel.layout.provisioningProfile,
     "PacketTunnel",
     packetTunnelBundleIdentifier,
   );
@@ -266,7 +209,7 @@ function main() {
     "com.apple.security.app-sandbox",
     "com.apple.security.inherit",
   ]);
-  verifySignature(appex, tunnelLayout.label, [
+  verifySignature(tunnel.layout.bundle, tunnel.layout.label, [
     "com.apple.developer.networking.networkextension",
     ...profileRequiredEntitlements(packetTunnelProfile),
     "com.apple.security.application-groups",

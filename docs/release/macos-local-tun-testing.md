@@ -108,6 +108,7 @@ open -n /Applications/VoyaVPN.app
 | `VOYAVPN_MACOS_APP_PROVISIONING_PROFILE` / `VOYAVPN_PACKET_TUNNEL_PROVISIONING_PROFILE` | Explicit profile paths; they are still validated against the signing certificate and device. |
 | `VOYAVPN_PROVISIONING_UDID` | Override the detected Provisioning UDID. |
 | `VOYAVPN_MACOS_DMG_PATH` / `VOYAVPN_MACOS_DMG_ARCH` | DMG output path/arch suffix. |
+| `VOYAVPN_MACOS_DMG_DIR` | Directory the DMG is written to when `VOYAVPN_MACOS_DMG_PATH` is unset (default `target/release/bundle/dmg`). |
 
 ## Troubleshooting and teardown
 

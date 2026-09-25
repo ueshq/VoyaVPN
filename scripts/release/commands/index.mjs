@@ -1,13 +1,15 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, relative, resolve } from "node:path";
+import { basename, relative, resolve } from "node:path";
 import { parseArgs } from "../../lib/args.mjs";
-import { readJson, repoRootFromScript } from "../../lib/common.mjs";
+import { repoRootFromScript } from "../../lib/common.mjs";
+import { readJson, writeJson } from "../../lib/fs.mjs";
 import { stableTargets as stableTargetMatrix } from "../matrix.mjs";
 import {
+  artifactEvidence,
+  assertStableIndex,
   defaultEvidencePath,
   isStableChannel,
   joinUrl,
-  normalizeReleaseUrl,
+  normalizeChannelBaseUrl,
   requiredBytes,
   requiredSha256,
   requiredString,
@@ -72,23 +74,12 @@ Stable validation fails when the CDN base URL is missing, empty, an example host
 }
 
 function normalizeBaseUrl(baseUrl, channel) {
-  const value = (baseUrl ?? "").trim();
-  if (!value) {
-    throw new Error(
-      isStableChannel(channel)
-        ? "Stable release index generation requires --base-url or VOYAVPN_CDN_BASE_URL"
-        : "Release index generation requires --base-url or VOYAVPN_CDN_BASE_URL",
-    );
-  }
-
-  // The dry-run lane generates "stable" metadata against the placeholder `.test`
-  // CDN, so local/test hosts stay allowed; readiness is the gate that rejects
-  // them for a real stable run.
-  return normalizeReleaseUrl(value, {
-    allowHttp: true,
-    allowTestHosts: true,
-    checkHost: isStableChannel(channel),
-    label: isStableChannel(channel) ? "Stable CDN base URL" : "CDN base URL",
+  const stable = isStableChannel(channel);
+  return normalizeChannelBaseUrl(baseUrl, channel, {
+    missing: stable
+      ? "Stable release index generation requires --base-url or VOYAVPN_CDN_BASE_URL"
+      : "Release index generation requires --base-url or VOYAVPN_CDN_BASE_URL",
+    label: stable ? "Stable CDN base URL" : "CDN base URL",
   });
 }
 
@@ -306,42 +297,8 @@ function buildTargetEvidence(artifacts) {
       releaseTarget: target.releaseTarget,
       target: target.target,
       arch: target.arch,
-      artifactCount: target.artifacts.length,
-      artifactNames: uniqueSorted(target.artifacts.map((artifact) => artifact.name)),
-      sourceArtifactNames: uniqueSorted(target.artifacts.map((artifact) => artifact.originalName)),
-      checksums: target.artifacts.map((artifact) => ({
-        name: artifact.name,
-        sourceArtifactName: artifact.originalName,
-        bytes: artifact.bytes,
-        sha256: artifact.sha256,
-      })),
+      ...artifactEvidence(target.artifacts),
     }));
-}
-
-function assertStableTargetMatrix(artifacts) {
-  const present = new Set(artifacts.map(stableReleaseTargetFor));
-  const missing = releaseTargetEntries
-    .map((target) => target.releaseTarget)
-    .filter((releaseTarget) => !present.has(releaseTarget));
-
-  if (missing.length > 0) {
-    throw new Error(`Stable release index is missing first-stable target(s): ${missing.join(", ")}`);
-  }
-}
-
-function assertStableIndex(index, baseUrl) {
-  const serialized = JSON.stringify(index).toLowerCase();
-  if (serialized.includes("github.com") || serialized.includes("voyavpn.example") || serialized.includes("placeholder")) {
-    throw new Error("Stable release index contains forbidden placeholder or GitHub content");
-  }
-
-  for (const artifact of index.artifacts) {
-    if (!artifact.url.startsWith(`${baseUrl}/`)) {
-      throw new Error(`Artifact URL is not derived from CDN base URL: ${artifact.url}`);
-    }
-  }
-
-  assertStableTargetMatrix(index.artifacts);
 }
 
 async function main(argv = []) {
@@ -384,7 +341,10 @@ async function main(argv = []) {
   };
 
   if (isStableChannel(channel)) {
-    assertStableIndex(index, baseUrl);
+    assertStableIndex(index, baseUrl, {
+      present: artifacts.map(stableReleaseTargetFor),
+      expected: releaseTargetEntries.map((target) => target.releaseTarget),
+    });
   }
 
   const targetEvidence = buildTargetEvidence(artifacts);
@@ -430,10 +390,8 @@ async function main(argv = []) {
     })),
   };
 
-  await mkdir(dirname(outputPath), { recursive: true });
-  await mkdir(dirname(evidencePath), { recursive: true });
-  await writeFile(outputPath, `${JSON.stringify(index, null, 2)}\n`);
-  await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+  writeJson(outputPath, index);
+  writeJson(evidencePath, evidence);
 
   console.log(`Wrote release index to ${outputPath}`);
   console.log(`Wrote release evidence to ${evidencePath}`);

@@ -1,5 +1,4 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
   chmodSync,
   cpSync,
@@ -13,7 +12,10 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { readJson, sha256FileChunksSync, truthy } from "../lib/common.mjs";
+import { parseArgs } from "../lib/args.mjs";
+import { truthy } from "../lib/common.mjs";
+import { readJson, sha256FileSync, sha256Text, writeJson } from "../lib/fs.mjs";
+import { download } from "./download.mjs";
 
 export const DEFAULT_SING_BOX_VERSION = "v1.13.14";
 const SING_BOX_REPO = "SagerNet/sing-box";
@@ -174,17 +176,6 @@ export function assertPinnedSingBoxArchive({
   return { pinned: status.pinned, sha256: actualSha256 };
 }
 
-const HASH_CHUNK_BYTES = 1024 * 1024;
-
-/**
- * Hashes in fixed chunks instead of buffering the whole ~48 MiB executable.
- * It stays synchronous on purpose: verifyStagedSingBoxSeed is a sync export
- * that the release readiness check and the tests call directly.
- */
-function sha256OfFile(path) {
-  return sha256FileChunksSync(path, HASH_CHUNK_BYTES);
-}
-
 export function readSingBoxSeedManifest(seedDir) {
   const manifestPath = join(seedDir, SING_BOX_SEED_MANIFEST);
   if (!existsSync(manifestPath)) {
@@ -268,7 +259,7 @@ export function verifyStagedSingBoxSeed({
   }
 
   const executable = join(seedDir, executableName);
-  const actual = sha256OfFile(executable);
+  const actual = sha256FileSync(executable);
   if (actual.toLowerCase() !== String(manifest.executableSha256).toLowerCase()) {
     return {
       code: "executable-digest-mismatch",
@@ -285,12 +276,13 @@ function isSingBoxPayloadFile(name) {
   return /^sing-box(\.exe)?$/i.test(name) || /^licen[cs]e(\..*)?$/i.test(name);
 }
 
-function seedRoot(repoRoot) {
+/** Everything a package bundles from `resources/core-seeds`: the core and the rule sets. */
+export function coreSeedsDir(repoRoot) {
   return join(repoRoot, "apps", "desktop", "src-tauri", "resources", "core-seeds");
 }
 
 export function singBoxSeedDir(repoRoot) {
-  return join(seedRoot(repoRoot), SING_BOX_CORE_DIR);
+  return join(coreSeedsDir(repoRoot), SING_BOX_CORE_DIR);
 }
 
 export function defaultAppConfigDir({
@@ -338,7 +330,7 @@ export function shouldSkipSingBoxInstall({ env = process.env, postinstall = fals
   return { reason: null, skip: false };
 }
 
-function hasExpectedSingBoxExecutable(dir, platform = process.platform) {
+export function hasExpectedSingBoxExecutable(dir, platform = process.platform) {
   const executable = join(dir, singBoxExecutableName(platform));
   return existsSync(executable) && statSync(executable).isFile();
 }
@@ -416,21 +408,6 @@ function copySingBoxAppDataToSeed({
   logger.log(`  ✓ copied sing-box app-data binary -> ${targetDir}`);
 
   return { copied: true, sourceDir, targetDir };
-}
-
-async function download(url, destFile, { fetchImpl = fetch } = {}) {
-  const response = await fetchImpl(url, {
-    headers: { "User-Agent": "voyavpn-sing-box-core-installer" },
-    redirect: "follow",
-  });
-  if (!response.ok) {
-    throw new Error(`download failed ${response.status} ${response.statusText}: ${url}`);
-  }
-
-  const buffer = Buffer.from(await response.arrayBuffer());
-  writeFileSync(destFile, buffer);
-
-  return buffer;
 }
 
 function extractArchive(archiveFile, destDir, { platform = process.platform, spawn = spawnSync } = {}) {
@@ -521,8 +498,9 @@ export async function fetchAndStageSingBoxSeed({
   const tempDir = mkdtempSync(join(tmpdir(), "voyavpn-sing-box-core-"));
   try {
     const archiveFile = join(tempDir, assetName);
-    const buffer = await download(url, archiveFile, { fetchImpl });
-    const sha256 = createHash("sha256").update(buffer).digest("hex");
+    const buffer = await download(url, { "User-Agent": "voyavpn-sing-box-core-installer" }, { fetchImpl });
+    writeFileSync(archiveFile, buffer);
+    const sha256 = sha256Text(buffer);
     const verification = assertPinnedSingBoxArchive({
       actualSha256: sha256,
       arch,
@@ -537,7 +515,7 @@ export async function fetchAndStageSingBoxSeed({
 
     const destinationSeedDir = singBoxSeedDir(repoRoot);
     const kept = stageExtractedSingBoxPayload(extractDir, destinationSeedDir, { platform });
-    const executableSha256 = sha256OfFile(join(destinationSeedDir, singBoxExecutableName(platform)));
+    const executableSha256 = sha256FileSync(join(destinationSeedDir, singBoxExecutableName(platform)));
     const manifest = {
       assetName,
       bytes: buffer.length,
@@ -549,7 +527,7 @@ export async function fetchAndStageSingBoxSeed({
       upstreamUrl: url,
       version: resolvedVersion,
     };
-    writeFileSync(join(destinationSeedDir, SING_BOX_SEED_MANIFEST), `${JSON.stringify(manifest, null, 2)}\n`);
+    writeJson(join(destinationSeedDir, SING_BOX_SEED_MANIFEST), manifest);
     logger.log(`  ✓ staged ${kept.join(", ")} -> ${relative(repoRoot, destinationSeedDir)}/`);
     logger.log(`  ✓ SHA256 ${sha256}${verification.pinned ? " (matches pinned digest)" : " (unpinned)"}`);
 
@@ -664,8 +642,12 @@ export async function ensureSingBoxSeedForBuild({
 }
 
 export function parseInstallArgs(argv) {
-  return {
-    forceFetch: argv.includes("--force-fetch"),
-    forceInstall: argv.includes("--force"),
-  };
+  return parseArgs(
+    argv,
+    {
+      "--force": { key: "forceInstall", value: true },
+      "--force-fetch": { key: "forceFetch", value: true },
+    },
+    { forceFetch: false, forceInstall: false },
+  );
 }

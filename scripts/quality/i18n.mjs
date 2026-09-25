@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
-import { readJson, repoRootFromScript } from "../lib/common.mjs";
+import { repoRootFromScript } from "../lib/common.mjs";
+import { readJson } from "../lib/fs.mjs";
 import {
   EXTERNAL_KEY_NAMESPACES,
   inspectI18nSource,

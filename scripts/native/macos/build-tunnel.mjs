@@ -10,7 +10,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { capture, isCliEntrypoint, readJson, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { readJson } from "../../lib/fs.mjs";
 import {
   appBundleIdentifier,
   libboxBinaryPath,
@@ -25,15 +26,14 @@ import {
   distributionFromIdentityName,
 } from "./tunnel-layout.mjs";
 import {
-  assertProfileCapabilities,
   distributionProfileLabel,
   embedProvisioningProfile,
   formatProfileSelectionError,
   localProvisioningUdid,
   plistBuddy,
-  profileRejectionReason,
   resolveProfileFromEnv,
   resolveSigningIdentity,
+  validateProvisioningProfile,
   writeProfileEntitlements,
 } from "./provisioning.mjs";
 
@@ -128,17 +128,6 @@ function findProvisioningProfile(bundleIdentifier, envName, criteria) {
     profileDir: provisioningProfileDir,
     criteria,
   });
-}
-
-function validateProvisioningProfile(profile, label, bundleIdentifier, criteria) {
-  const reason = profileRejectionReason(profile, { ...criteria, bundleIdentifier });
-  if (reason) {
-    throw new Error(`${label} provisioning profile ${profile.path} cannot be used: ${reason}.`);
-  }
-  if (profile.teamIdentifier && !profile.applicationIdentifier.startsWith(`${profile.teamIdentifier}.`)) {
-    throw new Error(`${label} provisioning profile application identifier does not match its team identifier.`);
-  }
-  assertProfileCapabilities(profile, { label, distribution: criteria.distribution });
 }
 
 function profileOrWarn(bundleIdentifier, envName, label, criteria) {
@@ -255,6 +244,8 @@ function buildPacketTunnel() {
   rmSync(incompatibleTunnelBundle, { force: true, recursive: true });
   // A bundle reused from an older build can still hold the appex under its
   // bundle-id folder name, which App Store validation rejects (ITMS-90362).
+  // Remove after 2026-10-31: by then no target/ copy predates the rename
+  // (2026-09-24), and a fresh bundle never has the old folder.
   rmSync(legacyPacketTunnelAppexBundle(appContents), { force: true, recursive: true });
   mkdirSync(dirname(appexBinary), { recursive: true });
   const deployment = packetTunnelDeploymentTarget();

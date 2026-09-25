@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { capture, checkedCapture, repoRootFromScript } from "../../lib/common.mjs";
-import { requiredNetworkExtensionValue } from "./tunnel-layout.mjs";
+import { normalizeDistribution, packetTunnelLayout, requiredNetworkExtensionValue } from "./tunnel-layout.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const defaultDecodedDir = resolve(repoRoot, "target", "native", "macos", "decoded-provisioning-profiles");
@@ -207,6 +207,62 @@ export function assertProfileCapabilities(profile, { label, distribution }) {
   if (!profile.networkExtensions.includes(requiredValue)) {
     throw new Error(`${label} provisioning profile ${profile.path} does not include ${requiredValue}.`);
   }
+}
+
+/**
+ * The one check a selected profile passes before it is embedded or signed with:
+ * the selection criteria again (bundle id, distribution, certificate, device),
+ * an application identifier that belongs to the profile's own team, and the
+ * shared capabilities. build-tunnel and sign-app used to carry two copies and
+ * only one of them checked the team identifier.
+ */
+export function validateProvisioningProfile(profile, label, bundleIdentifier, criteria) {
+  const reason = profileRejectionReason(profile, { ...criteria, bundleIdentifier });
+  if (reason) {
+    throw new Error(`${label} provisioning profile ${profile.path} cannot be used: ${reason}.`);
+  }
+  if (profile.teamIdentifier && !profile.applicationIdentifier.startsWith(`${profile.teamIdentifier}.`)) {
+    throw new Error(`${label} provisioning profile application identifier does not match its team identifier.`);
+  }
+  assertProfileCapabilities(profile, { label, distribution: criteria.distribution });
+}
+
+/** The distribution a decoded profile was issued for: Developer ID, or the store/development lane. */
+function profileDistribution(profile) {
+  if (
+    profile.developerCertificateSubjects?.some((subject) => subject.includes("CN=Developer ID Application:"))
+    || profile.networkExtensions.includes("packet-tunnel-provider-systemextension")
+  ) {
+    return "developer-id";
+  }
+  return "app-store";
+}
+
+/**
+ * The distribution a staged app bundle is for, when `VOYAVPN_MACOS_DISTRIBUTION`
+ * does not say. The embedded app profile is the authority: build-tunnel embeds
+ * it before anything is signed, and it names both the certificate lane and the
+ * NetworkExtension flavour. Without one, a staged system extension means
+ * Developer ID; otherwise the app-extension lane.
+ */
+export function inferDistribution({
+  appContents,
+  env = process.env,
+  exists = existsSync,
+  decodeProfile = decodeProvisioningProfile,
+}) {
+  const explicit = normalizeDistribution(env.VOYAVPN_MACOS_DISTRIBUTION);
+  if (explicit !== "auto") {
+    return explicit;
+  }
+  const appProfile = resolve(appContents, "embedded.provisionprofile");
+  if (exists(appProfile)) {
+    return profileDistribution(decodeProfile(appProfile));
+  }
+  if (exists(packetTunnelLayout(appContents, "developer-id").bundle)) {
+    return "developer-id";
+  }
+  return "app-store";
 }
 
 export function formatProfileSelectionError(label, bundleIdentifier, rejections, profileDir) {

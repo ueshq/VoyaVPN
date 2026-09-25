@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
-import { closeSync, createReadStream, openSync, readSync, readdirSync, readFileSync } from "node:fs";
+import {
+  closeSync,
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 /**
  * Filesystem helpers shared by the quality, release, and native scripts.
@@ -57,16 +67,12 @@ export function sha256Text(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-/** Synchronous whole-file hash. For small files and sync APIs (tunnel service). */
-export function sha256FileSync(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-
 /**
- * Hashes in fixed chunks instead of buffering the whole file. Stays available
- * as a sync entry point for callers such as the staged-seed verifier.
+ * Synchronous file hash in fixed chunks, so a ~48 MiB core executable is never
+ * buffered whole. Sync on purpose: the staged-seed verifier and the Windows
+ * tunnel service helper call it from synchronous code paths.
  */
-export function sha256FileChunksSync(path, chunkBytes = 1024 * 1024) {
+export function sha256FileSync(path, chunkBytes = 1024 * 1024) {
   const hash = createHash("sha256");
   const chunk = Buffer.allocUnsafe(chunkBytes);
   const fd = openSync(path, "r");
@@ -99,4 +105,20 @@ export function readJson(path) {
 /** Async JSON read. Distinct name so it never shadows the sync `readJson`. */
 export async function readJsonAsync(path) {
   return JSON.parse(await readFile(path, "utf8"));
+}
+
+/**
+ * Writes `value` as two-space-indented JSON with a trailing newline, creating
+ * the parent directory. `onlyIfChanged` leaves identical bytes alone so a file
+ * regenerated on every build does not bump its mtime for anything watching it.
+ * Returns the text that is (or already was) on disk.
+ */
+export function writeJson(path, value, { onlyIfChanged = false } = {}) {
+  const content = `${JSON.stringify(value, null, 2)}\n`;
+  if (onlyIfChanged && existsSync(path) && readFileSync(path, "utf8") === content) {
+    return content;
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+  return content;
 }

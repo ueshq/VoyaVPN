@@ -11,7 +11,7 @@ import os.log
     final class VoyaPacketTunnelPlatformInterface: NSObject, LibboxPlatformInterfaceProtocol, LibboxCommandServerHandlerProtocol {
         private weak var provider: PacketTunnelProvider?
         private var networkSettings: NEPacketTunnelNetworkSettings?
-        private var defaultPathMonitor: NWPathMonitor?
+        private let defaultInterfaceMonitor = VoyaDefaultInterfaceMonitor()
 
         init(provider: PacketTunnelProvider) {
             self.provider = provider
@@ -199,50 +199,18 @@ import os.log
         }
 
         func startDefaultInterfaceMonitor(_ listener: LibboxInterfaceUpdateListenerProtocol?) throws {
-            guard let listener else {
-                return
-            }
-
-            let monitor = NWPathMonitor()
-            defaultPathMonitor = monitor
-            let semaphore = DispatchSemaphore(value: 0)
-            monitor.pathUpdateHandler = { path in
-                self.updateDefaultInterface(listener, path)
-                semaphore.signal()
-                monitor.pathUpdateHandler = { path in
-                    self.updateDefaultInterface(listener, path)
-                }
-            }
-            monitor.start(queue: DispatchQueue.global(qos: .utility))
-            semaphore.wait()
-        }
-
-        private func updateDefaultInterface(_ listener: LibboxInterfaceUpdateListenerProtocol, _ path: Network.NWPath) {
-            guard path.status != .unsatisfied,
-                  let defaultInterface = path.availableInterfaces.first
-            else {
-                listener.updateDefaultInterface("", interfaceIndex: -1, isExpensive: false, isConstrained: false)
-                return
-            }
-            listener.updateDefaultInterface(
-                defaultInterface.name,
-                interfaceIndex: Int32(defaultInterface.index),
-                isExpensive: path.isExpensive,
-                isConstrained: path.isConstrained
-            )
+            defaultInterfaceMonitor.start(listener)
         }
 
         func closeDefaultInterfaceMonitor(_: LibboxInterfaceUpdateListenerProtocol?) throws {
-            defaultPathMonitor?.cancel()
-            defaultPathMonitor = nil
+            defaultInterfaceMonitor.close()
         }
 
         func getInterfaces() throws -> LibboxNetworkInterfaceIteratorProtocol {
-            guard let defaultPathMonitor else {
+            guard let path = defaultInterfaceMonitor.currentPath else {
                 throw platformError("Default interface monitor is not started.")
             }
 
-            let path = defaultPathMonitor.currentPath
             guard path.status != .unsatisfied else {
                 return VoyaNetworkInterfaceIterator([])
             }
@@ -356,8 +324,7 @@ import os.log
 
         func reset() {
             networkSettings = nil
-            defaultPathMonitor?.cancel()
-            defaultPathMonitor = nil
+            defaultInterfaceMonitor.close()
         }
 
         private func platformError(_ message: String) -> NSError {

@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { hasStagedRuleSets } from "../core/rule-sets-installer.mjs";
-import { singBoxExecutableName } from "../core/sing-box-installer.mjs";
+import { coreSeedsDir, hasExpectedSingBoxExecutable } from "../core/sing-box-installer.mjs";
+import { writeJson } from "../lib/fs.mjs";
 
 export const requiredBundleResources = {
   "../../../docs/release/THIRD_PARTY_NOTICES.md": "release/THIRD_PARTY_NOTICES.md",
@@ -10,7 +10,7 @@ export const requiredBundleResources = {
 const optionalCoreSeedResources = [
   {
     dir: "sing_box",
-    isStaged: (dir, platform) => hasExpectedSeedExecutable(dir, platform),
+    isStaged: (dir, platform) => hasExpectedSingBoxExecutable(dir, platform),
     source: "resources/core-seeds/sing_box/*",
     target: "core-seeds/sing_box/",
   },
@@ -24,20 +24,8 @@ const optionalCoreSeedResources = [
   },
 ];
 
-export function hasExpectedSeedExecutable(seedDir, platform = process.platform) {
-  if (!existsSync(seedDir)) {
-    return false;
-  }
-
-  const expectedExecutable = singBoxExecutableName(platform).toLowerCase();
-
-  return readdirSync(seedDir, { withFileTypes: true }).some(
-    (entry) => entry.isFile() && entry.name.toLowerCase() === expectedExecutable,
-  );
-}
-
 export function coreSeedBundleResources(repoRoot, { platform = process.platform } = {}) {
-  const seedRoot = join(repoRoot, "apps", "desktop", "src-tauri", "resources", "core-seeds");
+  const seedRoot = coreSeedsDir(repoRoot);
   const resources = {};
 
   for (const seed of optionalCoreSeedResources) {
@@ -64,13 +52,8 @@ export function writeOptionalCoreSeedOverlay(repoRoot, overlayPath, options = {}
     },
   };
 
-  // Every `pnpm dev` / `tauri build` regenerates the overlay; rewriting identical
-  // bytes would only bump its mtime for anything that watches the file.
-  const content = `${JSON.stringify(overlay, null, 2)}\n`;
-  if (!existsSync(overlayPath) || readFileSync(overlayPath, "utf8") !== content) {
-    mkdirSync(dirname(overlayPath), { recursive: true });
-    writeFileSync(overlayPath, content);
-  }
+  // Every `pnpm dev` / `tauri build` regenerates the overlay.
+  writeJson(overlayPath, overlay, { onlyIfChanged: true });
 
   return overlayPath;
 }

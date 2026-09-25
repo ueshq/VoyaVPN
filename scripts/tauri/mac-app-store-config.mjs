@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import { capture, truthy } from "../lib/common.mjs";
+import { writeJson } from "../lib/fs.mjs";
 
 /** LSMinimumSystemVersion of the store package; see `macAppStoreOverlay`. */
 const macAppStoreMinimumSystemVersion = "26.0";
@@ -78,10 +78,6 @@ export function macAppStoreOverlay({ buildNumber }) {
 export function writeMacAppStoreOverlay({ repoRoot, env = process.env, captureCommand = capture }) {
   const buildNumber = resolveMacAppStoreBuildNumber({ env, repoRoot, captureCommand });
   const overlayPath = resolve(repoRoot, "target", "release-config", "tauri.mac-app-store.generated.json");
-  const content = `${JSON.stringify(macAppStoreOverlay({ buildNumber }), null, 2)}\n`;
-  if (!existsSync(overlayPath) || readFileSync(overlayPath, "utf8") !== content) {
-    mkdirSync(dirname(overlayPath), { recursive: true });
-    writeFileSync(overlayPath, content);
-  }
+  writeJson(overlayPath, macAppStoreOverlay({ buildNumber }), { onlyIfChanged: true });
   return { overlayPath, buildNumber };
 }

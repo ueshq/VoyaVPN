@@ -61,6 +61,9 @@ pnpm native:mobile:rust:ios      # VoyaMobile.xcframework  → apps/mobile/ios/F
                                  # + Swift bindings        → apps/mobile/ios/VoyaVPN/Generated/
 ```
 
+`native:mobile:rust:*` builds the `release` cargo profile; set
+`VOYAVPN_RUST_PROFILE=debug` for a faster unoptimised library while iterating.
+
 Then the CocoaPods dependencies React Native itself needs:
 
 ```sh

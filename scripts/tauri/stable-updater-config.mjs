@@ -1,26 +1,12 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, relative, resolve } from "node:path";
+import { relative, resolve } from "node:path";
 
-import { truthy } from "../lib/common.mjs";
+import { environmentValue, falsey, truthy } from "../lib/common.mjs";
+import { sha256Text, writeJson } from "../lib/fs.mjs";
 import { resolveApprovedUpdaterPublicKey } from "../release/updater-signatures.mjs";
-import { normalizeReleaseUrl, sha256Text } from "../release/validation.mjs";
-
-function falsey(value) {
-  return /^(0|false|no|off)$/i.test(String(value ?? "").trim());
-}
-
-function firstEnv(env, ...names) {
-  for (const name of names) {
-    const value = env[name];
-    if (value !== undefined && value !== null && String(value).trim().length > 0) {
-      return String(value).trim();
-    }
-  }
-  return null;
-}
+import { normalizeReleaseUrl } from "../release/validation.mjs";
 
 function stableUpdaterBaseUrl(env) {
-  const value = firstEnv(env, "VOYAVPN_UPDATES_BASE_URL");
+  const value = environmentValue(env, "VOYAVPN_UPDATES_BASE_URL");
   if (!value) {
     throw new Error("VOYAVPN_UPDATES_BASE_URL is required for stable Tauri updater builds.");
   }
@@ -46,7 +32,7 @@ export function requestedStableUpdaterConfig(env = process.env) {
     throw new Error("VOYAVPN_TAURI_UPDATER_CONFIG must be stable, true, or false.");
   }
 
-  return (env.VOYAVPN_RELEASE_CHANNEL ?? env.RELEASE_CHANNEL ?? env.CHANNEL ?? "").trim().toLowerCase() === "stable";
+  return (env.VOYAVPN_RELEASE_CHANNEL ?? "").trim().toLowerCase() === "stable";
 }
 
 export function normalizeCiEnv(source = process.env) {
@@ -57,7 +43,7 @@ export function normalizeCiEnv(source = process.env) {
 }
 
 export function writeStableUpdaterOverlay({ repoRoot, env = process.env }) {
-  if (!firstEnv(env, "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PATH")) {
+  if (!environmentValue(env, "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PATH")) {
     throw new Error(
       "TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PATH is required when stable updater artifacts are enabled.",
     );
@@ -83,23 +69,13 @@ export function writeStableUpdaterOverlay({ repoRoot, env = process.env }) {
     "release-config",
     "tauri.updater.stable.generated.metadata.json",
   );
-  const overlayText = `${JSON.stringify(overlay, null, 2)}\n`;
-
-  mkdirSync(dirname(overlayPath), { recursive: true });
-  writeFileSync(overlayPath, overlayText);
-  writeFileSync(
-    metadataPath,
-    `${JSON.stringify(
-      {
-        path: relative(repoRoot, overlayPath).replaceAll("\\", "/"),
-        sha256: sha256Text(overlayText),
-        pubkeySha256: sha256Text(publicKey),
-        endpoints,
-        createUpdaterArtifacts: true,
-      },
-      null,
-      2,
-    )}\n`,
-  );
+  const overlayText = writeJson(overlayPath, overlay);
+  writeJson(metadataPath, {
+    path: relative(repoRoot, overlayPath).replaceAll("\\", "/"),
+    sha256: sha256Text(overlayText),
+    pubkeySha256: sha256Text(publicKey),
+    endpoints,
+    createUpdaterArtifacts: true,
+  });
   return overlayPath;
 }

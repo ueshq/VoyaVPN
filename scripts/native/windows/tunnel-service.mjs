@@ -15,8 +15,9 @@ import {
   isCliEntrypoint,
   repoRootFromScript,
   run,
-  sha256FileSync,
+  sleepSync,
 } from "../../lib/common.mjs";
+import { sha256FileSync } from "../../lib/fs.mjs";
 import { singBoxExecutableName, singBoxSeedDir } from "../../core/sing-box-installer.mjs";
 
 export const WINDOWS_TUN_SERVICE_NAME = "VoyaVPNTunnelService";
@@ -47,16 +48,6 @@ const serviceExecutableName = "voyavpn-tunnel-service.exe";
 const productDirName = "VoyaVPN";
 const singBoxCoreDirName = "sing_box";
 const runtimeStagingDirName = "runtime";
-const sleeper = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
-
-function defaultWait(milliseconds) {
-  Atomics.wait(sleeper, 0, 0, milliseconds);
-}
-
-function defaultHashFile(path) {
-  return sha256FileSync(path);
-}
-
 function missingService(result) {
   return /(?:FAILED\s+)?1060\b/i.test(String(result.stderr || result.stdout || ""));
 }
@@ -239,8 +230,8 @@ export function installTunnelService({
   fileStat = statSync,
   makeDirectory = mkdirSync,
   copyFile = copyFileSync,
-  hashFile = defaultHashFile,
-  wait = defaultWait,
+  hashFile = sha256FileSync,
+  wait = sleepSync,
   ensureBuilt = buildTunnelService,
   singBoxSourcePath = singBoxSeedExecutablePath(repoRoot),
   timeoutMs = 20_000,
@@ -349,7 +340,7 @@ export function uninstallTunnelService({
   runCommand = run,
   fileExists = existsSync,
   removeFile = rmSync,
-  wait = defaultWait,
+  wait = sleepSync,
   timeoutMs = 20_000,
   pollIntervalMs = 250,
 } = {}) {

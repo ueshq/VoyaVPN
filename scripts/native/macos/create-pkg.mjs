@@ -8,16 +8,19 @@ import {
   requireDarwin,
   run,
   truthy,
-  walkFilesSync,
 } from "../../lib/common.mjs";
+import { walkFilesSync } from "../../lib/fs.mjs";
 import {
   appBundleIdentifier,
+  codesignEntitlements,
   compareMacosVersions,
   incompatiblePacketTunnelBundle,
   legacyPacketTunnelAppexBundle,
   normalizeDistribution,
   packetTunnelBundleIdentifier,
   packetTunnelLayout,
+  requireAbsent,
+  requirePath,
 } from "./tunnel-layout.mjs";
 import {
   decodeProvisioningProfile,
@@ -160,18 +163,6 @@ export function resolvePkgPath({ pkgDir: dir, version, buildNumber, arch, env = 
   return resolve(dir, `VoyaVPN_${version}_${buildNumber}_${arch}.pkg`);
 }
 
-function requirePath(path, label) {
-  if (!existsSync(path)) {
-    throw new Error(`${label} is missing: ${path}`);
-  }
-}
-
-function requireAbsent(path, label) {
-  if (existsSync(path)) {
-    throw new Error(`${label} must not ship in the App Store package: ${path}`);
-  }
-}
-
 function requireAppStoreDistribution() {
   const distribution = normalizeDistribution(process.env.VOYAVPN_MACOS_DISTRIBUTION);
   if (distribution === "developer-id") {
@@ -187,21 +178,18 @@ function executablesIn(contents) {
   });
 }
 
-function codesignEntitlements(path) {
-  const result = capture("codesign", ["-d", "--entitlements", ":-", path], { cwd: repoRoot });
-  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-}
-
 function verifyBundleShape(layout) {
   requirePath(appBundle, "macOS app bundle");
   requirePath(layout.bundle, layout.label);
   requirePath(layout.binary, "PacketTunnel binary");
   requirePath(resolve(appContents, "embedded.provisionprofile"), "macOS app provisioning profile");
   requirePath(layout.provisioningProfile, "PacketTunnel provisioning profile");
-  requireAbsent(incompatiblePacketTunnelBundle(appContents, "app-store"), "A Developer ID system extension");
-  requireAbsent(legacyPacketTunnelAppexBundle(appContents), "A PacketTunnel under the old bundle-id folder name");
-  requireAbsent(resolve(appContents, "MacOS", "export-bindings"), "The export-bindings development tool");
-  requireAbsent(resolve(appContents, "MacOS", "voyavpn-tunnel-service"), "The Windows-only tunnel service");
+  const reason = "must not ship in the App Store package";
+  requireAbsent(incompatiblePacketTunnelBundle(appContents, "app-store"), "A Developer ID system extension", { reason });
+  // Remove after 2026-10-31, together with the matching guard in build-tunnel.mjs.
+  requireAbsent(legacyPacketTunnelAppexBundle(appContents), "A PacketTunnel under the old bundle-id folder name", { reason });
+  requireAbsent(resolve(appContents, "MacOS", "export-bindings"), "The export-bindings development tool", { reason });
+  requireAbsent(resolve(appContents, "MacOS", "voyavpn-tunnel-service"), "The Windows-only tunnel service", { reason });
 }
 
 /** A development profile signs fine and uploads fine, then fails App Review. */

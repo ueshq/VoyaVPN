@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev:web": "vite --host 127.0.0.1 --port 1420",
-    "build": "tsc -b --pretty false && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --pretty false",
     "test": "vitest"

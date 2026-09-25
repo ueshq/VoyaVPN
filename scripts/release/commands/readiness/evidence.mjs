@@ -1,14 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { checkedCapture } from "../../../lib/common.mjs";
+import { sha256File, sha256Text } from "../../../lib/fs.mjs";
 import {
+  forbiddenSerializedContent,
   isPositiveByteSize,
   isSha256Hex,
   isUrlDerivedFromBase,
   missingExpectedValues,
   placeholderText,
-  sha256File,
-  sha256Text,
   walkArtifactManifests,
 } from "../../validation.mjs";
 import { stableTargets } from "../../matrix.mjs";
@@ -19,10 +19,8 @@ import {
   displayPath,
   isDryRun,
   stableInputPath,
-  stableInputPathAny,
   assertStableEvidencePath,
   assert,
-  forbiddenSerialized,
 } from "./inputs.mjs";
 import { lineSummary } from "./reporter.mjs";
 
@@ -41,7 +39,7 @@ function validateReleaseIndex(index, cdnBaseUrl) {
   assert(index.channel === "stable", "release index channel must be stable");
   assert(index.baseUrl === cdnBaseUrl, "release index baseUrl must match readiness CDN base URL");
   assert(Array.isArray(index.artifacts) && index.artifacts.length > 0, "release index artifacts[] must be non-empty");
-  assert(!forbiddenSerialized(index), "release index contains placeholder, example, or GitHub content");
+  assert(!forbiddenSerializedContent(index), "release index contains placeholder, example, or GitHub content");
 
   const present = new Set(index.artifacts.map((artifact) => `${artifact.target}/${artifact.arch}`));
   const missing = missingExpectedValues(
@@ -61,7 +59,7 @@ function validateUpdaterMetadata(latest, updatesBaseUrl) {
   assert(typeof latest.version === "string" && latest.version.length > 0, "latest.json version is missing");
   assert(typeof latest.pub_date === "string" && latest.pub_date.length > 0, "latest.json pub_date is missing");
   assert(latest.platforms && typeof latest.platforms === "object", "latest.json platforms object is missing");
-  assert(!forbiddenSerialized(latest), "latest.json contains placeholder, example, or GitHub content");
+  assert(!forbiddenSerializedContent(latest), "latest.json contains placeholder, example, or GitHub content");
 
   const keys = Object.keys(latest.platforms).sort((left, right) => left.localeCompare(right));
   const missing = missingExpectedValues(stableTargets.map((target) => target.updater), new Set(keys));
@@ -125,7 +123,7 @@ async function checkStableUpdaterConfigEvidence(reporter, options, roots, update
     return;
   }
 
-  const updaterPublicKey = process.env.VOYAVPN_UPDATER_PUBLIC_KEY ?? process.env.TAURI_UPDATER_PUBLIC_KEY ?? "";
+  const updaterPublicKey = process.env.VOYAVPN_UPDATER_PUBLIC_KEY ?? "";
   const manifestPaths = [];
   for (const root of roots) {
     manifestPaths.push(...(await walkArtifactManifests(resolveRepoPath(root))));
@@ -192,20 +190,18 @@ async function checkStableUpdaterConfigEvidence(reporter, options, roots, update
 
 export async function checkGeneratedManifests(reporter, options, cdnBaseUrl, updatesBaseUrl, workDir) {
   const releaseArtifacts = stableInputPath(
-    options,
     options.releaseArtifacts,
     "VOYAVPN_RELEASE_ARTIFACTS_DIR",
     isDryRun(options) ? "tests/fixtures/release/artifacts" : "dist/release/artifacts",
   );
   const updaterArtifacts = stableInputPath(
-    options,
     options.updaterArtifacts,
     "VOYAVPN_SIGNED_UPDATER_DIR",
     isDryRun(options) ? "tests/fixtures/release/signed-updater" : "dist/release/signed-updater",
   );
-  const coreAssets = stableInputPathAny(
+  const coreAssets = stableInputPath(
     options.coreAssets,
-    ["VOYAVPN_CORE_ASSETS_FILE", "VOYAVPN_CORE_ASSETS_FIXTURE"],
+    "VOYAVPN_CORE_ASSETS_FILE",
     isDryRun(options) ? "tests/fixtures/release/core-assets.json" : "dist/release/core-assets/source-core-assets.json",
   );
 
@@ -217,11 +213,9 @@ export async function checkGeneratedManifests(reporter, options, cdnBaseUrl, upd
     VOYAVPN_UPDATES_BASE_URL: updatesBaseUrl,
   };
   if (isDryRun(options)) {
-    const fixtureUpdaterPublicKey = (
+    env.VOYAVPN_UPDATER_PUBLIC_KEY = (
       await readFile(resolveRepoPath("tests/fixtures/release/updater-signing/public.key"), "utf8")
     ).trim();
-    env.VOYAVPN_UPDATER_PUBLIC_KEY = fixtureUpdaterPublicKey;
-    env.TAURI_UPDATER_PUBLIC_KEY = fixtureUpdaterPublicKey;
   }
 
   assertStableEvidencePath(options, "release artifacts", releaseArtifacts);

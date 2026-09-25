@@ -1,12 +1,9 @@
 import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { capture, isCliEntrypoint, readJson, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
-import {
-  incompatiblePacketTunnelBundle,
-  packetTunnelLayout,
-  normalizeDistribution,
-  resolveDmgPath,
-} from "./tunnel-layout.mjs";
+import { isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import { readJson } from "../../lib/fs.mjs";
+import { inferDistribution } from "./provisioning.mjs";
+import { initializeTunnelLayout, packetTunnelLayout, requirePath, resolveDmgPath } from "./tunnel-layout.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const packageJson = readJson(resolve(repoRoot, "package.json"));
@@ -19,18 +16,7 @@ const stagingRoot = resolve(repoRoot, "target", "native", "macos", "dmg-staging"
 const stagingApp = resolve(stagingRoot, "VoyaVPN.app");
 const stagingApplicationsLink = resolve(stagingRoot, "Applications");
 const appProvisioningProfile = resolve(appContents, "embedded.provisionprofile");
-let macosDistribution;
-let tunnelLayout;
-let incompatibleTunnelBundle;
-let packetTunnelBundle;
-let packetTunnelBinary;
-let packetTunnelProvisioningProfile;
-
-function requirePath(path, label) {
-  if (!existsSync(path)) {
-    throw new Error(`${label} is missing: ${path}`);
-  }
-}
+let tunnel;
 
 function optionalOrRequiredPath(path, label) {
   if (existsSync(path)) {
@@ -43,48 +29,17 @@ function optionalOrRequiredPath(path, label) {
   console.warn(`! ${message}`);
 }
 
-function codesignEntitlements(path) {
-  const result = capture("codesign", ["-d", "--entitlements", ":-", path], {
-    cwd: repoRoot,
-  });
-  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`;
-}
-
-function inferDistribution() {
-  const explicit = normalizeDistribution(process.env.VOYAVPN_MACOS_DISTRIBUTION);
-  if (explicit !== "auto") {
-    return explicit;
-  }
-  const entitlements = existsSync(appBundle) ? codesignEntitlements(appBundle) : "";
-  if (entitlements.includes("packet-tunnel-provider-systemextension")) {
-    return "developer-id";
-  }
-  if (existsSync(packetTunnelLayout(appContents, "developer-id").bundle)) {
-    return "developer-id";
-  }
-  return "app-store";
-}
-
-function initializeTunnelLayout() {
-  macosDistribution = inferDistribution();
-  tunnelLayout = packetTunnelLayout(appContents, macosDistribution);
-  incompatibleTunnelBundle = incompatiblePacketTunnelBundle(appContents, macosDistribution);
-  packetTunnelBundle = tunnelLayout.bundle;
-  packetTunnelBinary = tunnelLayout.binary;
-  packetTunnelProvisioningProfile = tunnelLayout.provisioningProfile;
-}
-
 function verifyFinalApp() {
   requirePath(appBundle, "macOS app bundle");
-  if (existsSync(incompatibleTunnelBundle)) {
+  if (existsSync(tunnel.incompatibleBundle)) {
     throw new Error(
-      `Incompatible PacketTunnel bundle is present for ${macosDistribution}: ${incompatibleTunnelBundle}. Re-run pnpm native:macos:tunnel before creating the DMG.`,
+      `Incompatible PacketTunnel bundle is present for ${tunnel.distribution}: ${tunnel.incompatibleBundle}. Re-run pnpm native:macos:tunnel before creating the DMG.`,
     );
   }
-  requirePath(packetTunnelBundle, tunnelLayout.label);
-  requirePath(packetTunnelBinary, "PacketTunnel binary");
+  requirePath(tunnel.layout.bundle, tunnel.layout.label);
+  requirePath(tunnel.layout.binary, "PacketTunnel binary");
   optionalOrRequiredPath(appProvisioningProfile, "macOS app provisioning profile");
-  optionalOrRequiredPath(packetTunnelProvisioningProfile, "PacketTunnel provisioning profile");
+  optionalOrRequiredPath(tunnel.layout.provisioningProfile, "PacketTunnel provisioning profile");
 }
 
 function createStagingDirectory() {
@@ -149,7 +104,7 @@ export function dmgSigningPlan({ distribution, identity, requireCodesign = false
 
 function signDmg(outputPath) {
   const plan = dmgSigningPlan({
-    distribution: macosDistribution,
+    distribution: tunnel.distribution,
     identity: process.env.VOYAVPN_CODESIGN_IDENTITY,
     requireCodesign: truthy(process.env.VOYAVPN_REQUIRE_CODESIGN),
     disableTimestamp: truthy(process.env.VOYAVPN_DISABLE_CODESIGN_TIMESTAMP),
@@ -179,30 +134,22 @@ function detachDmg(mountPoint) {
 function verifyDmgContents(outputPath) {
   const mountPoint = attachDmg(outputPath);
   const mountedApp = resolve(mountPoint, "VoyaVPN.app");
+  const mountedLayout = packetTunnelLayout(resolve(mountedApp, "Contents"), tunnel.distribution);
   try {
     requirePath(mountedApp, "DMG macOS app bundle");
-    requirePath(
-      packetTunnelLayout(resolve(mountedApp, "Contents"), macosDistribution).bundle,
-      `DMG ${tunnelLayout.label}`,
-    );
-    requirePath(
-      packetTunnelLayout(resolve(mountedApp, "Contents"), macosDistribution).binary,
-      "DMG PacketTunnel binary",
-    );
+    requirePath(mountedLayout.bundle, `DMG ${tunnel.layout.label}`);
+    requirePath(mountedLayout.binary, "DMG PacketTunnel binary");
     optionalOrRequiredPath(
       resolve(mountedApp, "Contents", "embedded.provisionprofile"),
       "DMG macOS app provisioning profile",
     );
-    optionalOrRequiredPath(
-      packetTunnelLayout(resolve(mountedApp, "Contents"), macosDistribution).provisioningProfile,
-      "DMG PacketTunnel provisioning profile",
-    );
+    optionalOrRequiredPath(mountedLayout.provisioningProfile, "DMG PacketTunnel provisioning profile");
     run("pnpm", ["native:macos:tunnel:verify"], {
       cwd: repoRoot,
       env: {
         ...process.env,
         VOYAVPN_MACOS_APP_BUNDLE: mountedApp,
-        VOYAVPN_MACOS_DISTRIBUTION: macosDistribution,
+        VOYAVPN_MACOS_DISTRIBUTION: tunnel.distribution,
       },
     });
   } finally {
@@ -212,7 +159,7 @@ function verifyDmgContents(outputPath) {
 
 function main() {
   requireDarwin("macOS DMG creation must run on macOS.");
-  initializeTunnelLayout();
+  tunnel = initializeTunnelLayout(appContents, inferDistribution({ appContents }));
   verifyFinalApp();
   createStagingDirectory();
   const outputPath = resolveDmgPath({ appContents, dmgDir, version: packageJson.version });

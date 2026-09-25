@@ -140,7 +140,7 @@ Stable packaging uses the generated overlay from `scripts/tauri/cli.mjs`:
 
 - Overlay path: `target/release-config/tauri.updater.stable.generated.json`.
 - `bundle.createUpdaterArtifacts`: `true`.
-- `plugins.updater.pubkey`: read from `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY`.
+- `plugins.updater.pubkey`: read from `VOYAVPN_UPDATER_PUBLIC_KEY`.
 - `plugins.updater.endpoints`: `<VOYAVPN_UPDATES_BASE_URL>/latest.json`.
 - Windows updater install mode: `passive`.
 
@@ -184,7 +184,7 @@ Before a real stable release:
    pnpm tauri signer generate --write-keys <secure-private-key-path> --ci
    ```
 
-2. Store only the public key in `VOYAVPN_UPDATER_PUBLIC_KEY` or `TAURI_UPDATER_PUBLIC_KEY`; do not commit it into the base config.
+2. Store only the public key in `VOYAVPN_UPDATER_PUBLIC_KEY`; do not commit it into the base config.
 3. Store the private key in CI or local release secrets through `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`. Store the key password in `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` when one is used.
 4. Set the prepared stable environment names described in [runbook.md](runbook.md), including `VOYAVPN_CDN_BASE_URL`, `VOYAVPN_UPDATES_BASE_URL`, `VOYAVPN_UPDATER_PUBLIC_KEY`, updater signing, platform signing, and real artifact input names.
 5. Generate and inspect the overlay before packaging with the command above.

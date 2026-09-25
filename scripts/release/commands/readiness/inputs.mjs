@@ -1,7 +1,8 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { readJsonAsync, repoRootFromScript } from "../../../lib/common.mjs";
+import { environmentValue, repoRootFromScript } from "../../../lib/common.mjs";
+import { readJsonAsync } from "../../../lib/fs.mjs";
 import { normalizeReleaseUrl } from "../../validation.mjs";
 export const repoRoot = repoRootFromScript(import.meta.url);
 export const defaultTauriConfig = "apps/desktop/src-tauri/tauri.conf.json";
@@ -19,20 +20,9 @@ export function resolveRepoPath(path) {
   return resolve(repoRoot, path);
 }
 
-export function stableInputPath(options, explicit, envName, fallback) {
-  return explicit ?? process.env[envName] ?? fallback;
-}
-
-export function stableInputPathAny(explicit, envNames, fallback) {
-  if (explicit) {
-    return explicit;
-  }
-  for (const envName of envNames) {
-    if (process.env[envName]) {
-      return process.env[envName];
-    }
-  }
-  return fallback;
+/** A stable input path: the CLI option, else the environment, else the default. */
+export function stableInputPath(explicit, envName, fallback) {
+  return explicit ?? (environmentValue(process.env, envName) || fallback);
 }
 
 export function assertStableEvidencePath(options, label, path) {
@@ -69,11 +59,6 @@ export function normalizeUrl(value, label, mode, { defaultDryRunUrl = null, requ
 }
 
 export { readJsonAsync };
-
-export function forbiddenSerialized(value) {
-  const text = JSON.stringify(value).toLowerCase();
-  return text.includes("voyavpn.example") || text.includes("placeholder") || text.includes("github.com");
-}
 
 export function assert(condition, message) {
   if (!condition) {

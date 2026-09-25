@@ -1,16 +1,15 @@
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const inputs = ["pnpm-lock.yaml", "apps/mobile/package.json", "apps/mobile/react-native.config.js", "apps/mobile/ios/Podfile", "apps/mobile/ios/Podfile.lock"];
+import { sha256Text } from "../../lib/fs.mjs";
+
+const inputs = ["pnpm-lock.yaml", "apps/mobile/package.json", "apps/mobile/ios/Podfile", "apps/mobile/ios/Podfile.lock"];
 const stamp = "apps/mobile/ios/Pods/.voya-inputs-sha256";
 function fingerprint(root) {
-  const hash = createHash("sha256");
-  for (const path of inputs) {
-    hash.update(path);
-    hash.update(existsSync(resolve(root, path)) ? readFileSync(resolve(root, path)) : "missing");
-  }
-  return hash.digest("hex");
+  return sha256Text(Buffer.concat(inputs.flatMap((path) => [
+    Buffer.from(path),
+    existsSync(resolve(root, path)) ? readFileSync(resolve(root, path)) : Buffer.from("missing"),
+  ])));
 }
 function installed(root) {
   const lock = resolve(root, "apps/mobile/ios/Podfile.lock");

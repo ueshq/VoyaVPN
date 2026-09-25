@@ -145,6 +145,11 @@ generated_group = app_group.children.find { |child| child.display_name == 'Gener
 %w[VoyaNative.swift VoyaNative.m VoyaDeviceActions.swift VoyaDeviceActions.m SystemTunnelHost.swift LibboxProbeCoreHost.swift].each do |name|
   ensure_source(app, file_ref(native_group, name))
 end
+# Shared with the PacketTunnel provider (and the macOS tunnel build): the probe
+# core's platform interface uses the same default-interface monitor.
+apple_shared_group = group_at(project, 'AppleShared', '../../../native/apple')
+default_interface_monitor = file_ref(apple_shared_group, 'DefaultInterfaceMonitor.swift')
+ensure_source(app, default_interface_monitor)
 # Hand-written, not generated: it is what lets the generated Swift see the C
 # symbols (see SWIFT_OBJC_BRIDGING_HEADER below).
 file_ref(native_group, 'VoyaVPN-Bridging-Header.h')
@@ -195,6 +200,7 @@ provider_group = group_at(project, 'PacketTunnelProvider', '../../../native/appl
   PacketTunnelDiagnostics.swift
   PacketTunnelPlatform.swift
 ].each { |name| ensure_source(appex, file_ref(provider_group, name)) }
+ensure_source(appex, default_interface_monitor)
 
 appex_group = project.main_group.children.find { |child| child.display_name == APPEX_TARGET } ||
               group_at(project, APPEX_TARGET, APPEX_TARGET)

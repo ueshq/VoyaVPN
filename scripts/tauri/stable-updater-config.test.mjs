@@ -26,7 +26,9 @@ describe("stable updater config", () => {
     expect(requestedStableUpdaterConfig({ VOYAVPN_TAURI_UPDATER_CONFIG: "stable" })).toBe(true);
     expect(requestedStableUpdaterConfig({ VOYAVPN_TAURI_UPDATER_CONFIG: "false" })).toBe(false);
     expect(requestedStableUpdaterConfig({ VOYAVPN_RELEASE_CHANNEL: "stable" })).toBe(true);
-    expect(requestedStableUpdaterConfig({ CHANNEL: "beta" })).toBe(false);
+    expect(requestedStableUpdaterConfig({ VOYAVPN_RELEASE_CHANNEL: "beta" })).toBe(false);
+    // The bare CHANNEL / RELEASE_CHANNEL aliases are no longer read.
+    expect(requestedStableUpdaterConfig({ CHANNEL: "stable", RELEASE_CHANNEL: "stable" })).toBe(false);
     expect(() => requestedStableUpdaterConfig({ VOYAVPN_TAURI_UPDATER_CONFIG: "sometimes" })).toThrow(
       /must be stable, true, or false/,
     );

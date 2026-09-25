@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { hasExpectedSingBoxExecutable } from "../core/sing-box-installer.mjs";
 import { capture, repoRootFromScript } from "../lib/common.mjs";
 import {
   coreSeedBundleResources,
-  hasExpectedSeedExecutable,
   requiredBundleResources,
   writeOptionalCoreSeedOverlay,
 } from "./core-seeds.mjs";
@@ -38,12 +38,12 @@ describe("tauri core seed overlay", () => {
       await mkdir(singBoxDir, { recursive: true });
       await writeFile(join(singBoxDir, "LICENSE"), "license");
 
-      expect(hasExpectedSeedExecutable(singBoxDir, "linux")).toBe(false);
+      expect(hasExpectedSingBoxExecutable(singBoxDir, "linux")).toBe(false);
       expect(coreSeedBundleResources(repoRoot, { platform: "linux" })).toEqual({});
 
       await writeFile(join(singBoxDir, "sing-box"), "fake executable");
 
-      expect(hasExpectedSeedExecutable(singBoxDir, "linux")).toBe(true);
+      expect(hasExpectedSingBoxExecutable(singBoxDir, "linux")).toBe(true);
       expect(coreSeedBundleResources(repoRoot, { platform: "linux" })).toEqual({
         "resources/core-seeds/sing_box/*": "core-seeds/sing_box/",
       });

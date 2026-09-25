@@ -1,6 +1,7 @@
 import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, checkedCapture, isCliEntrypoint, readJson, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import { capture, checkedCapture, isCliEntrypoint, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import { readJson } from "../../lib/fs.mjs";
 import { resolveDmgPath } from "./tunnel-layout.mjs";
 import { requestedMacAppStoreBuild } from "../../tauri/mac-app-store-config.mjs";
 import { prepareVoyaForLocalBuild } from "./local-runtime.mjs";

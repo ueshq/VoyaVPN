@@ -43,7 +43,6 @@ describe("release updater metadata", () => {
           env: {
             ...process.env,
             VOYAVPN_UPDATER_PUBLIC_KEY: updaterPublicKey,
-            TAURI_UPDATER_PUBLIC_KEY: updaterPublicKey,
           },
         },
       );

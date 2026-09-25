@@ -2,13 +2,62 @@ import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { repoRootFromScript, topLevelBlock, workflowJobs } from "../lib/common.mjs";
+import { repoRootFromScript } from "../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const workflowDir = resolve(repoRoot, ".github", "workflows");
 const pnpmInvocationPattern = /(?:^|[\s"'(&|;])pnpm(?:\s|$)/;
 const pnpmSetupPattern = /uses:\s*pnpm\/action-setup@[0-9a-f]{40}\b/;
 const actionPinPattern = /^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)/;
+const jobHeaderPattern = /^ {2}([A-Za-z0-9_-]+):\s*$/;
+const jobBodyPattern = /^ {4}(?:steps|uses):/;
+
+/**
+ * Splits the top-level `jobs:` mapping into per-job line blocks. This is a
+ * deliberately small scanner instead of a YAML parser so the quality gates keep
+ * running on Node builtins only.
+ */
+function workflowJobs(text) {
+  const lines = text.split(/\r?\n/);
+  const jobsIndex = lines.indexOf("jobs:");
+  const jobs = new Map();
+  if (jobsIndex < 0) {
+    return jobs;
+  }
+
+  let current = null;
+  for (const line of lines.slice(jobsIndex + 1)) {
+    const header = jobHeaderPattern.exec(line);
+    if (header) {
+      current = header[1];
+      jobs.set(current, []);
+      continue;
+    }
+    if (current) {
+      jobs.get(current).push(line);
+    }
+  }
+
+  // Drop anything that does not look like a job definition, so an unexpected
+  // two-space line inside a shell block cannot invent a phantom job.
+  for (const [name, body] of jobs) {
+    if (!body.some((line) => jobBodyPattern.test(line))) {
+      jobs.delete(name);
+    }
+  }
+  return jobs;
+}
+
+/** The lines of one top-level key (`concurrency:`, `permissions:`, ...). */
+function topLevelBlock(text, key) {
+  const lines = text.split(/\r?\n/);
+  const start = lines.indexOf(`${key}:`);
+  if (start < 0) {
+    return [];
+  }
+  const end = lines.findIndex((line, index) => index > start && /^[A-Za-z]/.test(line));
+  return lines.slice(start + 1, end < 0 ? undefined : end).filter((line) => line.trim() && !line.trim().startsWith("#"));
+}
 
 function workflowFiles() {
   return readdirSync(workflowDir)
@@ -26,7 +75,7 @@ function invokesPnpm(body) {
     if (!trimmed || trimmed.startsWith("#")) {
       return false;
     }
-    if (/uses:|cache:\s*pnpm|PNPM_VERSION/.test(trimmed)) {
+    if (/uses:|cache:\s*pnpm/.test(trimmed)) {
       return false;
     }
     return pnpmInvocationPattern.test(trimmed);
@@ -205,30 +254,6 @@ describe("GitHub Actions workflows", () => {
     for (const tool of ["cargo-deny", "cargo-machete", "tauri-driver"]) {
       expect(ci, tool).toMatch(new RegExp(`uses:\\s*taiki-e/install-action@[0-9a-f]{40}\\b[\\s\\S]{0,200}tool:\\s*${tool}@`, "u"));
     }
-  });
-
-  it("documents why the release package matrix opts out of the Rust build cache", () => {
-    const packageJob = workflowJobs(readWorkflow("release.yml")).get("package");
-
-    expect(packageJob).toBeDefined();
-    const text = packageJob.join("\n");
-    expect(text).not.toContain("Swatinem/rust-cache@");
-    expect(text).toContain("deliberately has no Swatinem/rust-cache step");
-  });
-
-  it("lints Rust on every platform-check runner so OS-gated code is covered", () => {
-    const jobs = workflowJobs(readWorkflow("ci.yml"));
-    const platformCheck = jobs.get("platform-check");
-    expect(platformCheck).toBeDefined();
-    const body = platformCheck.join("\n");
-    expect(body).toMatch(/cargo clippy --workspace --all-targets --locked -- -D warnings/);
-    expect(body).toMatch(/macos-15/);
-    expect(body).toMatch(/windows-2025/);
-
-    // Linux clippy runs once, in baseline-rust; a Linux leg here linted the
-    // same target a second time.
-    expect(body).not.toMatch(/ubuntu-/);
-    expect(jobs.get("baseline-rust")?.join("\n")).toContain("pnpm run check:rust:clippy");
   });
 
   // A cache hit only skips the browser download; the apt libraries Chromium

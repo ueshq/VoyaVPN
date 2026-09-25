@@ -11,6 +11,7 @@ import {
   embedProvisioningProfile,
   findMatchingIdentities,
   formatProfileSelectionError,
+  inferDistribution,
   parseCodesigningIdentities,
   profileContainsCertificate,
   profileDeviceCoverage,
@@ -20,6 +21,7 @@ import {
   renderProfileEntitlements,
   selectProvisioningProfile,
   signedNetworkExtensions,
+  validateProvisioningProfile,
 } from "./provisioning.mjs";
 
 const developmentSha1 = "1111111111111111111111111111111111111111";
@@ -434,5 +436,99 @@ describe("embedProvisioningProfile", () => {
 
     expect(capture("xattr", ["-p", "com.apple.quarantine", source]).stdout.trim()).toBe(quarantine);
     expect(capture("xattr", ["-p", "com.apple.quarantine", destination]).status).not.toBe(0);
+  });
+});
+
+describe("validateProvisioningProfile", () => {
+  const criteria = { distribution: "app-store", identitySha1: distributionSha1, deviceUdid: localUdid };
+
+  it("accepts a profile that matches the criteria, its team and the capabilities", () => {
+    expect(() =>
+      validateProvisioningProfile(appStoreProfile("app.voyavpn.desktop"), "macOS app", "app.voyavpn.desktop", criteria),
+    ).not.toThrow();
+  });
+
+  it("reports the selection rejection reason first", () => {
+    expect(() =>
+      validateProvisioningProfile(
+        appStoreProfile("app.voyavpn.desktop"),
+        "PacketTunnel",
+        "app.voyavpn.desktop.PacketTunnel",
+        criteria,
+      ),
+    ).toThrow(/PacketTunnel provisioning profile .* cannot be used: bundle id is app\.voyavpn\.desktop, expected/u);
+  });
+
+  // sign-app.mjs used to skip this check, so a profile whose App ID prefix
+  // belonged to another team signed a bundle that then failed to launch.
+  it("rejects an application identifier outside the profile's own team", () => {
+    const profile = appStoreProfile("app.voyavpn.desktop");
+    profile.applicationIdentifier = "OTHERTEAM1.app.voyavpn.desktop";
+
+    expect(() => validateProvisioningProfile(profile, "macOS app", "app.voyavpn.desktop", criteria)).toThrow(
+      /application identifier does not match its team identifier/u,
+    );
+  });
+
+  it("still runs the shared capability check", () => {
+    const profile = appStoreProfile("app.voyavpn.desktop");
+    profile.appGroups = [];
+
+    expect(() => validateProvisioningProfile(profile, "macOS app", "app.voyavpn.desktop", criteria)).toThrow(
+      /does not include group\.app\.voyavpn\.desktop/u,
+    );
+  });
+});
+
+describe("inferDistribution", () => {
+  const appContents = "/bundle/VoyaVPN.app/Contents";
+  const appProfile = join(appContents, "embedded.provisionprofile");
+  const systemExtension = join(appContents, "Library", "SystemExtensions", "app.voyavpn.desktop.PacketTunnel.systemextension");
+
+  it("honours an explicit VOYAVPN_MACOS_DISTRIBUTION without reading the bundle", () => {
+    const decodeProfile = () => {
+      throw new Error("should not decode");
+    };
+    expect(inferDistribution({ appContents, env: { VOYAVPN_MACOS_DISTRIBUTION: "dmg" }, exists: () => true, decodeProfile }))
+      .toBe("developer-id");
+    expect(inferDistribution({ appContents, env: { VOYAVPN_MACOS_DISTRIBUTION: "mas" }, exists: () => true, decodeProfile }))
+      .toBe("app-store");
+  });
+
+  // The embedded profile is the authority: it exists before signing (so it
+  // works where the entitlement check create-dmg used to run could not) and
+  // names both the certificate lane and the NetworkExtension flavour.
+  it("reads the distribution from the embedded app profile when there is one", () => {
+    const decoded = new Map([
+      ["developer-id", developerIdProfile("app.voyavpn.desktop")],
+      ["app-store", appStoreProfile("app.voyavpn.desktop")],
+      ["systemextension-only", profileFixture({ networkExtensions: ["packet-tunnel-provider-systemextension"] })],
+    ]);
+    for (const [expected, profile] of [
+      ["developer-id", decoded.get("developer-id")],
+      ["app-store", decoded.get("app-store")],
+      ["developer-id", decoded.get("systemextension-only")],
+    ]) {
+      expect(
+        inferDistribution({
+          appContents,
+          env: {},
+          exists: (path) => path === appProfile,
+          decodeProfile: (path) => {
+            expect(path).toBe(appProfile);
+            return profile;
+          },
+        }),
+      ).toBe(expected);
+    }
+  });
+
+  it("falls back to the staged bundle shape, and to the app-extension lane", () => {
+    const decodeProfile = () => {
+      throw new Error("no profile to decode");
+    };
+    expect(inferDistribution({ appContents, env: {}, exists: (path) => path === systemExtension, decodeProfile }))
+      .toBe("developer-id");
+    expect(inferDistribution({ appContents, env: {}, exists: () => false, decodeProfile })).toBe("app-store");
   });
 });
