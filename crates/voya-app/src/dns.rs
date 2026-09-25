@@ -151,6 +151,23 @@ fn validate_expected_ips(value: Option<&str>, field: &str, issues: &mut Vec<Vali
     }
 }
 
+/// Validates and stores the DNS settings, returning what was stored.
+pub async fn save_dns_settings_use_case(
+    mutations: &crate::config_mutation::ConfigMutationCoordinator,
+    settings: voya_contracts::DnsSettings,
+) -> std::result::Result<voya_contracts::DnsSettings, voya_contracts::AppError> {
+    let saved = validated_settings(crate::contract_map::simple_dns_from_contract(settings))?;
+    mutations
+        .mutate(
+            async |_unit_of_work, config| -> std::result::Result<_, voya_contracts::AppError> {
+                config.simple_dns_item = saved.clone();
+                Ok(())
+            },
+        )
+        .await?;
+    Ok(crate::contract_map::simple_dns_to_contract(saved))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

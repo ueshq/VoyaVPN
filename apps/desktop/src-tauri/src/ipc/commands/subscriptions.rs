@@ -1,4 +1,9 @@
-use super::{post_commit::*, support::*, *};
+use voya_app::subscriptions::{
+    delete_subscriptions_use_case, import_profiles_use_case, save_subscription_use_case,
+    update_subscriptions_use_case,
+};
+
+use super::{post_commit::*, *};
 
 #[tauri::command]
 #[specta::specta]
@@ -38,24 +43,14 @@ pub async fn save_subscription<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     item: SubscriptionContract,
 ) -> Result<SubscriptionContract, AppError> {
-    // Saving a subscription only writes the subscription row: it imports no
-    // profiles and never touches the persisted app config, so neither the
-    // profile list nor the settings bundle needs refreshing.
-    let saved = state
-        .config_mutations()
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(SubscriptionManager::new_in(unit_of_work)
-                .save_subscription(subscription_from_contract(item))
-                .await?)
-        })
-        .await?;
+    let saved = save_subscription_use_case(state.config_mutations(), item).await?;
     emit_invalidation(
         &app,
         "subscription-saved",
         invalidation::subscription_scopes(false, false),
     );
 
-    Ok(subscription_to_contract(saved.value))
+    Ok(saved.value)
 }
 
 #[tauri::command]
@@ -65,19 +60,7 @@ pub async fn delete_subscriptions<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     ids: Vec<String>,
 ) -> Result<u32, AppError> {
-    map_ipc_input(
-        input_safety::validate_text_list(&ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "subscription id",
-        AppErrorSubsystem::Subscription,
-    )?;
-    let deleted = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(SubscriptionManager::new_in(unit_of_work)
-                .delete_subscriptions(config, &ids)
-                .await?)
-        })
-        .await?;
+    let deleted = delete_subscriptions_use_case(state.config_mutations(), ids).await?;
     emit_then_disconnect_removed(&app, &state, |app| {
         emit_invalidation(
             app,
@@ -98,19 +81,8 @@ pub async fn import_profiles_from_text<R: tauri::Runtime>(
     text: String,
     subscription_id: Option<String>,
 ) -> Result<ImportProfilesContract, AppError> {
-    map_ipc_input(
-        input_safety::validate_present_text(subscription_id.as_deref(), IPC_ID_MAX_CHARS),
-        "subscription id",
-        AppErrorSubsystem::Subscription,
-    )?;
-    let imported = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(SubscriptionManager::new_in(unit_of_work)
-                .import_profiles_from_text(config, &text, subscription_id.as_deref())
-                .await?)
-        })
-        .await?;
+    let imported =
+        import_profiles_use_case(state.config_mutations(), text, subscription_id).await?;
     emit_then_disconnect_removed(&app, &state, |app| {
         emit_invalidation(
             app,
@@ -132,49 +104,27 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
     prefer_proxy: bool,
     proxy_url: Option<String>,
 ) -> Result<SubscriptionUpdateContract, AppError> {
-    map_ipc_input(
-        input_safety::validate_present_text(subscription_id.as_deref(), IPC_ID_MAX_CHARS),
-        "subscription id",
-        AppErrorSubsystem::Subscription,
-    )?;
-    map_ipc_input(
-        input_safety::validate_optional_text(proxy_url.as_deref(), IPC_PROXY_URL_MAX_CHARS),
-        "proxy URL",
-        AppErrorSubsystem::Subscription,
-    )?;
-    let snapshot = state.config_mutations().current_config();
-    let proxy_url = app_runtime_proxy_url(prefer_proxy, proxy_url, &snapshot, TargetOs::current());
-    let prepared = state
-        .services()
-        .subscriptions()
-        .prepare_subscription_update(
-            subscription_id.as_deref(),
-            prefer_proxy,
-            proxy_url.as_deref(),
-        )
-        .await
-        .map_err(AppError::from)?;
-    if !prepared.has_imports() {
-        return Ok(prepared.into_result());
-    }
-    let updated = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(SubscriptionManager::new_in(unit_of_work)
-                .apply_prepared_subscription_update(config, prepared)
-                .await?)
+    let update = update_subscriptions_use_case(
+        state.services(),
+        state.config_mutations(),
+        subscription_id,
+        prefer_proxy,
+        proxy_url,
+        TargetOs::current(),
+    )
+    .await?;
+    if let Some(config_changed) = update.config_changed {
+        emit_then_disconnect_removed(&app, &state, |app| {
+            emit_invalidation(
+                app,
+                "subscriptions-updated",
+                invalidation::subscription_scopes(true, config_changed),
+            )
         })
         .await?;
-    emit_then_disconnect_removed(&app, &state, |app| {
-        emit_invalidation(
-            app,
-            "subscriptions-updated",
-            invalidation::subscription_scopes(true, updated.config_changed),
-        )
-    })
-    .await?;
+    }
 
-    Ok(updated.value)
+    Ok(update.result)
 }
 
 #[tauri::command]

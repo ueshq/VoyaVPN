@@ -1,4 +1,9 @@
-use super::{post_commit::*, support::*, *};
+use voya_app::profiles::{
+    delete_profiles_use_case, move_profile_use_case, save_profile_use_case,
+    set_active_profile_use_case,
+};
+
+use super::{post_commit::*, *};
 
 /// Every node as the node table shows it; `get_profile` has one in full.
 #[tauri::command]
@@ -47,21 +52,14 @@ pub async fn save_profile<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     profile: ProfileContract,
 ) -> Result<ProfileDetails, AppError> {
-    let saved = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .save_profile(config, profile_from_contract(profile))
-                .await?)
-        })
-        .await?;
+    let saved = save_profile_use_case(state.config_mutations(), profile).await?;
     emit_invalidation(
         &app,
         "profile-saved",
         invalidation::profile_scopes(saved.config_changed),
     );
 
-    Ok(profile_details_to_contract(saved.value))
+    Ok(saved.value)
 }
 
 #[tauri::command]
@@ -71,19 +69,7 @@ pub async fn delete_profiles<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     index_ids: Vec<String>,
 ) -> Result<u32, AppError> {
-    map_ipc_input(
-        input_safety::validate_text_list(&index_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "node id",
-        AppErrorSubsystem::Profile,
-    )?;
-    let deleted = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .delete_profiles(config, &index_ids)
-                .await?)
-        })
-        .await?;
+    let deleted = delete_profiles_use_case(state.config_mutations(), index_ids).await?;
     emit_then_disconnect_removed(&app, &state, |app| {
         emit_invalidation(
             app,
@@ -93,7 +79,7 @@ pub async fn delete_profiles<R: tauri::Runtime>(
     })
     .await?;
 
-    Ok(u32::try_from(deleted.value).unwrap_or(u32::MAX))
+    Ok(deleted.value)
 }
 
 #[tauri::command]
@@ -123,19 +109,7 @@ pub async fn set_active_profile<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     index_id: String,
 ) -> Result<ProfileDetails, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&index_id, IPC_ID_MAX_CHARS),
-        "node id",
-        AppErrorSubsystem::Profile,
-    )?;
-    let active = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .set_active_profile(config, &index_id)
-                .await?)
-        })
-        .await?;
+    let active = set_active_profile_use_case(state.config_mutations(), index_id).await?;
     // The active-profile pointer lives in the persisted config, so the settings
     // bundle projected from it is refreshed too.
     emit_invalidation(
@@ -144,7 +118,7 @@ pub async fn set_active_profile<R: tauri::Runtime>(
         invalidation::profile_scopes(true),
     );
 
-    Ok(profile_details_to_contract(active.value))
+    Ok(active.value)
 }
 
 #[tauri::command]
@@ -157,25 +131,14 @@ pub async fn move_profile<R: tauri::Runtime>(
     action: ContractMoveAction,
     position: Option<i32>,
 ) -> Result<(), AppError> {
-    map_ipc_input(
-        input_safety::validate_present_text(subscription_id.as_deref(), IPC_ID_MAX_CHARS),
-        "subscription id",
-        AppErrorSubsystem::Profile,
-    )?;
-    map_ipc_input(
-        input_safety::validate_required_text(&index_id, IPC_ID_MAX_CHARS),
-        "node id",
-        AppErrorSubsystem::Profile,
-    )?;
-    state
-        .config_mutations()
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .move_profile(subscription_id.as_deref(), &index_id, action, position)
-                .await?)
-        })
-        .await?;
-
+    move_profile_use_case(
+        state.config_mutations(),
+        subscription_id,
+        index_id,
+        action,
+        position,
+    )
+    .await?;
     emit_invalidation(&app, "profile-moved", invalidation::profile_scopes(false));
 
     Ok(())

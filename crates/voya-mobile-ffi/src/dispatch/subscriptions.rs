@@ -3,12 +3,11 @@
 use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
-    contract_map::{
-        subscription_from_contract, subscription_metadata_to_contract, subscription_to_contract,
-    },
+    contract_map::{subscription_metadata_to_contract, subscription_to_contract},
     invalidation,
-    subscriptions::SubscriptionManager,
-    sysproxy::runtime_proxy_url,
+    subscriptions::{
+        delete_subscriptions_use_case, save_subscription_use_case, update_subscriptions_use_case,
+    },
 };
 use voya_contracts::AppError;
 use voya_platform::coreinfo::TargetOs;
@@ -55,37 +54,26 @@ pub(super) async fn update(state: &MobileState, args: &Value) -> Result<Value, A
         prefer_proxy,
         proxy_url,
     } = arguments("update_subscriptions", args)?;
-    let snapshot = state.config_mutations.current_config();
-    let proxy_url = runtime_proxy_url(prefer_proxy, proxy_url, &snapshot, TargetOs::current());
-    // The download happens outside the mutation: a network round trip must not
-    // hold the config lock or a pooled database connection.
-    let prepared = state
-        .services
-        .subscriptions()
-        .prepare_subscription_update(
-            subscription_id.as_deref(),
-            prefer_proxy,
-            proxy_url.as_deref(),
-        )
-        .await?;
-    if !prepared.has_imports() {
-        return answer("update_subscriptions", &prepared.into_result());
+    let update = update_subscriptions_use_case(
+        &state.services,
+        &state.config_mutations,
+        subscription_id,
+        prefer_proxy,
+        proxy_url,
+        TargetOs::current(),
+    )
+    .await?;
+    if let Some(config_changed) = update.config_changed {
+        state.sinks.invalidate(
+            "subscriptions-updated",
+            invalidation::subscription_scopes(true, config_changed),
+        );
+        // An update replaces the subscription's nodes, which may include the
+        // running one.
+        super::runtime::disconnect_removed_profile(state).await?;
     }
 
-    let updated = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(SubscriptionManager::new_in(unit_of_work)
-                .apply_prepared_subscription_update(config, prepared)
-                .await?)
-        })
-        .await?;
-    state.sinks.invalidate(
-        "subscriptions-updated",
-        invalidation::subscription_scopes(true, updated.config_changed),
-    );
-
-    answer("update_subscriptions", &updated.value)
+    answer("update_subscriptions", &update.result)
 }
 
 #[derive(Debug, Deserialize)]
@@ -96,14 +84,7 @@ struct SaveSubscription {
 
 pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let SaveSubscription { item } = arguments("save_subscription", args)?;
-    let saved = state
-        .config_mutations
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(SubscriptionManager::new_in(unit_of_work)
-                .save_subscription(subscription_from_contract(item))
-                .await?)
-        })
-        .await?;
+    let saved = save_subscription_use_case(&state.config_mutations, item).await?;
     // Saving writes the subscription row only: no node is imported and the
     // persisted config is untouched.
     state.sinks.invalidate(
@@ -111,7 +92,7 @@ pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, App
         invalidation::subscription_scopes(false, false),
     );
 
-    answer("save_subscription", &subscription_to_contract(saved.value))
+    answer("save_subscription", &saved.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,14 +103,7 @@ struct Ids {
 
 pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let Ids { ids } = arguments("delete_subscriptions", args)?;
-    let deleted = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(SubscriptionManager::new_in(unit_of_work)
-                .delete_subscriptions(config, &ids)
-                .await?)
-        })
-        .await?;
+    let deleted = delete_subscriptions_use_case(&state.config_mutations, ids).await?;
     state.sinks.invalidate(
         "subscriptions-deleted",
         invalidation::subscription_scopes(true, deleted.config_changed),

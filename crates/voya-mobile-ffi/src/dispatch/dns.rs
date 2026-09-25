@@ -3,8 +3,8 @@
 use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
-    contract_map::{simple_dns_from_contract, simple_dns_to_contract},
-    dns::{normalize_simple_dns, validated_settings},
+    contract_map::simple_dns_to_contract,
+    dns::{normalize_simple_dns, save_dns_settings_use_case},
     invalidation,
 };
 use voya_contracts::{AppError, DnsSettings};
@@ -30,18 +30,10 @@ struct SaveDns {
 
 pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let SaveDns { settings } = arguments("save_dns_settings", args)?;
-    let saved = validated_settings(simple_dns_from_contract(settings))?;
-    let committed = saved.clone();
-    state
-        .config_mutations
-        .mutate(async |_unit_of_work, config| -> Result<_, AppError> {
-            config.simple_dns_item = committed.clone();
-            Ok(())
-        })
-        .await?;
+    let saved = save_dns_settings_use_case(&state.config_mutations, settings).await?;
     state
         .sinks
         .invalidate("dns-settings-saved", invalidation::dns_scopes());
 
-    answer("save_dns_settings", &simple_dns_to_contract(saved))
+    answer("save_dns_settings", &saved)
 }

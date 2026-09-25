@@ -4,12 +4,15 @@ use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
     contract_map::{
-        policy_group_entry_to_contract, profile_details_to_contract, profile_from_contract,
+        policy_group_entry_to_contract, profile_details_to_contract,
         profile_summary_listing_to_contract,
     },
     invalidation,
-    profiles::ProfileManager,
-    subscriptions::SubscriptionManager,
+    profiles::{
+        delete_profiles_use_case, move_profile_use_case, save_profile_use_case,
+        set_active_profile_use_case,
+    },
+    subscriptions::{import_profiles_use_case, SubscriptionManager},
 };
 use voya_contracts::{AppError, PolicyGroupListing};
 
@@ -35,24 +38,14 @@ struct ActiveProfile {
 
 pub(super) async fn set_active(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let ActiveProfile { index_id } = arguments("set_active_profile", args)?;
-    let active = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .set_active_profile(config, &index_id)
-                .await?)
-        })
-        .await?;
+    let active = set_active_profile_use_case(&state.config_mutations, index_id).await?;
     // The active-node pointer lives in the persisted config, so the settings
     // bundle projected from it goes stale too.
     state
         .sinks
         .invalidate("active-profile-changed", invalidation::profile_scopes(true));
 
-    answer(
-        "set_active_profile",
-        &profile_details_to_contract(active.value),
-    )
+    answer("set_active_profile", &active.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,18 +68,14 @@ pub(super) async fn import_from_text(state: &MobileState, args: &Value) -> Resul
         text,
         subscription_id,
     } = arguments("import_profiles_from_text", args)?;
-    let imported = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(SubscriptionManager::new_in(unit_of_work)
-                .import_profiles_from_text(config, &text, subscription_id.as_deref())
-                .await?)
-        })
-        .await?;
+    let imported = import_profiles_use_case(&state.config_mutations, text, subscription_id).await?;
     state.sinks.invalidate(
         "profiles-imported",
         invalidation::subscription_scopes(true, imported.config_changed),
     );
+    // Importing into a subscription replaces its nodes, which may include the
+    // running one.
+    super::runtime::disconnect_removed_profile(state).await?;
 
     answer("import_profiles_from_text", &imported.value)
 }
@@ -148,20 +137,13 @@ struct SaveProfile {
 
 pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let SaveProfile { profile } = arguments("save_profile", args)?;
-    let saved = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .save_profile(config, profile_from_contract(profile))
-                .await?)
-        })
-        .await?;
+    let saved = save_profile_use_case(&state.config_mutations, profile).await?;
     state.sinks.invalidate(
         "profile-saved",
         invalidation::profile_scopes(saved.config_changed),
     );
 
-    answer("save_profile", &profile_details_to_contract(saved.value))
+    answer("save_profile", &saved.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -172,14 +154,7 @@ struct ProfileIds {
 
 pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let ProfileIds { index_ids } = arguments("delete_profiles", args)?;
-    let deleted = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .delete_profiles(config, &index_ids)
-                .await?)
-        })
-        .await?;
+    let deleted = delete_profiles_use_case(&state.config_mutations, index_ids).await?;
     state.sinks.invalidate(
         "profiles-deleted",
         invalidation::profile_scopes(deleted.config_changed),
@@ -187,10 +162,7 @@ pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, A
     // Deleting the node the core is running leaves it pointing at nothing.
     super::runtime::disconnect_removed_profile(state).await?;
 
-    answer(
-        "delete_profiles",
-        &u32::try_from(deleted.value).unwrap_or(u32::MAX),
-    )
+    answer("delete_profiles", &deleted.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -209,14 +181,14 @@ pub(super) async fn move_profile(state: &MobileState, args: &Value) -> Result<Va
         action,
         position,
     } = arguments("move_profile", args)?;
-    state
-        .config_mutations
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .move_profile(subscription_id.as_deref(), &index_id, action, position)
-                .await?)
-        })
-        .await?;
+    move_profile_use_case(
+        &state.config_mutations,
+        subscription_id,
+        index_id,
+        action,
+        position,
+    )
+    .await?;
     // Order lives in the profile rows, not in the persisted config.
     state
         .sinks

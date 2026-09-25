@@ -3,9 +3,11 @@
 use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
-    contract_map::{policy_group_from_contract, policy_group_to_contract},
     invalidation,
-    policy_groups::{select_member_use_case, test_running_policy_group_delay, PolicyGroupManager},
+    policy_groups::{
+        delete_policy_groups_use_case, save_policy_group_use_case, select_member_use_case,
+        set_active_policy_group_use_case, test_running_policy_group_delay,
+    },
     post_commit::ConfigChange,
 };
 use voya_contracts::{AppError, AppNoticeLevel, NoticeCode, PolicyGroup};
@@ -22,14 +24,7 @@ struct SaveGroup {
 
 pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let SaveGroup { group } = arguments("save_policy_group", args)?;
-    let saved = state
-        .config_mutations
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(PolicyGroupManager::new_in(unit_of_work)
-                .save(policy_group_from_contract(group))
-                .await?)
-        })
-        .await?;
+    let saved = save_policy_group_use_case(&state.config_mutations, group).await?;
 
     if saved.config.active_group_id == saved.value.id {
         // Editing the group traffic is going through changes the outbound the
@@ -49,7 +44,7 @@ pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, App
         );
     }
 
-    answer("save_policy_group", &policy_group_to_contract(saved.value))
+    answer("save_policy_group", &saved.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,14 +55,7 @@ struct Ids {
 
 pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let Ids { ids } = arguments("delete_policy_groups", args)?;
-    let deleted = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(PolicyGroupManager::new_in(unit_of_work)
-                .delete(config, &ids)
-                .await?)
-        })
-        .await?;
+    let deleted = delete_policy_groups_use_case(&state.config_mutations, ids).await?;
     state.sinks.invalidate(
         "policy-groups-deleted",
         invalidation::policy_group_scopes(deleted.config_changed),
@@ -75,10 +63,7 @@ pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, A
     // Deleting the group the core is running leaves it pointing at nothing.
     super::runtime::disconnect_removed_profile(state).await?;
 
-    answer(
-        "delete_policy_groups",
-        &u32::try_from(deleted.value).unwrap_or(u32::MAX),
-    )
+    answer("delete_policy_groups", &deleted.value)
 }
 
 #[derive(Debug, Deserialize)]
@@ -89,23 +74,13 @@ struct Id {
 
 pub(super) async fn set_active(state: &MobileState, args: &Value) -> Result<Value, AppError> {
     let Id { id } = arguments("set_active_policy_group", args)?;
-    let active = state
-        .config_mutations
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(PolicyGroupManager::new_in(unit_of_work)
-                .set_active(config, &id)
-                .await?)
-        })
-        .await?;
+    let active = set_active_policy_group_use_case(&state.config_mutations, id).await?;
     state.sinks.invalidate(
         "active-policy-group-changed",
         invalidation::policy_group_scopes(true),
     );
 
-    answer(
-        "set_active_policy_group",
-        &policy_group_to_contract(active.value),
-    )
+    answer("set_active_policy_group", &active.value)
 }
 
 #[derive(Debug, Deserialize)]

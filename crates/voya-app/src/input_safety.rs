@@ -23,6 +23,23 @@ impl Error for InputSafetyError {}
 
 pub type Result<T> = std::result::Result<T, InputSafetyError>;
 
+/// Longest id any command accepts.
+pub const IPC_ID_MAX_CHARS: usize = 128;
+/// Longest proxy URL a command accepts.
+pub const IPC_PROXY_URL_MAX_CHARS: usize = 2048;
+/// Most ids one command accepts in a list.
+pub const IPC_LIST_MAX_ITEMS: usize = 1024;
+
+/// Turns one check on a command argument into the validation error the
+/// frontend marks that argument with.
+pub fn map_ipc_input<T>(
+    result: Result<T>,
+    field: &str,
+    subsystem: voya_contracts::AppErrorSubsystem,
+) -> std::result::Result<T, voya_contracts::AppError> {
+    result.map_err(|error| crate::contract_map::input_text_error(&error, field, subsystem))
+}
+
 pub fn validate_required_text(value: &str, max_chars: usize) -> Result<()> {
     if value.trim().is_empty() {
         return Err(InputSafetyError::EmptyValue);

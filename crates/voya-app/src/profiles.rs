@@ -609,6 +609,111 @@ fn empty_server_stat(index_id: &str) -> ServerStatItem {
     }
 }
 
+// The contract-typed node use cases both hosts share: each checks its
+// arguments, runs the mutation and returns what was committed.
+
+/// Saves a manual node.
+pub async fn save_profile_use_case(
+    mutations: &crate::config_mutation::ConfigMutationCoordinator,
+    profile: voya_contracts::Profile,
+) -> std::result::Result<
+    crate::config_mutation::CommittedMutation<voya_contracts::ProfileDetails>,
+    voya_contracts::AppError,
+> {
+    mutations
+        .mutate(
+            async |unit_of_work, config| -> std::result::Result<_, voya_contracts::AppError> {
+                Ok(crate::contract_map::profile_details_to_contract(
+                    ProfileManager::new_in(unit_of_work)
+                        .save_profile(config, crate::contract_map::profile_from_contract(profile))
+                        .await?,
+                ))
+            },
+        )
+        .await
+}
+
+/// Deletes manual nodes, which may include the running one.
+pub async fn delete_profiles_use_case(
+    mutations: &crate::config_mutation::ConfigMutationCoordinator,
+    index_ids: Vec<String>,
+) -> std::result::Result<crate::config_mutation::CommittedMutation<u32>, voya_contracts::AppError> {
+    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS};
+    map_ipc_input(
+        input_safety::validate_text_list(&index_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
+        "node id",
+        voya_contracts::AppErrorSubsystem::Profile,
+    )?;
+    mutations
+        .mutate(
+            async |unit_of_work, config| -> std::result::Result<_, voya_contracts::AppError> {
+                let deleted = ProfileManager::new_in(unit_of_work)
+                    .delete_profiles(config, &index_ids)
+                    .await?;
+                Ok(u32::try_from(deleted).unwrap_or(u32::MAX))
+            },
+        )
+        .await
+}
+
+/// Makes a node the one connecting uses.
+pub async fn set_active_profile_use_case(
+    mutations: &crate::config_mutation::ConfigMutationCoordinator,
+    index_id: String,
+) -> std::result::Result<
+    crate::config_mutation::CommittedMutation<voya_contracts::ProfileDetails>,
+    voya_contracts::AppError,
+> {
+    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS};
+    map_ipc_input(
+        input_safety::validate_required_text(&index_id, IPC_ID_MAX_CHARS),
+        "node id",
+        voya_contracts::AppErrorSubsystem::Profile,
+    )?;
+    mutations
+        .mutate(
+            async |unit_of_work, config| -> std::result::Result<_, voya_contracts::AppError> {
+                Ok(crate::contract_map::profile_details_to_contract(
+                    ProfileManager::new_in(unit_of_work)
+                        .set_active_profile(config, &index_id)
+                        .await?,
+                ))
+            },
+        )
+        .await
+}
+
+/// Moves a node within its subscription, or among the manual nodes.
+pub async fn move_profile_use_case(
+    mutations: &crate::config_mutation::ConfigMutationCoordinator,
+    subscription_id: Option<String>,
+    index_id: String,
+    action: MoveAction,
+    position: Option<i32>,
+) -> std::result::Result<(), voya_contracts::AppError> {
+    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS};
+    map_ipc_input(
+        input_safety::validate_present_text(subscription_id.as_deref(), IPC_ID_MAX_CHARS),
+        "subscription id",
+        voya_contracts::AppErrorSubsystem::Profile,
+    )?;
+    map_ipc_input(
+        input_safety::validate_required_text(&index_id, IPC_ID_MAX_CHARS),
+        "node id",
+        voya_contracts::AppErrorSubsystem::Profile,
+    )?;
+    mutations
+        .mutate(
+            async |unit_of_work, _config| -> std::result::Result<_, voya_contracts::AppError> {
+                Ok(ProfileManager::new_in(unit_of_work)
+                    .move_profile(subscription_id.as_deref(), &index_id, action, position)
+                    .await?)
+            },
+        )
+        .await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use voya_core::{

@@ -1,11 +1,9 @@
 //! Thin adapters over `voya_app::policy_groups` and the running group's Clash API.
 
-use voya_app::contract_map::{
-    policy_group_entry_to_contract, policy_group_from_contract, policy_group_to_contract,
-};
+use voya_app::contract_map::policy_group_entry_to_contract;
 use voya_app::policy_groups::{
-    running_policy_group_runtime, select_member_use_case, test_running_policy_group_delay,
-    PolicyGroupManager,
+    delete_policy_groups_use_case, running_policy_group_runtime, save_policy_group_use_case,
+    select_member_use_case, set_active_policy_group_use_case, test_running_policy_group_delay,
 };
 use voya_contracts::{PolicyGroup, PolicyGroupListing, PolicyGroupRuntime};
 
@@ -41,19 +39,7 @@ pub async fn save_policy_group<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     group: PolicyGroup,
 ) -> Result<PolicyGroup, AppError> {
-    map_ipc_input(
-        input_safety::validate_text_list(&group.member_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "node id",
-        AppErrorSubsystem::PolicyGroup,
-    )?;
-    let saved = state
-        .config_mutations()
-        .mutate(async |unit_of_work, _config| -> Result<_, AppError> {
-            Ok(PolicyGroupManager::new_in(unit_of_work)
-                .save(policy_group_from_contract(group))
-                .await?)
-        })
-        .await?;
+    let saved = save_policy_group_use_case(state.config_mutations(), group).await?;
     emit_invalidation(
         &app,
         "policy-group-saved",
@@ -63,7 +49,7 @@ pub async fn save_policy_group<R: tauri::Runtime>(
         restart_after_config_change(&app, &state, &saved.config, ConfigChange::POLICY_GROUP).await;
     }
 
-    Ok(policy_group_to_contract(saved.value))
+    Ok(saved.value)
 }
 
 #[tauri::command]
@@ -73,19 +59,7 @@ pub async fn delete_policy_groups<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     ids: Vec<String>,
 ) -> Result<u32, AppError> {
-    map_ipc_input(
-        input_safety::validate_text_list(&ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "policy group id",
-        AppErrorSubsystem::PolicyGroup,
-    )?;
-    let deleted = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(PolicyGroupManager::new_in(unit_of_work)
-                .delete(config, &ids)
-                .await?)
-        })
-        .await?;
+    let deleted = delete_policy_groups_use_case(state.config_mutations(), ids).await?;
     emit_then_disconnect_removed(&app, &state, |app| {
         emit_invalidation(
             app,
@@ -95,7 +69,7 @@ pub async fn delete_policy_groups<R: tauri::Runtime>(
     })
     .await?;
 
-    Ok(u32::try_from(deleted.value).unwrap_or(u32::MAX))
+    Ok(deleted.value)
 }
 
 /// Makes a group what connecting uses. Connecting or restarting is the
@@ -107,26 +81,14 @@ pub async fn set_active_policy_group<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<PolicyGroup, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&id, IPC_ID_MAX_CHARS),
-        "policy group id",
-        AppErrorSubsystem::PolicyGroup,
-    )?;
-    let active = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(PolicyGroupManager::new_in(unit_of_work)
-                .set_active(config, &id)
-                .await?)
-        })
-        .await?;
+    let active = set_active_policy_group_use_case(state.config_mutations(), id).await?;
     emit_invalidation(
         &app,
         "active-policy-group-changed",
         invalidation::policy_group_scopes(true),
     );
 
-    Ok(policy_group_to_contract(active.value))
+    Ok(active.value)
 }
 
 /// Stores a selector's member and, when that group is running, switches the

@@ -5,10 +5,9 @@ use crate::ipc::events::Emit;
 use voya_app::autostart::AutostartManager;
 use voya_app::config_mutation::{AppConfig, CommittedMutation};
 use voya_app::contract_map::{
-    core_info_error, core_seed_install_result, input_text_error, profile_details_to_contract,
-    profile_from_contract, profile_summary_listing_to_contract, runtime_status_event,
-    runtime_status_response, simple_dns_from_contract, simple_dns_to_contract,
-    subscription_from_contract, subscription_metadata_to_contract, subscription_to_contract,
+    core_info_error, core_seed_install_result, profile_details_to_contract,
+    profile_summary_listing_to_contract, runtime_status_event, runtime_status_response,
+    simple_dns_to_contract, subscription_metadata_to_contract, subscription_to_contract,
     system_proxy_status_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
 };
 use voya_app::input_safety;
@@ -44,8 +43,8 @@ use voya_contracts::{
     TransientStreamEvent,
 };
 
-const IPC_ID_MAX_CHARS: usize = 128;
-const IPC_PROXY_URL_MAX_CHARS: usize = 2048;
+use voya_app::input_safety::{map_ipc_input, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS};
+
 const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;
 /// The base64 of one grey pixel per byte at the largest picture voya-app will
 /// decode. `decode_image` rejects a payload that disagrees with the width and
@@ -55,7 +54,6 @@ const IPC_QR_IMAGE_MAX_BASE64_CHARS: usize = (voya_app::qr::QR_IMAGE_MAX_SIDE as
     .pow(2)
     .div_ceil(3)
     * 4;
-const IPC_LIST_MAX_ITEMS: usize = 1024;
 
 mod app;
 mod clipboard;

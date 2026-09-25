@@ -41,19 +41,6 @@ pub(super) async fn current_clash_api_access(state: &AppState) -> ClashApiAccess
         .unwrap_or_default()
 }
 
-/// Maps one `input_safety` check onto the shared `input_text_error` issue.
-///
-/// Rejected IPC text is a *validation* failure addressed to the argument that
-/// carried it; this is the one remap, so the shell never picks an error variant
-/// per call site.
-pub(super) fn map_ipc_input<T>(
-    result: input_safety::Result<T>,
-    field: &str,
-    subsystem: AppErrorSubsystem,
-) -> Result<T, AppError> {
-    result.map_err(|error| input_text_error(&error, field, subsystem))
-}
-
 pub(super) fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
     state.services().runtime(
         state.supervisor(),

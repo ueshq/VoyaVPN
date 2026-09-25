@@ -13,6 +13,9 @@ use voya_core::{
 };
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
+use crate::config_mutation::{CommittedMutation, ConfigMutationCoordinator};
+use voya_contracts::AppError;
+
 /// Longest group name the editor accepts.
 pub const GROUP_NAME_MAX_CHARS: usize = 64;
 const GROUP_TEST_URL_MAX_CHARS: usize = 2048;
@@ -411,28 +414,23 @@ pub const GROUP_DELAY_TIMEOUT_MS: u32 = 5_000;
 /// Returns the saved group and, when the live switch failed, the message each
 /// host reports its way; the stored choice is kept either way.
 pub async fn select_member_use_case(
-    mutations: &crate::config_mutation::ConfigMutationCoordinator,
+    mutations: &ConfigMutationCoordinator,
     supervisor: &crate::supervisor::CoreSupervisor,
     policy_groups: &PolicyGroupManager<'_>,
     proxy_runtime: &crate::proxy_runtime::ProxyRuntimeManager,
     group_id: &str,
     profile_id: &str,
-) -> std::result::Result<(voya_contracts::PolicyGroup, Option<String>), voya_contracts::AppError> {
+) -> std::result::Result<(voya_contracts::PolicyGroup, Option<String>), AppError> {
     let selected = mutations
         .mutate(
-            async |unit_of_work,
-                   _config|
-                   -> std::result::Result<PolicyGroupItem, voya_contracts::AppError> {
+            async |unit_of_work, _config| -> std::result::Result<PolicyGroupItem, AppError> {
                 Ok(PolicyGroupManager::new_in(unit_of_work)
                     .select_member(group_id, profile_id)
                     .await?)
             },
         )
         .await?;
-    let snapshot = supervisor
-        .status()
-        .await
-        .map_err(voya_contracts::AppError::from)?;
+    let snapshot = supervisor.status().await.map_err(AppError::from)?;
     let live_error = select_member_live_if_running(
         &snapshot,
         policy_groups,
@@ -441,7 +439,7 @@ pub async fn select_member_use_case(
         profile_id,
     )
     .await
-    .map_err(voya_contracts::AppError::from)?;
+    .map_err(AppError::from)?;
     Ok((
         crate::contract_map::policy_group_to_contract(selected.value),
         live_error,
@@ -522,6 +520,77 @@ pub async fn test_running_policy_group_delay(
     Ok(Some(crate::contract_map::policy_group_runtime_to_contract(
         group_id, runtime,
     )))
+}
+
+/// Saves a group definition.
+pub async fn save_policy_group_use_case(
+    mutations: &ConfigMutationCoordinator,
+    group: voya_contracts::PolicyGroup,
+) -> std::result::Result<CommittedMutation<voya_contracts::PolicyGroup>, AppError> {
+    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS};
+    map_ipc_input(
+        input_safety::validate_text_list(&group.member_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
+        "node id",
+        voya_contracts::AppErrorSubsystem::PolicyGroup,
+    )?;
+    mutations
+        .mutate(
+            async |unit_of_work, _config| -> std::result::Result<_, AppError> {
+                Ok(crate::contract_map::policy_group_to_contract(
+                    PolicyGroupManager::new_in(unit_of_work)
+                        .save(crate::contract_map::policy_group_from_contract(group))
+                        .await?,
+                ))
+            },
+        )
+        .await
+}
+
+/// Deletes groups; the active one may be among them.
+pub async fn delete_policy_groups_use_case(
+    mutations: &ConfigMutationCoordinator,
+    ids: Vec<String>,
+) -> std::result::Result<CommittedMutation<u32>, AppError> {
+    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS};
+    map_ipc_input(
+        input_safety::validate_text_list(&ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
+        "policy group id",
+        voya_contracts::AppErrorSubsystem::PolicyGroup,
+    )?;
+    mutations
+        .mutate(
+            async |unit_of_work, config| -> std::result::Result<_, AppError> {
+                let deleted = PolicyGroupManager::new_in(unit_of_work)
+                    .delete(config, &ids)
+                    .await?;
+                Ok(u32::try_from(deleted).unwrap_or(u32::MAX))
+            },
+        )
+        .await
+}
+
+/// Makes a group what connecting uses.
+pub async fn set_active_policy_group_use_case(
+    mutations: &ConfigMutationCoordinator,
+    id: String,
+) -> std::result::Result<CommittedMutation<voya_contracts::PolicyGroup>, AppError> {
+    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS};
+    map_ipc_input(
+        input_safety::validate_required_text(&id, IPC_ID_MAX_CHARS),
+        "policy group id",
+        voya_contracts::AppErrorSubsystem::PolicyGroup,
+    )?;
+    mutations
+        .mutate(
+            async |unit_of_work, config| -> std::result::Result<_, AppError> {
+                Ok(crate::contract_map::policy_group_to_contract(
+                    PolicyGroupManager::new_in(unit_of_work)
+                        .set_active(config, &id)
+                        .await?,
+                ))
+            },
+        )
+        .await
 }
 
 #[cfg(test)]
