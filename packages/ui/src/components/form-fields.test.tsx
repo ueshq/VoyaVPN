@@ -29,7 +29,7 @@ describe("form fields", () => {
       const [value, setValue] = useState("");
       return <SelectField label="策略" value={value} onChange={(next) => { onChange(next); setValue(next); }} options={[
         { label: "默认", value: "" },
-        { label: "IPv4", value: "UseIPv4" },
+        { label: "IPv4", value: "preferIpv4" },
       ]} />;
     }
     render(<Form />);
@@ -37,7 +37,7 @@ describe("form fields", () => {
     expect(select).toHaveTextContent("默认");
     fireEvent.keyDown(select, { key: "Enter" });
     fireEvent.keyDown(await screen.findByRole("option", { name: "IPv4" }), { key: "Enter" });
-    expect(onChange).toHaveBeenLastCalledWith("UseIPv4");
+    expect(onChange).toHaveBeenLastCalledWith("preferIpv4");
     fireEvent.keyDown(select, { key: "Enter" });
     fireEvent.keyDown(await screen.findByRole("option", { name: "默认" }), { key: "Enter" });
     expect(onChange).toHaveBeenLastCalledWith("");

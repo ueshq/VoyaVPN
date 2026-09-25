@@ -5,7 +5,7 @@ use std::{
 };
 
 use sqlx::Row;
-use voya_contracts::{AppSettings, SystemProxyType, TrafficMode};
+use voya_contracts::{AppSettings, DnsStrategy, SystemProxyType, TrafficMode};
 use voya_core::{
     ProfileExItem, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RuleType,
     RulesItem, ServerEndpoint, ServerStatItem, SubItem, SubMetadataItem, TlsMode, TlsSettings,
@@ -1943,6 +1943,17 @@ fn typed_settings_enums_keep_their_persisted_strings() {
     for (mode, stored) in PINNED_TRAFFIC_MODES {
         assert_pinned_settings_value(&["proxy", "trafficMode"], stored, |settings| {
             settings.proxy.traffic_mode = mode;
+        });
+    }
+
+    for (strategy, stored) in [
+        (DnsStrategy::PreferIpv4, "preferIpv4"),
+        (DnsStrategy::PreferIpv6, "preferIpv6"),
+        (DnsStrategy::Ipv4Only, "ipv4Only"),
+        (DnsStrategy::Ipv6Only, "ipv6Only"),
+    ] {
+        assert_pinned_settings_value(&["dns", "directStrategy"], stored, |settings| {
+            settings.dns.direct_strategy = Some(strategy);
         });
     }
 }

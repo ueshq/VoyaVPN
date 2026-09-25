@@ -107,9 +107,9 @@ describe("DNS fields", () => {
     await waitFor(() => expect(lastSaved()).toMatchObject({ bootstrap: "223.6.6.6", direct: "10.0.0.53" }));
   });
 
-  it("shows strategies that generate nothing as Default and saves Default as no strategy", async () => {
+  it("offers Default plus the four strategies and saves Default as no strategy", async () => {
     const user = userEvent.setup();
-    await stored({ directStrategy: "AsIs", proxyStrategy: "ForceIPv6" });
+    await stored({ directStrategy: null, proxyStrategy: "ipv6Only" });
     mount();
     const directStrategy = await screen.findByRole("combobox", { name: "Direct strategy" });
     const proxyStrategy = screen.getByRole("combobox", { name: "Proxy strategy" });
@@ -118,17 +118,16 @@ describe("DNS fields", () => {
 
     await user.click(directStrategy);
     const options = within(await screen.findByRole("listbox")).getAllByRole("option");
-    // "AsIs" and "UseIP" are the default under other names, so only one is offered.
     expect(options.map((option) => option.textContent)).toEqual([
       "Default", "Prefer IPv4", "Prefer IPv6", "IPv4 only", "IPv6 only",
     ]);
     await user.click(screen.getByRole("option", { name: "IPv4 only" }));
-    await waitFor(() => expect(lastSaved()?.directStrategy).toBe("ForceIPv4"));
+    await waitFor(() => expect(lastSaved()?.directStrategy).toBe("ipv4Only"));
 
     await user.click(proxyStrategy);
     await user.click(await screen.findByRole("option", { name: "Default" }));
     await waitFor(() => expect(lastSaved()?.proxyStrategy).toBeNull());
-    expect(serverSettings().dns).toMatchObject({ directStrategy: "ForceIPv4", proxyStrategy: null });
+    expect(serverSettings().dns).toMatchObject({ directStrategy: "ipv4Only", proxyStrategy: null });
   });
 
   it("shows Global FakeIP off while FakeIP is off and brings the stored choice back with it", async () => {

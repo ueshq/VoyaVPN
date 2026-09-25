@@ -37,8 +37,7 @@ pub(super) fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
     // match-all rule is only needed when a rule-level strategy still has to
     // reach `final`; with IPv6 off the top-level `ipv4_only` already covers it.
     if !use_direct_dns {
-        if let Some(strategy) =
-            proxy_dns_strategy(context, context.simple_dns_item.strategy4_proxy.as_deref())
+        if let Some(strategy) = proxy_dns_strategy(context, context.simple_dns_item.proxy_strategy)
         {
             dns.rules.push(SingboxRule {
                 server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
@@ -56,15 +55,16 @@ const IPV4_ONLY: &str = "ipv4_only";
 /// While IPv6 is off every rule defers to the top-level
 /// `dns.strategy: "ipv4_only"`: an explicit IPv6 preference would contradict
 /// the switch, and a rule-level override would undo the suppression.
-/// Otherwise an explicit UseIPv4/UseIPv6/ForceIPv4/ForceIPv6 (or its
-/// default-like `AsIs`/`UseIP`) is mapped through `domain_strategy4_sbox`.
+/// Otherwise the explicit choice, if any, applies.
 pub(crate) fn direct_dns_strategy(
     context: &CoreConfigContext,
-    explicit: Option<&str>,
+    explicit: Option<DnsStrategy>,
 ) -> Option<String> {
     match context.ipv6_mode() {
         Ipv6Mode::Off => None,
-        Ipv6Mode::Full | Ipv6Mode::DirectOnly => domain_strategy4_sbox(explicit),
+        Ipv6Mode::Full | Ipv6Mode::DirectOnly => {
+            explicit.map(|strategy| strategy.singbox_name().to_string())
+        }
     }
 }
 
@@ -76,12 +76,12 @@ pub(crate) fn direct_dns_strategy(
 /// die after the local handshake.
 pub(crate) fn proxy_dns_strategy(
     context: &CoreConfigContext,
-    explicit: Option<&str>,
+    explicit: Option<DnsStrategy>,
 ) -> Option<String> {
     match context.ipv6_mode() {
         Ipv6Mode::Off => None,
-        Ipv6Mode::DirectOnly => Some(IPV4_ONLY.to_string()),
-        Ipv6Mode::Full => domain_strategy4_sbox(explicit),
+        Ipv6Mode::DirectOnly => Some(DnsStrategy::Ipv4Only.singbox_name().to_string()),
+        Ipv6Mode::Full => explicit.map(|strategy| strategy.singbox_name().to_string()),
     }
 }
 
@@ -191,7 +191,7 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
     if !context.protect_domain_list.is_empty() {
         rules.push(SingboxRule {
             server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
-            strategy: direct_dns_strategy(context, simple_dns.strategy4_freedom.as_deref()),
+            strategy: direct_dns_strategy(context, simple_dns.direct_strategy),
             domain: Some(context.protect_domain_list.clone()),
             ..SingboxRule::default()
         });
@@ -200,7 +200,7 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
     // Mirror the route generator: Global mode precedes the user's rules.
     rules.push(SingboxRule {
         server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
-        strategy: proxy_dns_strategy(context, simple_dns.strategy4_proxy.as_deref()),
+        strategy: proxy_dns_strategy(context, simple_dns.proxy_strategy),
         clash_mode: Some("Global".to_string()),
         ..SingboxRule::default()
     });
@@ -307,8 +307,7 @@ fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigCo
         match item.outbound_tag.as_deref() {
             Some(DIRECT_TAG) => {
                 rule.server = Some(SINGBOX_DIRECT_DNS_TAG.to_string());
-                rule.strategy =
-                    direct_dns_strategy(context, simple_dns.strategy4_freedom.as_deref());
+                rule.strategy = direct_dns_strategy(context, simple_dns.direct_strategy);
                 if !expected_ip_regions.is_empty() && !region_name.is_empty() {
                     if let Some(geosite) = &mut rule.geosite {
                         let matched_geosite = geosite
@@ -346,7 +345,7 @@ fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigCo
                     rules.push(fake_rule);
                 }
                 rule.server = Some(SINGBOX_REMOTE_DNS_TAG.to_string());
-                rule.strategy = proxy_dns_strategy(context, simple_dns.strategy4_proxy.as_deref());
+                rule.strategy = proxy_dns_strategy(context, simple_dns.proxy_strategy);
             }
         }
 

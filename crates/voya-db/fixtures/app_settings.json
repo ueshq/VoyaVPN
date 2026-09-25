@@ -50,9 +50,6 @@
       }
     ]
   },
-  "routing": {
-    "domainStrategy": "AsIs"
-  },
   "dns": {
     "addCommonHosts": null,
     "fakeIp": null,

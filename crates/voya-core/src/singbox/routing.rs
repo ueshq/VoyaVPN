@@ -5,7 +5,7 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
     let simple_dns = &context.simple_dns_item;
     config.route.default_domain_resolver = Some(SingboxRule {
         server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
-        strategy: direct_dns_strategy(context, simple_dns.strategy4_freedom.as_deref()),
+        strategy: direct_dns_strategy(context, simple_dns.direct_strategy),
         ..SingboxRule::default()
     });
 
@@ -105,31 +105,13 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         ..SingboxRule::default()
     });
 
-    let resolve_rule = SingboxRule {
-        action: Some("resolve".to_string()),
-        ..SingboxRule::default()
-    };
-    if context.app_config.routing_basic_item.domain_strategy == IP_ON_DEMAND {
-        config.route.rules.push(resolve_rule.clone());
-    }
-
     if let Some(routing) = context.routing_item.clone() {
-        let mut ip_rules = Vec::new();
         for item in routing
             .rule_set
             .iter()
             .filter(|item| item.enabled && item.rule_type != Some(RuleType::DNS))
         {
             gen_routing_user_rule(config, context, item);
-            if item.ip.as_ref().is_some_and(|ips| !ips.is_empty()) {
-                ip_rules.push(item.clone());
-            }
-        }
-        if context.app_config.routing_basic_item.domain_strategy == IP_IF_NON_MATCH {
-            config.route.rules.push(resolve_rule);
-            for item in &ip_rules {
-                gen_routing_user_rule(config, context, item);
-            }
         }
     }
 

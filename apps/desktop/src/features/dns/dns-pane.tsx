@@ -14,20 +14,14 @@ import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import { SettingsGroup } from "@/features/settings/settings-form";
-import type { DnsSettings } from "@voya/contracts";
+import type { DnsSettings, DnsStrategy } from "@voya/contracts";
 
 import { DNS_STRATEGIES } from "@voya/features/dns/dns-form-schema";
 import type { useDnsSettings } from "@voya/features/dns/use-dns-settings";
 
-// "AsIs" and "UseIP" generate no strategy at all, exactly like the default, so
-// the list offers the default once and shows either stored value as it.
-const DEFAULT_LIKE_STRATEGIES: readonly string[] = ["AsIs", "UseIP"];
-const STRATEGY_OPTIONS = DNS_STRATEGIES.filter(
-  (value) => !DEFAULT_LIKE_STRATEGIES.includes(value),
-);
-
-function shownStrategy(value: string | null) {
-  return value && !DEFAULT_LIKE_STRATEGIES.includes(value) ? value : "";
+/** The select's empty value stands for "no strategy", sing-box's default. */
+function strategyOrNull(value: string): DnsStrategy | null {
+  return DNS_STRATEGIES.find((strategy) => strategy === value) ?? null;
 }
 
 type DnsPreset = { labelKey: TranslationKey; value: string };
@@ -82,11 +76,16 @@ function SimpleDnsForm({
   const ipv6Off = settingsQuery.data
     ? !settingsQuery.data.network.tun.ipv6Enabled
     : false;
-  const strategyLabels: Record<string, string> = {
-    "": t("panes.routing.defaultValue"),
-    UseIPv4: t("panes.dns.strategyIpv4"), UseIPv6: t("panes.dns.strategyIpv6"), ForceIPv4: t("panes.dns.strategyOnlyIpv4"), ForceIPv6: t("panes.dns.strategyOnlyIpv6"),
+  const strategyLabels: Record<DnsStrategy, string> = {
+    preferIpv4: t("panes.dns.strategyIpv4"),
+    preferIpv6: t("panes.dns.strategyIpv6"),
+    ipv4Only: t("panes.dns.strategyOnlyIpv4"),
+    ipv6Only: t("panes.dns.strategyOnlyIpv6"),
   };
-  const strategies = STRATEGY_OPTIONS.map((value) => ({ value, label: strategyLabels[value] ?? value }));
+  const strategies = [
+    { value: "", label: t("panes.routing.defaultValue") },
+    ...DNS_STRATEGIES.map((value) => ({ value, label: strategyLabels[value] })),
+  ];
   return (
     <>
       {/* The FakeIP switch below already shows the mode, so only errors get a badge. */}
@@ -144,16 +143,16 @@ function SimpleDnsForm({
           description={ipv6Off ? t("panes.dns.strategyIpv6Off") : t("panes.dns.strategyHint")}
           label={t("panes.dns.directStrategy")}
           layout="row"
-          onChange={(value) => updateSimple({ directStrategy: value || null })}
-          value={shownStrategy(settings.directStrategy)}
+          onChange={(value) => updateSimple({ directStrategy: strategyOrNull(value) })}
+          value={settings.directStrategy ?? ""}
         />
         <SelectField
           options={strategies}
           description={ipv6Off ? t("panes.dns.strategyIpv6Off") : t("panes.dns.strategyHint")}
           label={t("panes.dns.proxyStrategy")}
           layout="row"
-          onChange={(value) => updateSimple({ proxyStrategy: value || null })}
-          value={shownStrategy(settings.proxyStrategy)}
+          onChange={(value) => updateSimple({ proxyStrategy: strategyOrNull(value) })}
+          value={settings.proxyStrategy ?? ""}
         />
       </SettingsGroup>
       <SettingsGroup title={t("settings.sections.dnsBehavior")}>

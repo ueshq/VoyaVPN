@@ -332,7 +332,6 @@ export type AppSettings = {
 	behavior: BehaviorSettings,
 	core: CoreSettings,
 	network: NetworkSettings,
-	routing: RoutingSettings,
 	dns: DnsSettings,
 	speedTest: SpeedtestSettings,
 	multiplexing: MultiplexingSettings,
@@ -492,11 +491,17 @@ export type DnsSettings = {
 	direct: string | null,
 	remote: string | null,
 	bootstrap: string | null,
-	directStrategy: string | null,
-	proxyStrategy: string | null,
+	directStrategy: DnsStrategy | null,
+	proxyStrategy: DnsStrategy | null,
 	hosts: string | null,
 	directExpectedIps: string | null,
 };
+
+/**
+ *  Which address families a DNS answer carries. Unset leaves sing-box's own
+ *  default.
+ */
+export type DnsStrategy = "preferIpv4" | "preferIpv6" | "ipv4Only" | "ipv6Only";
 
 export type ExportProfilesResult = {
 	text: string,
@@ -1002,10 +1007,6 @@ export type RoutingRule = {
 };
 
 export type RoutingRuleScope = "all" | "routing" | "dns";
-
-export type RoutingSettings = {
-	domainStrategy: string,
-};
 
 export type Routing_Deserialize = {
 	id: string,

@@ -54,7 +54,6 @@ export function makeAppSettings({
         strictRoute: true,
       },
     },
-    routing: { domainStrategy: "AsIs" },
     dns: {
       addCommonHosts: null,
       blockBindingQuery: null,

@@ -15,7 +15,6 @@ pub struct AppSettings {
     pub behavior: BehaviorSettings,
     pub core: CoreSettings,
     pub network: NetworkSettings,
-    pub routing: RoutingSettings,
     pub dns: DnsSettings,
     // Serialized as `speedTest`. The type follows the `Speedtest` spelling the
     // commands and events use, but the field name is a persisted JSON key and
@@ -247,20 +246,6 @@ impl Default for SystemProxySettings {
             mode: SystemProxyType::ForcedChange,
             exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
             bypass_local: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RoutingSettings {
-    pub domain_strategy: String,
-}
-
-impl Default for RoutingSettings {
-    fn default() -> Self {
-        Self {
-            domain_strategy: "AsIs".to_string(),
         }
     }
 }

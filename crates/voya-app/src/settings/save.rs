@@ -289,9 +289,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettings {
                 })
                 .collect(),
         },
-        routing: contracts::RoutingSettings {
-            domain_strategy: config.routing_basic_item.domain_strategy.clone(),
-        },
         dns: simple_dns_to_contract(config.simple_dns_item.clone()),
         speed_test: contracts::SpeedtestSettings {
             timeout_seconds: config.speed_test_item.speed_test_timeout,
@@ -366,7 +363,6 @@ pub fn app_config_from_settings(
             icmp_routing: settings.network.tun.icmp_routing.clone(),
         },
         routing_basic_item: RoutingBasicItem {
-            domain_strategy: settings.routing.domain_strategy.clone(),
             routing_index_id: state.active_routing_id.clone().unwrap_or_default(),
         },
         gui_item: GuiItem {
@@ -545,7 +541,6 @@ mod tests {
                 icmp_routing: "icmp-routing-value".to_string(),
             },
             routing_basic_item: RoutingBasicItem {
-                domain_strategy: "domain-strategy-value".to_string(),
                 routing_index_id: "active-routing-id".to_string(),
             },
             gui_item: GuiItem {
@@ -601,8 +596,8 @@ mod tests {
                 direct_dns: Some("direct-dns-value".to_string()),
                 remote_dns: Some("remote-dns-value".to_string()),
                 bootstrap_dns: Some("bootstrap-dns-value".to_string()),
-                strategy4_freedom: Some("direct-strategy-value".to_string()),
-                strategy4_proxy: Some("proxy-strategy-value".to_string()),
+                direct_strategy: Some(voya_core::DnsStrategy::PreferIpv4),
+                proxy_strategy: Some(voya_core::DnsStrategy::Ipv6Only),
                 hosts: Some("hosts-value".to_string()),
                 direct_expected_ips: Some("direct-expected-ips-value".to_string()),
             },

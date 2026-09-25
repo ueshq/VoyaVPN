@@ -1221,7 +1221,6 @@ export async function installTauriSmokeMock(
             strictRoute: false,
           },
         },
-        routing: { domainStrategy: "AsIs" },
         dns: {
           addCommonHosts: null,
           blockBindingQuery: null,
@@ -1262,9 +1261,9 @@ export async function installTauriSmokeMock(
         fakeIp: false,
         globalFakeIp: false,
         hosts: "",
-        proxyStrategy: "UseIP",
+        proxyStrategy: null,
         remote: "https://1.1.1.1/dns-query",
-        directStrategy: "AsIs",
+        directStrategy: null,
       };
     }
 

@@ -3,7 +3,6 @@ use crate::{SysProxyType, TlsFragmentMode, TrafficMode};
 pub const DEFAULT_LOCAL_PORT: i32 = 10808;
 pub const DEFAULT_LOG_LEVEL: &str = "warn";
 pub const DEFAULT_FRAGMENT_FALLBACK_DELAY_MS: i32 = 500;
-pub const DEFAULT_DOMAIN_STRATEGY: &str = "AsIs";
 pub const DEFAULT_TUN_ICMP_ROUTING: &str = "rule";
 pub const DEFAULT_LANGUAGE: &str = "en";
 pub const DEFAULT_SPEED_PING_TEST_URL: &str = "https://www.google.com/generate_204";
@@ -213,19 +212,9 @@ impl Default for SpeedTestItem {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RoutingBasicItem {
-    pub domain_strategy: String,
     pub routing_index_id: String,
-}
-
-impl Default for RoutingBasicItem {
-    fn default() -> Self {
-        Self {
-            domain_strategy: DEFAULT_DOMAIN_STRATEGY.to_string(),
-            routing_index_id: String::new(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -313,6 +302,28 @@ impl Default for TunModeItem {
     }
 }
 
+/// Which address families a DNS answer carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DnsStrategy {
+    PreferIpv4,
+    PreferIpv6,
+    Ipv4Only,
+    Ipv6Only,
+}
+
+impl DnsStrategy {
+    /// The value sing-box's `strategy` field takes.
+    #[must_use]
+    pub const fn singbox_name(self) -> &'static str {
+        match self {
+            Self::PreferIpv4 => "prefer_ipv4",
+            Self::PreferIpv6 => "prefer_ipv6",
+            Self::Ipv4Only => "ipv4_only",
+            Self::Ipv6Only => "ipv6_only",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SimpleDnsItem {
     pub add_common_hosts: Option<bool>,
@@ -322,8 +333,8 @@ pub struct SimpleDnsItem {
     pub direct_dns: Option<String>,
     pub remote_dns: Option<String>,
     pub bootstrap_dns: Option<String>,
-    pub strategy4_freedom: Option<String>,
-    pub strategy4_proxy: Option<String>,
+    pub direct_strategy: Option<DnsStrategy>,
+    pub proxy_strategy: Option<DnsStrategy>,
     pub hosts: Option<String>,
     pub direct_expected_ips: Option<String>,
 }
@@ -338,8 +349,8 @@ impl Default for SimpleDnsItem {
             direct_dns: Some(DEFAULT_DIRECT_DNS.to_string()),
             remote_dns: Some(DEFAULT_REMOTE_DNS.to_string()),
             bootstrap_dns: Some(DEFAULT_BOOTSTRAP_DNS.to_string()),
-            strategy4_freedom: None,
-            strategy4_proxy: None,
+            direct_strategy: None,
+            proxy_strategy: None,
             hosts: None,
             direct_expected_ips: None,
         }
@@ -358,7 +369,6 @@ mod tests {
         assert_eq!(config.inbound[0].local_port, 10808);
         assert!(config.inbound[0].sniffing_enabled);
         assert_eq!(config.core_basic_item.loglevel, "warn");
-        assert_eq!(config.routing_basic_item.domain_strategy, "AsIs");
         assert_eq!(config.tun_mode_item.mtu, 1500);
         assert!(!config.tun_mode_item.strict_route);
         assert_eq!(config.speed_test_item.speed_test_timeout, 10);

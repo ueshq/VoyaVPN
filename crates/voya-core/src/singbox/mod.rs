@@ -17,9 +17,9 @@ use crate::{
         WIREGUARD_DEFAULT_ADDRESS, WIREGUARD_DEFAULT_MTU,
     },
     text::{nonempty_str, nonempty_string},
-    AppConfig, ConfigType, CoreConfigContext, InItem, InboundProtocol, Ipv6Mode, ProfileItem,
-    ProfileProtocol, ProfileTransport, RuleType, RulesItem, SpeedtestConfigEntry, TlsMode,
-    TlsSettings, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
+    AppConfig, ConfigType, CoreConfigContext, DnsStrategy, InItem, InboundProtocol, Ipv6Mode,
+    ProfileItem, ProfileProtocol, ProfileTransport, RuleType, RulesItem, SpeedtestConfigEntry,
+    TlsMode, TlsSettings, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
     DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
 
@@ -46,8 +46,6 @@ pub const DEFAULT_SINGBOX_RULESET_URL: &str =
     "https://raw.githubusercontent.com/2dust/sing-box-rules/rule-set-{0}/{1}.srs";
 const GEOIP_PREFIX: &str = "geoip:";
 const GEOSITE_PREFIX: &str = "geosite:";
-const IP_IF_NON_MATCH: &str = "IPIfNonMatch";
-const IP_ON_DEMAND: &str = "IPOnDemand";
 const VMESS_SECURITIES: &[&str] = &[
     "aes-128-gcm",
     "chacha20-poly1305",

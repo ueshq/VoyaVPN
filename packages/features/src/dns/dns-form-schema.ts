@@ -1,8 +1,13 @@
 import { z } from "zod";
 
-import type { DnsSettings } from "@voya/contracts";
+import type { DnsSettings, DnsStrategy } from "@voya/contracts";
 
-export const DNS_STRATEGIES = ["", "AsIs", "UseIP", "UseIPv4", "UseIPv6", "ForceIPv4", "ForceIPv6"] as const;
+export const DNS_STRATEGIES = [
+  "preferIpv4",
+  "preferIpv6",
+  "ipv4Only",
+  "ipv6Only",
+] as const satisfies readonly DnsStrategy[];
 
 // Issue messages are translation keys (see lib/zod-errors.ts); the DNS pane
 // renders them through `t`, so nothing here may be a display string.

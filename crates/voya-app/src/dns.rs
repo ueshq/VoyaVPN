@@ -34,8 +34,6 @@ pub fn normalize_simple_dns(mut item: SimpleDnsItem) -> SimpleDnsItem {
         .or_else(|| Some(DEFAULT_REMOTE_DNS.to_string()));
     item.bootstrap_dns = nonempty_string(item.bootstrap_dns.as_deref())
         .or_else(|| Some(DEFAULT_BOOTSTRAP_DNS.to_string()));
-    item.strategy4_freedom = nonempty_string(item.strategy4_freedom.as_deref());
-    item.strategy4_proxy = nonempty_string(item.strategy4_proxy.as_deref());
     item.hosts = nonempty_string(item.hosts.as_deref());
     item.direct_expected_ips = nonempty_string(item.direct_expected_ips.as_deref());
     item

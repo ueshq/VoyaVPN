@@ -203,6 +203,17 @@ pub enum MoveAction {
     Position,
 }
 
+/// Which address families a DNS answer carries. Unset leaves sing-box's own
+/// default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum DnsStrategy {
+    PreferIpv4,
+    PreferIpv6,
+    Ipv4Only,
+    Ipv6Only,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DnsSettings {
@@ -213,8 +224,8 @@ pub struct DnsSettings {
     pub direct: Option<String>,
     pub remote: Option<String>,
     pub bootstrap: Option<String>,
-    pub direct_strategy: Option<String>,
-    pub proxy_strategy: Option<String>,
+    pub direct_strategy: Option<DnsStrategy>,
+    pub proxy_strategy: Option<DnsStrategy>,
     pub hosts: Option<String>,
     pub direct_expected_ips: Option<String>,
 }

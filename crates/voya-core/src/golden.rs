@@ -14,7 +14,7 @@ use crate::testutil::{
 };
 use crate::{
     generate_singbox_config, generate_singbox_config_value, AppConfig, ContextPolicyGroup,
-    CoreConfigContext, CoreGenPlatform, GroupStrategy, PolicyGroupItem, ProfileItem,
+    CoreConfigContext, CoreGenPlatform, DnsStrategy, GroupStrategy, PolicyGroupItem, ProfileItem,
     ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem, TlsMode, TlsSettings,
     BLOCK_TAG, DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
@@ -921,8 +921,8 @@ fn singbox_routing_dns_contexts() -> (CoreConfigContext, CoreConfigContext) {
         Some("https://cloudflare-dns.com/dns-query".to_string());
     dns_config.simple_dns_item.hosts =
         Some("resolver.example 1.1.1.1\nblock.test #3\ncname.test target.example".to_string());
-    dns_config.simple_dns_item.strategy4_freedom = Some("UseIPv4".to_string());
-    dns_config.simple_dns_item.strategy4_proxy = Some("UseIPv6".to_string());
+    dns_config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
+    dns_config.simple_dns_item.proxy_strategy = Some(DnsStrategy::PreferIpv6);
     dns_config.simple_dns_item.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
     let mut dns_context = singbox_context(dns_config, singbox_base_remote_node());
     dns_context.routing_item = Some(RoutingItem {

@@ -3,7 +3,9 @@ use voya_contracts::{
     RoutingRuleScope, Subscription as SubscriptionContract,
     SubscriptionMetadata as SubscriptionMetadataContract,
 };
-use voya_core::{RoutingItem, RuleType, RulesItem, SimpleDnsItem, SubItem, SubMetadataItem};
+use voya_core::{
+    DnsStrategy, RoutingItem, RuleType, RulesItem, SimpleDnsItem, SubItem, SubMetadataItem,
+};
 
 #[must_use]
 pub fn subscription_to_contract(item: SubItem) -> SubscriptionContract {
@@ -125,10 +127,28 @@ pub fn simple_dns_to_contract(item: SimpleDnsItem) -> DnsContract {
         direct: item.direct_dns,
         remote: item.remote_dns,
         bootstrap: item.bootstrap_dns,
-        direct_strategy: item.strategy4_freedom,
-        proxy_strategy: item.strategy4_proxy,
+        direct_strategy: item.direct_strategy.map(dns_strategy_to_contract),
+        proxy_strategy: item.proxy_strategy.map(dns_strategy_to_contract),
         hosts: item.hosts,
         direct_expected_ips: item.direct_expected_ips,
+    }
+}
+
+const fn dns_strategy_to_contract(strategy: DnsStrategy) -> voya_contracts::DnsStrategy {
+    match strategy {
+        DnsStrategy::PreferIpv4 => voya_contracts::DnsStrategy::PreferIpv4,
+        DnsStrategy::PreferIpv6 => voya_contracts::DnsStrategy::PreferIpv6,
+        DnsStrategy::Ipv4Only => voya_contracts::DnsStrategy::Ipv4Only,
+        DnsStrategy::Ipv6Only => voya_contracts::DnsStrategy::Ipv6Only,
+    }
+}
+
+const fn dns_strategy_from_contract(strategy: voya_contracts::DnsStrategy) -> DnsStrategy {
+    match strategy {
+        voya_contracts::DnsStrategy::PreferIpv4 => DnsStrategy::PreferIpv4,
+        voya_contracts::DnsStrategy::PreferIpv6 => DnsStrategy::PreferIpv6,
+        voya_contracts::DnsStrategy::Ipv4Only => DnsStrategy::Ipv4Only,
+        voya_contracts::DnsStrategy::Ipv6Only => DnsStrategy::Ipv6Only,
     }
 }
 
@@ -142,8 +162,8 @@ pub fn simple_dns_from_contract(settings: DnsContract) -> SimpleDnsItem {
         direct_dns: settings.direct,
         remote_dns: settings.remote,
         bootstrap_dns: settings.bootstrap,
-        strategy4_freedom: settings.direct_strategy,
-        strategy4_proxy: settings.proxy_strategy,
+        direct_strategy: settings.direct_strategy.map(dns_strategy_from_contract),
+        proxy_strategy: settings.proxy_strategy.map(dns_strategy_from_contract),
         hosts: settings.hosts,
         direct_expected_ips: settings.direct_expected_ips,
     }

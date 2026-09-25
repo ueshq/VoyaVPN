@@ -728,24 +728,14 @@ fn singbox_dns_helper_tables_parse_hosts_strategies_and_rcodes() {
     assert!(!hosts.contains_key("bare-line-without-value"));
     assert!(!hosts.contains_key("# comment line"));
 
-    assert_eq!(domain_strategy4_sbox(None), None);
-    assert_eq!(domain_strategy4_sbox(Some("AsIs")), None);
-    assert_eq!(
-        domain_strategy4_sbox(Some("UseIPv4")).as_deref(),
-        Some("prefer_ipv4")
-    );
-    assert_eq!(
-        domain_strategy4_sbox(Some("UseIPv6")).as_deref(),
-        Some("prefer_ipv6")
-    );
-    assert_eq!(
-        domain_strategy4_sbox(Some("ForceIPv4")).as_deref(),
-        Some("ipv4_only")
-    );
-    assert_eq!(
-        domain_strategy4_sbox(Some("ForceIPv6v4")).as_deref(),
-        Some("ipv6_only")
-    );
+    for (strategy, name) in [
+        (DnsStrategy::PreferIpv4, "prefer_ipv4"),
+        (DnsStrategy::PreferIpv6, "prefer_ipv6"),
+        (DnsStrategy::Ipv4Only, "ipv4_only"),
+        (DnsStrategy::Ipv6Only, "ipv6_only"),
+    ] {
+        assert_eq!(strategy.singbox_name(), name);
+    }
 
     assert_eq!(dns_rcode(0), "NOERROR");
     assert_eq!(dns_rcode(1), "FORMERR");
@@ -830,7 +820,7 @@ fn singbox_dns_bootstrap_and_expected_ips_reach_servers_and_rules() {
     app_config.simple_dns_item.remote_dns = Some("https://remote.example/dns-query".to_string());
     app_config.simple_dns_item.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
     app_config.simple_dns_item.add_common_hosts = Some(false);
-    app_config.simple_dns_item.strategy4_freedom = Some("UseIPv4".to_string());
+    app_config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
     let mut context = test_context(app_config, base_remote_node());
     context.routing_item = Some(RoutingItem {
         rule_set: vec![RulesItem {
@@ -1328,12 +1318,10 @@ fn singbox_dns_strategy_yields_to_the_ipv6_master_switch() {
     // Off: every rule-level strategy is suppressed; the top-level covers it.
     for explicit in [
         None,
-        Some("AsIs"),
-        Some("UseIP"),
-        Some("UseIPv4"),
-        Some("UseIPv6"),
-        Some("ForceIPv4"),
-        Some("ForceIPv6"),
+        Some(DnsStrategy::PreferIpv4),
+        Some(DnsStrategy::PreferIpv6),
+        Some(DnsStrategy::Ipv4Only),
+        Some(DnsStrategy::Ipv6Only),
     ] {
         let mut config = AppConfig::default();
         config.tun_mode_item.enable_ipv6_address = false;
@@ -1358,13 +1346,12 @@ fn singbox_dns_strategy_yields_to_the_ipv6_master_switch() {
     assert_eq!(context.ipv6_mode(), Ipv6Mode::Full);
     for strategy in [direct_dns_strategy, proxy_dns_strategy] {
         assert_eq!(strategy(&context, None), None);
-        assert_eq!(strategy(&context, Some("AsIs")), None);
         assert_eq!(
-            strategy(&context, Some("UseIPv6")).as_deref(),
+            strategy(&context, Some(DnsStrategy::PreferIpv6)).as_deref(),
             Some("prefer_ipv6")
         );
         assert_eq!(
-            strategy(&context, Some("ForceIPv4")).as_deref(),
+            strategy(&context, Some(DnsStrategy::Ipv4Only)).as_deref(),
             Some("ipv4_only")
         );
     }
@@ -1378,7 +1365,11 @@ fn singbox_node_without_ipv6_egress_keeps_ipv6_on_the_direct_path_only() {
     context.ipv6_egress_unsupported = true;
     assert_eq!(context.ipv6_mode(), Ipv6Mode::DirectOnly);
 
-    for explicit in [None, Some("AsIs"), Some("UseIPv6"), Some("ForceIPv6")] {
+    for explicit in [
+        None,
+        Some(DnsStrategy::PreferIpv6),
+        Some(DnsStrategy::Ipv6Only),
+    ] {
         assert_eq!(
             proxy_dns_strategy(&context, explicit).as_deref(),
             Some("ipv4_only"),
@@ -1387,7 +1378,7 @@ fn singbox_node_without_ipv6_egress_keeps_ipv6_on_the_direct_path_only() {
     }
     assert_eq!(direct_dns_strategy(&context, None), None);
     assert_eq!(
-        direct_dns_strategy(&context, Some("UseIPv6")).as_deref(),
+        direct_dns_strategy(&context, Some(DnsStrategy::PreferIpv6)).as_deref(),
         Some("prefer_ipv6")
     );
 
@@ -1400,8 +1391,8 @@ fn singbox_node_without_ipv6_egress_keeps_ipv6_on_the_direct_path_only() {
 fn singbox_ipv6_off_puts_ipv4_only_on_top_and_drops_rule_strategies() {
     let mut config = AppConfig::default();
     config.tun_mode_item.enable_ipv6_address = false;
-    config.simple_dns_item.strategy4_proxy = Some("UseIPv6".to_string());
-    config.simple_dns_item.strategy4_freedom = Some("UseIPv4".to_string());
+    config.simple_dns_item.proxy_strategy = Some(DnsStrategy::PreferIpv6);
+    config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
     config.simple_dns_item.add_common_hosts = Some(false);
     config.simple_dns_item.block_binding_query = Some(false);
     let mut context = test_context(config, base_remote_node());
@@ -1451,8 +1442,8 @@ fn singbox_ipv6_off_puts_ipv4_only_on_top_and_drops_rule_strategies() {
 fn singbox_ipv6_on_emits_explicit_rule_strategies_and_the_final_catch_all() {
     let mut config = AppConfig::default();
     config.tun_mode_item.enable_ipv6_address = true;
-    config.simple_dns_item.strategy4_proxy = Some("UseIPv6".to_string());
-    config.simple_dns_item.strategy4_freedom = Some("UseIPv4".to_string());
+    config.simple_dns_item.proxy_strategy = Some(DnsStrategy::PreferIpv6);
+    config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
     config.simple_dns_item.add_common_hosts = Some(false);
     config.simple_dns_item.block_binding_query = Some(false);
     let mut context = test_context(config, base_remote_node());
@@ -1557,17 +1548,15 @@ fn singbox_ipv6_reject_lets_direct_rules_claim_ipv6_first() {
 
     for (ipv6_enabled, unsupported) in [(false, false), (false, true), (true, true)] {
         for tun in [false, true] {
-            for strategy in ["AsIs", IP_IF_NON_MATCH] {
+            {
                 let mut app_config = AppConfig::default();
                 app_config.tun_mode_item.enable_tun = tun;
                 app_config.tun_mode_item.enable_ipv6_address = ipv6_enabled;
-                app_config.routing_basic_item.domain_strategy = strategy.to_string();
                 let mut context = test_context(app_config, base_remote_node());
                 context.is_tun_enabled = tun;
                 context.ipv6_egress_unsupported = unsupported;
                 context.routing_item = Some(routing.clone());
-                let case =
-                    format!("ipv6={ipv6_enabled} unsupported={unsupported} tun={tun} {strategy}");
+                let case = format!("ipv6={ipv6_enabled} unsupported={unsupported} tun={tun}");
 
                 let rules = generate_singbox_config(&context)
                     .expect("sing-box config should generate")
@@ -1808,8 +1797,8 @@ fn singbox_routing_dns_snapshot_contexts() -> (CoreConfigContext, CoreConfigCont
         Some("https://cloudflare-dns.com/dns-query".to_string());
     dns_config.simple_dns_item.hosts =
         Some("resolver.example 1.1.1.1\nblock.test #3\ncname.test target.example".to_string());
-    dns_config.simple_dns_item.strategy4_freedom = Some("UseIPv4".to_string());
-    dns_config.simple_dns_item.strategy4_proxy = Some("UseIPv6".to_string());
+    dns_config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
+    dns_config.simple_dns_item.proxy_strategy = Some(DnsStrategy::PreferIpv6);
     dns_config.simple_dns_item.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
     let mut dns_context = test_context(dns_config, base_remote_node());
     dns_context.routing_item = Some(RoutingItem {

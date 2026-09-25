@@ -126,11 +126,11 @@ function makeDnsSettings(): DnsSettings {
     bootstrap: "1.1.1.1",
     direct: "223.5.5.5",
     directExpectedIps: "",
-    directStrategy: "AsIs",
+    directStrategy: null,
     fakeIp: false,
     globalFakeIp: false,
     hosts: "",
-    proxyStrategy: "UseIP",
+    proxyStrategy: null,
     remote: "https://1.1.1.1/dns-query",
   };
 }
@@ -185,7 +185,6 @@ function makeAppSettings(): AppSettings {
       },
     },
     proxy: { trafficMode: "rule" },
-    routing: { domainStrategy: "AsIs" },
     speedTest: {
       delayIntervalSeconds: null,
       ipLookupUrl: "",

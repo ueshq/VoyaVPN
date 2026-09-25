@@ -160,21 +160,6 @@ fn parse_authority_port(port: &str) -> Option<u16> {
     port.parse::<u16>().ok().filter(|port| *port > 0)
 }
 
-pub(crate) fn domain_strategy4_sbox(strategy: Option<&str>) -> Option<String> {
-    let strategy = strategy?;
-    if strategy.starts_with("UseIPv4") {
-        Some("prefer_ipv4".to_string())
-    } else if strategy.starts_with("UseIPv6") {
-        Some("prefer_ipv6".to_string())
-    } else if strategy.starts_with("ForceIPv4") {
-        Some("ipv4_only".to_string())
-    } else if strategy.starts_with("ForceIPv6") {
-        Some("ipv6_only".to_string())
-    } else {
-        None
-    }
-}
-
 pub(crate) fn dns_rcode(value: i32) -> &'static str {
     match value {
         1 => "FORMERR",

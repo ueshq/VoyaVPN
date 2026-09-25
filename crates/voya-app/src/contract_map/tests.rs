@@ -111,8 +111,8 @@ fn dns_mapping_round_trips_every_distinct_field() {
         direct_dns: Some("direct-dns".to_string()),
         remote_dns: Some("remote-dns".to_string()),
         bootstrap_dns: Some("bootstrap-dns".to_string()),
-        strategy4_freedom: Some("direct-strategy".to_string()),
-        strategy4_proxy: Some("proxy-strategy".to_string()),
+        direct_strategy: Some(voya_core::DnsStrategy::Ipv4Only),
+        proxy_strategy: Some(voya_core::DnsStrategy::PreferIpv6),
         hosts: Some("hosts-value".to_string()),
         direct_expected_ips: Some("direct-expected-ips".to_string()),
     };
