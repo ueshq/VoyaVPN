@@ -2,10 +2,10 @@ use super::*;
 
 pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContext) {
     config.route.final_outbound = Some(PROXY_TAG.to_string());
-    let simple_dns = &context.simple_dns_item;
+    let dns_config = &context.dns;
     config.route.default_domain_resolver = Some(SingboxRule {
         server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
-        strategy: direct_dns_strategy(context, simple_dns.direct_strategy),
+        strategy: direct_dns_strategy(context, dns_config.direct_strategy),
         ..SingboxRule::default()
     });
 
@@ -24,7 +24,7 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
                 ..SingboxRule::default()
             });
         }
-        let icmp_routing = tun_icmp_routing(&context.app_config.tun_mode_item.icmp_routing);
+        let icmp_routing = tun_icmp_routing(&context.app_config.tun.icmp_routing);
         match icmp_routing {
             "direct" => config.route.rules.push(SingboxRule {
                 network: Some(vec!["icmp".to_string()]),
@@ -50,7 +50,7 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
 
     if context
         .app_config
-        .inbound
+        .inbounds
         .first()
         .is_none_or(|inbound| inbound.sniffing_enabled)
     {
@@ -82,7 +82,7 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         });
     }
 
-    if let Some(hosts_resolve_rule) = hosts_resolve_rule(simple_dns) {
+    if let Some(hosts_resolve_rule) = hosts_resolve_rule(dns_config) {
         config.route.rules.push(hosts_resolve_rule);
     }
 
@@ -156,8 +156,8 @@ fn tun_icmp_routing(value: &str) -> &str {
     }
 }
 
-fn hosts_resolve_rule(simple_dns: &crate::SimpleDnsItem) -> Option<SingboxRule> {
-    let host_keys = parse_hosts_to_dictionary(simple_dns.hosts.as_deref())
+fn hosts_resolve_rule(dns_config: &crate::DnsConfig) -> Option<SingboxRule> {
+    let host_keys = parse_hosts_to_dictionary(dns_config.hosts.as_deref())
         .into_keys()
         .collect::<Vec<_>>();
     if host_keys.is_empty() {

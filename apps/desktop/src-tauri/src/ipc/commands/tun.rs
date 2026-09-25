@@ -73,7 +73,7 @@ pub async fn set_tun_enabled<R: tauri::Runtime>(
             AppNoticeLevel::Warning,
         );
     }
-    // `enable_tun` is committed, and the settings bundle mirrors it; without
+    // `tun.enabled` is committed, and the settings bundle mirrors it; without
     // this a stale bundle would rewrite the flag back on the next Save-all.
     emit_invalidation(
         &app,

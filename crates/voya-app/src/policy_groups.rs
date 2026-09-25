@@ -229,7 +229,7 @@ impl<'db> PolicyGroupManager<'db> {
         config: &AppConfig,
         subscription_id: &str,
     ) -> std::result::Result<Option<PolicyGroupItem>, DbError> {
-        if !config.gui_item.auto_create_subscription_group
+        if !config.behavior.auto_create_subscription_group
             || self
                 .database
                 .policy_groups()
@@ -254,7 +254,7 @@ impl<'db> PolicyGroupManager<'db> {
             } else {
                 &subscription.remarks
             },
-            &config.ui_item.current_language,
+            &config.appearance.language,
         );
         let group = PolicyGroupItem {
             id: uuid::Uuid::new_v4().simple().to_string(),
@@ -640,15 +640,15 @@ mod tests {
             .expect("empty subscription");
         let manager = PolicyGroupManager::new(&database);
         let mut config = AppConfig::default();
-        assert!(config.gui_item.auto_create_subscription_group);
+        assert!(config.behavior.auto_create_subscription_group);
 
-        config.gui_item.auto_create_subscription_group = false;
+        config.behavior.auto_create_subscription_group = false;
         assert!(manager
             .ensure_subscription_auto_group(&config, "work")
             .await
             .expect("disabled")
             .is_none());
-        config.gui_item.auto_create_subscription_group = true;
+        config.behavior.auto_create_subscription_group = true;
         let created = manager
             .ensure_subscription_auto_group(&config, "work")
             .await

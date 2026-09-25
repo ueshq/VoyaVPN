@@ -33,7 +33,7 @@ impl SnapshotCoreGenEnv {
     ) -> Self {
         Self {
             local_socks_port: config
-                .inbound
+                .inbounds
                 .first()
                 .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port),
             platform,
@@ -103,7 +103,7 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
         self.routings
             .iter()
-            .find(|routing| routing.id == config.routing_basic_item.routing_index_id)
+            .find(|routing| routing.id == config.active_routing_id)
             .or_else(|| self.routings.first())
             .cloned()
     }

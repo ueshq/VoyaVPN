@@ -9,10 +9,10 @@
 //! cannot tell two `String`s or two `i64`s apart.
 
 use voya_core::{
-    ProfileExItem, ProfileItem, ProfileListItem, ProfileProtocol as CoreProfileProtocol,
+    DnsConfig, ProfileExItem, ProfileItem, ProfileListItem, ProfileProtocol as CoreProfileProtocol,
     ProfileTransport as CoreProfileTransport, RoutingItem, RuleType, RulesItem,
-    ServerEndpoint as CoreServerEndpoint, ServerStatItem, SimpleDnsItem, SubItem,
-    TlsMode as CoreTlsMode, TlsSettings as CoreTlsSettings,
+    ServerEndpoint as CoreServerEndpoint, ServerStatItem, SubItem, TlsMode as CoreTlsMode,
+    TlsSettings as CoreTlsSettings,
 };
 
 use voya_contracts::SpeedtestOutcome;
@@ -103,33 +103,30 @@ fn subscription_mapping_round_trips_every_distinct_field() {
 
 #[test]
 fn dns_mapping_round_trips_every_distinct_field() {
-    let item = SimpleDnsItem {
+    let item = DnsConfig {
         add_common_hosts: Some(false),
         fake_ip: Some(true),
         global_fake_ip: Some(false),
         block_binding_query: Some(true),
-        direct_dns: Some("direct-dns".to_string()),
-        remote_dns: Some("remote-dns".to_string()),
-        bootstrap_dns: Some("bootstrap-dns".to_string()),
+        direct: Some("direct-dns".to_string()),
+        remote: Some("remote-dns".to_string()),
+        bootstrap: Some("bootstrap-dns".to_string()),
         direct_strategy: Some(voya_core::DnsStrategy::Ipv4Only),
         proxy_strategy: Some(voya_core::DnsStrategy::PreferIpv6),
         hosts: Some("hosts-value".to_string()),
         direct_expected_ips: Some("direct-expected-ips".to_string()),
     };
 
-    assert_eq!(
-        simple_dns_from_contract(simple_dns_to_contract(item.clone())),
-        item
-    );
+    assert_eq!(dns_from_contract(dns_to_contract(item.clone())), item);
 
     let config = voya_core::AppConfig {
-        simple_dns_item: item.clone(),
+        dns: item.clone(),
         ..voya_core::AppConfig::default()
     };
     let bundle = crate::settings::save::settings_from_app_config(&config);
-    assert_eq!(bundle.dns, simple_dns_to_contract(item.clone()));
+    assert_eq!(bundle.dns, dns_to_contract(item.clone()));
     let restored = crate::settings::save::config_from_settings(&bundle, &config);
-    assert_eq!(restored.simple_dns_item, item);
+    assert_eq!(restored.dns, item);
 }
 
 #[test]

@@ -17,10 +17,10 @@ use crate::{
         WIREGUARD_DEFAULT_ADDRESS, WIREGUARD_DEFAULT_MTU,
     },
     text::{nonempty_str, nonempty_string},
-    AppConfig, ConfigType, CoreConfigContext, DnsStrategy, InItem, InboundProtocol, Ipv6Mode,
-    ProfileItem, ProfileProtocol, ProfileTransport, RuleType, RulesItem, SpeedtestConfigEntry,
-    TlsMode, TlsSettings, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
-    DIRECT_TAG, LOOPBACK, PROXY_TAG,
+    AppConfig, ConfigType, CoreConfigContext, DnsStrategy, InboundConfig, InboundProtocol,
+    Ipv6Mode, ProfileItem, ProfileProtocol, ProfileTransport, RuleType, RulesItem,
+    SpeedtestConfigEntry, TlsMode, TlsSettings, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS,
+    DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS, DIRECT_TAG, LOOPBACK, PROXY_TAG,
 };
 
 const USER_AGENT_HEADER: &str = "Sec-WebSocket-Protocol";

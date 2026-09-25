@@ -110,7 +110,7 @@ impl SystemProxyManager {
         }
 
         let mut request = self.request(config, false)?;
-        request.item.sys_proxy_type = SysProxyType::ForcedClear;
+        request.item.mode = SysProxyType::ForcedClear;
         let status = self.service.apply(&request)?;
         if status.effective_type == SysProxyType::ForcedClear {
             self.clear_dirty_marker()?;
@@ -124,7 +124,7 @@ impl SystemProxyManager {
     pub fn unavailable_status(&self, config: &AppConfig) -> SystemProxyStatus {
         SystemProxyStatus {
             management: system_proxy_management(self.target_os),
-            requested_type: config.system_proxy_item.sys_proxy_type,
+            requested_type: config.system_proxy.mode,
             effective_type: SysProxyType::Unchanged,
             target_os: self.target_os,
             proxy: None,
@@ -139,13 +139,13 @@ impl SystemProxyManager {
     ) -> Result<SystemProxyRequest, SystemProxyManagerError> {
         self.paths.ensure_dirs()?;
         let socks_port = config
-            .inbound
+            .inbounds
             .first()
             .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port);
 
         Ok(SystemProxyRequest {
             target_os: self.target_os,
-            item: config.system_proxy_item.clone(),
+            item: config.system_proxy.clone(),
             force_disable,
             socks_port,
             script_dir: self.paths.temp_dir().join(SYSPROXY_SCRIPT_DIR_NAME),
@@ -213,20 +213,20 @@ fn runtime_system_proxy_config(
     if should_disable_native_tun_system_proxy(config, target_os) {
         runtime.force_disable = true;
     } else if should_apply_tun_system_proxy_fallback(config, target_os) {
-        runtime.config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
+        runtime.config.system_proxy.mode = SysProxyType::ForcedChange;
     }
     runtime
 }
 
 #[must_use]
 fn should_disable_native_tun_system_proxy(config: &AppConfig, target_os: TargetOs) -> bool {
-    config.tun_mode_item.enable_tun && tun_backend(target_os).is_native()
+    config.tun.enabled && tun_backend(target_os).is_native()
 }
 
 #[must_use]
 fn should_apply_tun_system_proxy_fallback(config: &AppConfig, target_os: TargetOs) -> bool {
-    config.tun_mode_item.enable_tun
-        && config.system_proxy_item.sys_proxy_type == SysProxyType::ForcedClear
+    config.tun.enabled
+        && config.system_proxy.mode == SysProxyType::ForcedClear
         && tun_backend(target_os) == TunBackend::Process
 }
 
@@ -250,12 +250,12 @@ pub fn runtime_proxy_url(
 
 #[must_use]
 pub fn runtime_default_proxy_url(config: &AppConfig, target_os: TargetOs) -> Option<String> {
-    if config.tun_mode_item.enable_tun && tun_backend(target_os).is_native() {
+    if config.tun.enabled && tun_backend(target_os).is_native() {
         return None;
     }
 
     let port = config
-        .inbound
+        .inbounds
         .first()
         .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port);
     (1..=65_535)
@@ -270,7 +270,7 @@ fn request_sets_local_proxy(request: &SystemProxyRequest) -> bool {
         return false;
     }
 
-    request.item.sys_proxy_type == SysProxyType::ForcedChange
+    request.item.mode == SysProxyType::ForcedChange
         && matches!(
             request.target_os,
             TargetOs::Windows | TargetOs::Linux | TargetOs::Macos
@@ -313,16 +313,13 @@ mod tests {
         let runner = Arc::new(RecordingRunner::default());
         let manager = manager(TargetOs::Windows, runner);
         let mut config = AppConfig::default();
-        config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
+        config.system_proxy.mode = SysProxyType::ForcedChange;
 
         let status = manager.restore(&config).expect("restore");
 
         assert_eq!(status.requested_type, SysProxyType::ForcedChange);
         assert_eq!(status.effective_type, SysProxyType::ForcedClear);
-        assert_eq!(
-            config.system_proxy_item.sys_proxy_type,
-            SysProxyType::ForcedChange
-        );
+        assert_eq!(config.system_proxy.mode, SysProxyType::ForcedChange);
     }
 
     #[test]
@@ -331,7 +328,7 @@ mod tests {
         let runner = Arc::new(RecordingRunner::default());
         let manager = manager_with_app_dir(TargetOs::Windows, runner, app_dir.clone());
         let mut config = AppConfig::default();
-        config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
+        config.system_proxy.mode = SysProxyType::ForcedChange;
 
         manager.apply_config(&config, false).expect("apply proxy");
 
@@ -345,7 +342,7 @@ mod tests {
         let runner = Arc::new(RecordingRunner::default());
         let manager = manager_with_app_dir(TargetOs::Windows, runner, app_dir.clone());
         let mut config = AppConfig::default();
-        config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
+        config.system_proxy.mode = SysProxyType::ForcedChange;
 
         manager.apply_config(&config, false).expect("apply proxy");
         manager.restore(&config).expect("restore proxy");
@@ -360,7 +357,7 @@ mod tests {
         let runner = Arc::new(RecordingRunner::default());
         let manager = manager_with_app_dir(TargetOs::Windows, Arc::clone(&runner), app_dir.clone());
         let mut config = AppConfig::default();
-        config.system_proxy_item.sys_proxy_type = SysProxyType::Unchanged;
+        config.system_proxy.mode = SysProxyType::Unchanged;
         manager.write_dirty_marker().expect("dirty marker");
 
         let restored = manager
@@ -392,7 +389,7 @@ mod tests {
     #[test]
     fn runtime_proxy_policy_separates_native_tun_and_process_fallback() {
         let mut config = AppConfig::default();
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
 
         let native = runtime_system_proxy_config(&config, false, TargetOs::Macos);
         assert!(native.force_disable);
@@ -405,10 +402,7 @@ mod tests {
 
         let process = runtime_system_proxy_config(&config, false, TargetOs::Linux);
         assert!(!process.force_disable);
-        assert_eq!(
-            process.config.system_proxy_item.sys_proxy_type,
-            SysProxyType::ForcedChange
-        );
+        assert_eq!(process.config.system_proxy.mode, SysProxyType::ForcedChange);
         assert_eq!(
             runtime_proxy_url(true, None, &config, TargetOs::Linux).as_deref(),
             Some("http://127.0.0.1:10808")

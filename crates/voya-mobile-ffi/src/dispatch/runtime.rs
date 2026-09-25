@@ -261,7 +261,7 @@ pub(super) async fn set_tun_enabled(state: &MobileState, args: &Value) -> Result
         EventChannel::TransientStream,
         &TransientStreamEvent::TunChanged(planned.value.clone()),
     );
-    // `enable_tun` is committed, and the settings bundle mirrors it; without
+    // `tun.enabled` is committed, and the settings bundle mirrors it; without
     // this a stale bundle would rewrite the flag back on the next save.
     finish_config_change(
         state,

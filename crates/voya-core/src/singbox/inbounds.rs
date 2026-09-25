@@ -1,9 +1,9 @@
 use super::*;
 
 pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
-    let in_item = context
+    let inbound = context
         .app_config
-        .inbound
+        .inbounds
         .first()
         .cloned()
         .unwrap_or_default();
@@ -16,25 +16,25 @@ pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigConte
 
     config.inbounds.clear();
     if mixed_inbound_available {
-        let mut primary = build_mixed_inbound(&in_item, InboundProtocol::socks);
-        if in_item.allow_lan_conn && !in_item.new_port4_lan {
+        let mut primary = build_mixed_inbound(&inbound, InboundProtocol::socks);
+        if inbound.lan_connections_allowed && !inbound.separate_lan_port {
             primary.listen = Some("0.0.0.0".to_string());
         }
         config.inbounds.push(primary.clone());
 
-        if in_item.second_local_port_enabled {
+        if inbound.secondary_port_enabled {
             config
                 .inbounds
-                .push(build_mixed_inbound(&in_item, InboundProtocol::socks2));
+                .push(build_mixed_inbound(&inbound, InboundProtocol::socks2));
         }
 
-        if in_item.allow_lan_conn && in_item.new_port4_lan {
-            let mut lan = build_mixed_inbound(&in_item, InboundProtocol::socks3);
+        if inbound.lan_connections_allowed && inbound.separate_lan_port {
+            let mut lan = build_mixed_inbound(&inbound, InboundProtocol::socks3);
             lan.listen = Some("0.0.0.0".to_string());
-            if !in_item.user.trim().is_empty() && !in_item.pass.trim().is_empty() {
+            if !inbound.username.trim().is_empty() && !inbound.password.trim().is_empty() {
                 lan.users = Some(vec![SingboxUser {
-                    username: Some(in_item.user.clone()),
-                    password: Some(in_item.pass.clone()),
+                    username: Some(inbound.username.clone()),
+                    password: Some(inbound.password.clone()),
                     ..SingboxUser::default()
                 }]);
             }
@@ -50,10 +50,10 @@ pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigConte
     }
 }
 
-fn build_mixed_inbound(in_item: &InItem, protocol: InboundProtocol) -> SingboxInbound {
+fn build_mixed_inbound(inbound: &InboundConfig, protocol: InboundProtocol) -> SingboxInbound {
     build_mixed_inbound_with(
         inbound_protocol_tag(protocol),
-        in_item.local_port + protocol.port_offset(),
+        inbound.local_port + protocol.port_offset(),
     )
 }
 
@@ -70,7 +70,7 @@ pub(super) fn build_mixed_inbound_with(tag: impl Into<String>, port: i32) -> Sin
 fn build_tun_inbound(context: &CoreConfigContext, http_proxy_port: Option<i32>) -> SingboxInbound {
     let mtu = tun_mtu(context);
     let address = tun_addresses(context);
-    let stack = nonempty_str(Some(&context.app_config.tun_mode_item.stack))
+    let stack = nonempty_str(Some(&context.app_config.tun.stack))
         .unwrap_or(DEFAULT_TUN_STACK)
         .to_string();
 
@@ -82,7 +82,7 @@ fn build_tun_inbound(context: &CoreConfigContext, http_proxy_port: Option<i32>) 
         interface_name: tun_interface_name(context),
         address: Some(address),
         mtu: Some(mtu),
-        auto_route: Some(context.app_config.tun_mode_item.auto_route),
+        auto_route: Some(context.app_config.tun.auto_route),
         strict_route: Some(tun_strict_route(context)),
         stack: Some(stack),
         platform: tun_platform(context, http_proxy_port),
@@ -122,8 +122,8 @@ fn tun_interface_name(context: &CoreConfigContext) -> Option<String> {
 }
 
 fn tun_mtu(context: &CoreConfigContext) -> i32 {
-    let configured = if context.app_config.tun_mode_item.mtu > 0 {
-        context.app_config.tun_mode_item.mtu
+    let configured = if context.app_config.tun.mtu > 0 {
+        context.app_config.tun.mtu
     } else {
         WIREGUARD_DEFAULT_MTU
     };
@@ -135,5 +135,5 @@ fn tun_mtu(context: &CoreConfigContext) -> i32 {
 }
 
 fn tun_strict_route(context: &CoreConfigContext) -> bool {
-    !context.platform.is_macos() && context.app_config.tun_mode_item.strict_route
+    !context.platform.is_macos() && context.app_config.tun.strict_route
 }

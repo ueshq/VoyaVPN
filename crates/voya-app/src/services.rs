@@ -70,7 +70,7 @@ impl AppServices {
         if fresh {
             seed_platform_connection_defaults(&mut config, target_os);
             if let Some(locale) = system_locale {
-                config.ui_item.current_language =
+                config.appearance.language =
                     crate::language::ui_language_for_locale(locale).to_string();
             }
         }
@@ -163,7 +163,7 @@ impl AppServices {
     ) -> Result<bool, voya_contracts::AppError> {
         let committed = coordinator
             .mutate(async |unit_of_work, config| {
-                let language = config.ui_item.current_language.clone();
+                let language = config.appearance.language.clone();
                 let manager = RoutingManager::new_in(unit_of_work);
                 let seeded = manager.ensure_default_routing(config, &language).await?;
                 let refreshed = manager.refresh_managed_rules().await?;
@@ -383,11 +383,8 @@ mod tests {
         let initial = load_config(&services)
             .await
             .expect("fresh default settings should load");
-        assert_eq!(
-            initial.system_proxy_item.sys_proxy_type,
-            SysProxyType::ForcedChange
-        );
-        assert!(!initial.tun_mode_item.enable_tun);
+        assert_eq!(initial.system_proxy.mode, SysProxyType::ForcedChange);
+        assert!(!initial.tun.enabled);
         services.database.close().await;
         assert_eq!(
             std::fs::read(&database_path).expect("database bytes"),
@@ -400,10 +397,7 @@ mod tests {
         let persisted = load_config(&reopened)
             .await
             .expect("persisted default settings should reload");
-        assert_eq!(
-            persisted.system_proxy_item.sys_proxy_type,
-            SysProxyType::ForcedChange
-        );
+        assert_eq!(persisted.system_proxy.mode, SysProxyType::ForcedChange);
         reopened.database.close().await;
 
         std::fs::remove_dir_all(&app_dir).expect("test database directory should be removable");
@@ -431,7 +425,7 @@ mod tests {
                 .load_config_for(target_os, None)
                 .await
                 .expect("fresh");
-            assert_eq!(fresh.tun_mode_item.enable_tun, fresh_tun, "{target_os:?}");
+            assert_eq!(fresh.tun.enabled, fresh_tun, "{target_os:?}");
 
             let mut stored = AppSettings::default();
             stored.network.tun.enabled = false;
@@ -447,7 +441,7 @@ mod tests {
                 .await
                 .expect("stored");
             assert_eq!(
-                loaded.tun_mode_item.enable_tun,
+                loaded.tun.enabled,
                 target_os == TargetOs::Macos,
                 "a saved choice wins except where the platform has no system proxy: {target_os:?}"
             );
@@ -474,12 +468,12 @@ mod tests {
             .load_config_for(TargetOs::Linux, Some("zh-Hant-TW"))
             .await
             .expect("fresh");
-        assert_eq!(fresh.ui_item.current_language, "zh-Hant");
+        assert_eq!(fresh.appearance.language, "zh-Hant");
         let unknown = services
             .load_config_for(TargetOs::Linux, None)
             .await
             .expect("no locale");
-        assert_eq!(unknown.ui_item.current_language, "en");
+        assert_eq!(unknown.appearance.language, "en");
 
         let mut stored = AppSettings::default();
         stored.appearance.language = "en".to_string();
@@ -493,7 +487,7 @@ mod tests {
             .load_config_for(TargetOs::Linux, Some("zh-CN"))
             .await
             .expect("stored");
-        assert_eq!(chosen.ui_item.current_language, "en", "a saved choice wins");
+        assert_eq!(chosen.appearance.language, "en", "a saved choice wins");
 
         services.database.close().await;
         std::fs::remove_dir_all(app_dir).expect("remove test database");

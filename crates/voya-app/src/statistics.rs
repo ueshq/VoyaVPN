@@ -648,7 +648,7 @@ pub(crate) fn available_state_port(port: u16) -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use crate::supervisor::SupervisorConnectionState;
-    use voya_core::{InItem, ProfileItem, ProfileProtocol, ServerEndpoint, TunModeItem};
+    use voya_core::{InboundConfig, ProfileItem, ProfileProtocol, ServerEndpoint, TunConfig};
 
     use super::*;
 
@@ -676,23 +676,23 @@ mod tests {
 
     #[test]
     fn statistics_config_snapshot_does_not_carry_a_state_port() {
-        // The port used to be recomputed here from `tun_mode_item.enable_tun`,
+        // The port used to be recomputed here from `tun.enabled`,
         // which disagreed with the generated config on a pre-socks topology.
         // It now travels on the supervisor snapshot, so a config change no
         // longer has to restart the statistics loop to pick it up.
         let base = AppConfig {
-            inbound: vec![InItem {
+            inbounds: vec![InboundConfig {
                 local_port: 12000,
-                ..InItem::default()
+                ..InboundConfig::default()
             }],
-            tun_mode_item: TunModeItem {
-                enable_tun: true,
-                ..TunModeItem::default()
+            tun: TunConfig {
+                enabled: true,
+                ..TunConfig::default()
             },
             ..AppConfig::default()
         };
         let mut without_tun = base.clone();
-        without_tun.tun_mode_item.enable_tun = false;
+        without_tun.tun.enabled = false;
 
         assert_eq!(
             StatisticsConfigSnapshot::from_app_config(&base),

@@ -20,10 +20,10 @@ pub(super) fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
     );
     apply_tun_dns_reverse_mapping(dns, context);
 
-    let simple_dns = &context.simple_dns_item;
+    let dns_config = &context.dns;
     if !use_direct_dns
-        && simple_dns.fake_ip == Some(true)
-        && simple_dns.global_fake_ip == Some(false)
+        && dns_config.fake_ip == Some(true)
+        && dns_config.global_fake_ip == Some(false)
     {
         dns.rules.push(SingboxRule {
             server: Some(SINGBOX_FAKE_DNS_TAG.to_string()),
@@ -37,8 +37,7 @@ pub(super) fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
     // match-all rule is only needed when a rule-level strategy still has to
     // reach `final`; with IPv6 off the top-level `ipv4_only` already covers it.
     if !use_direct_dns {
-        if let Some(strategy) = proxy_dns_strategy(context, context.simple_dns_item.proxy_strategy)
-        {
+        if let Some(strategy) = proxy_dns_strategy(context, context.dns.proxy_strategy) {
             dns.rules.push(SingboxRule {
                 server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
                 strategy: Some(strategy),
@@ -86,10 +85,10 @@ pub(crate) fn proxy_dns_strategy(
 }
 
 fn gen_dns_servers(config: &mut SingboxConfig, context: &CoreConfigContext) {
-    let simple_dns = &context.simple_dns_item;
+    let dns_config = &context.dns;
     let mut bootstrap_dns = parse_dns_address_or_default(
-        simple_dns
-            .bootstrap_dns
+        dns_config
+            .bootstrap
             .as_deref()
             .unwrap_or(DEFAULT_BOOTSTRAP_DNS),
         DEFAULT_BOOTSTRAP_DNS,
@@ -97,20 +96,14 @@ fn gen_dns_servers(config: &mut SingboxConfig, context: &CoreConfigContext) {
     bootstrap_dns.tag = SINGBOX_LOCAL_DNS_TAG.to_string();
 
     let mut direct_dns = parse_dns_address_or_default(
-        simple_dns
-            .direct_dns
-            .as_deref()
-            .unwrap_or(DEFAULT_DIRECT_DNS),
+        dns_config.direct.as_deref().unwrap_or(DEFAULT_DIRECT_DNS),
         DEFAULT_DIRECT_DNS,
     );
     direct_dns.tag = SINGBOX_DIRECT_DNS_TAG.to_string();
     direct_dns.domain_resolver = Some(SINGBOX_LOCAL_DNS_TAG.to_string());
 
     let mut remote_dns = parse_dns_address_or_default(
-        simple_dns
-            .remote_dns
-            .as_deref()
-            .unwrap_or(DEFAULT_REMOTE_DNS),
+        dns_config.remote.as_deref().unwrap_or(DEFAULT_REMOTE_DNS),
         DEFAULT_REMOTE_DNS,
     );
     remote_dns.tag = SINGBOX_REMOTE_DNS_TAG.to_string();
@@ -118,7 +111,7 @@ fn gen_dns_servers(config: &mut SingboxConfig, context: &CoreConfigContext) {
     remote_dns.domain_resolver = Some(SINGBOX_LOCAL_DNS_TAG.to_string());
 
     let mut predefined = BTreeMap::new();
-    if simple_dns.add_common_hosts == Some(true) {
+    if dns_config.add_common_hosts == Some(true) {
         for (host, addresses) in predefined_hosts() {
             predefined.insert(
                 host.to_string(),
@@ -129,7 +122,7 @@ fn gen_dns_servers(config: &mut SingboxConfig, context: &CoreConfigContext) {
             );
         }
     }
-    for (host, addresses) in parse_hosts_to_dictionary(simple_dns.hosts.as_deref()) {
+    for (host, addresses) in parse_hosts_to_dictionary(dns_config.hosts.as_deref()) {
         let mut test_rule = SingboxRule::default();
         if !parse_v2_domain(&host, &mut test_rule) {
             continue;
@@ -167,7 +160,7 @@ fn gen_dns_servers(config: &mut SingboxConfig, context: &CoreConfigContext) {
             ..SingboxDnsServer::default()
         },
     ];
-    if simple_dns.fake_ip == Some(true) {
+    if dns_config.fake_ip == Some(true) {
         servers.push(SingboxDnsServer {
             tag: SINGBOX_FAKE_DNS_TAG.to_string(),
             r#type: "fakeip".to_string(),
@@ -181,7 +174,7 @@ fn gen_dns_servers(config: &mut SingboxConfig, context: &CoreConfigContext) {
 }
 
 fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
-    let simple_dns = &context.simple_dns_item;
+    let dns_config = &context.dns;
     let mut rules = vec![SingboxRule {
         ip_accept_any: Some(true),
         server: Some(SINGBOX_HOSTS_DNS_TAG.to_string()),
@@ -191,7 +184,7 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
     if !context.protect_domain_list.is_empty() {
         rules.push(SingboxRule {
             server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
-            strategy: direct_dns_strategy(context, simple_dns.direct_strategy),
+            strategy: direct_dns_strategy(context, dns_config.direct_strategy),
             domain: Some(context.protect_domain_list.clone()),
             ..SingboxRule::default()
         });
@@ -200,12 +193,12 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
     // Mirror the route generator: Global mode precedes the user's rules.
     rules.push(SingboxRule {
         server: Some(SINGBOX_REMOTE_DNS_TAG.to_string()),
-        strategy: proxy_dns_strategy(context, simple_dns.proxy_strategy),
+        strategy: proxy_dns_strategy(context, dns_config.proxy_strategy),
         clash_mode: Some("Global".to_string()),
         ..SingboxRule::default()
     });
 
-    for (host, addresses) in parse_hosts_to_dictionary(simple_dns.hosts.as_deref()) {
+    for (host, addresses) in parse_hosts_to_dictionary(dns_config.hosts.as_deref()) {
         let Some(predefined) = addresses.first() else {
             continue;
         };
@@ -241,7 +234,7 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
         rules.push(rule);
     }
 
-    if simple_dns.block_binding_query == Some(true) {
+    if dns_config.block_binding_query == Some(true) {
         rules.push(SingboxRule {
             query_type: Some(vec![64, 65]),
             action: Some("predefined".to_string()),
@@ -250,7 +243,7 @@ fn gen_dns_rules(config: &mut SingboxConfig, context: &CoreConfigContext) {
         });
     }
 
-    if simple_dns.fake_ip == Some(true) && simple_dns.global_fake_ip == Some(true) {
+    if dns_config.fake_ip == Some(true) && dns_config.global_fake_ip == Some(true) {
         let mut fakeip_filter_rule = fakeip_filter_rule();
         fakeip_filter_rule.invert = Some(true);
         rules.push(SingboxRule {
@@ -283,9 +276,9 @@ fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigCo
     let Some(routing) = context.routing_item.as_ref() else {
         return;
     };
-    let simple_dns = &context.simple_dns_item;
+    let dns_config = &context.dns;
     let (expected_ip_cidr, expected_ip_regions, region_name) =
-        parse_direct_expected_ips(simple_dns.direct_expected_ips.as_deref());
+        parse_direct_expected_ips(dns_config.direct_expected_ips.as_deref());
 
     for item in routing
         .rule_set
@@ -307,7 +300,7 @@ fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigCo
         match item.outbound_tag.as_deref() {
             Some(DIRECT_TAG) => {
                 rule.server = Some(SINGBOX_DIRECT_DNS_TAG.to_string());
-                rule.strategy = direct_dns_strategy(context, simple_dns.direct_strategy);
+                rule.strategy = direct_dns_strategy(context, dns_config.direct_strategy);
                 if !expected_ip_regions.is_empty() && !region_name.is_empty() {
                     if let Some(geosite) = &mut rule.geosite {
                         let matched_geosite = geosite
@@ -337,7 +330,7 @@ fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigCo
                 rule.rcode = Some("NXDOMAIN".to_string());
             }
             _ => {
-                if simple_dns.fake_ip == Some(true) && simple_dns.global_fake_ip == Some(false) {
+                if dns_config.fake_ip == Some(true) && dns_config.global_fake_ip == Some(false) {
                     let mut fake_rule = rule.clone();
                     fake_rule.server = Some(SINGBOX_FAKE_DNS_TAG.to_string());
                     fake_rule.query_type = Some(vec![1, 28]);
@@ -345,7 +338,7 @@ fn append_dns_routing_rules(rules: &mut Vec<SingboxRule>, context: &CoreConfigCo
                     rules.push(fake_rule);
                 }
                 rule.server = Some(SINGBOX_REMOTE_DNS_TAG.to_string());
-                rule.strategy = proxy_dns_strategy(context, simple_dns.proxy_strategy);
+                rule.strategy = proxy_dns_strategy(context, dns_config.proxy_strategy);
             }
         }
 

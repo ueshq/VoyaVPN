@@ -197,7 +197,7 @@ impl TunManager {
 
     /// Apply a change already validated by [`Self::plan_set_enabled`].
     pub fn apply_enabled(config: &mut AppConfig, enabled: bool) {
-        config.tun_mode_item.enable_tun = enabled;
+        config.tun.enabled = enabled;
     }
 
     fn status_with_report(
@@ -211,7 +211,7 @@ impl TunManager {
         let registration = self.provider_registration(report.backend, freshness);
         let provider_state = tun_provider_state(native_status.provider_state);
         let status = TunStatus {
-            enabled: config.tun_mode_item.enable_tun,
+            enabled: config.tun.enabled,
             backend: tun_backend(report.backend),
             provider_state,
             allow_enable_tun: report.allow_enable_tun && !registration.path_mismatch,
@@ -607,7 +607,7 @@ mod tests {
             Err(TunManagerError::ProviderPathMismatch { .. })
         ));
         assert_eq!(resolver.probes(), 2);
-        assert!(!config.tun_mode_item.enable_tun);
+        assert!(!config.tun.enabled);
         // The fresh probe replaces the memo, so the next status agrees with it.
         assert!(
             manager
@@ -645,25 +645,25 @@ mod tests {
     #[test]
     fn tun_disable_does_not_require_elevation() {
         let mut config = AppConfig::default();
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
         let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Linux);
 
         let status = set_enabled(&manager, &mut config, false).expect("disable");
         assert!(!status.enabled);
-        assert!(!config.tun_mode_item.enable_tun);
+        assert!(!config.tun.enabled);
     }
 
     #[test]
     fn macos_refuses_to_leave_vpn_mode() {
         let mut config = AppConfig::default();
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
         let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Macos);
 
         assert!(matches!(
             set_enabled(&manager, &mut config, false),
             Err(TunManagerError::VpnRequired)
         ));
-        assert!(config.tun_mode_item.enable_tun);
+        assert!(config.tun.enabled);
     }
 
     /// The status probe forks OS helpers, so command handlers run it off the
@@ -680,10 +680,10 @@ mod tests {
             .plan_set_enabled(&config, true)
             .expect("plan enable with elevation grant");
         assert!(planned.enabled);
-        assert!(!config.tun_mode_item.enable_tun);
+        assert!(!config.tun.enabled);
 
         TunManager::apply_enabled(&mut config, true);
-        assert!(config.tun_mode_item.enable_tun);
+        assert!(config.tun.enabled);
         assert_eq!(manager.status(&config).expect("status"), planned);
     }
 
@@ -696,7 +696,7 @@ mod tests {
             manager.plan_set_enabled(&config, true),
             Err(TunManagerError::ElevationRequired)
         ));
-        assert!(!config.tun_mode_item.enable_tun);
+        assert!(!config.tun.enabled);
     }
 
     #[test]
@@ -769,7 +769,7 @@ mod tests {
             set_enabled(&manager, &mut config, true),
             Err(TunManagerError::ProviderPathMismatch { .. })
         ));
-        assert!(!config.tun_mode_item.enable_tun);
+        assert!(!config.tun.enabled);
     }
 
     /// A phone's tunnel belongs to its host app. Its controller replaces the

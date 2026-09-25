@@ -4,7 +4,7 @@ use voya_contracts::{
     SubscriptionMetadata as SubscriptionMetadataContract,
 };
 use voya_core::{
-    DnsStrategy, RoutingItem, RuleType, RulesItem, SimpleDnsItem, SubItem, SubMetadataItem,
+    DnsConfig, DnsStrategy, RoutingItem, RuleType, RulesItem, SubItem, SubMetadataItem,
 };
 
 #[must_use]
@@ -114,19 +114,19 @@ pub fn rule_from_contract(item: RoutingRuleContract) -> RulesItem {
 
 #[must_use]
 pub fn default_dns_settings() -> DnsContract {
-    simple_dns_to_contract(crate::dns::normalize_simple_dns(SimpleDnsItem::default()))
+    dns_to_contract(crate::dns::normalize_dns(DnsConfig::default()))
 }
 
 #[must_use]
-pub fn simple_dns_to_contract(item: SimpleDnsItem) -> DnsContract {
+pub fn dns_to_contract(item: DnsConfig) -> DnsContract {
     DnsContract {
         add_common_hosts: item.add_common_hosts,
         fake_ip: item.fake_ip,
         global_fake_ip: item.global_fake_ip,
         block_binding_query: item.block_binding_query,
-        direct: item.direct_dns,
-        remote: item.remote_dns,
-        bootstrap: item.bootstrap_dns,
+        direct: item.direct,
+        remote: item.remote,
+        bootstrap: item.bootstrap,
         direct_strategy: item.direct_strategy.map(dns_strategy_to_contract),
         proxy_strategy: item.proxy_strategy.map(dns_strategy_to_contract),
         hosts: item.hosts,
@@ -153,15 +153,15 @@ const fn dns_strategy_from_contract(strategy: voya_contracts::DnsStrategy) -> Dn
 }
 
 #[must_use]
-pub fn simple_dns_from_contract(settings: DnsContract) -> SimpleDnsItem {
-    SimpleDnsItem {
+pub fn dns_from_contract(settings: DnsContract) -> DnsConfig {
+    DnsConfig {
         add_common_hosts: settings.add_common_hosts,
         fake_ip: settings.fake_ip,
         global_fake_ip: settings.global_fake_ip,
         block_binding_query: settings.block_binding_query,
-        direct_dns: settings.direct,
-        remote_dns: settings.remote,
-        bootstrap_dns: settings.bootstrap,
+        direct: settings.direct,
+        remote: settings.remote,
+        bootstrap: settings.bootstrap,
         direct_strategy: settings.direct_strategy.map(dns_strategy_from_contract),
         proxy_strategy: settings.proxy_strategy.map(dns_strategy_from_contract),
         hosts: settings.hosts,

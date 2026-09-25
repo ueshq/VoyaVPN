@@ -47,11 +47,11 @@ pub(crate) fn tls_settings(
 pub(crate) fn linux_context(app_config: AppConfig, node: ProfileItem) -> CoreConfigContext {
     let mut all_proxies_map = BTreeMap::new();
     all_proxies_map.insert(node.index_id.clone(), node.clone());
-    let simple_dns_item = app_config.simple_dns_item.clone();
+    let dns = app_config.dns.clone();
     CoreConfigContext {
         node,
         app_config,
-        simple_dns_item,
+        dns,
         all_proxies_map,
         platform: CoreGenPlatform::Linux,
         ..CoreConfigContext::default()

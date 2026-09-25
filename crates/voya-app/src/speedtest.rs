@@ -16,7 +16,7 @@ use tokio::time;
 use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
     generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, InboundProtocol,
-    ProfileItem, SpeedTestItem, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
+    ProfileItem, SpeedtestConfig, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
 };
 use voya_db::{Database, DbError};
 use voya_net::probe::{is_cancelled, tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
@@ -134,7 +134,7 @@ pub trait SpeedtestProbe: Send + Sync {
     fn realping(
         &self,
         socks_port: u16,
-        speed_test_item: SpeedTestItem,
+        speed_test: SpeedtestConfig,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<RealPingProbeResult>>;
 }
@@ -146,20 +146,19 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
     fn realping(
         &self,
         socks_port: u16,
-        speed_test_item: SpeedTestItem,
+        speed_test: SpeedtestConfig,
         cancel: CancellationFlag,
     ) -> BoxFuture<'static, Result<RealPingProbeResult>> {
         Box::pin(async move {
             check_cancelled(&cancel)?;
             let client = SocksHttpProbe::new(socks_port)?;
-            let url = latency_test_url(&speed_test_item);
-            let timeout = Duration::from_secs(
-                u64::try_from(speed_test_item.speed_test_timeout.max(1)).unwrap_or(1),
-            );
+            let url = latency_test_url(&speed_test);
+            let timeout =
+                Duration::from_secs(u64::try_from(speed_test.timeout_seconds.max(1)).unwrap_or(1));
             let delay = client.best_latency(url, timeout, 2, &cancel).await?;
 
             let lookup = client
-                .lookup_country(&speed_test_item.ipapi_url, Duration::from_secs(5), &cancel)
+                .lookup_country(&speed_test.ip_lookup_url, Duration::from_secs(5), &cancel)
                 .await;
             Ok(RealPingProbeResult {
                 delay,
@@ -173,11 +172,11 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
 }
 
 /// The URL a latency probe fetches: the configured one, else the default.
-fn latency_test_url(item: &SpeedTestItem) -> &str {
-    if item.speed_ping_test_url.trim().is_empty() {
+fn latency_test_url(item: &SpeedtestConfig) -> &str {
+    if item.latency_url.trim().is_empty() {
         REALPING_FALLBACK_URL
     } else {
-        item.speed_ping_test_url.as_str()
+        item.latency_url.as_str()
     }
 }
 
@@ -264,7 +263,7 @@ async fn select_test_items(
     };
 
     let base_port = config
-        .inbound
+        .inbounds
         .first()
         .map_or(DEFAULT_LOCAL_PORT, |inbound| inbound.local_port)
         + InboundProtocol::speedtest.port_offset();
@@ -289,8 +288,8 @@ async fn select_test_items(
 
 fn speedtest_page_size(config: &AppConfig, selected_count: usize) -> usize {
     let configured = config
-        .speed_test_item
-        .speed_test_page_size
+        .speed_test
+        .page_size
         .and_then(|value| usize::try_from(value).ok())
         .filter(|value| *value > 0)
         .unwrap_or(SPEEDTEST_BATCH_PAGE_SIZE);
@@ -303,8 +302,8 @@ fn speedtest_page_size(config: &AppConfig, selected_count: usize) -> usize {
 /// pins that.
 fn speedtest_delay_interval(config: &AppConfig) -> Duration {
     config
-        .speed_test_item
-        .speed_test_delay_interval_seconds
+        .speed_test
+        .delay_interval_seconds
         .and_then(|value| u64::try_from(value).ok())
         .filter(|value| *value > 0)
         .map(Duration::from_secs)
@@ -500,7 +499,7 @@ mod tests {
         fn realping(
             &self,
             socks_port: u16,
-            _speed_test_item: SpeedTestItem,
+            _speed_test: SpeedtestConfig,
             cancel: CancellationFlag,
         ) -> BoxFuture<'static, Result<RealPingProbeResult>> {
             let calls = Arc::clone(&self.calls);
@@ -651,7 +650,7 @@ mod tests {
         fn realping(
             &self,
             _: u16,
-            _: SpeedTestItem,
+            _: SpeedtestConfig,
             _: CancellationFlag,
         ) -> BoxFuture<'static, Result<RealPingProbeResult>> {
             let database = self.database.clone();
@@ -837,7 +836,7 @@ mod tests {
             backend.clone(),
         );
         let mut config = AppConfig::default();
-        config.speed_test_item.speed_test_page_size = Some(1);
+        config.speed_test.page_size = Some(1);
         // Keep this two-port fixture outside both the shared default 108xx
         // range and the OS ephemeral range: concurrent connect() calls can
         // consume the port immediately after a bind(..., 0) allocation.
@@ -848,7 +847,8 @@ mod tests {
                 Some((port, first, next))
             })
             .expect("two available fixture ports");
-        config.inbound[0].local_port = i32::from(pair.0) - InboundProtocol::speedtest.port_offset();
+        config.inbounds[0].local_port =
+            i32::from(pair.0) - InboundProtocol::speedtest.port_offset();
         drop(pair);
 
         manager
@@ -1150,8 +1150,8 @@ mod tests {
         let manager =
             SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let mut config = AppConfig::default();
-        config.speed_test_item.speed_test_page_size = Some(1);
-        config.speed_test_item.speed_test_delay_interval_seconds = Some(1);
+        config.speed_test.page_size = Some(1);
+        config.speed_test.delay_interval_seconds = Some(1);
         let deliveries = StdMutex::new(Vec::<Vec<(String, SpeedtestOutcome)>>::new());
 
         let run = manager
@@ -1195,8 +1195,8 @@ mod tests {
         let manager =
             SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
         let mut config = AppConfig::default();
-        config.speed_test_item.speed_test_page_size = Some(1);
-        config.speed_test_item.speed_test_delay_interval_seconds = Some(1);
+        config.speed_test.page_size = Some(1);
+        config.speed_test.delay_interval_seconds = Some(1);
 
         let started = Instant::now();
         manager
@@ -1349,14 +1349,14 @@ mod tests {
         let mut config = AppConfig::default();
         assert_eq!(speedtest_delay_interval(&config), SPEEDTEST_DELAY_INTERVAL);
 
-        config.speed_test_item.speed_test_delay_interval_seconds = Some(3);
+        config.speed_test.delay_interval_seconds = Some(3);
         assert_eq!(
             speedtest_delay_interval(&config),
             Duration::from_secs(3),
             "the delay interval is configured in seconds"
         );
 
-        config.speed_test_item.speed_test_delay_interval_seconds = Some(0);
+        config.speed_test.delay_interval_seconds = Some(0);
         assert_eq!(speedtest_delay_interval(&config), SPEEDTEST_DELAY_INTERVAL);
     }
 
@@ -1427,7 +1427,7 @@ mod tests {
                 .port();
             let local_port = i32::from(base_port) - speedtest_offset;
             if local_port > 0 && base_port < u16::MAX - 4 {
-                config.inbound[0].local_port = local_port;
+                config.inbounds[0].local_port = local_port;
                 return listener;
             }
         }

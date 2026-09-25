@@ -277,10 +277,10 @@ fn singbox_vless_ws_tls_mux_outbound() -> Value {
 
 fn singbox_vless_ws_tls_mux_context() -> CoreConfigContext {
     let mut config = AppConfig::default();
-    config.core_basic_item.tls_fragment = crate::TlsFragmentMode::Record;
-    config.core_basic_item.mux_enabled = true;
-    config.core_basic_item.def_fingerprint = "firefox".to_string();
-    config.core_basic_item.def_user_agent = "chrome".to_string();
+    config.core.tls_fragment = crate::TlsFragmentMode::Record;
+    config.core.mux_enabled = true;
+    config.core.default_fingerprint = "firefox".to_string();
+    config.core.default_user_agent = "chrome".to_string();
 
     let node = ProfileItem {
         index_id: "n-vless".to_string(),
@@ -324,8 +324,8 @@ fn singbox_vless_tls_fragment_hello_outbound() -> Value {
 
 fn singbox_vless_tls_fragment_hello_context() -> CoreConfigContext {
     let mut config = AppConfig::default();
-    config.core_basic_item.tls_fragment = crate::TlsFragmentMode::TlsHello;
-    config.core_basic_item.fragment_fallback_delay_ms = 800;
+    config.core.tls_fragment = crate::TlsFragmentMode::TlsHello;
+    config.core.fragment_fallback_delay_ms = 800;
 
     let node = ProfileItem {
         index_id: "n-vless-fragment".to_string(),
@@ -346,7 +346,7 @@ fn singbox_vless_tls_fragment_hello_context() -> CoreConfigContext {
 
 fn singbox_tuic_tls_outbound() -> Value {
     let mut config = AppConfig::default();
-    config.core_basic_item.def_fingerprint = "chrome".to_string();
+    config.core.default_fingerprint = "chrome".to_string();
     let node = ProfileItem {
         index_id: "n-tuic".to_string(),
         remarks: "tuic-tls".to_string(),
@@ -365,7 +365,7 @@ fn singbox_tuic_tls_outbound() -> Value {
 
 fn singbox_anytls_tls_outbound() -> Value {
     let mut config = AppConfig::default();
-    config.core_basic_item.def_fingerprint = "safari".to_string();
+    config.core.default_fingerprint = "safari".to_string();
     let node = ProfileItem {
         index_id: "n-anytls".to_string(),
         remarks: "anytls-tls".to_string(),
@@ -386,7 +386,7 @@ fn singbox_anytls_tls_outbound() -> Value {
 
 fn singbox_naive_quic_tls_outbound() -> Value {
     let mut config = AppConfig::default();
-    config.core_basic_item.def_fingerprint = "edge".to_string();
+    config.core.default_fingerprint = "edge".to_string();
     let node = ProfileItem {
         index_id: "n-naive".to_string(),
         remarks: "naive-quic".to_string(),
@@ -536,7 +536,7 @@ fn singbox_bind_interface_windows_context() -> CoreConfigContext {
     // Windows applies `bind_interface` with TUN off; every other platform needs
     // TUN for it to take effect (`singbox::support::apply_outbound_bind_interface`).
     let mut config = AppConfig::default();
-    config.core_basic_item.bind_interface = Some("eth0".to_string());
+    config.core.bind_interface = Some("eth0".to_string());
     let node = ProfileItem {
         index_id: "n-win".to_string(),
         remarks: "win-bind".to_string(),
@@ -606,12 +606,12 @@ fn singbox_tun_inbounds() -> Value {
 
 fn singbox_tun_inbounds_macos() -> Value {
     let mut tun_config = AppConfig::default();
-    tun_config.tun_mode_item.enable_tun = true;
-    tun_config.tun_mode_item.mtu = 9000;
-    tun_config.tun_mode_item.stack = String::new();
-    tun_config.tun_mode_item.strict_route = true;
-    tun_config.simple_dns_item.add_common_hosts = Some(false);
-    tun_config.simple_dns_item.block_binding_query = Some(false);
+    tun_config.tun.enabled = true;
+    tun_config.tun.mtu = 9000;
+    tun_config.tun.stack = String::new();
+    tun_config.tun.strict_route = true;
+    tun_config.dns.add_common_hosts = Some(false);
+    tun_config.dns.block_binding_query = Some(false);
     let mut tun_context = singbox_context(tun_config, singbox_base_remote_node());
     tun_context.is_tun_enabled = true;
     tun_context.platform = CoreGenPlatform::MacOS;
@@ -640,7 +640,7 @@ fn singbox_default_seed_snapshot() -> Value {
 /// a node recorded as having no IPv6 egress.
 fn singbox_default_seed_ipv6_contexts() -> [(&'static str, CoreConfigContext); 2] {
     let mut off = singbox_default_seed_context();
-    off.app_config.tun_mode_item.enable_ipv6_address = false;
+    off.app_config.tun.ipv6_enabled = false;
     let mut direct_only = singbox_default_seed_context();
     direct_only.ipv6_egress_unsupported = true;
     [("off", off), ("directOnly", direct_only)]
@@ -780,14 +780,14 @@ fn singbox_latency_probes_snapshot() -> Value {
 
 fn singbox_pre_socks_configs() -> Vec<Value> {
     let mut config = AppConfig::default();
-    config.tun_mode_item.enable_tun = true;
-    config.tun_mode_item.enable_ipv6_address = false;
-    config.simple_dns_item.add_common_hosts = Some(false);
-    config.simple_dns_item.block_binding_query = Some(false);
+    config.tun.enabled = true;
+    config.tun.ipv6_enabled = false;
+    config.dns.add_common_hosts = Some(false);
+    config.dns.block_binding_query = Some(false);
 
     let mut main_context = singbox_vless_ws_tls_mux_context();
     main_context.app_config = config.clone();
-    main_context.simple_dns_item = config.simple_dns_item.clone();
+    main_context.dns = config.dns.clone();
     main_context.is_tun_enabled = false;
 
     let mut pre_context = singbox_context(
@@ -818,7 +818,7 @@ fn singbox_pre_socks_snapshot() -> Value {
     let configs = singbox_pre_socks_configs();
     // `clashApi` is part of the snapshot because the split assigns the base
     // api2 port to the main process and api2 + 1 to the TUN process; a client
-    // that re-derives the port from `tun_mode_item.enable_tun` talks to the
+    // that re-derives the port from `tun.enabled` talks to the
     // wrong core.
     serde_json::json!({
         "main": {
@@ -895,8 +895,8 @@ fn singbox_per_rule_outbound_snapshot() -> Value {
 
 fn singbox_logs_and_api_config() -> Value {
     let mut config = AppConfig::default();
-    config.core_basic_item.log_enabled = true;
-    config.core_basic_item.loglevel = "info".to_string();
+    config.core.log_enabled = true;
+    config.core.log_level = "info".to_string();
     generate_singbox_config_value(&singbox_context(
         config,
         singbox_socks_node("runtime", "Runtime"),
@@ -914,16 +914,15 @@ fn singbox_logs_and_api_snapshot() -> Value {
 
 fn singbox_routing_dns_contexts() -> (CoreConfigContext, CoreConfigContext) {
     let mut dns_config = AppConfig::default();
-    dns_config.simple_dns_item.fake_ip = Some(true);
-    dns_config.simple_dns_item.global_fake_ip = Some(true);
-    dns_config.simple_dns_item.direct_dns = Some("https://resolver.example/dns-query".to_string());
-    dns_config.simple_dns_item.remote_dns =
-        Some("https://cloudflare-dns.com/dns-query".to_string());
-    dns_config.simple_dns_item.hosts =
+    dns_config.dns.fake_ip = Some(true);
+    dns_config.dns.global_fake_ip = Some(true);
+    dns_config.dns.direct = Some("https://resolver.example/dns-query".to_string());
+    dns_config.dns.remote = Some("https://cloudflare-dns.com/dns-query".to_string());
+    dns_config.dns.hosts =
         Some("resolver.example 1.1.1.1\nblock.test #3\ncname.test target.example".to_string());
-    dns_config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
-    dns_config.simple_dns_item.proxy_strategy = Some(DnsStrategy::PreferIpv6);
-    dns_config.simple_dns_item.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
+    dns_config.dns.direct_strategy = Some(DnsStrategy::PreferIpv4);
+    dns_config.dns.proxy_strategy = Some(DnsStrategy::PreferIpv6);
+    dns_config.dns.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
     let mut dns_context = singbox_context(dns_config, singbox_base_remote_node());
     dns_context.routing_item = Some(RoutingItem {
         rule_set: vec![
@@ -944,13 +943,13 @@ fn singbox_routing_dns_contexts() -> (CoreConfigContext, CoreConfigContext) {
     });
 
     let mut tun_config = AppConfig::default();
-    tun_config.tun_mode_item.enable_tun = true;
-    tun_config.tun_mode_item.mtu = 1500;
-    tun_config.tun_mode_item.stack = "system".to_string();
-    tun_config.tun_mode_item.strict_route = false;
-    tun_config.tun_mode_item.enable_ipv6_address = false;
-    tun_config.simple_dns_item.add_common_hosts = Some(false);
-    tun_config.simple_dns_item.block_binding_query = Some(false);
+    tun_config.tun.enabled = true;
+    tun_config.tun.mtu = 1500;
+    tun_config.tun.stack = "system".to_string();
+    tun_config.tun.strict_route = false;
+    tun_config.tun.ipv6_enabled = false;
+    tun_config.dns.add_common_hosts = Some(false);
+    tun_config.dns.block_binding_query = Some(false);
     let mut tun_context = singbox_context(tun_config, singbox_base_remote_node());
     tun_context.is_tun_enabled = true;
 

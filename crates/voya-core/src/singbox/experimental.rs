@@ -11,12 +11,12 @@ pub(super) fn gen_experimental(config: &mut SingboxConfig, context: &CoreConfigC
         store_selected: None,
     });
 
-    if context.app_config.core_basic_item.enable_cache_file4_sbox {
+    if context.app_config.core.cache_file_enabled {
         experimental.cache_file = Some(SingboxCacheFile {
             enabled: true,
             path: Some("cache.db".to_string()),
             cache_id: None,
-            store_fakeip: (context.simple_dns_item.fake_ip == Some(true)).then_some(true),
+            store_fakeip: (context.dns.fake_ip == Some(true)).then_some(true),
         });
     }
 

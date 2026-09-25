@@ -1,4 +1,4 @@
-use voya_app::dns::{normalize_simple_dns, save_dns_settings_use_case};
+use voya_app::dns::{normalize_dns, save_dns_settings_use_case};
 
 use super::{post_commit::*, *};
 
@@ -9,9 +9,7 @@ pub async fn load_dns_settings(
 ) -> Result<DnsSettingsContract, AppError> {
     let config = state.config_mutations().current_config();
 
-    Ok(simple_dns_to_contract(normalize_simple_dns(
-        config.simple_dns_item,
-    )))
+    Ok(dns_to_contract(normalize_dns(config.dns)))
 }
 
 #[tauri::command]

@@ -8,10 +8,10 @@ use crate::{golden, CoreGenPlatform, RoutingItem, TlsSettings};
 #[test]
 fn singbox_outbound_vless_ws_tls_mux_matches_golden() {
     let mut config = AppConfig::default();
-    config.core_basic_item.tls_fragment = crate::TlsFragmentMode::Record;
-    config.core_basic_item.mux_enabled = true;
-    config.core_basic_item.def_fingerprint = "firefox".to_string();
-    config.core_basic_item.def_user_agent = "chrome".to_string();
+    config.core.tls_fragment = crate::TlsFragmentMode::Record;
+    config.core.mux_enabled = true;
+    config.core.default_fingerprint = "firefox".to_string();
+    config.core.default_user_agent = "chrome".to_string();
 
     let node = ProfileItem {
         index_id: "n-vless".to_string(),
@@ -272,7 +272,7 @@ fn singbox_tls_insecure_requires_application_gate() {
     );
 
     let mut config = AppConfig::default();
-    config.core_basic_item.def_allow_insecure = true;
+    config.core.default_allow_insecure = true;
     let context = test_context(config.clone(), node.clone());
     assert_eq!(
         build_outbound(&context, &node)
@@ -295,7 +295,7 @@ fn singbox_tls_insecure_requires_application_gate() {
 #[test]
 fn singbox_pinned_cert_and_reality_force_insecure_false() {
     let mut config = AppConfig::default();
-    config.core_basic_item.def_allow_insecure = true;
+    config.core.default_allow_insecure = true;
 
     let mut pinned_node = base_remote_node();
     pinned_node.tls = Some(TlsSettings {
@@ -346,7 +346,7 @@ fn singbox_reality_client_always_carries_utls() {
     assert_eq!(utls.fingerprint, REALITY_FALLBACK_FINGERPRINT);
 
     let mut config = AppConfig::default();
-    config.core_basic_item.def_fingerprint = "firefox".to_string();
+    config.core.default_fingerprint = "firefox".to_string();
     let context = test_context(config, reality_node.clone());
     let utls = build_outbound(&context, &reality_node)
         .tls
@@ -576,10 +576,10 @@ fn singbox_dns_address_uses_dhcp_interface_and_unbracketed_ipv6() {
 fn singbox_clash_api_port_follows_the_context_not_the_tun_setting() {
     // Linux + TUN splits into two processes: the main config keeps the base
     // api2 port and only the pre-socks (TUN) config takes api2 + 1. Deriving
-    // the port from `tun_mode_item.enable_tun` instead would point every
+    // the port from `tun.enabled` instead would point every
     // client at the TUN process, which has no selector or urltest outbounds.
     let mut app_config = AppConfig::default();
-    app_config.tun_mode_item.enable_tun = true;
+    app_config.tun.enabled = true;
     let api2_port = inbound_port(&app_config, InboundProtocol::api2);
 
     let mut main_context = test_context(app_config.clone(), base_remote_node());
@@ -815,12 +815,12 @@ fn singbox_shadowsocks_plugin_options_come_from_the_shared_model() {
 #[test]
 fn singbox_dns_bootstrap_and_expected_ips_reach_servers_and_rules() {
     let mut app_config = AppConfig::default();
-    app_config.simple_dns_item.bootstrap_dns = Some("223.5.5.5:5353".to_string());
-    app_config.simple_dns_item.direct_dns = Some("tls://dot.example".to_string());
-    app_config.simple_dns_item.remote_dns = Some("https://remote.example/dns-query".to_string());
-    app_config.simple_dns_item.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
-    app_config.simple_dns_item.add_common_hosts = Some(false);
-    app_config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
+    app_config.dns.bootstrap = Some("223.5.5.5:5353".to_string());
+    app_config.dns.direct = Some("tls://dot.example".to_string());
+    app_config.dns.remote = Some("https://remote.example/dns-query".to_string());
+    app_config.dns.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
+    app_config.dns.add_common_hosts = Some(false);
+    app_config.dns.direct_strategy = Some(DnsStrategy::PreferIpv4);
     let mut context = test_context(app_config, base_remote_node());
     context.routing_item = Some(RoutingItem {
         rule_set: vec![RulesItem {
@@ -1250,9 +1250,9 @@ fn singbox_tun_inbound_and_route_match_golden() {
 #[test]
 fn singbox_macos_tun_inbound_lets_singbox_allocate_utun() {
     let mut config = AppConfig::default();
-    config.tun_mode_item.enable_tun = true;
-    config.tun_mode_item.mtu = 9000;
-    config.tun_mode_item.strict_route = true;
+    config.tun.enabled = true;
+    config.tun.mtu = 9000;
+    config.tun.strict_route = true;
     let mut context = test_context(config, base_remote_node());
     context.is_tun_enabled = true;
     context.platform = CoreGenPlatform::MacOS;
@@ -1290,8 +1290,8 @@ fn singbox_macos_tun_inbound_lets_singbox_allocate_utun() {
 fn singbox_tun_address_is_always_dual_stack() {
     for ipv6 in [false, true] {
         let mut config = AppConfig::default();
-        config.tun_mode_item.enable_tun = true;
-        config.tun_mode_item.enable_ipv6_address = ipv6;
+        config.tun.enabled = true;
+        config.tun.ipv6_enabled = ipv6;
         let mut context = test_context(config, base_remote_node());
         context.is_tun_enabled = true;
         context.platform = CoreGenPlatform::MacOS;
@@ -1324,7 +1324,7 @@ fn singbox_dns_strategy_yields_to_the_ipv6_master_switch() {
         Some(DnsStrategy::Ipv6Only),
     ] {
         let mut config = AppConfig::default();
-        config.tun_mode_item.enable_ipv6_address = false;
+        config.tun.ipv6_enabled = false;
         let context = test_context(config, base_remote_node());
         assert_eq!(context.ipv6_mode(), Ipv6Mode::Off);
         assert_eq!(
@@ -1341,7 +1341,7 @@ fn singbox_dns_strategy_yields_to_the_ipv6_master_switch() {
 
     // On: the explicit preference is mapped through on both paths.
     let mut config = AppConfig::default();
-    config.tun_mode_item.enable_ipv6_address = true;
+    config.tun.ipv6_enabled = true;
     let context = test_context(config, base_remote_node());
     assert_eq!(context.ipv6_mode(), Ipv6Mode::Full);
     for strategy in [direct_dns_strategy, proxy_dns_strategy] {
@@ -1360,7 +1360,7 @@ fn singbox_dns_strategy_yields_to_the_ipv6_master_switch() {
 #[test]
 fn singbox_node_without_ipv6_egress_keeps_ipv6_on_the_direct_path_only() {
     let mut config = AppConfig::default();
-    config.tun_mode_item.enable_ipv6_address = true;
+    config.tun.ipv6_enabled = true;
     let mut context = test_context(config, base_remote_node());
     context.ipv6_egress_unsupported = true;
     assert_eq!(context.ipv6_mode(), Ipv6Mode::DirectOnly);
@@ -1383,18 +1383,18 @@ fn singbox_node_without_ipv6_egress_keeps_ipv6_on_the_direct_path_only() {
     );
 
     // The switch still wins: off is off whatever the node can do.
-    context.app_config.tun_mode_item.enable_ipv6_address = false;
+    context.app_config.tun.ipv6_enabled = false;
     assert_eq!(context.ipv6_mode(), Ipv6Mode::Off);
 }
 
 #[test]
 fn singbox_ipv6_off_puts_ipv4_only_on_top_and_drops_rule_strategies() {
     let mut config = AppConfig::default();
-    config.tun_mode_item.enable_ipv6_address = false;
-    config.simple_dns_item.proxy_strategy = Some(DnsStrategy::PreferIpv6);
-    config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
-    config.simple_dns_item.add_common_hosts = Some(false);
-    config.simple_dns_item.block_binding_query = Some(false);
+    config.tun.ipv6_enabled = false;
+    config.dns.proxy_strategy = Some(DnsStrategy::PreferIpv6);
+    config.dns.direct_strategy = Some(DnsStrategy::PreferIpv4);
+    config.dns.add_common_hosts = Some(false);
+    config.dns.block_binding_query = Some(false);
     let mut context = test_context(config, base_remote_node());
     context.routing_item = Some(RoutingItem {
         rule_set: vec![
@@ -1441,11 +1441,11 @@ fn singbox_ipv6_off_puts_ipv4_only_on_top_and_drops_rule_strategies() {
 #[test]
 fn singbox_ipv6_on_emits_explicit_rule_strategies_and_the_final_catch_all() {
     let mut config = AppConfig::default();
-    config.tun_mode_item.enable_ipv6_address = true;
-    config.simple_dns_item.proxy_strategy = Some(DnsStrategy::PreferIpv6);
-    config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
-    config.simple_dns_item.add_common_hosts = Some(false);
-    config.simple_dns_item.block_binding_query = Some(false);
+    config.tun.ipv6_enabled = true;
+    config.dns.proxy_strategy = Some(DnsStrategy::PreferIpv6);
+    config.dns.direct_strategy = Some(DnsStrategy::PreferIpv4);
+    config.dns.add_common_hosts = Some(false);
+    config.dns.block_binding_query = Some(false);
     let mut context = test_context(config, base_remote_node());
     context.routing_item = Some(RoutingItem {
         rule_set: vec![
@@ -1550,8 +1550,8 @@ fn singbox_ipv6_reject_lets_direct_rules_claim_ipv6_first() {
         for tun in [false, true] {
             {
                 let mut app_config = AppConfig::default();
-                app_config.tun_mode_item.enable_tun = tun;
-                app_config.tun_mode_item.enable_ipv6_address = ipv6_enabled;
+                app_config.tun.enabled = tun;
+                app_config.tun.ipv6_enabled = ipv6_enabled;
                 let mut context = test_context(app_config, base_remote_node());
                 context.is_tun_enabled = tun;
                 context.ipv6_egress_unsupported = unsupported;
@@ -1603,7 +1603,7 @@ fn singbox_ipv6_reject_lets_direct_rules_claim_ipv6_first() {
 
     // No routing profile: the reject still guards `final`.
     let mut app_config = AppConfig::default();
-    app_config.tun_mode_item.enable_ipv6_address = false;
+    app_config.tun.ipv6_enabled = false;
     let rules = generate_singbox_config(&test_context(app_config, base_remote_node()))
         .expect("sing-box config should generate")
         .route
@@ -1611,7 +1611,7 @@ fn singbox_ipv6_reject_lets_direct_rules_claim_ipv6_first() {
     assert!(rules.last().is_some_and(is_plain_reject));
 
     let mut app_config = AppConfig::default();
-    app_config.tun_mode_item.enable_ipv6_address = true;
+    app_config.tun.ipv6_enabled = true;
     let mut context = test_context(app_config, base_remote_node());
     context.routing_item = Some(routing);
     let generated = generate_singbox_config(&context).expect("sing-box config should generate");
@@ -1628,8 +1628,8 @@ fn singbox_ipv6_reject_lets_direct_rules_claim_ipv6_first() {
 #[test]
 fn singbox_global_mode_precedes_user_rules_and_no_domain_list_is_injected() {
     let mut app_config = AppConfig::default();
-    app_config.tun_mode_item.enable_tun = true;
-    app_config.tun_mode_item.enable_ipv6_address = false;
+    app_config.tun.enabled = true;
+    app_config.tun.ipv6_enabled = false;
     let mut context = test_context(app_config, base_remote_node());
     context.is_tun_enabled = true;
     context.routing_item = Some(RoutingItem {
@@ -1752,7 +1752,7 @@ fn singbox_log_level_accepts_current_levels_and_defaults_invalid_values() {
 
     for (configured, expected_level, expected_disabled) in cases {
         let mut app_config = AppConfig::default();
-        app_config.core_basic_item.loglevel = configured.to_string();
+        app_config.core.log_level = configured.to_string();
         let generated =
             generate_singbox_config(&test_context(app_config, socks_node("log", "Log")))
                 .expect("sing-box config should generate");
@@ -1790,16 +1790,15 @@ fn names_ai_service(rule: &SingboxRule) -> bool {
 
 fn singbox_routing_dns_snapshot_contexts() -> (CoreConfigContext, CoreConfigContext) {
     let mut dns_config = AppConfig::default();
-    dns_config.simple_dns_item.fake_ip = Some(true);
-    dns_config.simple_dns_item.global_fake_ip = Some(true);
-    dns_config.simple_dns_item.direct_dns = Some("https://resolver.example/dns-query".to_string());
-    dns_config.simple_dns_item.remote_dns =
-        Some("https://cloudflare-dns.com/dns-query".to_string());
-    dns_config.simple_dns_item.hosts =
+    dns_config.dns.fake_ip = Some(true);
+    dns_config.dns.global_fake_ip = Some(true);
+    dns_config.dns.direct = Some("https://resolver.example/dns-query".to_string());
+    dns_config.dns.remote = Some("https://cloudflare-dns.com/dns-query".to_string());
+    dns_config.dns.hosts =
         Some("resolver.example 1.1.1.1\nblock.test #3\ncname.test target.example".to_string());
-    dns_config.simple_dns_item.direct_strategy = Some(DnsStrategy::PreferIpv4);
-    dns_config.simple_dns_item.proxy_strategy = Some(DnsStrategy::PreferIpv6);
-    dns_config.simple_dns_item.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
+    dns_config.dns.direct_strategy = Some(DnsStrategy::PreferIpv4);
+    dns_config.dns.proxy_strategy = Some(DnsStrategy::PreferIpv6);
+    dns_config.dns.direct_expected_ips = Some("geoip:cn,192.0.2.0/24".to_string());
     let mut dns_context = test_context(dns_config, base_remote_node());
     dns_context.routing_item = Some(RoutingItem {
         rule_set: vec![
@@ -1820,13 +1819,13 @@ fn singbox_routing_dns_snapshot_contexts() -> (CoreConfigContext, CoreConfigCont
     });
 
     let mut tun_config = AppConfig::default();
-    tun_config.tun_mode_item.enable_tun = true;
-    tun_config.tun_mode_item.mtu = 1500;
-    tun_config.tun_mode_item.stack = "system".to_string();
-    tun_config.tun_mode_item.strict_route = false;
-    tun_config.tun_mode_item.enable_ipv6_address = false;
-    tun_config.simple_dns_item.add_common_hosts = Some(false);
-    tun_config.simple_dns_item.block_binding_query = Some(false);
+    tun_config.tun.enabled = true;
+    tun_config.tun.mtu = 1500;
+    tun_config.tun.stack = "system".to_string();
+    tun_config.tun.strict_route = false;
+    tun_config.tun.ipv6_enabled = false;
+    tun_config.dns.add_common_hosts = Some(false);
+    tun_config.dns.block_binding_query = Some(false);
     let mut tun_context = test_context(tun_config, base_remote_node());
     tun_context.is_tun_enabled = true;
 
@@ -2174,7 +2173,7 @@ fn singbox_macos_leaves_out_app_conditions_the_network_extension_cannot_match() 
 #[test]
 fn singbox_macos_tun_leaves_out_the_core_process_rule() {
     let mut app_config = AppConfig::default();
-    app_config.tun_mode_item.enable_tun = true;
+    app_config.tun.enabled = true;
     let mut linux = test_context(app_config, base_remote_node());
     linux.is_tun_enabled = true;
     let mut macos = linux.clone();
@@ -2232,7 +2231,7 @@ fn latency_probe_tag_follows_the_generated_outbound() {
     let mut remote = base_remote_node();
     remote.index_id = "remote".to_string();
     let mut muxed = context.clone();
-    muxed.app_config.core_basic_item.mux_enabled = true;
+    muxed.app_config.core.mux_enabled = true;
     assert_ne!(
         latency_probe_tag(&context, &remote),
         latency_probe_tag(&muxed, &remote)

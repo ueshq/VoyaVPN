@@ -240,7 +240,7 @@ impl Default for SystemProxySettings {
     fn default() -> Self {
         // A fresh install has no persisted settings row, so these defaults are
         // what the system proxy is actually configured with. They must stay in
-        // step with `voya_core::SystemProxyItem::default()`; the equivalence is
+        // step with `voya_core::SystemProxyConfig::default()`; the equivalence is
         // guarded by a test in voya-app's settings mapping layer.
         Self {
             mode: SystemProxyType::ForcedChange,
@@ -337,7 +337,7 @@ mod tests {
             serde_json::Value::String("forcedChange".to_string())
         );
         assert!(value.get("core").is_some());
-        assert!(value.get("CoreBasicItem").is_none());
+        assert!(value.get("CoreConfig").is_none());
 
         let mut invalid = value;
         invalid

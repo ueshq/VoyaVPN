@@ -155,7 +155,7 @@ impl HostTunnelState for SupervisorTunnelState {
                 && (snapshot.active_tun_backend.is_some()
                     || config
                         .read()
-                        .map(|config| config.tun_mode_item.enable_tun)
+                        .map(|config| config.tun.enabled)
                         .unwrap_or(false))
         })
     }

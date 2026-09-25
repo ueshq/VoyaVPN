@@ -129,8 +129,8 @@ fn current_labels<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> TrayLabels {
             state
                 .config_mutations()
                 .current_config()
-                .ui_item
-                .current_language
+                .appearance
+                .language
                 .clone()
         })
         .unwrap_or_default();

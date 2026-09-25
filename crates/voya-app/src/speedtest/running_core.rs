@@ -140,8 +140,8 @@ impl SpeedtestManager {
         }
         let mut results = record_item_failures(database, failures, items, on_results).await?;
 
-        let test_url = latency_test_url(&config.speed_test_item).to_string();
-        let timeout_ms = running_core_timeout_ms(&config.speed_test_item);
+        let test_url = latency_test_url(&config.speed_test).to_string();
+        let timeout_ms = running_core_timeout_ms(&config.speed_test);
         // Indices rather than borrows: the stream's futures must not hold a
         // reference into `items`, or the run's future stops being `Send`-able
         // across the higher-ranked lifetimes `tokio::spawn` asks for.
@@ -179,8 +179,8 @@ impl SpeedtestManager {
     }
 }
 
-fn running_core_timeout_ms(item: &SpeedTestItem) -> u32 {
-    u32::try_from(item.speed_test_timeout)
+fn running_core_timeout_ms(item: &SpeedtestConfig) -> u32 {
+    u32::try_from(item.timeout_seconds)
         .unwrap_or(0)
         .saturating_mul(1_000)
         .clamp(

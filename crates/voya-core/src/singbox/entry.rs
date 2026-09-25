@@ -165,14 +165,14 @@ pub(super) fn singbox_log_level(configured: &str) -> &'static str {
 
 fn gen_log(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let mut log = config.log.clone().unwrap_or_default();
-    let configured = context.app_config.core_basic_item.loglevel.trim();
+    let configured = context.app_config.core.log_level.trim();
     // Always overwrite: the sample config ships `debug`, so leaving an
     // unmapped level in place would run the core at its noisiest setting.
     log.level = singbox_log_level(configured).to_string();
     if configured.eq_ignore_ascii_case("none") {
         log.disabled = Some(true);
     }
-    if context.app_config.core_basic_item.log_enabled {
+    if context.app_config.core.log_enabled {
         log.output = Some("sbox.log".to_string());
     }
     config.log = Some(log);

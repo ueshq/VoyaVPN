@@ -271,8 +271,8 @@ impl<'runtime> RuntimeManager<'runtime> {
             active_group_id,
             main: main_spec,
             pre,
-            tun_enabled: config.tun_mode_item.enable_tun,
-            kill_switch: config.tun_mode_item.strict_route,
+            tun_enabled: config.tun.enabled,
+            kill_switch: config.tun.strict_route,
             sudo_script_dir: self.paths.temp_dir().join(SUDO_SCRIPT_DIR_NAME),
             restart_on_crash: true,
             // Taken from the generated main context, not from the TUN setting:
@@ -593,9 +593,9 @@ mod tests {
         let profile = active_singbox_profile("active");
         let config = AppConfig {
             index_id: "active".to_string(),
-            tun_mode_item: voya_core::TunModeItem {
-                enable_tun: true,
-                ..voya_core::TunModeItem::default()
+            tun: voya_core::TunConfig {
+                enabled: true,
+                ..voya_core::TunConfig::default()
             },
             ..AppConfig::default()
         };
@@ -632,7 +632,7 @@ mod tests {
     #[test]
     fn runtime_clash_api_port_matches_the_generated_main_config() {
         // The Clash API port used to be recomputed downstream from
-        // `tun_mode_item.enable_tun`. On the Linux TUN topology the builder
+        // `tun.enabled`. On the Linux TUN topology the builder
         // clears `is_tun_enabled` on the *main* context and gives the TUN
         // inbound to the pre-socks one, so that formula addressed the wrong
         // process. The supervisor now carries the port the main config
@@ -640,9 +640,9 @@ mod tests {
         let profile = active_singbox_profile("active");
         let config = AppConfig {
             index_id: "active".to_string(),
-            tun_mode_item: voya_core::TunModeItem {
-                enable_tun: true,
-                ..voya_core::TunModeItem::default()
+            tun: voya_core::TunConfig {
+                enabled: true,
+                ..voya_core::TunConfig::default()
             },
             ..AppConfig::default()
         };
@@ -807,9 +807,9 @@ mod tests {
         let profile = active_singbox_profile("active");
         let config = AppConfig {
             index_id: "active".to_string(),
-            tun_mode_item: voya_core::TunModeItem {
-                enable_tun: true,
-                ..voya_core::TunModeItem::default()
+            tun: voya_core::TunConfig {
+                enabled: true,
+                ..voya_core::TunConfig::default()
             },
             ..AppConfig::default()
         };
@@ -860,9 +860,9 @@ mod tests {
             RuntimeManager::with_target_os(&database, paths.clone(), supervisor, target_os);
         let config = AppConfig {
             index_id: "active".to_string(),
-            tun_mode_item: voya_core::TunModeItem {
-                enable_tun: true,
-                ..voya_core::TunModeItem::default()
+            tun: voya_core::TunConfig {
+                enabled: true,
+                ..voya_core::TunConfig::default()
             },
             ..AppConfig::default()
         };

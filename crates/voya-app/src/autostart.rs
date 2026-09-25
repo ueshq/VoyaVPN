@@ -47,7 +47,7 @@ impl AutostartManager {
     }
 
     pub fn status(&self, config: &AppConfig) -> Result<AutostartStatus, AutostartManagerError> {
-        let request = self.request(config.gui_item.auto_run)?;
+        let request = self.request(config.behavior.autostart)?;
 
         Ok(status_from_request(&request))
     }
@@ -59,7 +59,7 @@ impl AutostartManager {
     ) -> Result<AutostartStatus, AutostartManagerError> {
         let request = self.request(enabled)?;
         apply_autostart(self.adapter.as_ref(), &request)?;
-        config.gui_item.auto_run = enabled;
+        config.behavior.autostart = enabled;
 
         Ok(status_from_request(&request))
     }
@@ -282,7 +282,7 @@ mod autostart_app_tests {
             .set_enabled(&mut config, true)
             .expect("autostart set");
 
-        assert!(config.gui_item.auto_run);
+        assert!(config.behavior.autostart);
         assert!(status.enabled);
         assert_eq!(status.platform, AutostartPlatform::Linux);
         assert_eq!(*adapter.writes.lock().expect("writes"), 1);

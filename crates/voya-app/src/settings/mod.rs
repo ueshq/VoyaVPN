@@ -83,7 +83,7 @@ pub async fn save_app_settings(
     let target = config_from_settings(settings, &original);
     let runtime_action = settings_runtime_action(
         saved_config_requires_runtime_restart(&original, &target),
-        original.system_proxy_item != target.system_proxy_item,
+        original.system_proxy != target.system_proxy,
     );
 
     // Autostart is applied before the commit so a registration the OS refuses

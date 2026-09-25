@@ -168,7 +168,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         core_seed_resource_dir.clone(),
         supervisor.clone(),
         Arc::clone(&shared_config),
-        config.core_basic_item.loglevel.clone(),
+        config.core.log_level.clone(),
     );
     drop(runtime_guard);
     let speedtest_manager = services.speedtest_manager(

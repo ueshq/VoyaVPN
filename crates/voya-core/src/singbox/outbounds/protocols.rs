@@ -175,8 +175,8 @@ fn fill_hysteria2_fields(
         });
     }
 
-    let up_mbps = context.app_config.hysteria_item.up_mbps;
-    let down_mbps = context.app_config.hysteria_item.down_mbps;
+    let up_mbps = context.app_config.hysteria.upload_mbps;
+    let down_mbps = context.app_config.hysteria.download_mbps;
     outbound.up_mbps = (up_mbps > 0).then_some(up_mbps);
     outbound.down_mbps = (down_mbps > 0).then_some(down_mbps);
 
@@ -205,8 +205,8 @@ fn fill_hysteria2_fields(
         outbound.server_ports = Some(server_ports);
     }
 
-    let default_interval = if context.app_config.hysteria_item.hop_interval >= 5 {
-        context.app_config.hysteria_item.hop_interval
+    let default_interval = if context.app_config.hysteria.hop_interval_seconds >= 5 {
+        context.app_config.hysteria.hop_interval_seconds
     } else {
         DEFAULT_HYSTERIA2_HOP_INTERVAL
     };
@@ -214,17 +214,17 @@ fn fill_hysteria2_fields(
 }
 
 fn fill_outbound_mux(outbound: &mut SingboxOutbound, context: &CoreConfigContext) {
-    if !context.app_config.core_basic_item.mux_enabled {
+    if !context.app_config.core.mux_enabled {
         return;
     }
-    let protocol = context.app_config.mux4_sbox_item.protocol.trim();
+    let protocol = context.app_config.multiplexing.protocol.trim();
     if protocol.is_empty() {
         return;
     }
     outbound.multiplex = Some(SingboxMultiplex {
         enabled: true,
         protocol: protocol.to_string(),
-        max_connections: context.app_config.mux4_sbox_item.max_connections,
-        padding: context.app_config.mux4_sbox_item.padding,
+        max_connections: context.app_config.multiplexing.max_connections,
+        padding: context.app_config.multiplexing.padding,
     });
 }

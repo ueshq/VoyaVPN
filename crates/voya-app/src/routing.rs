@@ -66,10 +66,7 @@ impl<'db> RoutingManager<'db> {
         self.database.routings().upsert(&item).await?;
         if should_activate {
             self.database.routings().set_active(&item.id).await?;
-            config
-                .routing_basic_item
-                .routing_index_id
-                .clone_from(&item.id);
+            config.active_routing_id.clone_from(&item.id);
         }
         self.ensure_active_routing(config).await?;
 
@@ -153,7 +150,7 @@ impl<'db> RoutingManager<'db> {
         if !self.database.routings().set_active(id).await? {
             return Err(RoutingManagerError::RoutingNotFound(id.to_string()));
         }
-        config.routing_basic_item.routing_index_id = id.to_string();
+        config.active_routing_id = id.to_string();
 
         self.database
             .routings()
@@ -241,35 +238,26 @@ impl<'db> RoutingManager<'db> {
 
     async fn ensure_active_routing(&self, config: &mut AppConfig) -> Result<Option<RoutingItem>> {
         if let Some(active) = self.database.routings().active().await? {
-            config
-                .routing_basic_item
-                .routing_index_id
-                .clone_from(&active.id);
+            config.active_routing_id.clone_from(&active.id);
             return Ok(Some(active));
         }
 
-        let configured = config.routing_basic_item.routing_index_id.trim();
+        let configured = config.active_routing_id.trim();
         if !configured.is_empty() {
             if let Some(item) = self.database.routings().get(configured).await? {
                 self.database.routings().set_active(&item.id).await?;
-                config
-                    .routing_basic_item
-                    .routing_index_id
-                    .clone_from(&item.id);
+                config.active_routing_id.clone_from(&item.id);
                 return Ok(Some(item));
             }
         }
 
         if let Some(first) = self.database.routings().first().await? {
             self.database.routings().set_active(&first.id).await?;
-            config
-                .routing_basic_item
-                .routing_index_id
-                .clone_from(&first.id);
+            config.active_routing_id.clone_from(&first.id);
             return Ok(Some(first));
         }
 
-        config.routing_basic_item.routing_index_id.clear();
+        config.active_routing_id.clear();
         Ok(None)
     }
 
@@ -531,7 +519,7 @@ mod tests {
             .await
             .expect("routing manager test operation should succeed");
 
-        assert_eq!(config.routing_basic_item.routing_index_id, first.id);
+        assert_eq!(config.active_routing_id, first.id);
         assert_eq!(
             manager
                 .set_active_routing(&mut config, &second.id)
@@ -540,7 +528,7 @@ mod tests {
                 .id,
             second.id
         );
-        assert_eq!(config.routing_basic_item.routing_index_id, second.id);
+        assert_eq!(config.active_routing_id, second.id);
 
         let added = manager
             .save_rule(
@@ -577,7 +565,7 @@ mod tests {
             .expect("a fresh database is seeded");
         assert_eq!(seeded.remarks, "智能分流");
         assert!(seeded.is_active);
-        assert_eq!(config.routing_basic_item.routing_index_id, seeded.id);
+        assert_eq!(config.active_routing_id, seeded.id);
         assert_eq!(seeded.rule_set.len(), voya_core::default_rule_set().len());
         assert!(seeded.rule_set.iter().all(|rule| !rule.id.is_empty()));
 

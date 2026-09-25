@@ -361,10 +361,7 @@ impl<'flow> CoreFlow<'flow> {
     async fn settle_traffic_mode(&self, config: &AppConfig, snapshot: &SupervisorSnapshot) {
         if let Err(error) = self
             .proxy_runtime
-            .apply_saved_traffic_mode(
-                &snapshot.clash_api_access(),
-                config.proxy_ui_item.traffic_mode,
-            )
+            .apply_saved_traffic_mode(&snapshot.clash_api_access(), config.proxy.traffic_mode)
             .await
         {
             self.sink.notice(

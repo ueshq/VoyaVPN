@@ -42,7 +42,7 @@ impl CoreFlow<'_> {
     /// while it was being probed).
     pub async fn check_ipv6_egress(&self, current_config: impl Fn() -> AppConfig + Send + Sync) {
         let config = current_config();
-        if !config.tun_mode_item.enable_ipv6_address {
+        if !config.tun.ipv6_enabled {
             return;
         }
         let Ok(before) = self.runtime.status().await else {
@@ -55,12 +55,8 @@ impl CoreFlow<'_> {
         let Some(node) = self.ipv6_probe_node(&before, &access).await else {
             return;
         };
-        let Some(egress) = probe_ipv6_egress(
-            &self.proxy_runtime,
-            &access,
-            &config.speed_test_item.speed_ping_test_url,
-        )
-        .await
+        let Some(egress) =
+            probe_ipv6_egress(&self.proxy_runtime, &access, &config.speed_test.latency_url).await
         else {
             return;
         };

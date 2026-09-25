@@ -351,8 +351,8 @@ fn fmt_hostile_subscription_tls_flags_are_not_trusted_by_generators() {
     node.index_id = "hostile-vless".to_string();
 
     let mut app_config = AppConfig::default();
-    app_config.core_basic_item.def_allow_insecure = false;
-    app_config.core_basic_item.def_fingerprint = "firefox".to_string();
+    app_config.core.default_allow_insecure = false;
+    app_config.core.default_fingerprint = "firefox".to_string();
 
     let singbox_value = generate_singbox_config_value(&fmt_test_context(app_config, node))
         .expect("sing-box config should generate");

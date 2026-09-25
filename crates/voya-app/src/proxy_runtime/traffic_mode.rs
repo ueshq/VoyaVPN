@@ -35,7 +35,7 @@ impl ProxyRuntimeManager {
     ) -> std::result::Result<TrafficModeChangeOutcome, ConfigMutationError> {
         let committed = coordinator
             .mutate(async |_unit_of_work, config| {
-                config.proxy_ui_item.traffic_mode = mode;
+                config.proxy.traffic_mode = mode;
                 Ok::<_, ConfigMutationError>(())
             })
             .await?;
@@ -155,7 +155,7 @@ mod tests {
                 let mut state = self.0.lock().expect("state");
                 state.requests.push(request.clone());
                 if let Some(coordinator) = &state.coordinator {
-                    let saved = coordinator.current_config().proxy_ui_item.traffic_mode;
+                    let saved = coordinator.current_config().proxy.traffic_mode;
                     state.saved_modes_at_request.push(saved);
                 }
                 let close = request.method == ClashHttpMethod::Delete;
@@ -229,8 +229,8 @@ mod tests {
         ] {
             for tun in [false, true] {
                 let mut config = AppConfig::default();
-                config.system_proxy_item.sys_proxy_type = proxy;
-                config.tun_mode_item.enable_tun = tun;
+                config.system_proxy.mode = proxy;
+                config.tun.enabled = tun;
                 let (database, coordinator) = coordinator(config.clone()).await;
                 let transport = ModeTransport::default();
                 let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
@@ -244,7 +244,7 @@ mod tests {
                         .await
                         .expect("save");
                     outcome.runtime_result.expect("offline has no runtime work");
-                    config.proxy_ui_item.traffic_mode = mode;
+                    config.proxy.traffic_mode = mode;
                     assert_eq!(coordinator.current_config(), config);
                     assert_eq!(
                         database
@@ -384,7 +384,7 @@ mod tests {
                 .is_err()
         );
         assert_eq!(
-            coordinator.current_config().proxy_ui_item.traffic_mode,
+            coordinator.current_config().proxy.traffic_mode,
             TrafficMode::Rule
         );
         assert!(transport.0.lock().expect("transport").requests.is_empty());

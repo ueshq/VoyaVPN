@@ -40,7 +40,7 @@ pub async fn check_connection_ip(
     let cancel = Arc::new(AtomicBool::new(false));
     let lookup = probe
         .lookup_country(
-            &config.speed_test_item.ipapi_url,
+            &config.speed_test.ip_lookup_url,
             CONNECTION_IP_TIMEOUT,
             &cancel,
         )
@@ -64,7 +64,7 @@ fn ensure_connected(state: SupervisorConnectionState) -> Result<(), ConnectionIp
 /// The mixed inbound port the core listens on for this configuration.
 fn probe_port(config: &AppConfig) -> Result<u16, ConnectionIpError> {
     let port = config
-        .inbound
+        .inbounds
         .first()
         .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port);
     u16::try_from(port)
@@ -98,14 +98,14 @@ mod tests {
             probe_port(&config).expect("default port"),
             u16::try_from(voya_core::DEFAULT_LOCAL_PORT).expect("port")
         );
-        config.inbound[0].local_port = 20_000;
+        config.inbounds[0].local_port = 20_000;
         assert_eq!(probe_port(&config).expect("custom port"), 20_000);
-        config.inbound[0].local_port = 70_000;
+        config.inbounds[0].local_port = 70_000;
         assert!(matches!(
             probe_port(&config),
             Err(ConnectionIpError::InvalidPort(70_000))
         ));
-        config.inbound.clear();
+        config.inbounds.clear();
         assert!(probe_port(&config).is_ok());
     }
 }

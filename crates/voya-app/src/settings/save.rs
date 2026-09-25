@@ -1,17 +1,16 @@
 use thiserror::Error;
 use voya_contracts as contracts;
 use voya_core::{
-    AppConfig, CoreBasicItem, GuiItem, HysteriaItem, InItem, Mux4SboxItem, ProxyUiItem,
-    RoutingBasicItem, SpeedTestItem, SystemProxyItem, TunModeItem, UiItem,
+    AppConfig, AppearanceConfig, BehaviorConfig, CoreConfig, HysteriaConfig, InboundConfig,
+    MultiplexingConfig, ProxyConfig, SpeedtestConfig, SystemProxyConfig, TunConfig,
 };
 use voya_db::AppStateRecord;
 
 use crate::{
     contract_map::{
-        close_action_from_contract, close_action_to_contract, simple_dns_from_contract,
-        simple_dns_to_contract, sysproxy_type_from_contract, sysproxy_type_to_contract,
-        tls_fragment_mode_from_contract, tls_fragment_mode_to_contract, traffic_mode_from_contract,
-        traffic_mode_to_contract,
+        close_action_from_contract, close_action_to_contract, dns_from_contract, dns_to_contract,
+        sysproxy_type_from_contract, sysproxy_type_to_contract, tls_fragment_mode_from_contract,
+        tls_fragment_mode_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
     },
     input_safety,
 };
@@ -199,15 +198,15 @@ fn validate_inbound(settings: &contracts::AppSettings) -> Result<(), AppSettings
 #[must_use]
 pub fn saved_config_requires_runtime_restart(original: &AppConfig, updated: &AppConfig) -> bool {
     original.index_id != updated.index_id
-        || original.core_basic_item != updated.core_basic_item
-        || original.tun_mode_item != updated.tun_mode_item
-        || original.routing_basic_item != updated.routing_basic_item
-        || original.mux4_sbox_item != updated.mux4_sbox_item
-        || original.hysteria_item != updated.hysteria_item
+        || original.core != updated.core
+        || original.tun != updated.tun
+        || original.active_routing_id != updated.active_routing_id
+        || original.multiplexing != updated.multiplexing
+        || original.hysteria != updated.hysteria
         // Traffic mode changes generated routing.
-        || original.proxy_ui_item.traffic_mode != updated.proxy_ui_item.traffic_mode
-        || original.inbound != updated.inbound
-        || original.simple_dns_item != updated.simple_dns_item
+        || original.proxy.traffic_mode != updated.proxy.traffic_mode
+        || original.inbounds != updated.inbounds
+        || original.dns != updated.dns
 }
 
 /// Why a text field was rejected, as the code the settings dialog translates.
@@ -237,78 +236,78 @@ fn input_safety_text(code: &contracts::ValidationCode) -> &'static str {
 pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettings {
     contracts::AppSettings {
         appearance: contracts::AppearanceSettings {
-            language: config.ui_item.current_language.clone(),
-            theme: theme_from_config(config.ui_item.current_theme.as_deref()),
+            language: config.appearance.language.clone(),
+            theme: theme_from_config(config.appearance.theme.as_deref()),
         },
         behavior: contracts::BehaviorSettings {
-            autostart: config.gui_item.auto_run,
-            auto_check_ip: config.gui_item.auto_check_ip,
-            close_action: close_action_to_contract(config.gui_item.close_action),
-            start_minimized: config.gui_item.start_minimized,
-            auto_create_subscription_group: config.gui_item.auto_create_subscription_group,
+            autostart: config.behavior.autostart,
+            auto_check_ip: config.behavior.auto_check_ip,
+            close_action: close_action_to_contract(config.behavior.close_action),
+            start_minimized: config.behavior.start_minimized,
+            auto_create_subscription_group: config.behavior.auto_create_subscription_group,
         },
         core: contracts::CoreSettings {
-            log_enabled: config.core_basic_item.log_enabled,
-            log_level: config.core_basic_item.loglevel.clone(),
-            mux_enabled: config.core_basic_item.mux_enabled,
-            default_allow_insecure: config.core_basic_item.def_allow_insecure,
-            default_fingerprint: config.core_basic_item.def_fingerprint.clone(),
-            default_user_agent: config.core_basic_item.def_user_agent.clone(),
-            send_through: config.core_basic_item.send_through.clone(),
-            bind_interface: config.core_basic_item.bind_interface.clone(),
-            tls_fragment: tls_fragment_mode_to_contract(config.core_basic_item.tls_fragment),
-            fragment_fallback_delay_ms: config.core_basic_item.fragment_fallback_delay_ms,
-            cache_file_enabled: config.core_basic_item.enable_cache_file4_sbox,
+            log_enabled: config.core.log_enabled,
+            log_level: config.core.log_level.clone(),
+            mux_enabled: config.core.mux_enabled,
+            default_allow_insecure: config.core.default_allow_insecure,
+            default_fingerprint: config.core.default_fingerprint.clone(),
+            default_user_agent: config.core.default_user_agent.clone(),
+            send_through: config.core.send_through.clone(),
+            bind_interface: config.core.bind_interface.clone(),
+            tls_fragment: tls_fragment_mode_to_contract(config.core.tls_fragment),
+            fragment_fallback_delay_ms: config.core.fragment_fallback_delay_ms,
+            cache_file_enabled: config.core.cache_file_enabled,
         },
         network: contracts::NetworkSettings {
             tun: contracts::TunSettings {
-                enabled: config.tun_mode_item.enable_tun,
-                auto_route: config.tun_mode_item.auto_route,
-                strict_route: config.tun_mode_item.strict_route,
-                stack: config.tun_mode_item.stack.clone(),
-                mtu: config.tun_mode_item.mtu,
-                ipv6_enabled: config.tun_mode_item.enable_ipv6_address,
-                icmp_routing: config.tun_mode_item.icmp_routing.clone(),
+                enabled: config.tun.enabled,
+                auto_route: config.tun.auto_route,
+                strict_route: config.tun.strict_route,
+                stack: config.tun.stack.clone(),
+                mtu: config.tun.mtu,
+                ipv6_enabled: config.tun.ipv6_enabled,
+                icmp_routing: config.tun.icmp_routing.clone(),
             },
             system_proxy: contracts::SystemProxySettings {
-                mode: sysproxy_type_to_contract(config.system_proxy_item.sys_proxy_type),
-                exceptions: config.system_proxy_item.system_proxy_exceptions.clone(),
-                bypass_local: config.system_proxy_item.not_proxy_local_address,
+                mode: sysproxy_type_to_contract(config.system_proxy.mode),
+                exceptions: config.system_proxy.exceptions.clone(),
+                bypass_local: config.system_proxy.bypass_local,
             },
             inbounds: config
-                .inbound
+                .inbounds
                 .iter()
                 .map(|item| contracts::InboundSettings {
                     local_port: item.local_port,
                     sniffing_enabled: item.sniffing_enabled,
-                    lan_connections_allowed: item.allow_lan_conn,
-                    separate_lan_port: item.new_port4_lan,
-                    username: item.user.clone(),
-                    password: item.pass.clone(),
-                    secondary_port_enabled: item.second_local_port_enabled,
+                    lan_connections_allowed: item.lan_connections_allowed,
+                    separate_lan_port: item.separate_lan_port,
+                    username: item.username.clone(),
+                    password: item.password.clone(),
+                    secondary_port_enabled: item.secondary_port_enabled,
                 })
                 .collect(),
         },
-        dns: simple_dns_to_contract(config.simple_dns_item.clone()),
+        dns: dns_to_contract(config.dns.clone()),
         speed_test: contracts::SpeedtestSettings {
-            timeout_seconds: config.speed_test_item.speed_test_timeout,
-            latency_url: config.speed_test_item.speed_ping_test_url.clone(),
-            ip_lookup_url: config.speed_test_item.ipapi_url.clone(),
-            page_size: config.speed_test_item.speed_test_page_size,
-            delay_interval_seconds: config.speed_test_item.speed_test_delay_interval_seconds,
+            timeout_seconds: config.speed_test.timeout_seconds,
+            latency_url: config.speed_test.latency_url.clone(),
+            ip_lookup_url: config.speed_test.ip_lookup_url.clone(),
+            page_size: config.speed_test.page_size,
+            delay_interval_seconds: config.speed_test.delay_interval_seconds,
         },
         multiplexing: contracts::MultiplexingSettings {
-            protocol: config.mux4_sbox_item.protocol.clone(),
-            max_connections: config.mux4_sbox_item.max_connections,
-            padding: config.mux4_sbox_item.padding,
+            protocol: config.multiplexing.protocol.clone(),
+            max_connections: config.multiplexing.max_connections,
+            padding: config.multiplexing.padding,
         },
         hysteria: contracts::HysteriaSettings {
-            upload_mbps: config.hysteria_item.up_mbps,
-            download_mbps: config.hysteria_item.down_mbps,
-            hop_interval_seconds: config.hysteria_item.hop_interval,
+            upload_mbps: config.hysteria.upload_mbps,
+            download_mbps: config.hysteria.download_mbps,
+            hop_interval_seconds: config.hysteria.hop_interval_seconds,
         },
         proxy: contracts::ProxySettings {
-            traffic_mode: traffic_mode_to_contract(config.proxy_ui_item.traffic_mode),
+            traffic_mode: traffic_mode_to_contract(config.proxy.traffic_mode),
         },
     }
 }
@@ -325,8 +324,8 @@ pub fn config_from_settings(settings: &contracts::AppSettings, current: &AppConf
 pub(crate) fn state_from_app_config(config: &AppConfig) -> AppStateRecord {
     AppStateRecord {
         active_profile_id: (!config.index_id.is_empty()).then(|| config.index_id.clone()),
-        active_routing_id: (!config.routing_basic_item.routing_index_id.is_empty())
-            .then(|| config.routing_basic_item.routing_index_id.clone()),
+        active_routing_id: (!config.active_routing_id.is_empty())
+            .then(|| config.active_routing_id.clone()),
         active_group_id: (!config.active_group_id.is_empty())
             .then(|| config.active_group_id.clone()),
     }
@@ -340,93 +339,91 @@ pub fn app_config_from_settings(
     AppConfig {
         index_id: state.active_profile_id.clone().unwrap_or_default(),
         active_group_id: state.active_group_id.clone().unwrap_or_default(),
-        core_basic_item: CoreBasicItem {
+        active_routing_id: state.active_routing_id.clone().unwrap_or_default(),
+        core: CoreConfig {
             log_enabled: settings.core.log_enabled,
-            loglevel: settings.core.log_level.clone(),
+            log_level: settings.core.log_level.clone(),
             mux_enabled: settings.core.mux_enabled,
-            def_allow_insecure: settings.core.default_allow_insecure,
-            def_fingerprint: settings.core.default_fingerprint.clone(),
-            def_user_agent: settings.core.default_user_agent.clone(),
+            default_allow_insecure: settings.core.default_allow_insecure,
+            default_fingerprint: settings.core.default_fingerprint.clone(),
+            default_user_agent: settings.core.default_user_agent.clone(),
             send_through: settings.core.send_through.clone(),
             bind_interface: settings.core.bind_interface.clone(),
             tls_fragment: tls_fragment_mode_from_contract(settings.core.tls_fragment),
             fragment_fallback_delay_ms: settings.core.fragment_fallback_delay_ms,
-            enable_cache_file4_sbox: settings.core.cache_file_enabled,
+            cache_file_enabled: settings.core.cache_file_enabled,
         },
-        tun_mode_item: TunModeItem {
-            enable_tun: settings.network.tun.enabled,
+        tun: TunConfig {
+            enabled: settings.network.tun.enabled,
             auto_route: settings.network.tun.auto_route,
             strict_route: settings.network.tun.strict_route,
             stack: settings.network.tun.stack.clone(),
             mtu: settings.network.tun.mtu,
-            enable_ipv6_address: settings.network.tun.ipv6_enabled,
+            ipv6_enabled: settings.network.tun.ipv6_enabled,
             icmp_routing: settings.network.tun.icmp_routing.clone(),
         },
-        routing_basic_item: RoutingBasicItem {
-            routing_index_id: state.active_routing_id.clone().unwrap_or_default(),
-        },
-        gui_item: GuiItem {
-            auto_run: settings.behavior.autostart,
+        behavior: BehaviorConfig {
+            autostart: settings.behavior.autostart,
             auto_check_ip: settings.behavior.auto_check_ip,
             close_action: close_action_from_contract(settings.behavior.close_action),
             start_minimized: settings.behavior.start_minimized,
             auto_create_subscription_group: settings.behavior.auto_create_subscription_group,
         },
-        ui_item: UiItem {
-            current_theme: theme_to_config(settings.appearance.theme).map(str::to_string),
-            current_language: settings.appearance.language.clone(),
+        appearance: AppearanceConfig {
+            theme: theme_to_config(settings.appearance.theme).map(str::to_string),
+            language: settings.appearance.language.clone(),
         },
-        speed_test_item: SpeedTestItem {
-            speed_test_timeout: settings.speed_test.timeout_seconds,
-            speed_ping_test_url: settings.speed_test.latency_url.clone(),
-            ipapi_url: settings.speed_test.ip_lookup_url.clone(),
-            speed_test_page_size: settings.speed_test.page_size,
-            speed_test_delay_interval_seconds: settings.speed_test.delay_interval_seconds,
+        speed_test: SpeedtestConfig {
+            timeout_seconds: settings.speed_test.timeout_seconds,
+            latency_url: settings.speed_test.latency_url.clone(),
+            ip_lookup_url: settings.speed_test.ip_lookup_url.clone(),
+            page_size: settings.speed_test.page_size,
+            delay_interval_seconds: settings.speed_test.delay_interval_seconds,
         },
-        mux4_sbox_item: Mux4SboxItem {
+        multiplexing: MultiplexingConfig {
             protocol: settings.multiplexing.protocol.clone(),
             max_connections: settings.multiplexing.max_connections,
             padding: settings.multiplexing.padding,
         },
-        hysteria_item: HysteriaItem {
-            up_mbps: settings.hysteria.upload_mbps,
-            down_mbps: settings.hysteria.download_mbps,
-            hop_interval: settings.hysteria.hop_interval_seconds,
+        hysteria: HysteriaConfig {
+            upload_mbps: settings.hysteria.upload_mbps,
+            download_mbps: settings.hysteria.download_mbps,
+            hop_interval_seconds: settings.hysteria.hop_interval_seconds,
         },
-        proxy_ui_item: ProxyUiItem {
+        proxy: ProxyConfig {
             traffic_mode: traffic_mode_from_contract(settings.proxy.traffic_mode),
         },
-        system_proxy_item: SystemProxyItem {
-            sys_proxy_type: sysproxy_type_from_contract(settings.network.system_proxy.mode),
-            system_proxy_exceptions: settings.network.system_proxy.exceptions.clone(),
-            not_proxy_local_address: settings.network.system_proxy.bypass_local,
+        system_proxy: SystemProxyConfig {
+            mode: sysproxy_type_from_contract(settings.network.system_proxy.mode),
+            exceptions: settings.network.system_proxy.exceptions.clone(),
+            bypass_local: settings.network.system_proxy.bypass_local,
         },
-        inbound: settings
+        inbounds: settings
             .network
             .inbounds
             .iter()
-            .map(|item| InItem {
+            .map(|item| InboundConfig {
                 local_port: item.local_port,
                 sniffing_enabled: item.sniffing_enabled,
-                allow_lan_conn: item.lan_connections_allowed,
-                new_port4_lan: item.separate_lan_port,
-                user: item.username.clone(),
-                pass: item.password.clone(),
-                second_local_port_enabled: item.secondary_port_enabled,
+                lan_connections_allowed: item.lan_connections_allowed,
+                separate_lan_port: item.separate_lan_port,
+                username: item.username.clone(),
+                password: item.password.clone(),
+                secondary_port_enabled: item.secondary_port_enabled,
             })
             .collect(),
-        simple_dns_item: simple_dns_from_contract(settings.dns.clone()),
+        dns: dns_from_contract(settings.dns.clone()),
     }
 }
 
 /// `None` is the stored shape of "follow the system theme", matching
-/// `UiItem::default()` so contract defaults map onto domain defaults exactly.
+/// `AppearanceConfig::default()` so contract defaults map onto domain defaults exactly.
 ///
 /// Unlike the system-proxy and traffic-mode tables that used to sit here, this
 /// pair is *not* a restatement of serde's `rename_all = "camelCase"`: the domain
 /// stores `Light`/`Dark`/absent, which is neither what `ThemeMode` serializes to
 /// nor a shape `Option<ThemeMode>` could express. Deleting it would rewrite
-/// `ui_item.current_theme` on every install.
+/// `appearance.theme` on every install.
 const fn theme_to_config(theme: contracts::ThemeMode) -> Option<&'static str> {
     match theme {
         contracts::ThemeMode::System => None,
@@ -473,7 +470,7 @@ pub trait ApplyAutostart: Sync {
 impl ApplyAutostart for crate::autostart::AutostartManager {
     fn apply_autostart(&self, config: &AppConfig) -> Result<(), contracts::AppError> {
         let mut config = config.clone();
-        let enabled = config.gui_item.auto_run;
+        let enabled = config.behavior.autostart;
         self.set_enabled(&mut config, enabled)
             .map(|_| ())
             .map_err(contracts::AppError::from)
@@ -496,106 +493,104 @@ impl ApplyAutostart for NoAutostart {
 /// enabled entry is also rewritten when that option changes.
 #[must_use]
 pub fn autostart_changes(original: &AppConfig, target: &AppConfig) -> bool {
-    original.gui_item.auto_run != target.gui_item.auto_run
-        || (target.gui_item.auto_run
-            && original.gui_item.start_minimized != target.gui_item.start_minimized)
+    original.behavior.autostart != target.behavior.autostart
+        || (target.behavior.autostart
+            && original.behavior.start_minimized != target.behavior.start_minimized)
 }
 
 #[cfg(test)]
 mod tests {
-    use voya_core::SimpleDnsItem;
+    use voya_core::DnsConfig;
 
     use voya_core::{SysProxyType, TrafficMode};
 
     use super::*;
 
     /// Every scalar and string in `AppConfig` gets a distinct value, so a
-    /// same-typed neighbour swap in either mapper (`up_mbps`/`down_mbps`,
-    /// `direct`/`remote`/`bootstrap` DNS, `user`/`pass`, …) fails here instead of
+    /// same-typed neighbour swap in either mapper (`upload_mbps`/`download_mbps`,
+    /// `direct`/`remote`/`bootstrap` DNS, `username`/`password`, …) fails here instead of
     /// silently shipping. Struct literals guarantee that every field is
     /// assigned; nothing but distinct values proves it is assigned correctly.
     fn distinctly_valued_config() -> AppConfig {
         AppConfig {
             index_id: "active-profile-id".to_string(),
             active_group_id: String::new(),
-            core_basic_item: CoreBasicItem {
+            active_routing_id: "active-routing-id".to_string(),
+            core: CoreConfig {
                 log_enabled: true,
-                loglevel: "debug".to_string(),
+                log_level: "debug".to_string(),
                 mux_enabled: true,
-                def_allow_insecure: true,
-                def_fingerprint: "fingerprint-value".to_string(),
-                def_user_agent: "user-agent-value".to_string(),
+                default_allow_insecure: true,
+                default_fingerprint: "fingerprint-value".to_string(),
+                default_user_agent: "user-agent-value".to_string(),
                 send_through: Some("send-through-value".to_string()),
                 bind_interface: Some("bind-interface-value".to_string()),
                 tls_fragment: voya_core::TlsFragmentMode::TlsHello,
                 fragment_fallback_delay_ms: 51,
-                enable_cache_file4_sbox: false,
+                cache_file_enabled: false,
             },
-            tun_mode_item: TunModeItem {
-                enable_tun: true,
+            tun: TunConfig {
+                enabled: true,
                 auto_route: false,
                 strict_route: true,
                 stack: "gvisor".to_string(),
                 mtu: 1301,
-                enable_ipv6_address: true,
+                ipv6_enabled: true,
                 icmp_routing: "icmp-routing-value".to_string(),
             },
-            routing_basic_item: RoutingBasicItem {
-                routing_index_id: "active-routing-id".to_string(),
-            },
-            gui_item: GuiItem {
-                auto_run: true,
+            behavior: BehaviorConfig {
+                autostart: true,
                 auto_check_ip: false,
                 close_action: voya_core::CloseAction::Ask,
                 start_minimized: true,
                 auto_create_subscription_group: false,
             },
-            ui_item: UiItem {
-                current_theme: Some("Dark".to_string()),
-                current_language: "zh-Hans".to_string(),
+            appearance: AppearanceConfig {
+                theme: Some("Dark".to_string()),
+                language: "zh-Hans".to_string(),
             },
-            speed_test_item: SpeedTestItem {
-                speed_test_timeout: 21,
-                speed_ping_test_url: "https://speed.test/latency".to_string(),
-                ipapi_url: "https://speed.test/ip".to_string(),
-                speed_test_page_size: Some(23),
-                speed_test_delay_interval_seconds: Some(24),
+            speed_test: SpeedtestConfig {
+                timeout_seconds: 21,
+                latency_url: "https://speed.test/latency".to_string(),
+                ip_lookup_url: "https://speed.test/ip".to_string(),
+                page_size: Some(23),
+                delay_interval_seconds: Some(24),
             },
-            mux4_sbox_item: Mux4SboxItem {
+            multiplexing: MultiplexingConfig {
                 protocol: "h2mux".to_string(),
                 max_connections: 31,
                 padding: Some(true),
             },
-            hysteria_item: HysteriaItem {
-                up_mbps: 41,
-                down_mbps: 42,
-                hop_interval: 43,
+            hysteria: HysteriaConfig {
+                upload_mbps: 41,
+                download_mbps: 42,
+                hop_interval_seconds: 43,
             },
-            proxy_ui_item: ProxyUiItem {
+            proxy: ProxyConfig {
                 traffic_mode: TrafficMode::Global,
             },
-            system_proxy_item: SystemProxyItem {
-                sys_proxy_type: SysProxyType::Unchanged,
-                system_proxy_exceptions: "exceptions-value".to_string(),
-                not_proxy_local_address: false,
+            system_proxy: SystemProxyConfig {
+                mode: SysProxyType::Unchanged,
+                exceptions: "exceptions-value".to_string(),
+                bypass_local: false,
             },
-            inbound: vec![InItem {
+            inbounds: vec![InboundConfig {
                 local_port: 61,
                 sniffing_enabled: false,
-                allow_lan_conn: true,
-                new_port4_lan: false,
-                user: "inbound-user".to_string(),
-                pass: "inbound-pass".to_string(),
-                second_local_port_enabled: true,
+                lan_connections_allowed: true,
+                separate_lan_port: false,
+                username: "inbound-user".to_string(),
+                password: "inbound-pass".to_string(),
+                secondary_port_enabled: true,
             }],
-            simple_dns_item: SimpleDnsItem {
+            dns: DnsConfig {
                 add_common_hosts: Some(false),
                 fake_ip: Some(true),
                 global_fake_ip: Some(false),
                 block_binding_query: Some(true),
-                direct_dns: Some("direct-dns-value".to_string()),
-                remote_dns: Some("remote-dns-value".to_string()),
-                bootstrap_dns: Some("bootstrap-dns-value".to_string()),
+                direct: Some("direct-dns-value".to_string()),
+                remote: Some("remote-dns-value".to_string()),
+                bootstrap: Some("bootstrap-dns-value".to_string()),
                 direct_strategy: Some(voya_core::DnsStrategy::PreferIpv4),
                 proxy_strategy: Some(voya_core::DnsStrategy::Ipv6Only),
                 hosts: Some("hosts-value".to_string()),
@@ -609,7 +604,7 @@ mod tests {
         let config = distinctly_valued_config();
         let state = AppStateRecord {
             active_profile_id: Some(config.index_id.clone()),
-            active_routing_id: Some(config.routing_basic_item.routing_index_id.clone()),
+            active_routing_id: Some(config.active_routing_id.clone()),
             active_group_id: None,
         };
 
@@ -630,9 +625,9 @@ mod tests {
         let restored = app_config_from_settings(&settings, &AppStateRecord::default());
 
         assert!(restored.index_id.is_empty());
-        assert!(restored.routing_basic_item.routing_index_id.is_empty());
+        assert!(restored.active_routing_id.is_empty());
         assert_eq!(
-            restored.hysteria_item.up_mbps, config.hysteria_item.up_mbps,
+            restored.hysteria.upload_mbps, config.hysteria.upload_mbps,
             "everything outside the state record must still round trip"
         );
     }
@@ -648,16 +643,13 @@ mod tests {
         let restored = config_from_settings(&settings, &config);
 
         assert_eq!(restored.index_id, config.index_id);
-        assert_eq!(
-            restored.routing_basic_item.routing_index_id,
-            config.routing_basic_item.routing_index_id
-        );
-        assert_eq!(restored.ui_item, AppConfig::default().ui_item);
+        assert_eq!(restored.active_routing_id, config.active_routing_id);
+        assert_eq!(restored.appearance, AppConfig::default().appearance);
     }
 
     fn config(autostart: bool) -> AppConfig {
         let mut config = AppConfig::default();
-        config.gui_item.auto_run = autostart;
+        config.behavior.autostart = autostart;
         config
     }
 
@@ -665,12 +657,12 @@ mod tests {
     fn toggling_start_minimized_rewrites_only_an_enabled_login_entry() {
         let original = config(true);
         let mut target = original.clone();
-        target.gui_item.start_minimized = true;
+        target.behavior.start_minimized = true;
         assert!(autostart_changes(&original, &target));
 
         let original = config(false);
         let mut target = original.clone();
-        target.gui_item.start_minimized = true;
+        target.behavior.start_minimized = true;
         assert!(!autostart_changes(&original, &target));
     }
 
@@ -710,14 +702,14 @@ mod tests {
     fn runtime_restart_policy_ignores_appearance_only_changes() {
         let original = AppConfig::default();
         let mut appearance = original.clone();
-        appearance.ui_item.current_language = "zh-Hans".to_string();
+        appearance.appearance.language = "zh-Hans".to_string();
         assert!(!saved_config_requires_runtime_restart(
             &original,
             &appearance
         ));
 
         let mut network = original.clone();
-        network.inbound[0].local_port += 1;
+        network.inbounds[0].local_port += 1;
         assert!(saved_config_requires_runtime_restart(&original, &network));
     }
 
@@ -726,7 +718,7 @@ mod tests {
         let original = AppConfig::default();
 
         let mut mode = original.clone();
-        mode.proxy_ui_item.traffic_mode = TrafficMode::Global;
+        mode.proxy.traffic_mode = TrafficMode::Global;
         assert!(saved_config_requires_runtime_restart(&original, &mode));
     }
 
@@ -737,8 +729,8 @@ mod tests {
             active_group_id: String::new(),
             ..AppConfig::default()
         };
-        original.routing_basic_item.routing_index_id = "routing-a".to_string();
-        original.ui_item.current_language = "zh-Hans".to_string();
+        original.active_routing_id = "routing-a".to_string();
+        original.appearance.language = "zh-Hans".to_string();
 
         let target = config_from_settings(&settings_from_app_config(&original), &original);
 
@@ -752,7 +744,7 @@ mod tests {
             &contracts::AppSettings::default(),
             &AppStateRecord::default(),
         );
-        mapped.simple_dns_item = crate::dns::normalize_simple_dns(mapped.simple_dns_item);
+        mapped.dns = crate::dns::normalize_dns(mapped.dns);
 
         assert_eq!(
             mapped,

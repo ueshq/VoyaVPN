@@ -5,10 +5,10 @@ use crate::ipc::events::Emit;
 use voya_app::autostart::AutostartManager;
 use voya_app::config_mutation::{AppConfig, CommittedMutation};
 use voya_app::contract_map::{
-    core_info_error, core_seed_install_result, profile_details_to_contract,
+    core_info_error, core_seed_install_result, dns_to_contract, profile_details_to_contract,
     profile_summary_listing_to_contract, runtime_status_event, runtime_status_response,
-    simple_dns_to_contract, subscription_metadata_to_contract, subscription_to_contract,
-    system_proxy_status_to_contract, traffic_mode_from_contract, traffic_mode_to_contract,
+    subscription_metadata_to_contract, subscription_to_contract, system_proxy_status_to_contract,
+    traffic_mode_from_contract, traffic_mode_to_contract,
 };
 use voya_app::input_safety;
 use voya_app::invalidation;

@@ -34,8 +34,8 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     let settings_language_before = state
         .config_mutations()
         .current_config()
-        .ui_item
-        .current_language
+        .appearance
+        .language
         .clone();
     let outcome = voya_app::settings::save_app_settings(
         state.config_mutations(),
@@ -45,7 +45,7 @@ pub async fn save_app_settings<R: tauri::Runtime>(
     .await
     .map_err(AppError::from)?;
 
-    // The tray is a native menu built from `ui_item.current_language`, so it is
+    // The tray is a native menu built from `appearance.language`, so it is
     // the one surface a language change cannot reach on its own: the webview
     // re-renders, the tray keeps whatever words it was built with.
     if outcome.settings.appearance.language != settings_language_before {

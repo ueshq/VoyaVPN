@@ -1,5 +1,5 @@
 //! The Hiddify-style connection mode over the two persisted primitives
-//! (`system_proxy_item.sys_proxy_type` and `tun_mode_item.enable_tun`), and the
+//! (`system_proxy.mode` and `tun.enabled`), and the
 //! one transaction that changes them.
 //!
 //! The Tauri shell used to own that transaction twice — `set_connection_mode`
@@ -49,7 +49,7 @@ use crate::{
 /// state uses the system proxy.
 #[must_use]
 pub fn derive_connection_mode(config: &AppConfig) -> ConnectionMode {
-    if config.tun_mode_item.enable_tun {
+    if config.tun.enabled {
         ConnectionMode::Vpn
     } else {
         ConnectionMode::SystemProxy
@@ -62,11 +62,11 @@ pub fn derive_connection_mode(config: &AppConfig) -> ConnectionMode {
 pub fn apply_connection_mode(config: &mut AppConfig, mode: ConnectionMode) {
     match mode {
         ConnectionMode::SystemProxy => {
-            config.tun_mode_item.enable_tun = false;
-            config.system_proxy_item.sys_proxy_type = SysProxyType::ForcedChange;
+            config.tun.enabled = false;
+            config.system_proxy.mode = SysProxyType::ForcedChange;
         }
         ConnectionMode::Vpn => {
-            config.tun_mode_item.enable_tun = true;
+            config.tun.enabled = true;
         }
     }
 }
@@ -112,7 +112,7 @@ fn system_proxy_mode_available(target_os: TargetOs) -> bool {
 /// needs a root launcher installed first.
 pub fn seed_platform_connection_defaults(config: &mut AppConfig, target_os: TargetOs) {
     if tun_backend(target_os).is_native() {
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
     }
 }
 
@@ -123,10 +123,9 @@ pub fn enforce_platform_connection_mode(config: &mut AppConfig, target_os: Targe
     if system_proxy_mode_available(target_os) {
         return false;
     }
-    let changed = !config.tun_mode_item.enable_tun
-        || config.system_proxy_item.sys_proxy_type != SysProxyType::Unchanged;
-    config.tun_mode_item.enable_tun = true;
-    config.system_proxy_item.sys_proxy_type = SysProxyType::Unchanged;
+    let changed = !config.tun.enabled || config.system_proxy.mode != SysProxyType::Unchanged;
+    config.tun.enabled = true;
+    config.system_proxy.mode = SysProxyType::Unchanged;
     changed
 }
 
@@ -232,8 +231,7 @@ impl ConnectionModeManager {
                 apply_connection_mode(config, mode);
             })
             .await?;
-        let tun_flag_changed =
-            original.tun_mode_item.enable_tun != committed.tun_mode_item.enable_tun;
+        let tun_flag_changed = original.tun.enabled != committed.tun.enabled;
 
         let (system_proxy_status, system_proxy_applied) = self
             .settle_system_proxy(coordinator, &original, &committed, connected)

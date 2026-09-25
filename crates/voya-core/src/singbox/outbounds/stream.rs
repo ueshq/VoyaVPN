@@ -7,7 +7,7 @@ pub(crate) fn fill_outbound_transport(
     context: &CoreConfigContext,
     node: &ProfileItem,
 ) {
-    let user_agent = raw_http_user_agent(&context.app_config.core_basic_item.def_user_agent);
+    let user_agent = raw_http_user_agent(&context.app_config.core.default_user_agent);
     let mut transport = SingboxTransport::default();
 
     match &node.transport {
@@ -157,7 +157,7 @@ fn apply_outbound_tls(
 ) {
     let server_name =
         nonempty_string(domain_tls.server_name.as_deref()).or_else(|| transport_host_for_tls(node));
-    let core = &context.app_config.core_basic_item;
+    let core = &context.app_config.core;
     let split_hello = core.tls_fragment == crate::TlsFragmentMode::TlsHello;
     let mut tls = SingboxTls {
         enabled: true,

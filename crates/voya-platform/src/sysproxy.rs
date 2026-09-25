@@ -1,7 +1,7 @@
 use std::{net::IpAddr, path::PathBuf, sync::Arc};
 
 use thiserror::Error;
-use voya_core::{host::is_dns_label, SysProxyType, SystemProxyItem, LOOPBACK};
+use voya_core::{host::is_dns_label, SysProxyType, SystemProxyConfig, LOOPBACK};
 
 use crate::{
     coreinfo::TargetOs,
@@ -39,7 +39,7 @@ pub const fn system_proxy_management(os: TargetOs) -> SystemProxyManagement {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SystemProxyRequest {
     pub target_os: TargetOs,
-    pub item: SystemProxyItem,
+    pub item: SystemProxyConfig,
     pub force_disable: bool,
     pub socks_port: i32,
     pub script_dir: PathBuf,
@@ -63,7 +63,7 @@ impl SystemProxyStatus {
     ) -> Self {
         Self {
             management: system_proxy_management(request.target_os),
-            requested_type: request.item.sys_proxy_type,
+            requested_type: request.item.mode,
             effective_type,
             target_os: request.target_os,
             proxy: None,
@@ -156,9 +156,9 @@ pub(crate) fn plan_system_proxy(
         return Err(SystemProxyError::InvalidPort(request.socks_port));
     }
 
-    let exception_entries = validated_proxy_exceptions(&request.item.system_proxy_exceptions)?;
+    let exception_entries = validated_proxy_exceptions(&request.item.exceptions)?;
     let normalized_exceptions = exception_entries.join(",");
-    let effective_type = effective_type(request.item.sys_proxy_type, request.force_disable);
+    let effective_type = effective_type(request.item.mode, request.force_disable);
     let mut status = SystemProxyStatus::from_request_with_exceptions(
         request,
         effective_type,
@@ -204,7 +204,7 @@ pub(crate) fn plan_system_proxy(
 }
 
 fn build_windows_proxy_settings_with_exceptions(
-    item: &SystemProxyItem,
+    item: &SystemProxyConfig,
     port: i32,
     exception_entries: &[String],
 ) -> WindowsProxySettings {
@@ -347,11 +347,11 @@ fn is_valid_hostname(value: &str) -> bool {
     hostname.split('.').all(is_dns_label)
 }
 
-fn windows_exceptions(item: &SystemProxyItem, exception_entries: &[String]) -> String {
+fn windows_exceptions(item: &SystemProxyConfig, exception_entries: &[String]) -> String {
     let exceptions = exception_entries.join(";");
-    if item.not_proxy_local_address && exceptions.is_empty() {
+    if item.bypass_local && exceptions.is_empty() {
         LOCAL_EXCEPTIONS.to_string()
-    } else if item.not_proxy_local_address {
+    } else if item.bypass_local {
         format!("{LOCAL_EXCEPTIONS};{exceptions}")
     } else {
         exceptions
@@ -391,10 +391,10 @@ mod tests {
     fn request(target_os: TargetOs, proxy_type: SysProxyType) -> SystemProxyRequest {
         SystemProxyRequest {
             target_os,
-            item: SystemProxyItem {
-                sys_proxy_type: proxy_type,
-                system_proxy_exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
-                not_proxy_local_address: true,
+            item: SystemProxyConfig {
+                mode: proxy_type,
+                exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
+                bypass_local: true,
             },
             force_disable: false,
             socks_port: 10808,
@@ -404,15 +404,15 @@ mod tests {
 
     #[test]
     fn sysproxy_windows_proxy_uses_socks_port_and_local_exceptions() {
-        let item = SystemProxyItem {
-            system_proxy_exceptions: "localhost, 10.0.0.0/8".to_string(),
-            not_proxy_local_address: true,
-            ..SystemProxyItem::default()
+        let item = SystemProxyConfig {
+            exceptions: "localhost, 10.0.0.0/8".to_string(),
+            bypass_local: true,
+            ..SystemProxyConfig::default()
         };
 
         let mut request = request(TargetOs::Windows, SysProxyType::ForcedChange);
         request.item = item;
-        request.item.sys_proxy_type = SysProxyType::ForcedChange;
+        request.item.mode = SysProxyType::ForcedChange;
         request.socks_port = 2080;
         let plan = plan_system_proxy(&request).expect("windows proxy plan");
         let SystemProxyAction::WindowsSetProxy(settings) = plan.action else {
@@ -435,7 +435,7 @@ mod tests {
             "example.com/24",
         ] {
             let mut request = request(TargetOs::Linux, SysProxyType::ForcedChange);
-            request.item.system_proxy_exceptions = value.to_string();
+            request.item.exceptions = value.to_string();
 
             let error = plan_system_proxy(&request).expect_err("unsafe exception should fail");
 
@@ -449,7 +449,7 @@ mod tests {
     #[test]
     fn sysproxy_allows_hostname_ip_and_cidr_exceptions() {
         let mut request = request(TargetOs::Linux, SysProxyType::ForcedChange);
-        request.item.system_proxy_exceptions =
+        request.item.exceptions =
             "localhost,example.internal,127.0.0.1,10.0.0.0/8,::1,fd00::/8".to_string();
 
         let plan = plan_system_proxy(&request).expect("valid exceptions");

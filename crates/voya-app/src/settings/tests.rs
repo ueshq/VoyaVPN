@@ -24,7 +24,7 @@ impl RecordingSideEffects {
 
 impl ApplyAutostart for RecordingSideEffects {
     fn apply_autostart(&self, config: &AppConfig) -> Result<(), voya_contracts::AppError> {
-        self.push(format!("autostart:{}", config.gui_item.auto_run));
+        self.push(format!("autostart:{}", config.behavior.autostart));
         if self.fail_autostart {
             return Err(voya_contracts::AppError::internal(
                 voya_contracts::AppErrorSubsystem::Autostart,
@@ -77,7 +77,7 @@ async fn a_ui_only_change_commits_without_touching_the_runtime() {
     assert_eq!(outcome.runtime_action, SettingsRuntimeAction::None);
     assert!(outcome.changed);
     assert_eq!(outcome.settings.appearance.language, "zh-Hans");
-    assert_eq!(harness.stored().ui_item.current_language, "zh-Hans");
+    assert_eq!(harness.stored().appearance.language, "zh-Hans");
     // The autostart entry did not change, so it was not touched.
     assert!(side_effects.calls().is_empty());
 }
@@ -94,7 +94,7 @@ async fn a_generation_input_change_asks_for_a_core_restart() {
         .expect("tun mtu save");
 
     assert_eq!(outcome.runtime_action, SettingsRuntimeAction::Restart);
-    assert_eq!(harness.stored().tun_mode_item.mtu, 1400);
+    assert_eq!(harness.stored().tun.mtu, 1400);
 }
 
 /// The system proxy is re-applied rather than restarting the core: nothing the
@@ -114,10 +114,7 @@ async fn a_system_proxy_change_only_reapplies_the_proxy() {
         outcome.runtime_action,
         SettingsRuntimeAction::ReapplySystemProxy
     );
-    assert_eq!(
-        harness.stored().system_proxy_item.system_proxy_exceptions,
-        "example.test"
-    );
+    assert_eq!(harness.stored().system_proxy.exceptions, "example.test");
 }
 
 #[tokio::test]
@@ -152,7 +149,7 @@ async fn a_refused_side_effect_rolls_back_and_persists_nothing() {
         side_effects.calls().as_slice(),
         ["autostart:true".to_string(), "autostart:false".to_string()]
     );
-    assert!(!harness.stored().gui_item.auto_run);
+    assert!(!harness.stored().behavior.autostart);
 }
 
 /// The side effects run before the commit, so a failed commit has to undo them;
@@ -180,5 +177,5 @@ async fn a_failed_commit_rolls_back_the_applied_side_effects() {
         side_effects.calls().as_slice(),
         ["autostart:true".to_string(), "autostart:false".to_string()]
     );
-    assert!(!harness.stored().gui_item.auto_run);
+    assert!(!harness.stored().behavior.autostart);
 }

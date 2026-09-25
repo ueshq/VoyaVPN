@@ -17,18 +17,19 @@ pub struct AppConfig {
     pub index_id: String,
     /// The active policy group; empty when a node, or nothing, is active.
     pub active_group_id: String,
-    pub core_basic_item: CoreBasicItem,
-    pub tun_mode_item: TunModeItem,
-    pub routing_basic_item: RoutingBasicItem,
-    pub gui_item: GuiItem,
-    pub ui_item: UiItem,
-    pub speed_test_item: SpeedTestItem,
-    pub mux4_sbox_item: Mux4SboxItem,
-    pub hysteria_item: HysteriaItem,
-    pub proxy_ui_item: ProxyUiItem,
-    pub system_proxy_item: SystemProxyItem,
-    pub inbound: Vec<InItem>,
-    pub simple_dns_item: SimpleDnsItem,
+    /// The routing profile generation uses; empty for the default one.
+    pub active_routing_id: String,
+    pub core: CoreConfig,
+    pub tun: TunConfig,
+    pub behavior: BehaviorConfig,
+    pub appearance: AppearanceConfig,
+    pub speed_test: SpeedtestConfig,
+    pub multiplexing: MultiplexingConfig,
+    pub hysteria: HysteriaConfig,
+    pub proxy: ProxyConfig,
+    pub system_proxy: SystemProxyConfig,
+    pub inbounds: Vec<InboundConfig>,
+    pub dns: DnsConfig,
 }
 
 impl Default for AppConfig {
@@ -36,18 +37,18 @@ impl Default for AppConfig {
         Self {
             index_id: String::new(),
             active_group_id: String::new(),
-            core_basic_item: CoreBasicItem::default(),
-            tun_mode_item: TunModeItem::default(),
-            routing_basic_item: RoutingBasicItem::default(),
-            gui_item: GuiItem::default(),
-            ui_item: UiItem::default(),
-            speed_test_item: SpeedTestItem::default(),
-            mux4_sbox_item: Mux4SboxItem::default(),
-            hysteria_item: HysteriaItem::default(),
-            proxy_ui_item: ProxyUiItem::default(),
-            system_proxy_item: SystemProxyItem::default(),
-            inbound: vec![InItem::default()],
-            simple_dns_item: SimpleDnsItem::default(),
+            active_routing_id: String::new(),
+            core: CoreConfig::default(),
+            tun: TunConfig::default(),
+            behavior: BehaviorConfig::default(),
+            appearance: AppearanceConfig::default(),
+            speed_test: SpeedtestConfig::default(),
+            multiplexing: MultiplexingConfig::default(),
+            hysteria: HysteriaConfig::default(),
+            proxy: ProxyConfig::default(),
+            system_proxy: SystemProxyConfig::default(),
+            inbounds: vec![InboundConfig::default()],
+            dns: DnsConfig::default(),
         }
     }
 }
@@ -65,7 +66,7 @@ impl AppConfig {
     /// no inbound.
     #[must_use]
     pub fn local_port(&self) -> i32 {
-        self.inbound
+        self.inbounds
             .first()
             .map_or(DEFAULT_LOCAL_PORT, |inbound| inbound.local_port)
     }
@@ -96,66 +97,66 @@ impl AppConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CoreBasicItem {
+pub struct CoreConfig {
     pub log_enabled: bool,
-    pub loglevel: String,
+    pub log_level: String,
     pub mux_enabled: bool,
-    pub def_allow_insecure: bool,
-    pub def_fingerprint: String,
-    pub def_user_agent: String,
+    pub default_allow_insecure: bool,
+    pub default_fingerprint: String,
+    pub default_user_agent: String,
     pub send_through: Option<String>,
     pub bind_interface: Option<String>,
     pub tls_fragment: TlsFragmentMode,
     pub fragment_fallback_delay_ms: i32,
-    pub enable_cache_file4_sbox: bool,
+    pub cache_file_enabled: bool,
 }
 
-impl Default for CoreBasicItem {
+impl Default for CoreConfig {
     fn default() -> Self {
         Self {
             log_enabled: false,
-            loglevel: DEFAULT_LOG_LEVEL.to_string(),
+            log_level: DEFAULT_LOG_LEVEL.to_string(),
             mux_enabled: false,
-            def_allow_insecure: false,
-            def_fingerprint: String::new(),
-            def_user_agent: String::new(),
+            default_allow_insecure: false,
+            default_fingerprint: String::new(),
+            default_user_agent: String::new(),
             send_through: None,
             bind_interface: None,
             tls_fragment: TlsFragmentMode::Off,
             fragment_fallback_delay_ms: DEFAULT_FRAGMENT_FALLBACK_DELAY_MS,
-            enable_cache_file4_sbox: true,
+            cache_file_enabled: true,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InItem {
+pub struct InboundConfig {
     pub local_port: i32,
     pub sniffing_enabled: bool,
-    pub allow_lan_conn: bool,
-    pub new_port4_lan: bool,
-    pub user: String,
-    pub pass: String,
-    pub second_local_port_enabled: bool,
+    pub lan_connections_allowed: bool,
+    pub separate_lan_port: bool,
+    pub username: String,
+    pub password: String,
+    pub secondary_port_enabled: bool,
 }
 
-impl Default for InItem {
+impl Default for InboundConfig {
     fn default() -> Self {
         Self {
             local_port: DEFAULT_LOCAL_PORT,
             sniffing_enabled: true,
-            allow_lan_conn: false,
-            new_port4_lan: false,
-            user: String::new(),
-            pass: String::new(),
-            second_local_port_enabled: false,
+            lan_connections_allowed: false,
+            separate_lan_port: false,
+            username: String::new(),
+            password: String::new(),
+            secondary_port_enabled: false,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GuiItem {
-    pub auto_run: bool,
+pub struct BehaviorConfig {
+    pub autostart: bool,
     pub auto_check_ip: bool,
     pub close_action: crate::CloseAction,
     pub start_minimized: bool,
@@ -164,10 +165,10 @@ pub struct GuiItem {
     pub auto_create_subscription_group: bool,
 }
 
-impl Default for GuiItem {
+impl Default for BehaviorConfig {
     fn default() -> Self {
         Self {
-            auto_run: false,
+            autostart: false,
             auto_check_ip: false,
             close_action: crate::CloseAction::default(),
             start_minimized: false,
@@ -177,54 +178,49 @@ impl Default for GuiItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UiItem {
-    pub current_theme: Option<String>,
-    pub current_language: String,
+pub struct AppearanceConfig {
+    pub theme: Option<String>,
+    pub language: String,
 }
 
-impl Default for UiItem {
+impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
-            current_theme: None,
-            current_language: DEFAULT_LANGUAGE.to_string(),
+            theme: None,
+            language: DEFAULT_LANGUAGE.to_string(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SpeedTestItem {
-    pub speed_test_timeout: i32,
-    pub speed_ping_test_url: String,
-    pub ipapi_url: String,
-    pub speed_test_page_size: Option<i32>,
-    pub speed_test_delay_interval_seconds: Option<i32>,
+pub struct SpeedtestConfig {
+    pub timeout_seconds: i32,
+    pub latency_url: String,
+    pub ip_lookup_url: String,
+    pub page_size: Option<i32>,
+    pub delay_interval_seconds: Option<i32>,
 }
 
-impl Default for SpeedTestItem {
+impl Default for SpeedtestConfig {
     fn default() -> Self {
         Self {
-            speed_test_timeout: 10,
-            speed_ping_test_url: DEFAULT_SPEED_PING_TEST_URL.to_string(),
-            ipapi_url: String::new(),
-            speed_test_page_size: None,
-            speed_test_delay_interval_seconds: None,
+            timeout_seconds: 10,
+            latency_url: DEFAULT_SPEED_PING_TEST_URL.to_string(),
+            ip_lookup_url: String::new(),
+            page_size: None,
+            delay_interval_seconds: None,
         }
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct RoutingBasicItem {
-    pub routing_index_id: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Mux4SboxItem {
+pub struct MultiplexingConfig {
     pub protocol: String,
     pub max_connections: i32,
     pub padding: Option<bool>,
 }
 
-impl Default for Mux4SboxItem {
+impl Default for MultiplexingConfig {
     fn default() -> Self {
         Self {
             protocol: DEFAULT_SINGBOX_MUX.to_string(),
@@ -235,47 +231,47 @@ impl Default for Mux4SboxItem {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HysteriaItem {
-    pub up_mbps: i32,
-    pub down_mbps: i32,
-    pub hop_interval: i32,
+pub struct HysteriaConfig {
+    pub upload_mbps: i32,
+    pub download_mbps: i32,
+    pub hop_interval_seconds: i32,
 }
 
-impl Default for HysteriaItem {
+impl Default for HysteriaConfig {
     fn default() -> Self {
         Self {
-            up_mbps: 100,
-            down_mbps: 100,
-            hop_interval: 30,
+            upload_mbps: 100,
+            download_mbps: 100,
+            hop_interval_seconds: 30,
         }
     }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ProxyUiItem {
+pub struct ProxyConfig {
     pub traffic_mode: TrafficMode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SystemProxyItem {
-    pub sys_proxy_type: SysProxyType,
-    pub system_proxy_exceptions: String,
-    pub not_proxy_local_address: bool,
+pub struct SystemProxyConfig {
+    pub mode: SysProxyType,
+    pub exceptions: String,
+    pub bypass_local: bool,
 }
 
-impl Default for SystemProxyItem {
+impl Default for SystemProxyConfig {
     fn default() -> Self {
         Self {
-            sys_proxy_type: SysProxyType::ForcedChange,
-            system_proxy_exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
-            not_proxy_local_address: true,
+            mode: SysProxyType::ForcedChange,
+            exceptions: DEFAULT_SYSTEM_PROXY_EXCEPTIONS.to_string(),
+            bypass_local: true,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TunModeItem {
-    pub enable_tun: bool,
+pub struct TunConfig {
+    pub enabled: bool,
     pub auto_route: bool,
     pub strict_route: bool,
     pub stack: String,
@@ -284,19 +280,19 @@ pub struct TunModeItem {
     /// `ipv4_only` and refuses IPv6 destinations that no direct rule claims;
     /// see [`crate::Ipv6Mode`], which also narrows "on" for a node without
     /// IPv6 egress.
-    pub enable_ipv6_address: bool,
+    pub ipv6_enabled: bool,
     pub icmp_routing: String,
 }
 
-impl Default for TunModeItem {
+impl Default for TunConfig {
     fn default() -> Self {
         Self {
-            enable_tun: false,
+            enabled: false,
             auto_route: true,
             strict_route: false,
             stack: String::new(),
             mtu: 1500,
-            enable_ipv6_address: true,
+            ipv6_enabled: true,
             icmp_routing: DEFAULT_TUN_ICMP_ROUTING.to_string(),
         }
     }
@@ -325,30 +321,30 @@ impl DnsStrategy {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SimpleDnsItem {
+pub struct DnsConfig {
     pub add_common_hosts: Option<bool>,
     pub fake_ip: Option<bool>,
     pub global_fake_ip: Option<bool>,
     pub block_binding_query: Option<bool>,
-    pub direct_dns: Option<String>,
-    pub remote_dns: Option<String>,
-    pub bootstrap_dns: Option<String>,
+    pub direct: Option<String>,
+    pub remote: Option<String>,
+    pub bootstrap: Option<String>,
     pub direct_strategy: Option<DnsStrategy>,
     pub proxy_strategy: Option<DnsStrategy>,
     pub hosts: Option<String>,
     pub direct_expected_ips: Option<String>,
 }
 
-impl Default for SimpleDnsItem {
+impl Default for DnsConfig {
     fn default() -> Self {
         Self {
             add_common_hosts: Some(true),
             fake_ip: Some(false),
             global_fake_ip: Some(true),
             block_binding_query: Some(true),
-            direct_dns: Some(DEFAULT_DIRECT_DNS.to_string()),
-            remote_dns: Some(DEFAULT_REMOTE_DNS.to_string()),
-            bootstrap_dns: Some(DEFAULT_BOOTSTRAP_DNS.to_string()),
+            direct: Some(DEFAULT_DIRECT_DNS.to_string()),
+            remote: Some(DEFAULT_REMOTE_DNS.to_string()),
+            bootstrap: Some(DEFAULT_BOOTSTRAP_DNS.to_string()),
             direct_strategy: None,
             proxy_strategy: None,
             hosts: None,
@@ -365,27 +361,21 @@ mod tests {
     fn app_config_defaults_match_foundation_source() {
         let config = AppConfig::default();
 
-        assert_eq!(config.inbound.len(), 1);
-        assert_eq!(config.inbound[0].local_port, 10808);
-        assert!(config.inbound[0].sniffing_enabled);
-        assert_eq!(config.core_basic_item.loglevel, "warn");
-        assert_eq!(config.tun_mode_item.mtu, 1500);
-        assert!(!config.tun_mode_item.strict_route);
-        assert_eq!(config.speed_test_item.speed_test_timeout, 10);
-        assert_eq!(config.mux4_sbox_item.protocol, "h2mux");
-        assert_eq!(config.hysteria_item.up_mbps, 100);
-        assert_eq!(config.hysteria_item.down_mbps, 100);
+        assert_eq!(config.inbounds.len(), 1);
+        assert_eq!(config.inbounds[0].local_port, 10808);
+        assert!(config.inbounds[0].sniffing_enabled);
+        assert_eq!(config.core.log_level, "warn");
+        assert_eq!(config.tun.mtu, 1500);
+        assert!(!config.tun.strict_route);
+        assert_eq!(config.speed_test.timeout_seconds, 10);
+        assert_eq!(config.multiplexing.protocol, "h2mux");
+        assert_eq!(config.hysteria.upload_mbps, 100);
+        assert_eq!(config.hysteria.download_mbps, 100);
         assert_eq!(
-            config.system_proxy_item.system_proxy_exceptions,
+            config.system_proxy.exceptions,
             DEFAULT_SYSTEM_PROXY_EXCEPTIONS
         );
-        assert_eq!(
-            config.simple_dns_item.direct_dns.as_deref(),
-            Some(DEFAULT_DIRECT_DNS)
-        );
-        assert_eq!(
-            config.simple_dns_item.remote_dns.as_deref(),
-            Some(DEFAULT_REMOTE_DNS)
-        );
+        assert_eq!(config.dns.direct.as_deref(), Some(DEFAULT_DIRECT_DNS));
+        assert_eq!(config.dns.remote.as_deref(), Some(DEFAULT_REMOTE_DNS));
     }
 }

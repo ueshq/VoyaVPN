@@ -299,7 +299,7 @@ fn route_proxy_ws_event(sink: &dyn ProxyRuntimeEventSink, event: ClashWebSocketE
 /// token it wrote into `experimental.clash_api.secret`. That snapshot is the
 /// only authority — on a pre-socks topology the builder clears
 /// `is_tun_enabled` on the main context, so recomputing the port from
-/// `tun_mode_item.enable_tun` would address the pre-socks process instead, and
+/// `tun.enabled` would address the pre-socks process instead, and
 /// the token exists only in the config that launch generated. `None` means no
 /// core is running, so there is no Clash API to talk to.
 #[must_use]

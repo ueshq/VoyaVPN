@@ -4,8 +4,8 @@ use crate::{
     singbox::support::state_port2,
     text::nonempty_str,
     validation::{ValidationCode, ValidationMessage, ValidationScope},
-    AppConfig, ConfigType, InboundProtocol, ProfileItem, ProfileProtocol, RoutingItem, RulesItem,
-    ServerEndpoint, SimpleDnsItem, TlsMode,
+    AppConfig, ConfigType, DnsConfig, InboundProtocol, ProfileItem, ProfileProtocol, RoutingItem,
+    RulesItem, ServerEndpoint, TlsMode,
 };
 
 pub const PROXY_TAG: &str = "proxy";
@@ -103,7 +103,7 @@ impl NodeValidatorResult {
 pub struct CoreConfigContext {
     pub node: ProfileItem,
     pub routing_item: Option<RoutingItem>,
-    pub simple_dns_item: SimpleDnsItem,
+    pub dns: DnsConfig,
     pub all_proxies_map: BTreeMap<String, ProfileItem>,
     pub app_config: AppConfig,
     pub is_tun_enabled: bool,
@@ -155,7 +155,7 @@ impl Default for CoreConfigContext {
         Self {
             node: ProfileItem::default(),
             routing_item: None,
-            simple_dns_item: SimpleDnsItem::default(),
+            dns: DnsConfig::default(),
             all_proxies_map: BTreeMap::new(),
             app_config: AppConfig::default(),
             is_tun_enabled: false,
@@ -186,7 +186,7 @@ impl CoreConfigContext {
     /// The pre-socks split gives the TUN process `api2 + 1` and leaves the main
     /// process on `api2`, so callers must read the port back from the context
     /// they generated instead of re-deriving it from
-    /// `tun_mode_item.enable_tun`, which disagrees on the Linux TUN path.
+    /// `tun.enabled`, which disagrees on the Linux TUN path.
     #[must_use]
     pub fn clash_api_port(&self) -> i32 {
         state_port2(&self.app_config, self.is_tun_enabled)
@@ -196,7 +196,7 @@ impl CoreConfigContext {
     /// and a node without IPv6 egress narrows "on" to the direct paths.
     #[must_use]
     pub const fn ipv6_mode(&self) -> Ipv6Mode {
-        if !self.app_config.tun_mode_item.enable_ipv6_address {
+        if !self.app_config.tun.ipv6_enabled {
             Ipv6Mode::Off
         } else if self.ipv6_egress_unsupported {
             Ipv6Mode::DirectOnly
@@ -272,10 +272,10 @@ where
         let base = CoreConfigContext {
             node: ProfileItem::default(),
             routing_item: None,
-            simple_dns_item: config.simple_dns_item.clone(),
+            dns: config.dns.clone(),
             all_proxies_map: BTreeMap::new(),
             app_config: config.clone(),
-            is_tun_enabled: config.tun_mode_item.enable_tun,
+            is_tun_enabled: config.tun.enabled,
             protect_domain_list: Vec::new(),
             platform: self.env.platform(),
             singbox_ruleset_paths: self.env.get_singbox_ruleset_paths(),
@@ -547,7 +547,7 @@ fn pre_socks_item<E: CoreGenEnv>(config: &AppConfig, env: &E) -> Option<ProfileI
     // `CoreGenPlatform`: macOS runs TUN inside the single NetworkExtension
     // config (ADR 0005), so `build_all` must not synthesize a pre-socks context
     // there even though macOS is "non-Windows".
-    if config.tun_mode_item.enable_tun && env.tun_topology().is_pre_socks() {
+    if config.tun.enabled && env.tun_topology().is_pre_socks() {
         return Some(socks_profile(env.get_local_port(InboundProtocol::socks)));
     }
 
@@ -641,7 +641,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::{CoreBasicItem, RoutingBasicItem, RulesItem, TunModeItem};
+    use crate::{CoreConfig, RulesItem, TunConfig};
 
     #[derive(Debug, Clone)]
     struct MemoryEnv {
@@ -678,7 +678,7 @@ mod tests {
         fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem> {
             self.routings
                 .iter()
-                .find(|routing| routing.id == config.routing_basic_item.routing_index_id)
+                .find(|routing| routing.id == config.active_routing_id)
                 .or_else(|| self.routings.first())
                 .cloned()
         }
@@ -700,7 +700,7 @@ mod tests {
         let capable = vless_profile("capable", "Capable", "capable.example.com");
         let limited = vless_profile("limited", "Limited", "limited.example.com");
         let mut config = app_config("limited");
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
         let env = MemoryEnv {
             profiles: vec![capable.clone(), limited.clone()],
             ipv6_unsupported: BTreeSet::from(["limited".to_string()]),
@@ -732,7 +732,7 @@ mod tests {
         let capable_only = builder.build_for_group(&config, &group, std::slice::from_ref(&capable));
         assert_eq!(capable_only.context.ipv6_mode(), Ipv6Mode::Full);
 
-        config.tun_mode_item.enable_ipv6_address = false;
+        config.tun.ipv6_enabled = false;
         assert_eq!(
             builder.build(&config, &capable).context.ipv6_mode(),
             Ipv6Mode::Off
@@ -760,7 +760,7 @@ mod tests {
             result.context.routing_item.as_ref().map(|item| &item.id),
             Some(&"routing".to_string())
         );
-        assert_eq!(result.context.simple_dns_item, config.simple_dns_item);
+        assert_eq!(result.context.dns, config.dns);
     }
 
     #[test]
@@ -885,7 +885,7 @@ mod tests {
     fn context_build_all_creates_pre_socks_and_disables_main_tun() {
         let active = vless_profile("active", "Active", "active.example.com");
         let mut config = app_config("active");
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
         let env = MemoryEnv {
             platform: CoreGenPlatform::Linux,
             profiles: vec![active.clone()],
@@ -911,7 +911,7 @@ mod tests {
     fn context_build_all_keeps_tun_direct_on_windows() {
         let active = vless_profile("active", "Active", "active.example.com");
         let mut config = app_config("active");
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
         let env = MemoryEnv {
             platform: CoreGenPlatform::Windows,
             profiles: vec![active.clone()],
@@ -933,7 +933,7 @@ mod tests {
         // bypassed `build_all` entirely.
         let active = vless_profile("active", "Active", "active.example.com");
         let mut config = app_config("active");
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
         let env = MemoryEnv {
             platform: CoreGenPlatform::MacOS,
             profiles: vec![active.clone()],
@@ -951,7 +951,7 @@ mod tests {
     fn context_clash_api_port_splits_between_main_and_pre_socks_on_linux() {
         let active = vless_profile("active", "Active", "active.example.com");
         let mut config = app_config("active");
-        config.tun_mode_item.enable_tun = true;
+        config.tun.enabled = true;
         let env = MemoryEnv {
             platform: CoreGenPlatform::Linux,
             profiles: vec![active.clone()],
@@ -1075,9 +1075,8 @@ mod tests {
     fn app_config(active_id: &str) -> AppConfig {
         AppConfig {
             index_id: active_id.to_string(),
-            core_basic_item: CoreBasicItem::default(),
-            routing_basic_item: RoutingBasicItem::default(),
-            tun_mode_item: TunModeItem::default(),
+            core: CoreConfig::default(),
+            tun: TunConfig::default(),
             ..AppConfig::default()
         }
     }

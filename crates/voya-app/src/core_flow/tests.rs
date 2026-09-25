@@ -248,7 +248,7 @@ async fn saved_mode_is_applied_before_connect_restart_and_recovery_are_announced
     };
     let flow = harness.flow_with_transport(transport.clone());
     let mut config = active_config();
-    config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
+    config.proxy.traffic_mode = voya_core::TrafficMode::Global;
     let first = flow.connect(&config).await.expect("connect");
     let restarted = flow.restart(&config).await.expect("restart");
     flow.restart_if_connected(&config, CoreFlowReason::Connect)
@@ -302,17 +302,14 @@ async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
         ..ModeTransport::default()
     };
     let mut config = active_config();
-    config.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
+    config.proxy.traffic_mode = voya_core::TrafficMode::Global;
     let snapshot = harness
         .flow_with_transport(transport)
         .connect(&config)
         .await
         .expect("core still connected");
     assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
-    assert_eq!(
-        config.proxy_ui_item.traffic_mode,
-        voya_core::TrafficMode::Global
-    );
+    assert_eq!(config.proxy.traffic_mode, voya_core::TrafficMode::Global);
     let events = harness.sink.events();
     let warning = events
         .iter()
@@ -393,7 +390,7 @@ async fn explicit_proxy_application_failure_is_reported_and_keeps_the_core_conne
     let mut config = active_config();
     harness.flow().connect(&config).await.expect("connect");
     let before = harness.sink.events().len();
-    config.system_proxy_item.sys_proxy_type = voya_core::SysProxyType::ForcedChange;
+    config.system_proxy.mode = voya_core::SysProxyType::ForcedChange;
     harness
         .flow_with_proxy_runner(RecordingRunner::default().with_oneshot_output(
             voya_platform::process::ProcessOutput {
@@ -715,7 +712,7 @@ async fn pending_native_cleanup_publishes_the_proxy_state_before_the_pending_sta
         TargetOs::Macos,
     );
     let mut config = active_config();
-    config.tun_mode_item.enable_tun = true;
+    config.tun.enabled = true;
     let error = harness
         .flow_with_proxy_manager(manager)
         .connect(&config)

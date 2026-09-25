@@ -24,7 +24,7 @@ pub fn close_request_decision(config: &AppConfig, tray_available: bool) -> Close
     if !tray_available {
         return CloseDecision::Quit;
     }
-    match config.gui_item.close_action {
+    match config.behavior.close_action {
         CloseAction::MinimizeToTray => CloseDecision::Hide,
         CloseAction::Quit => CloseDecision::Quit,
         CloseAction::Ask => CloseDecision::Ask,
@@ -35,7 +35,7 @@ pub fn close_request_decision(config: &AppConfig, tray_available: bool) -> Close
 /// honours `start_minimized`: a user who opens the app expects to see it.
 #[must_use]
 pub fn launch_hidden(config: &AppConfig, launched_by_autostart: bool) -> bool {
-    launched_by_autostart && config.gui_item.start_minimized
+    launched_by_autostart && config.behavior.start_minimized
 }
 
 /// Stores an answer to the close prompt as the new close action. Returns
@@ -46,8 +46,8 @@ pub fn remember_close_action(config: &mut AppConfig, action: CloseRequestAction)
         CloseRequestAction::Quit => CloseAction::Quit,
         CloseRequestAction::Cancel => return false,
     };
-    let changed = config.gui_item.close_action != remembered;
-    config.gui_item.close_action = remembered;
+    let changed = config.behavior.close_action != remembered;
+    config.behavior.close_action = remembered;
     changed
 }
 
@@ -85,7 +85,7 @@ mod tests {
 
     fn config(close_action: CloseAction) -> AppConfig {
         let mut config = AppConfig::default();
-        config.gui_item.close_action = close_action;
+        config.behavior.close_action = close_action;
         config
     }
 
@@ -108,7 +108,7 @@ mod tests {
     fn only_a_login_launch_starts_hidden() {
         let mut config = AppConfig::default();
         assert!(!launch_hidden(&config, true));
-        config.gui_item.start_minimized = true;
+        config.behavior.start_minimized = true;
         assert!(launch_hidden(&config, true));
         assert!(!launch_hidden(&config, false));
     }
@@ -120,9 +120,9 @@ mod tests {
             &mut config,
             CloseRequestAction::Cancel
         ));
-        assert_eq!(config.gui_item.close_action, CloseAction::Ask);
+        assert_eq!(config.behavior.close_action, CloseAction::Ask);
         assert!(remember_close_action(&mut config, CloseRequestAction::Quit));
-        assert_eq!(config.gui_item.close_action, CloseAction::Quit);
+        assert_eq!(config.behavior.close_action, CloseAction::Quit);
         assert!(!remember_close_action(
             &mut config,
             CloseRequestAction::Quit
@@ -131,7 +131,7 @@ mod tests {
             &mut config,
             CloseRequestAction::MinimizeToTray
         ));
-        assert_eq!(config.gui_item.close_action, CloseAction::MinimizeToTray);
+        assert_eq!(config.behavior.close_action, CloseAction::MinimizeToTray);
     }
 
     #[test]

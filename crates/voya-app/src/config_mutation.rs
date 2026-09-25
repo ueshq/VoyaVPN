@@ -194,11 +194,11 @@ mod tests {
             .with_target_os(TargetOs::Macos);
 
         let mut mutation = coordinator.begin().await.expect("begin");
-        mutation.config_mut().tun_mode_item.enable_tun = false;
+        mutation.config_mut().tun.enabled = false;
         let committed = mutation.commit().await.expect("commit");
 
-        assert!(committed.tun_mode_item.enable_tun);
-        assert!(read_config(&shared).tun_mode_item.enable_tun);
+        assert!(committed.tun.enabled);
+        assert!(read_config(&shared).tun.enabled);
     }
     use tokio::sync::Barrier;
 
@@ -221,7 +221,7 @@ mod tests {
             let release_first = Arc::clone(&release_first);
             tokio::spawn(async move {
                 let mut mutation = coordinator.begin().await.expect("mutation should begin");
-                mutation.config_mut().ui_item.current_theme = Some("Dark".to_string());
+                mutation.config_mut().appearance.theme = Some("Dark".to_string());
                 first_started.wait().await;
                 release_first.wait().await;
                 mutation.commit().await.expect("mutation should commit");
@@ -233,11 +233,8 @@ mod tests {
             let coordinator = Arc::clone(&coordinator);
             tokio::spawn(async move {
                 let mut mutation = coordinator.begin().await.expect("mutation should begin");
-                assert_eq!(
-                    mutation.config().ui_item.current_theme.as_deref(),
-                    Some("Dark")
-                );
-                mutation.config_mut().ui_item.current_language = "zh-Hant".to_string();
+                assert_eq!(mutation.config().appearance.theme.as_deref(), Some("Dark"));
+                mutation.config_mut().appearance.language = "zh-Hant".to_string();
                 mutation.commit().await.expect("mutation should commit");
             })
         };
@@ -246,8 +243,8 @@ mod tests {
         second.await.expect("second mutation task should finish");
 
         let final_config = coordinator.current_config();
-        assert_eq!(final_config.ui_item.current_theme.as_deref(), Some("Dark"));
-        assert_eq!(final_config.ui_item.current_language, "zh-Hant");
+        assert_eq!(final_config.appearance.theme.as_deref(), Some("Dark"));
+        assert_eq!(final_config.appearance.language, "zh-Hant");
     }
 
     #[tokio::test]
@@ -270,7 +267,7 @@ mod tests {
         let shared = Arc::new(RwLock::new(AppConfig::default()));
         let coordinator = ConfigMutationCoordinator::new(database.clone(), Arc::clone(&shared));
         let mut mutation = coordinator.begin().await.expect("mutation should begin");
-        mutation.config_mut().ui_item.current_theme = Some("Dark".to_string());
+        mutation.config_mut().appearance.theme = Some("Dark".to_string());
         mutation
             .unit_of_work()
             .subscriptions()
@@ -283,7 +280,7 @@ mod tests {
             .expect("business row should be staged");
 
         assert!(mutation.commit().await.is_err());
-        assert!(coordinator.current_config().ui_item.current_theme.is_none());
+        assert!(coordinator.current_config().appearance.theme.is_none());
         assert!(database
             .subscriptions()
             .get("subscription-a")
@@ -302,7 +299,7 @@ mod tests {
 
         let committed = coordinator
             .mutate(async |_unit_of_work, config| {
-                config.ui_item.current_language = "zh-Hant".to_string();
+                config.appearance.language = "zh-Hant".to_string();
                 Ok::<_, ConfigMutationError>("saved")
             })
             .await
@@ -310,12 +307,9 @@ mod tests {
 
         assert_eq!(committed.value, "saved");
         assert!(committed.config_changed);
-        assert_eq!(committed.config.ui_item.current_language, "zh-Hant");
+        assert_eq!(committed.config.appearance.language, "zh-Hant");
         // Committed means published: the next reader sees it without a refetch.
-        assert_eq!(
-            coordinator.current_config().ui_item.current_language,
-            "zh-Hant"
-        );
+        assert_eq!(coordinator.current_config().appearance.language, "zh-Hant");
     }
 
     /// `config_changed` drives the settings-bundle invalidation, so a mutation
@@ -365,7 +359,7 @@ mod tests {
 
         let failure = coordinator
             .mutate(async |unit_of_work, config| {
-                config.ui_item.current_language = "zh-Hant".to_string();
+                config.appearance.language = "zh-Hant".to_string();
                 unit_of_work
                     .subscriptions()
                     .upsert(&voya_core::SubItem {
@@ -382,7 +376,7 @@ mod tests {
             .await;
 
         assert!(failure.is_err());
-        assert_eq!(coordinator.current_config().ui_item.current_language, "en");
+        assert_eq!(coordinator.current_config().appearance.language, "en");
         assert!(database
             .subscriptions()
             .get("subscription-a")

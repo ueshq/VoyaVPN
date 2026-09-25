@@ -17,8 +17,8 @@ use super::*;
 
 fn config_with(sys_proxy: SysProxyType, tun: bool) -> AppConfig {
     let mut config = AppConfig::default();
-    config.system_proxy_item.sys_proxy_type = sys_proxy;
-    config.tun_mode_item.enable_tun = tun;
+    config.system_proxy.mode = sys_proxy;
+    config.tun.enabled = tun;
     config
 }
 
@@ -52,22 +52,16 @@ fn derivation_covers_every_primitive_combination() {
 fn apply_system_proxy_selects_forced_change() {
     let mut config = config_with(SysProxyType::ForcedClear, true);
     apply_connection_mode(&mut config, ConnectionMode::SystemProxy);
-    assert!(!config.tun_mode_item.enable_tun);
-    assert_eq!(
-        config.system_proxy_item.sys_proxy_type,
-        SysProxyType::ForcedChange
-    );
+    assert!(!config.tun.enabled);
+    assert_eq!(config.system_proxy.mode, SysProxyType::ForcedChange);
 }
 
 #[test]
 fn apply_vpn_preserves_stored_system_proxy_type() {
     let mut config = config_with(SysProxyType::ForcedChange, false);
     apply_connection_mode(&mut config, ConnectionMode::Vpn);
-    assert!(config.tun_mode_item.enable_tun);
-    assert_eq!(
-        config.system_proxy_item.sys_proxy_type,
-        SysProxyType::ForcedChange
-    );
+    assert!(config.tun.enabled);
+    assert_eq!(config.system_proxy.mode, SysProxyType::ForcedChange);
 }
 
 #[test]
@@ -104,11 +98,7 @@ async fn a_disconnected_mode_switch_persists_the_mode_without_touching_the_machi
         .expect("a mode switch never needs a running core");
 
     assert_eq!(
-        harness
-            .coordinator
-            .current_config()
-            .system_proxy_item
-            .sys_proxy_type,
+        harness.coordinator.current_config().system_proxy.mode,
         SysProxyType::ForcedChange,
         "the mode is always persisted"
     );
@@ -174,11 +164,7 @@ async fn entering_vpn_without_authorization_leaves_the_configuration_alone() {
         ConnectionModeError::Tun(TunManagerError::ElevationRequired)
     ));
     assert!(
-        !harness
-            .coordinator
-            .current_config()
-            .tun_mode_item
-            .enable_tun,
+        !harness.coordinator.current_config().tun.enabled,
         "a failed preflight must not persist the mode"
     );
     assert!(harness.sink.events().is_empty());
@@ -201,13 +187,7 @@ async fn entering_vpn_reports_the_tun_flag_change_that_forces_a_restart() {
 
     assert!(outcome.tun_flag_changed);
     assert!(outcome.tun_status.enabled);
-    assert!(
-        harness
-            .coordinator
-            .current_config()
-            .tun_mode_item
-            .enable_tun
-    );
+    assert!(harness.coordinator.current_config().tun.enabled);
     assert_eq!(outcome.status.mode, ConnectionMode::Vpn);
     assert!(outcome.status.process_rules_effective);
 }
@@ -238,11 +218,7 @@ async fn a_failed_apply_rolls_the_persisted_mode_back() {
         ConnectionModeError::SystemProxyRolledBack { .. }
     ));
     assert_eq!(
-        harness
-            .coordinator
-            .current_config()
-            .system_proxy_item
-            .sys_proxy_type,
+        harness.coordinator.current_config().system_proxy.mode,
         SysProxyType::ForcedClear,
         "a mode the machine refused must not survive in the database"
     );
@@ -285,7 +261,7 @@ fn fresh_installs_start_in_the_native_vpn_where_one_ships() {
     ] {
         let mut config = AppConfig::default();
         seed_platform_connection_defaults(&mut config, target_os);
-        assert_eq!(config.tun_mode_item.enable_tun, expected, "{target_os:?}");
+        assert_eq!(config.tun.enabled, expected, "{target_os:?}");
     }
 }
 
@@ -296,11 +272,8 @@ fn macos_configurations_always_load_in_vpn_mode() {
         &mut config,
         TargetOs::Macos
     ));
-    assert!(config.tun_mode_item.enable_tun);
-    assert_eq!(
-        config.system_proxy_item.sys_proxy_type,
-        SysProxyType::Unchanged
-    );
+    assert!(config.tun.enabled);
+    assert_eq!(config.system_proxy.mode, SysProxyType::Unchanged);
     assert!(!enforce_platform_connection_mode(
         &mut config,
         TargetOs::Macos
@@ -309,7 +282,7 @@ fn macos_configurations_always_load_in_vpn_mode() {
     for target_os in [TargetOs::Windows, TargetOs::Linux] {
         let mut config = config_with(SysProxyType::ForcedChange, false);
         assert!(!enforce_platform_connection_mode(&mut config, target_os));
-        assert!(!config.tun_mode_item.enable_tun, "{target_os:?}");
+        assert!(!config.tun.enabled, "{target_os:?}");
     }
 }
 
@@ -332,11 +305,7 @@ async fn leaving_vpn_mode_is_refused_on_macos_without_touching_anything() {
         ConnectionModeError::Tun(TunManagerError::VpnRequired)
     ));
     assert_eq!(
-        harness
-            .coordinator
-            .current_config()
-            .system_proxy_item
-            .sys_proxy_type,
+        harness.coordinator.current_config().system_proxy.mode,
         SysProxyType::ForcedClear,
         "a refused mode must not be persisted"
     );

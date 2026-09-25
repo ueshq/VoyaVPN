@@ -83,10 +83,7 @@ async fn a_node_without_ipv6_egress_is_recorded_announced_and_reconnected() {
     };
     let flow = harness.ipv6_flow(&transport);
     let config = active_config();
-    assert!(
-        config.tun_mode_item.enable_ipv6_address,
-        "IPv6 is on by default"
-    );
+    assert!(config.tun.ipv6_enabled, "IPv6 is on by default");
 
     flow.connect(&config).await.expect("connect");
     assert_eq!(harness.count("ipv6-check"), 1, "a connect asks for a check");
@@ -202,7 +199,7 @@ async fn an_untrustworthy_or_unwanted_probe_changes_nothing() {
     };
     let flow = harness.ipv6_flow(&transport);
     let mut config = active_config();
-    config.tun_mode_item.enable_ipv6_address = false;
+    config.tun.ipv6_enabled = false;
     flow.connect(&config).await.expect("connect");
     flow.check_ipv6_egress(|| config.clone()).await;
     assert!(transport

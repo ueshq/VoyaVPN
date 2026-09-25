@@ -305,7 +305,7 @@ impl SpeedtestManager {
                 .collect::<Vec<_>>();
             let mut pending = stream::iter(probes.into_iter().map(|(index, socks_port)| {
                 let probe = Arc::clone(&self.probe);
-                let speed_test_item = config.speed_test_item.clone();
+                let speed_test = config.speed_test.clone();
                 let cancel = Arc::clone(&cancel);
                 async move {
                     // Queued probes that would start after a cancel never run.
@@ -313,7 +313,7 @@ impl SpeedtestManager {
                         None
                     } else {
                         Some(
-                            ProbeTask::spawn(probe.realping(socks_port, speed_test_item, cancel))
+                            ProbeTask::spawn(probe.realping(socks_port, speed_test, cancel))
                                 .join()
                                 .await,
                         )

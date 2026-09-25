@@ -4,8 +4,7 @@ pub(super) fn apply_outbound_bind_interface(
     config: &mut SingboxConfig,
     context: &CoreConfigContext,
 ) {
-    let Some(bind_interface) =
-        nonempty_string(context.app_config.core_basic_item.bind_interface.as_deref())
+    let Some(bind_interface) = nonempty_string(context.app_config.core.bind_interface.as_deref())
     else {
         return;
     };
@@ -20,8 +19,7 @@ pub(super) fn apply_outbound_bind_interface(
 }
 
 pub(super) fn apply_outbound_send_through(config: &mut SingboxConfig, context: &CoreConfigContext) {
-    let Some(send_through) =
-        nonempty_string(context.app_config.core_basic_item.send_through.as_deref())
+    let Some(send_through) = nonempty_string(context.app_config.core.send_through.as_deref())
     else {
         return;
     };
@@ -72,11 +70,11 @@ pub(super) fn shadowsocks_method(protocol: &ProfileProtocol) -> String {
 }
 
 pub(super) fn allow_insecure(context: &CoreConfigContext) -> bool {
-    context.app_config.core_basic_item.def_allow_insecure
+    context.app_config.core.default_allow_insecure
 }
 
 pub(super) fn effective_fingerprint(context: &CoreConfigContext) -> Option<String> {
-    singbox_utls_fingerprint(&context.app_config.core_basic_item.def_fingerprint)
+    singbox_utls_fingerprint(&context.app_config.core.default_fingerprint)
 }
 
 fn singbox_utls_fingerprint(value: &str) -> Option<String> {

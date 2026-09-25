@@ -236,8 +236,8 @@ async fn running_core_speedtest_maps_the_core_answers() {
         ..FakeCore::default()
     });
     let mut config = AppConfig::default();
-    config.speed_test_item.speed_test_timeout = 90;
-    config.speed_test_item.speed_ping_test_url = String::new();
+    config.speed_test.timeout_seconds = 90;
+    config.speed_test.latency_url = String::new();
 
     let run = manager
         .run_with_callback(

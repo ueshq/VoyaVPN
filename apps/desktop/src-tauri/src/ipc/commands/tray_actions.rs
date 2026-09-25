@@ -108,9 +108,9 @@ impl TraySnapshot {
 pub(crate) fn initial_tray_snapshot(state: &AppState) -> TraySnapshot {
     let config = state.config_mutations().current_config();
     TraySnapshot {
-        language: config.ui_item.current_language.clone(),
+        language: config.appearance.language.clone(),
         connected: false,
-        traffic_mode: config.proxy_ui_item.traffic_mode,
+        traffic_mode: config.proxy.traffic_mode,
         nodes: Vec::new(),
         total_nodes: 0,
         active_node_id: None,
@@ -170,9 +170,9 @@ pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
     };
 
     TraySnapshot {
-        language: config.ui_item.current_language.clone(),
+        language: config.appearance.language.clone(),
         connected,
-        traffic_mode: config.proxy_ui_item.traffic_mode,
+        traffic_mode: config.proxy.traffic_mode,
         nodes,
         total_nodes,
         active_node_id,

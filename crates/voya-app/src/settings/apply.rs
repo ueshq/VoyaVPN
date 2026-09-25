@@ -47,7 +47,7 @@ impl SettingsApplication {
             .core
             .as_mut()
         {
-            core.proxy_ui_item.traffic_mode = mode;
+            core.proxy.traffic_mode = mode;
         }
     }
 
@@ -68,7 +68,7 @@ impl SettingsApplication {
         } else if applied
             .proxy
             .as_ref()
-            .is_none_or(|proxy| proxy.system_proxy_item != saved.system_proxy_item)
+            .is_none_or(|proxy| proxy.system_proxy != saved.system_proxy)
         {
             SettingsApplyAction::ReapplyProxy
         } else {
@@ -89,7 +89,7 @@ mod tests {
         tracker.core_applied(&initial);
         tracker.proxy_applied(&initial);
         let mut saved = initial.clone();
-        saved.inbound[0].local_port += 1;
+        saved.inbounds[0].local_port += 1;
         assert_eq!(
             tracker.status(&saved, true).action,
             SettingsApplyAction::Reconnect
@@ -116,7 +116,7 @@ mod tests {
         let tracker = SettingsApplication::default();
         let captured = AppConfig::default();
         let mut latest = captured.clone();
-        latest.inbound[0].local_port += 1;
+        latest.inbounds[0].local_port += 1;
         tracker.core_applied(&captured);
         tracker.proxy_applied(&captured);
         assert_eq!(
@@ -124,13 +124,13 @@ mod tests {
             SettingsApplyAction::Reconnect
         );
         tracker.core_applied(&latest);
-        latest.system_proxy_item.system_proxy_exceptions = "localhost".into();
+        latest.system_proxy.exceptions = "localhost".into();
         assert_eq!(
             tracker.status(&latest, true).action,
             SettingsApplyAction::ReapplyProxy
         );
         tracker.proxy_applied(&latest);
-        latest.ui_item.current_language = "zh-Hans".into();
+        latest.appearance.language = "zh-Hans".into();
         assert_eq!(
             tracker.status(&latest, true).action,
             SettingsApplyAction::None
@@ -143,15 +143,15 @@ mod tests {
         let mut saved = AppConfig::default();
         tracker.core_applied(&saved);
         tracker.proxy_applied(&saved);
-        saved.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Global;
-        tracker.traffic_mode_applied(saved.proxy_ui_item.traffic_mode);
+        saved.proxy.traffic_mode = voya_core::TrafficMode::Global;
+        tracker.traffic_mode_applied(saved.proxy.traffic_mode);
         assert_eq!(
             tracker.status(&saved, true).action,
             SettingsApplyAction::None
         );
-        saved.inbound[0].local_port += 1;
-        saved.proxy_ui_item.traffic_mode = voya_core::TrafficMode::Rule;
-        tracker.traffic_mode_applied(saved.proxy_ui_item.traffic_mode);
+        saved.inbounds[0].local_port += 1;
+        saved.proxy.traffic_mode = voya_core::TrafficMode::Rule;
+        tracker.traffic_mode_applied(saved.proxy.traffic_mode);
         assert_eq!(
             tracker.status(&saved, true).action,
             SettingsApplyAction::Reconnect

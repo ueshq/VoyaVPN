@@ -105,7 +105,7 @@ const TRAY_LABELS: &[(&str, TrayLabels)] = &[
 /// English, the fallback for a language this build does not ship.
 const FALLBACK: TrayLabels = TRAY_LABELS[0].1;
 
-/// Tray labels for `ui_item.current_language`.
+/// Tray labels for `appearance.language`.
 ///
 /// Matching is case-insensitive and falls back through the base language, so
 /// `zh-hans`, `ZH-HANS` and `zh-Hans-CN` all resolve, and an unknown or empty

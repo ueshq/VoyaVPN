@@ -3,8 +3,8 @@
 use serde::Deserialize;
 use serde_json::Value;
 use voya_app::{
-    contract_map::simple_dns_to_contract,
-    dns::{normalize_simple_dns, save_dns_settings_use_case},
+    contract_map::dns_to_contract,
+    dns::{normalize_dns, save_dns_settings_use_case},
     invalidation,
 };
 use voya_contracts::{AppError, DnsSettings};
@@ -18,7 +18,7 @@ pub(super) async fn load(state: &MobileState) -> Result<Value, AppError> {
 
     answer(
         "load_dns_settings",
-        &simple_dns_to_contract(normalize_simple_dns(config.simple_dns_item)),
+        &dns_to_contract(normalize_dns(config.dns)),
     )
 }
 

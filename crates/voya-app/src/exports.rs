@@ -62,11 +62,11 @@ async fn load_profiles(database: &Database, index_ids: &[String]) -> Result<Vec<
 
 fn export_share_links(profiles: &[ProfileItem], config: &AppConfig) -> Result<String> {
     let options = ShareLinkOptions {
-        allow_insecure: config.core_basic_item.def_allow_insecure,
-        fingerprint: config.core_basic_item.def_fingerprint.clone(),
-        hysteria_up_mbps: config.hysteria_item.up_mbps,
-        hysteria_down_mbps: config.hysteria_item.down_mbps,
-        hysteria_hop_interval: config.hysteria_item.hop_interval,
+        allow_insecure: config.core.default_allow_insecure,
+        fingerprint: config.core.default_fingerprint.clone(),
+        hysteria_up_mbps: config.hysteria.upload_mbps,
+        hysteria_down_mbps: config.hysteria.download_mbps,
+        hysteria_hop_interval: config.hysteria.hop_interval_seconds,
     };
     profiles
         .iter()
