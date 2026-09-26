@@ -1584,6 +1584,57 @@ describe("ProfilesScreen", () => {
     );
   });
 
+  it("keeps each protocol's draft across protocol switches and saves only the selected one", async () => {
+    mockProfileList([]);
+
+    renderProfiles();
+
+    await openAddNode();
+    fireEvent.change(await screen.findByLabelText("Remarks"), {
+      target: { value: "Switched node" },
+    });
+    fireEvent.change(screen.getByLabelText("Address"), {
+      target: { value: "node.example.test" },
+    });
+    await selectComboboxOption("Protocol", "WireGuard");
+    // Not a whole number, but WireGuard is not what gets saved.
+    fireEvent.change(await screen.findByLabelText("MTU"), {
+      target: { value: "1.5" },
+    });
+    await selectComboboxOption("Protocol", "Trojan");
+    fireEvent.change(await screen.findByLabelText("Password"), {
+      target: { value: "trojan-secret" },
+    });
+    await selectComboboxOption("Protocol", "VLESS");
+    // A UUID is not a password: the Trojan secret does not follow into it.
+    expect(await screen.findByLabelText("UUID")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("UUID"), {
+      target: { value: "uuid-vless" },
+    });
+    await selectComboboxOption("Protocol", "Trojan");
+    expect(await screen.findByLabelText("Password")).toHaveValue("trojan-secret");
+    await selectComboboxOption("Protocol", "WireGuard");
+    expect(await screen.findByLabelText("MTU")).toHaveValue("1.5");
+    await selectComboboxOption("Protocol", "VLESS");
+    expect(await screen.findByLabelText("UUID")).toHaveValue("uuid-vless");
+    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+
+    await waitFor(() =>
+      expect(ipcMocks.saveProfile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          protocol: {
+            encryption: null,
+            flow: null,
+            kind: "vless",
+            server: { address: "node.example.test", port: 443 },
+            uuid: "uuid-vless",
+          },
+          remarks: "Switched node",
+        }),
+      ),
+    );
+  });
+
   it("edits every Naive contract field from the protocol panel", async () => {
     const user = userEvent.setup();
     mockProfileList([]);

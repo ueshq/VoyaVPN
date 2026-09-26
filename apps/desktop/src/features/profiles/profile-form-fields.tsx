@@ -9,6 +9,47 @@ import {
   CardHeader,
   CardTitle,
 } from "@voya/ui/components/card";
+import { TextField } from "@voya/ui/components/form-fields";
+import type { ProfileDraft } from "@voya/features/profiles/profile-draft";
+
+/** What every editor panel gets: the draft, its translated errors by field, and the one way to change it. */
+export type ProfilePanelProps = {
+  draft: ProfileDraft;
+  errors: Partial<Record<string, string>>;
+  onChange: <Key extends keyof ProfileDraft>(key: Key, value: ProfileDraft[Key]) => void;
+};
+
+/** The draft fields a plain text input edits. */
+type DraftTextKey = {
+  [Key in keyof ProfileDraft]: string extends ProfileDraft[Key]
+    ? ProfileDraft[Key] extends string
+      ? Key
+      : never
+    : never;
+}[keyof ProfileDraft];
+
+/** A text input bound to one draft field: its value, its edits and its error. */
+export function DraftTextField({
+  draft,
+  errors,
+  name,
+  onChange,
+  ...input
+}: ProfilePanelProps & {
+  inputMode?: "numeric";
+  label: string;
+  name: DraftTextKey;
+  placeholder?: string;
+}) {
+  return (
+    <TextField
+      {...input}
+      error={errors[name]}
+      onChange={(value) => onChange(name, value)}
+      value={draft[name]}
+    />
+  );
+}
 
 export function Panel({
   children,

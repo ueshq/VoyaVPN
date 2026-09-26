@@ -13,33 +13,27 @@ import {
   DialogTitle,
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
-import { SelectField, TextField } from "@voya/ui/components/form-fields";
+import { SelectField } from "@voya/ui/components/form-fields";
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { Profile, ProfileKind } from "@voya/contracts";
+import type { Profile } from "@voya/contracts";
 import {
   translateFieldErrors,
   zodIssuesToErrorMap,
   type FieldErrorMap,
 } from "@voya/features/forms/zod-errors";
 
-import { localizeProfileProtocols } from "@voya/features/profiles/profile-constants";
 import {
-  Panel,
-} from "./profile-form-fields";
+  isProfileKind,
+  localizeProfileProtocols,
+} from "@voya/features/profiles/profile-constants";
 import {
-  toEditorForm,
-  toSchemaValues,
-  type ProfileEditorForm,
-} from "./profile-editor-form";
-import {
-  activeProfileFormValues,
-  profileFormSchema,
-} from "@voya/features/profiles/profile-form-schema";
-import {
-  createDefaultProfile,
-  normalizeProfileForForm,
-  prepareProfileForSave,
-} from "@voya/features/profiles/profile-form-values";
+  createDefaultDraft,
+  draftFromProfile,
+  parseProfileDraft,
+  profileFromDraft,
+  type ProfileDraft,
+} from "@voya/features/profiles/profile-draft";
+import { DraftTextField, Panel, type ProfilePanelProps } from "./profile-form-fields";
 import { ProtocolPanel } from "./profile-protocol-panel";
 import { SecurityPanel } from "./profile-security-panel";
 import { TransportPanel } from "./profile-transport-panel";
@@ -48,9 +42,7 @@ type ProfileDialogProps = {
   mode: "create" | "edit";
   onCloseFocus?: () => void;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (
-    profile: ReturnType<typeof prepareProfileForSave>,
-  ) => Promise<void>;
+  onSubmit: (profile: Profile) => Promise<void>;
   open: boolean;
   profile?: Profile | null;
   // Backend rejection of the last save. The dialog stays open on failure so the
@@ -94,49 +86,29 @@ function ProfileDialogForm({
   saveError,
 }: Omit<ProfileDialogProps, "open">) {
   const { t } = useI18n();
-  const [form, setForm] = useState<ProfileEditorForm>(() =>
-    toEditorForm(
-      profile ? normalizeProfileForForm(profile) : createDefaultProfile(),
-    ),
+  const [draft, setDraft] = useState<ProfileDraft>(() =>
+    profile ? draftFromProfile(profile) : createDefaultDraft("vmess"),
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrorMap>({});
-  const errors = translateFieldErrors(t, fieldErrors);
   const [pending, setPending] = useState(false);
-  const configType = form.configType as ProfileKind;
-  const security = form.streamSecurity;
 
-  function update<Key extends keyof ProfileEditorForm>(
+  function update<Key extends keyof ProfileDraft>(
     key: Key,
-    value: ProfileEditorForm[Key],
+    value: ProfileDraft[Key],
   ) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function updateOption<Key extends keyof ProfileEditorForm["protocolOptions"]>(
-    key: Key,
-    value: ProfileEditorForm["protocolOptions"][Key],
-  ) {
-    setForm((current) => ({
-      ...current,
-      protocolOptions: { ...current.protocolOptions, [key]: value },
-    }));
-  }
-
-  function updateTransport<
-    Key extends keyof ProfileEditorForm["transportOptions"],
-  >(key: Key, value: ProfileEditorForm["transportOptions"][Key]) {
-    setForm((current) => ({
-      ...current,
-      transportOptions: { ...current.transportOptions, [key]: value },
-    }));
-  }
+  const panel: ProfilePanelProps = {
+    draft,
+    errors: translateFieldErrors(t, fieldErrors),
+    onChange: update,
+  };
 
   async function submitForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
-    const parsed = profileFormSchema.safeParse(
-      activeProfileFormValues(toSchemaValues(form)),
-    );
+    const parsed = parseProfileDraft(draft);
     if (!parsed.success) {
       setFieldErrors(zodIssuesToErrorMap(parsed.error));
       // Hidden fields keep their session draft. Reveal their section on errors.
@@ -155,7 +127,7 @@ function ProfileDialogForm({
     setFieldErrors({});
     setPending(true);
     try {
-      await onSubmit(prepareProfileForSave(parsed.data));
+      await onSubmit(profileFromDraft(parsed.data));
     } finally {
       setPending(false);
     }
@@ -196,59 +168,41 @@ function ProfileDialogForm({
               <div className="grid gap-3 lg:grid-cols-[14rem_1fr]">
                 <SelectField
                   label={t("panes.profiles.fields.protocol")}
-                  onChange={(value) => update("configType", value)}
+                  onChange={(value) => {
+                    if (isProfileKind(value)) update("kind", value);
+                  }}
                   options={localizeProfileProtocols(t).map(
                     ({ label, value }) => ({ label, value }),
                   )}
-                  value={form.configType}
+                  value={draft.kind}
                 />
 
-                <TextField
-                  error={errors.remarks}
+                <DraftTextField
+                  {...panel}
                   label={t("panes.profiles.fields.remarks")}
-                  onChange={(value) => update("remarks", value)}
-                  value={form.remarks}
+                  name="remarks"
                 />
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[1fr_7rem]">
-                <TextField
-                  error={errors.address}
+                <DraftTextField
+                  {...panel}
                   label={t("panes.profiles.fields.address")}
-                  onChange={(value) => update("address", value)}
-                  value={form.address}
+                  name="address"
                 />
-                <TextField
-                  error={errors.port}
+                <DraftTextField
+                  {...panel}
                   inputMode="numeric"
                   label={t("panes.profiles.fields.port")}
-                  onChange={(value) => update("port", value)}
-                  value={form.port}
+                  name="port"
                 />
               </div>
             </Panel>
 
-            <ProtocolPanel
-              configType={configType}
-              errors={errors}
-              form={form}
-              onFieldChange={(key, value) => update(key, value)}
-              onOptionChange={updateOption}
-            />
-            {configType !== "wireGuard" ? (
-              <TransportPanel
-                errors={errors}
-                form={form}
-                onFieldChange={(key, value) => update(key, value)}
-                onTransportChange={updateTransport}
-              />
-            ) : null}
-            <SecurityPanel
-              errors={errors}
-              form={form}
-              onFieldChange={(key, value) => update(key, value)}
-              security={security}
-            />
+            <ProtocolPanel {...panel} />
+            {/* WireGuard carries its own UDP framing: no transport settings. */}
+            {draft.kind !== "wireGuard" ? <TransportPanel {...panel} /> : null}
+            <SecurityPanel {...panel} />
           </div>
         </form>
 

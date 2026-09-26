@@ -32,10 +32,8 @@ export const criticalModules = [
   "apps/desktop/src/ipc/notifications.ts",
   "packages/features/src/settings/use-app-settings.ts",
   "apps/desktop/src/features/dns/use-dns-settings.ts",
-  "packages/features/src/profiles/profile-form-schema.ts",
-  "packages/features/src/profiles/profile-form-protocol.ts",
-  "packages/features/src/profiles/profile-form-transport.ts",
-  "packages/features/src/profiles/profile-form-tls.ts",
+  // The node editor's draft: its validation and both contract conversions.
+  "packages/features/src/profiles/profile-draft.ts",
   "apps/desktop/src/features/profiles/virtual-list-keyboard.ts",
   "apps/desktop/src/features/routing/per-app-proxy-rule.ts",
   "packages/features/src/routing/routing-form-schema.ts",
@@ -85,7 +83,6 @@ export const runtimeModules = [
   { path: "packages/features/src/profiles/use-node-operation.ts", lines: 90, branches: 90 },
   { path: "apps/desktop/src/features/profiles/use-node-subscriptions.ts", lines: 80, branches: 75 },
   { path: "packages/features/src/profiles/use-node-speedtest.ts", lines: 90, branches: 50 },
-  { path: "packages/features/src/profiles/profile-form-values.ts", lines: 90, branches: 60 },
   // TLS field panel in the profile dialog; certificate fetch/hash was retired.
   { path: "apps/desktop/src/features/profiles/profile-security-panel.tsx", lines: 85, branches: 70 },
   { path: "apps/desktop/src/features/updates/app-update-flow.ts", lines: 85, branches: 75 },

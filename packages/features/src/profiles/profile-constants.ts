@@ -1,4 +1,4 @@
-import type { ProfileKind } from "@voya/contracts";
+import type { ProfileKind, ProfileTransport, TlsMode } from "@voya/contracts";
 import type { TranslationFunction } from "@voya/i18n/core";
 
 /** Every protocol's name, in picker order. A kind added in Rust fails the typecheck here. */
@@ -40,21 +40,45 @@ function protocolDescription(value: ProfileKind, t: TranslationFunction): string
   }
 }
 
-export const NETWORK_OPTIONS = [
-  { label: "TCP / Raw", value: "tcp" },
-  { label: "WebSocket", value: "ws" },
-  { label: "HTTP Upgrade", value: "httpupgrade" },
-  { label: "HTTP/2", value: "h2" },
-  { label: "gRPC", value: "grpc" },
-  { label: "QUIC", value: "quic" },
-];
+export function isProfileKind(value: unknown): value is ProfileKind {
+  return typeof value === "string" && Object.hasOwn(PROFILE_PROTOCOL_LABELS, value);
+}
 
-export const SECURITY_OPTIONS = [
-  { label: "None", value: "" },
-  { label: "TLS", value: "tls" },
-  { label: "REALITY", value: "reality" },
-];
+/** Every transport's name, in picker order. */
+const TRANSPORT_LABELS = {
+  tcp: "TCP / Raw",
+  websocket: "WebSocket",
+  httpUpgrade: "HTTP Upgrade",
+  http2: "HTTP/2",
+  grpc: "gRPC",
+  quic: "QUIC",
+} satisfies Record<ProfileTransport["kind"], string>;
 
-export function getProtocolLabel(configType: ProfileKind | null | undefined) {
-  return configType == null ? "" : PROFILE_PROTOCOL_LABELS[configType];
+export const TRANSPORT_OPTIONS = Object.entries(TRANSPORT_LABELS).map(
+  ([value, label]) => ({ label, value }),
+);
+
+export function isTransportKind(value: unknown): value is ProfileTransport["kind"] {
+  return typeof value === "string" && Object.hasOwn(TRANSPORT_LABELS, value);
+}
+
+/** The TLS modes, in picker order after "none", whose label is translated. */
+const TLS_MODE_LABELS = {
+  tls: "TLS",
+  reality: "REALITY",
+} satisfies Record<TlsMode, string>;
+
+export const TLS_MODE_OPTIONS = Object.entries(TLS_MODE_LABELS).map(
+  ([value, label]) => ({ label, value }),
+);
+
+export function isTlsModeOption(value: unknown): value is TlsMode | "none" {
+  return (
+    value === "none"
+    || (typeof value === "string" && Object.hasOwn(TLS_MODE_LABELS, value))
+  );
+}
+
+export function getProtocolLabel(kind: ProfileKind | null | undefined) {
+  return kind == null ? "" : PROFILE_PROTOCOL_LABELS[kind];
 }

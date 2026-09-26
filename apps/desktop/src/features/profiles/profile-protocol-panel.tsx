@@ -1,193 +1,157 @@
 import { Server } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { ProfileKind } from "@voya/contracts";
-import { CheckboxField, TextField } from "@voya/ui/components/form-fields";
+import { CheckboxField } from "@voya/ui/components/form-fields";
 
-import {
-  Panel,
-} from "./profile-form-fields";
-import type {
-  ProfileEditorForm,
-  ProfileFieldErrors,
-} from "./profile-editor-form";
-import {
-  passwordLabel,
-  requiresUsername,
-  usernameLabel,
-} from "@voya/features/profiles/profile-form-utils";
+import { DraftTextField, Panel, type ProfilePanelProps } from "./profile-form-fields";
 
-type ProtocolPanelProps = {
-  configType: ProfileKind;
-  errors: ProfileFieldErrors;
-  form: ProfileEditorForm;
-  onFieldChange: (key: "password" | "username", value: string) => void;
-  onOptionChange: <Key extends keyof ProfileEditorForm["protocolOptions"]>(
-    key: Key,
-    value: ProfileEditorForm["protocolOptions"][Key],
-  ) => void;
-};
-
-export function ProtocolPanel({
-  configType,
-  errors,
-  form,
-  onFieldChange,
-  onOptionChange,
-}: ProtocolPanelProps) {
+/** The selected protocol's own fields; the other protocols' drafts stay hidden. */
+export function ProtocolPanel(panel: ProfilePanelProps) {
   const { t } = useI18n();
-  const options = form.protocolOptions;
+  const { draft, onChange } = panel;
+  const uuid = (
+    <DraftTextField {...panel} label={t("panes.profiles.fields.uuid")} name="uuid" />
+  );
+  const username = (
+    <DraftTextField {...panel} label={t("panes.profiles.fields.username")} name="username" />
+  );
+  const password = (
+    <DraftTextField {...panel} label={t("panes.profiles.fields.password")} name="password" />
+  );
+  const congestionControl = (
+    <DraftTextField
+      {...panel}
+      label={t("panes.profiles.fields.congestionControl")}
+      name="congestionControl"
+      placeholder="bbr"
+    />
+  );
+  const udpOverTcp = (
+    <CheckboxField
+      checked={draft.udpOverTcp}
+      label={t("panes.profiles.fields.udpOverTcp")}
+      onChange={(checked) => onChange("udpOverTcp", checked)}
+    />
+  );
+
+  function fields() {
+    switch (draft.kind) {
+      case "vmess":
+        return (
+          <>
+            {uuid}
+            <DraftTextField
+              {...panel}
+              label={t("panes.profiles.fields.vmessSecurity")}
+              name="cipher"
+              placeholder="auto"
+            />
+          </>
+        );
+      case "vless":
+        return (
+          <>
+            {uuid}
+            <DraftTextField
+              {...panel}
+              label={t("panes.profiles.fields.flow")}
+              name="flow"
+              placeholder="xtls-rprx-vision"
+            />
+            <DraftTextField
+              {...panel}
+              label={t("panes.profiles.fields.encryption")}
+              name="encryption"
+              placeholder="none"
+            />
+          </>
+        );
+      case "shadowsocks":
+        return (
+          <>
+            {password}
+            <DraftTextField
+              {...panel}
+              label={t("panes.profiles.fields.method")}
+              name="method"
+              placeholder="2022-blake3-aes-128-gcm"
+            />
+            {udpOverTcp}
+          </>
+        );
+      case "trojan":
+      case "anytls":
+        return password;
+      case "socks":
+      case "http":
+        return (
+          <>
+            {username}
+            {password}
+          </>
+        );
+      case "hysteria2":
+        return (
+          <>
+            {password}
+            <DraftTextField {...panel} label={t("panes.profiles.fields.ports")} name="portHops" />
+            <DraftTextField
+              {...panel}
+              label={t("panes.profiles.fields.salamanderPassword")}
+              name="obfuscationPassword"
+            />
+          </>
+        );
+      case "tuic":
+        return (
+          <>
+            {uuid}
+            {password}
+            {congestionControl}
+          </>
+        );
+      case "wireGuard":
+        return (
+          <>
+            <DraftTextField {...panel} label={t("panes.profiles.fields.privateKey")} name="privateKey" />
+            <DraftTextField {...panel} label={t("panes.profiles.fields.peerPublicKey")} name="peerPublicKey" />
+            <DraftTextField {...panel} label={t("panes.profiles.fields.presharedKey")} name="presharedKey" />
+            <DraftTextField
+              {...panel}
+              label={t("panes.profiles.fields.interfaceAddress")}
+              name="interfaceAddress"
+            />
+            <DraftTextField {...panel} label={t("panes.profiles.fields.allowedIps")} name="allowedIps" />
+            <DraftTextField {...panel} label={t("panes.profiles.fields.reservedBytes")} name="reserved" />
+            <DraftTextField {...panel} inputMode="numeric" label={t("panes.profiles.fields.mtu")} name="mtu" />
+          </>
+        );
+      case "naive":
+        return (
+          <>
+            {username}
+            {password}
+            <CheckboxField
+              checked={draft.quic}
+              label={t("panes.profiles.fields.quic")}
+              onChange={(checked) => onChange("quic", checked)}
+            />
+            {congestionControl}
+            <DraftTextField
+              {...panel}
+              inputMode="numeric"
+              label={t("panes.profiles.fields.insecureConcurrency")}
+              name="insecureConcurrency"
+            />
+            {udpOverTcp}
+          </>
+        );
+    }
+  }
 
   return (
     <Panel icon={Server} title={t("panes.profiles.panels.protocol")}>
-      <div className="grid gap-3 lg:grid-cols-3">
-        {requiresUsername(configType) ? (
-          <TextField
-            error={errors.username}
-            label={usernameLabel(configType, t)}
-            onChange={(value) => onFieldChange("username", value)}
-            value={form.username}
-          />
-        ) : null}
-        <TextField
-          error={errors.password}
-          label={passwordLabel(configType, t)}
-          onChange={(value) => onFieldChange("password", value)}
-          value={form.password}
-        />
-        {configType === "vmess" ? (
-          <TextField
-            label={t("panes.profiles.fields.vmessSecurity")}
-            onChange={(value) => onOptionChange("vmessCipher", value)}
-            placeholder="auto"
-            value={options.vmessCipher}
-          />
-        ) : null}
-        {configType === "vless" ? (
-          <>
-            <TextField
-              label={t("panes.profiles.fields.flow")}
-              onChange={(value) => onOptionChange("flow", value)}
-              placeholder="xtls-rprx-vision"
-              value={options.flow}
-            />
-            <TextField
-              label={t("panes.profiles.fields.encryption")}
-              onChange={(value) => onOptionChange("vlessEncryption", value)}
-              placeholder="none"
-              value={options.vlessEncryption}
-            />
-          </>
-        ) : null}
-        {configType === "shadowsocks" ? (
-          <>
-            <TextField
-              label={t("panes.profiles.fields.method")}
-              onChange={(value) => onOptionChange("method", value)}
-              placeholder="2022-blake3-aes-128-gcm"
-              value={options.method}
-            />
-            <CheckboxField
-              checked={options.udpOverTcp}
-              label={t("panes.profiles.fields.udpOverTcp")}
-              onChange={(checked) => onOptionChange("udpOverTcp", checked)}
-            />
-          </>
-        ) : null}
-        {configType === "hysteria2" ? (
-          <>
-            <TextField
-              label={t("panes.profiles.fields.ports")}
-              onChange={(value) => onOptionChange("portHops", value)}
-              value={options.portHops}
-            />
-            <TextField
-              label={t("panes.profiles.fields.salamanderPassword")}
-              onChange={(value) => onOptionChange("obfuscationPassword", value)}
-              value={options.obfuscationPassword}
-            />
-          </>
-        ) : null}
-        {configType === "tuic" ? (
-          <TextField
-            label={t("panes.profiles.fields.congestionControl")}
-            onChange={(value) => onOptionChange("congestionControl", value)}
-            placeholder="bbr"
-            value={options.congestionControl}
-          />
-        ) : null}
-        {configType === "wireGuard" ? (
-          <>
-            <TextField
-              label={t("panes.profiles.fields.peerPublicKey")}
-              onChange={(value) =>
-                onOptionChange("wireGuardPeerPublicKey", value)
-              }
-              value={options.wireGuardPeerPublicKey}
-            />
-            <TextField
-              label={t("panes.profiles.fields.presharedKey")}
-              onChange={(value) =>
-                onOptionChange("wireGuardPresharedKey", value)
-              }
-              value={options.wireGuardPresharedKey}
-            />
-            <TextField
-              label={t("panes.profiles.fields.interfaceAddress")}
-              onChange={(value) =>
-                onOptionChange("wireGuardInterfaceAddress", value)
-              }
-              value={options.wireGuardInterfaceAddress}
-            />
-            <TextField
-              label={t("panes.profiles.fields.allowedIps")}
-              onChange={(value) => onOptionChange("wireGuardAllowedIps", value)}
-              value={options.wireGuardAllowedIps}
-            />
-            <TextField
-              label={t("panes.profiles.fields.reservedBytes")}
-              onChange={(value) => onOptionChange("wireGuardReserved", value)}
-              value={options.wireGuardReserved}
-            />
-            <TextField
-              error={errors["protocolOptions.wireGuardMtu"]}
-              inputMode="numeric"
-              label={t("panes.profiles.fields.mtu")}
-              onChange={(value) => onOptionChange("wireGuardMtu", value)}
-              value={options.wireGuardMtu}
-            />
-          </>
-        ) : null}
-        {configType === "naive" ? (
-          <>
-            <CheckboxField
-              checked={options.naiveQuic}
-              label={t("panes.profiles.fields.quic")}
-              onChange={(checked) => onOptionChange("naiveQuic", checked)}
-            />
-            <TextField
-              label={t("panes.profiles.fields.congestionControl")}
-              onChange={(value) => onOptionChange("congestionControl", value)}
-              placeholder="bbr"
-              value={options.congestionControl}
-            />
-            <TextField
-              error={errors["protocolOptions.insecureConcurrency"]}
-              inputMode="numeric"
-              label={t("panes.profiles.fields.insecureConcurrency")}
-              onChange={(value) =>
-                onOptionChange("insecureConcurrency", value)
-              }
-              value={options.insecureConcurrency}
-            />
-            <CheckboxField
-              checked={options.udpOverTcp}
-              label={t("panes.profiles.fields.udpOverTcp")}
-              onChange={(checked) => onOptionChange("udpOverTcp", checked)}
-            />
-          </>
-        ) : null}
-      </div>
+      <div className="grid gap-3 lg:grid-cols-3">{fields()}</div>
     </Panel>
   );
 }
