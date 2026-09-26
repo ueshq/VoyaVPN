@@ -270,7 +270,7 @@ async fn running_core_speedtest_maps_the_core_answers() {
         "WireGuard carries no probe: {requests:?}"
     );
     assert!(requests.iter().all(|request| {
-        request.test_url == REALPING_FALLBACK_URL && request.timeout_ms == 25_000
+        request.test_url == DEFAULT_SPEED_PING_TEST_URL && request.timeout_ms == 25_000
     }));
     let stored = database
         .profile_exs()

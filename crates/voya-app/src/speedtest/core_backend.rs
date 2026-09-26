@@ -284,7 +284,7 @@ fn find_free_speedtest_port(start: i32, used_ports: &mut HashSet<u16>) -> Result
 }
 
 fn local_port_available(port: u16) -> bool {
-    TcpListener::bind((LOOPBACK_ADDR, port)).is_ok()
+    TcpListener::bind((LOOPBACK, port)).is_ok()
 }
 
 pub(super) async fn wait_for_speedtest_ports(
@@ -305,7 +305,7 @@ pub(super) async fn wait_for_speedtest_ports(
     loop {
         check_cancelled(cancel)?;
         while let Some(port) = socks_ports.get(ready) {
-            if !tcp_port_is_open(LOOPBACK_ADDR, *port).await {
+            if !tcp_port_is_open(LOOPBACK, *port).await {
                 break;
             }
             ready += 1;
@@ -680,8 +680,8 @@ mod tests {
 
     #[tokio::test]
     async fn wait_for_speedtest_ports_returns_once_every_port_answers() {
-        let listener = StdTcpListener::bind((LOOPBACK_ADDR, 0))
-            .expect("speedtest test operation should succeed");
+        let listener =
+            StdTcpListener::bind((LOOPBACK, 0)).expect("speedtest test operation should succeed");
         let port = i32::from(
             listener
                 .local_addr()

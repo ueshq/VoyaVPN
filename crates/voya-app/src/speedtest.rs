@@ -17,6 +17,7 @@ use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, Spee
 use voya_core::{
     generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, LocalPort,
     ProfileItem, SpeedtestConfig, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
+    DEFAULT_SPEED_PING_TEST_URL, LOOPBACK,
 };
 use voya_db::{Database, DbError};
 use voya_net::probe::{is_cancelled, tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
@@ -31,10 +32,8 @@ use crate::backoff::exponential_delay;
 use crate::redaction::redact_urls;
 use crate::runtime::load_runtime_core_gen_env;
 
-const REALPING_FALLBACK_URL: &str = "https://www.google.com/generate_204";
 const SPEEDTEST_BATCH_PAGE_SIZE: usize = 1000;
 const SPEEDTEST_DELAY_INTERVAL: Duration = Duration::from_secs(1);
-const LOOPBACK_ADDR: &str = "127.0.0.1";
 /// Latency probes in flight at once, through probe cores or the running core;
 /// sing-box's own group test runs ten.
 const SPEEDTEST_CONCURRENCY: usize = 8;
@@ -174,7 +173,7 @@ impl SpeedtestProbe for ReqwestSpeedtestProbe {
 /// The URL a latency probe fetches: the configured one, else the default.
 fn latency_test_url(item: &SpeedtestConfig) -> &str {
     if item.latency_url.trim().is_empty() {
-        REALPING_FALLBACK_URL
+        DEFAULT_SPEED_PING_TEST_URL
     } else {
         item.latency_url.as_str()
     }
@@ -585,7 +584,7 @@ mod tests {
                     .max()
                     .and_then(|port| u16::try_from(port + 1).ok())
                     .expect("a page has ports");
-                let listener = StdTcpListener::bind((LOOPBACK_ADDR, next))
+                let listener = StdTcpListener::bind((LOOPBACK, next))
                     .expect("the fixture must actually hold the next port");
                 self.occupied.lock().expect("occupied").push(listener);
             }
@@ -594,7 +593,7 @@ mod tests {
             let mut listeners = Vec::new();
             for port in &ports {
                 if let Ok(listener) =
-                    StdTcpListener::bind((LOOPBACK_ADDR, u16::try_from(*port).unwrap_or(0)))
+                    StdTcpListener::bind((LOOPBACK, u16::try_from(*port).unwrap_or(0)))
                 {
                     listeners.push(listener);
                 }
@@ -842,8 +841,8 @@ mod tests {
         // consume the port immediately after a bind(..., 0) allocation.
         let pair = (20000_u16..30000)
             .find_map(|port| {
-                let first = StdTcpListener::bind((LOOPBACK_ADDR, port)).ok()?;
-                let next = StdTcpListener::bind((LOOPBACK_ADDR, port + 1)).ok()?;
+                let first = StdTcpListener::bind((LOOPBACK, port)).ok()?;
+                let next = StdTcpListener::bind((LOOPBACK, port + 1)).ok()?;
                 Some((port, first, next))
             })
             .expect("two available fixture ports");
@@ -1418,7 +1417,7 @@ mod tests {
     fn reserve_speedtest_base_port(config: &mut AppConfig) -> StdTcpListener {
         let speedtest_offset = LocalPort::Speedtest.port_offset();
         for _ in 0..100 {
-            let listener = StdTcpListener::bind((LOOPBACK_ADDR, 0))
+            let listener = StdTcpListener::bind((LOOPBACK, 0))
                 .expect("speedtest test operation should succeed");
             let base_port = listener
                 .local_addr()
