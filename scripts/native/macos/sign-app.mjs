@@ -8,6 +8,7 @@ import {
   distributionFromIdentityName,
 } from "./tunnel-layout.mjs";
 import {
+  defaultProvisioningProfileDir,
   distributionProfileLabel,
   embedProvisioningProfile,
   formatProfileSelectionError,
@@ -30,7 +31,6 @@ const appEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entit
 const packetTunnelEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "packet-tunnel.plist");
 const helperEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "macos-inherit.plist");
 const windowsTunnelService = resolve(appContents, "MacOS", "voyavpn-tunnel-service");
-const defaultProvisioningProfileDir = resolve(repoRoot, "..", "docs", "certs");
 const provisioningProfileDir = resolve(process.env.VOYAVPN_PROVISIONING_PROFILE_DIR || defaultProvisioningProfileDir);
 const generatedEntitlementsDir = resolve(outRoot, "generated-entitlements");
 let tunnelLayout;

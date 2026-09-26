@@ -7,6 +7,7 @@ import {
   parseMachOMinimumVersions,
   pkgBuildPlan,
   resolvePkgPath,
+  seedOriginProblems,
   selectInstallerIdentity,
 } from "./create-pkg.mjs";
 
@@ -177,5 +178,16 @@ Load command 11
     };
     expect(appexInfoProblems({ ...appex, minimumSystemVersion: "26.0" })).toEqual([]);
     expect(appexInfoProblems({ ...appex, minimumSystemVersion: "11.0" })[0]).toMatch(/differs from the app's 26\.0/u);
+  });
+
+  it("requires the source-built sing-box seed", () => {
+    expect(seedOriginProblems({ origin: "source", tags: ["with_quic", "with_clash_api"] })).toEqual([]);
+    expect(seedOriginProblems(null)).toEqual(["The bundled sing-box seed has no sing-box.seed.json."]);
+    expect(seedOriginProblems({ assetName: "sing-box-1.13.14-darwin-arm64.tar.gz" })).toEqual([
+      "The bundled sing-box seed is the upstream build; the store package needs the source-built one (pnpm core:sing-box:build).",
+    ]);
+    expect(seedOriginProblems({ origin: "source", tags: ["with_quic", "with_naive_outbound"] })).toEqual([
+      "The bundled sing-box seed was built with with_naive_outbound.",
+    ]);
   });
 });

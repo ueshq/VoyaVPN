@@ -15,16 +15,65 @@ import { join, relative, resolve } from "node:path";
 import { parseArgs } from "../lib/args.mjs";
 import { truthy } from "../lib/common.mjs";
 import { readJson, sha256FileSync, sha256Text, writeJson } from "../lib/fs.mjs";
+import { requestedMacAppStoreBuild } from "../tauri/mac-app-store-config.mjs";
 import { download } from "./download.mjs";
 
 export const DEFAULT_SING_BOX_VERSION = "v1.13.14";
 const SING_BOX_REPO = "SagerNet/sing-box";
 const SING_BOX_CORE_DIR = "sing_box";
-const SING_BOX_SEED_MANIFEST = "sing-box.seed.json";
+export const SING_BOX_SEED_MANIFEST = "sing-box.seed.json";
 
 const SING_BOX_VERSION_PATTERN = /^v\d+\.\d+\.\d+(-[\w.]+)?$/;
 export const ALLOW_UNPINNED_SING_BOX_ENV = "VOYAVPN_ALLOW_UNPINNED_SING_BOX";
 export const ALLOW_SEED_BACKFILL_ENV = "VOYAVPN_ALLOW_SING_BOX_SEED_BACKFILL";
+
+/**
+ * Where the bundled seed comes from: `upstream` (the pinned release archive,
+ * the default) or `source` (built from the pinned sing-box commit by
+ * `scripts/core/sing-box-source-seed.mjs`). The Mac App Store build always
+ * needs `source`: the upstream macOS binary is built with
+ * `with_naive_outbound`, which links Chromium's Cronet, and Cronet imports the
+ * non-public `__kCFBundleNumericVersionKey` and links private `/usr/lib`
+ * libraries (App Review Guideline 2.5.1). See
+ * docs/release/sing-box-seed-pinning.md.
+ */
+export const SING_BOX_SEED_ORIGIN_ENV = "VOYAVPN_SING_BOX_SEED_ORIGIN";
+const SING_BOX_SEED_ORIGINS = new Set(["upstream", "source"]);
+
+export const SING_BOX_SOURCE_REPOSITORY = "https://github.com/SagerNet/sing-box.git";
+
+/**
+ * The commit each tag must resolve to for a source build. A tag can be moved,
+ * so this is the source build's counterpart of SING_BOX_ARCHIVE_SHA256 and is
+ * bumped in the same commit as DEFAULT_SING_BOX_VERSION.
+ */
+export const SING_BOX_SOURCE_COMMITS = {
+  "v1.13.14": "25a600db24f7680ad9806ce5427bd0ab8afe1114",
+};
+
+/**
+ * Build tags of the source seed: upstream's own default for a `make build`
+ * (`release/DEFAULT_BUILD_TAGS_OTHERS` at the pinned tag), which already
+ * leaves out `with_naive_outbound`. Written out here so a version bump that
+ * changes upstream's list fails the build instead of changing the binary.
+ */
+export const SING_BOX_SOURCE_BUILD_TAGS = Object.freeze([
+  "with_gvisor",
+  "with_quic",
+  "with_dhcp",
+  "with_wireguard",
+  "with_utls",
+  "with_acme",
+  "with_clash_api",
+  "with_tailscale",
+  "with_ccm",
+  "with_ocm",
+  "badlinkname",
+  "tfogo_checklinkname0",
+]);
+
+/** Tags that must never be in a source seed; see SING_BOX_SEED_ORIGIN_ENV. */
+export const SING_BOX_SOURCE_EXCLUDED_TAGS = Object.freeze(["with_naive_outbound"]);
 
 /**
  * SHA-256 of the upstream *release archive* the installer downloads (the same
@@ -86,7 +135,7 @@ export function singBoxExecutableName(platform = process.platform) {
   return platform === "win32" ? "sing-box.exe" : "sing-box";
 }
 
-function singBoxPinKey({ arch = process.arch, platform = process.platform } = {}) {
+export function singBoxPinKey({ arch = process.arch, platform = process.platform } = {}) {
   const os = SING_BOX_OS[platform];
   const cpu = SING_BOX_ARCH[arch];
   return os && cpu ? `${os}-${cpu}` : null;
@@ -147,6 +196,53 @@ export function singBoxPinStatus({
   };
 }
 
+/**
+ * Which seed this build must bundle. The Mac App Store build always gets the
+ * source seed, and asking it for the upstream one is refused rather than
+ * silently shipping a binary App Review has already rejected.
+ */
+export function requestedSingBoxSeedOrigin(env = process.env) {
+  const raw = String(env[SING_BOX_SEED_ORIGIN_ENV] ?? "").trim().toLowerCase();
+  if (raw && !SING_BOX_SEED_ORIGINS.has(raw)) {
+    throw new Error(`${SING_BOX_SEED_ORIGIN_ENV} must be "upstream" or "source" (got ${JSON.stringify(raw)}).`);
+  }
+  if (requestedMacAppStoreBuild(env)) {
+    if (raw === "upstream") {
+      throw new Error(
+        `The Mac App Store build must bundle the source-built sing-box seed; unset ${SING_BOX_SEED_ORIGIN_ENV}=upstream.`,
+      );
+    }
+    return "source";
+  }
+  return raw || "upstream";
+}
+
+/** The source build's pin for `version`, with the same escape hatch as the archive pin. */
+export function singBoxSourcePinStatus({ env = process.env, version = DEFAULT_SING_BOX_VERSION } = {}) {
+  const expected = SING_BOX_SOURCE_COMMITS[String(version)] ?? null;
+  if (expected) {
+    return { expected, pinned: true, unpinnedAllowed: false };
+  }
+  return {
+    expected: null,
+    pinned: false,
+    reason:
+      `sing-box ${version} has no pinned source commit. Add it to SING_BOX_SOURCE_COMMITS in ` +
+      "scripts/core/sing-box-installer.mjs (see docs/release/sing-box-seed-pinning.md), " +
+      `or set ${ALLOW_UNPINNED_SING_BOX_ENV}=1 to build an unverified core for a local experiment.`,
+    unpinnedAllowed: truthy(env[ALLOW_UNPINNED_SING_BOX_ENV]),
+  };
+}
+
+export function sameSingBoxBuildTags(actual, expected = SING_BOX_SOURCE_BUILD_TAGS) {
+  if (!Array.isArray(actual)) {
+    return false;
+  }
+  const left = [...new Set(actual.map(String))].sort();
+  const right = [...new Set(expected)].sort();
+  return left.length === right.length && left.every((tag, index) => tag === right[index]);
+}
+
 function assertSingBoxPinAvailable(status) {
   if (!status.pinned && !status.unpinnedAllowed) {
     throw new Error(status.reason);
@@ -200,10 +296,12 @@ export function readSingBoxSeedManifest(seedDir) {
 export function verifyStagedSingBoxSeed({
   arch = process.arch,
   env = process.env,
+  origin,
   platform = process.platform,
   repoRoot,
   version = DEFAULT_SING_BOX_VERSION,
 } = {}) {
+  const requestedOrigin = origin ?? requestedSingBoxSeedOrigin(env);
   const seedDir = singBoxSeedDir(repoRoot);
   const executableName = singBoxExecutableName(platform);
   if (!hasExpectedSingBoxExecutable(seedDir, platform)) {
@@ -223,6 +321,21 @@ export function verifyStagedSingBoxSeed({
   const manifest = readSingBoxSeedManifest(seedDir);
   if (!manifest) {
     return { code: "manifest-missing", ok: false, reason: `${SING_BOX_SEED_MANIFEST} is missing or unreadable`, staged: true };
+  }
+  // A seed staged for the other origin is stale for this build, never
+  // acceptable: that is what keeps a source seed out of a Developer ID
+  // package and the upstream binary out of the store package.
+  const manifestOrigin = manifest.origin ?? "upstream";
+  if (manifestOrigin !== requestedOrigin) {
+    return {
+      code: "origin-mismatch",
+      ok: false,
+      reason: `staged seed is the ${manifestOrigin} build, this build needs the ${requestedOrigin} one`,
+      staged: true,
+    };
+  }
+  if (requestedOrigin === "source") {
+    return verifyStagedSourceSingBoxSeed({ arch, env, executableName, manifest, platform, seedDir, version });
   }
   if (manifest.version !== version) {
     return {
@@ -258,18 +371,69 @@ export function verifyStagedSingBoxSeed({
     return { code: "unpinned", ok: false, reason: status.reason, staged: true };
   }
 
-  const executable = join(seedDir, executableName);
-  const actual = sha256FileSync(executable);
-  if (actual.toLowerCase() !== String(manifest.executableSha256).toLowerCase()) {
-    return {
-      code: "executable-digest-mismatch",
-      ok: false,
-      reason: `staged ${executableName} digest ${actual} does not match ${SING_BOX_SEED_MANIFEST}`,
-      staged: true,
-    };
+  const digestProblem = executableDigestProblem(seedDir, executableName, manifest);
+  if (digestProblem) {
+    return digestProblem;
   }
 
-  return { code: "verified", manifest, ok: true, pinned: status.pinned, reason: null, staged: true };
+  return { code: "verified", manifest, ok: true, origin: "upstream", pinned: status.pinned, reason: null, staged: true };
+}
+
+function executableDigestProblem(seedDir, executableName, manifest) {
+  const actual = sha256FileSync(join(seedDir, executableName));
+  if (actual.toLowerCase() === String(manifest.executableSha256).toLowerCase()) {
+    return null;
+  }
+  return {
+    code: "executable-digest-mismatch",
+    ok: false,
+    reason: `staged ${executableName} digest ${actual} does not match ${SING_BOX_SEED_MANIFEST}`,
+    staged: true,
+  };
+}
+
+/**
+ * The source seed's counterpart of the archive checks: the right version and
+ * target, the pinned commit, exactly the pinned tags (so never
+ * `with_naive_outbound`), and an executable that still hashes to what the
+ * build recorded.
+ */
+function verifyStagedSourceSingBoxSeed({ arch, env, executableName, manifest, platform, seedDir, version }) {
+  const failure = (code, reason) => ({ code, ok: false, reason, staged: true });
+  if (manifest.version !== version) {
+    return failure("version-mismatch", `staged seed is ${manifest.version ?? "(unknown)"}, expected ${version}`);
+  }
+  const target = singBoxPinKey({ arch, platform });
+  if (manifest.target !== target) {
+    return failure("target-mismatch", `staged seed was built for ${manifest.target ?? "(unknown)"}, expected ${target}`);
+  }
+  if (!/^[a-f0-9]{40}$/i.test(String(manifest.commit ?? "")) ||
+      !/^[a-f0-9]{64}$/i.test(String(manifest.executableSha256 ?? ""))) {
+    return failure("manifest-invalid", `${SING_BOX_SEED_MANIFEST} must contain the source commit and executable SHA-256`);
+  }
+  const status = singBoxSourcePinStatus({ env, version });
+  if (status.pinned && manifest.commit.toLowerCase() !== status.expected) {
+    return failure(
+      "source-commit-mismatch",
+      `staged seed was built from ${manifest.commit}, not the pinned ${status.expected}`,
+    );
+  }
+  if (!status.pinned && !status.unpinnedAllowed) {
+    return failure("unpinned", status.reason);
+  }
+  const excluded = (Array.isArray(manifest.tags) ? manifest.tags : []).filter((tag) =>
+    SING_BOX_SOURCE_EXCLUDED_TAGS.includes(tag));
+  if (excluded.length || !sameSingBoxBuildTags(manifest.tags)) {
+    return failure(
+      "source-tags-mismatch",
+      `staged seed was built with tags ${JSON.stringify(manifest.tags ?? null)}, expected ${SING_BOX_SOURCE_BUILD_TAGS.join(",")}`,
+    );
+  }
+  const digestProblem = executableDigestProblem(seedDir, executableName, manifest);
+  if (digestProblem) {
+    return digestProblem;
+  }
+  return { code: "verified", manifest, ok: true, origin: "source", pinned: status.pinned, reason: null, staged: true };
 }
 
 function isSingBoxPayloadFile(name) {
@@ -522,6 +686,7 @@ export async function fetchAndStageSingBoxSeed({
       executableSha256,
       fetchedAt: new Date().toISOString(),
       kept,
+      origin: "upstream",
       pinned: verification.pinned,
       sha256,
       upstreamUrl: url,
@@ -560,6 +725,7 @@ export async function installSingBoxCore({
   repoRoot,
   spawn = spawnSync,
   stageSeed = fetchAndStageSingBoxSeed,
+  buildSeed,
   version = env.SING_BOX_VERSION ?? DEFAULT_SING_BOX_VERSION,
 } = {}) {
   const skip = shouldSkipSingBoxInstall({ env, postinstall });
@@ -589,12 +755,14 @@ export async function installSingBoxCore({
     return { executable: appExecutable, status: "already-installed" };
   }
 
-  const seedVerification = verifyStagedSingBoxSeed({ arch, env, platform, repoRoot, version: resolvedVersion });
+  const origin = requestedSingBoxSeedOrigin(env);
+  const seedVerification = verifyStagedSingBoxSeed({ arch, env, origin, platform, repoRoot, version: resolvedVersion });
   if (effectiveForceFetch || !seedVerification.ok) {
     if (!effectiveForceFetch && seedVerification.staged) {
       logger.log(`- re-staging sing-box seed: ${seedVerification.reason}`);
     }
-    await stageSeed({ arch, env, fetchImpl, logger, platform, repoRoot, spawn, version: resolvedVersion });
+    const stage = await seedStager({ buildSeed, origin, stageSeed });
+    await stage({ arch, env, fetchImpl, logger, platform, repoRoot, spawn, version: resolvedVersion });
   }
 
   const copy = copySingBoxSeedToAppData({
@@ -617,28 +785,56 @@ export async function installSingBoxCore({
   return { executable: appExecutable, seedDir: copy.sourceDir, status: "installed" };
 }
 
+/**
+ * The function that stages a seed of `origin`. The source builder is loaded
+ * on demand: it needs Go and a sing-box checkout, which an ordinary
+ * `pnpm install` or Developer ID build never touches.
+ */
+async function seedStager({ buildSeed, origin, stageSeed }) {
+  if (origin !== "source") {
+    return stageSeed;
+  }
+  return buildSeed ?? (await import("./sing-box-source-seed.mjs")).buildAndStageSingBoxSeed;
+}
+
 export async function ensureSingBoxSeedForBuild({
   arch = process.arch,
   env = process.env,
   logger = console,
+  origin,
   platform = process.platform,
   repoRoot,
   spawn = spawnSync,
   stageSeed = fetchAndStageSingBoxSeed,
+  buildSeed,
   version = env.SING_BOX_VERSION ?? DEFAULT_SING_BOX_VERSION,
 } = {}) {
   const resolvedVersion = assertSingBoxVersion(version);
-  const verification = verifyStagedSingBoxSeed({ arch, env, platform, repoRoot, version: resolvedVersion });
+  const resolvedOrigin = origin ?? requestedSingBoxSeedOrigin(env);
+  const verification = verifyStagedSingBoxSeed({
+    arch,
+    env,
+    origin: resolvedOrigin,
+    platform,
+    repoRoot,
+    version: resolvedVersion,
+  });
   if (verification.ok) {
-    return { seedDir: singBoxSeedDir(repoRoot), status: "already-staged", verified: verification.pinned };
+    return {
+      origin: resolvedOrigin,
+      seedDir: singBoxSeedDir(repoRoot),
+      status: "already-staged",
+      verified: verification.pinned,
+    };
   }
 
   if (verification.staged) {
     logger.log(`- re-staging sing-box seed: ${verification.reason}`);
   }
 
-  const result = await stageSeed({ arch, env, logger, platform, repoRoot, spawn, version: resolvedVersion });
-  return { ...result, status: "staged" };
+  const stage = await seedStager({ buildSeed, origin: resolvedOrigin, stageSeed });
+  const result = await stage({ arch, env, logger, platform, repoRoot, spawn, version: resolvedVersion });
+  return { ...result, origin: resolvedOrigin, status: "staged" };
 }
 
 export function parseInstallArgs(argv) {

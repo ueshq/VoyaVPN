@@ -194,6 +194,8 @@ function main() {
     ...profileRequiredEntitlements(appProfile),
     "com.apple.security.application-groups",
     "group.app.voyavpn.desktop",
+    // Required, and questioned by App Review: the inherited-sandbox seed and the
+    // self-hosted node listen (docs/release/app-store-review-notes.md).
     "com.apple.security.network.server",
     ...(appProfile ? [
       "com.apple.application-identifier",

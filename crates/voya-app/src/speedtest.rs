@@ -120,6 +120,11 @@ impl SpeedtestItemFailure {
         }
     }
 
+    fn with_detail(mut self, detail: String) -> Self {
+        self.detail = Some(detail);
+        self
+    }
+
     fn from_error(index_id: String, error: &SpeedtestError) -> Self {
         Self {
             index_id,
@@ -194,6 +199,12 @@ pub trait ProbeCoreLauncher: Send + Sync {
     /// way writing a config and spawning a child process demand.
     fn start(&self, config_json: String) -> Result<Box<dyn ProbeCore>>;
 
+    /// The outbound types this launcher's core was built for. Unknown, the
+    /// default, means every type: the upstream seed and Libbox carry them all.
+    fn capabilities(&self) -> ProbeCoreCapabilities {
+        ProbeCoreCapabilities::default()
+    }
+
     /// Stops every probe core this launcher still has running. Tauri ends the
     /// process with `std::process::exit`, so neither `Drop` nor the pending
     /// speedtest future ever reaps them — the shell has to ask for it
@@ -221,10 +232,12 @@ fn lock_ignoring_poison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     }
 }
 
+mod capabilities;
 mod core_backend;
 mod manager;
 mod running_core;
 
+pub use capabilities::ProbeCoreCapabilities;
 pub use core_backend::ProcessProbeCoreLauncher;
 pub use manager::{start_probe_core_page, ProbeCoreSession, SpeedtestManager};
 pub use running_core::{RunningCoreProbe, SupervisorRunningCoreProbe};
@@ -540,6 +553,8 @@ mod tests {
         /// other program could while the page runs.
         occupy_next_port: bool,
         occupied: Arc<StdMutex<Vec<StdTcpListener>>>,
+        /// What the fake core reports it was built with.
+        capabilities: ProbeCoreCapabilities,
     }
 
     impl RecordingCoreBackend {
@@ -598,6 +613,10 @@ mod tests {
                 active: Arc::clone(&self.active),
                 _listeners: listeners,
             }))
+        }
+
+        fn capabilities(&self) -> ProbeCoreCapabilities {
+            self.capabilities.clone()
         }
 
         fn stop_all(&self) {
@@ -1110,6 +1129,81 @@ mod tests {
             bad.message.as_deref(),
             Some(SpeedtestOutcome::InvalidProfile.as_stored()),
             "the validator rejection is reported as the profile's outcome"
+        );
+    }
+
+    /// The Mac App Store seed is built without `with_naive_outbound`, and
+    /// sing-box refuses a config naming an outbound type it lacks: a Naive node
+    /// is reported on its own and kept off the page the other nodes run on.
+    #[tokio::test]
+    async fn speedtest_manager_keeps_unsupported_outbounds_off_the_probe_core() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("speedtest test operation should succeed");
+        insert_profile(&database, "vmess", 443).await;
+        let naive = ProfileItem {
+            index_id: "naive".to_string(),
+            remarks: "naive".to_string(),
+            protocol: ProfileProtocol::Naive {
+                server: ServerEndpoint {
+                    address: "127.0.0.1".to_string(),
+                    port: 8443,
+                },
+                username: "user".to_string(),
+                password: "pass".to_string(),
+                quic: false,
+                congestion_control: None,
+                insecure_concurrency: None,
+                udp_over_tcp: false,
+            },
+            ..ProfileItem::default()
+        };
+        database
+            .profiles()
+            .upsert_with_profile_ex(
+                &naive,
+                &ProfileExItem {
+                    index_id: "naive".to_string(),
+                    ..ProfileExItem::default()
+                },
+            )
+            .await
+            .expect("speedtest test operation should succeed");
+        let probe = Arc::new(RecordingProbe::default());
+        let backend = Arc::new(RecordingCoreBackend {
+            capabilities: ProbeCoreCapabilities::from_build_tags(["with_quic", "with_clash_api"]),
+            ..RecordingCoreBackend::default()
+        });
+        let manager =
+            SpeedtestManager::with_probe_and_launcher(test_paths(), probe.clone(), backend.clone());
+
+        let run = manager
+            .run_with_callback(&database, &AppConfig::default(), Vec::new(), |_| {})
+            .await
+            .expect("an unsupported outbound must not abort the run");
+
+        assert_eq!(run.selected_count, 2);
+        let unsupported = run
+            .results
+            .iter()
+            .find(|result| result.index_id == "naive")
+            .expect("the naive node is reported");
+        assert_eq!(unsupported.outcome, SpeedtestOutcome::ProtocolUnsupported);
+        assert_eq!(
+            unsupported.detail.as_deref(),
+            Some("the bundled sing-box is built without with_naive_outbound")
+        );
+        let starts = backend.starts();
+        assert_eq!(starts.len(), 1);
+        assert_eq!(
+            starts[0].ports.len(),
+            1,
+            "only the vmess node reaches the core"
+        );
+        assert_eq!(profile_ex_row(&database, "vmess").await.delay, 44);
+        assert_eq!(
+            profile_ex_row(&database, "naive").await.message.as_deref(),
+            Some(SpeedtestOutcome::ProtocolUnsupported.as_stored())
         );
     }
 

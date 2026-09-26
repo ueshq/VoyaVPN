@@ -281,6 +281,11 @@ describe("formatProfileSelectionError", () => {
     const message = formatProfileSelectionError("macOS app", "app.voyavpn.desktop", [], "/certs");
     expect(message).toContain("No .provisionprofile/.mobileprovision files were found");
   });
+
+  it("names every folder of an ordered search", () => {
+    const message = formatProfileSelectionError("macOS app", "app.voyavpn.desktop", [], ["/certs", "/installed"]);
+    expect(message).toContain("was not found in /certs or /installed.");
+  });
 });
 
 describe("shared provisioning capability check", () => {

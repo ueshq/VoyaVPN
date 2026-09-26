@@ -287,3 +287,25 @@ release version — `pnpm run check:architecture` fails when the mobile
 
 Libbox is GPL-3.0-or-later, so any build handed to a third party carries the
 obligations in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Before the first upload, and whenever the review answers change:
+
+1. Scan the archived app for non-public symbols and private libraries, the
+   check that stopped the 2026-09 Mac submission (Guideline 2.5.1). It covers
+   the app, the PacketTunnel appex and the embedded frameworks:
+
+   ```sh
+   pnpm native:mobile:ios:verify-imports \
+     ~/Library/Developer/Xcode/Archives/<date>/VoyaVPN*.xcarchive/Products/Applications/VoyaVPN.app
+   ```
+
+   The iOS Libbox slice has no Cronet `info_plist_data.o`, so it passes today;
+   the scan keeps it that way across sing-box bumps.
+2. Fill in App Review Information, App Privacy ("Data Not Collected") and the
+   Privacy Policy URL from [app-store-review-notes.md](app-store-review-notes.md).
+   Review asks every VPN app for these answers. iOS has no self-hosted node, so
+   the `network.server` explanation there does not apply.
+3. Every purpose string in `apps/mobile/ios/VoyaVPN/Info.plist` must be
+   non-empty and describe the release use. Do not add a usage key the app does
+   not use; the React Native template's empty location key was removed for
+   that reason.

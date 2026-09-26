@@ -910,6 +910,7 @@
       "failed": "測試失敗",
       "invalidProfile": "節點無效",
       "noAvailablePort": "沒有可用的本機連接埠",
+      "protocolUnsupported": "連線後可測速",
       "proxyConnectFailed": "代理連線失敗",
       "proxyConnectionClosed": "代理連線已關閉",
       "proxyConnectionRefused": "代理連線遭拒",

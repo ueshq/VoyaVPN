@@ -41,6 +41,25 @@ impl ConfigType {
             Self::Naive => "naive",
         }
     }
+
+    /// The sing-box build tag an outbound of this type needs, or `None` when
+    /// every sing-box build carries it. A probe core whose build tags are known
+    /// is only handed the types it was built for.
+    #[must_use]
+    pub const fn required_build_tag(self) -> Option<&'static str> {
+        match self {
+            Self::Naive => Some("with_naive_outbound"),
+            Self::WireGuard => Some("with_wireguard"),
+            Self::Hysteria2 | Self::TUIC => Some("with_quic"),
+            Self::VMess
+            | Self::Shadowsocks
+            | Self::SOCKS
+            | Self::VLESS
+            | Self::Trojan
+            | Self::HTTP
+            | Self::Anytls => None,
+        }
+    }
 }
 
 /// A stored config type this build does not know.
@@ -150,6 +169,17 @@ pub enum CloseAction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_optional_outbounds_need_a_build_tag() {
+        assert_eq!(
+            ConfigType::Naive.required_build_tag(),
+            Some("with_naive_outbound")
+        );
+        assert_eq!(ConfigType::TUIC.required_build_tag(), Some("with_quic"));
+        assert_eq!(ConfigType::Shadowsocks.required_build_tag(), None);
+        assert_eq!(ConfigType::VLESS.required_build_tag(), None);
+    }
 
     #[test]
     fn config_types_keep_their_stored_spelling() {

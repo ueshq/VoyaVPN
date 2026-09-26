@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- network.server is used, not vestigial: the sing-box seed this app launches
+     inherits this sandbox and listens on 127.0.0.1 for the disconnected latency
+     test and the self-hosted node's self-test, and the self-hosted node itself
+     accepts connections on the ports the user opens. App Review questions it;
+     the answer to give is in docs/release/app-store-review-notes.md. -->
 <plist version="1.0">
 <dict>
   <key>com.apple.security.app-sandbox</key>

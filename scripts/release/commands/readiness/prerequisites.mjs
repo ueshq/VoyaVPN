@@ -92,11 +92,16 @@ export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStaged
     // A digest that disagrees means the staged bytes are not the pinned bytes,
     // which is an integrity failure in any mode. Every other reason means the
     // seed is merely stale or unverifiable and the next build re-stages it.
-    const tampered =
-      verification.code === "archive-digest-mismatch" || verification.code === "executable-digest-mismatch";
+    const tampered = [
+      "archive-digest-mismatch",
+      "executable-digest-mismatch",
+      "source-commit-mismatch",
+      "source-tags-mismatch",
+    ].includes(verification.code);
     const details = [
       `${DEFAULT_SING_BOX_VERSION} seed cannot be trusted: ${verification.reason}`,
-      "run `pnpm core:sing-box:install --force-fetch` to re-stage a verified seed",
+      "run `pnpm core:sing-box:install --force-fetch` to re-stage a verified seed " +
+        "(`pnpm core:sing-box:build` for the source-built Mac App Store seed)",
     ];
     if (tampered) {
       reporter.fail("bundled sing-box seed", details);
@@ -106,15 +111,20 @@ export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStaged
     return;
   }
 
+  const label = verification.origin === "source"
+    ? `source-built ${verification.manifest.version} (${verification.manifest.target})`
+    : verification.manifest.assetName;
   if (!verification.pinned) {
     reporter.blocker("bundled sing-box seed", [
-      `${verification.manifest.assetName} was staged with ${ALLOW_UNPINNED_SING_BOX_ENV}; its content is unverified`,
+      `${label} was staged with ${ALLOW_UNPINNED_SING_BOX_ENV}; its content is unverified`,
     ]);
     return;
   }
 
   reporter.pass("bundled sing-box seed", [
-    `${verification.manifest.assetName} matches the pinned SHA-256 ${verification.manifest.sha256}`,
+    verification.origin === "source"
+      ? `${label} is built from the pinned commit ${verification.manifest.commit} with tags ${verification.manifest.tags.join(",")}`
+      : `${label} matches the pinned SHA-256 ${verification.manifest.sha256}`,
   ]);
 }
 

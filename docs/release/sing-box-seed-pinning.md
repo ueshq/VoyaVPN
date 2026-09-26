@@ -65,6 +65,69 @@ is interpolated into a URL or a PowerShell command line.
    [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) approval evidence before a
    stable release ships the new binary.
 
+6. Pin the source build of the same tag (see
+   [From-source seed](#from-source-seed-mac-app-store-lane)):
+
+   ```sh
+   git -C target/native/sing-box fetch --tags --force
+   git -C target/native/sing-box rev-list -n1 <tag>
+   git -C target/native/sing-box show <tag>:release/DEFAULT_BUILD_TAGS_OTHERS
+   ```
+
+   Record the commit in `SING_BOX_SOURCE_COMMITS`. Compare the tag list with
+   `SING_BOX_SOURCE_BUILD_TAGS`; if upstream changed it, review the change
+   before copying it, and never add `with_naive_outbound`. Then run
+   `pnpm core:sing-box:build` on a Mac and check that it passes its own
+   public-API scan.
+
+## From-source seed (Mac App Store lane)
+
+The Mac App Store package cannot ship the upstream macOS binary. Upstream
+builds its release with `with_naive_outbound`, which links Chromium's Cronet
+(`github.com/sagernet/cronet-go`). Cronet's `info_plist_data.o` imports the
+non-public `__kCFBundleNumericVersionKey`, and Cronet links the private
+`/usr/lib/libpmenergy.dylib` and `/usr/lib/libpmsample.dylib`. App Review
+rejected the 2026-09 upload for the first of these (Guideline 2.5.1).
+
+So the store lane builds the seed from source instead:
+
+- **Switch.** `VOYAVPN_SING_BOX_SEED_ORIGIN` is `upstream` (default) or
+  `source`. `VOYAVPN_MAC_APP_STORE=1` implies `source`, and asking that build
+  for `upstream` is refused. `pnpm install` stages the upstream seed and never
+  needs Go.
+- **Pin.** `SING_BOX_SOURCE_COMMITS` maps each tag to the commit it must
+  resolve to, since a tag can move. `SING_BOX_SOURCE_BUILD_TAGS` is upstream's
+  own `make build` list (`release/DEFAULT_BUILD_TAGS_OTHERS`), written out so a
+  bump cannot change it silently. `SING_BOX_SOURCE_EXCLUDED_TAGS` names what
+  may never appear.
+- **Build.** `scripts/core/sing-box-source-seed.mjs` checks out the pin in
+  `target/native/sing-box` (the checkout the Libbox builds share) and runs
+  `go build -trimpath` with upstream's `release/LDFLAGS`. It then checks the
+  tags and revision the binary reports and, on macOS, runs the public-API scan
+  from `scripts/native/macos/macho-imports.mjs`. `pnpm core:sing-box:build`
+  runs it by hand; the Tauri build wrapper runs it when the staged seed does
+  not verify.
+- **Manifest.** `sing-box.seed.json` records `origin: "source"`, `version`,
+  `commit`, `target`, `tags`, `excludedTags`, `goVersion`, `ldflags` and
+  `executableSha256`. The same build with the same Go version is
+  byte-for-byte reproducible; a different Go version gives different bytes, so
+  the pin is the commit and tags, not the binary digest.
+- **Verification.** A seed staged for one origin never verifies for the other
+  (`origin-mismatch`), so the next build re-stages instead of bundling it. That
+  keeps a source seed out of a Developer ID package and the upstream binary out
+  of the store package. A source seed must also match the pinned commit, the
+  exact tag list, the target, and its recorded executable digest. `pnpm release
+  -- readiness` fails on a wrong commit or tag list.
+- **Runtime.** The app reads `tags` from the bundled manifest. A node whose
+  outbound type needs a tag the seed lacks is reported as `protocolUnsupported`
+  and left out of the probe core's config, because sing-box refuses a whole
+  config that names an unknown outbound type. The upstream manifest has no
+  `tags`, so nothing changes for the other lanes.
+
+`VOYAVPN_ALLOW_UNPINNED_SING_BOX=1` applies to the source build too: it permits
+a tag with no pinned commit for a local experiment, and never accepts a commit
+that disagrees with the pin.
+
 ## Escape hatch
 
 `VOYAVPN_ALLOW_UNPINNED_SING_BOX=1` permits staging a `{version, platform, arch}`

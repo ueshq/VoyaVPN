@@ -2,10 +2,19 @@ import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { capture, checkedCapture, isCliEntrypoint, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
-import { resolveDmgPath } from "./tunnel-layout.mjs";
+import { appBundleIdentifier, packetTunnelBundleIdentifier, resolveDmgPath } from "./tunnel-layout.mjs";
 import { requestedMacAppStoreBuild } from "../../tauri/mac-app-store-config.mjs";
 import { prepareVoyaForLocalBuild } from "./local-runtime.mjs";
-import { resolveSigningIdentity } from "./provisioning.mjs";
+import {
+  defaultProvisioningProfileDir,
+  distributionProfileLabel,
+  formatProfileSelectionError,
+  installedProvisioningProfileDir,
+  localProvisioningUdid,
+  resolveProfileFromEnv,
+  resolveSigningIdentity,
+} from "./provisioning.mjs";
+import { requireGoToolchain } from "../../core/sing-box-source-seed.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const packageJson = readJson(resolve(repoRoot, "package.json"));
@@ -205,16 +214,54 @@ function requireAppleSilicon() {
   }
 }
 
+/**
+ * The store lane's two distribution profiles, found before anything builds and
+ * handed to the child scripts as the explicit profile variables.
+ *
+ * Without VOYAVPN_PROVISIONING_PROFILE_DIR the search tries ../docs/certs, then
+ * the folder macOS installs a double-clicked profile into, which is where store
+ * profiles usually are. The criteria are the ones build-tunnel and sign-app
+ * apply, so a profile chosen here is one they accept.
+ */
+function appStoreProvisioningProfiles(identitySha1) {
+  const explicitDir = process.env.VOYAVPN_PROVISIONING_PROFILE_DIR?.trim();
+  const profileDir = explicitDir
+    ? resolve(explicitDir)
+    : [defaultProvisioningProfileDir, installedProvisioningProfileDir];
+  const criteria = { distribution: "app-store", identitySha1, deviceUdid: localProvisioningUdid() };
+  const env = {};
+  for (const [bundleIdentifier, explicitEnvName, label] of [
+    [appBundleIdentifier, "VOYAVPN_MACOS_APP_PROVISIONING_PROFILE", "macOS app"],
+    [packetTunnelBundleIdentifier, "VOYAVPN_PACKET_TUNNEL_PROVISIONING_PROFILE", "PacketTunnel"],
+  ]) {
+    const { profile, rejections } = resolveProfileFromEnv({ bundleIdentifier, explicitEnvName, profileDir, criteria });
+    if (!profile) {
+      const fullLabel = `${label} ${distributionProfileLabel("app-store")}`;
+      throw new Error(
+        `${formatProfileSelectionError(fullLabel, bundleIdentifier, rejections, profileDir)}\nSet ${explicitEnvName} to select a profile explicitly.`,
+      );
+    }
+    console.log(`${label} provisioning profile: ${profile.path}`);
+    env[explicitEnvName] = profile.path;
+  }
+  return env;
+}
+
 function buildAppStorePackage() {
   requireAppleSilicon();
+  // The store package bundles a sing-box seed compiled from the pinned source
+  // (docs/release/macos-app-store.md); fail now rather than after the Rust build.
+  const goVersion = requireGoToolchain();
   const identity = appStoreIdentity();
   const commonEnv = {
     ...process.env,
+    ...appStoreProvisioningProfiles(identity),
     VOYAVPN_MAC_APP_STORE: "1",
     VOYAVPN_MACOS_APP_BUNDLE: appBundle,
     VOYAVPN_CODESIGN_IDENTITY: identity,
     VOYAVPN_MACOS_DISTRIBUTION: "app-store",
     VOYAVPN_REQUIRE_PROVISIONING: "1",
+    VOYAVPN_SING_BOX_SEED_ORIGIN: "source",
   };
   // A development profile would sign and verify, then fail App Review.
   delete commonEnv.VOYAVPN_ALLOW_DEVELOPMENT_PROVISIONING;
@@ -225,6 +272,7 @@ function buildAppStorePackage() {
   };
 
   console.log("Building the Mac App Store package (arm64, PacketTunnel appex, no self-updater).");
+  console.log(`sing-box seed: built from the pinned source with ${goVersion}.`);
   console.log(`Output: ${appBundle}`);
 
   // Start from an empty bundle directory: Tauri writes into an existing

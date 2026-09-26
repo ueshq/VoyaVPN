@@ -910,6 +910,7 @@
       "failed": "测试失败",
       "invalidProfile": "节点无效",
       "noAvailablePort": "没有空闲的本地端口",
+      "protocolUnsupported": "连接后可测速",
       "proxyConnectFailed": "代理连接失败",
       "proxyConnectionClosed": "代理连接已关闭",
       "proxyConnectionRefused": "代理连接被拒绝",

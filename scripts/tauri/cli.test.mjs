@@ -29,7 +29,7 @@ describe("Tauri CLI", () => {
       writeCoreOverlay: () => null,
     });
 
-    expect(ensureSeed).toHaveBeenCalledWith({ repoRoot: "/repo" });
+    expect(ensureSeed).toHaveBeenCalledWith({ origin: "upstream", repoRoot: "/repo" });
     expect(invocation.commandArgs).toEqual(["build", "--debug"]);
     expect(invocation.env.CI).toBe("true");
   });
@@ -94,6 +94,30 @@ describe("Tauri CLI", () => {
     ]);
   });
 
+  it("stages the source-built seed for a Mac App Store build", async () => {
+    const ensureSeed = vi.fn();
+    await prepareTauriInvocation(["build", "--bundles", "app"], {
+      repoRoot: "/repo",
+      hostPlatform: "darwin",
+      sourceEnv: { VOYAVPN_MAC_APP_STORE: "1" },
+      ensureSeed,
+      writeCoreOverlay: () => null,
+      writeAppStoreOverlay: () => ({ overlayPath: "/repo/o.json", buildNumber: "1" }),
+    });
+    expect(ensureSeed).toHaveBeenCalledWith({ origin: "source", repoRoot: "/repo" });
+
+    const refusedSeed = vi.fn();
+    await expect(
+      prepareTauriInvocation(["build"], {
+        repoRoot: "/repo",
+        hostPlatform: "darwin",
+        sourceEnv: { VOYAVPN_MAC_APP_STORE: "1", VOYAVPN_SING_BOX_SEED_ORIGIN: "upstream" },
+        ensureSeed: refusedSeed,
+      }),
+    ).rejects.toThrow(/source-built sing-box seed/);
+    expect(refusedSeed).not.toHaveBeenCalled();
+  });
+
   it("refuses a Mac App Store build that also asks for the stable updater", async () => {
     const writeUpdaterOverlay = vi.fn();
     const writeAppStoreOverlay = vi.fn();
@@ -138,7 +162,7 @@ describe("Tauri CLI", () => {
       writeCoreOverlay: () => null,
     });
 
-    expect(ensureSeed).toHaveBeenCalledWith({ arch: "arm64", platform: "linux", repoRoot: "/repo" });
+    expect(ensureSeed).toHaveBeenCalledWith({ origin: "upstream", arch: "arm64", platform: "linux", repoRoot: "/repo" });
 
     const inlineEnsureSeed = vi.fn();
     await prepareTauriInvocation(["build", "--target=x86_64-pc-windows-msvc"], {
@@ -149,7 +173,7 @@ describe("Tauri CLI", () => {
       writeCoreOverlay: () => null,
     });
 
-    expect(inlineEnsureSeed).toHaveBeenCalledWith({ arch: "x64", platform: "win32", repoRoot: "/repo" });
+    expect(inlineEnsureSeed).toHaveBeenCalledWith({ origin: "upstream", arch: "x64", platform: "win32", repoRoot: "/repo" });
   });
 
   it("stages and bundles the seed for macOS packages", async () => {
@@ -163,7 +187,7 @@ describe("Tauri CLI", () => {
       writeCoreOverlay,
     });
 
-    expect(ensureSeed).toHaveBeenCalledWith({ arch: "arm64", platform: "darwin", repoRoot: "/repo" });
+    expect(ensureSeed).toHaveBeenCalledWith({ origin: "upstream", arch: "arm64", platform: "darwin", repoRoot: "/repo" });
     expect(writeCoreOverlay).toHaveBeenCalledWith(
       "/repo",
       "/repo/target/release-config/tauri.core-seeds.generated.json",

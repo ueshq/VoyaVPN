@@ -207,6 +207,7 @@ Every `pnpm tauri:build` bundles the sing-box seed, including `--debug` builds a
 - `bundle.externalBin` is an empty list.
 - The bundled release resources are `docs/release/THIRD_PARTY_NOTICES.md` and the generated sing-box seed overlay.
 - The seed archive is verified against the SHA-256 pinned in `scripts/core/sing-box-installer.mjs` before extraction, and the already-staged seed is re-verified against `sing-box.seed.json` before it is bundled. See [sing-box-seed-pinning.md](sing-box-seed-pinning.md) for the bump procedure and the `VOYAVPN_ALLOW_UNPINNED_SING_BOX` escape hatch.
+- The Mac App Store package is the exception: its seed is compiled from the pinned source commit without `with_naive_outbound`, because the upstream macOS binary imports a non-public CoreFoundation symbol through Cronet. See [sing-box-seed-pinning.md](sing-box-seed-pinning.md#from-source-seed-mac-app-store-lane).
 - Windows and Linux runtime core lookup uses the app data `bin/` tree. sing-box is copied there from the bundled seed. macOS runs the seed from the signed app bundle.
 - GPL and AGPL cores must remain user-supplied or separately approved unless there is explicit legal approval for a distribution path.
 
@@ -255,7 +256,6 @@ pnpm native:macos:app:notarize
 App Store/TestFlight lane, which produces the signed `.pkg` for Transporter:
 
 ```sh
-export VOYAVPN_PROVISIONING_PROFILE_DIR="<profile-dir-for-Mac-App-Store>"
 pnpm build:mac:appstore
 ```
 
@@ -279,7 +279,9 @@ instead provide an already-built framework through `VOYAVPN_LIBBOX_FRAMEWORK`.
 `VOYAVPN_MACOS_APP_BUNDLE` points the staging, verification, signing, and
 notarization helpers at the actual Tauri `.app`; when it is omitted, the scripts
 use `target/native/macos/VoyaVPN.app` for local staging only.
-For App Store/TestFlight builds, set `VOYAVPN_PROVISIONING_PROFILE_DIR` or the
+`pnpm build:mac:appstore` finds its store profiles in `../docs/certs` or else
+`~/Library/MobileDevice/Provisioning Profiles`; running these helpers by hand
+for App Store/TestFlight, set `VOYAVPN_PROVISIONING_PROFILE_DIR` or the
 more specific `VOYAVPN_MACOS_APP_PROVISIONING_PROFILE` and
 `VOYAVPN_PACKET_TUNNEL_PROVISIONING_PROFILE` paths. The scripts embed the
 profiles and derive `com.apple.application-identifier`,

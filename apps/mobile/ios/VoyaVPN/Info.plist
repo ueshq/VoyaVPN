@@ -33,10 +33,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- Shown to users, so it names the release use: latency tests reach the
+	     proxy servers the user added, which may be on the local network. Debug
+	     builds also load their JavaScript from Metro on the developer's Mac.
+	     App Review rejects empty or developer-facing purpose strings. -->
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Debug builds load the app's JavaScript from the development server on your Mac.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<string>VoyaVPN tests the latency of the proxy servers you add, including servers on your local network.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>VoyaAppGroupIdentifier</key>

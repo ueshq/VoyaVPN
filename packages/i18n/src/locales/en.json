@@ -910,6 +910,7 @@
       "failed": "Test failed",
       "invalidProfile": "The node is not valid",
       "noAvailablePort": "No free local port",
+      "protocolUnsupported": "Connect to test",
       "proxyConnectFailed": "Proxy connection failed",
       "proxyConnectionClosed": "Proxy connection closed",
       "proxyConnectionRefused": "Proxy connection refused",

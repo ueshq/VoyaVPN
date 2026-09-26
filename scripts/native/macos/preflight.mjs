@@ -7,6 +7,7 @@ import {
   packetTunnelBundleIdentifier,
 } from "./tunnel-layout.mjs";
 import {
+  defaultProvisioningProfileDir,
   findMatchingIdentities,
   formatProfileSelectionError,
   listCodesigningIdentities,
@@ -17,7 +18,6 @@ import {
 } from "./provisioning.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
-const defaultProvisioningProfileDir = resolve(repoRoot, "..", "docs", "certs");
 const provisioningProfileDir = resolve(process.env.VOYAVPN_PROVISIONING_PROFILE_DIR || defaultProvisioningProfileDir);
 const defaultLibboxFramework = resolve(
   repoRoot,

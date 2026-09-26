@@ -47,6 +47,11 @@ pub enum SpeedtestOutcome {
     /// The running core predates this node or its current settings (it was
     /// added or edited after connecting), so measuring needs a reconnect.
     ReconnectRequired,
+    /// The probe core this build ships was compiled without this profile's
+    /// outbound type, so nothing was probed. The Mac App Store build's seed
+    /// leaves out `with_naive_outbound`; a connected test goes through the
+    /// tunnel's core instead and is not affected.
+    ProtocolUnsupported,
     /// A failure with no more specific code.
     Failed,
     /// A stored value this build cannot classify, without dropping the row.
@@ -74,6 +79,7 @@ impl SpeedtestOutcome {
             Self::CoreUnavailable => "coreUnavailable",
             Self::NoAvailablePort => "noAvailablePort",
             Self::ReconnectRequired => "reconnectRequired",
+            Self::ProtocolUnsupported => "protocolUnsupported",
             Self::Failed => "failed",
             Self::Unknown => "unknown",
         }
@@ -193,6 +199,7 @@ mod tests {
             SpeedtestOutcome::CoreUnavailable,
             SpeedtestOutcome::NoAvailablePort,
             SpeedtestOutcome::ReconnectRequired,
+            SpeedtestOutcome::ProtocolUnsupported,
             SpeedtestOutcome::Failed,
             SpeedtestOutcome::Unknown,
         ] {

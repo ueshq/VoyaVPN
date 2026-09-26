@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { ensureCoreSeedsForBuild } from "../core/rule-sets-installer.mjs";
+import { requestedSingBoxSeedOrigin } from "../core/sing-box-installer.mjs";
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
 import { writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
 import { macAppStoreFeature, requestedMacAppStoreBuild, writeMacAppStoreOverlay } from "./mac-app-store-config.mjs";
@@ -85,7 +86,13 @@ export async function prepareTauriInvocation(
   const targetPlatform = seedTarget.platform ?? hostPlatform;
 
   if (operation === "build") {
-    await ensureSeed({ repoRoot, ...seedTarget });
+    // Resolved before anything is staged, so a store build that asks for the
+    // upstream seed fails before it downloads or compiles anything.
+    const origin = requestedSingBoxSeedOrigin(env);
+    if (origin === "source") {
+      console.log("Bundling the sing-box seed built from the pinned source (no with_naive_outbound).");
+    }
+    await ensureSeed({ origin, repoRoot, ...seedTarget });
   }
 
   if (operation === "dev" || operation === "build") {

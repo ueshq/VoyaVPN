@@ -1298,6 +1298,13 @@ export type SpeedtestOutcome =
  *  added or edited after connecting), so measuring needs a reconnect.
  */
 "reconnectRequired" | 
+/**
+ *  The probe core this build ships was compiled without this profile's
+ *  outbound type, so nothing was probed. The Mac App Store build's seed
+ *  leaves out `with_naive_outbound`; a connected test goes through the
+ *  tunnel's core instead and is not affected.
+ */
+"protocolUnsupported" | 
 /**  A failure with no more specific code. */
 "failed" | 
 /**  A stored value this build cannot classify, without dropping the row. */

@@ -26,6 +26,7 @@ import {
   distributionFromIdentityName,
 } from "./tunnel-layout.mjs";
 import {
+  defaultProvisioningProfileDir,
   distributionProfileLabel,
   embedProvisioningProfile,
   formatProfileSelectionError,
@@ -61,7 +62,6 @@ const libboxFramework = resolve(process.env.VOYAVPN_LIBBOX_FRAMEWORK || defaultL
 const embeddedLibboxFramework = tunnelLayout.embeddedLibboxFramework;
 const appEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "macos-app.plist");
 const packetTunnelEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "packet-tunnel.plist");
-const defaultProvisioningProfileDir = resolve(repoRoot, "..", "docs", "certs");
 const provisioningProfileDir = resolve(process.env.VOYAVPN_PROVISIONING_PROFILE_DIR || defaultProvisioningProfileDir);
 const generatedEntitlementsDir = resolve(outRoot, "generated-entitlements");
 

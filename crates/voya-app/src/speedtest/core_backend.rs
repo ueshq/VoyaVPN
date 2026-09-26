@@ -41,6 +41,7 @@ pub struct ProcessProbeCoreLauncher {
     runner: Arc<dyn ProcessRunner>,
     target_os: TargetOs,
     live: LiveProbeCores,
+    capabilities: ProbeCoreCapabilities,
 }
 
 impl ProcessProbeCoreLauncher {
@@ -53,8 +54,13 @@ impl ProcessProbeCoreLauncher {
         // A run that died with the process leaves its config behind, and only
         // a launcher that writes them knows to sweep them.
         cleanup_stale_speedtest_configs(&paths);
+        let capabilities = core_seed_resource_dir
+            .as_deref()
+            .map(ProbeCoreCapabilities::read_from_seed_resources)
+            .unwrap_or_default();
         Self {
             paths,
+            capabilities,
             core_seed_resource_dir,
             runner,
             target_os: TargetOs::current(),
@@ -92,6 +98,10 @@ impl ProbeCoreLauncher for ProcessProbeCoreLauncher {
             runner: Arc::clone(&self.runner),
             live: self.live.clone(),
         }))
+    }
+
+    fn capabilities(&self) -> ProbeCoreCapabilities {
+        self.capabilities.clone()
     }
 
     fn stop_all(&self) {

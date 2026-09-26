@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- network.server is used, not vestigial: the provider's sing-box opens the
+     local mixed inbound and the Clash API on 127.0.0.1, which the app reads for
+     connections and connected latency tests. Without it they fail with
+     "bind: operation not permitted". See docs/release/app-store-review-notes.md. -->
 <plist version="1.0">
 <dict>
   <key>com.apple.security.app-sandbox</key>

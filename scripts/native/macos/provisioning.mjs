@@ -1,11 +1,22 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { capture, checkedCapture, repoRootFromScript } from "../../lib/common.mjs";
 import { normalizeDistribution, packetTunnelLayout, requiredNetworkExtensionValue } from "./tunnel-layout.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const defaultDecodedDir = resolve(repoRoot, "target", "native", "macos", "decoded-provisioning-profiles");
+
+/** Where the macOS scripts look for profiles unless VOYAVPN_PROVISIONING_PROFILE_DIR names a folder. */
+export const defaultProvisioningProfileDir = resolve(repoRoot, "..", "docs", "certs");
+
+/**
+ * Where macOS installs a provisioning profile that is double-clicked after
+ * download. The store lane falls back to it: its distribution profiles usually
+ * live here, not beside the development and Developer ID ones in ../docs/certs.
+ */
+export const installedProvisioningProfileDir = resolve(homedir(), "Library", "MobileDevice", "Provisioning Profiles");
 
 export function plistBuddy(plistPath, keyPath, optional = false) {
   const result = capture("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], {
@@ -265,8 +276,10 @@ export function inferDistribution({
   return "app-store";
 }
 
+/** `profileDir` is one folder or the ordered list of folders that was searched. */
 export function formatProfileSelectionError(label, bundleIdentifier, rejections, profileDir) {
-  const lines = [`${label} provisioning profile for ${bundleIdentifier} was not found in ${profileDir}.`];
+  const searched = [profileDir].flat().join(" or ");
+  const lines = [`${label} provisioning profile for ${bundleIdentifier} was not found in ${searched}.`];
   if (rejections.length) {
     lines.push("Profiles were considered and rejected:");
     for (const rejection of rejections) {
@@ -444,6 +457,10 @@ export function embedProvisioningProfile(source, destination) {
   writeFileSync(destination, readFileSync(source));
 }
 
+/**
+ * The explicitly named profile, or the first acceptable one in `profileDir`:
+ * one folder, or a list searched in order.
+ */
 export function resolveProfileFromEnv({ bundleIdentifier, explicitEnvName, profileDir, criteria, decodedDir }) {
   const fullCriteria = { ...criteria, bundleIdentifier };
   const explicit = process.env[explicitEnvName]?.trim();
@@ -460,9 +477,10 @@ export function resolveProfileFromEnv({ bundleIdentifier, explicitEnvName, profi
     return { profile, rejections: [] };
   }
 
-  const profiles = collectProvisioningProfiles(profileDir).map((profilePath) =>
-    decodeProvisioningProfile(profilePath, decodedDir),
-  );
+  const profiles = [profileDir]
+    .flat()
+    .flatMap((dir) => collectProvisioningProfiles(dir))
+    .map((profilePath) => decodeProvisioningProfile(profilePath, decodedDir));
   return selectProvisioningProfile(profiles, fullCriteria);
 }
 

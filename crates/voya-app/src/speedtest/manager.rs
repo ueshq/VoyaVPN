@@ -266,6 +266,7 @@ impl SpeedtestManager {
     {
         let env = load_runtime_core_gen_env(database, &self.paths, config, self.target_os).await?;
         let contexts = CoreConfigContextBuilder::new(&env).prepare(config);
+        let capabilities = self.launcher.capabilities();
         let page_size = speedtest_page_size(config, items.len());
         let mut remaining = items.iter().peekable();
         let mut results = Vec::new();
@@ -278,7 +279,7 @@ impl SpeedtestManager {
             // front they all stayed resident until the run ended. A profile
             // that cannot be tested is therefore reported when its page comes
             // up, and one a cancel never reaches finishes `Cancelled`.
-            let (page, invalid) = prepare_page(&contexts, &mut remaining, page_size);
+            let (page, invalid) = prepare_page(&contexts, &capabilities, &mut remaining, page_size);
             results.extend(record_item_failures(database, invalid, items, on_results).await?);
             // Reserved per page, right before its core binds them: reserved
             // for the whole selection up front, a later page's ports sat free
@@ -387,8 +388,13 @@ impl SpeedtestManager {
 /// Takes the next page off `remaining`: up to `page_size` profiles a probe core
 /// can carry, plus an `InvalidProfile` failure for each unusable one met on the
 /// way, so one bad profile never cancels the testable ones around it.
+///
+/// A profile whose outbound type the core was not built for is reported as
+/// `ProtocolUnsupported` instead: sing-box refuses a whole config that names
+/// an unknown outbound type, so one such node would fail its entire page.
 fn prepare_page<'a>(
     contexts: &PreparedContextBuilder,
+    capabilities: &ProbeCoreCapabilities,
     remaining: &mut impl Iterator<Item = &'a ServerTestItem>,
     page_size: usize,
 ) -> (Vec<PreparedSpeedtestItem>, Vec<SpeedtestItemFailure>) {
@@ -398,6 +404,16 @@ fn prepare_page<'a>(
         let Some(item) = remaining.next() else {
             break;
         };
+        if let Some(tag) = capabilities.missing_build_tag(item.profile.config_type()) {
+            invalid.push(
+                SpeedtestItemFailure::new(
+                    item.index_id.clone(),
+                    SpeedtestOutcome::ProtocolUnsupported,
+                )
+                .with_detail(format!("the bundled sing-box is built without {tag}")),
+            );
+            continue;
+        }
         // A probe core only carries each node's own outbound, so the entry's
         // context leaves the routing rules' outbounds out.
         let build = contexts.build_node_outbound(&item.profile);

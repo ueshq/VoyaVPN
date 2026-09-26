@@ -9,7 +9,9 @@ import {
   run,
   truthy,
 } from "../../lib/common.mjs";
-import { walkFilesSync } from "../../lib/fs.mjs";
+import { readJson, walkFilesSync } from "../../lib/fs.mjs";
+import { SING_BOX_SEED_MANIFEST, SING_BOX_SOURCE_EXCLUDED_TAGS } from "../../core/sing-box-installer.mjs";
+import { bundleImportReport } from "./macho-imports.mjs";
 import {
   appBundleIdentifier,
   codesignEntitlements,
@@ -157,6 +159,29 @@ export function appexInfoProblems({ folderName, executableName, minimumSystemVer
   return problems;
 }
 
+/**
+ * The bundled seed must be the one built from source. The upstream release
+ * binary is exactly what App Review rejected (Guideline 2.5.1), so this is
+ * checked by its manifest as well as by the symbol scan.
+ */
+export function seedOriginProblems(manifest) {
+  if (!manifest) {
+    return [`The bundled sing-box seed has no ${SING_BOX_SEED_MANIFEST}.`];
+  }
+  const problems = [];
+  if (manifest.origin !== "source") {
+    problems.push(
+      `The bundled sing-box seed is the ${manifest.origin ?? "upstream"} build; the store package needs the source-built one (pnpm core:sing-box:build).`,
+    );
+  }
+  const excluded = (Array.isArray(manifest.tags) ? manifest.tags : []).filter((tag) =>
+    SING_BOX_SOURCE_EXCLUDED_TAGS.includes(tag));
+  if (excluded.length) {
+    problems.push(`The bundled sing-box seed was built with ${excluded.join(", ")}.`);
+  }
+  return problems;
+}
+
 export function resolvePkgPath({ pkgDir: dir, version, buildNumber, arch, env = process.env }) {
   const explicit = env.VOYAVPN_MACOS_PKG_PATH?.trim();
   if (explicit) return resolve(explicit);
@@ -228,6 +253,22 @@ function verifySignatures(executables) {
     }
     console.log(`✓ ${name}: sandboxed, ${archs.join("+")}`);
   }
+}
+
+/** Guideline 2.5.1: no non-public symbol, no private library, in any Mach-O of the bundle. */
+function verifyPublicApiImports() {
+  const { binaries, problems } = bundleImportReport(appContents);
+  throwProblems(problems);
+  for (const name of binaries) {
+    console.log(`✓ ${name}: public API only`);
+  }
+}
+
+function verifySeedOrigin() {
+  const manifestPath = resolve(appContents, "Resources", "core-seeds", "sing_box", SING_BOX_SEED_MANIFEST);
+  const manifest = existsSync(manifestPath) ? readJson(manifestPath) : null;
+  throwProblems(seedOriginProblems(manifest));
+  console.log(`✓ sing-box seed is built from source at ${manifest.commit} (${manifest.tags.join(",")})`);
 }
 
 function throwProblems(problems) {
@@ -321,6 +362,8 @@ function main() {
   verifySignatures(executables);
   verifyDeploymentTargets(executables, appMinimumSystemVersion);
   verifyAppExtensions(appMinimumSystemVersion);
+  verifySeedOrigin();
+  verifyPublicApiImports();
   assertNoQuarantine(appBundle, "App bundle");
 
   const version = plistBuddy(infoPlist, ":CFBundleShortVersionString");
