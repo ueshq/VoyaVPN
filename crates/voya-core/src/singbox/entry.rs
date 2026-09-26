@@ -61,12 +61,9 @@ pub fn generate_singbox_speedtest_config_json(
 #[must_use]
 pub(crate) fn generate_singbox_speedtest_config(entries: &[SpeedtestConfigEntry]) -> SingboxConfig {
     let mut config = SingboxConfig::sample();
-    config.inbounds.clear();
+    // Every other part of the sample starts empty; its `direct` outbound is
+    // the one thing a speedtest config must not carry.
     config.outbounds.clear();
-    config.endpoints.clear();
-    config.route.rules.clear();
-    config.route.rule_set = None;
-    config.route.final_outbound = None;
     config.route.default_domain_resolver = Some(SingboxRule {
         server: Some(SINGBOX_DIRECT_DNS_TAG.to_string()),
         ..SingboxRule::default()

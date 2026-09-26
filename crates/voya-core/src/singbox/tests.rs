@@ -1750,6 +1750,14 @@ fn singbox_speedtest_config_adds_mixed_inbound_proxy_and_route_per_entry() {
         generated.pointer("/dns/final").and_then(Value::as_str),
         Some(SINGBOX_DIRECT_DNS_TAG)
     );
+    assert!(
+        generated["outbounds"]
+            .as_array()
+            .is_some_and(|outbounds| outbounds
+                .iter()
+                .all(|outbound| outbound["tag"] != DIRECT_TAG)),
+        "the sample config's direct outbound must not reach a speedtest config"
+    );
 }
 
 #[test]
