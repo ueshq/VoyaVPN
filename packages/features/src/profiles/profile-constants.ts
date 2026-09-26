@@ -1,20 +1,6 @@
 import type { ProfileKind } from "@voya/contracts";
 import type { TranslationFunction } from "@voya/i18n/core";
 
-export const CONFIG_TYPES = {
-  VMess: "vmess",
-  Shadowsocks: "shadowsocks",
-  SOCKS: "socks",
-  VLESS: "vless",
-  Trojan: "trojan",
-  Hysteria2: "hysteria2",
-  TUIC: "tuic",
-  WireGuard: "wireGuard",
-  HTTP: "http",
-  Anytls: "anytls",
-  Naive: "naive",
-} as const satisfies Record<string, ProfileKind>;
-
 /** Every protocol's name, in picker order. A kind added in Rust fails the typecheck here. */
 const PROFILE_PROTOCOL_LABELS = {
   vmess: "VMess",
@@ -40,17 +26,17 @@ export function localizeProfileProtocols(t: TranslationFunction) {
 
 function protocolDescription(value: ProfileKind, t: TranslationFunction): string {
   switch (value) {
-    case CONFIG_TYPES.VMess: return t("panes.profiles.protocolDescriptions.vmess");
-    case CONFIG_TYPES.Shadowsocks: return t("panes.profiles.protocolDescriptions.shadowsocks");
-    case CONFIG_TYPES.SOCKS: return t("panes.profiles.protocolDescriptions.socks");
-    case CONFIG_TYPES.VLESS: return t("panes.profiles.protocolDescriptions.vless");
-    case CONFIG_TYPES.Trojan: return t("panes.profiles.protocolDescriptions.trojan");
-    case CONFIG_TYPES.Hysteria2: return t("panes.profiles.protocolDescriptions.hysteria2");
-    case CONFIG_TYPES.TUIC: return t("panes.profiles.protocolDescriptions.tuic");
-    case CONFIG_TYPES.WireGuard: return t("panes.profiles.protocolDescriptions.wireGuard");
-    case CONFIG_TYPES.HTTP: return t("panes.profiles.protocolDescriptions.http");
-    case CONFIG_TYPES.Anytls: return t("panes.profiles.protocolDescriptions.anytls");
-    case CONFIG_TYPES.Naive: return t("panes.profiles.protocolDescriptions.naive");
+    case "vmess": return t("panes.profiles.protocolDescriptions.vmess");
+    case "shadowsocks": return t("panes.profiles.protocolDescriptions.shadowsocks");
+    case "socks": return t("panes.profiles.protocolDescriptions.socks");
+    case "vless": return t("panes.profiles.protocolDescriptions.vless");
+    case "trojan": return t("panes.profiles.protocolDescriptions.trojan");
+    case "hysteria2": return t("panes.profiles.protocolDescriptions.hysteria2");
+    case "tuic": return t("panes.profiles.protocolDescriptions.tuic");
+    case "wireGuard": return t("panes.profiles.protocolDescriptions.wireGuard");
+    case "http": return t("panes.profiles.protocolDescriptions.http");
+    case "anytls": return t("panes.profiles.protocolDescriptions.anytls");
+    case "naive": return t("panes.profiles.protocolDescriptions.naive");
   }
 }
 

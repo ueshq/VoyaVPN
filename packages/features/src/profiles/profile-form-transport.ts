@@ -1,11 +1,10 @@
 import type { ProfileTransport } from "@voya/contracts";
 import { trimToNull } from "@voya/utils/text";
-import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import type { ParsedProfileFormValues } from "./profile-form-schema";
 export function formTransport(
   parsed: ParsedProfileFormValues,
 ): ProfileTransport | null {
-  if (parsed.configType === CONFIG_TYPES.WireGuard) return null;
+  if (parsed.configType === "wireGuard") return null;
   const options = parsed.transportOptions;
   switch (parsed.network || "tcp") {
     case "ws":

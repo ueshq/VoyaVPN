@@ -1,19 +1,18 @@
 import type { ProfileProtocol } from "@voya/contracts";
 import { trimToNull } from "@voya/utils/text";
-import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import type { ParsedProfileFormValues } from "./profile-form-schema";
 export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
   const options = parsed.protocolOptions;
   const server = { address: parsed.address, port: parsed.port };
   switch (parsed.configType) {
-    case CONFIG_TYPES.VMess:
+    case "vmess":
       return {
         kind: "vmess",
         server,
         uuid: parsed.password ?? "",
         cipher: trimToNull(options.vmessCipher),
       };
-    case CONFIG_TYPES.Shadowsocks:
+    case "shadowsocks":
       return {
         kind: "shadowsocks",
         server,
@@ -21,14 +20,14 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         method: options.method ?? "",
         udpOverTcp: options.udpOverTcp === true,
       };
-    case CONFIG_TYPES.SOCKS:
+    case "socks":
       return {
         kind: "socks",
         server,
         username: parsed.username ?? "",
         password: parsed.password ?? "",
       };
-    case CONFIG_TYPES.VLESS:
+    case "vless":
       return {
         kind: "vless",
         server,
@@ -36,9 +35,9 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         flow: trimToNull(options.flow),
         encryption: trimToNull(options.vlessEncryption),
       };
-    case CONFIG_TYPES.Trojan:
+    case "trojan":
       return { kind: "trojan", server, password: parsed.password ?? "" };
-    case CONFIG_TYPES.Hysteria2:
+    case "hysteria2":
       return {
         kind: "hysteria2",
         server,
@@ -46,7 +45,7 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         portHops: trimToNull(options.portHops),
         obfuscationPassword: trimToNull(options.obfuscationPassword),
       };
-    case CONFIG_TYPES.TUIC:
+    case "tuic":
       return {
         kind: "tuic",
         server,
@@ -54,7 +53,7 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         password: parsed.password ?? "",
         congestionControl: trimToNull(options.congestionControl),
       };
-    case CONFIG_TYPES.WireGuard:
+    case "wireGuard":
       return {
         kind: "wireGuard",
         server,
@@ -66,16 +65,16 @@ export function formProtocol(parsed: ParsedProfileFormValues): ProfileProtocol {
         reserved: trimToNull(options.wireGuardReserved),
         mtu: options.wireGuardMtu ?? null,
       };
-    case CONFIG_TYPES.HTTP:
+    case "http":
       return {
         kind: "http",
         server,
         username: parsed.username ?? "",
         password: parsed.password ?? "",
       };
-    case CONFIG_TYPES.Anytls:
+    case "anytls":
       return { kind: "anytls", server, password: parsed.password ?? "" };
-    case CONFIG_TYPES.Naive:
+    case "naive":
       return {
         kind: "naive",
         server,

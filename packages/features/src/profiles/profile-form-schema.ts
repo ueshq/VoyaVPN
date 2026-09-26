@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
-
 /**
  * Validation failures carry locale-independent codes instead of English
  * sentences: the editor renders them through `profileValidationMessage`, so the
@@ -103,19 +101,19 @@ const tuicProfileSchema = serverProfileSchema.extend({
 });
 
 export const profileFormSchema = z.discriminatedUnion("configType", [
-  serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.VMess) }),
+  serverProfileSchema.extend({ configType: z.literal("vmess") }),
   serverProfileSchema.extend({
-    configType: z.literal(CONFIG_TYPES.Shadowsocks),
+    configType: z.literal("shadowsocks"),
   }),
-  authProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.SOCKS) }),
-  serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.VLESS) }),
-  serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Trojan) }),
-  serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Hysteria2) }),
-  tuicProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.TUIC) }),
-  serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.WireGuard) }),
-  authProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.HTTP) }),
-  serverProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Anytls) }),
-  authProfileSchema.extend({ configType: z.literal(CONFIG_TYPES.Naive) }),
+  authProfileSchema.extend({ configType: z.literal("socks") }),
+  serverProfileSchema.extend({ configType: z.literal("vless") }),
+  serverProfileSchema.extend({ configType: z.literal("trojan") }),
+  serverProfileSchema.extend({ configType: z.literal("hysteria2") }),
+  tuicProfileSchema.extend({ configType: z.literal("tuic") }),
+  serverProfileSchema.extend({ configType: z.literal("wireGuard") }),
+  authProfileSchema.extend({ configType: z.literal("http") }),
+  serverProfileSchema.extend({ configType: z.literal("anytls") }),
+  authProfileSchema.extend({ configType: z.literal("naive") }),
 ]);
 
 export type ProfileFormValues = z.input<typeof profileFormSchema>;
@@ -130,11 +128,11 @@ export function activeProfileFormValues(
     protocolOptions: {
       ...values.protocolOptions,
       wireGuardMtu:
-        values.configType === CONFIG_TYPES.WireGuard
+        values.configType === "wireGuard"
           ? values.protocolOptions?.wireGuardMtu
           : undefined,
       insecureConcurrency:
-        values.configType === CONFIG_TYPES.Naive
+        values.configType === "naive"
           ? values.protocolOptions?.insecureConcurrency
           : undefined,
     },

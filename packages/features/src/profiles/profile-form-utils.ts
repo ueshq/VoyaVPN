@@ -1,5 +1,4 @@
 import type { ProfileKind } from "@voya/contracts";
-import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import type { TranslationFunction } from "@voya/i18n/core";
 import { PROFILE_VALIDATION_CODES } from "./profile-form-schema";
 
@@ -14,10 +13,10 @@ export function optionalNumber(value: unknown) {
 export function passwordLabel(configType: ProfileKind, t: TranslationFunction) {
   // TUIC is deliberately absent: it carries a UUID *and* a password, and the
   // UUID is edited through the username input (see `usernameLabel`).
-  if (configType === CONFIG_TYPES.VMess || configType === CONFIG_TYPES.VLESS) {
+  if (configType === "vmess" || configType === "vless") {
     return t("panes.profiles.fields.uuid");
   }
-  if (configType === CONFIG_TYPES.WireGuard) {
+  if (configType === "wireGuard") {
     return t("panes.profiles.fields.privateKey");
   }
 
@@ -27,7 +26,7 @@ export function passwordLabel(configType: ProfileKind, t: TranslationFunction) {
 export function usernameLabel(configType: ProfileKind, t: TranslationFunction) {
   // The form's `username` field carries the TUIC contract's `uuid`, so it is
   // labelled UUID for that protocol.
-  if (configType === CONFIG_TYPES.TUIC) {
+  if (configType === "tuic") {
     return t("panes.profiles.fields.uuid");
   }
 
@@ -35,10 +34,10 @@ export function usernameLabel(configType: ProfileKind, t: TranslationFunction) {
 }
 
 export function requiresUsername(configType: ProfileKind) {
-  return configType === CONFIG_TYPES.SOCKS
-    || configType === CONFIG_TYPES.HTTP
-    || configType === CONFIG_TYPES.Naive
-    || configType === CONFIG_TYPES.TUIC;
+  return configType === "socks"
+    || configType === "http"
+    || configType === "naive"
+    || configType === "tuic";
 }
 
 /**

@@ -1,5 +1,4 @@
 import type { ImportProfilesResult, ProfileKind } from "@voya/contracts";
-import { CONFIG_TYPES } from "./profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n/core";
 
 export type ProfileExportDestination = "clipboard" | "qr";
@@ -9,16 +8,16 @@ export type ProfileExportDestination = "clipboard" | "qr";
 // collects the batch with `?`, so a single unsupported profile fails the whole
 // export.
 const SHARE_LINK_KINDS: readonly ProfileKind[] = [
-  CONFIG_TYPES.VMess,
-  CONFIG_TYPES.Shadowsocks,
-  CONFIG_TYPES.SOCKS,
-  CONFIG_TYPES.Trojan,
-  CONFIG_TYPES.VLESS,
-  CONFIG_TYPES.Hysteria2,
-  CONFIG_TYPES.TUIC,
-  CONFIG_TYPES.WireGuard,
-  CONFIG_TYPES.Anytls,
-  CONFIG_TYPES.Naive,
+  "vmess",
+  "shadowsocks",
+  "socks",
+  "trojan",
+  "vless",
+  "hysteria2",
+  "tuic",
+  "wireGuard",
+  "anytls",
+  "naive",
 ];
 
 export function supportsShareLinkExport(kind: ProfileKind) {

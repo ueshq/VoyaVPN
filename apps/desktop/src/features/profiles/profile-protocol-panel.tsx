@@ -4,7 +4,6 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import type { ProfileKind } from "@voya/contracts";
 import { CheckboxField, TextField } from "@voya/ui/components/form-fields";
 
-import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import {
   Panel,
 } from "./profile-form-fields";
@@ -56,7 +55,7 @@ export function ProtocolPanel({
           onChange={(value) => onFieldChange("password", value)}
           value={form.password}
         />
-        {configType === CONFIG_TYPES.VMess ? (
+        {configType === "vmess" ? (
           <TextField
             label={t("panes.profiles.fields.vmessSecurity")}
             onChange={(value) => onOptionChange("vmessCipher", value)}
@@ -64,7 +63,7 @@ export function ProtocolPanel({
             value={options.vmessCipher}
           />
         ) : null}
-        {configType === CONFIG_TYPES.VLESS ? (
+        {configType === "vless" ? (
           <>
             <TextField
               label={t("panes.profiles.fields.flow")}
@@ -80,7 +79,7 @@ export function ProtocolPanel({
             />
           </>
         ) : null}
-        {configType === CONFIG_TYPES.Shadowsocks ? (
+        {configType === "shadowsocks" ? (
           <>
             <TextField
               label={t("panes.profiles.fields.method")}
@@ -95,7 +94,7 @@ export function ProtocolPanel({
             />
           </>
         ) : null}
-        {configType === CONFIG_TYPES.Hysteria2 ? (
+        {configType === "hysteria2" ? (
           <>
             <TextField
               label={t("panes.profiles.fields.ports")}
@@ -109,7 +108,7 @@ export function ProtocolPanel({
             />
           </>
         ) : null}
-        {configType === CONFIG_TYPES.TUIC ? (
+        {configType === "tuic" ? (
           <TextField
             label={t("panes.profiles.fields.congestionControl")}
             onChange={(value) => onOptionChange("congestionControl", value)}
@@ -117,7 +116,7 @@ export function ProtocolPanel({
             value={options.congestionControl}
           />
         ) : null}
-        {configType === CONFIG_TYPES.WireGuard ? (
+        {configType === "wireGuard" ? (
           <>
             <TextField
               label={t("panes.profiles.fields.peerPublicKey")}
@@ -159,7 +158,7 @@ export function ProtocolPanel({
             />
           </>
         ) : null}
-        {configType === CONFIG_TYPES.Naive ? (
+        {configType === "naive" ? (
           <>
             <CheckboxField
               checked={options.naiveQuic}

@@ -1,6 +1,5 @@
 import type { Profile, ProfileKind } from "@voya/contracts";
 import { trimToNull } from "@voya/utils/text";
-import { CONFIG_TYPES } from "@voya/features/profiles/profile-constants";
 import {
   profileFormSchema,
   activeProfileFormValues,
@@ -12,7 +11,7 @@ import { formTransport, transportToFormOptions, transportNetwork } from "./profi
 import { formTls, tlsToFormFields } from "./profile-form-tls";
 
 export function createDefaultProfile(
-  configType: ProfileKind = CONFIG_TYPES.VMess,
+  configType: ProfileKind = "vmess",
 ): ProfileFormValues {
   return createBaseProfile(configType) as ProfileFormValues;
 }
