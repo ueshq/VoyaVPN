@@ -16,8 +16,11 @@ import {
 import { SelectField, TextField } from "@voya/ui/components/form-fields";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { Profile, ProfileKind } from "@voya/contracts";
-import type { TranslationFunction } from "@voya/i18n/core";
-import type { ZodError } from "@voya/features/forms/zod-errors";
+import {
+  translateFieldErrors,
+  zodIssuesToErrorMap,
+  type FieldErrorMap,
+} from "@voya/features/forms/zod-errors";
 
 import { localizeProfileProtocols } from "@voya/features/profiles/profile-constants";
 import {
@@ -27,9 +30,7 @@ import {
   toEditorForm,
   toSchemaValues,
   type ProfileEditorForm,
-  type ProfileFieldErrors,
 } from "./profile-editor-form";
-import { profileValidationMessage } from "@voya/features/profiles/profile-form-utils";
 import {
   activeProfileFormValues,
   profileFormSchema,
@@ -57,15 +58,6 @@ type ProfileDialogProps = {
   // the modal.
   saveError?: string | null;
 };
-
-/** Zod issue paths, dotted, → the locale string the editor renders. */
-function issueMessages(error: ZodError, t: TranslationFunction): ProfileFieldErrors {
-  const messages: ProfileFieldErrors = {};
-  for (const issue of error.issues) {
-    messages[issue.path.join(".")] = profileValidationMessage(issue.message, t);
-  }
-  return messages;
-}
 
 export function ProfileDialog({
   onCloseFocus,
@@ -107,7 +99,8 @@ function ProfileDialogForm({
       profile ? normalizeProfileForForm(profile) : createDefaultProfile(),
     ),
   );
-  const [fieldErrors, setFieldErrors] = useState<ProfileFieldErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<FieldErrorMap>({});
+  const errors = translateFieldErrors(t, fieldErrors);
   const [pending, setPending] = useState(false);
   const configType = form.configType as ProfileKind;
   const security = form.streamSecurity;
@@ -145,7 +138,7 @@ function ProfileDialogForm({
       activeProfileFormValues(toSchemaValues(form)),
     );
     if (!parsed.success) {
-      setFieldErrors(issueMessages(parsed.error, t));
+      setFieldErrors(zodIssuesToErrorMap(parsed.error));
       // Hidden fields keep their session draft. Reveal their section on errors.
       document
         .querySelectorAll<HTMLDetailsElement>("#profile-form details")
@@ -211,7 +204,7 @@ function ProfileDialogForm({
                 />
 
                 <TextField
-                  error={fieldErrors.remarks}
+                  error={errors.remarks}
                   label={t("panes.profiles.fields.remarks")}
                   onChange={(value) => update("remarks", value)}
                   value={form.remarks}
@@ -220,13 +213,13 @@ function ProfileDialogForm({
 
               <div className="grid gap-3 lg:grid-cols-[1fr_7rem]">
                 <TextField
-                  error={fieldErrors.address}
+                  error={errors.address}
                   label={t("panes.profiles.fields.address")}
                   onChange={(value) => update("address", value)}
                   value={form.address}
                 />
                 <TextField
-                  error={fieldErrors.port}
+                  error={errors.port}
                   inputMode="numeric"
                   label={t("panes.profiles.fields.port")}
                   onChange={(value) => update("port", value)}
@@ -237,21 +230,21 @@ function ProfileDialogForm({
 
             <ProtocolPanel
               configType={configType}
-              errors={fieldErrors}
+              errors={errors}
               form={form}
               onFieldChange={(key, value) => update(key, value)}
               onOptionChange={updateOption}
             />
             {configType !== "wireGuard" ? (
               <TransportPanel
-                errors={fieldErrors}
+                errors={errors}
                 form={form}
                 onFieldChange={(key, value) => update(key, value)}
                 onTransportChange={updateTransport}
               />
             ) : null}
             <SecurityPanel
-              errors={fieldErrors}
+              errors={errors}
               form={form}
               onFieldChange={(key, value) => update(key, value)}
               security={security}

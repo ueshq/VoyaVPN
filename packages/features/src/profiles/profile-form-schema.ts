@@ -1,25 +1,14 @@
 import { z } from "zod";
 
-/**
- * Validation failures carry locale-independent codes instead of English
- * sentences: the editor renders them through `profileValidationMessage`, so the
- * text a user sees comes from the locale system like every other visible string.
- */
-export const PROFILE_VALIDATION_CODES = {
-  portInvalid: "voya.profile.port.invalid",
-  integerInvalid: "voya.profile.integer.invalid",
-  addressRequired: "voya.profile.address.required",
-  credentialRequired: "voya.profile.credential.required",
-  remarksRequired: "voya.profile.remarks.required",
-  uuidRequired: "voya.profile.uuid.required",
-} as const;
+// Issue messages are translation keys (see forms/zod-errors.ts); the editor
+// renders them through `t`, so nothing here may be a display string.
 
 const optionalText = z.string().optional();
 const optionalNullableText = z.string().nullable().optional();
 const optionalNullableBool = z.boolean().nullable().optional();
 const optionalNullableNumber = z
-  .number({ error: PROFILE_VALIDATION_CODES.integerInvalid })
-  .int(PROFILE_VALIDATION_CODES.integerInvalid)
+  .number({ error: "validation.integer" })
+  .int("validation.integer")
   .nullable()
   .optional();
 
@@ -59,13 +48,13 @@ const commonProfileSchema = z.object({
   indexId: optionalText,
   subscriptionId: optionalNullableText,
   displayLog: z.boolean().default(true),
-  remarks: z.string().trim().min(1, PROFILE_VALIDATION_CODES.remarksRequired),
-  address: z.string().trim().min(1, PROFILE_VALIDATION_CODES.addressRequired),
+  remarks: z.string().trim().min(1, "panes.profiles.validation.remarksRequired"),
+  address: z.string().trim().min(1, "panes.profiles.validation.addressRequired"),
   port: z
-    .number({ error: PROFILE_VALIDATION_CODES.portInvalid })
-    .int(PROFILE_VALIDATION_CODES.portInvalid)
-    .min(1, PROFILE_VALIDATION_CODES.portInvalid)
-    .max(65535, PROFILE_VALIDATION_CODES.portInvalid),
+    .number({ error: "validation.invalidPort" })
+    .int("validation.invalidPort")
+    .min(1, "validation.invalidPort")
+    .max(65535, "validation.invalidPort"),
   password: optionalText,
   username: optionalText,
   network: optionalText,
@@ -84,7 +73,7 @@ const serverProfileSchema = commonProfileSchema.extend({
   password: z
     .string()
     .trim()
-    .min(1, PROFILE_VALIDATION_CODES.credentialRequired),
+    .min(1, "panes.profiles.validation.credentialRequired"),
 });
 
 const authProfileSchema = commonProfileSchema.extend({
@@ -97,7 +86,7 @@ const authProfileSchema = commonProfileSchema.extend({
 // an empty uuid (it is simply omitted from the generated outbound), so the
 // requirement has to be enforced here.
 const tuicProfileSchema = serverProfileSchema.extend({
-  username: z.string().trim().min(1, PROFILE_VALIDATION_CODES.uuidRequired),
+  username: z.string().trim().min(1, "panes.profiles.validation.uuidRequired"),
 });
 
 export const profileFormSchema = z.discriminatedUnion("configType", [

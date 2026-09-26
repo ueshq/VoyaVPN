@@ -7,8 +7,9 @@ import type {
   TlsSettings,
 } from "@voya/contracts";
 
-import { profileValidationMessage } from "./profile-form-utils";
-import { activeProfileFormValues, profileFormSchema, PROFILE_VALIDATION_CODES } from "./profile-form-schema";
+import { translateFieldErrors, zodIssuesToErrorMap } from "@voya/features/forms/zod-errors";
+
+import { activeProfileFormValues, profileFormSchema } from "./profile-form-schema";
 import { createDefaultProfile, normalizeProfileForForm, prepareProfileForSave } from "./profile-form-values";
 
 const endpoint = { address: "node.example.test", port: 443 };
@@ -179,48 +180,30 @@ describe("profile form contract transformations", () => {
     });
   });
 
-  it("reports required-field failures as locale codes, never as English sentences", () => {
-    const issues =
-      profileFormSchema.safeParse(createDefaultProfile("vmess")).error
-        ?.issues ?? [];
-    const byField = Object.fromEntries(
-      issues.map((issue) => [issue.path.join("."), issue.message] as const),
-    );
-
-    expect(byField).toMatchObject({
-      address: PROFILE_VALIDATION_CODES.addressRequired,
-      password: PROFILE_VALIDATION_CODES.credentialRequired,
-      remarks: PROFILE_VALIDATION_CODES.remarksRequired,
+  it("reports validation failures as translation keys, never as English sentences", () => {
+    const vmess = profileFormSchema.safeParse(createDefaultProfile("vmess"));
+    expect(vmess.success).toBe(false);
+    expect(zodIssuesToErrorMap(vmess.error!)).toMatchObject({
+      address: "panes.profiles.validation.addressRequired",
+      password: "panes.profiles.validation.credentialRequired",
+      remarks: "panes.profiles.validation.remarksRequired",
     });
-    expect(
-      profileFormSchema
-        .safeParse({ ...createDefaultProfile("tuic"), username: "" })
-        .error?.issues.some(
-          (issue) => issue.message === PROFILE_VALIDATION_CODES.uuidRequired,
-        ),
-    ).toBe(true);
-  });
 
-  it("maps validation codes onto locale strings and passes anything else through", () => {
+    const tuic = profileFormSchema.safeParse({ ...createDefaultProfile("tuic"), username: "" });
+    expect(zodIssuesToErrorMap(tuic.error!)).toMatchObject({
+      username: "panes.profiles.validation.uuidRequired",
+    });
+
+    const numbers = profileFormSchema.safeParse({
+      ...createDefaultProfile("wireGuard"),
+      port: 0,
+      protocolOptions: { wireGuardMtu: 1.5 },
+    });
     const t = (key: string) => `t:${key}`;
-
-    expect(
-      profileValidationMessage(PROFILE_VALIDATION_CODES.remarksRequired, t),
-    ).toBe("t:panes.profiles.validation.remarksRequired");
-    expect(
-      profileValidationMessage(PROFILE_VALIDATION_CODES.addressRequired, t),
-    ).toBe("t:panes.profiles.validation.addressRequired");
-    expect(
-      profileValidationMessage(PROFILE_VALIDATION_CODES.credentialRequired, t),
-    ).toBe("t:panes.profiles.validation.credentialRequired");
-    expect(
-      profileValidationMessage(PROFILE_VALIDATION_CODES.uuidRequired, t),
-    ).toBe("t:panes.profiles.validation.uuidRequired");
-    // zod's own issues (port bounds, ...) have no code and stay verbatim.
-    expect(
-      profileValidationMessage("Too big: expected number to be <=65535", t),
-    ).toBe("Too big: expected number to be <=65535");
-    expect(profileValidationMessage(undefined, t)).toBeUndefined();
+    expect(translateFieldErrors(t, zodIssuesToErrorMap(numbers.error!))).toMatchObject({
+      port: "t:validation.invalidPort",
+      "protocolOptions.wireGuardMtu": "t:validation.integer",
+    });
   });
 });
 
