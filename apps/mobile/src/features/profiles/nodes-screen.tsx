@@ -71,6 +71,11 @@ export function NodesScreen() {
   const [actionsFor, setActionsFor] = useState<ProfileSummaryEntry | null>(null);
 
   const returnFocusId = useRef<string | null>(null);
+  // Focus goes back to the row the sheet was opened from once it closes.
+  const openActions = useCallback((entry: ProfileSummaryEntry) => {
+    returnFocusId.current = entry.profile.id;
+    setActionsFor(entry);
+  }, [setActionsFor]);
   const importRef = useRef<View>(null);
   const nodeRefs = useRef(new Map<string, View>());
   const { width, fontScale } = useWindowDimensions();
@@ -115,11 +120,13 @@ export function NodesScreen() {
           accessibilityLabel={`${profileTitle(item.item.profile.remarks, t)}, ${item.item.profile.address}, ${profileLatency(item.item, t)}`}
           trailing={
             <View className={`gap-1 ${stackedActions ? "flex-row items-center" : "items-end"}`}>
-              <Button isIconOnly className="h-12 w-12" variant="ghost" accessibilityLabel={actionsLabel(item.item, t)} onPress={() => { returnFocusId.current = item.item.profile.id; setActionsFor(item.item); }}>
+              <Button isIconOnly className="h-12 w-12" variant="ghost" accessibilityLabel={actionsLabel(item.item, t)} onPress={() => openActions(item.item)}>
                 <MoreHorizontal size={20} color={accentForeground} />
               </Button>
               {(!item.item.metrics.outcome || item.item.metrics.outcome === "completed") ? (
-                <LatencyChip color={LATENCY_COLOR[profileLatencyTone(item.item)]} text={profileLatency(item.item, t)} />
+                <Chip size="sm" variant="soft" color={LATENCY_COLOR[profileLatencyTone(item.item)]}>
+                  <Chip.Label className="tabular-nums">{profileLatency(item.item, t)}</Chip.Label>
+                </Chip>
               ) : null}
               {activation.runningId === item.item.profile.id ? (
                 <Typography className="text-sm font-medium text-connected">
@@ -137,15 +144,9 @@ export function NodesScreen() {
           onPress={() => void select(item.item.profile.id)}
           // A phone has no right-click, so the desktop's row menu is a long
           // press; the sheet says what it offers.
-          onLongPress={() => {
-            returnFocusId.current = item.item.profile.id;
-            setActionsFor(item.item);
-          }}
+          onLongPress={() => openActions(item.item)}
           onAccessibilityAction={(event) => {
-            if (event.nativeEvent.actionName === "longpress") {
-              returnFocusId.current = item.item.profile.id;
-              setActionsFor(item.item);
-            }
+            if (event.nativeEvent.actionName === "longpress") openActions(item.item);
           }}
           accessibilityActions={[{ label: actionsLabel(item.item, t), name: "longpress" }]}
         >
@@ -154,7 +155,7 @@ export function NodesScreen() {
           ) : null}
         </ListRow>
       ),
-    [activation, selection, stackedActions, t, accentForeground, select, setActionsFor],
+    [activation, selection, stackedActions, t, accentForeground, select, openActions],
   );
 
   const testAllLabel = speedtest.speedtestRunning
@@ -207,7 +208,7 @@ export function NodesScreen() {
             {selected ? <ListGroup><ListRow
               title={`${t("mobile.currentSelection")}: ${profileTitle(selected.profile.remarks, t)}`}
               titleLines={0} description={selected.profile.address} last
-              onPress={() => { returnFocusId.current = selected.profile.id; setActionsFor(selected); }}
+              onPress={() => openActions(selected)}
             /></ListGroup> : null}
             <Button
               ref={importRef}
@@ -298,15 +299,6 @@ const LATENCY_COLOR = {
   poor: "danger",
   unknown: "default",
 } as const satisfies Record<ReturnType<typeof profileLatencyTone>, "danger" | "default" | "success" | "warning">;
-
-/** A measured latency, as a soft HeroUI `Chip`. It reports; it is not pressable. */
-function LatencyChip({ color, text }: { color: (typeof LATENCY_COLOR)[keyof typeof LATENCY_COLOR]; text: string }) {
-  return (
-    <Chip size="sm" variant="soft" color={color}>
-      <Chip.Label className="tabular-nums">{text}</Chip.Label>
-    </Chip>
-  );
-}
 
 /**
  * The radio mark before a choosable row: a tap on the row selects it, and the

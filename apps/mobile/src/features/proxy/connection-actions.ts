@@ -5,6 +5,3 @@ export async function closeSingleConnection(id: string | null) {
   if (!id?.trim()) throw new Error("Connection identifier unavailable");
   await voyaCommands().proxyCloseConnection(id);
 }
-export async function closeAllConnections() {
-  await voyaCommands().proxyCloseConnection(null);
-}

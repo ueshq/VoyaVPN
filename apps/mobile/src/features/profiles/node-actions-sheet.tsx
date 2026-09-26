@@ -80,11 +80,10 @@ export function NodeActionsSheet({
   const open = entry !== null || share !== null;
 
   const shareLabel = t("mobile.copy");
-  const showQrLabel = t("panes.profiles.export.showQr");
+  const qrTitle = t("panes.profiles.export.showQr");
   const deleteLabel = t("actions.delete");
   const closeLabel = t("actions.close");
   const title = entry ? profileTitle(entry.profile.remarks, t) : "";
-  const qrTitle = t("panes.profiles.export.showQr");
   const qrAlt = t("qr.generatedAlt");
   const loadingLabel = t("panes.profiles.loadingNodes");
   const failedLabel = t("status.operationFailed");
@@ -148,7 +147,7 @@ export function NodeActionsSheet({
                     <SheetAction
                       icon={QrCode}
                       color={actionColor}
-                      label={showQrLabel}
+                      label={qrTitle}
                       last={entry.profile.subscriptionId !== null}
                       onPress={() => void exports.handleExport([entry.profile.id], "qr")}
                     />
@@ -215,7 +214,6 @@ function SheetAction({
       titleClassName={destructive ? "text-danger" : undefined}
       leading={<Icon size={20} color={color} accessible={false} />}
       onPress={onPress}
-      accessibilityLabel={label}
     />
   );
 }

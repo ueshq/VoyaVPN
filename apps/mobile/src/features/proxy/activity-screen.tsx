@@ -1,6 +1,5 @@
 import { useIsFocused } from "@react-navigation/native";
 import { ErrorNotice } from "~/components/error-notice";
-import { closeAllConnections } from "./connection-actions";
 import { useQuery } from "@tanstack/react-query";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useAppVisible } from "@voya/client/use-app-visible";
@@ -100,7 +99,7 @@ export function ActivityScreen() {
       { text: t("actions.cancel"), style: "cancel" },
       { text: t("activity.disconnectAll"), style: "destructive", onPress: () => {
         setClosing(true); setCloseError(null);
-        void closeAllConnections().catch(setCloseError).finally(() => setClosing(false));
+        void voyaCommands().proxyCloseConnection(null).catch(setCloseError).finally(() => setClosing(false));
       } },
     ]);
   }

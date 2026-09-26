@@ -141,7 +141,11 @@ export function HomeScreen() {
         <Banner
           status="danger"
           message={t("mobile.failed")}
-          action={<RetryButton label={t("actions.retry")} onPress={runtime.retryProfiles} />}
+          action={
+            <Button className="min-h-12 h-auto rounded-3xl py-1.5" size="sm" variant="tertiary" onPress={runtime.retryProfiles}>
+              <Button.Label>{t("actions.retry")}</Button.Label>
+            </Button>
+          }
         />
       ) : null}
       {runtime.hasNodes || runtime.profilesPending || runtime.profilesError ? null : (
@@ -216,14 +220,6 @@ function Fact({
         {value}
       </Typography>
     </View>
-  );
-}
-
-function RetryButton({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Button className="min-h-12 h-auto rounded-3xl py-1.5" size="sm" variant="tertiary" onPress={onPress}>
-      <Button.Label>{label}</Button.Label>
-    </Button>
   );
 }
 
