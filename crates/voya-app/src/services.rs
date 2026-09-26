@@ -16,11 +16,11 @@ use voya_platform::{
 use crate::{
     config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
     connection_mode::{enforce_platform_connection_mode, seed_platform_connection_defaults},
+    contract_map::app_config_from_settings,
     profiles::ProfileManager,
     routing::RoutingManager,
     runtime::RuntimeManager,
     self_host::{SelfHostDeps, SelfHostManager},
-    settings::save::app_config_from_settings,
     speedtest::SpeedtestManager,
     statistics::{StatisticsEventSink, StatisticsManager},
     subscriptions::{
@@ -351,7 +351,7 @@ impl AppServices {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::save::{app_config_from_settings, settings_from_app_config};
+    use crate::contract_map::{app_config_from_settings, settings_from_app_config};
     use voya_contracts::{AppSettings, SystemProxyType};
     use voya_core::SysProxyType;
 

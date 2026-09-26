@@ -42,7 +42,7 @@ use crate::{
     routing::RoutingManagerError,
     runtime::RuntimeError,
     self_host::SelfHostError,
-    settings::save::AppSettingsValidationError,
+    settings::validate::AppSettingsValidationError,
     settings::SettingsSaveError,
     speedtest::SpeedtestError,
     subscriptions::SubscriptionManagerError,

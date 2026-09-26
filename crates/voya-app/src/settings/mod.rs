@@ -21,16 +21,20 @@
 
 pub mod apply;
 pub mod save;
+pub mod validate;
 
 use voya_contracts::AppSettings;
 use voya_core::AppConfig;
 
 use crate::{
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
-    settings::save::{
-        autostart_changes, config_from_settings, saved_config_requires_runtime_restart,
-        settings_from_app_config, settings_runtime_action, validate_app_settings,
-        AppSettingsValidationError, ApplyAutostart, SettingsRuntimeAction,
+    contract_map::{config_from_settings, settings_from_app_config},
+    settings::{
+        save::{
+            autostart_changes, saved_config_requires_runtime_restart, settings_runtime_action,
+            ApplyAutostart, SettingsRuntimeAction,
+        },
+        validate::{validate_app_settings, AppSettingsValidationError},
     },
 };
 

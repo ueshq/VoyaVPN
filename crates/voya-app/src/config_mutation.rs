@@ -17,7 +17,7 @@ use voya_platform::coreinfo::TargetOs;
 
 use crate::{
     connection_mode::enforce_platform_connection_mode,
-    settings::save::{settings_from_app_config, state_from_app_config},
+    contract_map::{settings_from_app_config, state_from_app_config},
 };
 
 pub type SharedAppConfig = Arc<RwLock<AppConfig>>;

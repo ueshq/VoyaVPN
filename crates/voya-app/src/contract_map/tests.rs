@@ -123,9 +123,9 @@ fn dns_mapping_round_trips_every_distinct_field() {
         dns: item.clone(),
         ..voya_core::AppConfig::default()
     };
-    let bundle = crate::settings::save::settings_from_app_config(&config);
+    let bundle = settings_from_app_config(&config);
     assert_eq!(bundle.dns, dns_to_contract(item.clone()));
-    let restored = crate::settings::save::config_from_settings(&bundle, &config);
+    let restored = config_from_settings(&bundle, &config);
     assert_eq!(restored.dns, item);
 }
 
