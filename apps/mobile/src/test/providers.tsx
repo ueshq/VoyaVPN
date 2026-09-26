@@ -10,8 +10,9 @@ import type { ReactElement, ReactNode } from "react";
  * The providers every screen test mounts under.
  *
  * `HeroUINativeProvider` is not decoration: it renders the portal host that
- * sheets mount into, so a test without it never sees panel content. Toasts
- * stay off and animations are disabled so a press is synchronous.
+ * HeroUI's overlays, such as the node list's sort menu, mount into, so a test
+ * without it never sees their content. Toasts stay off and animations are
+ * disabled so a press is synchronous.
  */
 const Stack = createNativeStackNavigator();
 

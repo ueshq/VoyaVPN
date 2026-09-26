@@ -116,14 +116,16 @@ const HEROUI_CONFIG: HeroUINativeConfig = {
  * The provider stack.
  *
  * `GestureHandlerRootView` is outermost because a gesture outside it is never
- * recognised, and HeroUI's sheet and press feedback are gestures.
+ * recognised, and HeroUI's press feedback is one.
  *
  * `HeroUINativeProvider` sits outside `Suspense` because it renders the portal
- * host that sheets mount into: inside, every suspension of `Shell` would
- * unmount the host along with whatever was open in it. It sits inside
- * `QueryClientProvider` because portal content renders at the host, not where
- * it was declared — so a sheet can read the query client, but not navigation,
- * which lives in `Shell`.
+ * host that HeroUI's overlays — the node list's sort menu — mount into:
+ * inside, every suspension of `Shell` would unmount the host along with
+ * whatever was open in it. It sits inside `QueryClientProvider` because portal
+ * content renders at the host, not where it was declared — so an overlay can
+ * read the query client, but not navigation, which lives in `Shell`. The node
+ * actions sheet is a React Native `Modal`, not a portal, so none of this
+ * applies to it.
  */
 export function App() {
   return (

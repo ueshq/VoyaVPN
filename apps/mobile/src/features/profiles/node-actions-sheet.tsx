@@ -189,8 +189,8 @@ export function NodeActionsSheet({
 }
 
 /**
- * One sheet row. Pure props — the portal body cannot read context, so the
- * label and the icon colour are already values by the time they get here.
+ * One sheet row. The icon colour comes in as a value because the sheet
+ * resolves each tone once for all of its rows.
  */
 function SheetAction({
   color,
