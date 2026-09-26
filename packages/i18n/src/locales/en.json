@@ -1255,7 +1255,6 @@
     "monitorFailed": "Could not read network activity. Retry.",
     "upload": "Upload",
     "download": "Download",
-    "recommended": "Recommended configuration",
     "advanced": "Custom & advanced",
     "restoreDns": "Restore DNS defaults",
     "applied": "Applied to the current connection",

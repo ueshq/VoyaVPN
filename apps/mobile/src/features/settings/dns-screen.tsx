@@ -67,7 +67,6 @@ export function DnsScreen() {
   }
   return <DetailScreen>
     <ErrorNotice error={query.error} retry={() => void query.refetch()} />
-    <Button variant="secondary" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.recommended")}</Button.Label></Button>
     {form ? <>
       {/* Unsaved edits keep the fields open: collapsing them would hide what is about to be saved. */}
       <Disclosure title={t("mobile.advanced")} isExpanded={advanced || dirty} onExpandedChange={setAdvanced}>

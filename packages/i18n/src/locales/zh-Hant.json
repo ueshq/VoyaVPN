@@ -1255,7 +1255,6 @@
     "monitorFailed": "無法讀取網路活動，請重試。",
     "upload": "上傳",
     "download": "下載",
-    "recommended": "建議設定",
     "advanced": "自訂與進階選項",
     "restoreDns": "還原 DNS 預設值",
     "applied": "目前連線已套用",
