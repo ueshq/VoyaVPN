@@ -89,50 +89,49 @@ export function RulesScreen() {
   );
 
   return (
-    <View className="flex-1 bg-canvas">
-      <FlatList
-        data={rules}
-        keyExtractor={({ item }) => item.id}
-        renderItem={renderRule}
-        contentContainerStyle={insets}
-        // The rows read the mode and the pending set, neither of which is in
-        // `data`; without this the list keeps the cells it already drew.
-        extraData={renderRule}
-        ListHeaderComponent={
-          <View className="gap-4 px-page pb-4">
-            <PageHeader title={t("tabs.rules")} />
-            <View>
-              <SectionHeader title={t("panes.routing.trafficMode")} />
-              <Card className="gap-3 p-4">
-                <SegmentedControl
-                  options={TRAFFIC_MODES.map(({ labelKey, value }) => ({ label: t(labelKey), value }))}
-                  value={trafficMode.mode}
-                  onChange={(value) => trafficMode.selectMode(value)}
-                  isDisabled={trafficMode.disabled}
-                />
-                {trafficMode.disabledReason ? (
-                  <Typography className="text-sm text-subtle">{t(trafficMode.disabledReason)}</Typography>
-                ) : null}
-              </Card>
-            </View>
-            {rulesApply ? null : <Banner status="warning" message={t("panes.routing.globalModeBanner")} />}
-            <ErrorNotice error={routing.loadError} />
-            <ErrorNotice error={routing.operationError} />
+    <FlatList
+      className="flex-1 bg-canvas"
+      data={rules}
+      keyExtractor={({ item }) => item.id}
+      renderItem={renderRule}
+      contentContainerStyle={insets}
+      // The rows read the mode and the pending set, neither of which is in
+      // `data`; without this the list keeps the cells it already drew.
+      extraData={renderRule}
+      ListHeaderComponent={
+        <View className="gap-4 px-page pb-4">
+          <PageHeader title={t("tabs.rules")} />
+          <View>
+            <SectionHeader title={t("panes.routing.trafficMode")} />
+            <Card className="gap-3 p-4">
+              <SegmentedControl
+                options={TRAFFIC_MODES.map(({ labelKey, value }) => ({ label: t(labelKey), value }))}
+                value={trafficMode.mode}
+                onChange={(value) => trafficMode.selectMode(value)}
+                isDisabled={trafficMode.disabled}
+              />
+              {trafficMode.disabledReason ? (
+                <Typography className="text-sm text-subtle">{t(trafficMode.disabledReason)}</Typography>
+              ) : null}
+            </Card>
           </View>
-        }
-        ListFooterComponent={
-          rules.length > 0 ? (
-            <Typography className="px-page pt-3 text-sm text-subtle">
-              {t("panes.routing.ruleOrderHint")}
-            </Typography>
-          ) : undefined
-        }
-        ListEmptyComponent={
-          <View className="px-page">
-            {routing.loading ? <Spinner /> : routing.loadError ? null : <EmptyState icons={[Route]} title={t("panes.routing.emptyRules")} />}
-          </View>
-        }
-      />
-    </View>
+          {rulesApply ? null : <Banner status="warning" message={t("panes.routing.globalModeBanner")} />}
+          <ErrorNotice error={routing.loadError} />
+          <ErrorNotice error={routing.operationError} />
+        </View>
+      }
+      ListFooterComponent={
+        rules.length > 0 ? (
+          <Typography className="px-page pt-3 text-sm text-subtle">
+            {t("panes.routing.ruleOrderHint")}
+          </Typography>
+        ) : undefined
+      }
+      ListEmptyComponent={
+        <View className="px-page">
+          {routing.loading ? <Spinner /> : routing.loadError ? null : <EmptyState icons={[Route]} title={t("panes.routing.emptyRules")} />}
+        </View>
+      }
+    />
   );
 }

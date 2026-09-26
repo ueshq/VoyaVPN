@@ -20,9 +20,10 @@ import { SearchField } from "heroui-native/search-field";
 import { Typography } from "heroui-native/text";
 import { Activity, ArrowDownUp, Globe, SearchX } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, ScrollView, View } from "react-native";
+import { Alert, FlatList, View } from "react-native";
 
 import { navigateToTab, openPage } from "~/app/navigation";
+import { DetailScreen } from "~/components/detail-screen";
 import { EmptyState } from "~/components/empty-state";
 import { withListPositions } from "~/components/list-positions";
 import { ListRow } from "~/components/list-row";
@@ -127,8 +128,7 @@ export function ActivityScreen() {
 
   if (!connected) {
     return (
-      <ScrollView className="flex-1 bg-canvas" contentContainerClassName="gap-4 px-page" contentContainerStyle={insets}>
-
+      <DetailScreen>
         <EmptyState
           icons={[Globe, Activity, ArrowDownUp]}
           title={t("activity.connectToView")}
@@ -143,61 +143,59 @@ export function ActivityScreen() {
             </Button>
           }
         />
-      </ScrollView>
+      </DetailScreen>
     );
   }
 
   return (
-    <View className="flex-1 bg-canvas">
-      <FlatList
-        data={positioned}
-        keyExtractor={({ item }) => connectionKey(item)}
-        renderItem={renderRow}
-        contentContainerStyle={insets}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="on-drag"
-        ListHeaderComponent={
-          <View className="gap-3 px-page pb-3">
-
-            <ErrorNotice error={closeError} />
-            <ErrorNotice error={error ?? snapshotQuery.error ?? (monitor.state === "failed" ? monitor.message || true : null)} message={t("mobile.monitorFailed")} retry={() => { setError(null); setAttempt(attempt + 1); void snapshotQuery.refetch(); }} />
-            <SearchField value={search} onChange={setSearch}>
-              <SearchField.Group>
-                <SearchField.SearchIcon />
-                <SearchField.Input
-                  className="min-h-12 h-auto rounded-3xl"
-                  placeholder={t("proxy.filterConnections")}
-                  accessibilityLabel={t("proxy.filterConnections")}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <SearchField.ClearButton accessibilityLabel={t("activity.clearSearch")} />
-              </SearchField.Group>
-            </SearchField>
-            <View className="flex-row flex-wrap items-center justify-between gap-2">
-              <Typography className="text-sm text-subtle">
-                {needle
-                  ? t("activity.filteredConnections", {
-                      count: rows.length,
-                      total: connections.length,
-                    })
-                  : t("activity.connectionCount", { count: connections.length })}
-              </Typography>
-              <Button className="min-h-12 h-auto py-2" size="sm" variant="danger-soft" isDisabled={closing || connections.length === 0} onPress={confirmCloseAll}>
-                <Button.Label>{t("activity.disconnectAll")}</Button.Label>
-              </Button>
-            </View>
+    <FlatList
+      className="flex-1 bg-canvas"
+      data={positioned}
+      keyExtractor={({ item }) => connectionKey(item)}
+      renderItem={renderRow}
+      contentContainerStyle={insets}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      ListHeaderComponent={
+        <View className="gap-3 px-page pb-3">
+          <ErrorNotice error={closeError} />
+          <ErrorNotice error={error ?? snapshotQuery.error ?? (monitor.state === "failed" ? monitor.message || true : null)} message={t("mobile.monitorFailed")} retry={() => { setError(null); setAttempt(attempt + 1); void snapshotQuery.refetch(); }} />
+          <SearchField value={search} onChange={setSearch}>
+            <SearchField.Group>
+              <SearchField.SearchIcon />
+              <SearchField.Input
+                className="min-h-12 h-auto rounded-3xl"
+                placeholder={t("proxy.filterConnections")}
+                accessibilityLabel={t("proxy.filterConnections")}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <SearchField.ClearButton accessibilityLabel={t("activity.clearSearch")} />
+            </SearchField.Group>
+          </SearchField>
+          <View className="flex-row flex-wrap items-center justify-between gap-2">
+            <Typography className="text-sm text-subtle">
+              {needle
+                ? t("activity.filteredConnections", {
+                    count: rows.length,
+                    total: connections.length,
+                  })
+                : t("activity.connectionCount", { count: connections.length })}
+            </Typography>
+            <Button className="min-h-12 h-auto py-2" size="sm" variant="danger-soft" isDisabled={closing || connections.length === 0} onPress={confirmCloseAll}>
+              <Button.Label>{t("activity.disconnectAll")}</Button.Label>
+            </Button>
           </View>
-        }
-        ListEmptyComponent={monitor.state === "failed" || error || snapshotQuery.error ? undefined :
-          <View className="px-page">
-            <EmptyState
-              icons={[needle ? SearchX : Activity]}
-              title={needle ? t("activity.noMatches") : t("activity.liveConnections")}
-            />
-          </View>
-        }
-      />
-    </View>
+        </View>
+      }
+      ListEmptyComponent={monitor.state === "failed" || error || snapshotQuery.error ? undefined :
+        <View className="px-page">
+          <EmptyState
+            icons={[needle ? SearchX : Activity]}
+            title={needle ? t("activity.noMatches") : t("activity.liveConnections")}
+          />
+        </View>
+      }
+    />
   );
 }

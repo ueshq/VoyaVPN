@@ -164,8 +164,9 @@ export function NodesScreen() {
     : t("panes.profiles.speedtest.testAll");
 
   return (
-    <View className="flex-1 bg-canvas">
+    <>
       <FlatList
+        className="flex-1 bg-canvas"
         accessibilityElementsHidden={actionsFor !== null || exports.shareQrContent !== null}
         data={rows}
         keyExtractor={({ row }) => row.key}
@@ -252,8 +253,6 @@ export function NodesScreen() {
                 </ListGroup>
               </Disclosure>
             ) : null}
-
-
           </View>
         }
         ListEmptyComponent={data.profilesQuery.isPending ? <Typography className="px-page py-4 text-base text-subtle">{t("panes.profiles.loadingNodes")}</Typography> : data.profilesQuery.error ? undefined :
@@ -281,7 +280,7 @@ export function NodesScreen() {
         operation={operation}
         onTest={(id) => void speedtest.handleSpeedtest({ profileIds: [id], scope: "profiles" })}
       />
-    </View>
+    </>
   );
 }
 

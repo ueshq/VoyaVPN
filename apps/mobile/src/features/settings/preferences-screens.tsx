@@ -13,15 +13,15 @@ import { ListGroup } from "heroui-native/list-group";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import { Check, Database, ScrollText } from "lucide-react-native";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 
+import { DetailScreen } from "~/components/detail-screen";
 import { IconBadge } from "~/components/icon-badge";
 import { ListRow } from "~/components/list-row";
 import { SectionHeader } from "~/components/section-header";
 import { SegmentedControl } from "~/components/segmented-control";
 import { SwitchRow } from "~/components/switch-row";
 import { useToneColor } from "~/components/tone";
-import { useScreenInsets } from "~/components/use-screen-insets";
 
 /** The three theme choices, in the order the desktop offers them. */
 const THEME_MODES = [
@@ -41,7 +41,6 @@ const THEME_MODES = [
  */
 function PreferencesScreen({ section }: { section: "general" | "maintenance" }) {
   const { language, t } = useI18n();
-  const insets = useScreenInsets();
   const checkColor = useToneColor("brand");
   const app = useAppSettings();
   const appearance = app.settings?.appearance;
@@ -53,17 +52,7 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
 
 
   return (
-    <ScrollView
-      className="flex-1 bg-canvas"
-      contentContainerClassName="gap-6 px-page"
-      contentContainerStyle={insets}
-      // The three DNS fields sit low enough that the keyboard covers them
-      // completely once one is focused — measured at y=734 on a 874pt screen
-      // against a keyboard whose top edge is at 538 — so without this you
-      // cannot see the resolver you are editing. A plain ScrollView does not
-      // inset itself for the keyboard on its own.
-      automaticallyAdjustKeyboardInsets
-    >
+    <DetailScreen gap="gap-6">
 
 
       {app.working ? <Spinner size="sm" /> : null}
@@ -191,7 +180,7 @@ function PreferencesScreen({ section }: { section: "general" | "maintenance" }) 
         />
       </ListGroup>
       </> : null}
-    </ScrollView>
+    </DetailScreen>
   );
 }
 

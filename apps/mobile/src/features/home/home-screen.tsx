@@ -14,15 +14,15 @@ import { Separator } from "heroui-native/separator";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import { ArrowDown, ArrowUp, Clock, Globe, type LucideIcon } from "lucide-react-native";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 
 import { ErrorNotice } from "~/components/error-notice";
 import { useTrafficMode } from "@voya/features/routing/use-traffic-mode";
 import { navigateToTab, openPage } from "~/app/navigation";
 import { Banner } from "~/components/banner";
+import { DetailScreen } from "~/components/detail-screen";
 import { PageHeader } from "~/components/page-header";
 import { useToneColor } from "~/components/tone";
-import { useScreenInsets } from "~/components/use-screen-insets";
 
 import { WorldMap } from "./world-map";
 
@@ -37,7 +37,6 @@ import { WorldMap } from "./world-map";
  */
 export function HomeScreen() {
   const { t } = useI18n();
-  const insets = useScreenInsets();
   const runtime = useHomeRuntime();
   const trafficMode = useTrafficMode();
   const primaryLabel = runtime.connected || runtime.state === "cleanupPending" ? "actions.disconnect" : !runtime.hasNodes ? "mobile.add" : !runtime.ready ? "mobile.select" : "actions.connect";
@@ -61,12 +60,7 @@ export function HomeScreen() {
   });
 
   return (
-    <ScrollView
-      className="flex-1 bg-canvas"
-      contentContainerClassName="gap-4 px-page"
-      contentContainerStyle={insets}
-      accessibilityLabel={t("home.aria")}
-    >
+    <DetailScreen accessibilityLabel={t("home.aria")}>
       <PageHeader title={t("tabs.home")} />
 
       <Card className="gap-5 p-5">
@@ -140,7 +134,6 @@ export function HomeScreen() {
         <Fact icon={Clock} label={t("home.duration")} value={connectionTime(runtime.state)} />
         <Fact icon={Globe} label={t("home.exitIp")} value={exitIp(ipQuery, t)} selectable />
       </Card>
-
       </> : null}
       <Button testID="home-activity" variant="secondary" className="min-h-12 h-auto" onPress={() => openPage("activity")}><Button.Label>{t("tabs.connections")}</Button.Label></Button>
 
@@ -154,7 +147,7 @@ export function HomeScreen() {
       {runtime.hasNodes || runtime.profilesPending || runtime.profilesError ? null : (
         <Typography className="text-base text-subtle">{t("home.emptyGuide")}</Typography>
       )}
-    </ScrollView>
+    </DetailScreen>
   );
 }
 
