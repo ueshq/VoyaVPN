@@ -4,6 +4,7 @@ import { clipboard } from "@voya/client/platform";
 import { logLineText } from "@voya/client/messages";
 import { useLogStream } from "@voya/features/logs/use-log-stream";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { formatTimeOfDay } from "@voya/utils/formatting";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 import { Button } from "heroui-native/button";
 import { SearchField } from "heroui-native/search-field";
@@ -28,7 +29,7 @@ export function LogsScreen() {
   const list = useRef<FlatList>(null);
   const rows = useMemo(() => lines.filter((line) => source === "all" || (source === "app" ? line.body.source !== "core" : line.body.source === "core")).map((line) => ({
     id: line.id,
-    text: redactOperationalMessage(`${new Date(line.loggedAt).toLocaleTimeString()} [${line.level}] ${logLineText(t, line.body)}`),
+    text: redactOperationalMessage(`${formatTimeOfDay(line.loggedAt)} [${line.level}] ${logLineText(t, line.body)}`),
   })).filter((line) => line.text.toLowerCase().includes(search.toLowerCase())), [lines, search, source, t]);
   const added = pausedAt === null ? 0 : lines.filter((line) => line.id > pausedAt).length;
   const exportText = () => rows.map((line) => line.text).join("\n");
