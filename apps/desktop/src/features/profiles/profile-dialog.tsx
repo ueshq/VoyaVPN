@@ -24,7 +24,7 @@ import {
 
 import {
   isProfileKind,
-  localizeProfileProtocols,
+  PROFILE_PROTOCOL_OPTIONS,
 } from "@voya/features/profiles/profile-constants";
 import {
   createDefaultDraft,
@@ -171,9 +171,7 @@ function ProfileDialogForm({
                   onChange={(value) => {
                     if (isProfileKind(value)) update("kind", value);
                   }}
-                  options={localizeProfileProtocols(t).map(
-                    ({ label, value }) => ({ label, value }),
-                  )}
+                  options={PROFILE_PROTOCOL_OPTIONS}
                   value={draft.kind}
                 />
 

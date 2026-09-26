@@ -379,19 +379,6 @@
         "security": "安全",
         "transport": "傳輸"
       },
-      "protocolDescriptions": {
-        "anytls": "AnyTLS 代理節點",
-        "http": "HTTP 代理節點",
-        "hysteria2": "Hysteria2 代理節點",
-        "naive": "Naive 代理節點",
-        "shadowsocks": "Shadowsocks 代理節點",
-        "socks": "SOCKS 代理節點",
-        "trojan": "Trojan 代理節點",
-        "tuic": "TUIC 代理節點",
-        "vless": "VLESS 代理節點",
-        "vmess": "VMess 代理節點",
-        "wireGuard": "WireGuard 代理節點"
-      },
       "speedtest": {
         "cancelTitle": "取消測速",
         "stop": "停止",

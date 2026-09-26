@@ -379,19 +379,6 @@
         "security": "Security",
         "transport": "Transport"
       },
-      "protocolDescriptions": {
-        "anytls": "AnyTLS proxy node",
-        "http": "HTTP proxy node",
-        "hysteria2": "Hysteria2 proxy node",
-        "naive": "Naive proxy node",
-        "shadowsocks": "Shadowsocks proxy node",
-        "socks": "SOCKS proxy node",
-        "trojan": "Trojan proxy node",
-        "tuic": "TUIC proxy node",
-        "vless": "VLESS proxy node",
-        "vmess": "VMess proxy node",
-        "wireGuard": "WireGuard proxy node"
-      },
       "speedtest": {
         "cancelTitle": "Cancel ping",
         "stop": "Stop",

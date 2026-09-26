@@ -1,5 +1,4 @@
 import type { ProfileKind, ProfileTransport, TlsMode } from "@voya/contracts";
-import type { TranslationFunction } from "@voya/i18n/core";
 
 /** Every protocol's name, in picker order. A kind added in Rust fails the typecheck here. */
 const PROFILE_PROTOCOL_LABELS = {
@@ -16,29 +15,10 @@ const PROFILE_PROTOCOL_LABELS = {
   naive: "Naive",
 } satisfies Record<ProfileKind, string>;
 
-export function localizeProfileProtocols(t: TranslationFunction) {
-  return (Object.keys(PROFILE_PROTOCOL_LABELS) as ProfileKind[]).map((value) => ({
-    description: protocolDescription(value, t),
-    label: PROFILE_PROTOCOL_LABELS[value],
-    value,
-  }));
-}
-
-function protocolDescription(value: ProfileKind, t: TranslationFunction): string {
-  switch (value) {
-    case "vmess": return t("panes.profiles.protocolDescriptions.vmess");
-    case "shadowsocks": return t("panes.profiles.protocolDescriptions.shadowsocks");
-    case "socks": return t("panes.profiles.protocolDescriptions.socks");
-    case "vless": return t("panes.profiles.protocolDescriptions.vless");
-    case "trojan": return t("panes.profiles.protocolDescriptions.trojan");
-    case "hysteria2": return t("panes.profiles.protocolDescriptions.hysteria2");
-    case "tuic": return t("panes.profiles.protocolDescriptions.tuic");
-    case "wireGuard": return t("panes.profiles.protocolDescriptions.wireGuard");
-    case "http": return t("panes.profiles.protocolDescriptions.http");
-    case "anytls": return t("panes.profiles.protocolDescriptions.anytls");
-    case "naive": return t("panes.profiles.protocolDescriptions.naive");
-  }
-}
+/** The protocol picker's options, in picker order. */
+export const PROFILE_PROTOCOL_OPTIONS = (
+  Object.keys(PROFILE_PROTOCOL_LABELS) as ProfileKind[]
+).map((value) => ({ label: PROFILE_PROTOCOL_LABELS[value], value }));
 
 export function isProfileKind(value: unknown): value is ProfileKind {
   return typeof value === "string" && Object.hasOwn(PROFILE_PROTOCOL_LABELS, value);
