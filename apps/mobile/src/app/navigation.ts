@@ -20,13 +20,9 @@ export const navigationRef = createNavigationContainerRef<RootRoutes>();
 export function navigateToTab(tab: ShellTab) {
   if (navigationRef.isReady()) navigationRef.dispatch(StackActions.popTo("main", { screen: tab }));
 }
-export function openPage<Route extends keyof RootRoutes>(...args: undefined extends RootRoutes[Route]
+/** Opens a stack page; a tab is reached with `navigateToTab` instead. */
+export function openPage<Route extends Exclude<keyof RootRoutes, "main">>(...args: undefined extends RootRoutes[Route]
   ? [name: Route, params?: RootRoutes[Route]] : [name: Route, params: RootRoutes[Route]]) {
-  if (args[0] === "main") {
-    const params = args[1] as RootRoutes["main"];
-    if (params && "screen" in params && params.screen) navigateToTab(params.screen);
-    return;
-  }
   if (navigationRef.isReady()) {
     // navigate's conditional tuple overload cannot retain this correlated generic;
     // dispatch keeps the strongly typed public boundary above.

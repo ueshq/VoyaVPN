@@ -14,18 +14,13 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import type { HeroUINativeConfig } from "heroui-native/provider";
 import { HeroUINativeProvider } from "heroui-native/provider";
 import { Suspense, use } from "react";
-import { House, Route, Server, Settings } from "lucide-react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { FloatingTabBar } from "~/components/floating-tab-bar";
 
-import { HomeScreen } from "~/features/home/home-screen";
-import { NodesScreen } from "~/features/profiles/nodes-screen";
 import { ActivityScreen } from "~/features/proxy/activity-screen";
-import { RulesScreen } from "~/features/routing/rules-screen";
-import { SettingsScreen } from "~/features/settings/settings-screen";
 import { EventBridge } from "~/ipc/event-bridge";
 import { localeReady } from "~/native/platform-boot";
 
@@ -38,8 +33,26 @@ import { useTheme } from "./use-theme";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator<RootRoutes>();
-const TAB_ICONS = { home: House, profiles: Server, rules: Route, settings: Settings };
 const queryClient = createAppQueryClient();
+
+function MainTabs() {
+  const { t } = useI18n();
+  return (
+    <Tab.Navigator tabBar={(props) => <FloatingTabBar {...props} />} screenOptions={{ headerShown: false }}>
+      {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => {
+        const { component, icon: Icon, titleKey } = SHELL_TABS[tab];
+        return (
+          <Tab.Screen key={tab} name={tab} component={component} options={{
+            // The floating bar derives the tab's label and VoiceOver name from this.
+            title: t(titleKey),
+            tabBarButtonTestID: `tab-${tab}`,
+            tabBarIcon: ({ color, size }) => <Icon color={color} size={size} accessible={false} />,
+          }} />
+        );
+      })}
+    </Tab.Navigator>
+  );
+}
 
 /**
  * The shell, suspended until the startup locale's resources are in place.
@@ -48,45 +61,6 @@ const queryClient = createAppQueryClient();
  * the registered component immediately instead, so the gate has to live here.
  * Without it a non-English launch paints English first and then swaps.
  */
-/** The screen behind one tab. */
-function TabScreen({ tab }: { tab: ShellTab }) {
-  switch (tab) {
-    case "home":
-      return <HomeScreen />;
-    case "profiles":
-      return <NodesScreen />;
-    case "rules":
-      return <RulesScreen />;
-    case "settings":
-      return <SettingsScreen />;
-  }
-}
-
-function MainTabs() {
-  const { t } = useI18n();
-  return (
-      <Tab.Navigator
-        tabBar={(props) => <FloatingTabBar {...props} />}
-        screenOptions={{ headerShown: false }}
-      >
-        {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => (
-          <Tab.Screen key={tab} name={tab} options={{
-            title: t(SHELL_TABS[tab].titleKey),
-            tabBarButtonTestID: `tab-${tab}`,
-            tabBarLabel: t(SHELL_TABS[tab].titleKey),
-            tabBarAccessibilityLabel: t(SHELL_TABS[tab].titleKey),
-            tabBarIcon: ({ color, size }) => {
-              const Icon = TAB_ICONS[tab];
-              return <Icon color={color} size={size} accessible={false} />;
-            },
-          }}>
-            {() => <TabScreen tab={tab} />}
-          </Tab.Screen>
-        ))}
-      </Tab.Navigator>
-  );
-}
-
 function Shell() {
   use(localeReady);
 

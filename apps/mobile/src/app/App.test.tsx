@@ -5,7 +5,7 @@ import { localeReady } from "~/native/platform-boot";
 import { mockTransport } from "~/test/mock-transport";
 
 import { App } from "./App";
-import { SHELL_TABS, type ShellTab } from "./tabs";
+import type { ShellTab } from "./tabs";
 
 beforeEach(() => registerMobileBackend(mockTransport()));
 
@@ -23,11 +23,16 @@ describe("App", () => {
     // the tab labels come from.
     const view = await render(<App />);
 
-    for (const label of ["Home", "Nodes", "Rules", "Settings"]) {
+    // One entry per tab, checked by the type; `selfHost` is deliberately
+    // absent, because a phone is not an exit node.
+    const labels = { home: "Home", profiles: "Nodes", rules: "Rules", settings: "Settings" } satisfies Record<ShellTab, string>;
+
+    // The bar derives both the visible label and the VoiceOver name from the
+    // screen's title; nothing sets them separately.
+    for (const [tab, label] of Object.entries(labels)) {
+      expect(view.getByTestId(`tab-${tab}`)).toHaveProp("accessibilityLabel", label);
       expect(view.getAllByText(label).length).toBeGreaterThan(0);
     }
-
-    expect(Object.keys(SHELL_TABS) as ShellTab[]).toHaveLength(4);
   });
 
   it("marks the current tab selected on the floating bar, the state XCUITest reads", async () => {

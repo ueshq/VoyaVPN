@@ -12,9 +12,10 @@ import { useToneColor } from "./tone";
  * It replaces the stock bar rather than restyling it, because the stock bar is
  * edge-to-edge by construction. What the stock bar did for testing and for
  * VoiceOver is kept item for item: each tab is a button carrying the
- * screen's `tabBarButtonTestID`, its full title as the accessibility label and
- * `selected` while it is the current tab — which is what XCUITest reads back
- * as `isSelected`.
+ * screen's `tabBarButtonTestID`, its label (`tabBarLabel`, else the screen's
+ * `title`) as the accessibility label unless `tabBarAccessibilityLabel` says
+ * otherwise, and `selected` while it is the current tab — which is what
+ * XCUITest reads back as `isSelected`.
  *
  * The bar is absolutely positioned, so the navigator cannot measure it; it
  * reports its own height instead, and `useScreenInsets` pads each screen's
@@ -47,7 +48,7 @@ export function FloatingTabBar({ descriptors, insets, navigation, state }: Botto
               key={route.key}
               testID={options.tabBarButtonTestID}
               accessibilityRole="button"
-              accessibilityLabel={options.tabBarAccessibilityLabel}
+              accessibilityLabel={options.tabBarAccessibilityLabel ?? label}
               accessibilityState={{ selected: focused }}
               // Tab labels do not grow with Dynamic Type — there is no room —
               // so a long press shows the large-content viewer, as UIKit's does.

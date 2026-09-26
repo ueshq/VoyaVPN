@@ -14,7 +14,7 @@ import { Label } from "heroui-native/label";
 import { TextField } from "heroui-native/text-field";
 import { Typography } from "heroui-native/text";
 import { Keyboard, Linking, View, useWindowDimensions } from "react-native";
-import { openPage } from "~/app/navigation";
+import { navigateToTab } from "~/app/navigation";
 import { Banner } from "~/components/banner";
 import { DetailScreen } from "~/components/detail-screen";
 import { ErrorNotice } from "~/components/error-notice";
@@ -109,6 +109,6 @@ export function ImportScreen() {
     </> : null}
     {message ? <Banner status={failedIds.length ? "warning" : "info"} message={message} liveRegion /> : null}
     {failedIds.length ? <Button variant="secondary" className="min-h-12 h-auto" isDisabled={busy} onPress={() => void run(() => updateSources(failedIds))}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
-    {message ? <Button variant="secondary" className="min-h-12 h-auto" onPress={() => openPage("main", { screen: "profiles" })}><Button.Label>{t("mobile.select")}</Button.Label></Button> : null}
+    {message ? <Button variant="secondary" className="min-h-12 h-auto" onPress={() => navigateToTab("profiles")}><Button.Label>{t("mobile.select")}</Button.Label></Button> : null}
   </DetailScreen>;
 }
