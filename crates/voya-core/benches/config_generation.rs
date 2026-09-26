@@ -7,7 +7,7 @@ use std::hint::black_box;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use voya_core::{
     generate_singbox_config_json, generate_singbox_speedtest_config_json, AppConfig,
-    CoreConfigContextBuilder, CoreGenEnv, CoreGenPlatform, GroupStrategy, InboundProtocol,
+    CoreConfigContextBuilder, CoreGenEnv, CoreGenPlatform, GroupStrategy, LocalPort,
     PolicyGroupItem, ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, ServerEndpoint,
     SpeedtestConfigEntry, TlsMode, TlsSettings,
 };
@@ -35,8 +35,8 @@ impl CoreGenEnv for BenchEnv {
         None
     }
 
-    fn get_local_port(&self, protocol: InboundProtocol) -> i32 {
-        10_808 + protocol.port_offset()
+    fn get_local_port(&self, port: LocalPort) -> i32 {
+        10_808 + port.port_offset()
     }
 }
 

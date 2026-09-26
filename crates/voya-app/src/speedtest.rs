@@ -15,7 +15,7 @@ use thiserror::Error;
 use tokio::time;
 use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
-    generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, InboundProtocol,
+    generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, LocalPort,
     ProfileItem, SpeedtestConfig, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
 };
 use voya_db::{Database, DbError};
@@ -266,7 +266,7 @@ async fn select_test_items(
         .inbounds
         .first()
         .map_or(DEFAULT_LOCAL_PORT, |inbound| inbound.local_port)
-        + InboundProtocol::speedtest.port_offset();
+        + LocalPort::Speedtest.port_offset();
 
     profiles
         .into_iter()
@@ -847,8 +847,7 @@ mod tests {
                 Some((port, first, next))
             })
             .expect("two available fixture ports");
-        config.inbounds[0].local_port =
-            i32::from(pair.0) - InboundProtocol::speedtest.port_offset();
+        config.inbounds[0].local_port = i32::from(pair.0) - LocalPort::Speedtest.port_offset();
         drop(pair);
 
         manager
@@ -1417,7 +1416,7 @@ mod tests {
     }
 
     fn reserve_speedtest_base_port(config: &mut AppConfig) -> StdTcpListener {
-        let speedtest_offset = InboundProtocol::speedtest.port_offset();
+        let speedtest_offset = LocalPort::Speedtest.port_offset();
         for _ in 0..100 {
             let listener = StdTcpListener::bind((LOOPBACK_ADDR, 0))
                 .expect("speedtest test operation should succeed");

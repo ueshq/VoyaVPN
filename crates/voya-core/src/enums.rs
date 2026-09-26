@@ -70,28 +70,34 @@ impl FromStr for ConfigType {
     }
 }
 
-#[allow(non_camel_case_types)]
+/// A local listener, by the offset its port takes from the configured mixed
+/// port (`AppConfig::local_port`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InboundProtocol {
-    socks,
-    socks2,
-    socks3,
-    api2,
-    speedtest,
+pub enum LocalPort {
+    /// The main mixed inbound, on the configured port itself.
+    Primary,
+    /// The optional second mixed inbound on the next port.
+    Secondary,
+    /// The separate LAN-facing mixed inbound.
+    Lan,
+    /// The sing-box Clash API controller.
+    ClashApi,
+    /// The first port of the speedtest probe cores.
+    Speedtest,
 }
 
-impl InboundProtocol {
+impl LocalPort {
     #[must_use]
     pub const fn port_offset(self) -> i32 {
         match self {
-            Self::socks => 0,
-            Self::socks2 => 1,
-            Self::socks3 => 2,
+            Self::Primary => 0,
+            Self::Secondary => 1,
+            Self::Lan => 2,
             // Offset 3 belonged to the retired local PAC listener, and 4 and 6
             // to listeners nothing opened. The remaining offsets keep their
             // values so generated ports stay stable.
-            Self::api2 => 5,
-            Self::speedtest => 21,
+            Self::ClashApi => 5,
+            Self::Speedtest => 21,
         }
     }
 }

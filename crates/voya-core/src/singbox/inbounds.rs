@@ -7,7 +7,7 @@ pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigConte
         .first()
         .cloned()
         .unwrap_or_default();
-    let listen_port = inbound_port(&context.app_config, InboundProtocol::socks);
+    let listen_port = inbound_port(&context.app_config, LocalPort::Primary);
     let is_using_local_mixed_port = context
         .active_outbound_nodes()
         .iter()
@@ -16,7 +16,7 @@ pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigConte
 
     config.inbounds.clear();
     if mixed_inbound_available {
-        let mut primary = build_mixed_inbound(&inbound, InboundProtocol::socks);
+        let mut primary = build_mixed_inbound(&inbound, LocalPort::Primary);
         if inbound.lan_connections_allowed && !inbound.separate_lan_port {
             primary.listen = Some("0.0.0.0".to_string());
         }
@@ -25,11 +25,11 @@ pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigConte
         if inbound.secondary_port_enabled {
             config
                 .inbounds
-                .push(build_mixed_inbound(&inbound, InboundProtocol::socks2));
+                .push(build_mixed_inbound(&inbound, LocalPort::Secondary));
         }
 
         if inbound.lan_connections_allowed && inbound.separate_lan_port {
-            let mut lan = build_mixed_inbound(&inbound, InboundProtocol::socks3);
+            let mut lan = build_mixed_inbound(&inbound, LocalPort::Lan);
             lan.listen = Some("0.0.0.0".to_string());
             if !inbound.username.trim().is_empty() && !inbound.password.trim().is_empty() {
                 lan.users = Some(vec![SingboxUser {
@@ -50,10 +50,10 @@ pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigConte
     }
 }
 
-fn build_mixed_inbound(inbound: &InboundConfig, protocol: InboundProtocol) -> SingboxInbound {
+fn build_mixed_inbound(inbound: &InboundConfig, port: LocalPort) -> SingboxInbound {
     build_mixed_inbound_with(
-        inbound_protocol_tag(protocol),
-        inbound.local_port + protocol.port_offset(),
+        local_port_tag(port),
+        inbound.local_port + port.port_offset(),
     )
 }
 

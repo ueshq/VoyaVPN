@@ -153,9 +153,10 @@ pub struct SupervisorStartRequest {
     ///
     /// This cannot be recomputed from `AppConfig`: on a pre-socks topology the
     /// builder clears `is_tun_enabled` on the main context, so the main process
-    /// listens on `api2` while the pre-socks one takes `api2 + 1`. Deriving it
-    /// from the TUN setting instead would point every client at the pre-socks
-    /// process, which has no selector or per-node statistics.
+    /// listens on the base Clash API port while the pre-socks one takes that
+    /// port + 1. Deriving it from the TUN setting instead would point every
+    /// client at the pre-socks process, which has no selector or per-node
+    /// statistics.
     pub clash_api_port: i32,
     /// Bearer token the *main* generated config wrote into
     /// `experimental.clash_api.secret`, if the caller minted one.

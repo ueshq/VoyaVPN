@@ -5,7 +5,7 @@ pub(super) fn gen_experimental(config: &mut SingboxConfig, context: &CoreConfigC
     experimental.clash_api = Some(SingboxClashApi {
         // `clash_api_port` is the single source of truth for this process's
         // controller port: with the Linux pre-socks split the main config keeps
-        // the base api2 port while only the TUN config takes api2 + 1.
+        // the base Clash API port while only the TUN config takes that port + 1.
         external_controller: Some(format!("{LOOPBACK}:{}", context.clash_api_port())),
         secret: nonempty_string(context.clash_api_secret.as_deref()),
         store_selected: None,

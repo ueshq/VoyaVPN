@@ -1,5 +1,5 @@
 use crate::{
-    text::nonempty_str, AppConfig, InboundProtocol, ProfileItem, ProfileProtocol, ProfileTransport,
+    text::nonempty_str, AppConfig, LocalPort, ProfileItem, ProfileProtocol, ProfileTransport,
     STREAM_SECURITY_TLS,
 };
 
@@ -218,16 +218,18 @@ pub(crate) fn first_list_value(value: Option<&str>) -> String {
         .unwrap_or_default()
 }
 
-pub(crate) fn inbound_protocol_tag(protocol: InboundProtocol) -> &'static str {
-    match protocol {
-        InboundProtocol::socks => "socks",
-        InboundProtocol::socks2 => "socks2",
-        InboundProtocol::socks3 => "socks3",
-        InboundProtocol::api2 => "api2",
-        InboundProtocol::speedtest => "speedtest",
+/// The inbound tag a listener carries in generated configs. The spellings are
+/// part of the generated JSON, so they keep their original names.
+pub(crate) fn local_port_tag(port: LocalPort) -> &'static str {
+    match port {
+        LocalPort::Primary => "socks",
+        LocalPort::Secondary => "socks2",
+        LocalPort::Lan => "socks3",
+        LocalPort::ClashApi => "api2",
+        LocalPort::Speedtest => "speedtest",
     }
 }
 
-pub(crate) fn inbound_port(app_config: &AppConfig, protocol: InboundProtocol) -> i32 {
-    app_config.local_port() + protocol.port_offset()
+pub(crate) fn inbound_port(app_config: &AppConfig, port: LocalPort) -> i32 {
+    app_config.local_port() + port.port_offset()
 }

@@ -1,10 +1,10 @@
 use std::{collections::BTreeMap, net::IpAddr};
 
 use crate::{
-    singbox::support::state_port2,
+    singbox::support::clash_api_port,
     text::nonempty_str,
     validation::{ValidationCode, ValidationMessage, ValidationScope},
-    AppConfig, ConfigType, DnsConfig, InboundProtocol, ProfileItem, ProfileProtocol, RoutingItem,
+    AppConfig, ConfigType, DnsConfig, LocalPort, ProfileItem, ProfileProtocol, RoutingItem,
     RulesItem, ServerEndpoint, TlsMode,
 };
 
@@ -183,13 +183,13 @@ impl CoreConfigContext {
 
     /// Port this context's `experimental.clash_api.external_controller` binds.
     ///
-    /// The pre-socks split gives the TUN process `api2 + 1` and leaves the main
-    /// process on `api2`, so callers must read the port back from the context
+    /// The pre-socks split gives the TUN process [`LocalPort::ClashApi`] + 1 and
+    /// leaves the main process on the base port, so callers must read the port back from the context
     /// they generated instead of re-deriving it from
     /// `tun.enabled`, which disagrees on the Linux TUN path.
     #[must_use]
     pub fn clash_api_port(&self) -> i32 {
-        state_port2(&self.app_config, self.is_tun_enabled)
+        clash_api_port(&self.app_config, self.is_tun_enabled)
     }
 
     /// How this config treats IPv6: the switch decides between on and off,
@@ -548,7 +548,7 @@ fn pre_socks_item<E: CoreGenEnv>(config: &AppConfig, env: &E) -> Option<ProfileI
     // config (ADR 0005), so `build_all` must not synthesize a pre-socks context
     // there even though macOS is "non-Windows".
     if config.tun.enabled && env.tun_topology().is_pre_socks() {
-        return Some(socks_profile(env.get_local_port(InboundProtocol::socks)));
+        return Some(socks_profile(env.get_local_port(LocalPort::Primary)));
     }
 
     None
@@ -683,10 +683,10 @@ mod tests {
                 .cloned()
         }
 
-        fn get_local_port(&self, protocol: InboundProtocol) -> i32 {
-            match protocol {
-                InboundProtocol::socks => self.local_socks_port,
-                _ => self.local_socks_port + protocol.port_offset(),
+        fn get_local_port(&self, port: LocalPort) -> i32 {
+            match port {
+                LocalPort::Primary => self.local_socks_port,
+                _ => self.local_socks_port + port.port_offset(),
             }
         }
 

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use voya_core::{
-    AppConfig, ContextPolicyGroup, CoreGenEnv, CoreGenPlatform, InboundProtocol, PolicyGroupItem,
+    AppConfig, ContextPolicyGroup, CoreGenEnv, CoreGenPlatform, LocalPort, PolicyGroupItem,
     ProfileItem, RoutingItem,
 };
 
@@ -108,10 +108,10 @@ impl CoreGenEnv for SnapshotCoreGenEnv {
             .cloned()
     }
 
-    fn get_local_port(&self, protocol: InboundProtocol) -> i32 {
-        match protocol {
-            InboundProtocol::socks => self.local_socks_port,
-            _ => self.local_socks_port + protocol.port_offset(),
+    fn get_local_port(&self, port: LocalPort) -> i32 {
+        match port {
+            LocalPort::Primary => self.local_socks_port,
+            _ => self.local_socks_port + port.port_offset(),
         }
     }
 

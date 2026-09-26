@@ -817,7 +817,7 @@ fn singbox_pre_socks_configs() -> Vec<Value> {
 fn singbox_pre_socks_snapshot() -> Value {
     let configs = singbox_pre_socks_configs();
     // `clashApi` is part of the snapshot because the split assigns the base
-    // api2 port to the main process and api2 + 1 to the TUN process; a client
+    // Clash API port to the main process and that port + 1 to the TUN process; a client
     // that re-derives the port from `tun.enabled` talks to the
     // wrong core.
     serde_json::json!({

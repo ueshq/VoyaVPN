@@ -456,9 +456,9 @@ async fn run_singbox_statistics_service(
         // The supervisor reports the port the running main config actually
         // listens on, and the bearer token that config demands. Recomputing the
         // port from the TUN setting is wrong on a pre-socks topology, where the
-        // main process keeps `api2` and the pre-socks one takes `api2 + 1`:
-        // statistics would then be read from the pre-socks process, which has
-        // no per-node counters at all. The token exists only in the config that
+        // main process keeps the base Clash API port and the pre-socks one takes
+        // that port + 1: statistics would then be read from the pre-socks
+        // process, which has no per-node counters at all. The token exists only in the config that
         // launch generated, so it can only come from here.
         let access = snapshot
             .as_ref()

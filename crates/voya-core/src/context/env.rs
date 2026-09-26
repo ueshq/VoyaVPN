@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::ContextPolicyGroup;
-use crate::{AppConfig, InboundProtocol, ProfileItem, RoutingItem};
+use crate::{AppConfig, LocalPort, ProfileItem, RoutingItem};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoreGenPlatform {
@@ -106,7 +106,7 @@ pub trait CoreGenEnv {
         None
     }
     fn get_default_routing(&self, config: &AppConfig) -> Option<RoutingItem>;
-    fn get_local_port(&self, protocol: InboundProtocol) -> i32;
+    fn get_local_port(&self, port: LocalPort) -> i32;
     fn get_singbox_ruleset_paths(&self) -> BTreeMap<String, String> {
         BTreeMap::new()
     }

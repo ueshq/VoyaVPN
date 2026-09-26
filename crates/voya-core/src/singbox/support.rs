@@ -91,8 +91,8 @@ pub(super) fn transport_host_for_tls(node: &ProfileItem) -> Option<String> {
     nonempty_string(Some(&first_host))
 }
 
-pub(crate) fn state_port2(app_config: &AppConfig, is_tun_enabled: bool) -> i32 {
-    inbound_port(app_config, InboundProtocol::api2) + i32::from(is_tun_enabled)
+pub(crate) fn clash_api_port(app_config: &AppConfig, is_tun_enabled: bool) -> i32 {
+    inbound_port(app_config, LocalPort::ClashApi) + i32::from(is_tun_enabled)
 }
 
 pub(super) fn exe_name(process: &str) -> String {

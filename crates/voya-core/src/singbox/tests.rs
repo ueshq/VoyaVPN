@@ -575,20 +575,20 @@ fn singbox_dns_address_uses_dhcp_interface_and_unbracketed_ipv6() {
 #[test]
 fn singbox_clash_api_port_follows_the_context_not_the_tun_setting() {
     // Linux + TUN splits into two processes: the main config keeps the base
-    // api2 port and only the pre-socks (TUN) config takes api2 + 1. Deriving
+    // Clash API port and only the pre-socks (TUN) config takes that port + 1. Deriving
     // the port from `tun.enabled` instead would point every
     // client at the TUN process, which has no selector or urltest outbounds.
     let mut app_config = AppConfig::default();
     app_config.tun.enabled = true;
-    let api2_port = inbound_port(&app_config, InboundProtocol::api2);
+    let base_port = inbound_port(&app_config, LocalPort::ClashApi);
 
     let mut main_context = test_context(app_config.clone(), base_remote_node());
     main_context.is_tun_enabled = false;
     let mut pre_context = test_context(app_config, socks_node("pre", "pre-socks"));
     pre_context.is_tun_enabled = true;
 
-    assert_eq!(main_context.clash_api_port(), api2_port);
-    assert_eq!(pre_context.clash_api_port(), api2_port + 1);
+    assert_eq!(main_context.clash_api_port(), base_port);
+    assert_eq!(pre_context.clash_api_port(), base_port + 1);
     for context in [&main_context, &pre_context] {
         let generated = generate_singbox_config(context).expect("sing-box config should generate");
         assert_eq!(
@@ -1847,7 +1847,7 @@ impl crate::CoreGenEnv for GroupTestEnv {
         None
     }
 
-    fn get_local_port(&self, _protocol: InboundProtocol) -> i32 {
+    fn get_local_port(&self, _port: LocalPort) -> i32 {
         crate::DEFAULT_LOCAL_PORT
     }
 }
@@ -2043,7 +2043,7 @@ impl crate::CoreGenEnv for RuleGroupEnv {
         })
     }
 
-    fn get_local_port(&self, _protocol: InboundProtocol) -> i32 {
+    fn get_local_port(&self, _port: LocalPort) -> i32 {
         crate::DEFAULT_LOCAL_PORT
     }
 
