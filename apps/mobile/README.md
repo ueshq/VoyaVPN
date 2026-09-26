@@ -6,8 +6,11 @@ The VoyaVPN bare React Native app (RN 0.87, no Expo).
 
 - **No `@voya/ui`.** That package is Radix and DOM specific. Shared logic comes
   from `@voya/client` (query keys, backend-code→text maps, the runtime event
-  store, the persisted stores), `@voya/contracts` (generated backend DTOs) and
-  `@voya/i18n/core` + `@voya/i18n/native`.
+  store, the persisted stores), `@voya/features` (the controller hooks and pure
+  helpers the desktop screens use too — `use-home-runtime`,
+  `use-node-list-data`, … — while each app keeps its own views),
+  `@voya/contracts` (generated backend DTOs), `@voya/utils` (formatting and
+  redaction) and `@voya/i18n/core` + `@voya/i18n/native`.
 - **No `@tauri-apps/*`.** ADR-0002 confines Tauri APIs to
   `apps/desktop/src/ipc`; lint enforces it here too.
 - The `@/*` alias is desktop-private. This app uses `~/*` for `./src/*`,
@@ -34,12 +37,9 @@ gets. The three event channels arrive as one native event carrying its channel.
 
 ## Metro and pnpm
 
-`metro.config.js` carries the reasoning in full. In short: `watchFolders` covers
-the source-only workspace packages, `unstable_enablePackageExports` makes their
-`exports` maps resolve, `extraNodeModules` points Babel's injected
-`@babel/runtime` helpers at this app's copy, and hierarchical resolution must
-stay **on** — pnpm stores each package with its dependencies in a sibling
-`node_modules`, so disabling it breaks `react-native`'s own imports.
+Resolving the source-only workspace packages under pnpm takes a few Metro
+settings; `metro.config.js` explains each, including why hierarchical lookup
+must stay on.
 
 ## Native hosts
 
