@@ -5,7 +5,15 @@ import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
 import { mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
 import { makeTestQueryClient, TestProviders } from "~/test/providers";
+import * as native from "~/native/device-actions";
 import { ImportScreen } from "./import-screen";
+
+type DeviceActions = ReturnType<typeof native.deviceActions>;
+
+/** Stands in for the host module; only the methods a test reaches are needed. */
+function mockDeviceActions(actions: Partial<DeviceActions>) {
+  return jest.spyOn(native, "deviceActions").mockReturnValue(actions as DeviceActions);
+}
 
 beforeAll(async () => { await localeReady; });
 test("preview is read-only; confirming imports and updates only subscription sources", async () => {
@@ -34,9 +42,10 @@ test("preview is read-only; confirming imports and updates only subscription sou
 
 test("camera denial offers recovery and multiple image codes require a choice before preview", async () => {
   registerMobileBackend(mockTransport());
-  const native = await import("~/native/device-actions");
-  const camera = jest.spyOn(native, "scanQr").mockRejectedValue({ code: "cameraDenied" });
-  const image = jest.spyOn(native, "pickQr").mockResolvedValue(["vless://one@example.test:443#One", "vless://two@example.test:443#Two"]);
+  const device = mockDeviceActions({
+    scanQr: jest.fn().mockRejectedValue({ code: "cameraDenied" }),
+    pickQr: jest.fn().mockResolvedValue(["vless://one@example.test:443#One", "vless://two@example.test:443#Two"]),
+  });
   const backend = voyaTransport() as MockBackend;
   const client = makeTestQueryClient();
   const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
@@ -50,18 +59,17 @@ test("camera denial offers recovery and multiple image codes require a choice be
   await user.press(screen.getByText("vless://two@example.test:443#Two"));
   expect(screen.getByDisplayValue("vless://two@example.test:443#Two")).toBeOnTheScreen();
   expect(backend.state.calls.some((call) => call.command === "importProfilesFromText")).toBe(false);
-  await unmount(); client.clear(); camera.mockRestore(); image.mockRestore();
+  await unmount(); client.clear(); device.mockRestore();
 });
 
 
 test("an unknown native failure uses a general recovery message, not invalid-link advice", async () => {
   registerMobileBackend(mockTransport());
-  const native = await import("~/native/device-actions");
-  const camera = jest.spyOn(native, "scanQr").mockRejectedValue({ code: "unavailable" });
+  const device = mockDeviceActions({ scanQr: jest.fn().mockRejectedValue({ code: "unavailable" }) });
   const client = makeTestQueryClient();
   const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
   await userEvent.setup().press(screen.getByText("Scan QR code"));
   await screen.findByText("Could not complete this action. Retry or view diagnostics.");
   expect(screen.queryByText(/No importable/)).toBeNull();
-  await unmount(); client.clear(); camera.mockRestore();
+  await unmount(); client.clear(); device.mockRestore();
 });

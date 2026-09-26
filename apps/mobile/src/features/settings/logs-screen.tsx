@@ -13,7 +13,7 @@ import { FlatList, View } from "react-native";
 import { ErrorNotice } from "~/components/error-notice";
 import { SegmentedControl } from "~/components/segmented-control";
 import { useScreenInsets } from "~/components/use-screen-insets";
-import { shareDiagnostics } from "~/native/device-actions";
+import { deviceActions } from "~/native/device-actions";
 
 export function LogsScreen() {
   const { t } = useI18n();
@@ -52,7 +52,7 @@ export function LogsScreen() {
       />
       <Button variant="secondary" className="min-h-12 h-auto" onPress={() => setPausedAt(pausedAt === null ? lines.at(-1)?.id ?? 0 : null)}><Button.Label>{pausedAt === null ? t("mobile.pause") : t("mobile.follow", { count: added })}</Button.Label></Button>
       <Button variant="secondary" className="min-h-12 h-auto" onPress={() => { void clipboard().writeText(exportText()).catch(setError); }}><Button.Label>{t("mobile.copyDiagnostics")}</Button.Label></Button>
-      <Button variant="secondary" className="min-h-12 h-auto" onPress={() => { void shareDiagnostics(exportText()).catch(setError); }}><Button.Label>{t("mobile.share")}</Button.Label></Button>
+      <Button variant="secondary" className="min-h-12 h-auto" onPress={() => { void deviceActions().shareDiagnostics(exportText()).catch(setError); }}><Button.Label>{t("mobile.share")}</Button.Label></Button>
       <ErrorNotice error={error} />
     </View>} />;
 }

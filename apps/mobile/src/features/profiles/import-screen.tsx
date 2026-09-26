@@ -18,7 +18,7 @@ import { navigateToTab } from "~/app/navigation";
 import { Banner } from "~/components/banner";
 import { DetailScreen } from "~/components/detail-screen";
 import { ErrorNotice } from "~/components/error-notice";
-import { scanQr, pickQr } from "~/native/device-actions";
+import { deviceActions } from "~/native/device-actions";
 
 export function ImportScreen() {
   const { t } = useI18n();
@@ -50,7 +50,7 @@ export function ImportScreen() {
     } finally { busyRef.current = false; setBusy(false); }
   }
   async function recognize(camera: boolean) {
-    const values = await (camera ? scanQr(t("actions.cancel")) : pickQr());
+    const values = await (camera ? deviceActions().scanQr(t("actions.cancel")) : deviceActions().pickQr());
     if (!values) return;
     if (values.length === 1) edit(values[0]); else setChoices(values);
   }

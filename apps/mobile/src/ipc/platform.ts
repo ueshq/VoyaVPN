@@ -1,6 +1,6 @@
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Platform } from "react-native";
-import { requestVpnAuthorization } from "~/native/device-actions";
+import { deviceActions } from "~/native/device-actions";
 import { setClipboard, setElevationHandler } from "@voya/client/platform";
 import { setVoyaCommands } from "@voya/client/transport";
 
@@ -21,7 +21,7 @@ export function registerMobileBackend(backend: VoyaTransport = createTransport()
   setVoyaCommands(transport.commands);
   // iOS requests authorization while saving NETunnelProvider preferences.
   // Android must launch VpnService.prepare from the foreground Activity.
-  setElevationHandler(() => Platform.OS === "android" ? requestVpnAuthorization() : Promise.resolve(false));
+  setElevationHandler(() => Platform.OS === "android" ? deviceActions().requestVpnAuthorization() : Promise.resolve(false));
 
   // Both halves are native here. The desktop reads through the backend because
   // a WebView read needs a user gesture; React Native has no such restriction,
