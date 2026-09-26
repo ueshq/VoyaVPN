@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
 use thiserror::Error;
 
@@ -18,18 +18,18 @@ pub enum SingboxConfigError {
     Serialize(#[source] serde_json::Error),
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub log: Option<SingboxLog>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dns: Option<SingboxDns>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub inbounds: Vec<SingboxInbound>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub outbounds: Vec<SingboxOutbound>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub endpoints: Vec<SingboxEndpoint>,
     pub route: SingboxRoute,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,8 +57,8 @@ impl SingboxConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxLog {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled: Option<bool>,
@@ -80,14 +80,14 @@ impl Default for SingboxLog {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxRoute {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_domain_resolver: Option<SingboxRule>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_detect_interface: Option<bool>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub rules: Vec<SingboxRule>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rule_set: Option<Vec<SingboxRuleset>>,
@@ -95,12 +95,12 @@ pub struct SingboxRoute {
     pub final_outbound: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxDns {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub servers: Vec<SingboxDnsServer>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub rules: Vec<SingboxRule>,
     #[serde(rename = "final", skip_serializing_if = "Option::is_none")]
     pub final_server: Option<String>,
@@ -116,8 +116,8 @@ pub struct SingboxDns {
     pub client_subnet: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxDnsServer {
     pub r#type: String,
     pub tag: String,
@@ -165,8 +165,8 @@ impl Default for SingboxDnsServer {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxRuleset {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tag: Option<String>,
@@ -184,8 +184,8 @@ pub struct SingboxRuleset {
     pub update_interval: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxRule {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outbound: Option<String>,
@@ -263,8 +263,8 @@ pub struct SingboxRule {
     pub ip_version: Option<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxOutbound {
     pub r#type: String,
     pub tag: String,
@@ -391,8 +391,8 @@ impl SingboxOutbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxEndpoint {
     pub r#type: String,
     pub tag: String,
@@ -402,7 +402,7 @@ pub struct SingboxEndpoint {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mtu: Option<i32>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub address: Vec<String>,
     pub private_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -411,7 +411,7 @@ pub struct SingboxEndpoint {
     pub udp_timeout: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workers: Option<i32>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub peers: Vec<SingboxPeer>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bind_interface: Option<String>,
@@ -439,15 +439,15 @@ impl Default for SingboxEndpoint {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxPeer {
     pub address: String,
     pub port: i32,
     pub public_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pre_shared_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub allowed_ips: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub persistent_keepalive_interval: Option<i32>,
@@ -455,8 +455,8 @@ pub struct SingboxPeer {
     pub reserved: Option<Vec<i32>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxTls {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -499,8 +499,8 @@ impl Default for SingboxTls {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxEch {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -519,8 +519,8 @@ impl Default for SingboxEch {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxMultiplex {
     pub enabled: bool,
     pub protocol: String,
@@ -540,8 +540,8 @@ impl Default for SingboxMultiplex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxUtls {
     pub enabled: bool,
     pub fingerprint: String,
@@ -556,8 +556,8 @@ impl Default for SingboxUtls {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxReality {
     pub enabled: bool,
     pub public_key: String,
@@ -574,8 +574,8 @@ impl Default for SingboxReality {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxTransport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
@@ -599,8 +599,7 @@ pub struct SingboxTransport {
     pub early_data_header_name: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub struct SingboxHeaders {
     #[serde(rename = "Host", skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
@@ -608,8 +607,8 @@ pub struct SingboxHeaders {
     pub user_agent: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxHyObfs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub r#type: Option<String>,
@@ -617,8 +616,8 @@ pub struct SingboxHyObfs {
     pub password: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxExperimental {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_file: Option<SingboxCacheFile>,
@@ -626,8 +625,8 @@ pub struct SingboxExperimental {
     pub clash_api: Option<SingboxClashApi>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxClashApi {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_controller: Option<String>,
@@ -644,8 +643,8 @@ pub struct SingboxClashApi {
     pub store_selected: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxCacheFile {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]

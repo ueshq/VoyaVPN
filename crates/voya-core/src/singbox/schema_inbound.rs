@@ -1,12 +1,12 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::LOOPBACK;
 
 /// One sing-box inbound. Local proxy and TUN inbounds use the listener and TUN
 /// fields; the server inbounds of a self-hosted node add `users`, `method`,
 /// `password`, and `tls`.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxInbound {
     pub r#type: String,
     pub tag: String,
@@ -65,15 +65,15 @@ impl Default for SingboxInbound {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxTunPlatform {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub http_proxy: Option<SingboxTunHttpProxy>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxTunHttpProxy {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -84,8 +84,8 @@ pub struct SingboxTunHttpProxy {
 
 /// An inbound user: `username`/`password` for the mixed inbound, and
 /// `name`/`uuid`/`flow` for a VLESS server.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxUser {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -102,8 +102,8 @@ pub struct SingboxUser {
 /// Server-side TLS of an inbound. Only REALITY is generated: a self-hosted
 /// node borrows the handshake of a public site instead of holding a
 /// certificate.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxInboundTls {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,8 +122,8 @@ impl Default for SingboxInboundTls {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxRealityServer {
     pub enabled: bool,
     pub handshake: SingboxRealityHandshake,
@@ -144,8 +144,8 @@ impl Default for SingboxRealityServer {
 
 /// The site whose TLS handshake a REALITY server forwards unauthenticated
 /// clients to.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize, Serialize)]
-#[serde(default, rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub struct SingboxRealityHandshake {
     pub server: String,
     pub server_port: i32,

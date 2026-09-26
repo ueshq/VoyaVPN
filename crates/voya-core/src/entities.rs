@@ -368,18 +368,14 @@ pub struct TlsSettings {
     pub ech_config: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ProfileItem {
     pub index_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub subscription_id: Option<String>,
     pub display_log: bool,
     pub remarks: String,
     pub protocol: ProfileProtocol,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<ProfileTransport>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tls: Option<TlsSettings>,
 }
 
@@ -483,14 +479,12 @@ pub struct SubMetadataItem {
     pub profile_title: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct RoutingItem {
     pub id: String,
     pub remarks: String,
     pub rule_set: Vec<RulesItem>,
     pub sort: i32,
-    #[serde(default, skip_deserializing)]
     pub is_active: bool,
 }
 
@@ -582,26 +576,6 @@ pub struct ServerStatItem {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn profile_item_serializes_live_fields_without_obsolete_profile_columns() {
-        let json = serde_json::to_value(ProfileItem::default())
-            .expect("default profile item should serialize to JSON");
-        let object = json
-            .as_object()
-            .expect("default profile item JSON should be an object");
-
-        for obsolete in ["protocolExtra", "transportExtra", "AlterId", "HeaderType"] {
-            assert!(
-                !object.contains_key(obsolete),
-                "{obsolete} should be absent"
-            );
-        }
-
-        assert!(object.contains_key("protocol"));
-        assert!(!object.contains_key("transport"));
-        assert!(!object.contains_key("tls"));
-    }
 
     #[test]
     fn profile_protocol_serializes_tagged_string_enums() {
