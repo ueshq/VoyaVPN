@@ -15,12 +15,9 @@ import { changeLocale } from "@voya/i18n";
 import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 import type {
   ProxyConnectionItem,
-  ProxyConnectionsSnapshot,
+  RuntimeStatusResponse,
 } from "@voya/contracts";
-import type {
-  RuntimeEventState,
-  RuntimeProxyMonitorStatus,
-} from "@voya/client/runtime-event-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useToastStore } from "@voya/client/toast-store";
@@ -39,110 +36,6 @@ vi.mock("@/ipc/tauri-plugins", () => ({
   getVersion: vi.fn(() => Promise.resolve("0.1.0")),
   relaunch: vi.fn(() => Promise.resolve()),
 }));
-
-// The double is checked against the real store type (`satisfies` in `makeState`),
-// so a member added to `RuntimeEventState` cannot silently go unmodelled here and
-// leave these tests asserting the fake's own bookkeeping.
-type TestProxyMonitorState = RuntimeProxyMonitorStatus["state"];
-
-type TestProxyMonitorStatus = RuntimeProxyMonitorStatus;
-
-type TestRuntimeEventStore = {
-  getState: () => RuntimeEventState;
-  reset: () => void;
-  useRuntimeEventStore: {
-    (selector: (state: RuntimeEventState) => unknown): unknown;
-    getState: () => RuntimeEventState;
-  };
-};
-
-const runtimeStoreMock = vi.hoisted<TestRuntimeEventStore>(() => {
-  const initialMonitorStatus: TestProxyMonitorStatus = {
-    message: null,
-    running: false,
-    stale: true,
-    state: "stopped",
-  };
-  let state: RuntimeEventState;
-
-  function makeMonitorStatus(
-    monitorState: TestProxyMonitorState,
-    running: boolean,
-    stale: boolean,
-    message: string | null,
-  ): TestProxyMonitorStatus {
-    return { message, running, stale, state: monitorState };
-  }
-
-  function makeState(): RuntimeEventState {
-    const nextState = {
-      clearLogs: vi.fn(),
-      clearSpeedtestResults: vi.fn(),
-      proxyConnections: null,
-      proxyMonitorStatus: initialMonitorStatus,
-      coreState: null,
-      coreStateReceivedAt: null,
-      logLines: [],
-      pushTransientEvent: vi.fn(),
-      refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
-      serverStatsByProfileId: {},
-      setProxyConnections: vi.fn((snapshot: ProxyConnectionsSnapshot) => {
-        state.proxyConnections = snapshot;
-      }),
-      setProxyMonitorFailed: vi.fn((message: string | null = null) => {
-        state.proxyMonitorStatus = makeMonitorStatus(
-          "failed",
-          false,
-          true,
-          message,
-        );
-      }),
-      setProxyMonitorStarting: vi.fn((message: string | null = null) => {
-        state.proxyMonitorStatus = makeMonitorStatus(
-          "starting",
-          false,
-          state.proxyMonitorStatus.stale,
-          message,
-        );
-      }),
-      setProxyMonitorStatus: vi.fn((status: TestProxyMonitorStatus) => {
-        state.proxyMonitorStatus = status;
-      }),
-      setCoreState: vi.fn(),
-      setSpeedtestRunning: vi.fn((speedtestRunning: boolean) => {
-        state.speedtestRunning = speedtestRunning;
-      }),
-      setSysProxy: vi.fn(),
-      setTun: vi.fn(),
-      speedtestResultsByProfileId: {},
-      speedtestRunning: false,
-      statistics: null,
-      sysProxy: null,
-      tun: null,
-    } satisfies RuntimeEventState;
-
-    return nextState;
-  }
-
-  state = makeState();
-
-  const useRuntimeEventStore = Object.assign(
-    vi.fn((selector: (state: RuntimeEventState) => unknown) => selector(state)),
-    {
-      getState: vi.fn(() => state),
-    },
-  );
-
-  return {
-    getState: () => state,
-    reset: () => {
-      state = makeState();
-      useRuntimeEventStore.mockClear();
-      useRuntimeEventStore.getState.mockClear();
-    },
-    useRuntimeEventStore,
-  };
-});
 
 const ipc = installFakeCommands({
   connectActiveProfile: vi.fn(),
@@ -226,16 +119,7 @@ const ipc = installFakeCommands({
   moveRoutingRule: vi.fn(),
   moveProfile: vi.fn(),
   restartCore: vi.fn(),
-  runtimeStatus: vi.fn(() =>
-    Promise.resolve({
-      activeProfileId: null,
-      mainPid: null,
-      prePid: null,
-      connectedDurationMs: null,
-      activeTunBackend: null,
-      state: "disconnected",
-    }),
-  ),
+  runtimeStatus: vi.fn(),
   saveProfile: vi.fn(),
   saveRouting: vi.fn(),
   saveRoutingRule: vi.fn(),
@@ -305,10 +189,6 @@ const ipc = installFakeCommands({
   updateSubscriptions: vi.fn(),
 });
 vi.mock("@/ipc/event-bridge", () => ({ EventBridge: () => null }));
-vi.mock("@voya/client/runtime-event-store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@voya/client/runtime-event-store")>()),
-  useRuntimeEventStore: runtimeStoreMock.useRuntimeEventStore,
-}));
 
 function renderApp() {
   return renderWithQuery(<App />);
@@ -326,7 +206,6 @@ describe("App", () => {
   beforeEach(async () => {
     vi.useRealTimers();
     resetTestDom();
-    runtimeStoreMock.reset();
     useShellStore.setState({
       activeTab: "profiles",
       connectionSearch: "",
@@ -346,6 +225,7 @@ describe("App", () => {
     ipc.getWindowChromeConfig.mockResolvedValue({
       titleBarLayout: "none",
     });
+    ipc.runtimeStatus.mockResolvedValue(disconnectedCore());
     ipc.proxyCloseConnection.mockClear();
     ipc.proxyListConnections.mockClear();
     ipc.proxyStartMonitor.mockClear();
@@ -541,10 +421,10 @@ describe("App", () => {
     (
       window as typeof window & { __TAURI_INTERNALS__?: unknown }
     ).__TAURI_INTERNALS__ = {};
-    runtimeStoreMock.getState().coreState = {
+    useRuntimeEventStore.getState().setCoreState({
       ...connectedCore(),
       state: "disconnected",
-    };
+    });
     renderApp();
     await activateTab(/Network activity/);
     expect(
@@ -560,7 +440,7 @@ describe("App", () => {
     expect(ipc.proxyListConnections).not.toHaveBeenCalled();
 
     await activateTab(/Nodes/);
-    runtimeStoreMock.getState().coreState = connectedCore();
+    connectCore();
     await activateTab(/Network activity/);
     expect(ipc.proxyListConnections).toHaveBeenCalledTimes(1);
     expect(ipc.proxyStartMonitor).not.toHaveBeenCalled();
@@ -568,10 +448,7 @@ describe("App", () => {
       await vi.advanceTimersByTimeAsync(100);
     });
     expect(ipc.proxyStartMonitor).toHaveBeenCalledTimes(1);
-    expect(
-      runtimeStoreMock.getState().setProxyMonitorStarting,
-    ).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe(
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus.state).toBe(
       "running",
     );
     await activateTab(/Nodes/);
@@ -583,7 +460,7 @@ describe("App", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(ipc.proxyStopMonitor).toHaveBeenCalledTimes(1);
-    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe(
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus.state).toBe(
       "stopped",
     );
   });
@@ -594,7 +471,7 @@ describe("App", () => {
     (
       window as typeof window & { __TAURI_INTERNALS__?: unknown }
     ).__TAURI_INTERNALS__ = {};
-    runtimeStoreMock.getState().coreState = connectedCore();
+    connectCore();
     let visibility: DocumentVisibilityState = "visible";
     const visibilityState = vi
       .spyOn(document, "visibilityState", "get")
@@ -635,7 +512,7 @@ describe("App", () => {
     (
       window as typeof window & { __TAURI_INTERNALS__?: unknown }
     ).__TAURI_INTERNALS__ = {};
-    runtimeStoreMock.getState().coreState = connectedCore();
+    connectCore();
     renderApp();
     await activateTab(/Nodes/);
     await act(async () => {
@@ -651,7 +528,7 @@ describe("App", () => {
       window as typeof window & { __TAURI_INTERNALS__?: unknown }
     ).__TAURI_INTERNALS__ = {};
 
-    runtimeStoreMock.getState().coreState = connectedCore();
+    connectCore();
     renderApp();
 
     await activateTab(/Network activity/);
@@ -684,7 +561,7 @@ describe("App", () => {
       new Error("start unavailable"),
     );
 
-    runtimeStoreMock.getState().coreState = connectedCore();
+    connectCore();
     renderApp();
 
     await activateTab(/Network activity/);
@@ -693,13 +570,7 @@ describe("App", () => {
     });
 
     expect(ipc.proxyStartMonitor).toHaveBeenCalledTimes(1);
-    expect(
-      runtimeStoreMock.getState().setProxyMonitorStarting,
-    ).toHaveBeenCalledTimes(1);
-    expect(
-      runtimeStoreMock.getState().setProxyMonitorFailed,
-    ).toHaveBeenCalledWith("start unavailable");
-    expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual({
       message: "start unavailable",
       running: false,
       stale: true,
@@ -720,14 +591,14 @@ describe("App", () => {
       new Error("stop unavailable"),
     );
 
-    runtimeStoreMock.getState().coreState = connectedCore();
+    connectCore();
     renderApp();
 
     await activateTab(/Network activity/);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(100);
     });
-    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe(
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus.state).toBe(
       "running",
     );
 
@@ -737,10 +608,7 @@ describe("App", () => {
     });
 
     expect(ipc.proxyStopMonitor).toHaveBeenCalledTimes(1);
-    expect(
-      runtimeStoreMock.getState().setProxyMonitorFailed,
-    ).toHaveBeenCalledWith("stop unavailable");
-    expect(runtimeStoreMock.getState().proxyMonitorStatus).toEqual({
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual({
       message: "stop unavailable",
       running: false,
       stale: true,
@@ -754,8 +622,8 @@ describe("App", () => {
 
   it("consolidates failed updates and keeps stale data explicit after a manual refresh", async () => {
     const user = userEvent.setup();
-    runtimeStoreMock.getState().coreState = connectedCore();
-    runtimeStoreMock.getState().setProxyMonitorFailed("monitor offline");
+    connectCore();
+    useRuntimeEventStore.getState().setProxyMonitorFailed("monitor offline");
     const cachedSnapshot = {
       connections: [makeConnection(0, { host: "cached.example:443" })],
       downloadTotal: 100,
@@ -766,7 +634,7 @@ describe("App", () => {
       downloadTotal: 4096,
       uploadTotal: 1024,
     };
-    runtimeStoreMock.getState().setProxyConnections(cachedSnapshot);
+    useRuntimeEventStore.getState().setProxyConnections(cachedSnapshot);
     ipc.proxyListConnections
       .mockResolvedValueOnce(cachedSnapshot)
       .mockResolvedValueOnce(refreshedSnapshot);
@@ -779,17 +647,15 @@ describe("App", () => {
     expect(screen.queryByText("monitor offline")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Refresh list" }));
     expect(await screen.findByText("fresh.example:443")).toBeInTheDocument();
-    expect(
-      runtimeStoreMock.getState().setProxyConnections,
-    ).toHaveBeenCalledWith(refreshedSnapshot);
+    expect(useRuntimeEventStore.getState().proxyConnections).toMatchObject(refreshedSnapshot);
     expect(screen.getByText("Showing previous data")).toBeInTheDocument();
-    expect(runtimeStoreMock.getState().proxyMonitorStatus.state).toBe("failed");
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus.state).toBe("failed");
   });
 
   it("keeps the connection search between sub-tabs and after leaving the page", async () => {
     const user = userEvent.setup();
-    runtimeStoreMock.getState().coreState = connectedCore();
-    runtimeStoreMock.getState().setProxyMonitorStatus({
+    connectCore();
+    useRuntimeEventStore.getState().setProxyMonitorStatus({
       message: null,
       running: true,
       stale: false,
@@ -870,7 +736,27 @@ function makeConnections(count: number): ProxyConnectionItem[] {
   return Array.from({ length: count }, (_, index) => makeConnection(index));
 }
 
-function connectedCore(): NonNullable<RuntimeEventState["coreState"]> {
+/**
+ * Puts the core in `connected` both in the store and in what the backend
+ * reports, so the shell's own status refresh does not undo it.
+ */
+function connectCore() {
+  ipc.runtimeStatus.mockResolvedValue(connectedCore());
+  useRuntimeEventStore.getState().setCoreState(connectedCore());
+}
+
+function disconnectedCore(): RuntimeStatusResponse {
+  return {
+    state: "disconnected",
+    activeProfileId: null,
+    mainPid: null,
+    prePid: null,
+    connectedDurationMs: null,
+    activeTunBackend: null,
+  };
+}
+
+function connectedCore(): RuntimeStatusResponse {
   return {
     state: "connected",
     activeProfileId: null,

@@ -9,7 +9,7 @@ export const DNS_STRATEGIES = [
   "ipv6Only",
 ] as const satisfies readonly DnsStrategy[];
 
-// Issue messages are translation keys (see lib/zod-errors.ts); the DNS pane
+// Issue messages are translation keys (see forms/zod-errors.ts); the DNS pane
 // renders them through `t`, so nothing here may be a display string.
 const nullableText = z.string().nullable();
 

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { ruleHasMatcher } from "./rule-match-summary";
 
 // Issue messages are translation keys, not display strings: the dialog renders
-// them through `t` (see lib/zod-errors.ts). A literal English message here would
+// them through `t` (see forms/zod-errors.ts). A literal English message here would
 // reach the user untranslated and invisibly to the i18n gate, which only scans
 // JSX text.
 const nullableText = z.string().trim().nullable();

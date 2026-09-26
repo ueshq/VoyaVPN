@@ -1,63 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ProxyMonitorStatus } from "@voya/contracts";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { installFakeCommands } from "@voya/features/test/backend";
-
-type TestMonitorStatus = {
-  message: string | null;
-  running: boolean;
-  stale: boolean;
-  state: string;
-};
-
-// The snapshot lives outside `state` so the store actions can rewrite it without
-// `state` referencing itself in its own initializer.
-const storeMock = vi.hoisted(() => {
-  const stopped: TestMonitorStatus = { message: null, running: false, stale: true, state: "stopped" };
-  const snapshot = { value: stopped };
-  const state = {
-    get proxyMonitorStatus() {
-      return snapshot.value;
-    },
-    setProxyMonitorFailed: vi.fn((message: string | null = null) => {
-      snapshot.value = { message, running: false, stale: true, state: "failed" };
-    }),
-    setProxyMonitorStarting: vi.fn(() => {
-      snapshot.value = { ...snapshot.value, running: false, state: "starting" };
-    }),
-    setProxyMonitorStatus: vi.fn((status: TestMonitorStatus) => {
-      snapshot.value = status;
-    }),
-  };
-
-  return {
-    reset() {
-      snapshot.value = stopped;
-      state.setProxyMonitorFailed.mockClear();
-      state.setProxyMonitorStarting.mockClear();
-      state.setProxyMonitorStatus.mockClear();
-    },
-    setStatus(next: TestMonitorStatus) {
-      snapshot.value = next;
-    },
-    state,
-  };
-});
 
 const ipcMocks = installFakeCommands({
   proxyStartMonitor: vi.fn(),
   proxyStopMonitor: vi.fn(),
 });
 
-vi.mock("@voya/client/runtime-event-store", () => ({ useRuntimeEventStore: { getState: () => storeMock.state } }));
-
 import { createProxyMonitorController } from "./proxy-monitor-controller";
 
-const RUNNING: TestMonitorStatus = { message: null, running: true, stale: false, state: "running" };
-const STOPPED: TestMonitorStatus = { message: null, running: false, stale: true, state: "stopped" };
+const RUNNING: ProxyMonitorStatus = { message: null, running: true, stale: false, state: "running" };
+const STOPPED: ProxyMonitorStatus = { message: null, running: false, stale: true, state: "stopped" };
 
 describe("proxy monitor controller", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    storeMock.reset();
     ipcMocks.proxyStartMonitor.mockReset().mockResolvedValue(RUNNING);
     ipcMocks.proxyStopMonitor.mockReset().mockResolvedValue(STOPPED);
   });
@@ -72,6 +30,12 @@ describe("proxy monitor controller", () => {
 
   it("debounces the start so a tab passed through opens no socket", async () => {
     const { controller } = makeController();
+    // The "starting" badge is set before the command, never after it.
+    let statusWhenStarted: string | undefined;
+    ipcMocks.proxyStartMonitor.mockImplementationOnce(async () => {
+      statusWhenStarted = useRuntimeEventStore.getState().proxyMonitorStatus.state;
+      return RUNNING;
+    });
 
     controller.setWanted(true);
     await vi.advanceTimersByTimeAsync(99);
@@ -79,11 +43,8 @@ describe("proxy monitor controller", () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(ipcMocks.proxyStartMonitor).toHaveBeenCalledTimes(1);
-    // The "starting" badge is set before the command, never after it.
-    expect(storeMock.state.setProxyMonitorStarting.mock.invocationCallOrder[0]!).toBeLessThan(
-      ipcMocks.proxyStartMonitor.mock.invocationCallOrder[0]!,
-    );
-    expect(storeMock.state.proxyMonitorStatus).toEqual(RUNNING);
+    expect(statusWhenStarted).toBe("starting");
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual(RUNNING);
   });
 
   it("leaves the monitor alone while switching between proxy surfaces", async () => {
@@ -116,7 +77,7 @@ describe("proxy monitor controller", () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(ipcMocks.proxyStopMonitor).toHaveBeenCalledTimes(1);
-    expect(storeMock.state.proxyMonitorStatus).toEqual(STOPPED);
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus).toEqual(STOPPED);
   });
 
   it("reports a rejected start and does not leave the monitor marked running", async () => {
@@ -128,8 +89,7 @@ describe("proxy monitor controller", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(onError).toHaveBeenCalledWith(failure, "start");
-    expect(storeMock.state.setProxyMonitorStatus).not.toHaveBeenCalled();
-    expect(storeMock.state.proxyMonitorStatus.running).toBe(false);
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus.running).toBe(false);
   });
 
   it("reports a rejected stop", async () => {
@@ -147,9 +107,9 @@ describe("proxy monitor controller", () => {
 
   it("stops a start that completed after the surface went away", async () => {
     const { controller } = makeController();
-    let resolveStart: ((status: TestMonitorStatus) => void) | undefined;
+    let resolveStart: ((status: ProxyMonitorStatus) => void) | undefined;
     ipcMocks.proxyStartMonitor.mockReturnValueOnce(
-      new Promise<TestMonitorStatus>((resolve) => {
+      new Promise<ProxyMonitorStatus>((resolve) => {
         resolveStart = resolve;
       }),
     );
@@ -168,9 +128,9 @@ describe("proxy monitor controller", () => {
 
   it("restarts when a surface reappears while the stop is in flight", async () => {
     const { controller } = makeController();
-    let resolveStop: ((status: TestMonitorStatus) => void) | undefined;
+    let resolveStop: ((status: ProxyMonitorStatus) => void) | undefined;
     ipcMocks.proxyStopMonitor.mockReturnValueOnce(
-      new Promise<TestMonitorStatus>((resolve) => {
+      new Promise<ProxyMonitorStatus>((resolve) => {
         resolveStop = resolve;
       }),
     );
@@ -193,11 +153,13 @@ describe("proxy monitor controller", () => {
 
     controller.setWanted(true);
     await vi.advanceTimersByTimeAsync(100);
-    expect(storeMock.state.proxyMonitorStatus.running).toBe(true);
+    expect(useRuntimeEventStore.getState().proxyMonitorStatus.running).toBe(true);
 
     // The websocket loop failed on its own and pushed a status; the controller
     // keeps no private copy that could disagree with it.
-    storeMock.setStatus({ message: "socket closed", running: false, stale: true, state: "failed" });
+    useRuntimeEventStore
+      .getState()
+      .setProxyMonitorStatus({ message: "socket closed", running: false, stale: true, state: "failed" });
     controller.setWanted(false);
     await vi.advanceTimersByTimeAsync(5_000);
 

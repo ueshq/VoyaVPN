@@ -3,12 +3,13 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { MockBackend } from "@voya/client/mock-backend";
 import type { RootRoutes } from "~/app/navigation";
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
+import { mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
 import { makeTestQueryClient, TestProviders } from "~/test/providers";
 import { SubscriptionScreen } from "./subscriptions-screen";
 
 beforeAll(async () => { await localeReady; });
-beforeEach(registerMobileBackend);
+beforeEach(() => registerMobileBackend(mockTransport()));
 
 test("subscription drafts require Save, retain input on failure and merge the latest hidden fields", async () => {
   const backend = voyaTransport() as MockBackend;

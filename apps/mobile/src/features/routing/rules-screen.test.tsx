@@ -1,36 +1,23 @@
-import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
-import type { QueryClient } from "@tanstack/react-query";
-import type { MockBackend } from "@voya/client/mock-backend";
+import { screen, userEvent, waitFor } from "@testing-library/react-native";
 import { makeRouting, makeRoutingRule } from "@voya/client/mock-seed";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
-import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
+import { registerMobileBackend } from "~/ipc/platform";
+import { mockBackend, mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
-import { makeTestQueryClient, TestProviders } from "~/test/providers";
+import { renderScreen } from "~/test/providers";
 
 import { RulesScreen } from "./rules-screen";
 
-let activeQueryClient: QueryClient | null = null;
-
-async function renderRules() {
-  const queryClient = makeTestQueryClient();
-  activeQueryClient = queryClient;
-  const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <TestProviders queryClient={queryClient}>{children}</TestProviders>
-  );
-
-  return { queryClient, ...(await render(<RulesScreen />, { wrapper })) };
-}
-
-function backend() {
-  return voyaTransport() as MockBackend;
+function renderRules() {
+  return renderScreen(<RulesScreen />);
 }
 
 /** A rule on the seeded default profile, the way the backend would hold one. */
 async function seedRule(remarks: string) {
-  const [routing] = backend().state.routings;
+  const [routing] = mockBackend().state.routings;
   // An empty id is what a create looks like on the wire; the backend assigns one.
-  await backend().commands.saveRoutingRule(
+  await mockBackend().commands.saveRoutingRule(
     routing.id,
     makeRoutingRule(0, { domain: ["example.test"], id: "", remarks }),
   );
@@ -41,19 +28,15 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  registerMobileBackend();
-  // The development build seeds a couple of rules to look at; these tests are
-  // about what the screen does with a rule set, so they state their own.
-  backend().state.routings = [makeRouting(0)];
+  registerMobileBackend(mockTransport());
+  // The shared test seed has a couple of rules; these tests are about what
+  // the screen does with a rule set, so they state their own.
+  mockBackend().state.routings = [makeRouting(0)];
   // The core state arrives as a transient event, and the mode switcher needs
   // it: with nothing received yet there is nothing to switch away from.
-  useRuntimeEventStore.getState().setCoreState(backend().state.runtime);
+  useRuntimeEventStore.getState().setCoreState(mockBackend().state.runtime);
 });
 
-afterEach(() => {
-  activeQueryClient?.clear();
-  activeQueryClient = null;
-});
 
 describe("RulesScreen", () => {
   it("lists the active rule set with what each rule matches", async () => {
@@ -92,7 +75,7 @@ describe("RulesScreen", () => {
     await user.press(await screen.findByRole("switch", { name: "Office" }));
 
     await waitFor(() =>
-      expect(backend().state.routings[0].rules[0].enabled).toBe(false),
+      expect(mockBackend().state.routings[0].rules[0].enabled).toBe(false),
     );
   });
 

@@ -13,6 +13,10 @@ import './global.css';
 import { AppRegistry } from 'react-native';
 
 import { App } from './src/app/App';
+import { registerMobileBackend } from './src/ipc/platform';
 import { name as appName } from './app.json';
+
+// The native Rust host; tests register the shared mock instead.
+registerMobileBackend();
 
 AppRegistry.registerComponent(appName, () => App);

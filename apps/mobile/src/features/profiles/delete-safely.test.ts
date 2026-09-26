@@ -1,10 +1,11 @@
 import type { MockBackend } from "@voya/client/mock-backend";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
+import { mockTransport } from "~/test/mock-transport";
 import { deleteSafely } from "./delete-safely";
 
 beforeEach(() => {
-  registerMobileBackend();
+  registerMobileBackend(mockTransport());
   useRuntimeActionStore.setState(useRuntimeActionStore.getInitialState());
 });
 

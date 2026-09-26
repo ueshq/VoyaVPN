@@ -8,48 +8,18 @@ import { changeLocale } from "@voya/i18n";
 import type {
   ProfileSummaryEntry,
   RuntimeStatusResponse,
-  StatisticsSnapshot,
   SystemProxyStatusResponse,
   TunStatus,
 } from "@voya/contracts";
 import { IpcCommandError } from "@voya/client/errors";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 import { makeProfileFixture } from "@voya/features/test/profile-fixture";
 
 import { HomeScreen } from "./home-screen";
 import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
-
-type RuntimeState = {
-  coreState: RuntimeStatusResponse | null;
-  coreStateReceivedAt: number | null;
-  setCoreState: (state: RuntimeStatusResponse) => void;
-  statistics: StatisticsSnapshot | null;
-  sysProxy: SystemProxyStatusResponse | null;
-  setSysProxy: (state: SystemProxyStatusResponse) => void;
-  tun: TunStatus | null;
-  setTun: (state: TunStatus) => void;
-};
-
-const runtimeMock = vi.hoisted(() => {
-  const state: RuntimeState = {
-    coreState: null,
-    coreStateReceivedAt: null,
-    setCoreState: vi.fn(),
-    statistics: null,
-    sysProxy: null,
-    setSysProxy: vi.fn(),
-    tun: null,
-    setTun: vi.fn(),
-  };
-  const useRuntimeEventStore = Object.assign(
-    (selector: (value: RuntimeState) => unknown) => selector(state),
-    { getState: () => state },
-  );
-
-  return { state, useRuntimeEventStore };
-});
 
 const ipcMock = installFakeCommands({
   connectActiveProfile: vi.fn(),
@@ -125,10 +95,6 @@ const missingTunnelMessages = {
 
 // The real error class and kind check: the sudo-retry and missing-core paths
 // branch on `appError.kind`.
-vi.mock("@voya/client/runtime-event-store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@voya/client/runtime-event-store")>()),
-  useRuntimeEventStore: runtimeMock.useRuntimeEventStore,
-}));
 
 // `listProfileSummaries` answers with the rows plus the number of stored profiles this
 // build could not decode; Home only reads the rows.
@@ -155,16 +121,6 @@ describe("HomeScreen", () => {
     });
     await changeLocale("en", { persist: false });
     vi.clearAllMocks();
-    runtimeMock.state.coreState = null;
-    runtimeMock.state.statistics = null;
-    runtimeMock.state.sysProxy = null;
-    runtimeMock.state.tun = null;
-    vi.mocked(runtimeMock.state.setTun).mockImplementation((status) => {
-      runtimeMock.state.tun = status;
-    });
-    vi.mocked(runtimeMock.state.setSysProxy).mockImplementation((status) => {
-      runtimeMock.state.sysProxy = status;
-    });
     ipcMock.connectActiveProfile.mockResolvedValue(connectedStatus);
     ipcMock.loadAppSettings.mockResolvedValue(makeAppSettings());
     ipcMock.getSettingsApplyStatus.mockResolvedValue({ action: "none", connected: false });
@@ -208,7 +164,7 @@ describe("HomeScreen", () => {
   });
 
   it("states the connection in words and marks where traffic leaves", async () => {
-    runtimeMock.state.coreState = connectedStatus;
+    useRuntimeEventStore.setState({ coreState: connectedStatus });
     mockProfileList([
       makeActiveProfile({ id: "node-tokyo", remarks: "🇯🇵 Tokyo Edge" }),
     ]);
@@ -272,9 +228,9 @@ describe("HomeScreen", () => {
   });
 
   it("separates the actual capture path from saved VPN and routing settings", async () => {
-    runtimeMock.state.coreState = connectedStatus;
-    runtimeMock.state.tun = { ...tunStatusResponse, enabled: true };
-    runtimeMock.state.sysProxy = { ...sysProxyStatus, effectiveMode: "forcedChange" };
+    useRuntimeEventStore.setState({ coreState: connectedStatus });
+    useRuntimeEventStore.setState({ tun: { ...tunStatusResponse, enabled: true } });
+    useRuntimeEventStore.setState({ sysProxy: { ...sysProxyStatus, effectiveMode: "forcedChange" } });
     const settings = makeAppSettings();
     settings.proxy.trafficMode = "global";
     ipcMock.loadAppSettings.mockResolvedValue(settings);
@@ -287,16 +243,16 @@ describe("HomeScreen", () => {
   });
 
   it("confirms a running native VPN from its backend and links to connection settings", async () => {
-    runtimeMock.state.coreState = { ...connectedStatus, activeTunBackend: "macosPacketTunnel" };
-    runtimeMock.state.tun = tunStatusResponse;
-    runtimeMock.state.sysProxy = sysProxyStatus;
+    useRuntimeEventStore.setState({ coreState: { ...connectedStatus, activeTunBackend: "macosPacketTunnel" } });
+    useRuntimeEventStore.setState({ tun: tunStatusResponse });
+    useRuntimeEventStore.setState({ sysProxy: sysProxyStatus });
     renderHome();
     await userEvent.click(await screen.findByRole("button", { name: "Current capture: VPN mode" }));
     expect(useShellStore.getState()).toMatchObject({ activeTab: "settings", settingsTab: "connection" });
   });
 
   it("shows the active policy group and the member traffic goes through", async () => {
-    runtimeMock.state.coreState = connectedStatus;
+    useRuntimeEventStore.setState({ coreState: connectedStatus });
     ipcMock.runtimeStatus.mockResolvedValue(connectedStatus);
     ipcMock.listPolicyGroups.mockResolvedValue({
       entries: [
@@ -346,8 +302,8 @@ describe("HomeScreen", () => {
   });
 
   it("shows the running node and navigates directly to nodes without connecting", async () => {
-    runtimeMock.state.sysProxy = sysProxyStatus;
-    runtimeMock.state.coreState = connectedStatus;
+    useRuntimeEventStore.setState({ sysProxy: sysProxyStatus });
+    useRuntimeEventStore.setState({ coreState: connectedStatus });
     mockProfileList([
       makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
     ]);
@@ -374,7 +330,7 @@ describe("HomeScreen", () => {
   });
 
   it("keeps the disconnect action available while proxy capabilities are unavailable", () => {
-    runtimeMock.state.coreState = connectedStatus;
+    useRuntimeEventStore.setState({ coreState: connectedStatus });
     const view = renderHome();
     expect(screen.queryByText("Protection status unknown")).not.toBeInTheDocument();
     // Home states the connection itself, never a claim about protection.
@@ -386,7 +342,7 @@ describe("HomeScreen", () => {
 
   it("offers a retry when native tunnel cleanup is pending and refreshes TUN after failure", async () => {
     const pending = { ...connectedStatus, state: "cleanupPending" as const };
-    runtimeMock.state.coreState = pending;
+    useRuntimeEventStore.setState({ coreState: pending });
     ipcMock.runtimeStatus.mockResolvedValue(pending);
     ipcMock.disconnectCore.mockRejectedValue(new Error("stop timed out"));
     const user = userEvent.setup();
@@ -396,7 +352,7 @@ describe("HomeScreen", () => {
     await user.click(connectButton());
     await waitFor(() => expect(ipcMock.disconnectCore).toHaveBeenCalledOnce());
     await waitFor(() =>
-      expect(runtimeMock.state.setCoreState).toHaveBeenCalledWith(pending),
+      expect(useRuntimeEventStore.getState().coreState).toEqual(pending),
     );
     expect(ipcMock.tunStatus).toHaveBeenCalled();
     expect(connectButton()).toBeEnabled();
@@ -513,7 +469,7 @@ describe("HomeScreen", () => {
   it("refreshes runtime state and surfaces errors when disconnect fails", async () => {
     const user = userEvent.setup();
     const disconnectError = new Error("sudo kill failed");
-    runtimeMock.state.coreState = connectedStatus;
+    useRuntimeEventStore.setState({ coreState: connectedStatus });
     ipcMock.disconnectCore.mockRejectedValue(disconnectError);
     ipcMock.runtimeStatus.mockResolvedValue(connectedStatus);
 
@@ -523,7 +479,7 @@ describe("HomeScreen", () => {
     await user.click(connectButton());
 
     await waitFor(() => expect(ipcMock.runtimeStatus).toHaveBeenCalledTimes(1));
-    expect(runtimeMock.state.setCoreState).toHaveBeenCalledWith({
+    expect(useRuntimeEventStore.getState().coreState).toEqual({
       activeProfileId: "node-tokyo",
       mainPid: 4242,
       prePid: null,
@@ -602,7 +558,7 @@ describe("HomeScreen", () => {
   });
 
   it.each(["connected", "cleanupPending"] as const)("still disconnects an empty profile list while %s", async (state) => {
-    runtimeMock.state.coreState = { ...connectedStatus, state };
+    useRuntimeEventStore.setState({ coreState: { ...connectedStatus, state } });
     mockProfileList([]);
     renderHome();
     await userEvent.click(connectButton());
@@ -612,7 +568,7 @@ describe("HomeScreen", () => {
   });
 
   it("keeps the current node honest when the running profile differs from the saved selection", async () => {
-    runtimeMock.state.coreState = connectedStatus;
+    useRuntimeEventStore.setState({ coreState: connectedStatus });
     mockProfileList([
       makeActiveProfile({ id: "other", remarks: "Other saved node" }),
     ]);
@@ -644,7 +600,7 @@ describe("HomeScreen", () => {
         lastProviderError:
           "PacketTunnel extension is not bundled in this build",
       };
-      runtimeMock.state.tun = status;
+      useRuntimeEventStore.setState({ tun: status });
       ipcMock.tunStatus.mockResolvedValue(status);
 
       renderHome();
@@ -666,8 +622,8 @@ describe("HomeScreen", () => {
 
 
   it("offers no traffic or capture mode controls", async () => {
-    runtimeMock.state.coreState = disconnectedStatus;
-    runtimeMock.state.tun = { ...tunStatusResponse, enabled: true };
+    useRuntimeEventStore.setState({ coreState: disconnectedStatus });
+    useRuntimeEventStore.setState({ tun: { ...tunStatusResponse, enabled: true } });
     renderHome();
 
     await waitFor(() => expect(connectButton()).toBeEnabled());
@@ -680,12 +636,12 @@ describe("HomeScreen", () => {
   });
 
   it("asks macOS users to allow the VPN configuration", async () => {
-    runtimeMock.state.tun = {
+    useRuntimeEventStore.setState({ tun: {
       ...tunStatusResponse,
       backend: "macosPacketTunnel",
       enabled: true,
       providerState: "permissionRequired",
-    };
+    } });
     renderHome();
 
     expect(
@@ -709,14 +665,14 @@ describe("HomeScreen", () => {
   ] as const)(
     "keeps $backend diagnostics visible under the mode card",
     async ({ backend, providerState, message }) => {
-      runtimeMock.state.tun = {
+      useRuntimeEventStore.setState({ tun: {
         ...tunStatusResponse,
         backend,
         enabled: true,
         lastProviderError: message,
         nativeComponentReady: false,
         providerState,
-      };
+      } });
       renderHome();
 
       expect(

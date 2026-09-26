@@ -56,10 +56,8 @@ const SettingsScreen = lazy(() =>
   })),
 );
 
-// Render only the active screen. Replaces the Radix `Tabs`/`TabsContent` fan-out
-// (which already unmounted inactive panels) so the grid shell can drop the tab
-// primitive while keeping the exact "one mounted screen at a time" behaviour the
-// proxy-monitor lifecycle and query work rely on.
+// Only the active screen is mounted: the proxy-monitor lifecycle and the query
+// work rely on "one mounted screen at a time".
 function renderActiveScreen(tab: ShellTab) {
   switch (tab) {
     case "home":
@@ -74,8 +72,6 @@ function renderActiveScreen(tab: ShellTab) {
       return <SelfHostScreen />;
     case "settings":
       return <SettingsScreen />;
-    default:
-      return null;
   }
 }
 

@@ -18,7 +18,7 @@ import { isRecord } from "@voya/utils/guards";
 import { markRuntimeUpdate } from "./runtime-state-version";
 
 /** The backend's monitor status, plus the `starting` state only the frontend knows. */
-export type RuntimeProxyMonitorStatus = Omit<ProxyMonitorStatus, "state"> & {
+type RuntimeProxyMonitorStatus = Omit<ProxyMonitorStatus, "state"> & {
   state: "starting" | ProxyMonitorState;
 };
 

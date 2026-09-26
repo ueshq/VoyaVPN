@@ -1,9 +1,13 @@
 import { render, userEvent } from "@testing-library/react-native";
 
+import { registerMobileBackend } from "~/ipc/platform";
 import { localeReady } from "~/native/platform-boot";
+import { mockTransport } from "~/test/mock-transport";
 
 import { App } from "./App";
 import { SHELL_TABS, type ShellTab } from "./tabs";
+
+beforeEach(() => registerMobileBackend(mockTransport()));
 
 describe("App", () => {
   it("mounts a tab for every section, labelled from the shared locale", async () => {

@@ -8,6 +8,7 @@ import type { MockBackend } from "@voya/client/mock-backend";
 
 import { EventBridge } from "./event-bridge";
 import { registerMobileBackend, voyaTransport } from "./platform";
+import { mockTransport } from "~/test/mock-transport";
 
 /**
  * The registered transport, as the mock it is in every build today.
@@ -42,8 +43,8 @@ async function renderBridge() {
 }
 
 beforeEach(() => {
-  // A fresh backend per test, the way `platform-boot` registers one at startup.
-  registerMobileBackend();
+  // A fresh backend per test, where the app entry registers the native one.
+  registerMobileBackend(mockTransport());
   mockNavigate.mockClear();
   useToastStore.setState({ toasts: [] });
   useRuntimeEventStore.setState({ coreState: null });

@@ -1,11 +1,12 @@
 import { vi, type Mock } from "vitest";
 
-import type { VoyaCommands } from "@voya/contracts";
+import type { CoreState, VoyaCommands } from "@voya/contracts";
 import {
   setAppVisibility,
   setClipboard,
   setElevationHandler,
 } from "@voya/client/platform";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { setVoyaCommands } from "@voya/client/transport";
 
 /**
@@ -85,4 +86,18 @@ export function seedListCommands(): {
     listRoutings: vi.fn(async () => []),
     listSubscriptions: vi.fn(async () => []),
   };
+}
+
+/** Puts the real runtime event store in `state`, as a core-state event would. */
+export function setCoreState(state: CoreState) {
+  useRuntimeEventStore.setState({
+    coreState: {
+      activeProfileId: null,
+      activeTunBackend: null,
+      connectedDurationMs: null,
+      mainPid: null,
+      prePid: null,
+      state,
+    },
+  });
 }

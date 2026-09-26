@@ -17,10 +17,6 @@ export default defineConfig({
       ],
       exclude: [
         "apps/desktop/src/ipc/bindings.ts",
-        // Generated alongside the bindings for the native transports, which
-        // arrive with the mobile host; a table nothing calls yet is not a
-        // coverage gap the gate should be reporting.
-        "packages/contracts/src/commands.ts",
         // The Worker entry only binds `cloudflare:sockets`, which exists in the
         // Workers runtime alone; the handler it calls is covered in probe.ts.
         "apps/probe/src/index.ts",

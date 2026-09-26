@@ -2,8 +2,6 @@ import { setAppVisibility, setClientStorage, setSystemColorSchemeReader } from "
 import { createNativeI18n } from "@voya/i18n/native";
 import { Appearance, AppState } from "react-native";
 
-import { registerMobileBackend } from "~/ipc/platform";
-
 import { deviceLanguages } from "./locale";
 import { clientStorageAdapter, storage } from "./storage";
 
@@ -37,8 +35,6 @@ setAppVisibility({
     return () => subscription.remove();
   },
 });
-
-registerMobileBackend();
 
 // MMKV's `getString`/`set` are already the shape the i18n host asks for.
 const i18n = createNativeI18n({ storage, deviceLanguages });

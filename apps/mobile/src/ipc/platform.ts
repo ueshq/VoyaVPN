@@ -7,8 +7,8 @@ import { setVoyaCommands } from "@voya/client/transport";
 import { createTransport, type VoyaTransport } from "./transport";
 
 /**
- * The backend registration, split out of `platform-boot` so the event bridge
- * can reach the same instance.
+ * The backend registration: the app entry registers the native host, a test
+ * registers the shared mock, and the event bridge reaches whichever it was.
  *
  * `setVoyaCommands` puts the command half behind `@voya/client`, which is all
  * a feature ever sees; the event half has no global home, because subscribing
@@ -16,8 +16,8 @@ import { createTransport, type VoyaTransport } from "./transport";
  */
 let transport: VoyaTransport | null = null;
 
-export function registerMobileBackend() {
-  transport = createTransport();
+export function registerMobileBackend(backend: VoyaTransport = createTransport()) {
+  transport = backend;
   setVoyaCommands(transport.commands);
   // iOS requests authorization while saving NETunnelProvider preferences.
   // Android must launch VpnService.prepare from the foreground Activity.

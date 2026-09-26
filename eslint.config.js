@@ -119,6 +119,16 @@ export default tseslint.config(
     },
   },
   {
+    // Jest's module mocks are factories that `require` inside `jest.mock`,
+    // which hoisting runs before any `import`; and the test helpers export
+    // components alongside functions, which fast refresh never sees.
+    files: ["apps/mobile/src/test/**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      "react-refresh/only-export-components": "off",
+    },
+  },
+  {
     // The shared frontend layer runs in the desktop WebView and in React Native
     // alike, so reaching the DOM has to fail lint here rather than on a device.
     // TypeScript cannot catch it: its `lib` includes DOM for the whole

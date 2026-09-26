@@ -1,14 +1,14 @@
 // @testing-library/react-native v14 registers its matchers itself; there is
 // nothing to import here for them.
+import { clearRenderedClient } from "./providers";
 
-
+afterEach(clearRenderedClient);
 
 // SafeAreaProvider measures the real window before it renders children, so in a
 // test it renders nothing at all. The package ships this mock for exactly that.
 // The shipped mock puts every component on `default`, so it has to be spread
 // back out to stand in for the module's named exports.
 jest.mock("react-native-safe-area-context", () => ({
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   ...require("react-native-safe-area-context/jest/mock").default,
 }));
 
@@ -47,12 +47,10 @@ jest.mock("react-native-mmkv", () => {
 // Worklets owns the JSI runtime Reanimated 4 compiles worklets against. A Jest
 // run has neither, and importing the real module throws on that. The shipped
 // mock replaces the runtime with ordinary function calls.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock("react-native-worklets", () => require("react-native-worklets/lib/module/mock"));
 
 // The shipped Reanimated mock still requires the real package, whose import-time
 // initializer calls `setCSSEventHandler` on the JS fallback and throws. The
 // local stub covers the public surface HeroUI reads.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 jest.mock("react-native-reanimated", () => require("~/test/reanimated-mock"));
 

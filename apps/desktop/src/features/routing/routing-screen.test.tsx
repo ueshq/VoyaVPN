@@ -5,11 +5,11 @@ import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
-import type { CoreState, RoutingRule, Routing_Serialize } from "@voya/contracts";
+import type { RoutingRule, Routing_Serialize } from "@voya/contracts";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 
 import { RoutingScreen } from "./routing-screen";
-import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
+import { installFakeCommands, seedListCommands, setCoreState } from "@voya/features/test/backend";
 
 const ipc = installFakeCommands({
   connectionModeStatus: vi.fn(),
@@ -23,19 +23,13 @@ const ipc = installFakeCommands({
   saveRoutingRule: vi.fn(),
 });
 
-const runtime = vi.hoisted(() => ({ state: "disconnected" as CoreState }));
-vi.mock("@voya/client/runtime-event-store", () => ({
-  useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) =>
-    select({ coreState: { state: runtime.state } }),
-  coreStateOf: (coreState: { state: CoreState } | null) => coreState?.state ?? "disconnected",
-}));
 
 const clients = new Set<QueryClient>();
 
 describe("RoutingScreen", () => {
   beforeEach(() => {
     Object.values(ipc).forEach((mock) => mock.mockReset());
-    runtime.state = "disconnected";
+    setCoreState("disconnected");
     ipc.listRoutings.mockResolvedValue([activeRouting(), otherRouting()]);
     ipc.listProfileSummaries.mockResolvedValue({ entries: [], undecodableProfiles: 0 });
     ipc.listPolicyGroups.mockResolvedValue({ entries: [] });
@@ -123,7 +117,7 @@ describe("RoutingScreen", () => {
 
   it("locks every rule control in global mode until switched back from the title", async () => {
     const user = userEvent.setup();
-    runtime.state = "connected";
+    setCoreState("connected");
     const settings = makeAppSettings();
     settings.proxy.trafficMode = "global";
     ipc.loadAppSettings.mockResolvedValue(settings);
@@ -280,12 +274,12 @@ describe("RoutingScreen", () => {
   });
 
   it("says saving a rule reconnects only while connected", async () => {
-    runtime.state = "connected";
+    setCoreState("connected");
     const view = renderScreen();
     expect(await screen.findByText("Connected: saving a rule reconnects briefly.")).toBeInTheDocument();
     view.unmount();
 
-    runtime.state = "disconnected";
+    setCoreState("disconnected");
     renderScreen();
     await screen.findByText("Office");
     expect(screen.queryByText("Connected: saving a rule reconnects briefly.")).not.toBeInTheDocument();

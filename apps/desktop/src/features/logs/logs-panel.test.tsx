@@ -1,30 +1,19 @@
 import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { LogLevel } from "@voya/contracts";
-import type { StoredLogLine } from "@voya/client/runtime-event-store";
+import { useRuntimeEventStore, type StoredLogLine } from "@voya/client/runtime-event-store";
 
 import { LogsPanel, type LogFilter } from "./logs-panel";
 import { installFakeCommands } from "@voya/features/test/backend";
 
 installFakeCommands({ setLogStreaming: vi.fn(async () => null) });
 
-type LogsState = { clearLogs: () => void; logLines: StoredLogLine[] };
-
-const storeMock = vi.hoisted(() => {
-  const state: LogsState = {
-    clearLogs: vi.fn(),
-    logLines: [],
-  };
-  const hook = (selector: (state: LogsState) => unknown) => selector(state);
-
-  return Object.assign(hook, { getState: () => state, state });
-});
-
-
-vi.mock("@voya/client/runtime-event-store", () => ({ useRuntimeEventStore: storeMock }));
+function showLines(logLines: StoredLogLine[]) {
+  useRuntimeEventStore.setState({ logLines });
+}
 
 // 2026-06-01T08:09:10 local time; the panel renders the store's receipt stamp,
 // not a render-time clock read.
@@ -33,11 +22,6 @@ const LOGGED_AT = new Date(2026, 5, 1, 8, 9, 10).getTime();
 function line(id: number, level: LogLevel, text: string, loggedAt = LOGGED_AT): StoredLogLine {
   return { body: { line: text, source: "core" }, id, level, loggedAt };
 }
-
-beforeEach(() => {
-  storeMock.state.clearLogs = vi.fn();
-  storeMock.state.logLines = [];
-});
 
 describe("LogsPanel", () => {
   it("shows the empty state when there are no log lines", () => {
@@ -48,11 +32,11 @@ describe("LogsPanel", () => {
   });
 
   it("renders each line with a level badge and a timestamp", () => {
-    storeMock.state.logLines = [
+    showLines([
       line(1, "info", "core started"),
       line(2, "warn", "slow handshake"),
       line(3, "error", "tunnel closed"),
-    ];
+    ]);
 
     render(<Harness />);
 
@@ -66,10 +50,10 @@ describe("LogsPanel", () => {
   });
 
   it("shows each line's receipt time rather than one shared panel-open time", () => {
-    storeMock.state.logLines = [
+    showLines([
       line(1, "info", "buffered while the panel was hidden", new Date(2026, 5, 1, 8, 9, 10).getTime()),
       line(2, "info", "arrived a minute later", new Date(2026, 5, 1, 8, 10, 30).getTime()),
-    ];
+    ]);
 
     render(<Harness />);
 
@@ -80,7 +64,7 @@ describe("LogsPanel", () => {
 
   it("filters lines by search text", async () => {
     const user = userEvent.setup();
-    storeMock.state.logLines = [line(1, "info", "core started"), line(2, "info", "dns query resolved")];
+    showLines([line(1, "info", "core started"), line(2, "info", "dns query resolved")]);
 
     render(<Harness />);
 
@@ -91,13 +75,13 @@ describe("LogsPanel", () => {
   });
 
   it("uses standard levels by default and offers issues-only and all logs", async () => {
-    storeMock.state.logLines = [
+    showLines([
       line(1, "info", "core started"),
       line(2, "error", "tunnel closed"),
       line(3, "warn", "slow handshake"),
       line(4, "debug", "debug data"),
       line(5, "trace", "trace data"),
-    ];
+    ]);
     render(<Harness />);
     expect(screen.getAllByTestId("log-line")).toHaveLength(3);
     await userEvent.click(screen.getByRole("combobox"));
@@ -111,7 +95,7 @@ describe("LogsPanel", () => {
 
   it("shows a no-matches state when filters exclude every line", async () => {
     const user = userEvent.setup();
-    storeMock.state.logLines = [line(1, "info", "core started")];
+    showLines([line(1, "info", "core started")]);
 
     render(<Harness />);
 
@@ -122,7 +106,7 @@ describe("LogsPanel", () => {
   });
 
   it("translates an app-authored line and passes core output through", () => {
-    storeMock.state.logLines = [
+    showLines([
       { body: { line: "inbound/mixed started", source: "core" }, id: 1, level: "info", loggedAt: LOGGED_AT },
       {
         body: { code: { code: "connecting" }, detail: null, source: "app" },
@@ -152,7 +136,7 @@ describe("LogsPanel", () => {
         level: "warn",
         loggedAt: LOGGED_AT,
       },
-    ];
+    ]);
 
     render(<Harness />);
 
@@ -168,7 +152,7 @@ describe("LogsPanel", () => {
 
   it("searches the translated text of an app-authored line", async () => {
     const user = userEvent.setup();
-    storeMock.state.logLines = [
+    showLines([
       { body: { line: "inbound/mixed started", source: "core" }, id: 1, level: "info", loggedAt: LOGGED_AT },
       {
         body: { code: { code: "speedtestCancellationRequested" }, detail: null, source: "app" },
@@ -176,7 +160,7 @@ describe("LogsPanel", () => {
         level: "info",
         loggedAt: LOGGED_AT,
       },
-    ];
+    ]);
 
     render(<Harness />);
 
@@ -188,7 +172,7 @@ describe("LogsPanel", () => {
 
   it("opens full log details and restores row focus on Escape", async () => {
     const text = "diagnostic " + "long-content".repeat(100) + "\nlast line";
-    storeMock.state.logLines = [line(1, "error", text)];
+    showLines([line(1, "error", text)]);
     render(<Harness />);
     const row = within(screen.getByTestId("log-line")).getByRole("button");
     row.focus();
@@ -200,7 +184,7 @@ describe("LogsPanel", () => {
   });
 
   it("pauses following while scrolled up and offers a return to the latest entry", async () => {
-    storeMock.state.logLines = Array.from({ length: 100 }, (_, id) => line(id, "info", `line ${id}`));
+    showLines(Array.from({ length: 100 }, (_, id) => line(id, "info", `line ${id}`)));
     render(<Harness />);
     const viewport = screen.getByTestId("logs-viewport");
     Object.defineProperties(viewport, {
@@ -215,14 +199,15 @@ describe("LogsPanel", () => {
 
   it("clears logs through the store action", async () => {
     const user = userEvent.setup();
-    storeMock.state.logLines = [line(1, "info", "core started")];
+    showLines([line(1, "info", "core started")]);
 
     render(<Harness />);
 
     await user.click(screen.getByRole("menuitem", { name: "More" }));
     await user.click(screen.getByRole("menuitem", { name: "Clear display" }));
 
-    expect(storeMock.state.clearLogs).toHaveBeenCalledTimes(1);
+    expect(useRuntimeEventStore.getState().logLines).toEqual([]);
+    expect(screen.getByText("No log lines")).toBeInTheDocument();
   });
 });
 

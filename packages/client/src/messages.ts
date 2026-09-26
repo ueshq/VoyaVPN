@@ -16,8 +16,8 @@ import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
  * The one place a backend message code becomes text.
  *
  * The backend used to hand the frontend finished English sentences — notice
- * titles, validator messages, speedtest statuses, log lines — which the eight
- * shipped locales could not touch and `pnpm check:i18n` could not see, because
+ * titles, validator messages, speedtest statuses, log lines — which the shipped
+ * locales could not touch and `pnpm check:i18n` could not see, because
  * it only scans frontend source. Every one of those is a code now, and these
  * registries map it to the locale key that spells it out.
  *

@@ -1,7 +1,6 @@
 import { act } from "@testing-library/react-native";
 import { Alert, View, type MeasureOnSuccessCallback } from "react-native";
-import { fireEvent, render, screen, userEvent, waitFor } from "@testing-library/react-native";
-import type { QueryClient } from "@tanstack/react-query";
+import { fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
 import type { MockBackend } from "@voya/client/mock-backend";
 import { makePolicyGroupEntry } from "@voya/client/mock-seed";
 import { useNodeListStore } from "@voya/client/node-list-store";
@@ -10,36 +9,25 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { setClipboard } from "@voya/client/platform";
 
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
+import { mockBackend, mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
-import { makeTestQueryClient, TestProviders } from "~/test/providers";
+import { renderScreen } from "~/test/providers";
 
 import { NodesScreen } from "./nodes-screen";
 
-let activeQueryClient: QueryClient | null = null;
-
-async function renderNodes() {
-  const queryClient = makeTestQueryClient();
-  activeQueryClient = queryClient;
-  const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <TestProviders queryClient={queryClient}>{children}</TestProviders>
-  );
-
-  return { queryClient, ...(await render(<NodesScreen />, { wrapper })) };
+function renderNodes() {
+  return renderScreen(<NodesScreen />);
 }
 
 const readText = jest.fn<Promise<string>, []>();
 const writeText = jest.fn<Promise<void>, [string]>();
-
-function backend() {
-  return voyaTransport() as MockBackend;
-}
 
 beforeAll(async () => {
   await localeReady;
 });
 
 beforeEach(() => {
-  registerMobileBackend();
+  registerMobileBackend(mockTransport());
   // The screen reads the clipboard through the shared seam, so the test
   // replaces the seam rather than the native module behind it.
   readText.mockReset();
@@ -50,10 +38,6 @@ beforeEach(() => {
   useRuntimeEventStore.setState({ coreState: null });
 });
 
-afterEach(() => {
-  activeQueryClient?.clear();
-  activeQueryClient = null;
-});
 
 describe("NodesScreen", () => {
   it("groups nodes by source, local last, with each group's size", async () => {
@@ -137,7 +121,7 @@ describe("NodesScreen", () => {
   });
 
   it("uses a policy group instead of the selected node", async () => {
-    const backendInstance = backend();
+    const backendInstance = mockBackend();
     backendInstance.state.policyGroups = [
       makePolicyGroupEntry(0, { name: "Fastest" }),
     ];
@@ -174,7 +158,7 @@ describe("NodesScreen", () => {
     await user.press(await screen.findByText("Show QR"));
 
     expect(await screen.findByLabelText("Generated QR code")).toBeOnTheScreen();
-    expect(backend().state.calls.map((call) => call.command)).toContain("generateQrCode");
+    expect(mockBackend().state.calls.map((call) => call.command)).toContain("generateQrCode");
   });
 
   it("will not offer to delete a node the subscription owns", async () => {
@@ -198,13 +182,13 @@ describe("NodesScreen", () => {
 
     await user.longPress(await screen.findByText("🇸🇬 Singapore"));
     await user.press(await screen.findByText("Delete"));
-    expect(backend().state.profiles.map((entry) => entry.profile.id)).toContain("profile-1");
+    expect(mockBackend().state.profiles.map((entry) => entry.profile.id)).toContain("profile-1");
     const confirm = alert.mock.calls.at(-1)?.[2]?.find((button) => button.style === "destructive");
     await act(() => confirm?.onPress?.());
     alert.mockRestore();
 
     await waitFor(() =>
-      expect(backend().state.profiles.map((entry) => entry.profile.id)).not.toContain("profile-1"),
+      expect(mockBackend().state.profiles.map((entry) => entry.profile.id)).not.toContain("profile-1"),
     );
   });
 

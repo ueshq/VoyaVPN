@@ -6,17 +6,16 @@ import { changeLocale } from "@voya/i18n";
 import { createAppQueryClient } from "@voya/client/query-client";
 import { renderWithQuery } from "@/test/render";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
-import type { AppSettings, CoreState, TrafficModeResponse } from "@voya/contracts";
+import type { AppSettings, TrafficModeResponse } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
-import { installFakeCommands } from "@voya/features/test/backend";
+import { installFakeCommands, setCoreState } from "@voya/features/test/backend";
 
 import { TrafficModeBanner } from "./traffic-mode-banner";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
 
 const mocks = vi.hoisted(() => ({
-  state: "disconnected" as CoreState,
   load: vi.fn(),
   save: vi.fn(),
 }));
@@ -24,10 +23,6 @@ installFakeCommands({
   loadAppSettings: mocks.load,
   proxySetTrafficMode: mocks.save,
 });
-vi.mock("@voya/client/runtime-event-store", () => ({
-  useRuntimeEventStore: (select: (state: { coreState: { state: CoreState } }) => unknown) => select({ coreState: { state: mocks.state } }),
-  coreStateOf: (coreState: { state: CoreState } | null) => coreState?.state ?? "disconnected",
-}));
 
 const GLOBAL_BANNER = "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.";
 
@@ -50,7 +45,7 @@ function renderSwitcher() {
 }
 
 beforeEach(() => {
-  mocks.state = "disconnected";
+  setCoreState("disconnected");
   mocks.load.mockReset().mockResolvedValue(makeAppSettings());
   mocks.save.mockReset().mockImplementation((mode) => {
     const settings = makeAppSettings();
@@ -132,7 +127,7 @@ describe("rules traffic mode", () => {
   });
 
   it("allows an online retry of the already saved mode", async () => {
-    mocks.state = "connected";
+    setCoreState("connected");
     const user = userEvent.setup();
     renderSwitcher();
     await waitFor(() => expect(screen.getByRole("button", { name: "Rule" })).toBeEnabled());
@@ -156,7 +151,7 @@ describe("rules traffic mode", () => {
     "traffic mode was saved but could not be applied to the running core",
     "traffic mode was applied, but existing connections could not be closed",
   ])("reconciles a committed preference after %s and allows retry", async (message) => {
-    mocks.state = "connected";
+    setCoreState("connected");
     mocks.save.mockImplementationOnce((mode) => {
       const settings = makeAppSettings();
       settings.proxy.trafficMode = mode;
@@ -194,7 +189,7 @@ describe("rules traffic mode", () => {
   });
 
   it.each(["connecting", "disconnecting", "cleanupPending"] as const)("disables mode changes while %s", async (state) => {
-    mocks.state = state;
+    setCoreState(state);
     renderSwitcher();
     await waitFor(() => expect(mocks.load).toHaveBeenCalledOnce());
     expect(screen.getByRole("button", { name: "Global" })).toBeDisabled();

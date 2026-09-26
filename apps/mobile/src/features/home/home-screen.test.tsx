@@ -1,26 +1,18 @@
-import { render, screen, userEvent } from "@testing-library/react-native";
-import type { QueryClient } from "@tanstack/react-query";
+import { screen, userEvent } from "@testing-library/react-native";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import type { MockBackend } from "@voya/client/mock-backend";
 
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
+import { mockBackend, mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
-import { makeTestQueryClient, TestProviders } from "~/test/providers";
+import { renderScreen } from "~/test/providers";
 
 import { HomeScreen } from "./home-screen";
 
-let activeQueryClient: QueryClient | null = null;
-
-async function renderHome() {
-  const queryClient = makeTestQueryClient();
-  activeQueryClient = queryClient;
-  const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <TestProviders queryClient={queryClient}>{children}</TestProviders>
-  );
-
-  return { queryClient, ...(await render(<HomeScreen />, { wrapper })) };
+function renderHome() {
+  return renderScreen(<HomeScreen />);
 }
 
 beforeAll(async () => {
@@ -30,27 +22,20 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  registerMobileBackend();
+  registerMobileBackend(mockTransport());
   useRuntimeEventStore.setState({ coreState: null, statistics: null });
   useRuntimeActionStore.setState(useRuntimeActionStore.getInitialState());
 });
 
-// A query client keeps refetch and garbage-collection timers of its own, and
-// Jest will not exit while they are pending.
-afterEach(() => {
-  activeQueryClient?.clear();
-  activeQueryClient = null;
-});
-
 describe("HomeScreen", () => {
   it("does not offer a connection without nodes", async () => {
-    (voyaTransport() as MockBackend).state.profiles = [];
+    mockBackend().state.profiles = [];
     await renderHome();
     await screen.findByLabelText("Add nodes or subscription");
     expect(screen.queryByText("Connect")).toBeNull();
     expect(screen.queryByText("No node selected")).toBeNull();
     expect(screen.getByText("No nodes")).toBeOnTheScreen();
-    expect((voyaTransport() as MockBackend).state.calls.some((call) => call.command === "connectActiveProfile")).toBe(false);
+    expect(mockBackend().state.calls.some((call) => call.command === "connectActiveProfile")).toBe(false);
   });
   it("names the selected node and offers to connect", async () => {
     await renderHome();
@@ -72,7 +57,7 @@ describe("HomeScreen", () => {
     expect(await screen.findByText("Connected")).toBeOnTheScreen();
     expect(screen.getByText("Disconnect")).toBeOnTheScreen();
     expect(
-      (voyaTransport() as MockBackend).state.calls.map((call) => call.command),
+      mockBackend().state.calls.map((call) => call.command),
     ).toContain("connectActiveProfile");
   });
 

@@ -2,13 +2,14 @@ import { render, screen, userEvent, waitFor } from "@testing-library/react-nativ
 import { setClipboard } from "@voya/client/platform";
 import type { MockBackend } from "@voya/client/mock-backend";
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
+import { mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
 import { makeTestQueryClient, TestProviders } from "~/test/providers";
 import { ImportScreen } from "./import-screen";
 
 beforeAll(async () => { await localeReady; });
 test("preview is read-only; confirming imports and updates only subscription sources", async () => {
-  registerMobileBackend();
+  registerMobileBackend(mockTransport());
   const backend = voyaTransport() as MockBackend;
   const client = makeTestQueryClient();
   const readText = jest.fn(async () => "https://provider.example.test/new\nvless://token@example.test:443#Mixed");
@@ -32,7 +33,7 @@ test("preview is read-only; confirming imports and updates only subscription sou
 });
 
 test("camera denial offers recovery and multiple image codes require a choice before preview", async () => {
-  registerMobileBackend();
+  registerMobileBackend(mockTransport());
   const native = await import("~/native/device-actions");
   const camera = jest.spyOn(native, "scanQr").mockRejectedValue({ code: "cameraDenied" });
   const image = jest.spyOn(native, "pickQr").mockResolvedValue(["vless://one@example.test:443#One", "vless://two@example.test:443#Two"]);
@@ -54,7 +55,7 @@ test("camera denial offers recovery and multiple image codes require a choice be
 
 
 test("an unknown native failure uses a general recovery message, not invalid-link advice", async () => {
-  registerMobileBackend();
+  registerMobileBackend(mockTransport());
   const native = await import("~/native/device-actions");
   const camera = jest.spyOn(native, "scanQr").mockRejectedValue({ code: "unavailable" });
   const client = makeTestQueryClient();

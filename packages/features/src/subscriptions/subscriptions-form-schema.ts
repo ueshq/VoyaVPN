@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Issue messages are translation keys (see lib/zod-errors.ts); the dialog
+// Issue messages are translation keys (see forms/zod-errors.ts); the dialog
 // renders them through `t`, so nothing here may be a display string.
 
 /** The URL forms the backend accepts: `http(s)://` plus anything but spaces. */

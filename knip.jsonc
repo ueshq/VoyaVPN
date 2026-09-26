@@ -1,11 +1,7 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "includeEntryExports": true,
-  "ignoreWorkspaces": [],
   "workspaces": {
-    ".": {
-      "ignoreBinaries": [],
-    },
     "apps/mobile": {
       "entry": ["src/**/*.test.{ts,tsx}"],
       // `global.css` is Uniwind's build input, reached from `index.js` and
@@ -21,19 +17,11 @@
       "entry": ["src/**/*.{test,spec}.{ts,tsx}"],
       "project": ["src/**/*.{ts,tsx,css}", "e2e/**/*.ts"],
       // flag-icons ships only SVG files, reached through `import.meta.glob`
-      // in node-country-icon.tsx, which knip cannot follow. `zod` is named by
-      // no desktop source any more — the schemas live in `@voya/features` —
-      // but `zodResolver` checks them with `instanceof`, so the app has to
-      // resolve the same copy the schemas were built with.
+      // in node-country-icon.tsx, which knip cannot follow.
       "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
       "ignoreBinaries": ["tauri-driver"],
       "ignoreIssues": {
-        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],
-      // `commands.ts` is the desktop's implementation of the whole
-      // `VoyaCommands` contract, consumed as a namespace by platform-boot.ts.
-      // Completeness is the invariant here, not per-export usage, and the
-      // `satisfies VoyaCommands` assertion is what enforces it.
-        "src/ipc/commands.ts": ["exports"]
+        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"]
       }
     },
     "apps/probe": {
@@ -53,20 +41,12 @@
     "packages/contracts": {
       "project": ["src/**/*.ts"],
       "ignoreIssues": {
-        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"],
-        // The wire table exists for the native transports; the desktop's Tauri
-        // binding has its own generated wrappers and never reads it.
-        "src/commands.ts": ["exports"]
+        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"]
       }
     },
     "packages/client": {
       "entry": ["src/*.ts"],
-      "project": ["src/**/*.ts"],
-      // `mock-seed` is reached from `apps/mobile/src/ipc/transport.ts` only via
-      // a `__DEV__`-gated `require`. knip cannot see through that call.
-      "ignoreIssues": {
-        "src/mock-seed.ts": ["exports"]
-      }
+      "project": ["src/**/*.ts"]
     },
     "packages/features": {
       "entry": ["src/**/*.test.{ts,tsx}"],

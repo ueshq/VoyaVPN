@@ -364,46 +364,22 @@ html.voyavpn-acrylic.dark body {
 
   /* nicenote semantic utilities — text/icon hierarchy, links, border + focus/selection,
      feedback (danger/success/warning/information/discovery), blanket + dialog. */
-  --color-destructive-foreground: var(--destructive-foreground);
   --color-subtle: var(--text-subtle);
-  --color-tertiary: var(--text-tertiary);
   --color-subtlest: var(--text-subtlest);
-  --color-inverse: var(--text-inverse);
   --color-brand: var(--text-brand);
   --color-link: var(--link);
-  --color-border-bold: var(--border-bold);
   --color-border-subtle: var(--border-subtle);
-  --color-focused: var(--border-focused);
   --color-selected: var(--border-selected);
-  --color-state-selected: var(--bg-selected);
-  --color-state-selected-strong: var(--bg-selected-strong);
-  --color-state-drag-target: var(--state-drag-target);
-  --color-icon-subtle: var(--icon-subtle);
-  --color-icon-brand: var(--icon-brand);
   --color-danger: var(--text-danger);
   --color-danger-bg: var(--bg-danger);
-  --color-danger-bold: var(--bg-danger-bold);
-  --color-danger-border: var(--border-danger);
-  --color-danger-icon: var(--icon-danger);
   --color-success: var(--text-success);
   --color-success-bg: var(--bg-success);
-  --color-success-bold: var(--bg-success-bold);
-  --color-success-icon: var(--icon-success);
   --color-warning: var(--text-warning);
   --color-warning-bg: var(--bg-warning);
-  --color-warning-bold: var(--bg-warning-bold);
-  --color-warning-icon: var(--icon-warning);
-  --color-information: var(--text-information);
-  --color-information-bg: var(--bg-information);
-  --color-discovery: var(--text-discovery);
-  --color-discovery-bg: var(--bg-discovery);
   --color-blanket: var(--blanket);
-  --color-surface-dialog: var(--surface-dialog);
-  --color-border-dialog: var(--border-dialog);
 
   /* nicenote surface ladder + translucent interaction overlays. */
   --color-surface: var(--surface);
-  --color-surface-sunken: var(--surface-sunken);
   --color-surface-raised: var(--surface-raised);
   --color-surface-canvas: var(--surface-canvas);
   --color-surface-overlay: var(--surface-overlay);
@@ -411,16 +387,13 @@ html.voyavpn-acrylic.dark body {
   --color-surface-pressed: var(--surface-pressed);
   --color-surface-button: var(--surface-button);
   --color-overlay-hovered: var(--overlay-hovered);
-  --color-overlay-pressed: var(--overlay-pressed);
 
   /* nicenote accent palette. */
   --color-accent-blue: var(--accent-blue);
   --color-accent-blue-light: var(--accent-blue-light);
   --color-accent-blue-bg: var(--accent-blue-bg);
-  --color-accent-blue-hover: var(--accent-blue-hover);
 
   --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
 }
 
 @layer base {
