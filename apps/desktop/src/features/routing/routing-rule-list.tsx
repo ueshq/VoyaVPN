@@ -59,7 +59,7 @@ import {
   type MatchChip,
   type MatchListField,
 } from "@voya/features/routing/rule-match-summary";
-import { RULE_SCOPE_LABEL_KEYS } from "@voya/features/routing/routing-constants";
+import { RULE_SCOPE_LABEL_KEYS } from "@/features/routing/routing-constants";
 import { RuleRowContextMenu, RuleRowMenuButton, type RuleMenuActions } from "./routing-rule-menu";
 import { ruleDisplayName, sentinelLabelKey } from "@voya/features/routing/sentinel-rules";
 import type { RuleMoveAction } from "@voya/features/routing/use-routing-screen";

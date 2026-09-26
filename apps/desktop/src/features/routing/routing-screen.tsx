@@ -28,7 +28,7 @@ import { RoutingRuleList } from "./routing-rule-list";
 import { ruleDisplayName } from "@voya/features/routing/sentinel-rules";
 import { TrafficModeBanner } from "./traffic-mode-banner";
 import { TrafficModeSwitcher } from "./traffic-mode-switcher";
-import { useProcessRulesSupported } from "@voya/features/routing/use-process-rules-supported";
+import { useProcessRulesSupported } from "@/features/routing/use-process-rules-supported";
 import { useRoutingScreen, type RoutingScreenController } from "@voya/features/routing/use-routing-screen";
 import { useSavedTrafficMode } from "@voya/features/routing/use-traffic-mode";
 

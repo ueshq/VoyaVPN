@@ -17,7 +17,7 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import type { ProxyConnectionItem } from "@voya/contracts";
 import { outboundLabelKey } from "@voya/features/routing/rule-outbound";
 import { connectionBytes } from "@voya/features/proxy/connection-display";
-import { connectionRuleText } from "@voya/features/proxy/connection-rule";
+import { connectionRuleText } from "@/features/proxy/connection-rule";
 
 type Field = {
   label: string;

@@ -20,12 +20,6 @@ import { useMountedRef } from "@voya/utils/use-mounted-ref";
 
 type UpdateWorkingState = "app-check" | "app-install" | "app-restart";
 
-/** Which error line an action's failure lands on. */
-interface ErrorSink {
-  clear: () => void;
-  fail: (message: string) => void;
-}
-
 export function useCheckUpdateDialog() {
   const { t } = useI18n();
   const queue = saveQueue(useQueryClient());
@@ -52,23 +46,18 @@ export function useCheckUpdateDialog() {
     (statusQuery.error ? redactOperationalError(statusQuery.error) : null);
   const appUpdaterStatus: AppUpdaterStatus | null = statusQuery.data ?? null;
 
-  const appUpdaterSink: ErrorSink = {
-    clear: () => setAppActionError(null),
-    fail: setAppActionError,
-  };
-  /** Run one dialog action under its busy marker; `onSettled` runs on both paths. */
+  /** Run one app-updater action under its busy marker; `onSettled` runs on both paths. */
   async function withWorking(
     kind: UpdateWorkingState,
-    errorSink: ErrorSink,
     run: () => Promise<void>,
     onSettled?: () => void,
   ) {
     setWorking(kind);
-    errorSink.clear();
+    setAppActionError(null);
     try {
       await run();
     } catch (error) {
-      errorSink.fail(redactOperationalError(error));
+      setAppActionError(redactOperationalError(error));
     } finally {
       onSettled?.();
       setWorking(null);
@@ -76,7 +65,7 @@ export function useCheckUpdateDialog() {
   }
 
   function runAppUpdaterCheck() {
-    return withWorking("app-check", appUpdaterSink, async () => {
+    return withWorking("app-check", async () => {
       setAppUpdaterCheck(null);
       setAppInstallResult(null);
       setAppUpdaterCheck(await checkAppUpdate());
@@ -86,7 +75,6 @@ export function useCheckUpdateDialog() {
   function installAppUpdate() {
     return withWorking(
       "app-install",
-      appUpdaterSink,
       async () => {
         setAppInstallResult(null);
         setInstallProgress(null);
@@ -102,7 +90,7 @@ export function useCheckUpdateDialog() {
   }
 
   function restartApp() {
-    return withWorking("app-restart", appUpdaterSink, async () => {
+    return withWorking("app-restart", async () => {
       await queue.settled();
       await relaunch();
     });

@@ -1,20 +1,20 @@
 import { act, cleanup, waitFor } from "@testing-library/react";
-import { createTestQueryClient, renderHookWithQuery } from "../test/render";
+import { createTestQueryClient, renderHookWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@voya/client/query-keys";
 import type { AppSettings } from "@voya/contracts";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 import { useToastStore } from "@voya/client/toast-store";
-import { useDnsSettings } from "../dns/use-dns-settings";
+import { useDnsSettings } from "@/features/dns/use-dns-settings";
 import {
   deferred,
   installSettingsBackend,
   serverSettings,
   settingsIpc,
-} from "./settings-backend.test-fixture";
+} from "@voya/features/settings/settings-backend.test-fixture";
 import { saveQueue } from "@voya/features/forms/save-queue";
-import { useAppSettings } from "./use-app-settings";
+import { useAppSettings } from "@voya/features/settings/use-app-settings";
 
 beforeEach(async () => {
   // Registers the fixture behind `@voya/client`, the way an app registers its

@@ -33,9 +33,9 @@ import {
 } from "@voya/features/forms/zod-errors";
 
 import { OUTBOUND_LABEL_KEYS, type RuleGroupOutbound, appendMatcherLine, describeOutbound, groupOutboundValue } from "@voya/features/routing/rule-outbound";
-import { RULE_SCOPE_LABEL_KEYS } from "@voya/features/routing/routing-constants";
+import { RULE_SCOPE_LABEL_KEYS } from "@/features/routing/routing-constants";
 import { routingRuleSchema, type RoutingRulePayload } from "@voya/features/routing/routing-form-schema";
-import { formToRule, ruleToForm, type RuleFormState } from "@voya/features/routing/routing-form-values";
+import { formToRule, ruleToForm, type RuleFormState } from "@/features/routing/routing-form-values";
 import { sentinelLabelKey } from "@voya/features/routing/sentinel-rules";
 import type { RuleSaveError } from "@voya/features/routing/use-routing-screen";
 

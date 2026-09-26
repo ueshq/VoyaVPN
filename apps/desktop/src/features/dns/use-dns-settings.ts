@@ -4,10 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { voyaCommands } from "@voya/client/transport";
 import type { AppSettings, DnsSettings } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
-import { applyChanges, changedFields } from "../settings/settings-draft";
-import { settingsFailure, useSettingsDraft } from "../settings/use-settings-draft";
+import { applyChanges, changedFields } from "@voya/features/settings/settings-draft";
+import { settingsFailure, useSettingsDraft } from "@voya/features/settings/use-settings-draft";
 
-import { dnsSettingsSchema } from "./dns-form-schema";
+import { dnsSettingsSchema } from "@voya/features/dns/dns-form-schema";
 
 export function useDnsSettings(enabled = true) {
   const client = useQueryClient();

@@ -1,6 +1,6 @@
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { trimToNull } from "@voya/utils/text";
-import { SETTING_DEFAULTS } from "@voya/features/settings/settings-values";
+import { SETTING_DEFAULTS } from "@/features/settings/settings-values";
 import {
   NumberField,
   SelectField,

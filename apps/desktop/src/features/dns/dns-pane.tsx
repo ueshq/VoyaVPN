@@ -16,7 +16,7 @@ import { SettingsGroup } from "@/features/settings/settings-form";
 import type { DnsSettings, DnsStrategy } from "@voya/contracts";
 
 import { DNS_STRATEGIES } from "@voya/features/dns/dns-form-schema";
-import type { useDnsSettings } from "@voya/features/dns/use-dns-settings";
+import type { useDnsSettings } from "@/features/dns/use-dns-settings";
 
 /** The select's empty value stands for "no strategy", sing-box's default. */
 function strategyOrNull(value: string): DnsStrategy | null {

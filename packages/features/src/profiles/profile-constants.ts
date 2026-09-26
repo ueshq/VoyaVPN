@@ -1,4 +1,4 @@
-import type { MoveAction, ProfileKind } from "@voya/contracts";
+import type { ProfileKind } from "@voya/contracts";
 import type { TranslationFunction } from "@voya/i18n/core";
 
 export const CONFIG_TYPES = {
@@ -14,14 +14,6 @@ export const CONFIG_TYPES = {
   Anytls: "anytls",
   Naive: "naive",
 } as const satisfies Record<string, ProfileKind>;
-
-export const MOVE_ACTIONS = {
-  Top: "top",
-  Up: "up",
-  Down: "down",
-  Bottom: "bottom",
-  Position: "position",
-} as const satisfies Record<string, MoveAction>;
 
 /** Every protocol's name, in picker order. A kind added in Rust fails the typecheck here. */
 const PROFILE_PROTOCOL_LABELS = {

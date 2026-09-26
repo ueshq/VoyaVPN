@@ -25,6 +25,7 @@ const ipcMocks = {
   connectActiveProfile: vi.fn(),
   disconnectCore: vi.fn(),
   restartCore: vi.fn(),
+  setActiveProfile: vi.fn(),
 };
 setVoyaCommands(ipcMocks as unknown as VoyaCommands);
 
@@ -39,7 +40,9 @@ import {
   missingCorePayload,
   runRuntimeAction,
   runWithElevation,
+  selectProfile,
 } from "./runtime-action";
+import { QueryClient } from "@tanstack/react-query";
 
 // Keys stand in for text, so assertions do not depend on a locale.
 const t = ((key: string) => key) as unknown as TranslationFunction;
@@ -342,6 +345,49 @@ describe("activateSelection", () => {
       description: "node not found",
       title: "actions.connect",
     });
+    expect(useRuntimeActionStore.getState().switchingId).toBeNull();
+  });
+});
+
+describe("selectProfile", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    resetStores();
+  });
+
+  it("only remembers the node while the core is stopped", async () => {
+    ipcMocks.setActiveProfile.mockResolvedValueOnce(null);
+    const queryClient = new QueryClient();
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries");
+
+    const selecting = selectProfile("node", t, queryClient);
+    expect(useRuntimeActionStore.getState().switchingId).toBe("node");
+
+    await expect(selecting).resolves.toBe(true);
+    expect(ipcMocks.setActiveProfile).toHaveBeenCalledWith("node");
+    expect(invalidate).toHaveBeenCalledOnce();
+    expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
+    expect(useRuntimeActionStore.getState().switchingId).toBeNull();
+  });
+
+  it("switches a running core to the node", async () => {
+    useRuntimeEventStore.setState({ coreState: coreStatus("connected") });
+    ipcMocks.setActiveProfile.mockResolvedValueOnce(null);
+    ipcMocks.restartCore.mockResolvedValueOnce(coreStatus("connected"));
+
+    await expect(selectProfile("node", t, new QueryClient())).resolves.toBe(true);
+
+    expect(ipcMocks.restartCore).toHaveBeenCalledOnce();
+  });
+
+  it("changes nothing while the core cleans up, and lets a failure reach the caller", async () => {
+    useRuntimeEventStore.setState({ coreState: coreStatus("cleanupPending") });
+    await expect(selectProfile("node", t, new QueryClient())).resolves.toBe(false);
+    expect(ipcMocks.setActiveProfile).not.toHaveBeenCalled();
+
+    useRuntimeEventStore.setState({ coreState: null });
+    ipcMocks.setActiveProfile.mockRejectedValueOnce(new Error("node not found"));
+    await expect(selectProfile("node", t, new QueryClient())).rejects.toThrow("node not found");
     expect(useRuntimeActionStore.getState().switchingId).toBeNull();
   });
 });

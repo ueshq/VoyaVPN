@@ -30,10 +30,9 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { makeProfileDetailsFixture, toProfileSummaryEntry } from "@voya/features/test/profile-fixture";
 
-import { MOVE_ACTIONS } from "@voya/features/profiles/profile-constants";
 import { ProfilesScreen } from "./server-table";
 import { applySpeedtestResults, overlaySpeedtestResult, useNodeListData } from "@voya/features/profiles/use-node-list-data";
-import { useNodeGroups } from "./use-node-groups";
+import { useNodeSelection } from "@voya/features/profiles/use-node-selection";
 import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 
 const ipcMocks = installFakeCommands({
@@ -338,7 +337,7 @@ describe("ProfilesScreen", () => {
     mockProfileList(makeProfiles(3));
     const { result } = renderHookWithQuery(() => {
       const { t } = useI18n();
-      return useNodeListData(useNodeGroups(), t);
+      return useNodeListData(useNodeSelection(), t);
     });
     await waitFor(() => expect(result.current.rows).toHaveLength(4));
     const before = result.current.rows;
@@ -1408,7 +1407,7 @@ describe("ProfilesScreen", () => {
       expect(ipcMocks.moveProfile).toHaveBeenCalledWith(
         null,
         "profile-0",
-        MOVE_ACTIONS.Down,
+        "down",
         null,
       ),
     );

@@ -11,7 +11,7 @@ import {
   settingsIpc,
 } from "@voya/features/settings/settings-backend.test-fixture";
 import { DnsPane } from "./dns-pane";
-import { useDnsSettings } from "@voya/features/dns/use-dns-settings";
+import { useDnsSettings } from "@/features/dns/use-dns-settings";
 
 beforeEach(async () => { installSettingsBackend(); await changeLocale("en"); });
 afterEach(cleanup);

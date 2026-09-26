@@ -15,7 +15,7 @@ import {
   SettingsSwitch,
   TextField,
 } from "./settings-form";
-import { SETTING_DEFAULTS } from "@voya/features/settings/settings-values";
+import { SETTING_DEFAULTS } from "@/features/settings/settings-values";
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
 import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
 

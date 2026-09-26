@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import type { PolicyGroupListing, RuntimeStatusResponse } from "@voya/contracts";
 import type { TranslationFunction } from "@voya/i18n/core";
@@ -95,56 +95,62 @@ export async function activateSelection(
   }
 }
 
-/** Choosing a node to use: the shared runtime guard, the running node and `activateProfile`. */
+/** Makes a node the active selection, then connects or restarts with it. */
+export function activateProfile(id: string, t: TranslationFunction, queryClient: QueryClient) {
+  return activateSelection(id, t, async () => {
+    // A node replaces the policy group in use; say which one it set aside.
+    const replacedGroup = queryClient
+      .getQueryData<PolicyGroupListing>(queryKeys.policyGroups)
+      ?.entries.find((entry) => entry.isActive)?.group.name;
+    await voyaCommands().setActiveProfile(id);
+    if (replacedGroup) {
+      useToastStore.getState().pushToast({
+        description: t("policyGroups.replacedByNode", { group: replacedGroup }),
+        severity: "info",
+        title: t("policyGroups.switchedTitle"),
+      });
+    }
+  });
+}
+
+/**
+ * Makes a node the active one without starting the core: a running core
+ * switches to it, a stopped one only remembers the choice. A failure while
+ * stopped is the caller's to show; a switch reports its own.
+ */
+export async function selectProfile(id: string, t: TranslationFunction, queryClient: QueryClient) {
+  const state = coreStateOf(useRuntimeEventStore.getState().coreState);
+  if (state === "connected") {
+    return activateProfile(id, t, queryClient);
+  }
+  if (switchBusy(state)) {
+    return false;
+  }
+  const store = useRuntimeActionStore.getState();
+  store.startSwitch(id);
+  try {
+    await voyaCommands().setActiveProfile(id);
+    await queryClient.invalidateQueries();
+    return true;
+  } finally {
+    store.finishSwitch();
+  }
+}
+
+/** Choosing a node to use: the shared runtime guard, the running node and the two ways to pick one. */
 export function useProfileActivation(t: TranslationFunction) {
   const queryClient = useQueryClient();
   const coreState = useRuntimeEventStore((state) => state.coreState);
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
   const busy = useSwitchBusy();
-  const runningId = runningProfileId(coreState);
 
-  function activateProfile(id: string) {
-    return activateSelection(id, t, async () => {
-      // A node replaces the policy group in use; say which one it set aside.
-      const replacedGroup = queryClient
-        .getQueryData<PolicyGroupListing>(queryKeys.policyGroups)
-        ?.entries.find((entry) => entry.isActive)?.group.name;
-      await voyaCommands().setActiveProfile(id);
-      if (replacedGroup) {
-        useToastStore.getState().pushToast({
-          description: t("policyGroups.replacedByNode", { group: replacedGroup }),
-          severity: "info",
-          title: t("policyGroups.switchedTitle"),
-        });
-      }
-    });
-  }
-
-  /**
-   * Makes a node the active one without starting the core: a running core
-   * switches to it, a stopped one only remembers the choice. A failure while
-   * stopped is the caller's to show; a switch reports its own.
-   */
-  async function selectProfile(id: string) {
-    const state = coreStateOf(useRuntimeEventStore.getState().coreState);
-    if (state === "connected") {
-      return activateProfile(id);
-    }
-    if (switchBusy(state)) {
-      return false;
-    }
-    const store = useRuntimeActionStore.getState();
-    store.startSwitch(id);
-    try {
-      await voyaCommands().setActiveProfile(id);
-      await queryClient.invalidateQueries();
-      return true;
-    } finally {
-      store.finishSwitch();
-    }
-  }
-
-  return { activateProfile, busy, runningId, selectProfile, switchingId };
+  return {
+    activateProfile: (id: string) => activateProfile(id, t, queryClient),
+    busy,
+    runningId: runningProfileId(coreState),
+    selectProfile: (id: string) => selectProfile(id, t, queryClient),
+    switchingId,
+  };
 }
 
 /**

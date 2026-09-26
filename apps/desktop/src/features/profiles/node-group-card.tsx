@@ -61,7 +61,7 @@ export function NodeGroupCard({
           disabled={!!nodeGroups.search.trim()}
           title={nodeGroups.search.trim() ? t("panes.profiles.search.expanded") : undefined}
           data-row-focus
-          onClick={() => nodeGroups.toggle(row.groupKey)}
+          onClick={() => nodeGroups.toggleGroup(row.groupKey)}
           type="button"
         >
           {row.expanded ? (

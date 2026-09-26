@@ -1,4 +1,4 @@
-import { redactOperationalError } from "@voya/utils/operational-redaction";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { useState } from "react";
 import { Cpu } from "lucide-react";
 
@@ -33,28 +33,20 @@ export function ModalHost() {
 function MissingCoreDialog() {
   const { t } = useI18n();
   const closeMissingCore = useRuntimeActionStore((state) => state.closeMissingCore);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, pending: busy, submit } = useDialogSubmit();
   const [seedMissing, setSeedMissing] = useState(false);
 
-  async function installAndConnect() {
-    setBusy(true);
-    setError(null);
-    try {
+  function installAndConnect() {
+    return submit(async () => {
       const result = await voyaCommands().installCoreSeed();
       if (result.status === "seedMissing") {
         setSeedMissing(true);
-
         return;
       }
 
       await voyaCommands().connectActiveProfile();
       closeMissingCore();
-    } catch (error) {
-      setError(redactOperationalError(error));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (

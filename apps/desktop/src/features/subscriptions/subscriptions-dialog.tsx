@@ -18,7 +18,7 @@ import { SwitchField, TextField } from "@voya/ui/components/form-fields";
 import { Spinner } from "@voya/ui/components/spinner";
 import { voyaCommands } from "@voya/client/transport";
 import type { Subscription } from "@voya/contracts";
-import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { assertSubscriptionUpdated } from "@voya/features/subscriptions/subscription-update-result";
 import { subscriptionFormSchema } from "@voya/features/subscriptions/subscriptions-form-schema";
 

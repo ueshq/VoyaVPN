@@ -38,7 +38,6 @@ import type { ProfileSummaryEntry, SpeedtestTarget } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { MOVE_ACTIONS } from "@voya/features/profiles/profile-constants";
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
 import type { ServerTableController } from "./use-server-table";
 
@@ -235,7 +234,7 @@ function ProfileMenuItems({
             <Item
               onSelect={() =>
                 void runOperation(() =>
-                  voyaCommands().moveProfile(null, indexId, MOVE_ACTIONS.Top, null),
+                  voyaCommands().moveProfile(null, indexId, "top", null),
                 )
               }
             >
@@ -245,7 +244,7 @@ function ProfileMenuItems({
             <Item
               onSelect={() =>
                 void runOperation(() =>
-                  voyaCommands().moveProfile(null, indexId, MOVE_ACTIONS.Up, null),
+                  voyaCommands().moveProfile(null, indexId, "up", null),
                 )
               }
             >
@@ -255,7 +254,7 @@ function ProfileMenuItems({
             <Item
               onSelect={() =>
                 void runOperation(() =>
-                  voyaCommands().moveProfile(null, indexId, MOVE_ACTIONS.Down, null),
+                  voyaCommands().moveProfile(null, indexId, "down", null),
                 )
               }
             >
@@ -265,7 +264,7 @@ function ProfileMenuItems({
             <Item
               onSelect={() =>
                 void runOperation(() =>
-                  voyaCommands().moveProfile(null, indexId, MOVE_ACTIONS.Bottom, null),
+                  voyaCommands().moveProfile(null, indexId, "bottom", null),
                 )
               }
             >

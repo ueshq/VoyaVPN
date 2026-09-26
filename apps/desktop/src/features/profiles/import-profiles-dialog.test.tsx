@@ -13,7 +13,7 @@ import { changeLocale } from "@voya/i18n";
 import type { ImportProfilesResult } from "@voya/contracts";
 
 import { ImportProfilesDialog } from "./import-profiles-dialog";
-import { QrScanError } from "@voya/features/profiles/qr-errors";
+import { QrScanError } from "@/features/profiles/qr-errors";
 import { installFakeCommands, seedListCommands } from "@voya/features/test/backend";
 
 const ipcMocks = installFakeCommands({

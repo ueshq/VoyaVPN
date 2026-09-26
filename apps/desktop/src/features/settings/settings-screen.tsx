@@ -14,7 +14,7 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { DnsPane } from "@/features/dns/dns-pane";
-import { useDnsSettings } from "@voya/features/dns/use-dns-settings";
+import { useDnsSettings } from "@/features/dns/use-dns-settings";
 import { UpdatesPanel } from "@/features/updates/updates-panel";
 import { useShellStore, type SettingsTab } from "@/stores/shell-store";
 

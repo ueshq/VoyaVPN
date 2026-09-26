@@ -19,7 +19,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 import type { PolicyGroup, ProfileSummaryEntry, Subscription } from "@voya/contracts";
 import { VirtualScrollList } from "@/components/virtual-scroll-list";
 import { voyaCommands } from "@voya/client/transport";
-import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 
 import {
   POLICY_GROUP_STRATEGIES,

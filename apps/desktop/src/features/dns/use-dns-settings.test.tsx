@@ -1,9 +1,9 @@
 import { act, cleanup, waitFor } from "@testing-library/react";
-import { createTestQueryClient, renderHookWithQuery } from "../test/render";
+import { createTestQueryClient, renderHookWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@voya/client/query-keys";
-import { installSettingsBackend, serverSettings, settingsIpc } from "../settings/settings-backend.test-fixture";
+import { installSettingsBackend, serverSettings, settingsIpc } from "@voya/features/settings/settings-backend.test-fixture";
 import { saveQueue } from "@voya/features/forms/save-queue";
 import { useDnsSettings } from "./use-dns-settings";
 

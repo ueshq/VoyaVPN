@@ -22,7 +22,7 @@ import { voyaCommands } from "@voya/client/transport";
 import { importLineText } from "@voya/client/messages";
 import type { ImportProfilesResult } from "@voya/contracts";
 
-import { qrScanErrorCode } from "@voya/features/profiles/qr-errors";
+import { qrScanErrorCode } from "@/features/profiles/qr-errors";
 import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
 
 type ImportProfilesDialogProps = {

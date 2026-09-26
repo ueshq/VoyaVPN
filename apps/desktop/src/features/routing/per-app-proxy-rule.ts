@@ -2,7 +2,7 @@ import type { TranslationKey } from "@voya/i18n/core";
 
 import type { RoutingRule, Routing_Serialize } from "@voya/contracts";
 
-import { PER_APP_SENTINEL } from "./sentinel-rules";
+import { PER_APP_SENTINEL } from "@voya/features/routing/sentinel-rules";
 
 /**
  * `include`: the listed apps always go through the proxy (ahead of other

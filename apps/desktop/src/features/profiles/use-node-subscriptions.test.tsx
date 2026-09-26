@@ -2,9 +2,9 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { i18next } from "@voya/i18n";
 import type { Subscription, SubscriptionUpdateResult } from "@voya/contracts";
-import { useNodeOperation } from "./use-node-operation";
+import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 
-import { installFakeCommands } from "../test/backend";
+import { installFakeCommands } from "@voya/features/test/backend";
 import { useNodeSubscriptions } from "./use-node-subscriptions";
 
 // The hook reaches the backend through the shared seam, so the test registers

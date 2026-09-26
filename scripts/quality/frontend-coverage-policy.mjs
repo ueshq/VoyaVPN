@@ -31,15 +31,15 @@ export const criticalModules = [
   "apps/desktop/src/ipc/tauri-plugins.ts",
   "apps/desktop/src/ipc/notifications.ts",
   "packages/features/src/settings/use-app-settings.ts",
-  "packages/features/src/dns/use-dns-settings.ts",
+  "apps/desktop/src/features/dns/use-dns-settings.ts",
   "packages/features/src/profiles/profile-form-schema.ts",
   "packages/features/src/profiles/profile-form-protocol.ts",
   "packages/features/src/profiles/profile-form-transport.ts",
   "packages/features/src/profiles/profile-form-tls.ts",
   "apps/desktop/src/features/profiles/virtual-list-keyboard.ts",
-  "packages/features/src/routing/per-app-proxy-rule.ts",
+  "apps/desktop/src/features/routing/per-app-proxy-rule.ts",
   "packages/features/src/routing/routing-form-schema.ts",
-  "packages/features/src/routing/routing-form-values.ts",
+  "apps/desktop/src/features/routing/routing-form-values.ts",
   "apps/desktop/src/features/routing/routing-rule-dialog.tsx",
   "packages/features/src/routing/use-routing-screen.ts",
   "apps/desktop/src/stores/shell-store.ts",
@@ -77,14 +77,13 @@ export const runtimeModules = [
   { path: "apps/desktop/src/features/profiles/use-server-table.ts", lines: 75, branches: 55 },
   // Share-link-only export: 83/78 when the Base64, bundle and file-save paths were removed.
   { path: "packages/features/src/profiles/server-table-actions.ts", lines: 75, branches: 65 },
-  { path: "apps/desktop/src/features/profiles/use-node-groups.ts", lines: 80, branches: 65 },
   { path: "packages/features/src/profiles/node-list-rows.ts", lines: 80, branches: 65 },
   // Page composition keeps the old floor; each extracted capability has its own floor.
   { path: "packages/features/src/profiles/use-node-list-data.ts", lines: 90, branches: 75 },
   { path: "apps/desktop/src/features/profiles/use-node-editor.ts", lines: 85, branches: 65 },
   { path: "packages/features/src/profiles/use-node-export.ts", lines: 80, branches: 75 },
   { path: "packages/features/src/profiles/use-node-operation.ts", lines: 90, branches: 90 },
-  { path: "packages/features/src/profiles/use-node-subscriptions.ts", lines: 80, branches: 75 },
+  { path: "apps/desktop/src/features/profiles/use-node-subscriptions.ts", lines: 80, branches: 75 },
   { path: "packages/features/src/profiles/use-node-speedtest.ts", lines: 90, branches: 50 },
   { path: "packages/features/src/profiles/profile-form-values.ts", lines: 90, branches: 60 },
   // TLS field panel in the profile dialog; certificate fetch/hash was retired.
@@ -118,7 +117,7 @@ export const runtimeModules = [
   { path: "packages/client/src/node-list-store.ts", lines: 90, branches: 90 },
   { path: "packages/features/src/profiles/use-policy-groups.ts", lines: 90, branches: 90 },
   { path: "packages/features/src/dns/dns-form-schema.ts", lines: 90, branches: 90 },
-  { path: "packages/features/src/profiles/qr-errors.ts", lines: 90, branches: 90 },
+  { path: "apps/desktop/src/features/profiles/qr-errors.ts", lines: 90, branches: 90 },
   // Had no test at all; 100/100 once it got one.
   { path: "apps/desktop/src/features/profiles/speedtest-settings-dialog.tsx", lines: 90, branches: 85 },
 ];

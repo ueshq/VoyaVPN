@@ -8,7 +8,7 @@ import type { ConnectionMode } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { SettingsGroup } from "./settings-form";
-import { useCaptureMode } from "@voya/features/settings/use-capture-mode";
+import { useCaptureMode } from "@/features/settings/use-capture-mode";
 
 const OPTIONS = [
   {

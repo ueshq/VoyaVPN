@@ -7,7 +7,7 @@ import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import type { DirectImportMethod } from "./import-methods";
-import type { NodeOperation } from "./use-node-operation";
+import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 
 const SCREEN_FAILURE_KEYS = {
   permissionDenied: "qr.screenPermissionDenied",

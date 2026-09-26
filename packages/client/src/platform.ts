@@ -85,7 +85,8 @@ export function requestElevation(): Promise<boolean> {
  * through the WebView's `navigator.clipboard` but *reads* through the backend,
  * because a WebView read needs a user gesture the paste menu item does not
  * always carry; React Native has one native module for both. Sharing the seam
- * rather than the implementation keeps `use-node-import` identical on both.
+ * rather than the implementation keeps shared code such as `use-node-export`
+ * identical on both.
  */
 export type ClipboardAdapter = {
   readText: () => Promise<string>;

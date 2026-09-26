@@ -1,4 +1,4 @@
-import { redactOperationalError } from "@voya/utils/operational-redaction";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { useState } from "react";
 
 import { Button } from "@voya/ui/components/button";
@@ -29,8 +29,7 @@ export function CloseRequestDialog() {
   // Staying in the tray keeps the connection; quitting ends it.
   const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const [remember, setRemember] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { error, pending: busy, setError, submit } = useDialogSubmit();
 
   function close() {
     setOpen(false);
@@ -38,17 +37,11 @@ export function CloseRequestDialog() {
     setError(null);
   }
 
-  async function resolve(action: Exclude<CloseRequestAction, "cancel">) {
-    setBusy(true);
-    setError(null);
-    try {
+  function resolve(action: Exclude<CloseRequestAction, "cancel">) {
+    return submit(async () => {
       await voyaCommands().resolveCloseRequest(action, remember);
       close();
-    } catch (reason) {
-      setError(redactOperationalError(reason));
-    } finally {
-      setBusy(false);
-    }
+    });
   }
 
   return (

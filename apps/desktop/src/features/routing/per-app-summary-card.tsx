@@ -10,8 +10,8 @@ import { cn } from "@voya/ui/lib/utils";
 import { PageSurface } from "@/components/app-shell/page-section";
 import type { Routing_Serialize } from "@voya/contracts";
 
-import { PER_APP_MODE_LABEL_KEYS, readPerAppRule } from "@voya/features/routing/per-app-proxy-rule";
-import { useProcessRulesSupported } from "@voya/features/routing/use-process-rules-supported";
+import { PER_APP_MODE_LABEL_KEYS, readPerAppRule } from "@/features/routing/per-app-proxy-rule";
+import { useProcessRulesSupported } from "@/features/routing/use-process-rules-supported";
 
 const VISIBLE_APPS = 4;
 

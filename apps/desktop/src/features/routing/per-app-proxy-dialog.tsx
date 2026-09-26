@@ -26,7 +26,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 import { voyaCommands } from "@voya/client/transport";
 import { VirtualScrollList } from "@/components/virtual-scroll-list";
 import { queryKeys } from "@voya/client/query-keys";
-import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import {
@@ -36,7 +36,7 @@ import {
   PER_APP_MODE_LABEL_KEYS,
   readPerAppRule,
   type PerAppProxyMode,
-} from "@voya/features/routing/per-app-proxy-rule";
+} from "@/features/routing/per-app-proxy-rule";
 
 type PerAppProxyDialogProps = {
   onOpenChange: (open: boolean) => void;

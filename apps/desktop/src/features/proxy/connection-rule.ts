@@ -1,5 +1,5 @@
 import type { TranslationFunction } from "@voya/i18n/core";
-import { ruleDisplayName } from "../routing/sentinel-rules";
+import { ruleDisplayName } from "@voya/features/routing/sentinel-rules";
 import type { ProxyConnectionItem, RoutingRule } from "@voya/contracts";
 
 // What the core reports for a connection that matched no route rule.

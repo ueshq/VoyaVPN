@@ -4,9 +4,8 @@ import { restoreFocus } from "@voya/ui/lib/focus";
 import { voyaCommands } from "@voya/client/transport";
 import type { ImportProfilesResult, Profile } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
-import { useProfileActivation } from "@voya/client/runtime-action";
 import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
-import type { DialogImportMethod } from "@voya/features/profiles/import-methods";
+import type { DialogImportMethod } from "@/features/profiles/import-methods";
 import type { TranslationFunction } from "@voya/i18n";
 import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 type DialogState =
@@ -28,7 +27,6 @@ export function useNodeEditor(
   const [saveError, setSaveError] = useState<string | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const detailsTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const activation = useProfileActivation(t);
   const queryClient = useQueryClient();
   function openDetails(id: string, trigger: HTMLButtonElement) {
     detailsTriggerRef.current = trigger;
@@ -115,7 +113,6 @@ export function useNodeEditor(
     pendingDelete,
     setPendingDelete,
     saveError,
-    activation,
     detailsId,
     setDetailsId,
     openDetails,
