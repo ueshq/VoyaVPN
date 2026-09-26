@@ -139,7 +139,7 @@ export function MaintenanceScreen() {
           <Typography className="text-base text-subtle">{t("updates.ruleLibraryDescription")}</Typography>
         </View>
         <View className="gap-1">
-          <Typography className="text-sm text-subtlest">
+          <Typography className="text-sm text-subtle">
             {ruleLibrary.updatedAt === null
               ? t("updates.neverUpdated")
               : t("updates.lastUpdated", {

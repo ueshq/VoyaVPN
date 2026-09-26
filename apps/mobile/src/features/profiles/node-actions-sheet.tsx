@@ -11,7 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "heroui-native/button";
 import { ListGroup } from "heroui-native/list-group";
 import { Typography } from "heroui-native/text";
-import { AccessibilityInfo, Alert, Modal, Pressable, ScrollView, Share, findNodeHandle, StyleSheet, View, useWindowDimensions, type Text } from "react-native";
+import { AccessibilityInfo, Alert, Modal, Pressable, ScrollView, Share, findNodeHandle, View, useWindowDimensions, type Text } from "react-native";
 import { QrCode, Copy, Gauge, Share2, Trash2, type LucideIcon } from "lucide-react-native";
 import { useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -92,7 +92,7 @@ export function NodeActionsSheet({
   return (
     <Modal visible={open} transparent animationType="fade" onRequestClose={close} onShow={focusTitle} onDismiss={onClosed}>
       <View style={{ flex: 1, justifyContent: "flex-end", paddingTop: insets.top + 16 }}>
-        <Pressable accessible={false} style={[StyleSheet.absoluteFill, { backgroundColor: "rgba(0,0,0,0.3)" }]} onPress={close} />
+        <Pressable accessible={false} className="absolute inset-0 bg-backdrop" onPress={close} />
         <View accessibilityViewIsModal className="rounded-t-3xl bg-canvas" style={{ maxHeight: height - insets.top - 16 }}>
           <ScrollView key={share ? "qr" : "actions"} style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 16 }}>
               {share ? (

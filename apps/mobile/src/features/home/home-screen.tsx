@@ -84,7 +84,7 @@ export function HomeScreen() {
           <Typography className="text-sm text-subtle">{t(trafficMode.mode === "global" ? "proxy.trafficModeGlobal" : "panes.routing.trafficModeRule")}</Typography>
           </> : null}
           {runtime.activeGroup && runtime.groupRuntime?.nowProfileId ? (
-            <Typography className="text-center text-sm text-subtlest">
+            <Typography className="text-center text-sm text-subtle">
               {t("home.groupVia", { node: groupMemberName(runtime, t) })}
             </Typography>
           ) : null}
@@ -173,10 +173,10 @@ const CORE_STATE_KEYS = {
 
 /** Each state's dot beside its word: green only when traffic is protected. */
 const STATE_DOT = {
-  cleanupPending: "bg-subtlest",
+  cleanupPending: "bg-subtle",
   connected: "bg-connected",
   connecting: "bg-warning",
-  disconnected: "bg-subtlest",
+  disconnected: "bg-subtle",
   disconnecting: "bg-warning",
 } satisfies Record<CoreState, string>;
 

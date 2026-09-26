@@ -7,13 +7,12 @@
  *   - HeroUI (`heroui-native/styles`) owns the design-system slots —
  *     `surface`, `border`, `muted`, `accent`, `danger`, `warning`, `field`, …
  *     Components under `heroui-native/*` are written against those tokens.
- *   - Voya keeps nine application roles that the screens still need and that
- *     HeroUI has no equivalent for: `canvas`, `subtle`, `subtlest`,
- *     `border-subtle`, `brand`, `brand-tint`, `connected`,
- *     `connected-foreground`, `map-land`. Their values are still the Primer
- *     11.9 numbers the desktop uses, because "copy the desktop hex" is only
- *     true for these nine — not for the design-system slots, which are
- *     HeroUI's to choose.
+ *   - Voya keeps seven application roles that the screens still need and that
+ *     HeroUI has no equivalent for: `canvas`, `subtle`, `border-subtle`,
+ *     `brand`, `brand-tint`, `connected`, `map-land`. Their values are still
+ *     the Primer 11.9 numbers the desktop uses, because "copy the desktop hex"
+ *     is only true for these seven — not for the design-system slots, which
+ *     are HeroUI's to choose.
  *
  * Do not add a `@source` line for `heroui-native/styles`. Since 1.0.8 that
  * import carries its own, and a hand-written path under pnpm is wrong and
@@ -83,7 +82,7 @@
 }
 
 /*
- * The nine Voya application roles, one line each.
+ * The seven Voya application roles, one line each.
  *
  * Nested `@variant light` / `@variant dark` under `:root` is the shape
  * Uniwind's theme scanner resolves. The two blocks must declare exactly the
@@ -94,24 +93,20 @@
     @variant light {
       --voya-canvas: #f6f8fa;
       --voya-subtle: #59636e;
-      --voya-subtlest: #59636e;
       --voya-border-subtle: rgb(209 217 224 / 0.7);
       --voya-brand: #0969da;
       --voya-brand-tint: rgb(9 105 218 / 0.08);
       --voya-connected: #1a7434;
-      --voya-connected-foreground: #ffffff;
       --voya-map-land: #e0e6eb;
     }
 
     @variant dark {
       --voya-canvas: #0d1117;
       --voya-subtle: #9198a1;
-      --voya-subtlest: #9198a1;
       --voya-border-subtle: rgb(61 68 77 / 0.7);
       --voya-brand: #4493f8;
       --voya-brand-tint: rgb(68 147 248 / 0.16);
       --voya-connected: #3fb950;
-      --voya-connected-foreground: #0d1117;
       --voya-map-land: #212830;
     }
   }
@@ -151,11 +146,9 @@
 @theme inline {
   --color-canvas: var(--voya-canvas);
   --color-subtle: var(--voya-subtle);
-  --color-subtlest: var(--voya-subtlest);
   --color-border-subtle: var(--voya-border-subtle);
   --color-brand: var(--voya-brand);
   --color-brand-tint: var(--voya-brand-tint);
   --color-connected: var(--voya-connected);
-  --color-connected-foreground: var(--voya-connected-foreground);
   --color-map-land: var(--voya-map-land);
 }
