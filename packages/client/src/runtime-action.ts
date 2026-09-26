@@ -96,7 +96,7 @@ export async function activateSelection(
 }
 
 /** Makes a node the active selection, then connects or restarts with it. */
-export function activateProfile(id: string, t: TranslationFunction, queryClient: QueryClient) {
+function activateProfile(id: string, t: TranslationFunction, queryClient: QueryClient) {
   return activateSelection(id, t, async () => {
     // A node replaces the policy group in use; say which one it set aside.
     const replacedGroup = queryClient
