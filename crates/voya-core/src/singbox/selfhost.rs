@@ -6,7 +6,15 @@
 //! that keep peers off this device and its network. Keys, ports, and addresses
 //! are injected: nothing here draws randomness or looks at the machine.
 
-use super::*;
+use crate::{
+    ProfileItem, ProfileProtocol, ProfileTransport, TlsMode, TlsSettings, DIRECT_TAG, LOOPBACK,
+};
+
+use super::{
+    singbox_log_level, SingboxClashApi, SingboxConfig, SingboxConfigError, SingboxDns,
+    SingboxDnsServer, SingboxExperimental, SingboxInbound, SingboxInboundTls, SingboxLog,
+    SingboxRealityHandshake, SingboxRealityServer, SingboxRoute, SingboxRule, SingboxUser,
+};
 
 pub const SELFHOST_VLESS_INBOUND_TAG: &str = "selfhost-vless";
 pub const SELFHOST_SHADOWSOCKS_INBOUND_TAG: &str = "selfhost-ss";

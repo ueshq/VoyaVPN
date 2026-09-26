@@ -1,4 +1,13 @@
-use super::*;
+use crate::{
+    protocol_common::{inbound_port, local_port_tag, WIREGUARD_DEFAULT_MTU},
+    text::nonempty_str,
+    CoreConfigContext, InboundConfig, LocalPort, LOOPBACK,
+};
+
+use super::{
+    SingboxConfig, SingboxInbound, SingboxTunHttpProxy, SingboxTunPlatform, SingboxUser,
+    DEFAULT_TUN_STACK, MACOS_TUN_SAFE_MTU, SINGBOX_TUN_INBOUND_TAG,
+};
 
 pub(super) fn gen_inbounds(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let inbound = context

@@ -1,4 +1,6 @@
-use super::*;
+use serde::{Deserialize, Serialize};
+
+use crate::LOOPBACK;
 
 /// One sing-box inbound. Local proxy and TUN inbounds use the listener and TUN
 /// fields; the server inbounds of a self-hosted node add `users`, `method`,

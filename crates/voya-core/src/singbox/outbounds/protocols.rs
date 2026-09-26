@@ -1,4 +1,18 @@
-use super::*;
+use crate::{
+    protocol_common::{
+        parse_wireguard_reserved, shadowsocks_plugin_for, split_csv, wireguard_allowed_ips,
+        wireguard_public_key, WIREGUARD_DEFAULT_ADDRESS, WIREGUARD_DEFAULT_MTU,
+    },
+    singbox::{
+        support::{shadowsocks_method, singbox_protocol_type, vmess_security},
+        SingboxEndpoint, SingboxHyObfs, SingboxMultiplex, SingboxOutbound, SingboxPeer,
+        DEFAULT_HYSTERIA2_HOP_INTERVAL,
+    },
+    text::{nonempty_str, nonempty_string},
+    CoreConfigContext, ProfileItem, ProfileProtocol, PROXY_TAG,
+};
+
+use super::{fill_outbound_tls, fill_outbound_transport};
 
 pub(crate) fn build_outbound(context: &CoreConfigContext, node: &ProfileItem) -> SingboxOutbound {
     let mut outbound = SingboxOutbound {

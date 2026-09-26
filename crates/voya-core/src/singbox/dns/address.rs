@@ -1,5 +1,9 @@
-use super::*;
-use crate::host::strip_host_brackets;
+use std::{collections::BTreeMap, net::IpAddr};
+
+use crate::{
+    host::strip_host_brackets,
+    singbox::{SingboxDnsServer, SingboxRule, GEOIP_PREFIX},
+};
 
 pub(crate) fn parse_direct_expected_ips(value: Option<&str>) -> (Vec<String>, Vec<String>, String) {
     let mut ip_cidr = Vec::new();

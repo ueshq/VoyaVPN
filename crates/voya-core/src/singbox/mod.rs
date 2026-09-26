@@ -1,27 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    net::IpAddr,
-};
-
-use regex::Regex;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use thiserror::Error;
-
-use crate::{
-    context::SS_SECURITIES_IN_SINGBOX,
-    protocol_common::{
-        first_list_value, inbound_port, local_port_tag, parse_pem_chain, parse_wireguard_reserved,
-        raw_http_user_agent, shadowsocks_plugin_for, split_csv, wireguard_allowed_ips,
-        wireguard_public_key, DEFAULT_SECURITY, RAW_HEADER_HTTP, WIREGUARD_DEFAULT_ADDRESS,
-        WIREGUARD_DEFAULT_MTU,
-    },
-    text::{nonempty_str, nonempty_string},
-    AppConfig, ConfigType, CoreConfigContext, DnsStrategy, InboundConfig, Ipv6Mode, LocalPort,
-    ProfileItem, ProfileProtocol, ProfileTransport, RuleType, RulesItem, SpeedtestConfigEntry,
-    TlsMode, TlsSettings, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS, DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS,
-    DIRECT_TAG, LOOPBACK, PROXY_TAG,
-};
+use crate::protocol_common::DEFAULT_SECURITY;
 
 const USER_AGENT_HEADER: &str = "Sec-WebSocket-Protocol";
 const DEFAULT_HYSTERIA2_HOP_INTERVAL: i32 = 30;
@@ -86,13 +63,6 @@ pub use outbounds::{is_latency_probe_candidate, latency_probe_tag};
 pub use schema::*;
 pub use schema_inbound::*;
 pub use selfhost::*;
-
-use dns::*;
-use experimental::*;
-use inbounds::*;
-use outbounds::*;
-use routing::*;
-use support::*;
 
 #[cfg(test)]
 mod tests;

@@ -1,6 +1,21 @@
 use std::sync::LazyLock;
 
-use super::*;
+use regex::Regex;
+use serde_json::{json, Value};
+
+use crate::{
+    protocol_common::{
+        first_list_value, parse_pem_chain, raw_http_user_agent, split_csv, RAW_HEADER_HTTP,
+    },
+    singbox::{
+        support::{allow_insecure, effective_fingerprint, transport_host_for_tls},
+        SingboxEch, SingboxHeaders, SingboxOutbound, SingboxReality, SingboxTls, SingboxTransport,
+        SingboxUtls, GRPC_IDLE_TIMEOUT, GRPC_PERMIT_WITHOUT_STREAM, GRPC_PING_TIMEOUT,
+        REALITY_FALLBACK_FINGERPRINT, USER_AGENT_HEADER,
+    },
+    text::nonempty_string,
+    ConfigType, CoreConfigContext, ProfileItem, ProfileTransport, TlsMode, TlsSettings,
+};
 
 pub(crate) fn fill_outbound_transport(
     outbound: &mut SingboxOutbound,

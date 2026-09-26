@@ -4,8 +4,13 @@
 //!
 //! Nothing routes to them; they only exist to be named by a delay request.
 
-use super::*;
-use crate::context::validate_node;
+use crate::{
+    context::validate_node,
+    singbox::{SingboxConfig, SingboxOutbound},
+    ConfigType, CoreConfigContext, ProfileItem,
+};
+
+use super::build_outbound;
 
 const LATENCY_PROBE_TAG_PREFIX: &str = "probe:";
 

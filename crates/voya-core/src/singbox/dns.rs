@@ -1,4 +1,15 @@
-use super::*;
+use std::{collections::BTreeMap, net::IpAddr};
+
+use crate::{
+    CoreConfigContext, DnsStrategy, Ipv6Mode, RuleType, BLOCK_TAG, DEFAULT_BOOTSTRAP_DNS,
+    DEFAULT_DIRECT_DNS, DEFAULT_REMOTE_DNS, DIRECT_TAG, PROXY_TAG,
+};
+
+use super::{
+    routing::parse_v2_domain, SingboxConfig, SingboxDns, SingboxDnsServer, SingboxRule,
+    SINGBOX_DIRECT_DNS_TAG, SINGBOX_FAKEIP_INET4_RANGE, SINGBOX_FAKEIP_INET6_RANGE,
+    SINGBOX_FAKE_DNS_TAG, SINGBOX_HOSTS_DNS_TAG, SINGBOX_LOCAL_DNS_TAG, SINGBOX_REMOTE_DNS_TAG,
+};
 
 pub(super) fn gen_dns(config: &mut SingboxConfig, context: &CoreConfigContext) {
     gen_dns_servers(config, context);

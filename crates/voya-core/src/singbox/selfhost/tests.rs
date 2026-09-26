@@ -1,6 +1,11 @@
+use crate::{
+    export_share_link_with_options, parse_share_link,
+    singbox::{generate_singbox_config, REALITY_FALLBACK_FINGERPRINT},
+    testutil::linux_context,
+    AppConfig, ShareLinkOptions, DIRECT_TAG, PROXY_TAG,
+};
+
 use super::*;
-use crate::testutil::linux_context;
-use crate::{export_share_link_with_options, parse_share_link, AppConfig, ShareLinkOptions};
 
 const TEST_REALITY_PRIVATE_KEY: &str = "sJ2_PK3Bd1use05cc9jK6gcEarznMKgXeVNz9Dt4VF0";
 const TEST_REALITY_PUBLIC_KEY: &str = "Q5mEoK_fSpzT4d13YC4_HI_2Crte_pRkSElgYb5wCD8";

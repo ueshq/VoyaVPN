@@ -1,4 +1,11 @@
-use super::*;
+use std::collections::BTreeSet;
+
+use crate::{text::nonempty_string, CoreConfigContext, LOOPBACK, PROXY_TAG};
+
+use super::{
+    SingboxCacheFile, SingboxClashApi, SingboxConfig, SingboxConfigError, SingboxRule,
+    SingboxRuleset, DEFAULT_SINGBOX_RULESET_URL,
+};
 
 pub(super) fn gen_experimental(config: &mut SingboxConfig, context: &CoreConfigContext) {
     let mut experimental = config.experimental.clone().unwrap_or_default();

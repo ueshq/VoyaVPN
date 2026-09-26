@@ -1,4 +1,14 @@
-use super::*;
+use std::net::IpAddr;
+
+use crate::{
+    context::SS_SECURITIES_IN_SINGBOX,
+    protocol_common::{first_list_value, inbound_port, DEFAULT_SECURITY},
+    text::nonempty_string,
+    AppConfig, ConfigType, CoreConfigContext, LocalPort, ProfileItem, ProfileProtocol,
+    ProfileTransport,
+};
+
+use super::{SingboxConfig, SingboxOutbound, SINGBOX_UTLS_FINGERPRINTS, VMESS_SECURITIES};
 
 pub(super) fn apply_outbound_bind_interface(
     config: &mut SingboxConfig,

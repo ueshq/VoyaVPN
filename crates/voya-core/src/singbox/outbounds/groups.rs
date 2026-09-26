@@ -1,12 +1,14 @@
 //! Policy groups as sing-box outbounds: the active one, and the ones routing
 //! rules name.
 
-use super::*;
 use crate::{
-    unique_member_tags, ContextPolicyGroup, GroupStrategy, DEFAULT_GROUP_INTERVAL_SECONDS,
-    DEFAULT_GROUP_TEST_URL, DEFAULT_GROUP_TOLERANCE_MS, FALLBACK_TOLERANCE_MS,
-    GROUP_INTERVAL_SECONDS_RANGE, GROUP_TOLERANCE_MS_RANGE,
+    singbox::SingboxOutbound, unique_member_tags, ContextPolicyGroup, CoreConfigContext,
+    GroupStrategy, ProfileItem, DEFAULT_GROUP_INTERVAL_SECONDS, DEFAULT_GROUP_TEST_URL,
+    DEFAULT_GROUP_TOLERANCE_MS, FALLBACK_TOLERANCE_MS, GROUP_INTERVAL_SECONDS_RANGE,
+    GROUP_TOLERANCE_MS_RANGE,
 };
+
+use super::{build_proxy_server, SingboxServer};
 
 /// The group as the `group_tag` outbound, followed by one outbound per member.
 ///

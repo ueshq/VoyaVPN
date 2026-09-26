@@ -1,4 +1,12 @@
-use super::*;
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use thiserror::Error;
+
+use crate::{DIRECT_TAG, PROXY_TAG};
+
+use super::SingboxInbound;
 
 #[derive(Debug, Error)]
 pub enum SingboxConfigError {

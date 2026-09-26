@@ -1,9 +1,27 @@
-use super::*;
-use crate::testutil::{
-    base_remote_node, endpoint, linux_context as test_context, raw_transport, socks_node,
-    tls_settings as full_tls_settings,
+use serde_json::Value;
+
+use crate::{
+    golden,
+    protocol_common::{inbound_port, parse_wireguard_reserved, DEFAULT_SECURITY},
+    testutil::{
+        base_remote_node, endpoint, linux_context as test_context, raw_transport, socks_node,
+        tls_settings as full_tls_settings,
+    },
+    AppConfig, ConfigType, CoreConfigContext, CoreGenPlatform, DnsStrategy, Ipv6Mode, LocalPort,
+    ProfileItem, ProfileProtocol, ProfileTransport, RoutingItem, RuleType, RulesItem,
+    SpeedtestConfigEntry, TlsMode, TlsSettings, BLOCK_TAG, DEFAULT_DIRECT_DNS, DIRECT_TAG,
+    LOOPBACK, PROXY_TAG,
 };
-use crate::{golden, CoreGenPlatform, RoutingItem, TlsSettings};
+
+use super::*;
+use super::{
+    dns::{
+        direct_dns_strategy, dns_rcode, is_domain_name, parse_direct_expected_ips,
+        parse_dns_address, parse_dns_address_or_default, parse_hosts_to_dictionary,
+        proxy_dns_strategy,
+    },
+    outbounds::build_outbound,
+};
 
 #[test]
 fn singbox_outbound_vless_ws_tls_mux_matches_golden() {

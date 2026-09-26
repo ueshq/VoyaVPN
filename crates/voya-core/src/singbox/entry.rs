@@ -1,4 +1,20 @@
-use super::*;
+use serde_json::Value;
+
+use crate::{
+    protocol_common::wireguard_public_key, ConfigType, CoreConfigContext, SpeedtestConfigEntry,
+    DEFAULT_DIRECT_DNS, PROXY_TAG,
+};
+
+use super::{
+    dns::gen_dns,
+    experimental::{convert_geo_to_ruleset, gen_experimental},
+    inbounds::{build_mixed_inbound_with, gen_inbounds},
+    outbounds::{append_servers, build_proxy_server, gen_latency_probes, gen_outbounds},
+    routing::gen_routing,
+    support::{apply_outbound_bind_interface, apply_outbound_send_through},
+    SingboxConfig, SingboxConfigError, SingboxDns, SingboxDnsServer, SingboxRule,
+    SINGBOX_DIRECT_DNS_TAG,
+};
 
 pub(crate) fn generate_singbox_config(
     context: &CoreConfigContext,

@@ -1,4 +1,14 @@
-use super::*;
+use crate::{
+    protocol_common::split_csv, text::nonempty_str, CoreConfigContext, RuleType, RulesItem,
+    BLOCK_TAG, DIRECT_TAG, PROXY_TAG,
+};
+
+use super::{
+    dns::{direct_dns_strategy, normalize_bare_host_domain, parse_hosts_to_dictionary},
+    outbounds::{append_servers, build_policy_group_servers, build_proxy_server, rule_group_tag},
+    support::exe_name,
+    SingboxConfig, SingboxRule, GEOSITE_PREFIX, SINGBOX_DIRECT_DNS_TAG,
+};
 
 pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContext) {
     config.route.final_outbound = Some(PROXY_TAG.to_string());
