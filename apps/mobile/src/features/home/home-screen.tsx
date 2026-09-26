@@ -113,7 +113,7 @@ export function HomeScreen() {
           message={runtime.lastError.reason === "elevationRequired" ? t("home.authorizationDeclined") : undefined}
           retryLabel={runtime.lastError.reason === "notFound" ? t("mobile.select") : runtime.lastError.reason === "elevationRequired" ? t("mobile.authorizeAgain") : undefined}
           retry={runtime.lastError.reason === "notFound" ? () => navigateToTab("profiles") : runtime.retryLastAction} />
-        <Button variant="secondary" className="min-h-12 h-auto" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
+        <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
       </View> : runtime.tunIssue ? <ErrorNotice error={runtime.tunIssue} /> : null}
 
       {runtime.connected ? <>
@@ -135,14 +135,14 @@ export function HomeScreen() {
         <Fact icon={Globe} label={t("home.exitIp")} value={exitIp(ipQuery, t)} selectable />
       </Card>
       </> : null}
-      <Button testID="home-activity" variant="secondary" className="min-h-12 h-auto" onPress={() => openPage("activity")}><Button.Label>{t("tabs.connections")}</Button.Label></Button>
+      <Button testID="home-activity" variant="secondary" onPress={() => openPage("activity")}><Button.Label>{t("tabs.connections")}</Button.Label></Button>
 
       {runtime.profilesError ? (
         <Banner
           status="danger"
           message={t("mobile.failed")}
           action={
-            <Button className="min-h-12 h-auto rounded-3xl py-1.5" size="sm" variant="tertiary" onPress={runtime.retryProfiles}>
+            <Button className="min-h-12 h-auto py-1.5" size="sm" variant="tertiary" onPress={runtime.retryProfiles}>
               <Button.Label>{t("actions.retry")}</Button.Label>
             </Button>
           }

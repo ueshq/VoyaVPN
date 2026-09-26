@@ -50,9 +50,9 @@ export function LogsScreen() {
         value={source}
         onChange={setSource}
       />
-      <Button variant="secondary" className="min-h-12 h-auto" onPress={() => setPausedAt(pausedAt === null ? lines.at(-1)?.id ?? 0 : null)}><Button.Label>{pausedAt === null ? t("mobile.pause") : t("mobile.follow", { count: added })}</Button.Label></Button>
-      <Button variant="secondary" className="min-h-12 h-auto" onPress={() => { void clipboard().writeText(exportText()).catch(setError); }}><Button.Label>{t("mobile.copyDiagnostics")}</Button.Label></Button>
-      <Button variant="secondary" className="min-h-12 h-auto" onPress={() => { void deviceActions().shareDiagnostics(exportText()).catch(setError); }}><Button.Label>{t("mobile.share")}</Button.Label></Button>
+      <Button variant="secondary" onPress={() => setPausedAt(pausedAt === null ? lines.at(-1)?.id ?? 0 : null)}><Button.Label>{pausedAt === null ? t("mobile.pause") : t("mobile.follow", { count: added })}</Button.Label></Button>
+      <Button variant="secondary" onPress={() => { void clipboard().writeText(exportText()).catch(setError); }}><Button.Label>{t("mobile.copyDiagnostics")}</Button.Label></Button>
+      <Button variant="secondary" onPress={() => { void deviceActions().shareDiagnostics(exportText()).catch(setError); }}><Button.Label>{t("mobile.share")}</Button.Label></Button>
       <ErrorNotice error={error} />
     </View>} />;
 }

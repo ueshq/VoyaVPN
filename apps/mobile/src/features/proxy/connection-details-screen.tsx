@@ -30,6 +30,6 @@ export function ConnectionDetailsScreen({ route, navigation }: NativeStackScreen
     {connection.rule ? <Typography selectable className="text-base text-subtle">{connection.rule} {connection.rulePayload}</Typography> : null}
     {connection.process ? <Typography selectable className="text-base text-subtle">{connection.process} {connection.processPath}</Typography> : null}
     <ErrorNotice error={error} />
-    <Button variant="danger" className="min-h-12 h-auto" isDisabled={!connection.id || busy} onPress={() => void close()}><Button.Label>{t("actions.disconnect")}</Button.Label></Button>
+    <Button variant="danger" isDisabled={!connection.id || busy} onPress={() => void close()}><Button.Label>{t("actions.disconnect")}</Button.Label></Button>
   </DetailScreen>;
 }

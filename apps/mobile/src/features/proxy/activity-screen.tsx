@@ -134,7 +134,7 @@ export function ActivityScreen() {
           description={t("activity.connectHint")}
           action={
             <Button
-              className="min-h-12 h-auto rounded-3xl bg-accent-soft py-3"
+              className="bg-accent-soft py-3"
               variant="secondary"
               onPress={() => navigateToTab("home")}
             >

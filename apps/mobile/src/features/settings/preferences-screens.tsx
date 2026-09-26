@@ -154,7 +154,7 @@ export function MaintenanceScreen() {
         </View>
         <ErrorNotice error={ruleLibrary.error} />
         <Button
-          className="min-h-12 h-auto rounded-3xl bg-accent-soft py-3"
+          className="bg-accent-soft py-3"
           variant="secondary"
           isDisabled={ruleLibrary.updating}
           onPress={() => void ruleLibrary.update()}

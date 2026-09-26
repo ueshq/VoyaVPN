@@ -168,13 +168,13 @@ export function NodeActionsSheet({
                   {entry.profile.subscriptionId === null ? null : (
                     <View className="gap-2">
                       <Typography className="px-1 text-sm text-subtle">{subscriptionReadOnly}</Typography>
-                      <Button className="min-h-12 h-auto" variant="secondary" onPress={() => { const id = entry.profile.subscriptionId; close(); if (id) openPage("subscription", { id }); }}><Button.Label>{t("mobile.subscriptions")}</Button.Label></Button>
+                      <Button variant="secondary" onPress={() => { const id = entry.profile.subscriptionId; close(); if (id) openPage("subscription", { id }); }}><Button.Label>{t("mobile.subscriptions")}</Button.Label></Button>
                     </View>
                   )}
                 </>
               ) : null}
               <Button
-                className="min-h-12 h-auto rounded-3xl py-3"
+                className="py-3"
                 variant="tertiary"
                 onPress={close}
                 accessibilityRole="button"

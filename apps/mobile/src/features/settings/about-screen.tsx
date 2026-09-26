@@ -16,7 +16,7 @@ export function AboutScreen() {
     <Typography accessibilityRole="header" className="text-2xl font-semibold text-foreground">VoyaVPN {version.data ?? ""}</Typography>
     <Typography accessibilityRole="header" className="text-lg font-semibold text-foreground">{t("mobile.help")}</Typography>
     <Typography className="text-base text-subtle">{t("mobile.helpText")}</Typography>
-    <Button variant="secondary" className="min-h-12 h-auto" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
+    <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
     <Typography accessibilityRole="header" className="text-lg font-semibold text-foreground">{t("mobile.privacy")}</Typography>
     <Typography className="text-base text-subtle">{t("mobile.privacyText")}</Typography>
     {Platform.OS === "android" ? <Typography className="text-base text-subtle">{t("mobile.androidScannerPrivacy")}</Typography> : null}

@@ -24,7 +24,7 @@ export function ErrorNotice({ error, message, reason, retry, retryLabel }: { err
   } satisfies Record<AppErrorKind["type"], string>;
   return <View className="gap-2">
     <Banner status="danger" liveRegion message={message ?? (kind ? reasons[kind] : t("mobile.failed"))} />
-    {retry ? <Button variant="secondary" className="min-h-12 h-auto self-start" onPress={retry}><Button.Label>{retryLabel ?? t("actions.retry")}</Button.Label></Button> : null}
+    {retry ? <Button variant="secondary" className="self-start" onPress={retry}><Button.Label>{retryLabel ?? t("actions.retry")}</Button.Label></Button> : null}
     <Disclosure title={t("mobile.details")}>
       <Typography selectable className="text-sm text-muted">{redactOperationalError(error)}</Typography>
     </Disclosure>

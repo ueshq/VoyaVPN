@@ -65,9 +65,9 @@ export function SubscriptionsScreen() {
     } finally { setFailedIds([...failed]); updatePending.current = false; setBusy(false); }
   }
   return <DetailScreen>
-    <Button className="min-h-12 h-auto" onPress={() => openPage("import")}><Button.Label>{t("mobile.add")}</Button.Label></Button>
-    <Button variant="secondary" className="min-h-12 h-auto" isDisabled={busy || !sources.data?.length} onPress={() => void update(null)}><Button.Label>{t("panes.profiles.toolbar.updateAllSubscriptions")}</Button.Label></Button>
-    {failedIds.length ? <Button variant="secondary" className="min-h-12 h-auto" isDisabled={busy} onPress={() => void update(failedIds)}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
+    <Button onPress={() => openPage("import")}><Button.Label>{t("mobile.add")}</Button.Label></Button>
+    <Button variant="secondary" isDisabled={busy || !sources.data?.length} onPress={() => void update(null)}><Button.Label>{t("panes.profiles.toolbar.updateAllSubscriptions")}</Button.Label></Button>
+    {failedIds.length ? <Button variant="secondary" isDisabled={busy} onPress={() => void update(failedIds)}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
     {message ? <Banner status={failedIds.length ? "warning" : "info"} liveRegion message={message} /> : null}
     <ErrorNotice error={error ?? sources.error} retry={() => void sources.refetch()} />
     <ListGroup>{sources.data?.map((item, index, all) => <ListRow key={item.id} title={item.remarks}
@@ -149,14 +149,14 @@ function SubscriptionEditor({ item, metadata, close }: { item: Subscription; met
     <TextField isInvalid={fields.name}><Label>{t("mobile.name")}</Label><Input accessibilityLabel={t("mobile.name")} value={name} onChangeText={setName} editable={!busy} /><FieldError>{t("mobile.nameRequired")}</FieldError></TextField>
     <TextField isInvalid={fields.url}><Label>{t("mobile.url")}</Label><Input accessibilityLabel={t("mobile.url")} value={url} onChangeText={setUrl} editable={!busy} autoCorrect={false} autoCapitalize="none" /><FieldError>{t("mobile.urlRequired")}</FieldError></TextField>
     <Typography className="text-sm text-subtle">{busy ? t("mobile.saving") : dirty ? t("mobile.unsaved") : t("mobile.saved")}</Typography>
-    <Button className="min-h-12 h-auto" isDisabled={!dirty || busy} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>
+    <Button isDisabled={!dirty || busy} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>
     <Typography className="text-base text-subtle">{t("nodeGroups.membersCount", { count: members.length })}</Typography>
     <Typography className="text-sm text-subtle">{metadata?.lastUpdateAt ? t("updates.lastUpdated", { time: new Date(metadata.lastUpdateAt * 1000).toLocaleString(language) }) : t("updates.neverUpdated")}</Typography>
     {metadata?.totalBytes != null ? <Typography className="text-sm text-subtle">{formatBytes((metadata.uploadBytes ?? 0) + (metadata.downloadBytes ?? 0))} / {formatBytes(metadata.totalBytes)}</Typography> : null}
     {metadata?.expireAt ? <Typography className="text-sm text-subtle">{new Date(metadata.expireAt * 1000).toLocaleDateString(language)}</Typography> : null}
     {message ? <Banner status={messageFailed ? "warning" : "info"} message={message} /> : null}
     <ErrorNotice error={error} message={dirty ? t("mobile.saveFailed") : undefined} />
-    <Button variant="secondary" className="min-h-12 h-auto" isDisabled={busy || dirty} onPress={() => void refresh()}><Button.Label>{t("home.subscriptionCard.update")}</Button.Label></Button>
-    <Button variant="danger" className="min-h-12 h-auto" isDisabled={busy || dirty || nodes.isPending || Boolean(nodes.error)} onPress={confirmDelete}><Button.Label>{t("actions.delete")}</Button.Label></Button>
+    <Button variant="secondary" isDisabled={busy || dirty} onPress={() => void refresh()}><Button.Label>{t("home.subscriptionCard.update")}</Button.Label></Button>
+    <Button variant="danger" isDisabled={busy || dirty || nodes.isPending || Boolean(nodes.error)} onPress={confirmDelete}><Button.Label>{t("actions.delete")}</Button.Label></Button>
   </DetailScreen>;
 }

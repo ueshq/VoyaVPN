@@ -189,7 +189,7 @@ export function NodesScreen() {
                   {/* One button, two jobs: while a run is in flight it is the way
                       to stop it, and it counts the nodes that have answered. */}
                   <Button
-                    className="min-h-12 h-auto rounded-3xl bg-accent-soft py-2"
+                    className="min-h-12 h-auto bg-accent-soft py-2"
                     size="sm"
                     variant="secondary"
                     isDisabled={testableIds.length === 0}
@@ -212,7 +212,7 @@ export function NodesScreen() {
             /></ListGroup> : null}
             <Button
               ref={importRef}
-              className="min-h-12 h-auto rounded-3xl py-3"
+              className="py-3"
               variant="primary"
               accessibilityLabel={t("mobile.add")}
               onPress={() => openPage("import")}

@@ -43,12 +43,22 @@
 @import "uniwind";
 @import "heroui-native/styles";
 
-/* Labels must shrink inside row buttons before wrapping at accessibility
-   sizes; the upstream label otherwise keeps an unconstrained natural width. */
 @layer components {
+  /* Labels must shrink inside row buttons before wrapping at accessibility
+     sizes; the upstream label otherwise keeps an unconstrained natural width. */
   .button__label {
     flex-shrink: 1;
     text-align: center;
+  }
+
+  /* A medium button's 48pt is a floor, not a fixed height, so a label that
+     wraps grows the button instead of spilling out of it. HeroUI fixes the
+     height; Uniwind applies a class's rules in document order, so this one,
+     after the import, is the one that holds. Small and large buttons keep
+     their fixed heights and say `min-h-* h-auto` where they need it. */
+  .button__root--size-md {
+    height: auto;
+    min-height: var(--spacing-control);
   }
 }
 

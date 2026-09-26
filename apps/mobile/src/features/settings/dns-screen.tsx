@@ -67,7 +67,7 @@ export function DnsScreen() {
   }
   return <DetailScreen>
     <ErrorNotice error={query.error} retry={() => void query.refetch()} />
-    <Button variant="secondary" className="min-h-12 h-auto" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.recommended")}</Button.Label></Button>
+    <Button variant="secondary" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.recommended")}</Button.Label></Button>
     {form ? <>
       {/* Unsaved edits keep the fields open: collapsing them would hide what is about to be saved. */}
       <Disclosure title={t("mobile.advanced")} isExpanded={advanced || dirty} onExpandedChange={setAdvanced}>
@@ -81,15 +81,15 @@ export function DnsScreen() {
       {advanced || dirty ? null : <Typography className="text-base text-subtle">{FIELDS.map(({ key, labelKey }) => `${t(labelKey)}: ${form[key] ?? "—"}`).join("\n")}</Typography>}
       <Typography accessibilityLiveRegion="polite" className="text-sm text-subtle">{saving ? t("mobile.saving") : dirty ? t("mobile.unsaved") : t("mobile.saved")}</Typography>
       <ErrorNotice error={error} message={t("mobile.saveFailed")} />
-      <Button className="min-h-12 h-auto" isDisabled={!dirty || saving} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>
-      <Button variant="ghost" className="min-h-12 h-auto" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.restoreDns")}</Button.Label></Button>
+      <Button isDisabled={!dirty || saving} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>
+      <Button variant="ghost" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.restoreDns")}</Button.Label></Button>
     </> : null}
     <ErrorNotice error={apply.error} retry={() => void apply.refetch()} />
     <ErrorNotice error={applyError} message={t("notices.settingsSavedRuntimeUpdateFailed")} />
     {!dirty && apply.data?.connected && apply.data.action === "none" ? <Typography accessibilityLiveRegion="polite" className="text-sm text-subtle">{t("mobile.applied")}</Typography> : null}
     {(saved || !dirty) && apply.data?.action !== undefined && apply.data.action !== "none" ? <>
       <Typography className="text-base text-subtle">{t("mobile.applyPending")}</Typography>
-      <Button variant="secondary" className="min-h-12 h-auto" isDisabled={saving} onPress={() => {
+      <Button variant="secondary" isDisabled={saving} onPress={() => {
         if (savingRef.current) return;
         savingRef.current = true; setSaving(true); setApplyError(null);
         void voyaCommands().applyPendingSettings().then(() => client.invalidateQueries({ queryKey: queryKeys.appSettings })).catch(setApplyError).finally(() => { savingRef.current = false; setSaving(false); });
