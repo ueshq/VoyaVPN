@@ -66,9 +66,15 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * Measured locale chunks: English 50.4, zh-Hans 49.2, zh-Hant 49.9 KiB.
  * Only their per-locale allowance increases from 48 to 52 KiB; startup,
  * total JavaScript, CSS and whole-dist budgets remain unchanged.
+ *
+ * 2026-09-26: the close prompt and the missing-core dialog, both on the
+ * startup path, moved their save handling into `useDialogSubmit`. Their own
+ * try/finally had made React Compiler skip them; without it they compile,
+ * and the memoization adds 2.5 KiB to the entry. Measured: index 59.5 KiB
+ * (was 56.3 before the change); the entry budget moves from 58 to 61 KiB.
  */
 const budgets = [
-  { label: "application entry", maxKiB: 58, prefix: "index-" },
+  { label: "application entry", maxKiB: 61, prefix: "index-" },
   { label: "English locale (startup)", maxKiB: 52, prefix: "locales-" },
   { label: "Simplified Chinese locale", maxKiB: 52, prefix: "zh-Hans-" },
   { label: "Traditional Chinese locale", maxKiB: 52, prefix: "zh-Hant-" },
