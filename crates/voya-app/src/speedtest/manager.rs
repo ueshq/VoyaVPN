@@ -59,6 +59,26 @@ pub async fn start_probe_core_page(
     Ok(session)
 }
 
+/// Measures nodes with a throwaway sing-box per page, probed over SOCKS.
+///
+/// On macOS a connected PacketTunnel core takes over instead: every connection
+/// then goes through the tunnel, so a probe core would measure the node through
+/// the running VPN rather than directly.
+#[derive(Clone)]
+pub struct SpeedtestManager {
+    pub(super) probe: Arc<dyn SpeedtestProbe>,
+    pub(super) launcher: Arc<dyn ProbeCoreLauncher>,
+    pub(super) running_core: Option<Arc<dyn RunningCoreProbe>>,
+    pub(super) paths: AppPaths,
+    pub(super) target_os: TargetOs,
+    pub(super) active_cancel: Arc<Mutex<Option<CancellationFlag>>>,
+    /// Held for a run's whole database work. Cancelling a superseded run only
+    /// sets its flag; it still writes its untested nodes back as `Cancelled`
+    /// on the way out, and without this that write can land on top of the
+    /// `Testing` markers and results of the run that replaced it.
+    pub(super) run_lock: Arc<tokio::sync::Mutex<()>>,
+}
+
 impl SpeedtestManager {
     /// The desktop's manager: every probe core is a child process.
     #[must_use]

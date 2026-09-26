@@ -209,26 +209,6 @@ pub trait ProbeCore: Send + Sync {
     fn stop(self: Box<Self>);
 }
 
-/// Measures nodes with a throwaway sing-box per page, probed over SOCKS.
-///
-/// On macOS a connected PacketTunnel core takes over instead: every connection
-/// then goes through the tunnel, so a probe core would measure the node through
-/// the running VPN rather than directly.
-#[derive(Clone)]
-pub struct SpeedtestManager {
-    probe: Arc<dyn SpeedtestProbe>,
-    launcher: Arc<dyn ProbeCoreLauncher>,
-    running_core: Option<Arc<dyn RunningCoreProbe>>,
-    paths: AppPaths,
-    target_os: TargetOs,
-    active_cancel: Arc<Mutex<Option<CancellationFlag>>>,
-    /// Held for a run's whole database work. Cancelling a superseded run only
-    /// sets its flag; it still writes its untested nodes back as `Cancelled`
-    /// on the way out, and without this that write can land on top of the
-    /// `Testing` markers and results of the run that replaced it.
-    run_lock: Arc<tokio::sync::Mutex<()>>,
-}
-
 /// Lock a speedtest mutex even after a panicking holder poisoned it. Both
 /// guarded values survive a panic intact: the probe registry still holds the
 /// child handles it exists to reap, and the job slot is a single `Option`.
@@ -246,7 +226,7 @@ mod manager;
 mod running_core;
 
 pub use core_backend::ProcessProbeCoreLauncher;
-pub use manager::{start_probe_core_page, ProbeCoreSession};
+pub use manager::{start_probe_core_page, ProbeCoreSession, SpeedtestManager};
 pub use running_core::{RunningCoreProbe, SupervisorRunningCoreProbe};
 
 async fn select_test_items(
