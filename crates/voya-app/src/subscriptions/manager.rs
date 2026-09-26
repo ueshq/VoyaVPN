@@ -96,7 +96,9 @@ impl<'db> SubscriptionManager<'db> {
         }
 
         self.save_subscription(SubItem {
-            remarks: extract_remarks_from_url(url).unwrap_or_else(|| "import_sub".to_string()),
+            remarks: extract_remarks_from_url(url)
+                .or_else(|| url_host(url))
+                .unwrap_or_else(|| url.to_string()),
             url: url.to_string(),
             ..SubItem::default()
         })
@@ -151,6 +153,15 @@ fn trimmed_option(value: Option<String>) -> Option<String> {
 pub(super) fn is_http_url(value: &str) -> bool {
     let value = value.trim();
     value.starts_with("https://") || value.starts_with("http://")
+}
+
+/// A subscription added from a bare URL is named after its host until the
+/// provider's own title arrives with the first update.
+fn url_host(url: &str) -> Option<String> {
+    url::Url::parse(url)
+        .ok()?
+        .host_str()
+        .map(ToString::to_string)
 }
 
 fn extract_remarks_from_url(url: &str) -> Option<String> {
@@ -611,6 +622,22 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed")
             .is_empty());
+    }
+
+    #[test]
+    fn a_url_without_remarks_is_named_after_its_host() {
+        assert_eq!(
+            extract_remarks_from_url("https://sub.example.com/link?remarks=Work&token=1"),
+            Some("Work".to_string())
+        );
+        assert_eq!(
+            extract_remarks_from_url("https://sub.example.com/link?token=1"),
+            None
+        );
+        assert_eq!(
+            url_host("https://sub.example.com:8443/link?token=1"),
+            Some("sub.example.com".to_string())
+        );
     }
 
     /// Trimming `regex`'s Unicode features looks like a binary-size win but is

@@ -1,3 +1,4 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { saveQueue } from "@voya/features/forms/save-queue";
 import { useRuleLibraryUpdate } from "@voya/features/updates/use-rule-library-update";
@@ -15,7 +16,6 @@ import type { AppUpdaterStatus } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { relaunch } from "@/ipc/tauri-plugins";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { getErrorMessage } from "@voya/utils/error";
 import { useMountedRef } from "@voya/utils/use-mounted-ref";
 
 type UpdateWorkingState = "app-check" | "app-install" | "app-restart";
@@ -49,7 +49,7 @@ export function useCheckUpdateDialog() {
   });
   const appUpdaterError =
     appActionError ??
-    (statusQuery.error ? getErrorMessage(statusQuery.error) : null);
+    (statusQuery.error ? redactOperationalError(statusQuery.error) : null);
   const appUpdaterStatus: AppUpdaterStatus | null = statusQuery.data ?? null;
 
   const appUpdaterSink: ErrorSink = {
@@ -68,7 +68,7 @@ export function useCheckUpdateDialog() {
     try {
       await run();
     } catch (error) {
-      errorSink.fail(getErrorMessage(error));
+      errorSink.fail(redactOperationalError(error));
     } finally {
       onSettled?.();
       setWorking(null);

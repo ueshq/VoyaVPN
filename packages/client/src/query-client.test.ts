@@ -12,17 +12,6 @@ describe("createAppQueryClient", () => {
     const queryClient = createAppQueryClient();
 
     expect(queryClient.getDefaultOptions().queries).toMatchObject({
-      retry: false,
-      staleTime: 30_000,
-    });
-    // Mobile leaves the DOM-only option unset rather than disabling it.
-    expect(queryClient.getDefaultOptions().queries?.refetchOnWindowFocus).toBeUndefined();
-  });
-
-  it("applies the desktop focus-refetch delta when a host asks for it", () => {
-    const queryClient = createAppQueryClient({ refetchOnWindowFocus: false });
-
-    expect(queryClient.getDefaultOptions().queries).toMatchObject({
       refetchOnWindowFocus: false,
       retry: false,
       staleTime: 30_000,

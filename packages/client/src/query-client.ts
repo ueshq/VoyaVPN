@@ -5,39 +5,26 @@ import { i18next } from "@voya/i18n/core";
 import { toastError } from "./toast-store";
 
 /**
- * Options a host passes to [`createAppQueryClient`].
- *
- * `refetchOnWindowFocus` is the one desktop/mobile delta: the desktop disables
- * it explicitly, while React Native has no window-focus concept and leaves the
- * option unset (coming back from the background is handled by `AppState` where
- * a screen needs it, not globally).
- */
-export type AppQueryClientOptions = {
-  refetchOnWindowFocus?: boolean;
-};
-
-/**
  * The single app-wide TanStack Query client.
  *
  * Defaults are tuned for a local IPC backend rather than a flaky network:
  * command failures are deterministic typed `AppError` values, so retrying only
  * delays the error UI, and the backend already pushes invalidation events
- * (ADR 0002 channel 1), which makes focus refetching redundant chatter.
+ * (ADR 0002 channel 1), which makes focus refetching redundant chatter. React
+ * Native has no window focus, so the setting is inert there.
  *
  * The mutation cache is the safety net that keeps a failed mutation from
  * disappearing silently: every rejection surfaces as a toast. A feature can
  * name the failure by passing `meta: { errorTitle: t("…") }` to `useMutation`;
  * without it the generic operation title is used.
  */
-export function createAppQueryClient(options: AppQueryClientOptions = {}) {
+export function createAppQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
+        refetchOnWindowFocus: false,
         retry: false,
         staleTime: 30_000,
-        ...(options.refetchOnWindowFocus !== undefined
-          ? { refetchOnWindowFocus: options.refetchOnWindowFocus }
-          : {}),
       },
     },
     mutationCache: new MutationCache({

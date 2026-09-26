@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@voya/ui/components/button";
@@ -13,9 +14,7 @@ import {
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { voyaCommands } from "@voya/client/transport";
 import type { ProxyConnectionItem } from "@voya/contracts";
-import { queryKeys } from "@voya/client/query-keys";
 import { outboundLabelKey } from "@voya/features/routing/rule-outbound";
 import { connectionBytes } from "@voya/features/proxy/connection-display";
 import { connectionRuleText } from "@voya/features/proxy/connection-rule";
@@ -52,8 +51,7 @@ export function ConnectionDetails({
   const titleRef = useRef<HTMLHeadingElement>(null);
   const routingsQuery = useQuery({
     enabled: connection !== null,
-    queryFn: () => voyaCommands().listRoutings(),
-    queryKey: queryKeys.routings,
+    ...queries.routings,
   });
   const activeRules =
     routingsQuery.data?.find((routing) => routing.isActive)?.rules ?? null;

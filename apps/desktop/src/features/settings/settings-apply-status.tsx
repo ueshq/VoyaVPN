@@ -1,3 +1,5 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
+import { queries } from "@voya/client/queries";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -5,9 +7,7 @@ import { Check, RotateCcw } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { Spinner } from "@voya/ui/components/spinner";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { getErrorMessage } from "@voya/utils/error";
 import { voyaCommands } from "@voya/client/transport";
-import { queryKeys } from "@voya/client/query-keys";
 import { PageSurface } from "@/components/app-shell/page-section";
 
 /**
@@ -26,8 +26,7 @@ export function SettingsApplyStatus({
   const { t } = useI18n();
   const coreState = useRuntimeEventStore((state) => state.coreState?.state);
   const query = useQuery({
-    queryKey: queryKeys.settingsApply,
-    queryFn: () => voyaCommands().getSettingsApplyStatus(),
+    ...queries.settingsApply,
     refetchOnMount: "always",
   });
   const { refetch } = query;
@@ -45,7 +44,7 @@ export function SettingsApplyStatus({
     try {
       await voyaCommands().applyPendingSettings();
     } catch (cause) {
-      setError(getErrorMessage(cause));
+      setError(redactOperationalError(cause));
     } finally {
       pending.current = false;
       setWorking(false);
@@ -110,7 +109,7 @@ export function SettingsApplyStatus({
           role="alert"
         >
           <span className="min-w-0 break-words">
-            {error || getErrorMessage(query.error)}
+            {error || redactOperationalError(query.error)}
           </span>
           <Button
             size="sm"

@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { TranslationKey } from "@voya/i18n/core";
@@ -14,10 +15,7 @@ import { useRuntimeBusy } from "@voya/client/runtime-action";
  * which routes all captured traffic ahead of every rule.
  */
 export function useSavedTrafficMode() {
-  const query = useQuery({
-    queryKey: queryKeys.appSettings,
-    queryFn: () => voyaCommands().loadAppSettings(),
-  });
+  const query = useQuery(queries.appSettings);
 
   return {
     error: query.error,

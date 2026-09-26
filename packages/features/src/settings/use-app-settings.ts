@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -13,7 +14,7 @@ import { applyUiPreferences, endUiPreferencesPreview, previewUiPreferences, repo
 export function useAppSettings() {
   const client = useQueryClient();
   const [previewOwner] = useState(() => Symbol("settings appearance"));
-  const query = useQuery({ queryFn: () => voyaCommands().loadAppSettings(), queryKey: queryKeys.appSettings, refetchOnMount: "always" });
+  const query = useQuery({ ...queries.appSettings, refetchOnMount: "always" });
   const draft = useSettingsDraft<AppSettings>({
     data: query.data,
     queryKey: queryKeys.appSettings,

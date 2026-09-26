@@ -141,10 +141,5 @@ function safeUnlisten(eventName: string, unlisten: Unlisten) {
 }
 
 function reportEventBridgeError(context: string, error: unknown) {
-  if (typeof console === "undefined") {
-    return;
-  }
-
-  const message = getErrorMessage(error);
-  console.error(`[event-bridge] ${context}: ${message}`);
+  console.error(`[event-bridge] ${context}: ${getErrorMessage(error)}`);
 }

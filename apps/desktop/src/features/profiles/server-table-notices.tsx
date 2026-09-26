@@ -1,10 +1,10 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useEffect } from "react";
 import { FileWarning, X } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { Spinner } from "@voya/ui/components/spinner";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { PageSurface } from "@/components/app-shell/page-section";
-import { getErrorMessage } from "@voya/utils/error";
 import type { ServerTableController } from "./use-server-table";
 
 /** Long enough to read an import summary, short enough not to linger. */
@@ -47,7 +47,7 @@ export function ServerTableNotices({ controller }: { controller: ServerTableCont
       ) : null}
       {profilesQuery.isError ? (
         <InlinePageError>
-          {getErrorMessage(profilesQuery.error)}
+          {redactOperationalError(profilesQuery.error)}
         </InlinePageError>
       ) : null}
       {operationMessage ? (

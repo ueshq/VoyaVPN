@@ -1,3 +1,4 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useState } from "react";
 
 import { Button } from "@voya/ui/components/button";
@@ -12,7 +13,6 @@ import {
   DialogTitle,
 } from "@voya/ui/components/dialog";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { getErrorMessage } from "@voya/utils/error";
 import type { CloseRequestAction } from "@voya/contracts";
 import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
@@ -45,7 +45,7 @@ export function CloseRequestDialog() {
       await voyaCommands().resolveCloseRequest(action, remember);
       close();
     } catch (reason) {
-      setError(getErrorMessage(reason));
+      setError(redactOperationalError(reason));
     } finally {
       setBusy(false);
     }

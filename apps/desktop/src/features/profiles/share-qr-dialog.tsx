@@ -1,3 +1,4 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, QrCode } from "lucide-react";
@@ -17,7 +18,6 @@ import {
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { cn } from "@voya/ui/lib/utils";
-import { getErrorMessage } from "@voya/utils/error";
 import { voyaCommands } from "@voya/client/transport";
 import { profileShareQrQueryKey } from "@voya/client/query-keys";
 
@@ -68,7 +68,7 @@ export function ShareQrImage({
       <Alert variant="destructive">
         <AlertTriangle aria-hidden="true" />
         <AlertDescription>
-          {getErrorMessage(qrCodeQuery.error)}
+          {redactOperationalError(qrCodeQuery.error)}
         </AlertDescription>
       </Alert>
     );

@@ -1,8 +1,7 @@
+import { queries } from "@voya/client/queries";
 import { useQuery } from "@tanstack/react-query";
 
 import { i18next, i18nHost, isLocale, type Locale } from "@voya/i18n/core";
-import { voyaCommands } from "@voya/client/transport";
-import { queryKeys } from "@voya/client/query-keys";
 import { toastError, useToastStore } from "@voya/client/toast-store";
 import type { AppearanceSettings, ThemeMode } from "@voya/contracts";
 import { isThemeMode, usePreferencesStore } from "@voya/client/preferences-store";
@@ -43,8 +42,7 @@ export function reportUiPreferencesReverted() {
 
 export function useUiPreferencesQuery() {
   return useQuery({
-    queryFn: () => voyaCommands().loadUiPreferences(),
-    queryKey: queryKeys.uiPreferences,
+    ...queries.uiPreferences,
     select: normalizeUiPreferences,
   });
 }

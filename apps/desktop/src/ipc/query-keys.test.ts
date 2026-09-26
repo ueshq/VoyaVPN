@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { InvalidationScope } from "@voya/contracts";
+import { queries } from "@voya/client/queries";
 import {
   connectionIpQueryKey,
   invalidationQueryKey,
@@ -137,6 +138,12 @@ describe("query key registry", () => {
 
     for (const [path, source] of productionSources) {
       for (const block of findUseQueryCalls(source)) {
+        // `queries.x` carries its key with it; see `@voya/client/queries`.
+        for (const [, name] of block.matchAll(/\bqueries\.([A-Za-z0-9]+)/g)) {
+          const shared = queries[name as keyof typeof queries];
+          if (shared) subscribed.add(shared.queryKey[0]);
+          else unresolved.push(`${path}: queries.${name}`);
+        }
         for (const expression of queryKeyExpressions(block)) {
           const root = rootOf(expression);
           if (root === null) {

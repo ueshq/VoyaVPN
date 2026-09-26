@@ -9,8 +9,6 @@ import {
   setClientStorage,
   setClipboard,
   setElevationHandler,
-  setSystemColorSchemeReader,
-  systemColorScheme,
 } from "./platform";
 
 describe("clientStorage", () => {
@@ -39,22 +37,6 @@ describe("clientStorage", () => {
 
     handle.removeItem("k");
     expect(handle.getItem("k")).toBeNull();
-  });
-});
-
-describe("systemColorScheme", () => {
-  it("defaults to light for a host that reports no preference", () => {
-    expect(systemColorScheme()).toBe("light");
-  });
-
-  it("reports what the registered reader says, per call", () => {
-    let scheme: "dark" | "light" = "dark";
-    setSystemColorSchemeReader(() => scheme);
-
-    expect(systemColorScheme()).toBe("dark");
-
-    scheme = "light";
-    expect(systemColorScheme()).toBe("light");
   });
 });
 

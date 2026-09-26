@@ -2,20 +2,22 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { installFakeCommands } from "@voya/features/test/backend";
+
 import { TitleBar } from "./title-bar";
 
-const windowMocks = vi.hoisted(() => ({
-  closeWindow: vi.fn(),
-  // Not this component's business; the shared backend registration the test
-  // setup runs reads it from the same module.
-  isTauriRuntime: vi.fn(() => true),
-  isWindowMaximized: vi.fn(),
-  minimizeWindow: vi.fn(),
-  onWindowResized: vi.fn(),
-  toggleMaximizeWindow: vi.fn(),
-}));
+const resizeEvents = vi.hoisted(() => ({ onWindowResized: vi.fn() }));
+vi.mock("@/ipc/window", () => resizeEvents);
 
-vi.mock("@/ipc/window", () => windowMocks);
+const windowMocks = {
+  ...installFakeCommands({
+    closeWindow: vi.fn(),
+    isWindowMaximized: vi.fn(),
+    minimizeWindow: vi.fn(),
+    toggleMaximizeWindow: vi.fn(),
+  }),
+  ...resizeEvents,
+};
 
 describe("Windows title-bar controls", () => {
   beforeEach(() => {

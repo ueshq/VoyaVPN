@@ -1,3 +1,4 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useState } from "react";
 import { Cpu } from "lucide-react";
 
@@ -14,7 +15,6 @@ import {
 import { useI18n } from "@voya/i18n/use-i18n";
 import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
-import { getErrorMessage } from "@voya/utils/error";
 
 export function ModalHost() {
   const closeMissingCore = useRuntimeActionStore((state) => state.closeMissingCore);
@@ -51,7 +51,7 @@ function MissingCoreDialog() {
       await voyaCommands().connectActiveProfile();
       closeMissingCore();
     } catch (error) {
-      setError(getErrorMessage(error));
+      setError(redactOperationalError(error));
     } finally {
       setBusy(false);
     }

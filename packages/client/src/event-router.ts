@@ -12,7 +12,7 @@ import { getErrorMessage } from "@voya/utils/error";
 
 import { noticeText } from "./messages";
 import { invalidationQueryKey, queryKeys } from "./query-keys";
-import { useRuntimeEventStore } from "./runtime-event-store";
+import { speedtestPending, useRuntimeEventStore } from "./runtime-event-store";
 import { useToastStore } from "./toast-store";
 
 /**
@@ -143,7 +143,7 @@ export function createEventRouter(options: EventRouterOptions): EventRouter {
     // so results coalesce into one list refresh per COUNTRY_REFRESH_MS. The
     // run's closing invalidation covers the tail.
     if (event.kind === "speedtestResults"
-      && event.payload.some((result) => !["waiting", "testing"].includes(result.outcome))
+      && event.payload.some((result) => !speedtestPending(result))
       && countryRefresh === undefined) {
       countryRefresh = setTimeout(() => {
         countryRefresh = undefined;
@@ -175,9 +175,5 @@ function toShellTarget(tab: ShellTabTarget): ShellTarget {
 }
 
 function reportEventRouterError(context: string, error: unknown) {
-  if (typeof console === "undefined") {
-    return;
-  }
-
   console.error(`[event-router] ${context}: ${getErrorMessage(error)}`);
 }

@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Layers, Zap } from "lucide-react";
 
@@ -8,7 +9,6 @@ import { EmptyState } from "@voya/ui/components/empty-state";
 import { Spinner } from "@voya/ui/components/spinner";
 import { formatDelay } from "@voya/utils/formatting";
 import { voyaCommands } from "@voya/client/transport";
-import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { PolicyGroupMemberChip } from "@/features/profiles/policy-group-member-chip";
@@ -32,10 +32,7 @@ export function ProxyGroupsPanel() {
     (state) => state.coreState?.state === "connected",
   );
   const setActiveTab = useShellStore((state) => state.setActiveTab);
-  const groupsQuery = useQuery({
-    queryFn: () => voyaCommands().listPolicyGroups(),
-    queryKey: queryKeys.policyGroups,
-  });
+  const groupsQuery = useQuery(queries.policyGroups);
   const active = groupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
   const runtime = usePolicyGroupRuntime(active?.group.id ?? null);
   const memberSwitch = usePolicyGroupMemberSwitch();

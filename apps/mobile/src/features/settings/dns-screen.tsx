@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";
@@ -26,8 +27,8 @@ const SWITCHES = [{ key: "fakeIp", labelKey: "panes.dns.fakeIp" }, { key: "block
 export function DnsScreen() {
   const { t } = useI18n();
   const client = useQueryClient();
-  const query = useQuery({ queryKey: queryKeys.dns, queryFn: () => voyaCommands().loadDnsSettings() });
-  const apply = useQuery({ queryKey: queryKeys.settingsApply, queryFn: () => voyaCommands().getSettingsApplyStatus() });
+  const query = useQuery(queries.dns);
+  const apply = useQuery(queries.settingsApply);
   const [patch, setPatch] = useState<Partial<DnsSettings>>({});
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);

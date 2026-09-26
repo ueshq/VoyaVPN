@@ -1,11 +1,10 @@
+import { queries } from "@voya/client/queries";
 import { useQuery } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { voyaCommands } from "@voya/client/transport";
 import { coreStateOf, runningProfileId, useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { TunStatus } from "@voya/contracts";
-import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { usePolicyGroupRuntime } from "../profiles/use-policy-group-runtime";
 
@@ -29,10 +28,7 @@ export function useHomeRuntime() {
   const lastError = useRuntimeActionStore((state) => state.lastError);
   // Shares the ProfilesScreen query cache (same key) so resolving the active
   // node's name here costs no extra fetch and stays in sync after a switch.
-  const profilesQuery = useQuery({
-    queryFn: () => voyaCommands().listProfileSummaries(),
-    queryKey: queryKeys.profileList,
-  });
+  const profilesQuery = useQuery(queries.profileList);
 
   const state = coreStateOf(coreState);
   const connected = state === "connected";
@@ -56,10 +52,7 @@ export function useHomeRuntime() {
     : null;
   const nodeEntry = connected ? runningEntry : activeProfile;
   // Shares the node page's query, so activating a group there shows up here.
-  const policyGroupsQuery = useQuery({
-    queryFn: () => voyaCommands().listPolicyGroups(),
-    queryKey: queryKeys.policyGroups,
-  });
+  const policyGroupsQuery = useQuery(queries.policyGroups);
   const activeGroup =
     policyGroupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
   const groupRuntime = usePolicyGroupRuntime(activeGroup?.group.id ?? null);

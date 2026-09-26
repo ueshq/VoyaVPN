@@ -1,8 +1,8 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useState } from "react";
 
 import type { TranslationFunction } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { getErrorMessage } from "@voya/utils/error";
 import { useRuntimeBusy } from "@voya/client/runtime-action";
 import {
   tunProviderErrorDescription,
@@ -47,7 +47,7 @@ export function useCaptureMode() {
       }
       await voyaCommands().setConnectionMode(next);
     } catch (cause) {
-      setError(getErrorMessage(cause));
+      setError(redactOperationalError(cause));
     } finally {
       try {
         await refreshRuntimeStatusAndReport(t);

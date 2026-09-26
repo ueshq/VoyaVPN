@@ -1,5 +1,5 @@
 import { ErrorNotice } from "~/components/error-notice";
-import { outboundLabelKey } from "@voya/features/routing/rule-outbound";
+import { describeOutbound, outboundText } from "@voya/features/routing/rule-outbound";
 import { openPage } from "~/app/navigation";
 import { useTrafficMode } from "@voya/features/routing/use-traffic-mode";
 import { useRoutingScreen } from "@voya/features/routing/use-routing-screen";
@@ -58,8 +58,10 @@ export function RulesScreen() {
       // and the like — which are an identity, not a name. The shared helper is
       // what turns them into the words the desktop shows.
       const name = ruleDisplayName(item, t);
-      const outboundKey = outboundLabelKey(item.outbound ?? "proxy");
-      const target = outboundKey ? t(outboundKey) : item.outbound;
+      const target = outboundText(
+        describeOutbound(item.outbound, routing.nodeNames, routing.groupOutbounds),
+        t,
+      );
       return (
         <ListRow
           inset
@@ -69,7 +71,7 @@ export function RulesScreen() {
           title={name}
           description={t("mobile.ruleEffect", { target })}
           descriptionLines={0}
-          onPress={() => openPage("ruleDetails", { rule: item })}
+          onPress={() => openPage("ruleDetails", { rule: item, target })}
           trailingInteractive
           trailing={
             <Switch

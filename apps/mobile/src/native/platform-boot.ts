@@ -1,6 +1,6 @@
-import { setAppVisibility, setClientStorage, setSystemColorSchemeReader } from "@voya/client/platform";
+import { setAppVisibility, setClientStorage } from "@voya/client/platform";
 import { createNativeI18n } from "@voya/i18n/native";
-import { Appearance, AppState } from "react-native";
+import { AppState } from "react-native";
 
 import { deviceLanguages } from "./locale";
 import { clientStorageAdapter, storage } from "./storage";
@@ -16,8 +16,6 @@ import { clientStorageAdapter, storage } from "./storage";
  * The desktop equivalent is `apps/desktop/src/platform-boot.ts`.
  */
 setClientStorage(clientStorageAdapter);
-
-setSystemColorSchemeReader(() => (Appearance.getColorScheme() === "dark" ? "dark" : "light"));
 
 /**
  * What the desktop reads off `document.visibilityState`.

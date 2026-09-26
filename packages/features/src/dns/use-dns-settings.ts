@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { voyaCommands } from "@voya/client/transport";
@@ -10,7 +11,7 @@ import { dnsSettingsSchema } from "./dns-form-schema";
 
 export function useDnsSettings(enabled = true) {
   const client = useQueryClient();
-  const dnsQuery = useQuery({ enabled, queryFn: () => voyaCommands().loadDnsSettings(), queryKey: queryKeys.dns, refetchOnMount: "always" });
+  const dnsQuery = useQuery({ ...queries.dns, enabled, refetchOnMount: "always" });
   const draft = useSettingsDraft<DnsSettings>({
     data: dnsQuery.data,
     queryKey: queryKeys.dns,

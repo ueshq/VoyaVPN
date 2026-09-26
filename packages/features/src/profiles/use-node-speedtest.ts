@@ -1,16 +1,13 @@
 import { useState } from "react";
 
 import { voyaCommands } from "@voya/client/transport";
-import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { speedtestPending, useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { SpeedtestResult, SpeedtestTarget } from "@voya/contracts";
 
 import type { NodeOperation } from "./use-node-operation";
 
 /** `source` names the button that started the run, so only it offers Stop. */
 type SpeedtestRun = { ids: string[]; before: Record<string, SpeedtestResult>; source: string };
-
-// A result still in one of these states has not finished for its node.
-const PENDING_OUTCOMES: ReadonlySet<string> = new Set(["waiting", "testing"]);
 
 export function useNodeSpeedtest({ runOperation }: NodeOperation) {
   const speedtestRunning = useRuntimeEventStore(
@@ -51,7 +48,7 @@ export function useNodeSpeedtest({ runOperation }: NodeOperation) {
     ? {
         done: run.ids.filter((id) => {
           const result = results[id];
-          return result && result !== run.before[id] && !PENDING_OUTCOMES.has(result.outcome);
+          return result && result !== run.before[id] && !speedtestPending(result);
         }).length,
         total: run.ids.length,
       }

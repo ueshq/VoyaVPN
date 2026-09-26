@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { setAppVisibility, setBackendAvailable } from "@voya/client/platform";
+import { setAppVisibility } from "@voya/client/platform";
 
 import { installFakeCommands } from "../test/backend";
 
@@ -11,12 +11,10 @@ const setLogStreaming = vi.fn();
 installFakeCommands({ setLogStreaming });
 
 /**
- * The two platform facts this hook turns on, registered rather than faked at
- * the DOM: on the desktop they come from `document.visibilityState` and the
- * Tauri runtime probe, on a phone from `AppState` and "always".
+ * The platform fact this hook turns on, registered rather than faked at the
+ * DOM: `document.visibilityState` on the desktop, `AppState` on a phone.
  */
 let visible = true;
-let backendPresent = true;
 let notifyVisibility: (() => void) | null = null;
 
 setAppVisibility({
@@ -28,7 +26,6 @@ setAppVisibility({
     };
   },
 });
-setBackendAvailable(() => backendPresent);
 
 function setVisible(next: boolean) {
   visible = next;
@@ -38,7 +35,6 @@ function setVisible(next: boolean) {
 describe("log stream", () => {
   beforeEach(() => {
     visible = true;
-    backendPresent = true;
     setLogStreaming.mockReset().mockResolvedValue(null);
   });
 
@@ -62,11 +58,7 @@ describe("log stream", () => {
     expect(setLogStreaming.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 
-  it("asks for nothing without a backend, or while hidden", () => {
-    backendPresent = false;
-    renderHook(() => useLogStream()).unmount();
-
-    backendPresent = true;
+  it("asks for nothing while hidden", () => {
     visible = false;
     renderHook(() => useLogStream()).unmount();
 

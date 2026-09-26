@@ -120,7 +120,31 @@ export function useProfileActivation(t: TranslationFunction) {
     });
   }
 
-  return { activateProfile, busy, runningId, switchingId };
+  /**
+   * Makes a node the active one without starting the core: a running core
+   * switches to it, a stopped one only remembers the choice. A failure while
+   * stopped is the caller's to show; a switch reports its own.
+   */
+  async function selectProfile(id: string) {
+    const state = coreStateOf(useRuntimeEventStore.getState().coreState);
+    if (state === "connected") {
+      return activateProfile(id);
+    }
+    if (switchBusy(state)) {
+      return false;
+    }
+    const store = useRuntimeActionStore.getState();
+    store.startSwitch(id);
+    try {
+      await voyaCommands().setActiveProfile(id);
+      await queryClient.invalidateQueries();
+      return true;
+    } finally {
+      store.finishSwitch();
+    }
+  }
+
+  return { activateProfile, busy, runningId, selectProfile, switchingId };
 }
 
 /**

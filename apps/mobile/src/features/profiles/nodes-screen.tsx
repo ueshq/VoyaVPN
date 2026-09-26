@@ -1,11 +1,7 @@
 import { ErrorNotice } from "~/components/error-notice";
 import { openPage } from "~/app/navigation";
 import { MoreHorizontal } from "lucide-react-native";
-import { voyaCommands } from "@voya/client/transport";
-import { useQueryClient } from "@tanstack/react-query";
-import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
-import { runtimeBusy, useProfileActivation } from "@voya/client/runtime-action";
+import { useProfileActivation } from "@voya/client/runtime-action";
 import type { NodeListRow } from "@voya/features/profiles/node-list-rows";
 import type { ProfileSummaryEntry } from "@voya/contracts";
 import { profileLatency, profileLatencyTone, profileTitle } from "@voya/features/profiles/profile-display";
@@ -58,19 +54,10 @@ export function NodesScreen() {
   const operation = useNodeOperation();
   const speedtest = useNodeSpeedtest(operation);
   const activation = useProfileActivation(t);
-  const queryClient = useQueryClient();
-  const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
-  const select = useCallback(async (id: string) => {
-    if (connected) { await activation.activateProfile(id); return; }
-    if (runtimeBusy(useRuntimeEventStore.getState().coreState?.state ?? "disconnected")) return;
-    useRuntimeActionStore.getState().startSwitch(id);
-    try {
-      await operation.runOperation(async () => {
-        await voyaCommands().setActiveProfile(id);
-        await queryClient.invalidateQueries();
-      });
-    } finally { useRuntimeActionStore.getState().finishSwitch(); }
-  }, [activation, connected, operation, queryClient]);
+  const select = useCallback(
+    (id: string) => operation.runOperation(() => activation.selectProfile(id)),
+    [activation, operation],
+  );
 
   // Groups are headers, not nodes; a run tests what the list is showing.
   const testableIds = useMemo(

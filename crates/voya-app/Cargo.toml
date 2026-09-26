@@ -18,6 +18,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 tracing.workspace = true
+url = "2.5"
 uuid = { version = "1.23", features = ["v4"] }
 voya-core.workspace = true
 voya-contracts.workspace = true

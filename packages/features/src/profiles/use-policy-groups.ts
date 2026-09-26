@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -30,20 +31,14 @@ export function usePolicyGroups(
     (state) => state.coreState?.state === "connected",
   );
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
-  const policyGroupsQuery = useQuery({
-    queryFn: () => voyaCommands().listPolicyGroups(),
-    queryKey: queryKeys.policyGroups,
-  });
+  const policyGroupsQuery = useQuery(queries.policyGroups);
   const policyGroupEntries = policyGroupsQuery.data?.entries ?? [];
   const activeGroupId =
     policyGroupEntries.find((entry) => entry.isActive)?.group.id ?? null;
   const policyGroupRuntimeState = usePolicyGroupRuntime(activeGroupId);
   const memberSwitch = usePolicyGroupMemberSwitch();
   const delayTest = useGroupDelayTest(operation.runOperation);
-  const subscriptionsQuery = useQuery({
-    queryFn: () => voyaCommands().listSubscriptions(),
-    queryKey: queryKeys.subscriptions,
-  });
+  const subscriptionsQuery = useQuery(queries.subscriptions);
   const [editingPolicyGroup, setEditingPolicyGroup] = useState<PolicyGroup | null>(null);
   const [policyGroupEditorOpen, setPolicyGroupEditorOpen] = useState(false);
   const [deletingPolicyGroup, setDeletingPolicyGroup] = useState<PolicyGroupEntry | null>(null);

@@ -25,11 +25,7 @@ import { useToastStore } from "@voya/client/toast-store";
 vi.mock("@/ipc/window", async (importOriginal) => ({
   // The shell checks for Tauri through the real module; only the window plugin is faked.
   isTauriRuntime: (await importOriginal<typeof import("@/ipc/window")>()).isTauriRuntime,
-  closeWindow: vi.fn(() => Promise.resolve()),
-  isWindowMaximized: vi.fn(() => Promise.resolve(false)),
-  minimizeWindow: vi.fn(() => Promise.resolve()),
   onWindowResized: vi.fn(() => Promise.resolve(() => undefined)),
-  toggleMaximizeWindow: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("@/ipc/tauri-plugins", () => ({
   check: vi.fn(() => Promise.resolve(null)),
@@ -38,6 +34,10 @@ vi.mock("@/ipc/tauri-plugins", () => ({
 }));
 
 const ipc = installFakeCommands({
+  closeWindow: vi.fn(() => Promise.resolve(null)),
+  isWindowMaximized: vi.fn(() => Promise.resolve(false)),
+  minimizeWindow: vi.fn(() => Promise.resolve(null)),
+  toggleMaximizeWindow: vi.fn(() => Promise.resolve(null)),
   connectActiveProfile: vi.fn(),
   appUpdateStatus: vi.fn(() =>
     Promise.resolve({

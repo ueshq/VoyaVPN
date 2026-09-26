@@ -13,7 +13,7 @@ import { AppErrorBoundary } from "@/components/app-shell/error-boundary";
 import { createAppQueryClient } from "@voya/client/query-client";
 import "./styles/globals.css";
 
-const queryClient = createAppQueryClient({ refetchOnWindowFocus: false });
+const queryClient = createAppQueryClient();
 
 function render() {
   createRoot(document.getElementById("root")!, {

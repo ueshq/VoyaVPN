@@ -3,7 +3,7 @@ import { getErrorMessage } from "@voya/utils/error";
 
 import { applyUiPreferences, useUiPreferencesQuery } from "@voya/features/settings/ui-preferences";
 import type { ThemeMode } from "@voya/contracts";
-import { resolveThemeMode, usePreferencesStore } from "@voya/client/preferences-store";
+import { usePreferencesStore } from "@voya/client/preferences-store";
 
 export function PreferencesBridge() {
   const preferencesQuery = useUiPreferencesQuery();
@@ -31,13 +31,12 @@ export function PreferencesBridge() {
 function useThemeEffects(themeMode: ThemeMode) {
   useEffect(() => {
     const root = document.documentElement;
-    const media =
-      typeof window.matchMedia === "function"
-        ? window.matchMedia("(prefers-color-scheme: dark)")
-        : undefined;
+    // Optional only for jsdom, which has no `matchMedia`.
+    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
 
     const applyTheme = () => {
-      const resolvedTheme = resolveThemeMode(themeMode);
+      const resolvedTheme =
+        themeMode === "system" ? (media?.matches ? "dark" : "light") : themeMode;
 
       root.classList.toggle("dark", resolvedTheme === "dark");
       root.style.colorScheme = resolvedTheme;
@@ -45,12 +44,7 @@ function useThemeEffects(themeMode: ThemeMode) {
 
     applyTheme();
 
-    if (
-      themeMode !== "system" ||
-      !media ||
-      typeof media.addEventListener !== "function" ||
-      typeof media.removeEventListener !== "function"
-    ) {
+    if (themeMode !== "system" || !media) {
       return undefined;
     }
 

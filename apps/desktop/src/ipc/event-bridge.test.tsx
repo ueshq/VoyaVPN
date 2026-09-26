@@ -51,7 +51,8 @@ vi.mock("@/ipc/bindings", () => ({
   },
 }));
 
-vi.mock("@voya/client/runtime-event-store", () => ({
+vi.mock("@voya/client/runtime-event-store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@voya/client/runtime-event-store")>()),
   useRuntimeEventStore: {
     getState: () => ({
       speedtestRunning: bridgeMocks.speedtestRunning,

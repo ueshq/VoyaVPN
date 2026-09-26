@@ -1,4 +1,4 @@
-import { setClientStorage, setSystemColorSchemeReader } from "@voya/client/platform";
+import { setClientStorage } from "@voya/client/platform";
 
 import { registerDesktopBackend } from "@/ipc/register-backend";
 
@@ -11,11 +11,5 @@ import { registerDesktopBackend } from "@/ipc/register-backend";
  * in-memory fallback and then silently disagree with what is on disk.
  */
 setClientStorage(window.localStorage);
-
-setSystemColorSchemeReader(() =>
-  typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light",
-);
 
 registerDesktopBackend();

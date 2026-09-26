@@ -10,7 +10,6 @@ import { appErrorOfKind } from "@voya/client/errors";
 import { validationFieldErrors } from "@voya/client/messages";
 import { translateFieldErrors, zodIssuesToErrorMap } from "@voya/features/forms/zod-errors";
 import { i18next, type TranslationFunction } from "@voya/i18n/core";
-import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { toastError } from "@voya/client/toast-store";
@@ -111,7 +110,7 @@ export function settingsFailure(
   query: { error: unknown; isError: boolean; refetch: () => Promise<unknown> },
 ) {
   return {
-    error: draft.error ?? (query.error ? getErrorMessage(query.error) : null),
+    error: draft.error ?? (query.error ? redactOperationalError(query.error) : null),
     retry: () => {
       draft.retry();
       if (query.isError) void query.refetch();

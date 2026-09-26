@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -60,18 +61,9 @@ export function useRoutingScreen() {
     () => new Map(),
   );
   const [perAppOpen, setPerAppOpen] = useState(false);
-  const routingsQuery = useQuery({
-    queryFn: () => voyaCommands().listRoutings(),
-    queryKey: queryKeys.routings,
-  });
-  const profilesQuery = useQuery({
-    queryFn: () => voyaCommands().listProfileSummaries(),
-    queryKey: queryKeys.profileList,
-  });
-  const policyGroupsQuery = useQuery({
-    queryFn: () => voyaCommands().listPolicyGroups(),
-    queryKey: queryKeys.policyGroups,
-  });
+  const routingsQuery = useQuery(queries.routings);
+  const profilesQuery = useQuery(queries.profileList);
+  const policyGroupsQuery = useQuery(queries.policyGroups);
 
   const activeRouting = routingsQuery.data?.find((routing) => routing.isActive) ?? null;
   // The per-app dialog keeps its rule first so it matches ahead of everything

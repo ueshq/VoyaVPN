@@ -5,6 +5,9 @@ import type { RoutingRule } from "@voya/contracts";
 /** Reserved remarks of the per-app proxy rule, which the per-app dialog owns. */
 export const PER_APP_SENTINEL = "voya:per-app-proxy";
 
+/** Reserved remarks of the rule that blocks QUIC so clients fall back to TCP. */
+export const SENTINEL_BLOCK_QUIC = "voya:block-quic";
+
 /**
  * Names of the rules VoyaVPN manages, keyed by their reserved remarks. Mirrors
  * `voya_core::routing_seed`: the remarks are the rule's identity, so the rule
@@ -13,7 +16,7 @@ export const PER_APP_SENTINEL = "voya:per-app-proxy";
 const SENTINEL_LABEL_KEYS = new Map<string, TranslationKey>([
   ["voya:ai-services", "panes.routing.sentinel.aiServices"],
   ["voya:block-ads", "panes.routing.sentinel.blockAds"],
-  ["voya:block-quic", "panes.routing.sentinel.blockQuic"],
+  [SENTINEL_BLOCK_QUIC, "panes.routing.sentinel.blockQuic"],
   ["voya:bypass-lan", "panes.routing.sentinel.bypassLan"],
   ["voya:cn-direct", "panes.routing.sentinel.cnDirect"],
   ["voya:cn-dns", "panes.routing.sentinel.cnDns"],

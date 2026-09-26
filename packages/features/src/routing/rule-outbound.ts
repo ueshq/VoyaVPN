@@ -1,4 +1,4 @@
-import type { TranslationKey } from "@voya/i18n/core";
+import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
 
 import type { ProfileSummaryEntry } from "@voya/contracts";
 
@@ -65,6 +65,23 @@ export function nodeOutboundNames(entries: readonly ProfileSummaryEntry[]): Read
  * the proxy. `nodeNames` and `groups` are `null` until their lists have loaded,
  * and nothing is reported missing before then.
  */
+/** Where a rule sends matching traffic, as one line of text for a list row. */
+export function outboundText(target: OutboundTarget, t: TranslationFunction): string {
+  switch (target.kind) {
+    case "proxy":
+    case "direct":
+    case "block":
+      return t(OUTBOUND_LABEL_KEYS[target.kind]);
+    case "missing":
+      return t("panes.routing.outboundMissing", { name: target.name });
+    case "missingGroup":
+      return t("panes.routing.outboundGroupMissing");
+    case "group":
+    case "node":
+      return target.name;
+  }
+}
+
 export function describeOutbound(
   outbound: string | null | undefined,
   nodeNames: ReadonlySet<string> | null,

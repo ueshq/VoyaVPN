@@ -1,5 +1,5 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useState } from "react";
-import { getErrorMessage } from "@voya/utils/error";
 
 export function useNodeOperation() {
   const [operationError, setOperationError] = useState<string | null>(null);
@@ -19,7 +19,7 @@ export function useNodeOperation() {
       await operation();
       return true;
     } catch (error) {
-      onError(getErrorMessage(error));
+      onError(redactOperationalError(error));
       return false;
     }
   }

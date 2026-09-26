@@ -1,7 +1,8 @@
+import { queries } from "@voya/client/queries";
 import { useQuery } from "@tanstack/react-query";
 
 import { voyaCommands } from "@voya/client/transport";
-import { connectionIpQueryKey, queryKeys } from "@voya/client/query-keys";
+import { connectionIpQueryKey } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 /**
@@ -19,10 +20,7 @@ export function useConnectionIp() {
     coreState?.state === "connected"
       ? `${coreState.activeProfileId ?? ""}:${coreState.mainPid ?? ""}`
       : null;
-  const settingsQuery = useQuery({
-    queryFn: () => voyaCommands().loadAppSettings(),
-    queryKey: queryKeys.appSettings,
-  });
+  const settingsQuery = useQuery(queries.appSettings);
   const autoCheck = settingsQuery.data?.behavior.autoCheckIp ?? false;
   const ipQuery = useQuery({
     enabled: connectionKey !== null && autoCheck,

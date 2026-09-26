@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { voyaCommands } from "@voya/client/transport";
@@ -23,21 +24,15 @@ import { ListRow } from "~/components/list-row";
 import { useUnsavedChanges } from "~/components/use-unsaved-changes";
 import { deleteSafely } from "./delete-safely";
 
-function subscriptionName(item: Subscription, metadata?: SubscriptionMetadata) {
-  if (item.remarks && item.remarks !== "import_sub") return item.remarks;
-  if (metadata?.profileTitle) return metadata.profileTitle;
-  try { return new URL(item.url).hostname; } catch { return item.remarks; }
-}
-
 function useSources() {
-  const sources = useQuery({ queryKey: queryKeys.subscriptions, queryFn: () => voyaCommands().listSubscriptions() });
-  const metadata = useQuery({ queryKey: queryKeys.subscriptionMetadata, queryFn: () => voyaCommands().listSubscriptionMetadata() });
+  const sources = useQuery(queries.subscriptions);
+  const metadata = useQuery(queries.subscriptionMetadata);
   return { sources, metadata };
 }
 
 export function SubscriptionsScreen() {
   const { t } = useI18n();
-  const { sources, metadata } = useSources();
+  const { sources } = useSources();
   const client = useQueryClient();
   const [busy, setBusy] = useState(false);
   const updatePending = useRef(false);
@@ -75,7 +70,7 @@ export function SubscriptionsScreen() {
     {failedIds.length ? <Button variant="secondary" className="min-h-12 h-auto" isDisabled={busy} onPress={() => void update(failedIds)}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
     {message ? <Banner status={failedIds.length ? "warning" : "info"} liveRegion message={message} /> : null}
     <ErrorNotice error={error ?? sources.error} retry={() => void sources.refetch()} />
-    <ListGroup>{sources.data?.map((item, index, all) => <ListRow key={item.id} title={subscriptionName(item, metadata.data?.find((meta) => meta.subscriptionId === item.id))}
+    <ListGroup>{sources.data?.map((item, index, all) => <ListRow key={item.id} title={item.remarks}
       description={failedIds.includes(item.id) ? t("mobile.updateFailed") : undefined} descriptionLines={0}
       last={index === all.length - 1} chevron onPress={() => openPage("subscription", { id: item.id })} />)}</ListGroup>
   </DetailScreen>;
@@ -92,7 +87,7 @@ export function SubscriptionScreen({ route, navigation }: NativeStackScreenProps
 function SubscriptionEditor({ item, metadata, close }: { item: Subscription; metadata?: SubscriptionMetadata; close: () => void }) {
   const { t, language } = useI18n();
   const client = useQueryClient();
-  const [name, setName] = useState(item.remarks === "import_sub" ? subscriptionName(item, metadata) : item.remarks);
+  const [name, setName] = useState(item.remarks);
   const [url, setUrl] = useState(item.url);
   const [baseline, setBaseline] = useState({ name, url });
   const [busy, setBusy] = useState(false);
@@ -102,7 +97,7 @@ function SubscriptionEditor({ item, metadata, close }: { item: Subscription; met
   const [messageFailed, setMessageFailed] = useState(false);
   const [fields, setFields] = useState({ name: false, url: false });
   const dirty = name !== baseline.name || url !== baseline.url;
-  const nodes = useQuery({ queryKey: queryKeys.profileList, queryFn: () => voyaCommands().listProfileSummaries() });
+  const nodes = useQuery(queries.profileList);
   const members = nodes.data?.entries.filter((entry) => entry.profile.subscriptionId === item.id) ?? [];
   async function save() {
     if (busyRef.current) return false;

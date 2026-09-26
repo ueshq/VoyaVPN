@@ -2,13 +2,8 @@ import { useEffect, useState } from "react";
 import { Copy, Minus, Square, X } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
-import {
-  closeWindow,
-  isWindowMaximized,
-  minimizeWindow,
-  onWindowResized,
-  toggleMaximizeWindow,
-} from "@/ipc/window";
+import { voyaCommands } from "@voya/client/transport";
+import { onWindowResized } from "@/ipc/window";
 import type { TitleBarLayout } from "@voya/contracts";
 
 /**
@@ -29,8 +24,8 @@ export function TitleBar({ layout }: { layout: TitleBarLayout }) {
 
 /**
  * The three caption buttons (minimize / maximize-restore / close) for the
- * Windows borderless title bar. They drive the current window straight through
- * `@/ipc/window` and deliberately sit outside the drag region so every click
+ * Windows borderless title bar. They drive the current window through the
+ * window commands and deliberately sit outside the drag region so every click
  * registers. The maximize glyph swaps to a restore glyph while maximized.
  */
 function WindowControls() {
@@ -45,7 +40,9 @@ function WindowControls() {
     let unlisten: (() => void) | undefined;
 
     const sync = () => {
-      void isWindowMaximized().then((value) => {
+      void voyaCommands()
+        .isWindowMaximized()
+        .then((value) => {
         if (active) setMaximized(value);
       });
     };
@@ -70,7 +67,7 @@ function WindowControls() {
       <button
         aria-label={t("window.minimize")}
         className={buttonClass}
-        onClick={() => void minimizeWindow()}
+        onClick={() => void voyaCommands().minimizeWindow()}
         type="button"
       >
         <Minus className="size-4" aria-hidden="true" />
@@ -78,7 +75,7 @@ function WindowControls() {
       <button
         aria-label={maximized ? t("window.restore") : t("window.maximize")}
         className={buttonClass}
-        onClick={() => void toggleMaximizeWindow()}
+        onClick={() => void voyaCommands().toggleMaximizeWindow()}
         type="button"
       >
         {maximized ? (
@@ -90,7 +87,7 @@ function WindowControls() {
       <button
         aria-label={t("window.close")}
         className="flex h-full w-12 items-center justify-center text-foreground/70 transition-colors hover:bg-destructive hover:text-white"
-        onClick={() => void closeWindow()}
+        onClick={() => void voyaCommands().closeWindow()}
         type="button"
       >
         <X className="size-4" aria-hidden="true" />

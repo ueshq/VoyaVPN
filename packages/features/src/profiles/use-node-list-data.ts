@@ -1,8 +1,7 @@
+import { queries } from "@voya/client/queries";
 import { useDeferredValue, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { queryKeys } from "@voya/client/query-keys";
-import { voyaCommands } from "@voya/client/transport";
 import type { ProfileSummaryEntry, SpeedtestResult } from "@voya/contracts";
 import type { TranslationFunction } from "@voya/i18n/core";
 import { metadataBySubscriptionId } from "../subscriptions/subscription-usage";
@@ -29,18 +28,12 @@ export function useNodeListData(
   nodeGroups: NodeListSelection,
   t: TranslationFunction,
 ) {
-  const metadataQuery = useQuery({
-    queryFn: () => voyaCommands().listSubscriptionMetadata(),
-    queryKey: queryKeys.subscriptionMetadata,
-  });
+  const metadataQuery = useQuery(queries.subscriptionMetadata);
   const subscriptionMetadata = useMemo(
     () => metadataBySubscriptionId(metadataQuery.data ?? []),
     [metadataQuery.data],
   );
-  const subscriptionsQuery = useQuery({
-    queryFn: () => voyaCommands().listSubscriptions(),
-    queryKey: queryKeys.subscriptions,
-  });
+  const subscriptionsQuery = useQuery(queries.subscriptions);
   const subscriptionNames = useMemo(
     () =>
       new Map(
@@ -54,10 +47,7 @@ export function useNodeListData(
   const speedtestResultsByProfileId = useRuntimeEventStore(
     (state) => state.speedtestResultsByProfileId,
   );
-  const profilesQuery = useQuery({
-    queryFn: () => voyaCommands().listProfileSummaries(),
-    queryKey: queryKeys.profileList,
-  });
+  const profilesQuery = useQuery(queries.profileList);
   const base = profilesQuery.data?.entries ?? NO_PROFILES;
   const profiles = useMemo(
     () => applySpeedtestResults(base, speedtestResultsByProfileId),

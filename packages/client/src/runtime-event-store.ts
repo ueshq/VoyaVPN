@@ -69,6 +69,11 @@ export type RuntimeEventState = {
 };
 
 /** The core's state; `disconnected` until the first status arrives. */
+/** Whether a speedtest result is still waiting or running for its node. */
+export function speedtestPending(result: Pick<SpeedtestResult, "outcome">) {
+  return result.outcome === "waiting" || result.outcome === "testing";
+}
+
 export function coreStateOf(coreState: RuntimeStatusResponse | null) {
   return coreState?.state ?? "disconnected";
 }

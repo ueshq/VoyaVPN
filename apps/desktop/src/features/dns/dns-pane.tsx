@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { Disclosure } from "@voya/ui/components/disclosure";
@@ -11,8 +12,6 @@ import { cn } from "@voya/ui/lib/utils";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@voya/client/query-keys";
-import { voyaCommands } from "@voya/client/transport";
 import { SettingsGroup } from "@/features/settings/settings-form";
 import type { DnsSettings, DnsStrategy } from "@voya/contracts";
 
@@ -69,10 +68,7 @@ function SimpleDnsForm({
   const { t } = useI18n();
   // The strategies below only apply once IPv6 is allowed; while the master
   // switch is off the generator forces every path to `ipv4_only`.
-  const settingsQuery = useQuery({
-    queryFn: () => voyaCommands().loadAppSettings(),
-    queryKey: queryKeys.appSettings,
-  });
+  const settingsQuery = useQuery(queries.appSettings);
   const ipv6Off = settingsQuery.data
     ? !settingsQuery.data.network.tun.ipv6Enabled
     : false;

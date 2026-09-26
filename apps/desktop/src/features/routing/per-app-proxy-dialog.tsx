@@ -1,3 +1,4 @@
+import { queries } from "@voya/client/queries";
 import { useDeferredValue, useMemo, useState } from "react";
 import { AppWindow, Info, Plus, X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -24,7 +25,6 @@ import { SegmentedControl, SegmentedControlItem } from "@voya/ui/components/segm
 import { Spinner } from "@voya/ui/components/spinner";
 import { voyaCommands } from "@voya/client/transport";
 import { VirtualScrollList } from "@/components/virtual-scroll-list";
-import { useConnectionModeStatus } from "@voya/features/routing/use-connection-mode-status";
 import { queryKeys } from "@voya/client/query-keys";
 import { useDialogSubmit } from "@voya/features/forms/use-dialog-submit";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -72,8 +72,7 @@ export function PerAppProxyDialog({
 
   const routingsQuery = useQuery({
     enabled: open,
-    queryFn: () => voyaCommands().listRoutings(),
-    queryKey: queryKeys.routings,
+    ...queries.routings,
   });
   const candidatesQuery = useQuery({
     enabled: open,
@@ -81,7 +80,7 @@ export function PerAppProxyDialog({
     queryKey: queryKeys.processCandidates,
     staleTime: 30_000,
   });
-  const modeStatusQuery = useConnectionModeStatus(open);
+  const modeStatusQuery = useQuery({ ...queries.connectionMode, enabled: open });
 
   const activeRouting =
     routingsQuery.data?.find((routing) => routing.isActive) ?? null;

@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 
 import { voyaCommands } from "@voya/client/transport";
-import { backendAvailable } from "@voya/client/platform";
 import { useAppVisible } from "@voya/client/use-app-visible";
 
 /**
@@ -15,7 +14,7 @@ export function useLogStream(enabled = true) {
   const visible = useAppVisible();
 
   useEffect(() => {
-    if (!enabled || !visible || !backendAvailable()) {
+    if (!enabled || !visible) {
       return undefined;
     }
 

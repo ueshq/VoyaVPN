@@ -17,7 +17,6 @@ import {
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { Spinner } from "@voya/ui/components/spinner";
-import { getErrorMessage } from "@voya/utils/error";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { voyaCommands } from "@voya/client/transport";
 import { importLineText } from "@voya/client/messages";
@@ -167,7 +166,7 @@ function ImportProfilesDialogSession({
       case "notFound":
         return t("qr.noQrFound");
       default:
-        return getErrorMessage(error);
+        return redactOperationalError(error);
     }
   }
 

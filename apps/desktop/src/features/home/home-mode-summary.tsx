@@ -1,10 +1,9 @@
+import { queries } from "@voya/client/queries";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { Button } from "@voya/ui/components/button";
-import { voyaCommands } from "@voya/client/transport";
-import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
@@ -20,8 +19,7 @@ export function HomeModeSummary() {
   const traffic = useSavedTrafficMode();
   const connected = core?.state === "connected";
   const apply = useQuery({
-    queryKey: queryKeys.settingsApply,
-    queryFn: () => voyaCommands().getSettingsApplyStatus(),
+    ...queries.settingsApply,
     enabled: connected,
     refetchOnMount: "always",
   });

@@ -1,5 +1,5 @@
 import { screen, userEvent, waitFor } from "@testing-library/react-native";
-import { makeRouting, makeRoutingRule } from "@voya/client/mock-seed";
+import { makePolicyGroupEntry, makeRouting, makeRoutingRule } from "@voya/client/mock-seed";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { registerMobileBackend } from "~/ipc/platform";
@@ -57,6 +57,19 @@ describe("RulesScreen", () => {
 
     expect(await screen.findByText("AI services via proxy")).toBeOnTheScreen();
     expect(screen.queryByText("voya:ai-services")).toBeNull();
+  });
+
+  it("names a policy-group outbound by the group, not its id", async () => {
+    mockBackend().state.policyGroups = [makePolicyGroupEntry(0, { name: "Streaming" })];
+    const [routing] = mockBackend().state.routings;
+    await mockBackend().commands.saveRoutingRule(
+      routing.id,
+      makeRoutingRule(0, { domain: ["example.test"], id: "", outbound: "group:group-0", remarks: "Video" }),
+    );
+    await renderRules();
+
+    expect(await screen.findByText(/Streaming/)).toBeOnTheScreen();
+    expect(screen.queryByText(/group:group-0/)).toBeNull();
   });
 
   it("says the list is empty rather than showing nothing", async () => {

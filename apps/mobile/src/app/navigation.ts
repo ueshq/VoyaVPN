@@ -14,7 +14,7 @@ export type RootRoutes = {
   maintenance: undefined;
   logs: undefined;
   about: undefined;
-  ruleDetails: { rule: RoutingRule };
+  ruleDetails: { rule: RoutingRule; target: string };
 };
 export const navigationRef = createNavigationContainerRef<RootRoutes>();
 export function navigateToTab(tab: ShellTab) {

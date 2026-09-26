@@ -1,10 +1,10 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { voyaCommands } from "@voya/client/transport";
 import type { ResourceUpdateFile } from "@voya/contracts";
 import { usePreferencesStore } from "@voya/client/preferences-store";
-import { getErrorMessage } from "@voya/utils/error";
 
 import { saveQueue } from "../forms/save-queue";
 
@@ -36,7 +36,7 @@ export function useRuleLibraryUpdate() {
       usePreferencesStore.getState().setRuleLibraryUpdatedAt(Date.now());
     } catch (failure) {
       setFiles([]);
-      setError(getErrorMessage(failure));
+      setError(redactOperationalError(failure));
     } finally {
       setUpdating(false);
     }

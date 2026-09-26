@@ -1,3 +1,4 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { ArrowRight, Layers, Plus, Power, RotateCcw, Server } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -5,7 +6,6 @@ import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
-import { getErrorMessage } from "@voya/utils/error";
 
 import { CORE_STATE_TRANSLATION_KEYS } from "@/components/app-shell/core-state-labels";
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
@@ -143,7 +143,7 @@ export function HomeScreen() {
             <InlinePageError className="home-error">
               <p>
                 {t("home.profilesFailed", {
-                  message: getErrorMessage(home.profilesError),
+                  message: redactOperationalError(home.profilesError),
                 })}
               </p>
               <div className="home-error-actions">
