@@ -109,6 +109,6 @@ export function ImportScreen() {
     </> : null}
     {message ? <Banner status={failedIds.length ? "warning" : "info"} message={message} liveRegion /> : null}
     {failedIds.length ? <Button variant="secondary" isDisabled={busy} onPress={() => void run(() => updateSources(failedIds))}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
-    {message ? <Button variant="secondary" onPress={() => navigateToTab("profiles")}><Button.Label>{t("mobile.select")}</Button.Label></Button> : null}
+    {message ? <Button variant="secondary" onPress={() => navigateToTab("profiles")}><Button.Label>{t("home.chooseNode")}</Button.Label></Button> : null}
   </DetailScreen>;
 }

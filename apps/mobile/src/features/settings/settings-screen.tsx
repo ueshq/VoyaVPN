@@ -11,7 +11,7 @@ export function SettingsScreen() {
     <PageHeader title={t("tabs.settings")} />
     <ListGroup>
       <ListRow chevron title={t("mobile.subscriptions")} testID="settings-subscriptions" onPress={() => openPage("subscriptions")} />
-      <ListRow chevron title={t("mobile.general")} testID="settings-general" onPress={() => openPage("general")} />
+      <ListRow chevron title={t("settings.tabGeneral")} testID="settings-general" onPress={() => openPage("general")} />
       <ListRow chevron title={t("mobile.connection")} testID="settings-dns" onPress={() => openPage("dns")} />
       <ListRow chevron title={t("mobile.maintenance")} testID="settings-maintenance" onPress={() => openPage("maintenance")} />
       <ListRow last chevron title={t("mobile.about")} testID="settings-about" onPress={() => openPage("about")} />

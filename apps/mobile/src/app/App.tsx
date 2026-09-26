@@ -78,11 +78,11 @@ function Shell() {
       <Stack.Navigator screenOptions={{ headerBackButtonDisplayMode: "minimal", headerShadowVisible: false, statusBarStyle: scheme === "dark" ? "light" : "dark" }}>
         <Stack.Screen name="main" component={MainTabs} options={{ headerShown: false, title: "VoyaVPN" }} />
         <Stack.Screen name="activity" component={ActivityScreen} options={{ title: t("tabs.connections") }} />
-        <Stack.Screen name="connectionDetails" component={ConnectionDetailsScreen} options={{ title: t("mobile.connectionDetails") }} />
+        <Stack.Screen name="connectionDetails" component={ConnectionDetailsScreen} options={{ title: t("activity.connectionDetails") }} />
         <Stack.Screen name="import" component={ImportScreen} options={{ title: t("mobile.add") }} />
         <Stack.Screen name="subscriptions" component={SubscriptionsScreen} options={{ title: t("mobile.subscriptions") }} />
         <Stack.Screen name="subscription" component={SubscriptionScreen} options={{ title: t("mobile.subscription") }} />
-        <Stack.Screen name="general" component={GeneralScreen} options={{ title: t("mobile.general") }} />
+        <Stack.Screen name="general" component={GeneralScreen} options={{ title: t("settings.tabGeneral") }} />
         <Stack.Screen name="dns" component={DnsScreen} options={{ title: t("mobile.connection") }} />
         <Stack.Screen name="maintenance" component={MaintenanceScreen} options={{ title: t("mobile.maintenance") }} />
         <Stack.Screen name="logs" component={LogsScreen} options={{ title: t("tabs.logs") }} />

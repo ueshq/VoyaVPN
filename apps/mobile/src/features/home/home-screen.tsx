@@ -39,7 +39,7 @@ export function HomeScreen() {
   const { t } = useI18n();
   const runtime = useHomeRuntime();
   const trafficMode = useTrafficMode();
-  const primaryLabel = runtime.connected || runtime.state === "cleanupPending" ? "actions.disconnect" : !runtime.hasNodes ? "mobile.add" : !runtime.ready ? "mobile.select" : "actions.connect";
+  const primaryLabel = runtime.connected || runtime.state === "cleanupPending" ? "actions.disconnect" : !runtime.hasNodes ? "mobile.add" : !runtime.ready ? "home.chooseNode" : "actions.connect";
   const { ipQuery } = useConnectionIp();
   const statistics = useRuntimeEventStore((state) => state.statistics);
 
@@ -111,7 +111,7 @@ export function HomeScreen() {
       {runtime.lastError ? <View className="gap-2">
         <ErrorNotice error={runtime.lastError.message} reason={runtime.lastError.reason}
           message={runtime.lastError.reason === "elevationRequired" ? t("home.authorizationDeclined") : undefined}
-          retryLabel={runtime.lastError.reason === "notFound" ? t("mobile.select") : runtime.lastError.reason === "elevationRequired" ? t("mobile.authorizeAgain") : undefined}
+          retryLabel={runtime.lastError.reason === "notFound" ? t("home.chooseNode") : runtime.lastError.reason === "elevationRequired" ? t("mobile.authorizeAgain") : undefined}
           retry={runtime.lastError.reason === "notFound" ? () => navigateToTab("profiles") : runtime.retryLastAction} />
         <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
       </View> : runtime.tunIssue ? <ErrorNotice error={runtime.tunIssue} /> : null}

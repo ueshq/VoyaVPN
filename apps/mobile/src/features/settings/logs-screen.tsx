@@ -42,7 +42,7 @@ export function LogsScreen() {
       <SearchField value={search} onChange={setSearch}>
         <SearchField.Group>
           <SearchField.SearchIcon />
-          <SearchField.Input accessibilityLabel={t("mobile.logSearch")} placeholder={t("mobile.logSearch")} autoCapitalize="none" autoCorrect={false} />
+          <SearchField.Input accessibilityLabel={t("panes.logs.search")} placeholder={t("panes.logs.search")} autoCapitalize="none" autoCorrect={false} />
           <SearchField.ClearButton accessibilityLabel={t("activity.clearSearch")} />
         </SearchField.Group>
       </SearchField>

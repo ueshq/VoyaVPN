@@ -119,7 +119,7 @@ export function ActivityScreen() {
           </Typography>
         }
         onPress={() => openPage("connectionDetails", { connection: item })}
-        accessibilityLabel={`${t("mobile.connectionDetails")} ${item.host}`}
+        accessibilityLabel={`${t("activity.connectionDetails")} ${item.host}`}
       />
     ),
     [t],
