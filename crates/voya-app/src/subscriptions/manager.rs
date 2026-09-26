@@ -11,6 +11,7 @@ mod preview;
 mod update;
 
 use import::compile_filter;
+pub use update::PreparedSubscriptionUpdate;
 
 pub type Result<T> = std::result::Result<T, SubscriptionManagerError>;
 
@@ -150,7 +151,7 @@ fn trimmed_option(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-pub(super) fn is_http_url(value: &str) -> bool {
+fn is_http_url(value: &str) -> bool {
     let value = value.trim();
     value.starts_with("https://") || value.starts_with("http://")
 }

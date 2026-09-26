@@ -136,7 +136,7 @@ so read it before moving code between crates:
 
 - **800 production lines per Rust file.** Lines inside terminal `#[cfg(test)]`
   modules do not count. Split by responsibility when a module outgrows the cap
-  (that is what `crates/voya-app/src/subscriptions/update_flow.rs` is).
+  (that is what `crates/voya-core/src/context/env.rs` is).
 - **`#[cfg(test)]` items must be terminal test modules.** Everything after the
   first top-level `#[cfg(test)]` must be `#[cfg(test)] mod …` declarations, so
   the production/test split is decidable without compiling.

@@ -1,6 +1,5 @@
 mod auto_update;
 mod manager;
-mod update_flow;
 mod use_cases;
 
 /// Wall-clock seconds since the Unix epoch, saturating at zero, shared by the
@@ -15,8 +14,9 @@ pub use auto_update::{
     due_subscription_ids, AttemptState, AutoUpdateOutcome, SubscriptionAutoUpdateScheduler,
     SubscriptionAutoUpdateSink,
 };
-pub use manager::{Result, SubscriptionManager, SubscriptionManagerError};
-pub use update_flow::PreparedSubscriptionUpdate;
+pub use manager::{
+    PreparedSubscriptionUpdate, Result, SubscriptionManager, SubscriptionManagerError,
+};
 pub use use_cases::{
     delete_subscriptions_use_case, import_profiles_use_case, save_subscription_use_case,
     update_subscriptions_use_case, SubscriptionUpdate,
