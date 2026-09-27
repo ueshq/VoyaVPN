@@ -13,6 +13,10 @@ Where each block goes:
 - **App Privacy**: "Data Not Collected". A VPN app also needs a **Privacy
   Policy URL** on the app record; that page has to state the same facts as the
   VPN answers below.
+- **Privacy Policy URL**: `https://voyavpn.wangc.ai/privacy`. **Support URL**:
+  `https://voyavpn.wangc.ai/support`. Both are served from `apps/web`; see
+  [marketing-site.md](marketing-site.md). Its tests fail if the privacy page
+  stops naming a host the VPN answers name, so change them together.
 
 The 2026-09 Mac submission was stopped for three reasons. The build fix for the
 second one is in [macos-app-store.md](macos-app-store.md); the first and third
@@ -119,4 +123,5 @@ reviewer asks:
 | Log retention and redaction | `crates/voya-app/src/logging.rs` |
 | Endpoints | `crates/voya-core/src/singbox/mod.rs`, `crates/voya-net/src/probe/`, `crates/voya-app/src/ipv6_egress.rs`, `crates/voya-contracts/src/settings.rs` |
 | Probe service stores nothing | [self-host-probe-worker.md](self-host-probe-worker.md), `apps/probe/wrangler.jsonc` |
+| Privacy Policy page | `apps/web/src/content/*.ts`, checked against this page by `apps/web/test/privacy-sync.test.ts` |
 | iOS privacy manifest | `apps/mobile/ios/VoyaVPN/PrivacyInfo.xcprivacy` (no collected data types, no tracking) |

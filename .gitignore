@@ -38,6 +38,7 @@ node_modules/
 .swc/
 .docusaurus/
 .vite/
+.wrangler/
 apps/web/.output/
 .expo/
 .expo-shared/

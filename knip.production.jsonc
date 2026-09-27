@@ -36,6 +36,14 @@
       // `cloudflare:sockets` is a Workers runtime module, not a package.
       "ignoreDependencies": ["cloudflare"]
     },
+    "apps/web": {
+      // What ships is the rendered HTML, so the render tree is the production
+      // code; the build script and stylesheet only drive Vite and Tailwind,
+      // which are devDependencies.
+      "entry": ["src/render.tsx!"],
+      "project": ["src/**/*.{ts,tsx}!"],
+      "ignore": ["test/**"]
+    },
     "packages/i18n": {
       "entry": ["src/core.ts", "src/index.ts", "src/native.ts", "src/use-i18n.ts"],
       "project": ["src/**/*.{ts,tsx}!"],

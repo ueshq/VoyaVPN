@@ -13,6 +13,7 @@ export default defineConfig({
       include: [
         "apps/desktop/src/**/*.{ts,tsx}",
         "apps/probe/src/**/*.ts",
+        "apps/web/src/**/*.{ts,tsx}",
         "packages/*/src/**/*.{ts,tsx}",
       ],
       exclude: [
@@ -28,6 +29,8 @@ export default defineConfig({
       "apps/desktop",
       // The self-hosted node's reachability probe (a Cloudflare Worker).
       "apps/probe",
+      // The marketing site, rendered to static HTML at build time.
+      "apps/web",
       "packages/*",
       {
         test: {

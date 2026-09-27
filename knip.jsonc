@@ -33,6 +33,13 @@
       // `cloudflare:sockets` is a Workers runtime module, not a package.
       "ignoreDependencies": ["cloudflare"]
     },
+    "apps/web": {
+      // scripts/build.mjs loads src/render.tsx through Vite's module runner, and
+      // vite.config.ts names src/site.css as a build input, both by path, so
+      // knip cannot follow either.
+      "entry": ["src/render.tsx", "src/site.css", "test/**/*.test.{ts,tsx}"],
+      "project": ["scripts/**/*.mjs", "src/**/*.{ts,tsx,css}", "test/**/*.{ts,tsx}"]
+    },
     "packages/ui": {
       "project": ["src/**/*.{ts,tsx,css}"]
     },

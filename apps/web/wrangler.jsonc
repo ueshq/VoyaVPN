@@ -1,0 +1,17 @@
+{
+  // Static assets only: there is no Worker script, so every request is served
+  // from dist/ without invoking code.
+  "name": "voyavpn-web",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // /support serves support.html; /support.html redirects to /support.
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  // *.workers.dev is unreachable from mainland China; only the custom domain
+  // serves the site.
+  "workers_dev": false,
+  "routes": [{ "pattern": "voyavpn.wangc.ai", "custom_domain": true }],
+  "observability": { "enabled": false }
+}
