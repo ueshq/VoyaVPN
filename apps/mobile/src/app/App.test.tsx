@@ -1,5 +1,13 @@
 import { render, userEvent } from "@testing-library/react-native";
+import { usePreferencesStore } from "@voya/client/preferences-store";
+import { Linking } from "react-native";
 
+import {
+  PRIVACY_NOTICE_VERSION,
+  PRIVACY_POLICY_URL,
+  SUPPORT_URL,
+  isPrivacyNoticeAccepted,
+} from "~/features/settings/privacy-notice";
 import { registerMobileBackend } from "~/ipc/platform";
 import { localeReady } from "~/native/platform-boot";
 import { mockTransport } from "~/test/mock-transport";
@@ -7,7 +15,11 @@ import { mockTransport } from "~/test/mock-transport";
 import { App } from "./App";
 import type { ShellTab } from "./tabs";
 
-beforeEach(() => registerMobileBackend(mockTransport()));
+beforeEach(() => {
+  registerMobileBackend(mockTransport());
+  // A returning user: the first-run data notice was accepted on an earlier launch.
+  usePreferencesStore.setState({ privacyNoticeVersion: PRIVACY_NOTICE_VERSION });
+});
 
 describe("App", () => {
   it("mounts a tab for every section, labelled from the shared locale", async () => {
@@ -59,5 +71,47 @@ describe("App", () => {
     await user.press(view.getByTestId("settings-subscriptions"));
 
     expect(await view.findByText("Update all subscriptions")).toBeOnTheScreen();
+  });
+});
+
+describe("first-run data notice", () => {
+  beforeEach(() => usePreferencesStore.setState({ privacyNoticeVersion: null }));
+
+  it("stands in for the whole app until it is accepted, then stays accepted", async () => {
+    await localeReady;
+    const view = await render(<App />);
+
+    expect(view.getByText("Before you start")).toBeOnTheScreen();
+    expect(view.getByText(/It collects no data/)).toBeOnTheScreen();
+    expect(view.getByText(/raw\.githubusercontent\.com/)).toBeOnTheScreen();
+    // Nothing of the app is reachable behind it.
+    expect(view.queryByTestId("tab-home")).toBeNull();
+
+    await userEvent.setup().press(view.getByTestId("privacy-continue"));
+
+    expect(view.getByTestId("tab-home")).toBeOnTheScreen();
+    expect(view.queryByText("Before you start")).toBeNull();
+    expect(usePreferencesStore.getState().privacyNoticeVersion).toBe(PRIVACY_NOTICE_VERSION);
+  });
+
+  it("opens the privacy policy and support pages", async () => {
+    await localeReady;
+    const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+    const view = await render(<App />);
+    const user = userEvent.setup();
+
+    await user.press(view.getByTestId("privacy-policy-link"));
+    await user.press(view.getByTestId("support-link"));
+
+    expect(openURL.mock.calls).toEqual([[PRIVACY_POLICY_URL], [SUPPORT_URL]]);
+    // The addresses are also on screen, to read or copy.
+    expect(view.getByText(PRIVACY_POLICY_URL)).toBeOnTheScreen();
+    openURL.mockRestore();
+  });
+
+  it("asks again once the notice has a newer version than the one accepted", () => {
+    expect(isPrivacyNoticeAccepted(null)).toBe(false);
+    expect(isPrivacyNoticeAccepted(PRIVACY_NOTICE_VERSION - 1)).toBe(false);
+    expect(isPrivacyNoticeAccepted(PRIVACY_NOTICE_VERSION)).toBe(true);
   });
 });

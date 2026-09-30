@@ -27,17 +27,16 @@ const bundleVersionPattern = /^\d+(?:\.\d+){0,2}$/u;
 /**
  * The build number App Store Connect sees as CFBundleVersion.
  *
- * `VOYAVPN_MACOS_BUILD_NUMBER` wins; otherwise the commit count of HEAD, which
- * only grows on a linear main branch. Without either the upload would reuse
- * the marketing version, and App Store Connect rejects a repeated build.
+ * The environment variable named by `envName` wins; otherwise the commit count
+ * of HEAD, which only grows on a linear main branch. Without either the upload
+ * would reuse the marketing version, and App Store Connect rejects a repeated
+ * build. The Mac and iOS lanes share the rule and differ only in the variable.
  */
-export function resolveMacAppStoreBuildNumber({ env = process.env, repoRoot, captureCommand = capture } = {}) {
-  const explicit = env.VOYAVPN_MACOS_BUILD_NUMBER?.trim();
+export function resolveStoreBuildNumber({ envName, env = process.env, repoRoot, captureCommand = capture }) {
+  const explicit = env[envName]?.trim();
   if (explicit) {
     if (!bundleVersionPattern.test(explicit)) {
-      throw new Error(
-        `VOYAVPN_MACOS_BUILD_NUMBER must be one to three period-separated integers (got "${explicit}").`,
-      );
+      throw new Error(`${envName} must be one to three period-separated integers (got "${explicit}").`);
     }
     return explicit;
   }
@@ -45,11 +44,14 @@ export function resolveMacAppStoreBuildNumber({ env = process.env, repoRoot, cap
   const result = captureCommand("git", ["rev-list", "--count", "HEAD"], { cwd: repoRoot });
   const count = String(result?.stdout ?? "").trim();
   if (result?.error || result?.status !== 0 || !/^\d+$/u.test(count)) {
-    throw new Error(
-      "Unable to derive the Mac App Store build number from git; set VOYAVPN_MACOS_BUILD_NUMBER.",
-    );
+    throw new Error(`Unable to derive the App Store build number from git; set ${envName}.`);
   }
   return count;
+}
+
+/** {@link resolveStoreBuildNumber} for the Mac App Store package. */
+export function resolveMacAppStoreBuildNumber({ env = process.env, repoRoot, captureCommand = capture } = {}) {
+  return resolveStoreBuildNumber({ envName: "VOYAVPN_MACOS_BUILD_NUMBER", env, repoRoot, captureCommand });
 }
 
 /**

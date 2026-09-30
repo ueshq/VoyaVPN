@@ -1,1 +1,2 @@
 "NSCameraUsageDescription" = "扫描二维码以添加节点或订阅。";
+"NSLocalNetworkUsageDescription" = "VoyaVPN 会测试你添加的代理服务器的延迟，其中可能包括本地网络上的服务器。";

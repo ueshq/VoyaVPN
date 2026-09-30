@@ -118,9 +118,12 @@ the script is also the record of what the project contains. What it sets up:
   **in place**. They are not copied, or macOS and iOS drift.
 - Links `Libbox.xcframework` and `NetworkExtension.framework` only. It does not
   link the Rust host: it runs the core, and the host runs in the app.
-- `MARKETING_VERSION = 0.1.0` and `CURRENT_PROJECT_VERSION = 1`, matching the
-  app — `pnpm run check:architecture` requires one release version across the
-  whole workspace.
+- `MARKETING_VERSION` is the root `package.json` version, which the script
+  writes to the app and the extension alike; `pnpm run check:architecture`
+  requires one release version across the whole workspace. A version bump is
+  "edit `package.json`, run `pnpm run native:mobile:ios:project`".
+  `CURRENT_PROJECT_VERSION` stays `1` in the project. The store build passes
+  the real build number on the command line, which reaches both targets.
 - Embedded in the app through a PlugIns copy-files phase.
 
 ### The VoyaVPNUITests target
@@ -134,15 +137,26 @@ template left pointing at a `VoyaVPNTests.xctest` that has never existed.
 
 ### Signing
 
-Signing is still done in Xcode, once: select the team on both targets, and add
-**Network Extensions** and **App Groups** (`group.app.voyavpn.mobile`) to each
-under *Signing & Capabilities*.
+For development, signing is done in Xcode, once: select the team on both
+targets, and add **Network Extensions** and **App Groups**
+(`group.app.voyavpn.mobile`) to each under *Signing & Capabilities*. Xcode then
+manages the development profiles.
+
+The App Store build does not use those settings. `pnpm build:ios:appstore`
+passes its own identity and profiles on the command line; see
+[Distribution](#distribution). Nothing about store signing is written into the
+project.
 
 ### Memory
 
-Set the extension's memory ceiling early in `startTunnel`. iOS caps a
-NetworkExtension appex at roughly 50 MB, and sing-box with a large rule set is
-the classic way to exceed it. This is the first thing to measure on a device.
+iOS kills a NetworkExtension provider at roughly 50 MB, and sing-box with a
+large rule set is the classic way to exceed it. On iOS the provider calls
+`LibboxSetMemoryLimit(true)` between `LibboxSetup` and
+`LibboxNewCommandServer`. That makes libbox collect at 10% heap growth, cap
+the Go heap at 45 MiB, and enable its OOM killer. The order matters, because
+the command server reads the flag when it is created. macOS does not make the
+call. The limit bounds the Go heap, not the whole process, so memory under a
+large rule set is still the first thing to measure on a device.
 
 
 ## Running
@@ -212,6 +226,8 @@ Each XCTest business flow imports its own data. Only latency target URLs and
 the timeout are configured in the test device's database; no nodes or
 subscriptions are preseeded. The smoke covers:
 
+- The first-launch "Before you start" notice: every case accepts it after
+  launching, and the first launch on each simulator attaches a screenshot of it.
 - Real backend launch, all five tabs and foreground restoration.
 - Clipboard validation, node import, duplicate import, search, selection,
   semantic sheet buttons, exported link, QR image decoding and deletion after
@@ -261,6 +277,8 @@ A simulator proves none of this.
    the running core's Clash API.
 8. Connect with a large rule set (a subscription with a full ruleset, not two
    manual nodes) and leave it up. The extension must not be killed for memory.
+   Attach Xcode to the `PacketTunnel` process and watch the memory gauge in
+   the Debug navigator; it has to stay under the 50 MB ceiling.
 9. Refresh a real subscription over the network and use the policy group
    automatically created by its import.
 10. Exercise VPN authorization allow, deny and revoke in system Settings.
@@ -280,32 +298,146 @@ redesign.
 
 ## Distribution
 
-TestFlight and the App Store take the `.ipa` Xcode's Archive produces; both
-bundles are signed with distribution profiles. Set the version from the repo's
-release version — `pnpm run check:architecture` fails when the mobile
-`Info.plist` and the root `package.json` disagree.
+`pnpm build:ios:appstore` produces the package Transporter uploads to App
+Store Connect for TestFlight and App Review:
+
+```text
+target/release/bundle/ios/VoyaVPN_<version>_<build>.ipa
+target/release/bundle/ios/VoyaVPN.xcarchive        # keeps the dSYMs
+```
 
 Libbox is GPL-3.0-or-later, so any build handed to a third party carries the
-obligations in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+obligations in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). GPL terms and
+the App Store terms are widely considered incompatible. Settle that before a
+public release; TestFlight distribution raises the same question.
 
-Before the first upload, and whenever the review answers change:
+### One-time setup
 
-1. Scan the archived app for non-public symbols and private libraries, the
-   check that stopped the 2026-09 Mac submission (Guideline 2.5.1). It covers
-   the app, the PacketTunnel appex and the embedded frameworks:
+1. **Certificate.** An **Apple Distribution** certificate for the team, with
+   its private key, in the login keychain. The Mac App Store certificate
+   (`3rd Party Mac Developer Application`) cannot sign an iOS app.
 
    ```sh
-   pnpm native:mobile:ios:verify-imports \
-     ~/Library/Developer/Xcode/Archives/<date>/VoyaVPN*.xcarchive/Products/Applications/VoyaVPN.app
+   security find-identity -v -p codesigning | grep "Apple Distribution"
    ```
 
-   The iOS Libbox slice has no Cronet `info_plist_data.o`, so it passes today;
-   the scan keeps it that way across sing-box bumps.
-2. Fill in App Review Information, App Privacy ("Data Not Collected") and the
-   Privacy Policy URL from [app-store-review-notes.md](app-store-review-notes.md).
-   Review asks every VPN app for these answers. iOS has no self-hosted node, so
-   the `network.server` explanation there does not apply.
-3. Every purpose string in `apps/mobile/ios/VoyaVPN/Info.plist` must be
-   non-empty and describe the release use. Do not add a usage key the app does
-   not use; the React Native template's empty location key was removed for
-   that reason.
+2. **Profiles.** One **App Store Connect** distribution profile for each of
+   `app.voyavpn.mobile` and `app.voyavpn.mobile.PacketTunnel`, made with that
+   certificate. Put the two `.mobileprovision` files in `../docs/certs`, or
+   double-click them, which installs them into
+   `~/Library/MobileDevice/Provisioning Profiles`. The build looks in both and
+   stops before it compiles anything when either is missing. To search one
+   folder only, set `VOYAVPN_PROVISIONING_PROFILE_DIR`. To name the files, set
+   `VOYAVPN_IOS_APP_PROVISIONING_PROFILE` and
+   `VOYAVPN_IOS_PACKET_TUNNEL_PROVISIONING_PROFILE`. The development profiles
+   Xcode manages are not accepted.
+3. **App record.** The App Store Connect record for `app.voyavpn.mobile` must
+   exist before the first upload.
+
+### Build
+
+```sh
+pnpm build:ios:appstore                 # full build, signed, exported
+pnpm build:ios:appstore --reuse-libbox  # keep the staged Libbox.xcframework
+pnpm build:ios:appstore --skip-native   # skip Rust, Libbox, pods and the project step
+pnpm build:ios:appstore --unsigned      # archive and check, no signature, no .ipa
+```
+
+`--unsigned` needs no certificate. It runs every check that does not depend on
+a signature, which makes it the way to try the lane on a machine that cannot
+sign.
+
+The script runs these steps and writes one log per step into
+`target/release/bundle/ios/logs/`:
+
+1. Preflight, before anything is built: the distribution identity, both
+   profiles, and the checked-in inputs that `pnpm check:mobile:ios:assets`
+   also checks.
+2. The native artifacts: the Rust host, Libbox, CocoaPods when the lockfiles
+   changed, and `native:mobile:ios:project`.
+3. `xcodebuild archive` for `generic/platform=iOS`, arm64, with manual signing.
+4. Checks on the archived app.
+5. `xcodebuild -exportArchive` with a generated `ExportOptions.plist`
+   (`app-store-connect`, manual signing, both profiles).
+
+What it checks:
+
+- Each profile is a store profile for its bundle id, grants the App Group
+  `group.app.voyavpn.mobile` and `packet-tunnel-provider`, and does not allow
+  debugging.
+- Every icon in the set is present, the right size, and opaque. App Store
+  Connect rejects a 1024px icon with an alpha channel (ITMS-90717).
+- Every purpose string in `Info.plist` is non-empty and translated in all
+  three languages.
+- The app and the extension name the same App Group in both `Info.plist`s and
+  both entitlements files, and claim only `packet-tunnel-provider`.
+- The built app and extension carry the release version and the same build
+  number (ITMS-90473), and target iOS 15.1.
+- No Mach-O imports a symbol App Review has named as non-public or links a
+  private library (Guideline 2.5.1, the check that stopped the 2026-09 Mac
+  submission), and every one is arm64 only. `pnpm native:mobile:ios:verify-imports <VoyaVPN.app>`
+  runs the import scan on its own.
+- The signed entitlements are exactly the application identifier, the team,
+  `packet-tunnel-provider` and the App Group, with no `get-task-allow`.
+- Each bundle embeds the profile that was selected.
+
+Signing is manual on purpose. The profiles are files that can be read and
+checked before a twenty-minute build, and the same ones every time. A
+command-line build setting applies to every target, CocoaPods ones included,
+so the script selects the profile through a macro keyed by product name,
+`PROVISIONING_PROFILE_SPECIFIER=$(VOYA_PROFILE_$(PRODUCT_NAME))`, which
+resolves to nothing for a pod. The settings it used are also written to
+`target/release/bundle/ios/signing.xcconfig`.
+
+### Build number
+
+App Store Connect rejects a second upload with the same `CFBundleVersion` for
+one marketing version. The build number is `VOYAVPN_IOS_BUILD_NUMBER`, or the
+commit count of `HEAD` when that is unset, the same rule as the Mac package.
+Set the variable to upload the same commit twice.
+
+### Icons
+
+The icon set is checked in as opaque RGB PNGs. To regenerate it from a new
+source image:
+
+```sh
+apps/desktop/node_modules/.bin/tauri icon apps/desktop/src-tauri/app-icon.svg \
+  --ios-color "#1A58F2" -o <scratch>
+cp <scratch>/ios/*.png apps/mobile/ios/VoyaVPN/Images.xcassets/AppIcon.appiconset/
+pnpm native:mobile:ios:icons
+```
+
+The last command removes the alpha channel the generator writes, then checks
+the set.
+
+### Upload
+
+1. Open **Transporter**, add the `.ipa`, choose **Verify**, then **Deliver**.
+2. Answer the export-compliance question for the build. VoyaVPN uses
+   encryption beyond the exempt categories, and `Info.plist` does not declare
+   `ITSAppUsesNonExemptEncryption`, so the question is asked per build.
+3. Paste the iOS block from
+   [app-store-review-notes.md](app-store-review-notes.md#ios-and-ipados) into
+   App Review Information → Notes and fill in the review test configuration.
+   The reviewer connects from Apple's network in the United States, so the
+   node must be reachable from there and stay valid for the whole review. Keep
+   the credential out of git.
+4. Set App Privacy to "Data Not Collected" and the Privacy Policy and Support
+   URLs from the same page.
+5. In Pricing and Availability, leave out China mainland
+   ([Sales and territories](app-store-review-notes.md#sales-and-territories)).
+6. Upload screenshots for iPhone 6.9" and iPad 13". The app ships for both,
+   and App Store Connect requires a set for each.
+7. Install the build from TestFlight on an iPhone and an iPad and run
+   [Device only](#device-only) before submitting.
+
+### Known gaps for review
+
+- **Licensing.** The GPL question above is open.
+- **Device acceptance.** The device list has not been run and recorded for a
+  store build. Step 8 there, a large rule set left connected, is what shows
+  whether the memory limit holds.
+- **iPad.** The layout is the iPhone layout in a centred column. Review it on
+  an iPad with `pnpm check:mobile:ios:full --matrix-only`, which captures all
+  four orientations, before the first submission.

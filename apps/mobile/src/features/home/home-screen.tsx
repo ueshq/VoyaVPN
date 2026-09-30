@@ -114,7 +114,12 @@ export function HomeScreen() {
           retryLabel={runtime.lastError.reason === "notFound" ? t("home.chooseNode") : runtime.lastError.reason === "elevationRequired" ? t("mobile.authorizeAgain") : undefined}
           retry={runtime.lastError.reason === "notFound" ? () => navigateToTab("profiles") : runtime.retryLastAction} />
         <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
-      </View> : runtime.tunIssue ? <ErrorNotice error={runtime.tunIssue} /> : null}
+      </View> : runtime.tunIssue ? <View className="gap-2">
+        {/* The banner says what is wrong in the user's language; the provider's
+            own text, which is not translated, stays behind the disclosure. */}
+        <ErrorNotice message={runtime.tunIssueMessage ?? runtime.tunIssue} error={runtime.tunProviderError ?? runtime.tunIssue} />
+        <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
+      </View> : null}
 
       {runtime.connected ? <>
       <Card className="gap-4 p-5">

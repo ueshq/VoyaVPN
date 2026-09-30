@@ -13,6 +13,7 @@
 # Run it through `pnpm run native:mobile:ios:project`, which finds a Ruby that
 # can load the `xcodeproj` gem.
 
+require 'json'
 require 'shellwords'
 require 'xcodeproj'
 
@@ -29,12 +30,16 @@ UI_TEST_BUNDLE_ID = "#{APP_BUNDLE_ID}.uitests"
 
 DEPLOYMENT_TARGET = '15.1'
 SWIFT_VERSION = '5.0'
-# `check:architecture` requires one MARKETING_VERSION across the whole project,
-# so the extension carries the app's. The test bundle deliberately carries none.
-MARKETING_VERSION = '0.1.0'
-CURRENT_PROJECT_VERSION = '1'
-
 repo_root = Dir.pwd
+# The release version is the root package.json's, and `check:architecture`
+# requires the project to carry exactly that one MARKETING_VERSION. The app and
+# the extension both get it here, so a version bump is "edit package.json, run
+# this". The test bundle deliberately carries none.
+MARKETING_VERSION = JSON.parse(File.read(File.join(repo_root, 'package.json')))['version']
+# The build number stays 1 in the project. `pnpm build:ios:appstore` passes the
+# real one on the xcodebuild command line, which overrides every target, so the
+# app and the extension always agree (ITMS-90473).
+CURRENT_PROJECT_VERSION = '1'
 ios_root = File.join(repo_root, 'apps/mobile/ios')
 project_path = File.join(ios_root, 'VoyaVPN.xcodeproj')
 project = Xcodeproj::Project.open(project_path)
@@ -185,7 +190,9 @@ apply_settings(app, {
   # the same C declarations twice.
   'HEADER_SEARCH_PATHS' => ['$(inherited)', '$(SRCROOT)/VoyaVPN/Generated'],
   'SWIFT_OBJC_BRIDGING_HEADER' => 'VoyaVPN/Native/VoyaVPN-Bridging-Header.h',
-  'CODE_SIGN_ENTITLEMENTS' => 'VoyaVPN/VoyaVPN.entitlements'
+  'CODE_SIGN_ENTITLEMENTS' => 'VoyaVPN/VoyaVPN.entitlements',
+  'MARKETING_VERSION' => MARKETING_VERSION,
+  'CURRENT_PROJECT_VERSION' => CURRENT_PROJECT_VERSION
 })
 
 # --- the PacketTunnel extension ---------------------------------------------

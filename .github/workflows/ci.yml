@@ -179,6 +179,11 @@ jobs:
       - name: Run mobile tests
         run: pnpm run check:mobile:test
 
+      # What App Store Connect reads from the checked-in iOS inputs: opaque
+      # icons, translated purpose strings, one App Group across app and tunnel.
+      - name: Check the iOS bundle inputs
+        run: pnpm run check:mobile:ios:assets
+
       # Typecheck and lint resolve modules the Node way; the app is built by
       # Metro, whose resolver is configured separately. This is the only gate
       # that exercises it, and a workspace package that imports fine in an

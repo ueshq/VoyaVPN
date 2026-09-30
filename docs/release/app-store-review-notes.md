@@ -8,9 +8,14 @@ same change that alters what the app listens on, connects to, or stores.
 Where each block goes:
 
 - **App Review Information → Notes** (App Store Connect, the version page):
-  [the notes block](#app-review-information--notes), every submission. The
-  field holds 4,000 characters, so that block summarizes the two long answers
-  below instead of repeating them.
+  [the notes block](#app-review-information--notes) for the platform being
+  submitted, every submission. The field holds 4,000 characters, so each block
+  summarizes the two long answers below instead of repeating them.
+- **Pricing and Availability**: leave out China mainland on both app records;
+  see [Sales and territories](#sales-and-territories).
+- **In the app**: the iOS app shows the same data facts on a "Before you
+  start" screen before anything else, and again under Settings > About & help
+  (Guideline 5.4).
 - **Resolution Center reply**: [the reply for build 405](#resolution-center-reply-for-build-405)
   for the 2026-09 rejection; the full [entitlement explanation](#why-the-app-needs-network-server)
   or [VPN answers](#vpn-questions) as separate messages when a reviewer asks.
@@ -122,11 +127,13 @@ reviewer asks:
 
 ## App Review Information → Notes
 
-Paste this into App Review Information → Notes on every submission. Replace
-the two placeholders in REVIEW TEST CONFIGURATION with a node the reviewer can
-reach from the United States for the whole review, and never commit that
-credential. The block is about 2,500 characters with a typical share link;
-keep it under the field's 4,000.
+Paste the block for the platform into App Review Information → Notes on every
+submission. Replace the two placeholders in REVIEW TEST CONFIGURATION with a
+node the reviewer can reach from the United States for the whole review, and
+never commit that credential. Each block is about 2,500 characters with a
+typical share link; keep it under the field's 4,000.
+
+### macOS
 
 ```text
 APP PURPOSE
@@ -180,6 +187,70 @@ Store screenshots show demonstration data. Please use the configuration above
 to test.
 ```
 
+### iOS and iPadOS
+
+```text
+APP PURPOSE
+VoyaVPN for iPhone and iPad is a VPN and proxy client by Beijing Wangcai
+Technology Co., Ltd. Users import server configurations or subscription URLs
+they own or are authorized to use. The app includes no VPN service of its own
+and sells no servers or plans. There is no account or sign-in. A
+"subscription" here is a URL that lists servers, not an App Store subscription.
+
+TERRITORIES
+VoyaVPN is not offered in China mainland, which is excluded from its
+availability. It is offered only in territories that require no VPN licence.
+
+REVIEW TEST CONFIGURATION
+Share link or subscription URL: <FILL IN BEFORE SUBMITTING>
+Valid until: <DATE AFTER THE REVIEW ENDS>
+
+TEST STEPS
+1. On first launch, read "Before you start" and tap Continue. The same
+   information stays under Settings > About & help > Privacy information.
+2. On Home, tap "Add nodes or subscription". Paste the configuration above,
+   tap Preview, then Confirm import.
+3. Open Nodes and select the imported node.
+4. On Home, tap Connect and allow iOS to add the VPN configuration. Home
+   shows Connected and the exit IP address.
+5. Open any HTTPS website. Home > Network activity lists the connections.
+6. Disconnect from Home.
+
+HOW THE APP USES THE SYSTEM
+- The VPN is Apple's NetworkExtension Packet Tunnel provider, embedded as an
+  app extension. iOS asks once to add the VPN configuration.
+- Camera is requested only by the optional "Scan QR code" import.
+- Local Network is requested only when a latency test reaches a server the
+  user added on their own network.
+- The app asks for nothing else. It has no background modes, no push
+  notifications and no location access, and it never accepts incoming
+  connections.
+
+DATA
+VoyaVPN collects no user data. It has no analytics, crash reporting,
+advertising, telemetry or accounts. Traffic goes only to the servers the user
+configured. The server list, settings and a 7-day diagnostic log with
+credentials removed stay on the device. The app states this on the "Before you
+start" screen, and the full answers to the VPN questions are in the privacy
+policy: https://voyavpn.wangc.ai/privacy
+
+Store screenshots show demonstration data. Please use the configuration above
+to test.
+```
+
+## Sales and territories
+
+Guideline 5.4 requires a VPN app to provide its licence information in the
+review notes for every territory that requires a VPN licence. VoyaVPN holds
+none, so neither app is offered in China mainland.
+
+Set this once per app record, for the macOS app and the iOS app: App Store
+Connect > the app > **Pricing and Availability** > **App Availability** >
+**Edit**, and clear **China mainland**. Check it again before each
+submission, because a new app record starts with every territory selected. The
+iOS notes block says so in its TERRITORIES paragraph. If a reviewer raises it
+for the macOS app, reply with the same two sentences.
+
 ## Resolution Center reply for build 405
 
 Post this in the App Store Connect thread for the rejected build before
@@ -221,5 +292,7 @@ Review notes.
 | Probe service stores nothing | [self-host-probe-worker.md](self-host-probe-worker.md), `apps/probe/wrangler.jsonc` |
 | No privilege escalation on macOS | `crates/voya-platform/src/privilege/linux_installer.rs` (compiled for Linux only), [ADR 0004](../adr/0004-platform-boundaries.md), `scripts/native/macos/macho-imports.mjs` |
 | Launch at login | `crates/voya-platform/native/macos_login_item.m`, `apps/desktop/src-tauri/native/macos/LaunchAgents/app.voyavpn.desktop.autostart.plist` |
+| In-app data declaration (Guideline 5.4) | `apps/mobile/src/features/settings/privacy-notice.ts` and `privacy-notice-screen.tsx`, `packages/i18n/src/locales/*.json` (`mobile.privacyNotice*`) |
+| iOS permissions | `apps/mobile/ios/VoyaVPN/Info.plist`, `apps/mobile/ios/VoyaVPN/VoyaVPN.entitlements`; checked by `pnpm check:mobile:ios:assets` |
 | Privacy Policy page | `apps/web/src/content/*.ts`, checked against this page by `apps/web/test/privacy-sync.test.ts` |
 | iOS privacy manifest | `apps/mobile/ios/VoyaVPN/PrivacyInfo.xcprivacy` (no collected data types, no tracking) |

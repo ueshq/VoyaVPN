@@ -13,6 +13,7 @@
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		1861294F9DD14C6E28777254 /* VoyaMobile.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = E5D567F08A5BB2472A3195D1 /* VoyaMobile.xcframework */; };
 		22CFC5869E3B3759234E32DF /* VoyaNative.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0644747CCFE960CE954AD933 /* VoyaNative.swift */; };
+		3434D2AB029086DE14187109 /* DefaultInterfaceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAC3F11D0151CEA3888A8B4 /* DefaultInterfaceMonitor.swift */; };
 		42CE4D7CA38AD481CD1D6749 /* PacketTunnel.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 50E81178832F794513B4E65B /* PacketTunnel.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		463B87F382BCC306A0E97DF6 /* PacketTunnelPlatform.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C499B0D4FB261A67584353F /* PacketTunnelPlatform.swift */; };
 		479FFB0E56118FA5A8B969F0 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 16C6A7C128751209016F39CE /* InfoPlist.strings */; };
@@ -34,6 +35,7 @@
 		CE769709CEE289E9E1B66E96 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72B400BBB64AE08ACBAF695A /* Foundation.framework */; };
 		D36620DFBD50E5B6FB12267F /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ACD3E150945C58AA0FC180D /* PacketTunnelProvider.swift */; };
 		D92D1824FC1BED7E496E83E3 /* LibboxProbeCoreHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC0BACB3A3F05714704D984 /* LibboxProbeCoreHost.swift */; };
+		E7B54977BF8CB555A686FD47 /* DefaultInterfaceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFAC3F11D0151CEA3888A8B4 /* DefaultInterfaceMonitor.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -103,6 +105,7 @@
 		EC8C879C090E0F05DC440DB2 /* VoyaDeviceActions.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoyaDeviceActions.swift; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		EF131E8A8403724863AC75BD /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
+		FFAC3F11D0151CEA3888A8B4 /* DefaultInterfaceMonitor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DefaultInterfaceMonitor.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +142,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		000A7A114CC595A4EFD08825 /* AppleShared */ = {
+			isa = PBXGroup;
+			children = (
+				FFAC3F11D0151CEA3888A8B4 /* DefaultInterfaceMonitor.swift */,
+			);
+			name = AppleShared;
+			path = ../../../native/apple;
+			sourceTree = SOURCE_ROOT;
+		};
 		13B07FAE1A68108700A75B9A /* VoyaVPN */ = {
 			isa = PBXGroup;
 			children = (
@@ -229,6 +241,7 @@
 				1B671533167E7DB60F3ED916 /* PacketTunnelProvider */,
 				46B7EB0AF1824A4AAC341BDC /* PacketTunnel */,
 				F0487B8371431A6CF109E2A2 /* VoyaVPNUITests */,
+				000A7A114CC595A4EFD08825 /* AppleShared */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -430,13 +443,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -473,13 +482,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-VoyaVPN/Pods-VoyaVPN-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -501,6 +506,7 @@
 				CCDBA2FD6C8CD6F4B7CA73FF /* voya_mobile_ffi.swift in Sources */,
 				A669B45DE2DB9C6CFD55DE2F /* VoyaDeviceActions.swift in Sources */,
 				11E548123A3D78FA4CE4F3A1 /* VoyaDeviceActions.m in Sources */,
+				E7B54977BF8CB555A686FD47 /* DefaultInterfaceMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -512,6 +518,7 @@
 				82D39D05BABEF47ED1015765 /* PacketTunnelRuntime.swift in Sources */,
 				716FA596E2798DA25A90D3FD /* PacketTunnelDiagnostics.swift in Sources */,
 				463B87F382BCC306A0E97DF6 /* PacketTunnelPlatform.swift in Sources */,
+				3434D2AB029086DE14187109 /* DefaultInterfaceMonitor.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

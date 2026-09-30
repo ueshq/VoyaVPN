@@ -3,6 +3,7 @@ import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import type { MockBackend } from "@voya/client/mock-backend";
+import { makeMockSeed } from "@voya/client/mock-seed";
 
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
 import { mockBackend, mockTransport } from "~/test/mock-transport";
@@ -23,7 +24,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   registerMobileBackend(mockTransport());
-  useRuntimeEventStore.setState({ coreState: null, statistics: null });
+  useRuntimeEventStore.setState({ coreState: null, statistics: null, tun: null });
   useRuntimeActionStore.setState(useRuntimeActionStore.getInitialState());
 });
 
@@ -37,6 +38,26 @@ describe("HomeScreen", () => {
     expect(screen.getByText("No nodes")).toBeOnTheScreen();
     expect(mockBackend().state.calls.some((call) => call.command === "connectActiveProfile")).toBe(false);
   });
+  it("explains the iOS VPN prompt in words and keeps the provider's raw error behind Details", async () => {
+    const tun = { ...makeMockSeed().tun, backend: "iosPacketTunnel", providerPathMismatch: false } as const;
+    useRuntimeEventStore.setState({ tun: { ...tun, lastProviderError: null, providerState: "permissionRequired" } });
+    const view = await renderHome();
+
+    expect(await screen.findByText(/iOS asks to add a VPN configuration/)).toBeOnTheScreen();
+    expect(screen.queryByText("Could not complete this action. Retry or view diagnostics.")).toBeNull();
+    await view.unmount();
+
+    useRuntimeEventStore.setState({
+      tun: { ...tun, lastProviderError: "the tunnel did not come up within 60s", providerState: "error" },
+    });
+    await renderHome();
+
+    expect(await screen.findByText("iOS PacketTunnel: Error")).toBeOnTheScreen();
+    // Collapsed details are not mounted, so the untranslated text is not on screen.
+    expect(screen.queryByText(/did not come up/)).toBeNull();
+    expect(screen.getByText("View diagnostics")).toBeOnTheScreen();
+  });
+
   it("names the selected node and offers to connect", async () => {
     await renderHome();
 

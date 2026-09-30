@@ -227,13 +227,15 @@ order:
 4. Upload with Transporter (Verify, then Deliver) and answer export compliance
    for the new build.
 5. On the saved 0.1.0 version, replace build 405 with the new build.
-6. Paste the [App Review Information notes](app-store-review-notes.md#app-review-information--notes)
+6. Paste the macOS [App Review Information notes](app-store-review-notes.md#macos)
    and fill in the review test configuration. The reviewer connects from
    Apple's network in the United States, so the node must be reachable from
    there and stay valid for the whole review. Use a server you run elsewhere,
    not the self-hosted node on your own Mac. Keep the credential out of git.
 7. Check App Privacy ("Data Not Collected"), the Privacy Policy and Support
-   URLs, and the review contact, then submit.
+   URLs, the review contact, and that availability leaves out China mainland
+   ([Sales and territories](app-store-review-notes.md#sales-and-territories)),
+   then submit.
 8. Install the build from TestFlight and run the acceptance in step 6 of
    [Upload](#upload). Also turn on Autostart under Settings > Startup and
    confirm VoyaVPN appears in System Settings > General > Login Items &

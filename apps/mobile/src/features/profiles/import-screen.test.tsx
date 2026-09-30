@@ -1,4 +1,5 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { IpcCommandError } from "@voya/client/errors";
 import { setClipboard } from "@voya/client/platform";
 import type { MockBackend } from "@voya/client/mock-backend";
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
@@ -72,4 +73,28 @@ test("an unknown native failure uses a general recovery message, not invalid-lin
   await screen.findByText("Could not complete this action. Retry or view diagnostics.");
   expect(screen.queryByText(/No importable/)).toBeNull();
   await unmount(); client.clear(); device.mockRestore();
+});
+
+// The backend files "parsed, but no node in it" as a missing profile. On this
+// screen that must not read as "This item no longer exists".
+test("text with nothing importable gets import advice, whichever way the backend reports it", async () => {
+  registerMobileBackend(mockTransport());
+  const backend = voyaTransport() as MockBackend;
+  const client = makeTestQueryClient();
+  setClipboard({ readText: async () => "not-a-node", writeText: async () => {} });
+  const preview = jest.spyOn(backend.commands, "previewImportProfiles")
+    .mockRejectedValueOnce(new IpcCommandError({ kind: { type: "notFound", entity: "profile", id: null }, subsystem: "subscription", message: "no importable nodes were found" }))
+    .mockRejectedValueOnce(new IpcCommandError({ kind: { type: "notFound", entity: "subscription", id: "gone" }, subsystem: "subscription", message: "subscription not found" }));
+  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const user = userEvent.setup();
+  await user.press(screen.getByText("Read clipboard"));
+
+  await user.press(screen.getByText("Preview"));
+  await screen.findByText("No importable content. Check that the link is complete.");
+  expect(screen.queryByText(/no longer exists/)).toBeNull();
+
+  // Something else that is genuinely missing keeps its own wording.
+  await user.press(screen.getByText("Preview"));
+  await screen.findByText("This item no longer exists. Refresh the list and choose again.");
+  preview.mockRestore(); await unmount(); client.clear();
 });

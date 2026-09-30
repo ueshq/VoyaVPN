@@ -1,1 +1,2 @@
 "NSCameraUsageDescription" = "Scan a QR code to add a node or subscription.";
+"NSLocalNetworkUsageDescription" = "VoyaVPN tests the latency of the proxy servers you add, including servers on your local network.";

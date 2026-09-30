@@ -1,1 +1,2 @@
 "NSCameraUsageDescription" = "掃描 QR Code 以新增節點或訂閱。";
+"NSLocalNetworkUsageDescription" = "VoyaVPN 會測試你加入的代理伺服器的延遲，其中可能包含區域網路上的伺服器。";

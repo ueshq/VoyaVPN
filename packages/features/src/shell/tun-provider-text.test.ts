@@ -40,6 +40,22 @@ describe("tunProviderLabel", () => {
     ).toBe("iOS PacketTunnel: Error: the tunnel did not come up within 60s");
   });
 
+  it("leaves the provider's untranslated error out when asked", () => {
+    const failed = tun({
+      backend: "iosPacketTunnel",
+      lastProviderError: "the tunnel did not come up within 60s",
+      providerState: "error",
+    });
+
+    expect(tunProviderLabel(failed, t(), { includeProviderError: false })).toBe("iOS PacketTunnel: Error");
+    // An explanation this app words itself is kept either way.
+    expect(
+      tunProviderLabel(tun({ backend: "macosPacketTunnel", providerState: "missingComponent" }), t(), {
+        includeProviderError: false,
+      }),
+    ).toContain(i18next.t("status.macosTunnelMissing"));
+  });
+
   it("explains a macOS extension missing from the running copy", () => {
     expect(
       tunProviderLabel(

@@ -17,6 +17,7 @@ import { useRef } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
+import { useContentColumn } from "~/components/content-column";
 import { ListRow } from "~/components/list-row";
 import { useToneColor } from "~/components/tone";
 
@@ -43,6 +44,8 @@ export function NodeActionsSheet({
   const share = exports.shareQrContent;
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
+  // On an iPad the sheet is a centred panel rather than the full width.
+  const column = useContentColumn(480);
   const titleRef = useRef<Text>(null);
   // Resolve semantic colors once for every action in this modal.
   const actionColor = useToneColor("brand");
@@ -93,7 +96,7 @@ export function NodeActionsSheet({
     <Modal visible={open} transparent animationType="fade" onRequestClose={close} onShow={focusTitle} onDismiss={onClosed}>
       <View style={{ flex: 1, justifyContent: "flex-end", paddingTop: insets.top + 16 }}>
         <Pressable accessible={false} className="absolute inset-0 bg-backdrop" onPress={close} />
-        <View accessibilityViewIsModal className="rounded-t-3xl bg-canvas" style={{ maxHeight: height - insets.top - 16 }}>
+        <View accessibilityViewIsModal className="rounded-t-3xl bg-canvas" style={[{ maxHeight: height - insets.top - 16 }, column]}>
           <ScrollView key={share ? "qr" : "actions"} style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 16 }}>
               {share ? (
                 <View className="items-center gap-4">

@@ -10,6 +10,15 @@ import Foundation
 private let appGroupInfoKey = "VoyaAppGroupIdentifier"
 private let runtimeConfigRelativePath = "Library/Application Support/VoyaVPN/packet-tunnel-runtime.json"
 
+/// What this provider calls itself in the unified log and in queue labels.
+enum PacketTunnelIdentity {
+    /// The extension's own bundle id, which differs per platform
+    /// (`app.voyavpn.desktop.PacketTunnel`, `app.voyavpn.mobile.PacketTunnel`),
+    /// so a `log stream --predicate 'subsystem == …'` names the right app. The
+    /// fallback is for the command-line test binary, which has no bundle.
+    static let subsystem = Bundle.main.bundleIdentifier ?? "app.voyavpn.PacketTunnel"
+}
+
 /// Host payload decoding, validation and short libbox working paths.
 enum PacketTunnelRuntime {
     /// The App Group this extension declares, or `nil` if it declares none.

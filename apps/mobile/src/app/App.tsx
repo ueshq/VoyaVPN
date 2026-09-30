@@ -4,6 +4,8 @@ import { ConnectionDetailsScreen } from "~/features/proxy/connection-details-scr
 import { GeneralScreen, MaintenanceScreen } from "~/features/settings/preferences-screens";
 import { DnsScreen } from "~/features/settings/dns-screen";
 import { AboutScreen } from "~/features/settings/about-screen";
+import { isPrivacyNoticeAccepted } from "~/features/settings/privacy-notice";
+import { PrivacyNoticeScreen } from "~/features/settings/privacy-notice-screen";
 import { LogsScreen } from "~/features/settings/logs-screen";
 import { RuleDetailsScreen } from "~/features/routing/rule-details-screen";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -25,6 +27,7 @@ import { EventBridge } from "~/ipc/event-bridge";
 import { localeReady } from "~/native/platform-boot";
 
 import { type RootRoutes, navigationRef } from "./navigation";
+import { usePreferencesStore } from "@voya/client/preferences-store";
 import { createAppQueryClient } from "@voya/client/query-client";
 import type { ShellTab } from "./tabs";
 import { SHELL_TABS } from "./tabs";
@@ -69,6 +72,12 @@ function Shell() {
   const insets = useSafeAreaInsets();
   const navigationTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
   useRuntimeStatusSeed(["coreState"]);
+  const noticeAccepted = usePreferencesStore((state) => isPrivacyNoticeAccepted(state.privacyNoticeVersion));
+
+  // Before first use the app shows what data it handles (App Store Guideline
+  // 5.4). The notice replaces navigation rather than covering it, so nothing
+  // behind it can be reached, and the event bridge mounts only afterwards.
+  if (!noticeAccepted) return <PrivacyNoticeScreen />;
 
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme}>

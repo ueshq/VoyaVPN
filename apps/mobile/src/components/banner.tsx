@@ -31,7 +31,7 @@ export function Banner({
   status: BannerStatus;
 }) {
   return (
-    <Alert status={ALERT_STATUS[status]}>
+    <Alert status={ALERT_STATUS[status]} testID={`banner-${status}`}>
       <Alert.Indicator accessible={false} />
       <Alert.Content className="min-w-0 items-start gap-2">
         <Alert.Title accessibilityLiveRegion={liveRegion ? "polite" : undefined}>{message}</Alert.Title>

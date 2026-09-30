@@ -8,7 +8,7 @@ import os.log
 #endif
 
 public final class PacketTunnelProvider: NEPacketTunnelProvider {
-    private static let logger = Logger(subsystem: "app.voyavpn.desktop.PacketTunnel", category: "PacketTunnelProvider")
+    private static let logger = Logger(subsystem: PacketTunnelIdentity.subsystem, category: "PacketTunnelProvider")
 
     #if canImport(Libbox)
         private var commandServer: LibboxCommandServer?
@@ -100,6 +100,16 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
             if let setupError {
                 throw PacketTunnelProviderError.libboxSetupFailed(setupError.localizedDescription)
             }
+
+            #if os(iOS)
+                // iOS kills a NetworkExtension provider at roughly 50 MB. This
+                // makes libbox collect at 10% heap growth, cap the Go heap at
+                // 45 MiB, and turn on its OOM killer. The command server reads
+                // the flag when it is created, so the call has to sit between
+                // LibboxSetup and LibboxNewCommandServer. macOS has no such
+                // ceiling, and there it would only cost GC time.
+                LibboxSetMemoryLimit(true)
+            #endif
 
             var commandServerError: NSError?
             let server = LibboxNewCommandServer(platformInterface, platformInterface, &commandServerError)

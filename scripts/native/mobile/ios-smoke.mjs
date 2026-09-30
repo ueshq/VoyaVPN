@@ -155,7 +155,7 @@ export async function main() {
         const sdk = (await run("xcrun", ["--sdk", "iphonesimulator", "--show-sdk-path"])).stdout;
         const executable = resolve(output, "probe-core-tests");
         phase = "build";
-        await run("xcrun", ["swiftc", "-sdk", sdk, "-target", "arm64-apple-ios16.0-simulator", "-F", resolve(libbox, slice), "-framework", "Libbox", "-framework", "UIKit", "-framework", "CoreGraphics", "-framework", "CoreText", "-framework", "CoreTelephony", "-framework", "UniformTypeIdentifiers", "-framework", "SystemConfiguration", "-framework", "Network", "-lresolv", "-Xlinker", "-dead_strip", "-Xlinker", "-no_compact_unwind", resolve(root, "scripts/native/mobile/ProbeCoreTests.swift"), resolve(ios, "VoyaVPN/Native/LibboxProbeCoreHost.swift"), "-o", executable], { label: "probe-build" });
+        await run("xcrun", ["swiftc", "-sdk", sdk, "-target", "arm64-apple-ios16.0-simulator", "-F", resolve(libbox, slice), "-framework", "Libbox", "-framework", "UIKit", "-framework", "CoreGraphics", "-framework", "CoreText", "-framework", "CoreTelephony", "-framework", "UniformTypeIdentifiers", "-framework", "SystemConfiguration", "-framework", "Network", "-lresolv", "-Xlinker", "-dead_strip", "-Xlinker", "-no_compact_unwind", resolve(root, "scripts/native/mobile/ProbeCoreTests.swift"), resolve(ios, "VoyaVPN/Native/LibboxProbeCoreHost.swift"), resolve(root, "native/apple/DefaultInterfaceMonitor.swift"), "-o", executable], { label: "probe-build" });
         phase = "product";
         await sim(["spawn", activeDevice, executable, resolve(container, "Documents"), String(await unusedPort())]);
       }

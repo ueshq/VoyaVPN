@@ -7,6 +7,7 @@ import {
   macAppStoreOverlay,
   requestedMacAppStoreBuild,
   resolveMacAppStoreBuildNumber,
+  resolveStoreBuildNumber,
   writeMacAppStoreOverlay,
 } from "./mac-app-store-config.mjs";
 
@@ -46,6 +47,15 @@ describe("Mac App Store Tauri config", () => {
     expect(() => resolveMacAppStoreBuildNumber({ env: {}, repoRoot: "/repo", captureCommand: gitCount("", 128) })).toThrow(
       /set VOYAVPN_MACOS_BUILD_NUMBER/,
     );
+  });
+
+  it("reads the iOS lane's build number from its own variable", () => {
+    const captureCommand = gitCount("412\n");
+    const resolve = (env) => resolveStoreBuildNumber({ envName: "VOYAVPN_IOS_BUILD_NUMBER", env, repoRoot: "/repo", captureCommand });
+
+    expect(resolve({ VOYAVPN_IOS_BUILD_NUMBER: "7", VOYAVPN_MACOS_BUILD_NUMBER: "9" })).toBe("7");
+    expect(resolve({ VOYAVPN_MACOS_BUILD_NUMBER: "9" })).toBe("412");
+    expect(() => resolve({ VOYAVPN_IOS_BUILD_NUMBER: "v7" })).toThrow(/VOYAVPN_IOS_BUILD_NUMBER/);
   });
 
   it("bundles only the app, for macOS 26+, with the build number and no updater artifacts", () => {

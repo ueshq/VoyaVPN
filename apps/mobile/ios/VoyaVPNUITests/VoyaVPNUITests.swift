@@ -17,8 +17,7 @@ final class VoyaVPNUITests: XCTestCase {
             allow.tap()
             return true
         }
-        app.launch()
-        XCTAssertTrue(app.buttons["tab-settings"].waitForExistence(timeout: timeout))
+        launch()
         open("general")
         visible(row("English")).tap()
         let system = app.buttons["Follow system"]
@@ -209,18 +208,17 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertEqual(app.textFields["Bootstrap DNS"].value as? String, "1.1.1.1")
     }
 
-    func testSecondaryPagesAndImportCancellation() {
+    func testSecondaryPagesAndImportCancellation() throws {
         for page in ["subscriptions", "connections", "dns", "maintenance", "logs", "about"] {
             open(page)
             captureStable(page)
             XCTAssertFalse(app.buttons["tab-home"].isHittable)
         }
         open("profiles")
-        tap("Add nodes or subscription")
-        let input = app.textViews["Add nodes or subscription"]
-        XCTAssertTrue(input.waitForExistence(timeout: timeout))
-        input.tap()
-        input.typeText("trojan://test@cancel.example.test:443#Cancelled")
+        // Through the clipboard, like every other import here: XCUITest does
+        // not see keyboard focus on the multiline field, so it cannot type
+        // into it.
+        try readClipboard("trojan://test@cancel.example.test:443#Cancelled")
         tap("Preview")
         XCTAssertTrue(app.buttons["Confirm import"].waitForExistence(timeout: timeout))
         open("profiles")
@@ -378,7 +376,8 @@ final class VoyaVPNUITests: XCTestCase {
         return try XCTUnwrap(result).get()
     }
 
-    private func importText(_ value: String) throws {
+    /// Puts `value` on the simulator clipboard and reads it into the import field.
+    private func readClipboard(_ value: String) throws {
         _ = try fixture("clipboard", body: value)
         XCTAssertEqual(String(data: try fixture("clipboard"), encoding: .utf8), value, "Simulator clipboard fixture changed before import")
         if !app.buttons["Read clipboard"].exists { tap("Add nodes or subscription") }
@@ -387,6 +386,10 @@ final class VoyaVPNUITests: XCTestCase {
             let allow = host.buttons["Allow Paste"]
             if allow.waitForExistence(timeout: 1) { allow.tap() }
         }
+    }
+
+    private func importText(_ value: String) throws {
+        try readClipboard(value)
         if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
         tap("Preview")
         if value == "not-a-node" { return }
@@ -440,7 +443,23 @@ final class VoyaVPNUITests: XCTestCase {
         button.tap()
     }
 
-    private func relaunch() { app.terminate(); app.launch(); XCTAssertTrue(app.buttons["tab-home"].waitForExistence(timeout: timeout)) }
+    private func relaunch() { app.terminate(); launch() }
+
+    /// Launches the app and waits for the tabs. On a simulator's first launch
+    /// the data notice stands in front of everything else (App Store Guideline
+    /// 5.4); it is captured as evidence and accepted. The acceptance persists,
+    /// so later launches go straight to the tabs.
+    private func launch() {
+        app.launch()
+        let accept = app.buttons["privacy-continue"]
+        let tabs = app.buttons["tab-home"]
+        XCTAssertTrue(wait(seconds: timeout) { accept.exists || tabs.exists })
+        if accept.exists {
+            capture("privacy-notice")
+            visible(accept).tap()
+        }
+        XCTAssertTrue(tabs.waitForExistence(timeout: timeout))
+    }
 
     private func visible(_ element: XCUIElement) -> XCUIElement {
         for _ in 0..<8 {

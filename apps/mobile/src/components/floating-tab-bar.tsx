@@ -4,6 +4,7 @@ import { Typography } from "heroui-native/text";
 import { useContext } from "react";
 import { Platform, Pressable, View } from "react-native";
 
+import { CONTENT_INNER_WIDTH, useContentColumn } from "./content-column";
 import { useToneColor } from "./tone";
 
 /**
@@ -25,6 +26,9 @@ export function FloatingTabBar({ descriptors, insets, navigation, state }: Botto
   const reportHeight = useContext(BottomTabBarHeightCallbackContext);
   const activeColor = useToneColor("brand");
   const inactiveColor = useToneColor("neutral");
+  // On an iPad the pill sits under the content column, edge to edge with its
+  // cards, instead of spanning the window.
+  const column = useContentColumn(CONTENT_INNER_WIDTH);
 
   return (
     <View
@@ -35,7 +39,7 @@ export function FloatingTabBar({ descriptors, insets, navigation, state }: Botto
       style={{ paddingBottom: Math.max(insets.bottom - (Platform.OS === "ios" ? 10 : 0), 12) }}
       onLayout={(event) => reportHeight?.(event.nativeEvent.layout.height)}
     >
-      <View className="flex-row rounded-full border border-border-subtle bg-surface p-1.5 shadow-float">
+      <View className="flex-row rounded-full border border-border-subtle bg-surface p-1.5 shadow-float" style={column}>
         {state.routes.map((route, index) => {
           const { options } = descriptors[route.key];
           const focused = state.index === index;

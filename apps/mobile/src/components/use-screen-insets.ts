@@ -2,8 +2,11 @@ import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
 import { useContext } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useContentColumn } from "./content-column";
+
 /**
- * The vertical padding a tab screen's scrolling content needs.
+ * The content-container style of a screen's scrolling content: its vertical
+ * padding, and on an iPad the centred column.
  *
  * There is no navigation header: each screen draws its own large title, so the
  * content starts under the status bar and the title scrolls away with it. The
@@ -17,5 +20,7 @@ export function useScreenInsets() {
   const safeArea = useSafeAreaInsets();
   const tabBar = useContext(BottomTabBarHeightContext) ?? 0;
 
-  return { paddingBottom: Math.max(tabBar, safeArea.bottom) + 24, paddingTop: tabBar ? safeArea.top : 16 };
+  const column = useContentColumn();
+
+  return { ...column, paddingBottom: Math.max(tabBar, safeArea.bottom) + 24, paddingTop: tabBar ? safeArea.top : 16 };
 }

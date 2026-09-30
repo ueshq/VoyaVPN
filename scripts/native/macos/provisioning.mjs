@@ -91,6 +91,7 @@ export function profileMatchesDistribution(profile, distribution, allowDevelopme
       (subject) =>
         subject.includes("CN=3rd Party Mac Developer Application:")
         || subject.includes("CN=Apple Distribution:")
+        || subject.includes("CN=iPhone Distribution:")
         || (allowDevelopmentProvisioning
           && (subject.includes("CN=Apple Development:") || subject.includes("CN=Mac Developer:"))),
     );
@@ -407,7 +408,12 @@ export function decodeProvisioningProfile(profilePath, decodedDir = defaultDecod
   const plistPath = resolve(decodedDir, `${basename(profilePath)}.plist`);
   writeFileSync(plistPath, decoded);
 
-  const applicationIdentifier = plistBuddy(plistPath, ":Entitlements:com.apple.application-identifier");
+  // macOS profiles name the app `com.apple.application-identifier`, iOS ones
+  // `application-identifier`. Both kinds sit in the same folders, so a profile
+  // of the other platform must decode here and be rejected by bundle id
+  // rather than abort the scan.
+  const applicationIdentifier = plistBuddy(plistPath, ":Entitlements:com.apple.application-identifier", true)
+    || plistBuddy(plistPath, ":Entitlements:application-identifier");
   const teamIdentifier = plistBuddy(plistPath, ":Entitlements:com.apple.developer.team-identifier", true)
     || plistBuddy(plistPath, ":TeamIdentifier:0", true);
   const bundleIdentifier = teamIdentifier && applicationIdentifier.startsWith(`${teamIdentifier}.`)
@@ -437,6 +443,8 @@ export function decodeProvisioningProfile(profilePath, decodedDir = defaultDecod
       ":Entitlements:com.apple.developer.system-extension.install",
       true,
     ) === "true",
+    // Debuggable builds only; a store profile never grants it.
+    getTaskAllow: plistBuddy(plistPath, ":Entitlements:get-task-allow", true) === "true",
     provisionsAllDevices: plistBuddy(plistPath, ":ProvisionsAllDevices", true) === "true",
     provisionedDevices: readProvisionedDevices(plistPath),
     expirationDate: readExpirationDate(plistPath),

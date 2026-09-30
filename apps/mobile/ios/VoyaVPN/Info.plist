@@ -63,6 +63,6 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>Scan a node or subscription QR code to import your configuration.</string>
+	<string>Scan a QR code to add a node or subscription.</string>
 </dict>
 </plist>

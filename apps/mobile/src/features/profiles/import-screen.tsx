@@ -20,6 +20,19 @@ import { DetailScreen } from "~/components/detail-screen";
 import { ErrorNotice } from "~/components/error-notice";
 import { deviceActions } from "~/native/device-actions";
 
+/**
+ * Whether the backend refused the text because it holds nothing to import.
+ * It reports unparseable text as a validation failure, and text that parses
+ * but yields no node as "no profile found"; on this screen both mean the same
+ * thing to the user, and the generic wording for a missing item
+ * ("This item no longer exists") would be wrong.
+ */
+function nothingImportable(failure: unknown) {
+  if (!(failure instanceof IpcCommandError)) return false;
+  const { kind } = failure.appError;
+  return kind.type === "validation" || (kind.type === "notFound" && kind.entity === "profile");
+}
+
 export function ImportScreen() {
   const { t } = useI18n();
   const client = useQueryClient();
@@ -46,7 +59,7 @@ export function ImportScreen() {
       setError(failure);
       const code = failure && typeof failure === "object" && "code" in failure ? failure.code : null;
       setDenied(code === "cameraDenied");
-      setErrorMessage(code === "cameraDenied" ? t("mobile.cameraDenied") : code === "noQr" ? t("mobile.noQr") : failure instanceof IpcCommandError && failure.appError.kind.type === "validation" ? t("mobile.importInvalid") : undefined);
+      setErrorMessage(code === "cameraDenied" ? t("mobile.cameraDenied") : code === "noQr" ? t("mobile.noQr") : nothingImportable(failure) ? t("mobile.importInvalid") : undefined);
     } finally { busyRef.current = false; setBusy(false); }
   }
   async function recognize(camera: boolean) {

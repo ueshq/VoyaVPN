@@ -37,6 +37,7 @@ pnpm build               # Delegates to @voya/desktop build (tsc -b + vite build
 pnpm --filter @voya/desktop build  # Build only the desktop app
 pnpm tauri:build --debug # Unsigned debug Tauri packages (no signing creds needed)
 pnpm build:mac:appstore  # arm64 Mac App Store .pkg (feature mac-app-store drops the updater); docs/release/macos-app-store.md
+pnpm build:ios:appstore  # iOS App Store .ipa (--unsigned archives and checks without a certificate); docs/release/mobile-ios-signing.md
 
 pnpm run verify:local       # Full local verification suite — run this before declaring work done
 ```
@@ -68,6 +69,7 @@ pnpm run check:desktop:smoke       # Packaged shell through tauri-driver (Linux 
 pnpm run check:mobile:test         # React Native Jest suite
 pnpm run check:mobile:bundle       # Metro bundle for iOS and Android
 pnpm run check:mobile:swift        # Parse the iOS app Swift (macOS only)
+pnpm run check:mobile:ios:assets   # iOS icons opaque, purpose strings translated, one App Group
 pnpm run check:frontend:test       # Vitest once, without the coverage gate
 pnpm --filter @voya/desktop test --run src/features/profiles/server-table.test.tsx  # Single desktop test file
 

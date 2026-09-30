@@ -21,13 +21,13 @@ final class PacketTunnelDiagnostics {
         try? providerLogHandle?.close()
     }
 
-    private let logger = Logger(subsystem: "app.voyavpn.desktop.PacketTunnel", category: "PacketTunnelProvider")
+    private let logger = Logger(subsystem: PacketTunnelIdentity.subsystem, category: "PacketTunnelProvider")
     private var providerStatusURLOverride: URL?
     private var providerLogURLOverride: URL?
     /// Serializes provider-log appends. libbox forwards every sing-box log line
     /// here from arbitrary Go threads, and the handle, byte counter and
     /// formatter below are shared mutable state.
-    private let providerLogQueue = DispatchQueue(label: "app.voyavpn.desktop.PacketTunnel.log")
+    private let providerLogQueue = DispatchQueue(label: "\(PacketTunnelIdentity.subsystem).log")
     private let providerLogTimestampFormatter = ISO8601DateFormatter()
     private var providerLogHandle: FileHandle?
     private var providerLogBytes = 0

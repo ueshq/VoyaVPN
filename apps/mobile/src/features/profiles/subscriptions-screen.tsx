@@ -122,9 +122,12 @@ function SubscriptionEditor({ item, metadata, close }: { item: Subscription; met
     busyRef.current = true; setBusy(true); setError(null);
     try {
       const result = await voyaCommands().updateSubscriptions(item.id, true, null);
-      const failure = subscriptionUpdateMessages(result, t);
-      setMessageFailed(Boolean(failure));
-      setMessage(failure || formatSubscriptionUpdateSummary(result, t));
+      const notes = subscriptionUpdateMessages(result, t);
+      // Only a failed download is a warning. A skipped one means the
+      // subscription was edited while it downloaded; the note says to refresh
+      // again, and nothing went wrong.
+      setMessageFailed(result.outcomes.some((outcome) => outcome.status === "failed"));
+      setMessage(notes || formatSubscriptionUpdateSummary(result, t));
       await client.invalidateQueries();
     } catch (failure) { setError(failure); }
     finally { busyRef.current = false; setBusy(false); }

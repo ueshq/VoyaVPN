@@ -1,11 +1,23 @@
 import type { TranslationFunction } from "@voya/i18n/core";
 import type { TunStatus } from "@voya/contracts";
 
-/** The tunnel backend, its state and, when known, what went wrong, as one line. */
-export function tunProviderLabel(tun: TunStatus, t: TranslationFunction) {
+/**
+ * The tunnel backend, its state and, when known, what went wrong, as one line.
+ *
+ * The provider reports its own error as untranslated text. A surface that
+ * shows that text elsewhere, behind a details disclosure, passes
+ * `includeProviderError: false` to keep the line in the user's language.
+ */
+export function tunProviderLabel(
+  tun: TunStatus,
+  t: TranslationFunction,
+  { includeProviderError = true }: { includeProviderError?: boolean } = {},
+) {
   const backend = tunBackendLabel(tun.backend, t);
   const providerState = tunProviderStateLabel(tun.providerState, t);
-  const description = tunProviderErrorDescription(tun, t);
+  const description = includeProviderError
+    ? tunProviderErrorDescription(tun, t)
+    : translatedProviderDescription(tun, t);
   if (description) {
     return `${backend}: ${providerState}: ${description}`;
   }
@@ -14,6 +26,11 @@ export function tunProviderLabel(tun: TunStatus, t: TranslationFunction) {
 }
 
 export function tunProviderErrorDescription(tun: TunStatus, t: TranslationFunction) {
+  return translatedProviderDescription(tun, t) ?? tun.lastProviderError;
+}
+
+/** The explanation this app words itself, or `null` when only the provider's text exists. */
+function translatedProviderDescription(tun: TunStatus, t: TranslationFunction) {
   if (
     tun.backend === "macosPacketTunnel" &&
     tun.providerState === "missingComponent"
@@ -21,7 +38,7 @@ export function tunProviderErrorDescription(tun: TunStatus, t: TranslationFuncti
     return t("status.macosTunnelMissing");
   }
 
-  return tun.lastProviderError;
+  return null;
 }
 
 export function tunProviderPathMismatchDescription(status: TunStatus, t: TranslationFunction) {

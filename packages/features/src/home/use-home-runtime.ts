@@ -111,24 +111,36 @@ export function useHomeRuntime() {
     runningId,
     state,
     tunProviderSummary,
-    tunIssue: homeTunIssue(tun, tunProviderSummary, t),
+    tunIssue: homeTunIssue(tun, t),
+    // The same line without the provider's own untranslated text, and that
+    // text on its own: a view that tucks diagnostics away shows the first and
+    // discloses the second.
+    tunIssueMessage: homeTunIssue(tun, t, { includeProviderError: false }),
+    tunProviderError: tun?.lastProviderError ?? null,
   };
 }
 
+/** What each system asks the first time a VPN configuration is added. */
+const VPN_PERMISSION_HINT_KEYS = {
+  androidVpnService: "home.vpnPermissionHintAndroid",
+  iosPacketTunnel: "home.vpnPermissionHintIos",
+  macosPacketTunnel: "home.vpnPermissionHint",
+} as const satisfies Partial<Record<TunStatus["backend"], string>>;
+
 /** A line under the mode card when the tunnel needs attention, or `null`. */
-function homeTunIssue(
+export function homeTunIssue(
   tun: TunStatus | null,
-  summary: string | null,
   t: TranslationFunction,
+  options?: { includeProviderError?: boolean },
 ) {
   if (!tun) return null;
   if (tun.providerPathMismatch) return tunProviderPathMismatchDescription(tun, t);
-  // The first connection on macOS asks to add a VPN configuration.
-  if (tun.backend === "macosPacketTunnel" && tun.providerState === "permissionRequired") {
-    return t("home.vpnPermissionHint");
+  // The first connection asks to add a VPN configuration; say what to choose.
+  if (tun.providerState === "permissionRequired" && Object.hasOwn(VPN_PERMISSION_HINT_KEYS, tun.backend)) {
+    return t(VPN_PERMISSION_HINT_KEYS[tun.backend as keyof typeof VPN_PERMISSION_HINT_KEYS]);
   }
   const needsAttention =
     ["error", "permissionRequired", "missingComponent"].includes(tun.providerState) ||
     tun.lastProviderError;
-  return needsAttention ? summary : null;
+  return needsAttention ? tunProviderLabel(tun, t, options) : null;
 }
