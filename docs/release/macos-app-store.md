@@ -141,6 +141,17 @@ Before it writes the `.pkg`, `native:macos:pkg` checks the following:
   `scripts/native/macos/macho-imports.mjs`. It scans the PacketTunnel too:
   `Libbox.framework` still contains Cronet's object, and only `-dead_strip`
   keeps it out of the linked appex.
+- No Mach-O contains privilege-escalation text: an admin prompt
+  (`with administrator privileges`, `osascript`), a sudoers grant
+  (`sudoers`, `NOPASSWD`, `visudo`), `pkexec`, or `/usr/local/libexec`
+  (Guideline 2.4.5). macOS has no elevation path (ADR 0004), and the Tauri
+  updater, which asks for admin rights to replace the app, is not compiled
+  into the store build.
+- The launch-at-login agent
+  `Contents/Library/LaunchAgents/app.voyavpn.desktop.autostart.plist` is
+  present, its `Label` is its file name, its `BundleProgram` is
+  `Contents/MacOS/<CFBundleExecutable>`, and it passes `--autostart`.
+  `native:macos:tunnel:verify` checks the same in every lane.
 - No file carries `com.apple.quarantine` (ITMS-91109). This is checked on the
   bundle, and again on the finished `.pkg` after expanding it, because
   `productbuild` keeps extended attributes in the payload.
@@ -199,6 +210,35 @@ version fields from the app, which avoids ITMS-90473.
    Cover VPN authorization, TUN traffic, the latency test while disconnected
    (it runs the sandboxed seed), and log export to a user-chosen folder.
 
+## Resubmitting after a rejection
+
+Build 405 (commit `d311a25`, before the source-built seed) is the build App
+Review rejected in 2026-09 under 2.1.0, 2.4.5 and 2.5.1. Resubmit in this
+order:
+
+1. Reply in the App Store Connect message thread with the
+   [Resolution Center reply](app-store-review-notes.md#resolution-center-reply-for-build-405).
+   An unanswered thread stays attached to the version.
+2. Run `pnpm run verify:local` on the commit to ship.
+3. Run `pnpm build:mac:appstore`. The build number is the commit count, so it
+   is already above 405; set `VOYAVPN_MACOS_BUILD_NUMBER` only to upload the
+   same commit twice. Confirm `native:macos:pkg` printed the public-API,
+   privilege-escalation and launch-at-login lines.
+4. Upload with Transporter (Verify, then Deliver) and answer export compliance
+   for the new build.
+5. On the saved 0.1.0 version, replace build 405 with the new build.
+6. Paste the [App Review Information notes](app-store-review-notes.md#app-review-information--notes)
+   and fill in the review test configuration. The reviewer connects from
+   Apple's network in the United States, so the node must be reachable from
+   there and stay valid for the whole review. Use a server you run elsewhere,
+   not the self-hosted node on your own Mac. Keep the credential out of git.
+7. Check App Privacy ("Data Not Collected"), the Privacy Policy and Support
+   URLs, and the review contact, then submit.
+8. Install the build from TestFlight and run the acceptance in step 6 of
+   [Upload](#upload). Also turn on Autostart under Settings > Startup and
+   confirm VoyaVPN appears in System Settings > General > Login Items &
+   Extensions.
+
 ## Known gaps for review
 
 - **Licensing.** The bundled sing-box seed and the Libbox statically linked
@@ -213,9 +253,13 @@ version fields from the app, which avoids ITMS-90473.
   [app-store-review-notes.md](app-store-review-notes.md).
 - **Naive nodes while disconnected.** The source-built seed has no naive
   outbound, so those nodes can only be tested while connected.
-- **Launch at login.** Autostart writes a LaunchAgent under `~/Library`. Inside
-  the sandbox that path is redirected into the app container, so the setting
-  has no effect in the store build. A store-safe version needs `SMAppService`.
+- **Launch at login waits for the user.** The setting registers the bundled
+  agent with `SMAppService`. macOS may list it as needing approval in System
+  Settings > General > Login Items & Extensions; the app does not yet show
+  that state, so the switch reads on either way.
+- **No elevation.** Nothing in the store package can ask for administrator
+  rights. A reviewer who asks about root helpers or sudo gets the permissions
+  paragraph of the review notes.
 - **Architecture and OS floor.** The package is arm64 only and macOS 26 only.
   The seed is now built from source, so lowering the floor means building it
   for an older deployment target (for example through

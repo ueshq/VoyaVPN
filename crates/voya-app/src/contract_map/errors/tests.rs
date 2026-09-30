@@ -15,7 +15,7 @@ use std::{io, path::PathBuf};
 use voya_contracts::DatabaseErrorCode;
 use voya_db::DbError;
 use voya_net::DownloadError;
-use voya_platform::coreinfo::CoreInfoError;
+use voya_platform::{autostart::AutostartError, coreinfo::CoreInfoError};
 
 use voya_core::validation::ValidationCode as CoreValidationCode;
 
@@ -534,6 +534,29 @@ fn tun_and_system_proxy_failures_are_classified() {
         "io",
         AppErrorSubsystem::SysProxy,
     )]);
+}
+
+#[test]
+fn autostart_failures_are_classified() {
+    assert_kinds(vec![
+        (
+            "no app bundle",
+            AutostartManagerError::Autostart(AutostartError::LoginItemUnavailable {
+                reason: "not running from an .app bundle".to_string(),
+            }),
+            "unsupported",
+            AppErrorSubsystem::Autostart,
+        ),
+        (
+            "SMAppService refused",
+            AutostartManagerError::Autostart(AutostartError::LoginItem {
+                operation: "register",
+                message: "Operation not permitted".to_string(),
+            }),
+            "internal",
+            AppErrorSubsystem::Autostart,
+        ),
+    ]);
 }
 
 #[test]

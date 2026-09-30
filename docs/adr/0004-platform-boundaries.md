@@ -152,3 +152,33 @@ password to sudo and zeroized it on stop. The code does not work that way:
 - The residual risk is documented in `privilege.rs`: the core binaries live in
   a user-writable directory, so the launcher's path checks contain, but do not
   remove, privilege escalation by an attacker already running as the same user.
+
+## Amendment (2026-09-30): macOS Never Escalates, and Launches at Login Through SMAppService
+
+Mac App Store review (Guideline 2.4.5) does not allow an app to ask for
+administrator rights, install a helper outside its bundle, or write its own
+login entry. Two parts of this ADR assumed macOS could do those things, and
+neither was ever needed there:
+
+- **Elevation is Linux only.** macOS runs its tunnel in the NetworkExtension
+  provider ([ADR 0005](0005-native-transparent-tunnel-backends.md)), so
+  `requires_elevation` is always false there. The installer that writes the
+  root launcher and the `NOPASSWD` sudoers drop-in now lives in
+  `voya-platform::privilege::linux_installer` and is compiled only for Linux
+  (and for tests). `elevate_launcher_dir(Macos)` is `None`, `build_install_plan`
+  returns `UnsupportedOs` off Linux, and `should_use_unix_sudo` and the sudo
+  kill body accept Linux only. The startup sweep and the exit-time revoke are
+  therefore no-ops on macOS. This supersedes, for macOS, the "Linux and macOS
+  use the same `sudo -n` launcher shape" rule above and the `osascript` step of
+  the 2026-09 elevation amendment. `native:macos:pkg` refuses a store package
+  whose Mach-O files contain escalation text (`scripts/native/macos/macho-imports.mjs`).
+- **Launch at login uses `SMAppService`.** `voya-platform::autostart` no longer
+  writes `~/Library/LaunchAgents/VoyaVPN-LaunchAgent.plist` or runs `launchctl
+  load`; inside the App Sandbox that path was the container, so it never took
+  effect in a signed build. The app bundles a launchd agent at
+  `Contents/Library/LaunchAgents/app.voyavpn.desktop.autostart.plist` and
+  registers it with `SMAppService.agentServiceWithPlistName`
+  (`crates/voya-platform/native/macos_login_item.m`). The agent passes
+  `--autostart`, so the hidden-start contract is the same as on Windows and
+  Linux. Applying the setting also removes the old agent file if an unsandboxed
+  build left one behind.

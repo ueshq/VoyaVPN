@@ -1,4 +1,4 @@
-import { closeSync, openSync, readSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readSync } from "node:fs";
 import { relative } from "node:path";
 
 import { checkedCapture } from "../../lib/common.mjs";
@@ -124,6 +124,32 @@ export function machOImportProblems({ name, undefinedSymbols = [], linkedLibrari
   return problems;
 }
 
+/**
+ * Text that only a privilege-escalation path would carry: an admin
+ * authorization prompt, a sudoers grant, or a root helper installed outside
+ * the bundle. Guideline 2.4.5 forbids all of them in a Mac App Store app, and
+ * macOS VoyaVPN has none (ADR 0004): the Linux installer is compiled for Linux
+ * only, and the Tauri updater, which asks for admin rights to replace the app,
+ * is left out of the store build.
+ */
+const privilegeEscalationMarkers = Object.freeze([
+  "with administrator privileges",
+  "/usr/bin/osascript",
+  "sudoers",
+  "NOPASSWD",
+  "visudo",
+  "pkexec",
+  "/usr/local/libexec",
+]);
+
+/** One readable line per escalation marker found in `bytes`, the whole binary. */
+export function privilegeEscalationProblems({ name, bytes }) {
+  const found = privilegeEscalationMarkers.filter((marker) => bytes.includes(marker));
+  return found.length === 0
+    ? []
+    : [`${name} contains privilege-escalation text (${found.join(", ")}); App Review Guideline 2.4.5 forbids it.`];
+}
+
 /** Every Mach-O under `root`, whatever its mode bits: executables, extensions and embedded frameworks. */
 function machOBinariesIn(root) {
   return walkFilesSync(root).filter((path) => !path.includes("/_CodeSignature/") && isMachOFile(path));
@@ -143,5 +169,14 @@ export function bundleImportReport(root, { captureCommand = checkedCapture } = {
       linkedLibraries: parseLinkedLibraries(captureCommand("otool", ["-arch", "all", "-L", binary]).stdout),
     });
   });
+  return { binaries, problems };
+}
+
+/** Scans every Mach-O under `root` for {@link privilegeEscalationProblems}. */
+export function bundlePrivilegeEscalationReport(root) {
+  const binaries = machOBinariesIn(root).map((binary) => relative(root, binary));
+  const problems = binaries.flatMap((name) =>
+    privilegeEscalationProblems({ name, bytes: readFileSync(`${root}/${name}`) }),
+  );
   return { binaries, problems };
 }

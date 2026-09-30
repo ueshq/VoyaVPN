@@ -5,11 +5,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   bundleImportReport,
+  bundlePrivilegeEscalationReport,
   isAllowedLinkedLibrary,
   isMachOHeader,
   machOImportProblems,
   parseLinkedLibraries,
   parseUndefinedSymbols,
+  privilegeEscalationProblems,
 } from "./macho-imports.mjs";
 
 // Excerpts of `nm -u -arch all` and `otool -arch all -L` on the upstream
@@ -124,6 +126,46 @@ __kCFBundleNumericVersionKey
       expect(report.problems.every((line) => line.startsWith("Resources/core-seeds/sing_box/sing-box "))).toBe(true);
     } finally {
       rmSync(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("privilege-escalation gate", () => {
+  it("flags the macOS elevation installer the store build used to carry", () => {
+    const bytes = Buffer.from(
+      'do shell script "/bin/sh " & quoted form of "x" with administrator privileges\0/usr/local/libexec/voya-vpn\0',
+    );
+    expect(privilegeEscalationProblems({ name: "MacOS/voyavpn", bytes })).toEqual([
+      "MacOS/voyavpn contains privilege-escalation text (with administrator privileges, /usr/local/libexec); "
+        + "App Review Guideline 2.4.5 forbids it.",
+    ]);
+  });
+
+  it("flags a sudoers grant", () => {
+    const bytes = Buffer.from("afu ALL=(root) NOPASSWD: /usr/libexec/voya-vpn/voya-elevate\n/etc/sudoers.d/voya-vpn");
+    expect(privilegeEscalationProblems({ name: "MacOS/voyavpn", bytes })[0]).toMatch(/sudoers, NOPASSWD/u);
+  });
+
+  it("passes the sudo -n runtime path, which only Linux takes", () => {
+    const bytes = Buffer.from("/usr/bin/sudo\0-n\0--\0kill\0refusing to sudo kill pid");
+    expect(privilegeEscalationProblems({ name: "MacOS/voyavpn", bytes })).toEqual([]);
+  });
+
+  it("scans every Mach-O under a bundle", () => {
+    const root = mkdtempSync(join(tmpdir(), "voya-escalation-"));
+    try {
+      mkdirSync(join(root, "MacOS"));
+      const header = Buffer.from("cffaedfe", "hex");
+      writeFileSync(join(root, "MacOS", "voyavpn"), Buffer.concat([header, Buffer.from("visudo -cf")]));
+      writeFileSync(join(root, "MacOS", "clean"), Buffer.concat([header, Buffer.from("nothing here")]));
+      writeFileSync(join(root, "notes.txt"), "visudo is only text here");
+
+      const report = bundlePrivilegeEscalationReport(root);
+      expect(report.binaries.sort()).toEqual(["MacOS/clean", "MacOS/voyavpn"]);
+      expect(report.problems).toHaveLength(1);
+      expect(report.problems[0]).toMatch(/^MacOS\/voyavpn contains privilege-escalation text \(visudo\)/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

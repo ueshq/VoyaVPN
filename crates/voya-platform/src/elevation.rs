@@ -13,16 +13,18 @@ use crate::{
 /// deterministic regardless of the environment the GUI was launched with.
 pub const SUDO_EXECUTABLE: &str = "/usr/bin/sudo";
 
+/// Only Linux runs an elevated core. macOS runs the tunnel in its
+/// NetworkExtension provider and never escalates privileges (ADR 0004).
 #[must_use]
 pub const fn should_use_unix_sudo(os: TargetOs, tun_enabled: bool, may_need_sudo: bool) -> bool {
-    may_need_sudo && tun_enabled && matches!(os, TargetOs::Linux | TargetOs::Macos)
+    may_need_sudo && tun_enabled && matches!(os, TargetOs::Linux)
 }
 
 /// Wrap a core launch so it runs through the root-owned elevation launcher via
 /// passwordless `sudo -n`.
 ///
 /// The app never stores or pipes an admin password; a one-time native
-/// authorization grant installs a `NOPASSWD` sudoers rule for `launcher`, so
+/// authorization grant (Linux `pkexec`) lets `launcher` run without one, so
 /// this spawn succeeds without any stdin secret.
 #[must_use]
 pub fn wrap_spawn_with_unix_sudo_passwordless(base: ProcessSpawn, launcher: &Path) -> ProcessSpawn {
@@ -61,7 +63,7 @@ pub fn unix_sudo_kill_spawn_passwordless(
     expected_executable: impl AsRef<Path>,
     working_dir: impl Into<PathBuf>,
 ) -> Result<ProcessSpawn, ElevationError> {
-    if !matches!(os, TargetOs::Linux | TargetOs::Macos) {
+    if !matches!(os, TargetOs::Linux) {
         return Err(ElevationError::UnsupportedOs);
     }
 
@@ -84,12 +86,14 @@ pub fn unix_sudo_kill_spawn_passwordless(
 pub fn unix_sudo_kill_body(os: TargetOs) -> Result<String, ElevationError> {
     let child_lookup = match os {
         TargetOs::Linux => "ps -o pid= --ppid \"$parent\"",
-        TargetOs::Macos => "ps -axo pid=,ppid= | awk -v ppid=\"$parent\" '$2==ppid {print $1}'",
-        // No core runs as a child process on a phone, so nothing has to be
-        // killed with privilege.
-        TargetOs::Windows | TargetOs::Ios | TargetOs::Android | TargetOs::Other => {
-            return Err(ElevationError::UnsupportedOs)
-        }
+        // macOS runs the tunnel in its NetworkExtension provider and Windows in
+        // its service; no core runs as a child process on a phone. None of them
+        // kills an elevated core.
+        TargetOs::Macos
+        | TargetOs::Windows
+        | TargetOs::Ios
+        | TargetOs::Android
+        | TargetOs::Other => return Err(ElevationError::UnsupportedOs),
     };
 
     Ok(format!(
@@ -250,6 +254,8 @@ pub(crate) fn expected_process_comm_names(
     Ok(names)
 }
 
+/// Used only by the Linux installer, so it is compiled for Linux and tests.
+#[cfg(any(target_os = "linux", test))]
 #[must_use]
 pub(crate) fn quote_shell_arg(value: &str) -> String {
     if value.is_empty() {
@@ -283,7 +289,7 @@ mod tests {
         let base = ProcessSpawn::new(ProcessRole::Main, "/tmp/Voya VPN/sing-box")
             .with_arguments(split_command_line("run -c config.json").expect("args"))
             .with_working_dir("/tmp/Voya VPN/binConfigs");
-        let launcher = PathBuf::from("/usr/local/libexec/voya-vpn/voya-elevate");
+        let launcher = PathBuf::from("/usr/libexec/voya-vpn/voya-elevate");
         let wrapped = wrap_spawn_with_unix_sudo_passwordless(base, &launcher);
 
         assert_eq!(wrapped.executable, PathBuf::from(SUDO_EXECUTABLE));
@@ -293,7 +299,7 @@ mod tests {
             vec![
                 "-n".to_string(),
                 "--".to_string(),
-                "/usr/local/libexec/voya-vpn/voya-elevate".to_string(),
+                "/usr/libexec/voya-vpn/voya-elevate".to_string(),
                 "run".to_string(),
                 "/tmp/Voya VPN/sing-box".to_string(),
                 "run".to_string(),
@@ -330,6 +336,18 @@ mod tests {
     }
 
     #[test]
+    fn macos_never_runs_or_kills_an_elevated_core() {
+        let launcher = PathBuf::from("/usr/libexec/voya-vpn/voya-elevate");
+
+        assert!(!should_use_unix_sudo(TargetOs::Macos, true, true));
+        assert!(should_use_unix_sudo(TargetOs::Linux, true, true));
+        assert!(matches!(
+            unix_sudo_kill_spawn_passwordless(TargetOs::Macos, &launcher, 42, "sing-box", "/tmp"),
+            Err(ElevationError::UnsupportedOs)
+        ));
+    }
+
+    #[test]
     fn process_unix_sudo_passwordless_kill_rejects_target_without_comparable_process_name() {
         let launcher = PathBuf::from("/usr/libexec/voya-vpn/voya-elevate");
         let error = unix_sudo_kill_spawn_passwordless(TargetOs::Linux, &launcher, 42, "/", "/tmp")
@@ -341,20 +359,19 @@ mod tests {
     #[test]
     fn process_unix_sudo_kill_body_validates_tree_before_killing() {
         let linux = unix_sudo_kill_body(TargetOs::Linux).expect("linux body");
-        let macos = unix_sudo_kill_body(TargetOs::Macos).expect("macos body");
 
         assert!(!linux.starts_with("#!"));
         assert!(linux.contains("target_has_expected_process"));
         assert!(linux.contains("refusing to sudo kill pid $PID"));
         assert!(linux.contains("ps -o pid= --ppid"));
-        assert!(macos.contains("ps -axo pid=,ppid="));
+        assert!(unix_sudo_kill_body(TargetOs::Macos).is_err());
         assert!(unix_sudo_kill_body(TargetOs::Windows).is_err());
     }
 
     #[cfg(unix)]
     #[test]
-    fn process_unix_sudo_kill_body_matches_macos_comm_paths_with_spaces() {
-        let body = unix_sudo_kill_body(TargetOs::Macos).expect("macos body");
+    fn process_unix_sudo_kill_body_matches_comm_paths_with_spaces() {
+        let body = unix_sudo_kill_body(TargetOs::Linux).expect("linux body");
         let script = format!(
             r#"
 TERMINATED=0
@@ -374,14 +391,16 @@ kill() {{
 }}
 
 ps() {{
-  if [ "${{1:-}}" = "-axo" ]; then
-    printf '%s\n' '  424242       1' '  424243  424242'
+  if [ "${{1:-}}" = "-o" ] && [ "${{3:-}}" = "--ppid" ]; then
+    case "${{4:-}}" in
+      424242) printf '%s\n' '424243' ;;
+    esac
     return 0
   fi
   if [ "${{1:-}}" = "-p" ]; then
     case "${{2:-}}" in
       424242) printf '%s\n' '/usr/bin/sudo' ;;
-      424243) printf '%s\n' '/Users/afu/Library/Application Support/VoyaVPN/bin/sing-box' ;;
+      424243) printf '%s\n' '/home/afu/.local/share/Voya VPN/bin/sing-box' ;;
       *) return 1 ;;
     esac
     return 0
@@ -414,7 +433,7 @@ sleep() {{ :; }}
     #[test]
     fn process_unix_sudo_kill_body_rejects_non_numeric_and_reserved_pids() {
         for pid in ["", "abc", "12x", "-1", "0", "1"] {
-            let output = run_macos_kill_body("", &[pid, "sing-box"]);
+            let output = run_kill_body("", &[pid, "sing-box"]);
 
             assert_eq!(
                 output.status.code(),
@@ -441,8 +460,11 @@ kill() {
 }
 
 ps() {
-  if [ "${1:-}" = "-axo" ]; then
-    printf '%s\n' '  4242421       1' '  4242422  4242421' '  4242423  4242422'
+  if [ "${1:-}" = "-o" ] && [ "${3:-}" = "--ppid" ]; then
+    case "${4:-}" in
+      4242421) printf '%s\n' '4242422' ;;
+      4242422) printf '%s\n' '4242423' ;;
+    esac
     return 0
   fi
   if [ "${1:-}" = "-p" ]; then
@@ -458,7 +480,7 @@ ps() {
 }
 "#;
 
-        let output = run_macos_kill_body(stubs, &["4242421", "sing-box"]);
+        let output = run_kill_body(stubs, &["4242421", "sing-box"]);
 
         assert_eq!(
             output.status.code(),
@@ -475,8 +497,8 @@ ps() {
     }
 
     #[cfg(unix)]
-    fn run_macos_kill_body(stubs: &str, arguments: &[&str]) -> std::process::Output {
-        let body = unix_sudo_kill_body(TargetOs::Macos).expect("macos body");
+    fn run_kill_body(stubs: &str, arguments: &[&str]) -> std::process::Output {
+        let body = unix_sudo_kill_body(TargetOs::Linux).expect("linux body");
         let script = format!("{stubs}\nsleep() {{ :; }}\n{body}");
         let mut command = std::process::Command::new("bash");
         command.arg("-c").arg(script).arg("voya-test");

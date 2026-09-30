@@ -11,7 +11,7 @@ import {
 } from "../../lib/common.mjs";
 import { readJson, walkFilesSync } from "../../lib/fs.mjs";
 import { SING_BOX_SEED_MANIFEST, SING_BOX_SOURCE_EXCLUDED_TAGS } from "../../core/sing-box-installer.mjs";
-import { bundleImportReport } from "./macho-imports.mjs";
+import { bundleImportReport, bundlePrivilegeEscalationReport } from "./macho-imports.mjs";
 import {
   appBundleIdentifier,
   codesignEntitlements,
@@ -23,6 +23,7 @@ import {
   packetTunnelLayout,
   requireAbsent,
   requirePath,
+  verifyLoginItemPlist,
 } from "./tunnel-layout.mjs";
 import {
   decodeProvisioningProfile,
@@ -209,6 +210,7 @@ function verifyBundleShape(layout) {
   requirePath(layout.binary, "PacketTunnel binary");
   requirePath(resolve(appContents, "embedded.provisionprofile"), "macOS app provisioning profile");
   requirePath(layout.provisioningProfile, "PacketTunnel provisioning profile");
+  verifyLoginItemPlist(appContents, { log: true });
   const reason = "must not ship in the App Store package";
   requireAbsent(incompatiblePacketTunnelBundle(appContents, "app-store"), "A Developer ID system extension", { reason });
   // Remove after 2026-10-31, together with the matching guard in build-tunnel.mjs.
@@ -262,6 +264,12 @@ function verifyPublicApiImports() {
   for (const name of binaries) {
     console.log(`✓ ${name}: public API only`);
   }
+}
+
+function verifyNoPrivilegeEscalation() {
+  const { binaries, problems } = bundlePrivilegeEscalationReport(appContents);
+  throwProblems(problems);
+  console.log(`✓ No privilege-escalation text in ${binaries.length} Mach-O files (Guideline 2.4.5)`);
 }
 
 function verifySeedOrigin() {
@@ -364,6 +372,7 @@ function main() {
   verifyAppExtensions(appMinimumSystemVersion);
   verifySeedOrigin();
   verifyPublicApiImports();
+  verifyNoPrivilegeEscalation();
   assertNoQuarantine(appBundle, "App bundle");
 
   const version = plistBuddy(infoPlist, ":CFBundleShortVersionString");

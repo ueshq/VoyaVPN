@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   compareMacosVersions,
@@ -9,6 +10,9 @@ import {
   incompatiblePacketTunnelBundle,
   legacyPacketTunnelAppexBundle,
   libboxBinaryPath,
+  loginItemPlistName,
+  loginItemPlistPath,
+  loginItemPlistProblems,
   packetTunnelLayout,
   packagingModeForDistribution,
   requiredNetworkExtensionValue,
@@ -106,6 +110,60 @@ describe("macOS native tunnel layout", () => {
     ).toBe("developer-id");
     expect(distributionFromIdentityName("Apple Distribution: Example Team", "auto")).toBe("app-store");
     expect(distributionFromIdentityName("", "auto")).toBe("app-store");
+  });
+});
+
+describe("launch-at-login agent plist", () => {
+  const good = {
+    fileName: loginItemPlistName,
+    executableName: "voyavpn",
+    plist: {
+      Label: "app.voyavpn.desktop.autostart",
+      BundleProgram: "Contents/MacOS/voyavpn",
+      ProgramArguments: ["voyavpn", "--autostart"],
+    },
+  };
+
+  it("lives in Contents/Library/LaunchAgents", () => {
+    expect(loginItemPlistPath("/Applications/VoyaVPN.app/Contents")).toBe(
+      "/Applications/VoyaVPN.app/Contents/Library/LaunchAgents/app.voyavpn.desktop.autostart.plist",
+    );
+  });
+
+  it("accepts the bundled agent", () => {
+    expect(loginItemPlistProblems(good)).toEqual([]);
+  });
+
+  it("reports a label that differs from the file name", () => {
+    const problems = loginItemPlistProblems({ ...good, plist: { ...good.plist, Label: "VoyaVPN-LaunchAgent" } });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/Label/u);
+  });
+
+  it("reports a program that is not the bundle executable", () => {
+    const problems = loginItemPlistProblems({ ...good, executableName: "VoyaVPN" });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/Contents\/MacOS\/VoyaVPN/u);
+  });
+
+  it("requires the login flag after the program name", () => {
+    for (const ProgramArguments of [undefined, ["voyavpn"], ["--autostart"]]) {
+      expect(loginItemPlistProblems({ ...good, plist: { ...good.plist, ProgramArguments } })).toEqual([
+        "ProgramArguments must pass --autostart after the program name",
+      ]);
+    }
+  });
+
+  it("matches the plist the app bundles", () => {
+    const source = join(
+      dirname(fileURLToPath(import.meta.url)),
+      "../../../apps/desktop/src-tauri/native/macos/LaunchAgents",
+      loginItemPlistName,
+    );
+    const text = readFileSync(source, "utf8");
+    expect(text).toContain("<string>app.voyavpn.desktop.autostart</string>");
+    expect(text).toContain("<string>Contents/MacOS/voyavpn</string>");
+    expect(text).toMatch(/<string>voyavpn<\/string>\s*<string>--autostart<\/string>/u);
   });
 });
 

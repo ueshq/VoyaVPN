@@ -48,6 +48,59 @@ export function packetTunnelSources(repoRoot) {
   ].map((name) => resolve(appleNativeRoot(repoRoot), name));
 }
 
+/**
+ * The launch-at-login agent. `SMAppService.agentServiceWithPlistName` reads it
+ * from `Contents/Library/LaunchAgents` inside the signed bundle (Guideline
+ * 2.4.5(iii)); `bundle.macOS.files` in `tauri.macos.conf.json` puts it there.
+ * `MACOS_LOGIN_ITEM_PLIST_NAME` in `crates/voya-platform/src/autostart.rs`
+ * names the same file, and `AUTOSTART_ARG` there is the flag.
+ */
+export const loginItemPlistName = "app.voyavpn.desktop.autostart.plist";
+const autostartArgument = "--autostart";
+
+export function loginItemPlistPath(appContents) {
+  return resolve(appContents, "Library", "LaunchAgents", loginItemPlistName);
+}
+
+/**
+ * What would stop the agent from launching the app at login, or launch it
+ * without the flag that keeps the window hidden. `plist` is the parsed agent.
+ */
+export function loginItemPlistProblems({ fileName, plist, executableName }) {
+  const problems = [];
+  const label = fileName.replace(/\.plist$/u, "");
+  if (plist?.Label !== label) {
+    problems.push(`Label is ${JSON.stringify(plist?.Label)}, expected "${label}": SMAppService finds the job by its file name`);
+  }
+  const program = `Contents/MacOS/${executableName}`;
+  if (plist?.BundleProgram !== program) {
+    problems.push(`BundleProgram is ${JSON.stringify(plist?.BundleProgram)}, expected "${program}" (CFBundleExecutable)`);
+  }
+  const argumentsAfterProgram = Array.isArray(plist?.ProgramArguments) ? plist.ProgramArguments.slice(1) : [];
+  if (!argumentsAfterProgram.includes(autostartArgument)) {
+    problems.push(`ProgramArguments must pass ${autostartArgument} after the program name`);
+  }
+  return problems;
+}
+
+/** Throws unless the bundled agent plist exists and names this bundle's executable. */
+export function verifyLoginItemPlist(appContents, { log = false } = {}) {
+  const path = loginItemPlistPath(appContents);
+  requirePath(path, "Launch-at-login agent plist", { log });
+  const plist = JSON.parse(checkedCapture("plutil", ["-convert", "json", "-o", "-", path]).stdout);
+  const executableName = checkedCapture("plutil", [
+    "-extract", "CFBundleExecutable", "raw", "-o", "-", resolve(appContents, "Info.plist"),
+  ]).stdout.trim();
+  const problems = loginItemPlistProblems({ fileName: loginItemPlistName, plist, executableName });
+  if (problems.length > 0) {
+    throw new Error(`Launch-at-login agent plist ${path}:\n- ${problems.join("\n- ")}`);
+  }
+  requirePath(resolve(appContents, "MacOS", executableName), "Launch-at-login program");
+  if (log) {
+    console.log(`✓ Launch-at-login agent names Contents/MacOS/${executableName} with ${autostartArgument}`);
+  }
+}
+
 /** Throws when `path` is missing; `log` prints the line the verifier shows per check. */
 export function requirePath(path, label, { log = false } = {}) {
   if (!existsSync(path)) {

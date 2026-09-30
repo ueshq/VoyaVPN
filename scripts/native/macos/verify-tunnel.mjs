@@ -9,6 +9,7 @@ import {
   requireAbsent,
   requirePath,
   requiredNetworkExtensionValue,
+  verifyLoginItemPlist,
 } from "./tunnel-layout.mjs";
 import {
   assertProfileCapabilities,
@@ -180,6 +181,7 @@ function main() {
   requirePath(tunnel.layout.binary, "PacketTunnel binary", { log: true });
   requireAbsent(exportBindings, "Export bindings development tool", { log: true });
   requirePath(singBoxCoreSeed, "sing-box core seed", { log: true });
+  verifyLoginItemPlist(appContents, { log: true });
   verifyLibboxRuntime();
 
   const appProfile = verifyProvisioningProfile(appProvisioningProfile, "macOS app", appBundleIdentifier);

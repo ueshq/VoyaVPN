@@ -1,11 +1,14 @@
-//! One-time native privilege elevation for TUN.
+//! One-time native privilege elevation for TUN, on Linux only.
 //!
 //! Instead of storing an admin password and piping it to `sudo -S`, the app
-//! asks the OS once (macOS `osascript ... with administrator privileges`,
-//! Linux `pkexec`) to install a fixed-path, root-owned launcher plus a
-//! `NOPASSWD` sudoers drop-in that authorizes only that launcher. Subsequent
-//! core start/stop run passwordlessly through the launcher; the launcher is
-//! removed on exit. The password never touches the app process.
+//! asks the OS once (`pkexec`) to install a fixed-path, root-owned launcher
+//! plus a `NOPASSWD` sudoers drop-in that authorizes only that launcher.
+//! Subsequent core start/stop run passwordlessly through the launcher; the
+//! launcher is removed on exit. The password never touches the app process.
+//!
+//! macOS has no elevation path at all: its tunnel runs in the NetworkExtension
+//! provider, and the installer is not compiled into a macOS binary (App Review
+//! Guideline 2.4.5; ADR 0004). Windows runs its tunnel in a service.
 //!
 //! Security note: the core binaries live in a user-writable app directory, so a
 //! `NOPASSWD` grant cannot fully eliminate local privilege-escalation risk if
@@ -22,15 +25,13 @@ use thiserror::Error;
 
 use crate::{
     coreinfo::TargetOs,
-    elevation::{quote_shell_arg, sudo_launcher_arguments, unix_sudo_kill_body, SUDO_EXECUTABLE},
+    elevation::{sudo_launcher_arguments, SUDO_EXECUTABLE},
     process::{ProcessRole, ProcessSpawn},
 };
 
-/// Fixed sudoers drop-in path. The name has no `.` so sudo loads it (sudo
-/// ignores files in `sudoers.d` whose name contains a dot).
-pub const SUDOERS_DROP_IN_PATH: &str = "/etc/sudoers.d/voya-vpn";
+#[cfg(any(target_os = "linux", test))]
+mod linux_installer;
 
-const MACOS_LAUNCHER_DIR: &str = "/usr/local/libexec/voya-vpn";
 const LINUX_LAUNCHER_DIR: &str = "/usr/libexec/voya-vpn";
 const LAUNCHER_FILE_NAME: &str = "voya-elevate";
 
@@ -64,9 +65,12 @@ impl ElevationState {
 #[must_use]
 pub fn elevate_launcher_dir(os: TargetOs) -> Option<PathBuf> {
     match os {
-        TargetOs::Macos => Some(PathBuf::from(MACOS_LAUNCHER_DIR)),
         TargetOs::Linux => Some(PathBuf::from(LINUX_LAUNCHER_DIR)),
-        TargetOs::Windows | TargetOs::Ios | TargetOs::Android | TargetOs::Other => None,
+        TargetOs::Macos
+        | TargetOs::Windows
+        | TargetOs::Ios
+        | TargetOs::Android
+        | TargetOs::Other => None,
     }
 }
 
@@ -146,43 +150,34 @@ pub struct ElevationInstallPlan {
 ///
 /// `bin_prefix` is the user app `bin` directory; only core binaries under it
 /// are accepted by the launcher's `run` verb. `work_dir` is a user-owned scratch
-/// directory where the install sources are staged.
+/// directory where the install sources are staged. Every OS but Linux gets
+/// [`PrivilegeError::UnsupportedOs`].
+#[cfg(target_os = "linux")]
 pub fn build_install_plan(
     os: TargetOs,
     username: &str,
     bin_prefix: &Path,
     work_dir: &Path,
 ) -> Result<ElevationInstallPlan, PrivilegeError> {
-    let launcher_dir = elevate_launcher_dir(os).ok_or(PrivilegeError::UnsupportedOs)?;
-    let launcher_path = launcher_dir.join(LAUNCHER_FILE_NAME);
-    if username.is_empty() {
-        return Err(PrivilegeError::MissingUsername);
+    match os {
+        TargetOs::Linux => linux_installer::build_install_plan(username, bin_prefix, work_dir),
+        TargetOs::Macos
+        | TargetOs::Windows
+        | TargetOs::Ios
+        | TargetOs::Android
+        | TargetOs::Other => Err(PrivilegeError::UnsupportedOs),
     }
+}
 
-    let src_launcher_path = work_dir.join(LAUNCHER_FILE_NAME);
-    let src_sudoers_path = work_dir.join("voya-vpn.sudoers");
-    let install_script_path = work_dir.join("install.sh");
-
-    let launcher_contents = launcher_script(os, bin_prefix)?;
-    let sudoers_contents = sudoers_drop_in(username, &launcher_path);
-    let install_script_contents = install_script(
-        &launcher_dir,
-        &launcher_path,
-        &src_launcher_path,
-        &src_sudoers_path,
-    );
-    let command = elevated_install_command(os, &install_script_path)?;
-
-    Ok(ElevationInstallPlan {
-        work_dir: work_dir.to_path_buf(),
-        src_launcher_path,
-        src_sudoers_path,
-        install_script_path,
-        launcher_contents,
-        sudoers_contents,
-        install_script_contents,
-        command,
-    })
+/// See the Linux definition. The installer is not compiled into this binary.
+#[cfg(not(target_os = "linux"))]
+pub fn build_install_plan(
+    _os: TargetOs,
+    _username: &str,
+    _bin_prefix: &Path,
+    _work_dir: &Path,
+) -> Result<ElevationInstallPlan, PrivilegeError> {
+    Err(PrivilegeError::UnsupportedOs)
 }
 
 /// Passwordless `sudo -n` plan that drives the launcher's self-removing
@@ -194,170 +189,14 @@ pub fn build_uninstall_spawn(os: TargetOs) -> Result<ProcessSpawn, PrivilegeErro
         .with_display_log(false))
 }
 
-/// Root-owned launcher script. Dispatches `run` / `kill` / `uninstall` verbs.
-///
-/// The `run` verb requires an absolute path with no `..` component, resolves the
-/// containing directory with `cd -P`/`pwd -P` (so symlinked directories cannot
-/// escape), and only then requires the resolved path to be a non-symlink regular
-/// file inside the resolved `bin_prefix`. The resolved path is what gets exec'd.
-pub(crate) fn launcher_script(os: TargetOs, bin_prefix: &Path) -> Result<String, PrivilegeError> {
-    let kill_body = unix_sudo_kill_body(os).map_err(|_| PrivilegeError::UnsupportedOs)?;
-    let prefix = quote_shell_arg(&bin_prefix.to_string_lossy());
-    let sudoers = quote_shell_arg(SUDOERS_DROP_IN_PATH);
-    let launcher_dir = elevate_launcher_dir(os).ok_or(PrivilegeError::UnsupportedOs)?;
-    let launcher_dir = quote_shell_arg(&launcher_dir.to_string_lossy());
-
-    Ok(format!(
-        r#"#!/bin/bash
-# VoyaVPN privileged elevation launcher (root-owned, fixed path).
-# Authorized by a NOPASSWD sudoers rule so the app can start/stop the elevated
-# core without storing an admin password.
-PREFIX={prefix}
-SUDOERS={sudoers}
-LAUNCHER_DIR={launcher_dir}
-
-VERB="${{1:-}}"
-shift 2>/dev/null || true
-
-case "$VERB" in
-  run)
-    EXE="${{1:-}}"
-    shift 2>/dev/null || true
-    case "$EXE" in
-      /*) ;;
-      *) echo "voya-elevate: core path must be absolute" >&2; exit 64 ;;
-    esac
-    case "/$EXE/" in
-      */../*) echo "voya-elevate: core path must not contain '..'" >&2; exit 64 ;;
-    esac
-    EXE_DIR="${{EXE%/*}}"
-    [ -n "$EXE_DIR" ] || EXE_DIR="/"
-    EXE_NAME="${{EXE##*/}}"
-    REAL_DIR=$(cd -P -- "$EXE_DIR" 2>/dev/null && pwd -P) || {{
-      echo "voya-elevate: core directory could not be resolved" >&2
-      exit 64
-    }}
-    REAL_PREFIX=$(cd -P -- "$PREFIX" 2>/dev/null && pwd -P) || {{
-      echo "voya-elevate: allowed directory could not be resolved" >&2
-      exit 64
-    }}
-    EXE="$REAL_DIR/$EXE_NAME"
-    if [ -L "$EXE" ] || [ ! -f "$EXE" ]; then
-      echo "voya-elevate: core path is not a regular file" >&2
-      exit 64
-    fi
-    case "$EXE" in
-      "$REAL_PREFIX"/*) ;;
-      *) echo "voya-elevate: core path is outside the allowed directory" >&2; exit 64 ;;
-    esac
-    exec "$EXE" "$@"
-    ;;
-  kill)
-{kill_body}
-    ;;
-  uninstall)
-    rm -f "$SUDOERS"
-    rm -rf "$LAUNCHER_DIR"
-    exit 0
-    ;;
-  *)
-    echo "voya-elevate: unknown verb '$VERB'" >&2
-    exit 64
-    ;;
-esac
-"#
-    ))
-}
-
-/// Sudoers drop-in granting `username` passwordless use of exactly `launcher`.
+/// Classify the outcome of a native elevation command from its exit code.
 #[must_use]
-pub(crate) fn sudoers_drop_in(username: &str, launcher: &Path) -> String {
-    format!(
-        "{username} ALL=(root) NOPASSWD: {}\n",
-        launcher.to_string_lossy()
-    )
-}
-
-/// Installer (runs as root) that copies the staged launcher + sudoers into
-/// place, validating the sudoers file with `visudo` before activating it.
-fn install_script(
-    launcher_dir: &Path,
-    launcher_path: &Path,
-    src_launcher_path: &Path,
-    src_sudoers_path: &Path,
-) -> String {
-    let launcher_dir = quote_shell_arg(&launcher_dir.to_string_lossy());
-    let launcher = quote_shell_arg(&launcher_path.to_string_lossy());
-    let sudoers = quote_shell_arg(SUDOERS_DROP_IN_PATH);
-    let src_launcher = quote_shell_arg(&src_launcher_path.to_string_lossy());
-    let src_sudoers = quote_shell_arg(&src_sudoers_path.to_string_lossy());
-
-    format!(
-        r#"#!/bin/sh
-set -eu
-umask 022
-
-LAUNCHER_DIR={launcher_dir}
-LAUNCHER={launcher}
-SUDOERS={sudoers}
-SRC_LAUNCHER={src_launcher}
-SRC_SUDOERS={src_sudoers}
-
-mkdir -p "$LAUNCHER_DIR"
-chmod 0755 "$LAUNCHER_DIR"
-install -m 0755 "$SRC_LAUNCHER" "$LAUNCHER"
-install -m 0440 "$SRC_SUDOERS" "$SUDOERS.tmp"
-visudo -cf "$SUDOERS.tmp"
-mv -f "$SUDOERS.tmp" "$SUDOERS"
-"#
-    )
-}
-
-/// Native privileged command that runs the installer as root.
-fn elevated_install_command(
-    os: TargetOs,
-    install_script_path: &Path,
-) -> Result<ProcessSpawn, PrivilegeError> {
-    match os {
-        TargetOs::Macos => {
-            let applescript = format!(
-                "do shell script \"/bin/sh \" & quoted form of \"{}\" with administrator privileges",
-                applescript_escape(&install_script_path.to_string_lossy())
-            );
-            Ok(ProcessSpawn::new(ProcessRole::Probe, "/usr/bin/osascript")
-                .with_arguments(["-e".to_string(), applescript])
-                .with_display_log(false))
-        }
-        TargetOs::Linux => Ok(ProcessSpawn::new(ProcessRole::Probe, "/usr/bin/pkexec")
-            .with_arguments([
-                "/bin/sh".to_string(),
-                install_script_path.to_string_lossy().into_owned(),
-            ])
-            .with_display_log(false)),
-        TargetOs::Windows | TargetOs::Ios | TargetOs::Android | TargetOs::Other => {
-            Err(PrivilegeError::UnsupportedOs)
-        }
-    }
-}
-
-/// Escape a string for embedding inside an AppleScript double-quoted literal.
-fn applescript_escape(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
-/// Classify the outcome of a native elevation command from its exit/stderr.
-#[must_use]
-pub fn classify_elevation_outcome(status_code: Option<i32>, stderr: &str) -> ElevationOutcome {
+pub fn classify_elevation_outcome(status_code: Option<i32>) -> ElevationOutcome {
     if status_code == Some(0) {
         return ElevationOutcome::Granted;
     }
-    // macOS osascript reports a cancelled auth dialog as error -128; pkexec
-    // uses exit code 126 for "dismissed / not authorized".
-    if stderr.contains("-128")
-        || stderr.contains("User canceled")
-        || stderr.contains("User cancelled")
-        || status_code == Some(126)
-    {
+    // pkexec uses exit code 126 for "dismissed / not authorized".
+    if status_code == Some(126) {
         return ElevationOutcome::Cancelled;
     }
     ElevationOutcome::Failed
@@ -374,7 +213,7 @@ pub enum ElevationOutcome {
 pub enum PrivilegeError {
     #[error("native privilege elevation is not supported on this platform")]
     UnsupportedOs,
-    #[error("could not determine the current user for the sudoers grant")]
+    #[error("could not determine the current user for the elevation grant")]
     MissingUsername,
 }
 
@@ -407,163 +246,25 @@ mod tests {
     #[test]
     fn privilege_launcher_path_is_fixed_per_platform() {
         assert_eq!(
-            elevate_launcher_path(TargetOs::Macos),
-            Some(PathBuf::from("/usr/local/libexec/voya-vpn/voya-elevate"))
-        );
-        assert_eq!(
             elevate_launcher_path(TargetOs::Linux),
             Some(PathBuf::from("/usr/libexec/voya-vpn/voya-elevate"))
         );
+        // macOS has no launcher: its tunnel is the NetworkExtension provider.
+        assert_eq!(elevate_launcher_path(TargetOs::Macos), None);
         assert_eq!(elevate_launcher_path(TargetOs::Windows), None);
     }
 
     #[test]
-    fn privilege_launcher_confines_run_to_bin_prefix_and_embeds_kill() {
-        let script = launcher_script(
-            TargetOs::Macos,
-            Path::new("/Users/test/Library/Application Support/VoyaVPN/bin"),
-        )
-        .expect("launcher script");
-
-        assert!(script.starts_with("#!/bin/bash"));
-        assert!(
-            script.contains("PREFIX='/Users/test/Library/Application Support/VoyaVPN/bin'"),
-            "prefix should be shell-quoted: {script}"
-        );
-        assert!(script.contains("\"$REAL_PREFIX\"/*) ;;"));
-        assert!(script.contains("exec \"$EXE\" \"$@\""));
-        assert!(script.contains("target_has_expected_process"));
-        assert!(script.contains("rm -f \"$SUDOERS\""));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn privilege_launcher_run_rejects_traversal_and_symlinked_directory_escapes() {
-        use std::fs;
-
-        let root = unique_temp_root("privilege-launcher-run");
-        let prefix = root.join("app").join("bin");
-        let outside = root.join("outside");
-        fs::create_dir_all(&prefix).expect("create prefix");
-        fs::create_dir_all(&outside).expect("create outside directory");
-
-        let allowed = prefix.join("sing-box");
-        write_executable(&allowed, "#!/bin/sh\necho voya-allowed\n");
-        let forbidden = outside.join("evil");
-        write_executable(&forbidden, "#!/bin/sh\necho voya-escaped\n");
-        std::os::unix::fs::symlink(&outside, prefix.join("outside-link")).expect("symlink");
-
-        let launcher = root.join(LAUNCHER_FILE_NAME);
-        let script = launcher_script(TargetOs::Linux, &prefix).expect("launcher script");
-        fs::write(&launcher, script).expect("write launcher");
-
-        let allowed_run = run_launcher(&launcher, &allowed);
-        assert!(
-            allowed_run.status.success(),
-            "a genuine core under the prefix must still run: {}",
-            String::from_utf8_lossy(&allowed_run.stderr)
-        );
-        assert!(String::from_utf8_lossy(&allowed_run.stdout).contains("voya-allowed"));
-
-        for escape in [
-            prefix.join("..").join("..").join("outside").join("evil"),
-            prefix.join("outside-link").join("evil"),
-            forbidden.clone(),
-        ] {
-            let output = run_launcher(&launcher, &escape);
-            assert_eq!(
-                output.status.code(),
-                Some(64),
-                "{} must be rejected, stdout: {} stderr: {}",
-                escape.display(),
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            assert!(!String::from_utf8_lossy(&output.stdout).contains("voya-escaped"));
+    fn privilege_install_plan_is_unsupported_off_linux() {
+        for os in [TargetOs::Macos, TargetOs::Windows, TargetOs::Ios] {
+            assert!(matches!(
+                build_install_plan(os, "afu", Path::new("/bin"), Path::new("/tmp")),
+                Err(PrivilegeError::UnsupportedOs)
+            ));
         }
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[cfg(unix)]
-    fn write_executable(path: &Path, contents: &str) {
-        use std::{fs, os::unix::fs::PermissionsExt};
-
-        fs::write(path, contents).expect("write script");
-        fs::set_permissions(path, fs::Permissions::from_mode(0o755)).expect("chmod script");
-    }
-
-    #[cfg(unix)]
-    fn run_launcher(launcher: &Path, executable: &Path) -> std::process::Output {
-        std::process::Command::new("bash")
-            .arg(launcher)
-            .arg("run")
-            .arg(executable)
-            .output()
-            .expect("run launcher")
-    }
-
-    #[cfg(unix)]
-    fn unique_temp_root(name: &str) -> PathBuf {
-        tempfile::Builder::new()
-            .prefix(&format!("voyavpn-{name}-"))
-            .tempdir()
-            .expect("privilege test temp dir")
-            .keep()
-    }
-
-    #[test]
-    fn privilege_sudoers_grants_only_the_launcher() {
-        let sudoers = sudoers_drop_in("afu", Path::new("/usr/local/libexec/voya-vpn/voya-elevate"));
-        assert_eq!(
-            sudoers,
-            "afu ALL=(root) NOPASSWD: /usr/local/libexec/voya-vpn/voya-elevate\n"
-        );
-    }
-
-    #[test]
-    fn privilege_install_command_uses_native_dialog_per_platform() {
-        let plan = build_install_plan(
-            TargetOs::Macos,
-            "afu",
-            Path::new("/Users/afu/app/bin"),
-            Path::new("/Users/afu/app/tmp/elevate"),
-        )
-        .expect("macos plan");
-        assert_eq!(plan.command.executable, PathBuf::from("/usr/bin/osascript"));
-        assert_eq!(plan.command.arguments[0], "-e");
-        assert!(plan.command.arguments[1].contains("with administrator privileges"));
-        assert!(plan.command.arguments[1].contains("quoted form of"));
-        assert!(plan.install_script_contents.contains("visudo -cf"));
-        assert!(plan
-            .sudoers_contents
-            .starts_with("afu ALL=(root) NOPASSWD:"));
-
-        let linux = build_install_plan(
-            TargetOs::Linux,
-            "afu",
-            Path::new("/home/afu/app/bin"),
-            Path::new("/home/afu/app/tmp/elevate"),
-        )
-        .expect("linux plan");
-        assert_eq!(linux.command.executable, PathBuf::from("/usr/bin/pkexec"));
-        assert_eq!(linux.command.arguments[0], "/bin/sh");
-    }
-
-    #[test]
-    fn privilege_install_plan_rejects_unsupported_platforms_and_blank_user() {
         assert!(matches!(
-            build_install_plan(
-                TargetOs::Windows,
-                "afu",
-                Path::new("/bin"),
-                Path::new("/tmp")
-            ),
+            build_uninstall_spawn(TargetOs::Macos),
             Err(PrivilegeError::UnsupportedOs)
-        ));
-        assert!(matches!(
-            build_install_plan(TargetOs::Macos, "", Path::new("/bin"), Path::new("/tmp")),
-            Err(PrivilegeError::MissingUsername)
         ));
     }
 
@@ -585,25 +286,18 @@ mod tests {
     #[test]
     fn privilege_classifies_native_outcomes() {
         assert_eq!(
-            classify_elevation_outcome(Some(0), ""),
+            classify_elevation_outcome(Some(0)),
             ElevationOutcome::Granted
         );
+        // pkexec exits 126 when the prompt is dismissed.
         assert_eq!(
-            classify_elevation_outcome(Some(1), "User canceled. (-128)"),
+            classify_elevation_outcome(Some(126)),
             ElevationOutcome::Cancelled
         );
         assert_eq!(
-            classify_elevation_outcome(Some(126), ""),
-            ElevationOutcome::Cancelled
-        );
-        assert_eq!(
-            classify_elevation_outcome(Some(1), "visudo: invalid"),
+            classify_elevation_outcome(Some(1)),
             ElevationOutcome::Failed
         );
-    }
-
-    #[test]
-    fn privilege_applescript_escapes_quotes_and_backslashes() {
-        assert_eq!(applescript_escape(r#"/a/b"c\d"#), r#"/a/b\"c\\d"#);
+        assert_eq!(classify_elevation_outcome(None), ElevationOutcome::Failed);
     }
 }

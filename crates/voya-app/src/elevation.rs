@@ -1,9 +1,14 @@
-//! Session elevation orchestration.
+//! Session elevation orchestration (Linux only).
 //!
 //! Replaces the previous "collect and store a sudo password" flow with a
 //! one-time native authorization that installs a root-owned launcher + a
 //! `NOPASSWD` sudoers drop-in. No admin password is ever held by the app; the
 //! shared [`ElevationState`] flag is what the supervisor and TUN status read.
+//!
+//! On macOS there is no launcher path, so the startup sweep and the exit-time
+//! revoke do nothing and [`ElevationManager::request`] reports
+//! `UnsupportedOs`; nothing asks for it, because the macOS tunnel never needs
+//! elevation (ADR 0004).
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -97,7 +102,7 @@ impl ElevationManager {
         let output = self.runner.run_oneshot(plan.command.clone())?;
         let _ = filesystem::remove_dir_all_if_exists(&work_dir);
 
-        match classify_elevation_outcome(output.status_code, &output.stderr) {
+        match classify_elevation_outcome(output.status_code) {
             ElevationOutcome::Granted => {
                 self.state.set_granted(true);
                 Ok(())
@@ -229,7 +234,7 @@ mod tests {
     fn elevation_state_starts_ungranted() {
         let manager = manager(
             Arc::new(RecordingRunner::default()),
-            TargetOs::Macos,
+            TargetOs::Linux,
             "ungranted",
         );
         assert!(!manager.is_granted());
@@ -247,7 +252,7 @@ mod tests {
         let launcher = work_dir.join("voya-elevate");
         std::fs::write(&launcher, b"#!/bin/sh\n").expect("write stale launcher");
 
-        let manager = manager(runner.clone(), TargetOs::Macos, "stale-launcher")
+        let manager = manager(runner.clone(), TargetOs::Linux, "stale-launcher")
             .with_launcher_path(Some(launcher));
 
         assert!(manager.revoke_stale_grant());
@@ -260,17 +265,41 @@ mod tests {
     #[test]
     fn startup_sweep_is_a_no_op_without_a_stale_launcher() {
         let runner = Arc::new(RecordingRunner::default());
-        let manager = manager(runner.clone(), TargetOs::Macos, "no-launcher")
+        let manager = manager(runner.clone(), TargetOs::Linux, "no-launcher")
             .with_launcher_path(Some(unique_temp_dir("no-launcher").join("absent")));
 
         assert!(!manager.revoke_stale_grant());
         assert!(runner.events().is_empty());
     }
 
+    /// macOS never escalates: no launcher to sweep or revoke at startup and
+    /// exit, and a request is refused before any command runs.
+    #[test]
+    fn macos_has_no_elevation_path() {
+        let runner = Arc::new(RecordingRunner::default());
+        let manager = ElevationManager::with_target_os(
+            runner.clone(),
+            unique_temp_dir("macos"),
+            "/tmp/app/bin",
+            TargetOs::Macos,
+        );
+
+        assert!(!manager.revoke_stale_grant());
+        manager.revoke();
+        assert!(matches!(
+            manager.request(),
+            Err(ElevationError::Privilege(PrivilegeError::UnsupportedOs))
+        ));
+        assert!(!manager.is_granted());
+        assert!(runner.events().is_empty());
+    }
+
+    /// Builds the real installer, which only Linux binaries contain.
+    #[cfg(target_os = "linux")]
     #[test]
     fn elevation_request_grants_when_native_command_succeeds() {
         let runner = Arc::new(RecordingRunner::default());
-        let manager = manager(runner.clone(), TargetOs::Macos, "grant");
+        let manager = manager(runner.clone(), TargetOs::Linux, "grant");
 
         manager.request().expect("request should be granted");
 

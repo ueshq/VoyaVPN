@@ -7,9 +7,13 @@ same change that alters what the app listens on, connects to, or stores.
 
 Where each block goes:
 
-- **App Review Information → Notes** (App Store Connect, the version page): the
-  VPN answers and the entitlement explanation, every submission.
-- **Resolution Center reply**: the same text, when a review message asks.
+- **App Review Information → Notes** (App Store Connect, the version page):
+  [the notes block](#app-review-information--notes), every submission. The
+  field holds 4,000 characters, so that block summarizes the two long answers
+  below instead of repeating them.
+- **Resolution Center reply**: [the reply for build 405](#resolution-center-reply-for-build-405)
+  for the 2026-09 rejection; the full [entitlement explanation](#why-the-app-needs-network-server)
+  or [VPN answers](#vpn-questions) as separate messages when a reviewer asks.
 - **App Privacy**: "Data Not Collected". A VPN app also needs a **Privacy
   Policy URL** on the app record; that page has to state the same facts as the
   VPN answers below.
@@ -18,15 +22,18 @@ Where each block goes:
   [marketing-site.md](marketing-site.md). Its tests fail if the privacy page
   stops naming a host the VPN answers name, so change them together.
 
-The 2026-09 Mac submission was stopped for three reasons. The build fix for the
-second one is in [macos-app-store.md](macos-app-store.md); the first and third
-are answered here.
+The 2026-09 Mac submission, build 405 from commit `d311a25`, was stopped for
+three reasons. The build fix for the second one is in
+[macos-app-store.md](macos-app-store.md); the first and third are answered
+here. The resubmission order is in
+[macos-app-store.md](macos-app-store.md#resubmitting-after-a-rejection).
 
 | Review message | Answer |
 | --- | --- |
 | `com.apple.security.network.server` without matching functionality (2.1.0, 2.4.5, 2.5.1) | Keep the entitlement; reply with [the entitlement explanation](#why-the-app-needs-network-server). |
 | Non-public API `__kCFBundleNumericVersionKey` (2.5.1) | Fixed in the binary: the bundled sing-box is built from source without the Cronet-based naive outbound. `native:macos:pkg` now refuses any Mach-O that imports it. |
 | VPN information request | Reply with [the VPN answers](#vpn-questions). |
+| Not raised yet, fixed before resubmitting (2.4.5) | macOS has no privilege-escalation path: the admin-prompt installer is compiled for Linux only, and `native:macos:pkg` refuses escalation text. Launch at login registers a bundled agent with `SMAppService` instead of writing `~/Library/LaunchAgents`. |
 
 ## Why the app needs network.server
 
@@ -113,6 +120,95 @@ reviewer asks:
   [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Do not copy the answers
   above into a Google Play data-safety form without adding that.
 
+## App Review Information → Notes
+
+Paste this into App Review Information → Notes on every submission. Replace
+the two placeholders in REVIEW TEST CONFIGURATION with a node the reviewer can
+reach from the United States for the whole review, and never commit that
+credential. The block is about 2,500 characters with a typical share link;
+keep it under the field's 4,000.
+
+```text
+APP PURPOSE
+VoyaVPN is a VPN and proxy client for macOS by Beijing Wangcai Technology Co.,
+Ltd. Users import server configurations or subscription URLs they own or are
+authorized to use. The app includes no VPN service of its own and sells no
+servers or plans. There is no account or sign-in. A "subscription" here is a
+URL that lists servers, not an App Store subscription.
+
+REVIEW TEST CONFIGURATION
+Share link or subscription URL: <FILL IN BEFORE SUBMITTING>
+Valid until: <DATE AFTER THE REVIEW ENDS>
+
+TEST STEPS
+1. Open Nodes > Add > Paste links or subscription URLs, paste the
+   configuration above, and click Import.
+2. Select the imported node and click Connect.
+3. Allow macOS to add the VPN configuration. Home shows Connected.
+4. Open any HTTPS website. Network activity lists the connections.
+5. Disconnect from Home.
+
+HOW THE APP USES THE SYSTEM
+- The VPN is Apple's NetworkExtension Packet Tunnel provider, embedded as an
+  app extension.
+- The app never asks for administrator rights, installs no helper tool, and
+  runs no sudo.
+- Settings > Startup > Autostart registers a launchd agent bundled inside the
+  app with SMAppService.
+- Screen Recording is requested only by the optional "Scan screen" QR import.
+
+WHY com.apple.security.network.server
+Three features accept incoming connections:
+1. Self-hosted node (optional): the user can turn this Mac into a proxy server
+   for their own devices. The bundled sing-box, which inherits the app's
+   sandbox, listens on the ports the user picks.
+2. Latency test while disconnected: the app starts that sing-box with a proxy
+   listener on 127.0.0.1 and measures servers through it. To see it, click
+   Ping on any node while disconnected.
+3. The Packet Tunnel's sing-box opens a proxy port and a control API on
+   127.0.0.1, which the app reads to show connections.
+Without the entitlement each fails with "bind: operation not permitted".
+
+DATA
+VoyaVPN collects no user data. It has no analytics, crash reporting,
+advertising, telemetry or accounts. Traffic goes only to the servers the user
+configured. The server list, settings and a 7-day diagnostic log with
+credentials removed stay on the device. The full answers to the VPN questions
+are in the privacy policy: https://voyavpn.wangc.ai/privacy
+
+Store screenshots show demonstration data. Please use the configuration above
+to test.
+```
+
+## Resolution Center reply for build 405
+
+Post this in the App Store Connect thread for the rejected build before
+submitting the new one. Replace `<BUILD>` with the new build number.
+
+```text
+Thank you for the review. Build <BUILD> replaces build 405 and addresses each
+point:
+
+1. Guideline 2.5.1, non-public API __kCFBundleNumericVersionKey: the symbol
+   came from the bundled sing-box binary, whose upstream release links
+   Chromium's Cronet. We now build sing-box from source without that
+   component, and our packaging check rejects any binary that imports the
+   symbol or links a private library.
+
+2. com.apple.security.network.server: the entitlement is used. The optional
+   self-hosted node listens for the user's own devices, and the latency test
+   and the Packet Tunnel run local listeners on 127.0.0.1. The App Review
+   notes explain each one and how to see it.
+
+3. VPN information: VoyaVPN collects no user data. The answers are in the App
+   Review notes and in our privacy policy, https://voyavpn.wangc.ai/privacy
+
+We also removed anything that could look like privilege escalation. The app
+never asks for administrator rights, installs no helper tool, and uses
+SMAppService for launch at login. A working test configuration is in the App
+Review notes.
+```
+
 ## Where the facts come from
 
 | Claim | Source |
@@ -123,5 +219,7 @@ reviewer asks:
 | Log retention and redaction | `crates/voya-app/src/logging.rs` |
 | Endpoints | `crates/voya-core/src/singbox/mod.rs`, `crates/voya-net/src/probe/`, `crates/voya-app/src/ipv6_egress.rs`, `crates/voya-contracts/src/settings.rs` |
 | Probe service stores nothing | [self-host-probe-worker.md](self-host-probe-worker.md), `apps/probe/wrangler.jsonc` |
+| No privilege escalation on macOS | `crates/voya-platform/src/privilege/linux_installer.rs` (compiled for Linux only), [ADR 0004](../adr/0004-platform-boundaries.md), `scripts/native/macos/macho-imports.mjs` |
+| Launch at login | `crates/voya-platform/native/macos_login_item.m`, `apps/desktop/src-tauri/native/macos/LaunchAgents/app.voyavpn.desktop.autostart.plist` |
 | Privacy Policy page | `apps/web/src/content/*.ts`, checked against this page by `apps/web/test/privacy-sync.test.ts` |
 | iOS privacy manifest | `apps/mobile/ios/VoyaVPN/PrivacyInfo.xcprivacy` (no collected data types, no tracking) |

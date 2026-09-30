@@ -26,7 +26,7 @@ use voya_contracts::{AppError, AppErrorEntity, AppErrorKind, AppErrorSubsystem, 
 use super::validation_issue_to_contract;
 use voya_db::DbError;
 use voya_net::{ruleset::RulesetError, DownloadError};
-use voya_platform::coreinfo::CoreInfoError;
+use voya_platform::{autostart::AutostartError, coreinfo::CoreInfoError};
 
 use crate::{
     autostart::AutostartManagerError,
@@ -545,6 +545,10 @@ impl From<AutostartManagerError> for AppError {
     fn from(error: AutostartManagerError) -> Self {
         match error {
             AutostartManagerError::CurrentExe(ref source) => io(Sub::Autostart, source),
+            // `pnpm dev` or `cargo run`: no .app bundle holds the login item.
+            AutostartManagerError::Autostart(AutostartError::LoginItemUnavailable { .. }) => {
+                AppError::new(Sub::Autostart, AppErrorKind::Unsupported, error.to_string())
+            }
             AutostartManagerError::HomeDir | AutostartManagerError::Autostart(_) => {
                 internal(Sub::Autostart, &error)
             }

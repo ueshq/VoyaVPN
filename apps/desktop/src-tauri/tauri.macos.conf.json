@@ -15,5 +15,12 @@
         "trafficLightPosition": { "x": 16, "y": 16 }
       }
     ]
+  },
+  "bundle": {
+    "macOS": {
+      "files": {
+        "Library/LaunchAgents/app.voyavpn.desktop.autostart.plist": "native/macos/LaunchAgents/app.voyavpn.desktop.autostart.plist"
+      }
+    }
   }
 }

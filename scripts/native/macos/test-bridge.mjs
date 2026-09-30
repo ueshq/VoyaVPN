@@ -19,6 +19,13 @@ try {
     resolve(root, "crates/voya-platform/native/macos_window_chrome_tests.m"),
     "-framework", "AppKit", "-o", chromeBinary]);
   run(chromeBinary, []);
+  const loginItemBinary = join(directory, "login-item-tests");
+  run("xcrun", ["clang", "-fobjc-arc", "-fblocks", "-Wall", "-Wextra", "-Werror",
+    "-mmacosx-version-min=10.15",
+    resolve(root, "crates/voya-platform/native/macos_login_item.m"),
+    resolve(root, "crates/voya-platform/native/macos_login_item_tests.m"),
+    "-framework", "Foundation", "-framework", "ServiceManagement", "-o", loginItemBinary]);
+  run(loginItemBinary, []);
 
   const nativeRoot = resolve(root, "apps/desktop/src-tauri/native/macos");
   const appleRoot = resolve(root, "native/apple");

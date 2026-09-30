@@ -55,8 +55,13 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         // First, so a second launch hands over before anything else starts.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            residency::show_main_window(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // On macOS, turning launch at login on registers a launchd agent
+            // with RunAtLoad, which starts `voyavpn --autostart` right away.
+            // That copy hands over here and must not raise the window.
+            if !voya_platform::autostart::launched_by_autostart(&args) {
+                residency::show_main_window(app);
+            }
         }))
         .plugin(tauri_plugin_dialog::init())
         // OS notifications for a user whose window is hidden in the tray; the

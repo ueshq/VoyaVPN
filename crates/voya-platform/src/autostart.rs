@@ -17,7 +17,18 @@ pub const AUTOSTART_APP_NAME: &str = "VoyaVPN";
 pub const AUTOSTART_ARG: &str = "--autostart";
 pub const WINDOWS_RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 pub const LINUX_AUTOSTART_DIR: &str = ".config/autostart";
+/// Where builds before the SMAppService login item wrote their LaunchAgent,
+/// relative to the home directory. Only cleaned up now.
 pub const MACOS_LAUNCH_AGENTS_DIR: &str = "Library/LaunchAgents";
+/// The launchd agent bundled at [`MACOS_LOGIN_ITEM_BUNDLE_PATH`] and registered
+/// with `SMAppService`. Its file is
+/// `apps/desktop/src-tauri/native/macos/LaunchAgents/<this name>`.
+pub const MACOS_LOGIN_ITEM_PLIST_NAME: &str = "app.voyavpn.desktop.autostart.plist";
+pub const MACOS_LOGIN_ITEM_LABEL: &str = "app.voyavpn.desktop.autostart";
+pub const MACOS_LOGIN_ITEM_BUNDLE_PATH: &str =
+    "Contents/Library/LaunchAgents/app.voyavpn.desktop.autostart.plist";
+
+mod macos_login_item;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AutostartRequest {
@@ -58,10 +69,20 @@ pub enum AutostartArtifact {
     LinuxDesktopFile {
         path: PathBuf,
     },
-    MacosLaunchAgent {
-        path: PathBuf,
+    MacosLoginItem {
+        plist_name: String,
         label: String,
     },
+}
+
+/// `SMAppServiceStatus` of the macOS login item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginItemState {
+    NotRegistered,
+    Enabled,
+    /// Registered, but the user has to allow it in System Settings.
+    RequiresApproval,
+    NotFound,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,13 +103,12 @@ pub enum AutostartAction {
     RemoveFile {
         path: PathBuf,
     },
-    RunCommand {
-        executable: PathBuf,
-        arguments: Vec<String>,
+    RemoveFileBestEffort {
+        path: PathBuf,
     },
-    RunCommandBestEffort {
-        executable: PathBuf,
-        arguments: Vec<String>,
+    SetLoginItem {
+        plist_name: String,
+        enabled: bool,
     },
     Noop,
 }
@@ -104,7 +124,6 @@ pub struct AutostartPlan {
 pub trait AutostartAdapter: Send + Sync {
     fn write_file(&self, path: &Path, contents: &str) -> Result<(), AutostartError>;
     fn remove_file(&self, path: &Path) -> Result<(), AutostartError>;
-    fn run_command(&self, executable: &Path, arguments: &[String]) -> Result<(), AutostartError>;
     fn set_windows_run_registry(
         &self,
         key_path: &str,
@@ -116,6 +135,12 @@ pub trait AutostartAdapter: Send + Sync {
         key_path: &str,
         value_name: &str,
     ) -> Result<(), AutostartError>;
+    /// Registers or unregisters the bundled macOS login item.
+    fn set_login_item(
+        &self,
+        plist_name: &str,
+        enabled: bool,
+    ) -> Result<LoginItemState, AutostartError>;
 }
 
 /// Plans the login entry for `request` and carries it out through `adapter`.
@@ -141,19 +166,20 @@ pub fn apply_autostart(
             AutostartAction::RemoveFile { path } => {
                 adapter.remove_file(path)?;
             }
-            AutostartAction::RunCommand {
-                executable,
-                arguments,
-            } => adapter.run_command(executable, arguments)?,
-            AutostartAction::RunCommandBestEffort {
-                executable,
-                arguments,
+            AutostartAction::RemoveFileBestEffort { path } => {
+                if let Err(error) = adapter.remove_file(path) {
+                    tracing::debug!(%error, "ignored autostart cleanup failure");
+                }
+            }
+            AutostartAction::SetLoginItem {
+                plist_name,
+                enabled,
             } => {
-                if let Err(error) = adapter.run_command(executable, arguments) {
-                    tracing::debug!(
-                        %error,
-                        executable = %executable.display(),
-                        "ignored autostart cleanup command failure"
+                let state = adapter.set_login_item(plist_name, *enabled)?;
+                if state == LoginItemState::RequiresApproval {
+                    tracing::info!(
+                        "the login item waits for approval in System Settings > General > \
+                         Login Items & Extensions"
                     );
                 }
             }
@@ -192,10 +218,6 @@ impl AutostartAdapter for StdAutostartAdapter {
         })
     }
 
-    fn run_command(&self, executable: &Path, arguments: &[String]) -> Result<(), AutostartError> {
-        run_checked(&*self.runner, executable, arguments)
-    }
-
     fn set_windows_run_registry(
         &self,
         key_path: &str,
@@ -222,6 +244,14 @@ impl AutostartAdapter for StdAutostartAdapter {
             "/f".to_string(),
         ];
         run_checked(&*self.runner, Path::new("reg"), &arguments)
+    }
+
+    fn set_login_item(
+        &self,
+        plist_name: &str,
+        enabled: bool,
+    ) -> Result<LoginItemState, AutostartError> {
+        macos_login_item::set_enabled(plist_name, enabled)
     }
 }
 
@@ -285,38 +315,6 @@ fn desktop_entry_exec_argument(executable: &Path) -> String {
     quoted
 }
 
-#[must_use]
-fn macos_launch_agent_plist(app_name: &str, executable: &Path) -> String {
-    let label = macos_label(app_name);
-    let process_name = executable
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or(app_name);
-    let executable = shell_quoted_xml(&executable.to_string_lossy());
-    let process_name = shell_quoted_xml(process_name);
-
-    format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>{label}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/sh</string>
-        <string>-c</string>
-        <string>if ! pgrep -x {process_name} &gt; /dev/null; then {executable} {AUTOSTART_ARG}; fi</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <false/>
-</dict>
-</plist>"#
-    )
-}
-
 fn autostart_artifact(request: &AutostartRequest) -> Option<AutostartArtifact> {
     match request.target_os {
         TargetOs::Windows => Some(AutostartArtifact::WindowsRunRegistry {
@@ -327,9 +325,9 @@ fn autostart_artifact(request: &AutostartRequest) -> Option<AutostartArtifact> {
         TargetOs::Linux => Some(AutostartArtifact::LinuxDesktopFile {
             path: linux_autostart_path(&request.home_dir, &request.app_name),
         }),
-        TargetOs::Macos => Some(AutostartArtifact::MacosLaunchAgent {
-            path: macos_launch_agent_path(&request.home_dir, &request.app_name),
-            label: macos_label(&request.app_name),
+        TargetOs::Macos => Some(AutostartArtifact::MacosLoginItem {
+            plist_name: MACOS_LOGIN_ITEM_PLIST_NAME.to_string(),
+            label: MACOS_LOGIN_ITEM_LABEL.to_string(),
         }),
         TargetOs::Ios | TargetOs::Android | TargetOs::Other => None,
     }
@@ -363,44 +361,20 @@ fn linux_actions(request: &AutostartRequest) -> Vec<AutostartAction> {
     }
 }
 
+/// Registers or unregisters the bundled login item, then deletes the
+/// LaunchAgent file older builds wrote into the home directory. Inside the App
+/// Sandbox the home directory is the container, so that finds nothing; outside
+/// it, launchd no longer loads the old agent at the next login. The app runs
+/// no `launchctl`, which a sandboxed store app has no business doing.
 fn macos_actions(request: &AutostartRequest) -> Vec<AutostartAction> {
-    let path = macos_launch_agent_path(&request.home_dir, &request.app_name);
-    if request.enabled {
-        vec![
-            launchctl_best_effort_action("unload", &path),
-            AutostartAction::WriteFile {
-                path: path.clone(),
-                contents: macos_launch_agent_plist(&request.app_name, &request.executable),
-            },
-            launchctl_action("load", &path),
-        ]
-    } else {
-        vec![
-            launchctl_best_effort_action("unload", &path),
-            AutostartAction::RemoveFile { path },
-        ]
-    }
-}
-
-fn launchctl_action(command: &str, path: &Path) -> AutostartAction {
-    AutostartAction::RunCommand {
-        executable: PathBuf::from("launchctl"),
-        arguments: launchctl_arguments(command, path),
-    }
-}
-
-fn launchctl_best_effort_action(command: &str, path: &Path) -> AutostartAction {
-    AutostartAction::RunCommandBestEffort {
-        executable: PathBuf::from("launchctl"),
-        arguments: launchctl_arguments(command, path),
-    }
-}
-
-fn launchctl_arguments(command: &str, path: &Path) -> Vec<String> {
     vec![
-        command.to_string(),
-        "-w".to_string(),
-        path.to_string_lossy().into_owned(),
+        AutostartAction::SetLoginItem {
+            plist_name: MACOS_LOGIN_ITEM_PLIST_NAME.to_string(),
+            enabled: request.enabled,
+        },
+        AutostartAction::RemoveFileBestEffort {
+            path: legacy_macos_launch_agent_path(&request.home_dir, &request.app_name),
+        },
     ]
 }
 
@@ -410,14 +384,10 @@ fn linux_autostart_path(home_dir: &Path, app_name: &str) -> PathBuf {
         .join(format!("{app_name}.desktop"))
 }
 
-fn macos_launch_agent_path(home_dir: &Path, app_name: &str) -> PathBuf {
+fn legacy_macos_launch_agent_path(home_dir: &Path, app_name: &str) -> PathBuf {
     home_dir
         .join(MACOS_LAUNCH_AGENTS_DIR)
         .join(format!("{app_name}-LaunchAgent.plist"))
-}
-
-fn macos_label(app_name: &str) -> String {
-    format!("{app_name}-LaunchAgent")
 }
 
 fn quote_windows_path(path: &Path) -> String {
@@ -459,22 +429,6 @@ fn fnv1a_hex(bytes: &[u8]) -> String {
     format!("{hash:016x}")
 }
 
-fn xml_escape(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('"', "&quot;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-fn shell_quoted_xml(value: &str) -> String {
-    xml_escape(&shell_single_quote(value))
-}
-
-fn shell_single_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', r#"'\''"#))
-}
-
 #[derive(Debug, Error)]
 pub enum AutostartError {
     #[error("{operation} failed for {path}: {source}")]
@@ -494,6 +448,13 @@ pub enum AutostartError {
     },
     #[error(transparent)]
     Process(#[from] ProcessError),
+    #[error("login item {operation} failed: {message}")]
+    LoginItem {
+        operation: &'static str,
+        message: String,
+    },
+    #[error("launch at login is unavailable: {reason}")]
+    LoginItemUnavailable { reason: String },
 }
 
 #[cfg(test)]
@@ -506,9 +467,9 @@ mod autostart_tests {
     struct RecordingAutostartAdapter {
         writes: Mutex<Vec<(PathBuf, String)>>,
         removes: Mutex<Vec<PathBuf>>,
-        commands: Mutex<Vec<(PathBuf, Vec<String>)>>,
         registry_sets: Mutex<Vec<(String, String, String)>>,
         registry_deletes: Mutex<Vec<(String, String)>>,
+        login_items: Mutex<Vec<(String, bool)>>,
     }
 
     impl AutostartAdapter for RecordingAutostartAdapter {
@@ -525,18 +486,6 @@ mod autostart_tests {
                 .lock()
                 .expect("removes")
                 .push(path.to_path_buf());
-            Ok(())
-        }
-
-        fn run_command(
-            &self,
-            executable: &Path,
-            arguments: &[String],
-        ) -> Result<(), AutostartError> {
-            self.commands
-                .lock()
-                .expect("commands")
-                .push((executable.to_path_buf(), arguments.to_vec()));
             Ok(())
         }
 
@@ -565,6 +514,22 @@ mod autostart_tests {
                 .push((key_path.to_string(), value_name.to_string()));
             Ok(())
         }
+
+        fn set_login_item(
+            &self,
+            plist_name: &str,
+            enabled: bool,
+        ) -> Result<LoginItemState, AutostartError> {
+            self.login_items
+                .lock()
+                .expect("login_items")
+                .push((plist_name.to_string(), enabled));
+            Ok(if enabled {
+                LoginItemState::Enabled
+            } else {
+                LoginItemState::NotRegistered
+            })
+        }
     }
 
     fn request(target_os: TargetOs, enabled: bool) -> AutostartRequest {
@@ -575,10 +540,6 @@ mod autostart_tests {
             executable: PathBuf::from("/opt/VoyaVPN/voyavpn"),
             home_dir: PathBuf::from("/home/alice"),
         }
-    }
-
-    fn string_args(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| (*value).to_string()).collect()
     }
 
     #[test]
@@ -613,92 +574,111 @@ mod autostart_tests {
         ));
     }
 
-    #[test]
-    fn autostart_macos_plan_loads_launch_agent() {
-        let request = request(TargetOs::Macos, true);
-        let plan = plan_autostart(&request);
-        // Derive the plist path with the same helper production uses so the
-        // expected launchctl arguments stay portable across path separators.
-        let plist_arg = macos_launch_agent_path(&request.home_dir, &request.app_name)
-            .to_string_lossy()
-            .into_owned();
-
-        assert_eq!(plan.actions.len(), 3);
-        assert!(matches!(
-            &plan.actions[0],
-            AutostartAction::RunCommandBestEffort {
-                executable,
-                arguments,
-            } if executable == Path::new("launchctl")
-                && arguments == &string_args(&["unload", "-w", plist_arg.as_str()])
-        ));
-        assert!(matches!(
-            &plan.actions[1],
-            AutostartAction::WriteFile { path, contents }
-            if path.ends_with("VoyaVPN-LaunchAgent.plist")
-                && contents.contains("<string>VoyaVPN-LaunchAgent</string>")
-        ));
-        assert!(matches!(
-            &plan.actions[2],
-            AutostartAction::RunCommand { executable, arguments }
-            if executable == Path::new("launchctl")
-                && arguments == &string_args(&["load", "-w", plist_arg.as_str()])
-        ));
+    fn legacy_cleanup(request: &AutostartRequest) -> AutostartAction {
+        AutostartAction::RemoveFileBestEffort {
+            path: legacy_macos_launch_agent_path(&request.home_dir, &request.app_name),
+        }
     }
 
     #[test]
-    fn autostart_macos_shell_metacharacters_do_not_escape_path_arguments() {
-        let executable =
-            PathBuf::from("/Applications/VoyaVPN $(touch owned) \"quote\" 'apostrophe'/voyavpn");
-        let request = AutostartRequest {
-            target_os: TargetOs::Macos,
-            enabled: true,
-            app_name: AUTOSTART_APP_NAME.to_string(),
-            executable: executable.clone(),
-            home_dir: PathBuf::from("/Users/alice; touch owned"),
-        };
-        // Derive the plist path the same way production does so the expected
-        // launchctl arguments stay portable across path separators.
-        let path = macos_launch_agent_path(&request.home_dir, &request.app_name)
-            .to_string_lossy()
-            .into_owned();
+    fn autostart_macos_plan_registers_login_item_then_retires_legacy_agent() {
+        let request = request(TargetOs::Macos, true);
         let plan = plan_autostart(&request);
-        let executable_text = executable.to_string_lossy();
-        let quoted_executable = shell_quoted_xml(&executable_text);
-        let contents = match &plan.actions[1] {
-            AutostartAction::WriteFile { contents, .. } => contents,
-            action => panic!("expected plist write action, got {action:?}"),
-        };
 
-        assert!(matches!(
-            &plan.actions[0],
-            AutostartAction::RunCommandBestEffort {
-                executable,
-                arguments,
-            } if executable == Path::new("launchctl")
-                && arguments == &string_args(&["unload", "-w", path.as_str()])
-        ));
-        assert!(
-            contents.contains(&format!(
-                "then {quoted_executable} --autostart; fi</string>"
-            )),
-            "plist did not include shell-quoted executable path:\n{contents}"
+        assert_eq!(
+            plan.artifact,
+            Some(AutostartArtifact::MacosLoginItem {
+                plist_name: MACOS_LOGIN_ITEM_PLIST_NAME.to_string(),
+                label: MACOS_LOGIN_ITEM_LABEL.to_string(),
+            })
         );
-        assert!(
-            !contents.contains(&format!(
-                "then &quot;{}&quot;;",
-                xml_escape(&executable_text)
-            )),
-            "plist still used a double-quoted shell path:\n{contents}"
+        assert_eq!(
+            plan.actions,
+            vec![
+                AutostartAction::SetLoginItem {
+                    plist_name: MACOS_LOGIN_ITEM_PLIST_NAME.to_string(),
+                    enabled: true,
+                },
+                legacy_cleanup(&request),
+            ]
         );
-        assert!(matches!(
-            &plan.actions[2],
-            AutostartAction::RunCommand {
-                executable,
-                arguments,
-            } if executable == Path::new("launchctl")
-                && arguments == &string_args(&["load", "-w", path.as_str()])
-        ));
+    }
+
+    #[test]
+    fn autostart_macos_disable_plan_unregisters_login_item() {
+        let request = request(TargetOs::Macos, false);
+        let plan = plan_autostart(&request);
+
+        assert_eq!(
+            plan.actions.first(),
+            Some(&AutostartAction::SetLoginItem {
+                plist_name: MACOS_LOGIN_ITEM_PLIST_NAME.to_string(),
+                enabled: false,
+            })
+        );
+        assert_eq!(&plan.actions[1..], &[legacy_cleanup(&request)]);
+    }
+
+    /// The store build may write nothing outside its bundle or run system
+    /// tools, and the old LaunchAgent embedded the executable path in a shell
+    /// command.
+    #[test]
+    fn autostart_macos_plan_writes_nothing_and_never_names_the_executable() {
+        for enabled in [true, false] {
+            let request = AutostartRequest {
+                executable: PathBuf::from("/Applications/VoyaVPN $(touch owned).app/voyavpn"),
+                ..request(TargetOs::Macos, enabled)
+            };
+            let plan = plan_autostart(&request);
+
+            for action in &plan.actions {
+                assert!(
+                    !matches!(
+                        action,
+                        AutostartAction::WriteFile { .. } | AutostartAction::RemoveFile { .. }
+                    ),
+                    "unexpected write or command {action:?}"
+                );
+                assert!(
+                    !format!("{action:?}").contains("touch owned"),
+                    "executable path leaked into {action:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn autostart_macos_apply_registers_through_the_adapter() {
+        let adapter = RecordingAutostartAdapter::default();
+        apply_autostart(&adapter, &request(TargetOs::Macos, true)).expect("enable");
+        apply_autostart(&adapter, &request(TargetOs::Macos, false)).expect("disable");
+
+        assert_eq!(
+            adapter.login_items.lock().expect("login_items").as_slice(),
+            &[
+                (MACOS_LOGIN_ITEM_PLIST_NAME.to_string(), true),
+                (MACOS_LOGIN_ITEM_PLIST_NAME.to_string(), false),
+            ]
+        );
+        assert!(adapter.writes.lock().expect("writes").is_empty());
+    }
+
+    /// Ties the bundled agent plist to the constants the app registers it by
+    /// and to the flag that marks a login launch.
+    #[test]
+    fn bundled_macos_login_item_plist_matches_the_constants() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/desktop/src-tauri/native/macos/LaunchAgents")
+            .join(MACOS_LOGIN_ITEM_PLIST_NAME);
+        let plist = std::fs::read_to_string(&path).expect("bundled login item plist");
+
+        assert_eq!(
+            MACOS_LOGIN_ITEM_PLIST_NAME,
+            format!("{MACOS_LOGIN_ITEM_LABEL}.plist")
+        );
+        assert!(MACOS_LOGIN_ITEM_BUNDLE_PATH.ends_with(MACOS_LOGIN_ITEM_PLIST_NAME));
+        assert!(plist.contains(&format!("<string>{MACOS_LOGIN_ITEM_LABEL}</string>")));
+        assert!(plist.contains(&format!("<string>{AUTOSTART_ARG}</string>")));
     }
 
     #[test]

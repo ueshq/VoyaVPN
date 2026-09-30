@@ -418,7 +418,7 @@ Keep this document current whenever a runtime core, bundled seed asset, core upd
 
 The automated runner does not have signing certificates, notarization credentials, updater private keys, package repository credentials, or real Windows/Linux/macOS smoke machines. Capture those checks manually before publication:
 
-- macOS Developer ID sign, notarize with `notarytool`, staple, install `.dmg`, launch, and verify TUN/elevation prompts.
+- macOS Developer ID sign, notarize with `notarytool`, staple, install `.dmg`, launch, and verify the VPN configuration prompt on first connect.
 - Windows Authenticode sign NSIS/MSI, install as current user, launch, uninstall, and verify WebView2 bootstrap behavior.
 - Linux install `.deb`, `.rpm`, and `.AppImage` on clean distributions, verify desktop entry, execute bit, and bundled core seed path.
 - Publish updater metadata to the beta channel and verify that an older signed build sees the update.

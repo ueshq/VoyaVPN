@@ -10,7 +10,7 @@ use voya_core::AppConfig;
 use voya_platform::{
     autostart::{
         apply_autostart, AutostartAdapter, AutostartArtifact, AutostartError, AutostartRequest,
-        StdAutostartAdapter, AUTOSTART_APP_NAME,
+        StdAutostartAdapter, AUTOSTART_APP_NAME, MACOS_LOGIN_ITEM_BUNDLE_PATH,
     },
     coreinfo::TargetOs,
     process::StdProcessRunner,
@@ -155,15 +155,15 @@ fn artifact_kind(artifact: &AutostartArtifact) -> &'static str {
     match artifact {
         AutostartArtifact::WindowsRunRegistry { .. } => "windowsRunRegistry",
         AutostartArtifact::LinuxDesktopFile { .. } => "linuxDesktopFile",
-        AutostartArtifact::MacosLaunchAgent { .. } => "macosLaunchAgent",
+        AutostartArtifact::MacosLoginItem { .. } => "macosLoginItem",
     }
 }
 
 fn artifact_path(artifact: &AutostartArtifact) -> Option<String> {
     match artifact {
         AutostartArtifact::WindowsRunRegistry { key_path, .. } => Some(key_path.clone()),
-        AutostartArtifact::LinuxDesktopFile { path }
-        | AutostartArtifact::MacosLaunchAgent { path, .. } => Some(path_display(path)),
+        AutostartArtifact::LinuxDesktopFile { path } => Some(path_display(path)),
+        AutostartArtifact::MacosLoginItem { .. } => Some(MACOS_LOGIN_ITEM_BUNDLE_PATH.to_string()),
     }
 }
 
@@ -174,7 +174,7 @@ fn artifact_name(artifact: &AutostartArtifact) -> Option<String> {
             .file_name()
             .and_then(|value| value.to_str())
             .map(ToString::to_string),
-        AutostartArtifact::MacosLaunchAgent { label, .. } => Some(label.clone()),
+        AutostartArtifact::MacosLoginItem { label, .. } => Some(label.clone()),
     }
 }
 
@@ -186,7 +186,7 @@ fn path_display(path: &Path) -> String {
 mod autostart_app_tests {
     use std::sync::Mutex;
 
-    use voya_platform::autostart::AutostartAdapter;
+    use voya_platform::autostart::{AutostartAdapter, LoginItemState, MACOS_LOGIN_ITEM_LABEL};
 
     use super::*;
 
@@ -232,6 +232,7 @@ mod autostart_app_tests {
     struct FakeAutostartAdapter {
         writes: Mutex<u32>,
         registry_sets: Mutex<u32>,
+        login_items: Mutex<Vec<bool>>,
     }
 
     impl AutostartAdapter for FakeAutostartAdapter {
@@ -241,14 +242,6 @@ mod autostart_app_tests {
         }
 
         fn remove_file(&self, _path: &Path) -> Result<(), AutostartError> {
-            Ok(())
-        }
-
-        fn run_command(
-            &self,
-            _executable: &Path,
-            _arguments: &[String],
-        ) -> Result<(), AutostartError> {
             Ok(())
         }
 
@@ -269,6 +262,15 @@ mod autostart_app_tests {
         ) -> Result<(), AutostartError> {
             Ok(())
         }
+
+        fn set_login_item(
+            &self,
+            _plist_name: &str,
+            enabled: bool,
+        ) -> Result<LoginItemState, AutostartError> {
+            self.login_items.lock().expect("login_items").push(enabled);
+            Ok(LoginItemState::Enabled)
+        }
     }
 
     #[test]
@@ -286,5 +288,31 @@ mod autostart_app_tests {
         assert!(status.enabled);
         assert_eq!(status.platform, AutostartPlatform::Linux);
         assert_eq!(*adapter.writes.lock().expect("writes"), 1);
+    }
+
+    #[test]
+    fn autostart_manager_registers_the_macos_login_item() {
+        let adapter = Arc::new(FakeAutostartAdapter::default());
+        let manager =
+            AutostartManager::with_adapter(adapter.clone(), TargetOs::Macos, AUTOSTART_APP_NAME);
+        let mut config = AppConfig::default();
+
+        let status = manager
+            .set_enabled(&mut config, true)
+            .expect("autostart set");
+
+        assert!(config.behavior.autostart);
+        assert_eq!(status.platform, AutostartPlatform::Macos);
+        assert_eq!(status.artifact_kind.as_deref(), Some("macosLoginItem"));
+        assert_eq!(
+            status.artifact_path.as_deref(),
+            Some(MACOS_LOGIN_ITEM_BUNDLE_PATH)
+        );
+        assert_eq!(
+            status.artifact_name.as_deref(),
+            Some(MACOS_LOGIN_ITEM_LABEL)
+        );
+        assert_eq!(*adapter.login_items.lock().expect("login_items"), [true]);
+        assert_eq!(*adapter.writes.lock().expect("writes"), 0);
     }
 }
