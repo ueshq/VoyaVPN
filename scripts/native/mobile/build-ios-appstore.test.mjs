@@ -4,9 +4,12 @@ import {
   builtInfoProblems,
   entitlementProblems,
   exportOptionsPlist,
+  installProfileForXcode,
   iosProfileProblems,
+  parseXcodeMajor,
   resolveIpaPath,
   signingBuildSettings,
+  xcodeProfileDir,
 } from "./build-ios-appstore.mjs";
 import { parsePlist } from "./ios-bundle-checks.mjs";
 
@@ -165,5 +168,43 @@ describe("xcodebuild inputs", () => {
 
   it("names the package after version and build number", () => {
     expect(resolveIpaPath({ outputDir: "/out", version: "0.1.0", buildNumber: "412" })).toBe("/out/VoyaVPN_0.1.0_412.ipa");
+  });
+});
+
+// xcodebuild resolves a profile only among installed ones; the first signed
+// run failed with "No profile for team … matching <uuid>" on files in ../docs/certs.
+describe("installing the selected profiles for Xcode", () => {
+  it("finds Xcode's profile folder for the running version", () => {
+    expect(parseXcodeMajor("Xcode 26.6\nBuild version 17F113")).toBe(26);
+    expect(() => parseXcodeMajor("xcode-select: error")).toThrow(/Xcode version/u);
+    expect(xcodeProfileDir({ xcodeMajor: 26, home: "/Users/a" })).toBe(
+      "/Users/a/Library/Developer/Xcode/UserData/Provisioning Profiles",
+    );
+    expect(xcodeProfileDir({ xcodeMajor: 15, home: "/Users/a" })).toBe(
+      "/Users/a/Library/MobileDevice/Provisioning Profiles",
+    );
+  });
+
+  it("writes the profile's bytes under its UUID, not a copy of the file", () => {
+    const calls = [];
+    const io = {
+      mkdirSync: (path, options) => calls.push(["mkdir", path, options]),
+      readFileSync: (path) => (calls.push(["read", path]), Buffer.from("profile")),
+      writeFileSync: (path, bytes) => calls.push(["write", path, bytes.toString()]),
+    };
+    const profile = { uuid: "e897aa9a", path: "/certs/VoyaVPN_iOS_App_Store.mobileprovision" };
+
+    expect(installProfileForXcode(profile, "/xcode/profiles", io)).toBe("/xcode/profiles/e897aa9a.mobileprovision");
+    expect(calls).toEqual([
+      ["mkdir", "/xcode/profiles", { recursive: true }],
+      ["read", "/certs/VoyaVPN_iOS_App_Store.mobileprovision"],
+      ["write", "/xcode/profiles/e897aa9a.mobileprovision", "profile"],
+    ]);
+  });
+
+  it("leaves a profile alone that Xcode already has", () => {
+    const io = { mkdirSync: () => { throw new Error("must not write"); }, readFileSync: () => Buffer.alloc(0), writeFileSync: () => { throw new Error("must not write"); } };
+    const profile = { uuid: "e897aa9a", path: "/xcode/profiles/e897aa9a.mobileprovision" };
+    expect(installProfileForXcode(profile, "/xcode/profiles", io)).toBe(profile.path);
   });
 });

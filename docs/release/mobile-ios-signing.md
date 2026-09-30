@@ -323,14 +323,21 @@ public release; TestFlight distribution raises the same question.
 
 2. **Profiles.** One **App Store Connect** distribution profile for each of
    `app.voyavpn.mobile` and `app.voyavpn.mobile.PacketTunnel`, made with that
-   certificate. Put the two `.mobileprovision` files in `../docs/certs`, or
-   double-click them, which installs them into
-   `~/Library/MobileDevice/Provisioning Profiles`. The build looks in both and
-   stops before it compiles anything when either is missing. To search one
-   folder only, set `VOYAVPN_PROVISIONING_PROFILE_DIR`. To name the files, set
+   certificate. Put the two `.mobileprovision` files in `../docs/certs`. The
+   build also looks in `~/Library/MobileDevice/Provisioning Profiles` and in
+   `~/Library/Developer/Xcode/UserData/Provisioning Profiles`, where Xcode 16
+   and later install a profile dropped onto Xcode. It stops before it compiles
+   anything when either profile is missing. To search one folder only, set
+   `VOYAVPN_PROVISIONING_PROFILE_DIR`. To name the files, set
    `VOYAVPN_IOS_APP_PROVISIONING_PROFILE` and
    `VOYAVPN_IOS_PACKET_TUNNEL_PROVISIONING_PROFILE`. The development profiles
    Xcode manages are not accepted.
+
+   `xcodebuild` resolves a profile only among installed ones, so the build
+   installs the two it selected: it writes each into Xcode's profile folder
+   under its UUID. It writes the bytes rather than copying the file, because a
+   profile saved from a browser is quarantined, Xcode embeds the installed copy
+   into the app, and App Store Connect rejects a quarantined file (ITMS-91109).
 3. **App record.** The App Store Connect record for `app.voyavpn.mobile` must
    exist before the first upload.
 
@@ -380,6 +387,7 @@ What it checks:
 - The signed entitlements are exactly the application identifier, the team,
   `packet-tunnel-provider` and the App Group, with no `get-task-allow`.
 - Each bundle embeds the profile that was selected.
+- No file in the app carries `com.apple.quarantine` (ITMS-91109).
 
 Signing is manual on purpose. The profiles are files that can be read and
 checked before a twenty-minute build, and the same ones every time. A

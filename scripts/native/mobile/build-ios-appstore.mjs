@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 import { capture, checkedCapture, isCliEntrypoint, repoRootFromScript } from "../../lib/common.mjs";
@@ -16,6 +17,7 @@ import {
   resolveProfileFromEnv,
   resolveSigningIdentity,
 } from "../macos/provisioning.mjs";
+import { findQuarantined } from "../macos/quarantine.mjs";
 import { checkIosBundleInputs, parsePlist } from "./ios-bundle-checks.mjs";
 import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
 
@@ -173,6 +175,43 @@ export function exportOptionsPlist({ teamId, identityName, appProfile, tunnelPro
 `;
 }
 
+/**
+ * Where Xcode looks up a provisioning profile by UUID. Xcode 16 moved the
+ * folder; older versions read only the MobileDevice one.
+ */
+export function xcodeProfileDir({ xcodeMajor, home }) {
+  return xcodeMajor >= 16
+    ? resolve(home, "Library/Developer/Xcode/UserData/Provisioning Profiles")
+    : resolve(home, "Library/MobileDevice/Provisioning Profiles");
+}
+
+/** The major version from `xcodebuild -version` output ("Xcode 26.6\nBuild version …"). */
+export function parseXcodeMajor(versionOutput) {
+  const match = /^Xcode (\d+)/mu.exec(String(versionOutput ?? ""));
+  if (!match) throw new Error(`Unable to read the Xcode version from: ${versionOutput}`);
+  return Number.parseInt(match[1], 10);
+}
+
+/**
+ * Makes a selected profile visible to xcodebuild, which resolves
+ * `PROVISIONING_PROFILE_SPECIFIER` only among installed profiles: a file in
+ * `../docs/certs` does not count. The install is the file under its UUID in
+ * Xcode's folder, which is also all that Xcode's own "install" does.
+ *
+ * The bytes are written fresh rather than copied. A profile saved from a
+ * browser carries `com.apple.quarantine`, a copy inherits it, Xcode embeds
+ * that copy into the app, and App Store Connect rejects a quarantined file
+ * (ITMS-91109).
+ */
+export function installProfileForXcode(profile, directory, io = { mkdirSync, readFileSync, writeFileSync }) {
+  const destination = resolve(directory, `${profile.uuid}.mobileprovision`);
+  if (resolve(profile.path) !== destination) {
+    io.mkdirSync(directory, { recursive: true });
+    io.writeFileSync(destination, io.readFileSync(profile.path));
+  }
+  return destination;
+}
+
 export function resolveIpaPath({ outputDir, version, buildNumber }) {
   return resolve(outputDir, `VoyaVPN_${version}_${buildNumber}.ipa`);
 }
@@ -185,7 +224,14 @@ function throwProblems(title, problems) {
 
 function resolveStoreProfile(bundleId, explicitEnvName, identity) {
   const override = process.env.VOYAVPN_PROVISIONING_PROFILE_DIR?.trim();
-  const profileDir = override ? [resolve(override)] : [defaultProvisioningProfileDir, installedProvisioningProfileDir];
+  const profileDir = override
+    ? [resolve(override)]
+    : [
+      defaultProvisioningProfileDir,
+      installedProvisioningProfileDir,
+      // Where Xcode 16 and later keep profiles, including ones this lane installed.
+      resolve(homedir(), "Library/Developer/Xcode/UserData/Provisioning Profiles"),
+    ];
   const { profile, rejections } = resolveProfileFromEnv({
     bundleIdentifier: bundleId,
     explicitEnvName,
@@ -259,7 +305,8 @@ export function main(argv = process.argv.slice(2)) {
   };
 
   // --- 1. preflight: everything that can fail before a 20-minute build -----
-  console.log(checkedCapture("xcodebuild", ["-version"]).stdout.trim().replace("\n", ", "));
+  const xcodeVersion = checkedCapture("xcodebuild", ["-version"]).stdout.trim();
+  console.log(xcodeVersion.replace("\n", ", "));
   const version = readJson(resolve(root, "package.json")).version;
   const buildNumber = resolveStoreBuildNumber({ envName: "VOYAVPN_IOS_BUILD_NUMBER", repoRoot: root });
   console.log(`VoyaVPN ${version} (${buildNumber})${unsigned ? ", unsigned dry run" : ""}`);
@@ -275,6 +322,11 @@ export function main(argv = process.argv.slice(2)) {
     const appProfile = resolveStoreProfile(appBundleId, "VOYAVPN_IOS_APP_PROVISIONING_PROFILE", identity);
     const tunnelProfile = resolveStoreProfile(tunnelBundleId, "VOYAVPN_IOS_PACKET_TUNNEL_PROVISIONING_PROFILE", identity);
     signing = { teamId: appProfile.teamIdentifier, identityName: identity.name, appProfile, tunnelProfile };
+    const profileDir = xcodeProfileDir({ xcodeMajor: parseXcodeMajor(xcodeVersion), home: homedir() });
+    for (const profile of [appProfile, tunnelProfile]) {
+      installProfileForXcode(profile, profileDir);
+    }
+    console.log(`✓ Both profiles are installed for Xcode in ${profileDir}`);
   }
 
   // --- 2. native artifacts ---------------------------------------------------
@@ -350,7 +402,12 @@ export function main(argv = process.argv.slice(2)) {
       throw new Error(`${bundle} embeds profile ${embedded.uuid}, expected ${profile.uuid}.`);
     }
   }
-  console.log("✓ Signature, entitlements and embedded profiles match the App Store profiles");
+  const quarantined = findQuarantined(app);
+  throwProblems(
+    "Quarantined files (ITMS-91109)",
+    quarantined.map((path) => `${path} carries com.apple.quarantine.`),
+  );
+  console.log("✓ Signature, entitlements and embedded profiles match the App Store profiles; nothing is quarantined");
 
   // --- 5. export ---------------------------------------------------------------
   const exportOptions = resolve(outputDir, "ExportOptions.plist");
