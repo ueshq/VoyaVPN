@@ -319,6 +319,245 @@ final class VoyaVPNUITests: XCTestCase {
         }
     }
 
+    /// UX walkthrough: captures every page and interaction state as named
+    /// screenshot attachments for design review. Assertions are deliberately
+    /// minimal — navigation mirrors the focused tests above, but a missing
+    /// optional element is recorded as a screenshot, not a failure.
+    func testUxReviewWalkthrough() throws {
+        // --- Empty states (setUp landed on home; no nodes yet) ---
+        captureStable("01-home-empty")
+        open("profiles")
+        captureStable("02-profiles-empty")
+        open("rules")
+        captureStable("03-rules-empty")
+        open("settings")
+        captureStable("04-settings")
+
+        // --- Import flow, manual nodes ---
+        open("profiles")
+        tap("Add nodes or subscription")
+        captureStable("05-import-empty")
+        try readClipboard("not-a-node")
+        tap("Preview")
+        _ = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'No importable'")).firstMatch.waitForExistence(timeout: timeout)
+        captureStable("06-import-invalid")
+        let batch = [
+            "vless://11111111-1111-1111-1111-111111111111@tokyo.example.test:443?security=tls#Tokyo%20Edge%2001",
+            "trojan://secret@frankfurt.example.test:443?security=tls#Frankfurt%20Relay%2002%20with%20a%20deliberately%20long%20display%20name%20for%20truncation",
+            "ss://YWVzLTI1Ni1nY206cGFzc3dvcmQ=@singapore.example.test:8388#Singapore%20Entry%2003",
+        ].joined(separator: "\n")
+        try readClipboard(batch)
+        captureStable("07-import-filled")
+        tap("Preview")
+        XCTAssertTrue(app.buttons["Confirm import"].waitForExistence(timeout: timeout))
+        captureStable("08-import-preview")
+        tap("Confirm import")
+        XCTAssertTrue(app.buttons["Choose a node"].waitForExistence(timeout: timeout))
+        captureStable("09-import-choose-node")
+        tap("Choose a node")
+        _ = row("Tokyo Edge 01").waitForExistence(timeout: timeout)
+        captureStable("10-profiles-populated")
+
+        // --- Subscription import (brings policy groups + read-only nodes) ---
+        tap("Add nodes or subscription")
+        try readClipboard(required("QA_SUBSCRIPTION_URL"))
+        tap("Preview")
+        captureStable("11-import-subscription-preview")
+        XCTAssertTrue(app.buttons["Confirm import"].waitForExistence(timeout: timeout))
+        tap("Confirm import")
+        if app.buttons["Choose a node"].waitForExistence(timeout: timeout) {
+            captureStable("11b-subscription-choose-node")
+            app.buttons["Choose a node"].tap()
+        }
+        _ = row("QA Subscription A").waitForExistence(timeout: timeout)
+        captureStable("12-profiles-with-subscription")
+
+        // --- Policy groups disclosure ---
+        tap("Policy groups")
+        captureStable("13-policy-groups")
+        let group = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Auto' AND NOT (label CONTAINS 'tab')")).firstMatch
+        if group.exists {
+            group.tap()
+            captureStable("14-policy-group-selected")
+        }
+        tap("Policy groups")
+
+        // --- Sort menu ---
+        let sort = app.buttons["Sort order"]
+        if ready(sort) {
+            sort.tap()
+            capture("15-sort-menu")
+            let latency = app.buttons["Lowest latency"]
+            if latency.exists { latency.tap() }
+        }
+
+        // --- Latency test via the fixture probe ---
+        _ = try fixture("delay", body: "0")
+        tap("Test all")
+        capture("16-latency-testing")
+        _ = wait(seconds: 60) { self.row("Tokyo Edge 01").label.contains(" ms") }
+        captureStable("17-latency-results")
+
+        // --- Node actions sheet: manual node (full actions) ---
+        visible(row("Tokyo Edge 01")).press(forDuration: 1.2)
+        _ = app.buttons["Show QR"].waitForExistence(timeout: timeout)
+        captureStable("18-node-actions")
+        tap("Show QR")
+        captureStable("19-node-qr")
+        tap("Close")
+
+        // --- Node actions sheet: subscription node (read-only) ---
+        visible(row("QA Subscription A")).press(forDuration: 1.2)
+        _ = app.buttons["Show QR"].waitForExistence(timeout: timeout)
+        captureStable("20-subscription-node-actions")
+        if app.buttons["Close"].exists { tap("Close") }
+
+        // --- Home with a selection, connect attempt (tunnel fails on simulator) ---
+        open("home")
+        captureStable("21-home-node-selected")
+        tap("Connect")
+        capture("22-home-connecting")
+        if app.buttons["Technical details"].waitForExistence(timeout: timeout) {
+            captureStable("23-home-tun-error")
+            app.buttons["Technical details"].tap()
+            captureStable("24-home-technical-details")
+            if app.buttons["Connect"].exists || app.buttons["Disconnect"].exists {
+                (app.buttons["Connect"].exists ? app.buttons["Connect"] : app.buttons["Disconnect"]).tap()
+            }
+            _ = app.staticTexts["Disconnected"].waitForExistence(timeout: timeout)
+        }
+
+        // --- Activity ---
+        open("connections")
+        captureStable("25-activity-empty")
+
+        // --- Rules ---
+        open("rules")
+        captureStable("26-rules-rule-mode")
+        let rule = app.staticTexts["AI services via proxy"]
+        if rule.exists {
+            rule.tap()
+            captureStable("27-rule-details")
+        }
+        open("rules")
+        tap("Global")
+        captureStable("28-rules-global")
+        tap("Rule")
+
+        // --- Settings pages ---
+        open("subscriptions")
+        captureStable("29-subscriptions")
+        let subscription = row("QA Subscription")
+        if ready(visible(subscription)) {
+            subscription.tap()
+            captureStable("30-subscription-edit")
+        }
+        open("general")
+        captureStable("31-general")
+        open("dns")
+        captureStable("32-dns-collapsed")
+        tap("Custom & advanced")
+        captureStable("33-dns-expanded")
+        let bootstrap = visible(app.textFields["Bootstrap DNS"])
+        if bootstrap.exists {
+            bootstrap.tap()
+            bootstrap.typeText("1")
+            let back = app.navigationBars.buttons.firstMatch
+            if back.exists { back.tap() }
+            if app.alerts.buttons["Discard changes"].waitForExistence(timeout: 5) {
+                captureStable("34-dns-unsaved-alert")
+                app.alerts.buttons["Discard changes"].tap()
+                // The screen pop the discard triggers outlives the alert; a
+                // navigation-bar snapshot taken mid-pop is already stale.
+                _ = wait { self.app.buttons["tab-home"].isHittable }
+            } else {
+                open("dns")
+            }
+        }
+        open("maintenance")
+        captureStable("35-maintenance")
+        open("logs")
+        captureStable("36-logs")
+        open("about")
+        captureStable("37-about")
+        let licenses = app.buttons["Open-source licenses"]
+        if ready(licenses) {
+            licenses.tap()
+            captureStable("38-about-licenses")
+        }
+
+        // --- Dark mode across the tabs ---
+        open("general")
+        tap("Dark")
+        captureStable("39-dark-general")
+        open("home")
+        captureStable("40-dark-home")
+        open("profiles")
+        captureStable("41-dark-profiles")
+        open("rules")
+        captureStable("42-dark-rules")
+        open("settings")
+        captureStable("43-dark-settings")
+
+        // --- Simplified Chinese across the tabs (back to light first) ---
+        open("general")
+        visible(app.buttons["Light"]).tap()
+        visible(row("简体中文")).tap()
+        open("home")
+        captureStable("44-zh-home")
+        open("profiles")
+        captureStable("45-zh-profiles")
+        open("rules")
+        captureStable("46-zh-rules")
+        open("settings")
+        captureStable("47-zh-settings")
+        open("general")
+        captureStable("48-zh-general")
+        visible(row("English")).tap()
+    }
+
+    /// Supplemental captures for pages the main walkthrough's guards skipped:
+    /// rule details, subscription editing, about licenses. Each smoke run gets
+    /// a fresh device, so the subscription edit step seeds its own data.
+    func testUxReviewSupplement() throws {
+        open("rules")
+        let rule = app.buttons.matching(NSPredicate(format: "label CONTAINS 'AI services via proxy'")).firstMatch
+        if ready(visible(rule)) {
+            rule.tap()
+            captureStable("s1-rule-details")
+        }
+        open("profiles")
+        try importText(required("QA_SUBSCRIPTION_URL"))
+        open("subscriptions")
+        let subscription = row("192.168.1.3")
+        if ready(visible(subscription)) {
+            subscription.tap()
+            captureStable("s2-subscription-edit")
+        }
+        open("about")
+        let licenses = app.buttons["Open-source licenses"]
+        if ready(visible(licenses)) {
+            licenses.tap()
+            captureStable("s3-about-licenses")
+        }
+    }
+
+    /// On a simulator the VPN save always fails as a declined authorization,
+    /// which is exactly the state the permission guidance is for: the banner
+    /// must explain the permission, and the failed connect must offer its
+    /// user-initiated retry.
+    func testDeclinedConnectOffersAuthorizeAgain() throws {
+        open("profiles")
+        try importText("vless://33333333-3333-3333-3333-333333333333@authorize.example.test:443?security=tls#Authorize%20Me")
+        row("Authorize Me").tap()
+        open("home")
+        tap("Connect")
+        let authorize = app.buttons["Authorize again"]
+        XCTAssertTrue(authorize.waitForExistence(timeout: timeout), "a declined prompt must offer Authorize again")
+        captureStable("declined-connect")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'System authorization was not granted'")).firstMatch.exists)
+    }
+
     func testRuleLibraryUpdate() {
         open("maintenance")
         let update = visible(app.buttons.matching(NSPredicate(format: "label CONTAINS 'Update now'")).firstMatch)

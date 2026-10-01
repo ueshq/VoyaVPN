@@ -3,6 +3,7 @@ import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import type { MockBackend } from "@voya/client/mock-backend";
+import { IpcCommandError } from "@voya/client/errors";
 import { makeMockSeed } from "@voya/client/mock-seed";
 
 import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
@@ -112,6 +113,26 @@ describe("HomeScreen", () => {
     expect(screen.queryByText("No nodes")).toBeNull();
     expect(backend.state.calls.some((call) => call.command === "connectActiveProfile")).toBe(false);
     listing.mockRestore();
+  });
+
+  it("offers Authorize again when a connect is refused the VPN configuration", async () => {
+    const backend = voyaTransport() as MockBackend;
+    // The mobile connect dispatch maps a declined iOS VPN prompt to this kind.
+    const connect = jest.spyOn(backend.commands, "connectActiveProfile").mockRejectedValue(
+      new IpcCommandError({
+        kind: { type: "elevationRequired" },
+        subsystem: "runtime",
+        message:
+          "native TUN permission is required for iOS PacketTunnel: the system did not authorize the VPN configuration",
+      }),
+    );
+    await renderHome();
+    await userEvent.setup().press(await screen.findByText("Connect"));
+
+    expect(await screen.findByText(/System authorization was not granted/)).toBeOnTheScreen();
+    expect(screen.getByText("Authorize again")).toBeOnTheScreen();
+    expect(screen.queryByText(/native TUN permission is required/)).toBeNull();
+    connect.mockRestore();
   });
 
 });

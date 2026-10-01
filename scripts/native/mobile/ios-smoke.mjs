@@ -20,7 +20,7 @@ export function selectRuntime(runtimes) {
 
 export async function main() {
   const requestedTests = process.argv.filter((value) => value.startsWith("--test=")).map((value) => value.slice(7));
-  const allowedTests = [...smokeTests, "testRuleLibraryUpdate", "testVisualMatrix", "testTabletOrientations"];
+  const allowedTests = [...smokeTests, "testRuleLibraryUpdate", "testVisualMatrix", "testTabletOrientations", "testUxReviewWalkthrough", "testUxReviewSupplement", "testDeclinedConnectOffersAuthorizeAgain"];
   if (requestedTests.some((test) => !allowedTests.includes(test))) throw new Error("Unknown --test case");
   const requestedDevices = process.argv.filter((value) => value.startsWith("--device=")).map((value) => value.slice(9));
   const requestedSizes = process.argv.filter((value) => value.startsWith("--content-size=")).map((value) => value.slice(15));
