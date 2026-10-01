@@ -1257,6 +1257,7 @@
     "appLogs": "应用日志",
     "coreLogs": "核心日志",
     "copyDiagnostics": "复制脱敏诊断",
+    "copyJson": "复制 JSON",
     "ruleDetails": "规则详情",
     "ruleEffect": "匹配此规则的流量将使用：{{target}}",
     "quicHint": "阻止 QUIC 可使支持回退的应用改用 TCP；无法回退的应用可能连接失败。",

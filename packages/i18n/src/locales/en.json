@@ -1257,6 +1257,7 @@
     "appLogs": "App logs",
     "coreLogs": "Core logs",
     "copyDiagnostics": "Copy redacted diagnostics",
+    "copyJson": "Copy JSON",
     "ruleDetails": "Rule details",
     "ruleEffect": "Matching traffic uses: {{target}}",
     "quicHint": "Blocking QUIC lets compatible apps fall back to TCP; apps without fallback may fail to connect.",
