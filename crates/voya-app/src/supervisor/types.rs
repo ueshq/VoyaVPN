@@ -270,9 +270,9 @@ pub enum SupervisorError {
     Elevation(String),
     #[error("sudo kill target pid {pid} does not match a tracked elevated process")]
     UnknownSudoKillTarget { pid: u32 },
-    #[error("missing runtime config path for native TUN {role:?} process")]
+    #[error("missing runtime config path for native TUN {role} process")]
     MissingNativeTunConfigPath { role: ProcessRole },
-    #[error("no sing-box executable to launch the {role:?} process with")]
+    #[error("no sing-box executable to launch the {role} process with")]
     MissingCoreLaunch { role: ProcessRole },
     #[error("sudo kill for pid {pid} failed with status {status_code:?}: {stderr}")]
     SudoKillFailed {

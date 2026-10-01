@@ -298,7 +298,7 @@ fn terminal_native_tun_message(status: &voya_platform::tun::NativeTunStatus) -> 
 
     Some(status.message.clone().unwrap_or_else(|| {
         format!(
-            "native TUN provider ended with state {:?}",
+            "native TUN provider ended with state {}",
             status.provider_state
         )
     }))

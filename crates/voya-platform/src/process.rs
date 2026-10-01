@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    fs, io,
+    fmt, fs, io,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
@@ -28,6 +28,24 @@ pub enum ProcessRole {
     SelfHost,
     /// Reading or changing the self-hosted node's firewall rule.
     Firewall,
+}
+
+/// Lower-case words for diagnostics; these names reach user-visible error
+/// messages such as "missing runtime config path for the {role} process", where
+/// a Rust identifier like `SudoKill` would read as a code leak.
+impl fmt::Display for ProcessRole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Main => "main",
+            Self::Pre => "pre",
+            Self::SudoKill => "sudo kill",
+            Self::SysProxy => "system proxy",
+            Self::Probe => "probe",
+            Self::Autostart => "autostart",
+            Self::SelfHost => "self-host",
+            Self::Firewall => "firewall",
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -344,4 +362,23 @@ pub(crate) fn reg_add_arguments(
         .into_iter()
         .map(str::to_string)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProcessRole;
+
+    #[test]
+    fn process_role_display_names_are_user_readable() {
+        // These names reach user-visible supervisor error messages; a Rust
+        // identifier such as `SudoKill` would read as a code leak.
+        assert_eq!(ProcessRole::Main.to_string(), "main");
+        assert_eq!(ProcessRole::Pre.to_string(), "pre");
+        assert_eq!(ProcessRole::SudoKill.to_string(), "sudo kill");
+        assert_eq!(ProcessRole::SysProxy.to_string(), "system proxy");
+        assert_eq!(ProcessRole::Probe.to_string(), "probe");
+        assert_eq!(ProcessRole::Autostart.to_string(), "autostart");
+        assert_eq!(ProcessRole::SelfHost.to_string(), "self-host");
+        assert_eq!(ProcessRole::Firewall.to_string(), "firewall");
+    }
 }

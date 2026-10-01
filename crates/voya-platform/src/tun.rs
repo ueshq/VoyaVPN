@@ -1,5 +1,5 @@
 use std::{
-    fs, io,
+    fmt, fs, io,
     path::{Path, PathBuf},
 };
 
@@ -57,6 +57,24 @@ pub enum TunBackend {
     IosPacketTunnel,
     AndroidVpnService,
     Unsupported,
+}
+
+/// The names users read in error messages. `NativeTunError` text reaches the UI
+/// as display-only English, so the Rust identifier casing would show through:
+/// `IosPacketTunnel` renders as "losPacketTunnel" in UI fonts where the capital
+/// I is indistinguishable from a lower-case l. The frontend labels
+/// (`status.tunBackend*`) keep their own translations; these stay English.
+impl fmt::Display for TunBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Process => "process",
+            Self::MacosPacketTunnel => "macOS PacketTunnel",
+            Self::WindowsService => "Windows service",
+            Self::IosPacketTunnel => "iOS PacketTunnel",
+            Self::AndroidVpnService => "Android VPN service",
+            Self::Unsupported => "unsupported",
+        })
+    }
 }
 
 impl TunBackend {
@@ -230,6 +248,22 @@ pub enum NativeTunProviderState {
     Starting,
     Running,
     Error,
+}
+
+/// Lower-case words for diagnostics; see `TunBackend`'s `Display` for why the
+/// Rust identifiers must not reach user-visible text.
+impl fmt::Display for NativeTunProviderState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::NotApplicable => "not applicable",
+            Self::MissingComponent => "missing component",
+            Self::PermissionRequired => "permission required",
+            Self::Stopped => "stopped",
+            Self::Starting => "starting",
+            Self::Running => "running",
+            Self::Error => "error",
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -517,24 +551,24 @@ use self::windows::{start_windows_tun_service, stop_windows_tun_service, windows
 
 #[derive(Debug, Error)]
 pub enum NativeTunError {
-    #[error("native TUN backend {0:?} is not supported")]
+    #[error("native TUN backend {0} is not supported")]
     UnsupportedBackend(TunBackend),
-    #[error("native TUN component is missing for {backend:?}: {message}")]
+    #[error("native TUN component is missing for {backend}: {message}")]
     ComponentMissing {
         backend: TunBackend,
         message: String,
     },
-    #[error("native TUN controller is unavailable for {backend:?}: {message}")]
+    #[error("native TUN controller is unavailable for {backend}: {message}")]
     ControllerUnavailable {
         backend: TunBackend,
         message: String,
     },
-    #[error("native TUN request is invalid for {backend:?}: {message}")]
+    #[error("native TUN request is invalid for {backend}: {message}")]
     InvalidRequest {
         backend: TunBackend,
         message: String,
     },
-    #[error("native TUN permission is required for {backend:?}: {message}")]
+    #[error("native TUN permission is required for {backend}: {message}")]
     PermissionRequired {
         backend: TunBackend,
         message: String,
@@ -579,6 +613,54 @@ pub enum NativeTunError {
 mod tests {
     use super::macos::parse_macos_provider_state;
     use super::*;
+
+    #[test]
+    fn tun_backend_display_names_are_user_readable() {
+        // The names land verbatim in `NativeTunError` messages the UI shows as
+        // English diagnostics; a capital `I` must not read as a lower-case `l`.
+        assert_eq!(TunBackend::IosPacketTunnel.to_string(), "iOS PacketTunnel");
+        assert_eq!(
+            TunBackend::MacosPacketTunnel.to_string(),
+            "macOS PacketTunnel"
+        );
+        assert_eq!(TunBackend::WindowsService.to_string(), "Windows service");
+        assert_eq!(
+            TunBackend::AndroidVpnService.to_string(),
+            "Android VPN service"
+        );
+        assert_eq!(TunBackend::Process.to_string(), "process");
+        assert_eq!(TunBackend::Unsupported.to_string(), "unsupported");
+    }
+
+    #[test]
+    fn native_tun_error_messages_render_backend_display_names() {
+        let error = NativeTunError::PermissionRequired {
+            backend: TunBackend::IosPacketTunnel,
+            message: "the system did not authorize the VPN configuration".to_string(),
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "native TUN permission is required for iOS PacketTunnel: \
+             the system did not authorize the VPN configuration"
+        );
+    }
+
+    #[test]
+    fn native_tun_provider_state_display_is_lower_case_words() {
+        assert_eq!(
+            NativeTunProviderState::PermissionRequired.to_string(),
+            "permission required"
+        );
+        assert_eq!(
+            NativeTunProviderState::MissingComponent.to_string(),
+            "missing component"
+        );
+        assert_eq!(
+            NativeTunProviderState::NotApplicable.to_string(),
+            "not applicable"
+        );
+    }
 
     #[test]
     fn process_windows_tun_cleanup_abstraction_names_reference_devices() {
