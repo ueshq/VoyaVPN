@@ -94,11 +94,11 @@ export function ImportScreen() {
     await client.invalidateQueries();
     await updateSources(result.addedSubscriptionIds);
   }
-  return <DetailScreen key={preview ? "preview" : "input"}>
+  return <DetailScreen key={preview ? "preview" : message ? "summary" : "input"}>
     <ErrorNotice error={error} message={errorMessage} />
-    {!preview ? <>
+    {!preview && !message ? <>
     <Typography className="text-base text-subtle">{t("mobile.importHelp")}</Typography>
-    <Input multiline scrollEnabled style={{ maxHeight: 240 }} className="min-h-32 h-auto" accessibilityLabel={t("mobile.add")} value={text} onChangeText={edit} editable={!busy} autoCapitalize="none" autoCorrect={false} />
+    <Input multiline scrollEnabled style={{ maxHeight: 240 }} className="min-h-32 h-auto" accessibilityLabel={t("mobile.add")} placeholder={t("panes.profiles.importDialog.placeholder")} value={text} onChangeText={edit} editable={!busy} autoCapitalize="none" autoCorrect={false} />
     <View className="flex-row flex-wrap gap-2">
       <Button variant="secondary" isDisabled={busy} onPress={() => void run(async () => edit(await clipboard().readText()))}><Button.Label>{t("mobile.paste")}</Button.Label></Button>
       <Button variant="secondary" isDisabled={busy} onPress={() => void run(() => recognize(true))}><Button.Label>{t("mobile.scan")}</Button.Label></Button>
@@ -106,11 +106,11 @@ export function ImportScreen() {
     </View>
     {choices.length ? <><Typography className="text-base text-foreground">{t("mobile.chooseQr")}</Typography>{choices.map((value, index) => <Button key={index} variant="secondary" onPress={() => edit(value)}><Button.Label numberOfLines={2}>{value}</Button.Label></Button>)}</> : null}
     {denied ? <Button variant="secondary" onPress={() => void Linking.openSettings()}><Button.Label>{t("tabs.settings")}</Button.Label></Button> : null}
-    <Button isDisabled={busy || !text.trim()} onPress={() => void run(async () => { const data = await voyaCommands().previewImportProfiles(text); Keyboard.dismiss(); setPreview({ text, data }); })}><Button.Label>{t("mobile.preview")}</Button.Label></Button>
+    <Button isDisabled={busy || !text.trim()} onPress={() => void run(async () => { const data = await voyaCommands().previewImportProfiles(text); Keyboard.dismiss(); setMessage(null); setPreview({ text, data }); })}><Button.Label>{t("mobile.preview")}</Button.Label></Button>
     </> : null}
     {preview ? <>
       <Typography className="text-base text-foreground">{t("mobile.previewCount", { nodes: preview.data.nodes.length, sources: preview.data.subscriptionUrls.length, failed: preview.data.failed })}</Typography>
-      {preview.data.lineIssues.map((issue, index) => <Typography key={`issue-${index}`} className="text-sm text-danger">{importLineText(t, issue)}</Typography>)}
+      {preview.data.lineIssues.map((issue, index) => <Typography key={`issue-${index}`} className={issue.code.code === "subscriptionSourceAdded" ? "text-sm text-subtle" : "text-sm text-danger"}>{importLineText(t, issue)}</Typography>)}
       {(allNodes ? preview.data.nodes : preview.data.nodes.slice(0, previewLimit)).map((node, index) => <Typography key={index} className="text-base text-foreground">{node.name} · {node.protocol} · {node.address}</Typography>)}
       {preview.data.nodes.length > previewLimit ? <Button variant="secondary" accessibilityState={{ expanded: allNodes }} onPress={() => setAllNodes(!allNodes)}><Button.Label>{allNodes ? t("mobile.collapsePreview") : t("mobile.expandPreview", { count: preview.data.nodes.length })}</Button.Label></Button> : null}
       {preview.data.subscriptionUrls.map((url) => <View key={url} className="gap-2">
@@ -120,8 +120,11 @@ export function ImportScreen() {
       <Button variant="secondary" isDisabled={busy} onPress={() => { setPreview(null); setAllNodes(false); }}><Button.Label>{t("actions.edit")}</Button.Label></Button>
       <Button isDisabled={busy || !(preview.data.nodes.length || preview.data.subscriptionUrls.length)} onPress={() => void run(commit)}><Button.Label>{t("mobile.confirmImport")}</Button.Label></Button>
     </> : null}
-    {message ? <Banner status={failedIds.length ? "warning" : "info"} message={message} liveRegion /> : null}
-    {failedIds.length ? <Button variant="secondary" isDisabled={busy} onPress={() => void run(() => updateSources(failedIds))}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
-    {message ? <Button variant="secondary" onPress={() => navigateToTab("profiles")}><Button.Label>{t("home.chooseNode")}</Button.Label></Button> : null}
+    {message ? <>
+      <Banner status={failedIds.length ? "warning" : "info"} message={message} liveRegion />
+      {failedIds.length ? <Button variant="secondary" isDisabled={busy} onPress={() => void run(() => updateSources(failedIds))}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
+      <Button variant="secondary" onPress={() => navigateToTab("profiles")}><Button.Label>{t("home.chooseNode")}</Button.Label></Button>
+      <Button variant="secondary" isDisabled={busy} onPress={() => { setMessage(null); setFailedIds([]); }}><Button.Label>{t("mobile.add")}</Button.Label></Button>
+    </> : null}
   </DetailScreen>;
 }

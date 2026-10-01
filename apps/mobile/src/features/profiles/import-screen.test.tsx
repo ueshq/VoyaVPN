@@ -98,3 +98,43 @@ test("text with nothing importable gets import advice, whichever way the backend
   await screen.findByText("This item no longer exists. Refresh the list and choose again.");
   preview.mockRestore(); await unmount(); client.clear();
 });
+
+test("a subscription line in the preview is information, not a red problem", async () => {
+  registerMobileBackend(mockTransport());
+  const backend = voyaTransport() as MockBackend;
+  const client = makeTestQueryClient();
+  setClipboard({ readText: async () => "https://provider.example.test/sub", writeText: async () => {} });
+  const preview = jest.spyOn(backend.commands, "previewImportProfiles").mockResolvedValue({
+    nodes: [], subscriptionUrls: ["https://provider.example.test/sub"], failed: 0,
+    lineIssues: [{ line: 1, code: { code: "subscriptionSourceAdded" } }],
+  });
+  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const user = userEvent.setup();
+  await user.press(screen.getByText("Read clipboard"));
+  await user.press(screen.getByText("Preview"));
+  await screen.findByText("Line 1 was added as a subscription; it is being updated to import its nodes.");
+  preview.mockRestore(); await unmount(); client.clear();
+});
+
+test("after a confirmed import the summary replaces the input form until the user adds more", async () => {
+  registerMobileBackend(mockTransport());
+  const client = makeTestQueryClient();
+  setClipboard({ readText: async () => "https://provider.example.test/new\nvless://token@example.test:443#Mixed", writeText: async () => {} });
+  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const user = userEvent.setup();
+  await user.press(screen.getByText("Read clipboard"));
+  await user.press(screen.getByText("Preview"));
+  await screen.findByText("Found 1 nodes, 1 subscriptions and 0 invalid items.");
+  await user.press(screen.getByText("Confirm import"));
+  await screen.findByText(/Imported \d+ node/);
+
+  // The emptied input form must not sit between the summary and the actions.
+  expect(screen.queryByText("Read clipboard")).toBeNull();
+  expect(screen.queryByText("Preview")).toBeNull();
+  expect(screen.getByText("Choose a node")).toBeOnTheScreen();
+  expect(screen.getByText("Add nodes or subscription")).toBeOnTheScreen();
+
+  await user.press(screen.getByText("Add nodes or subscription"));
+  expect(screen.getByText("Read clipboard")).toBeOnTheScreen();
+  await unmount(); client.clear();
+});
