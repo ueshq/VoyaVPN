@@ -122,6 +122,56 @@ fn a_failed_start_is_remembered_until_the_next_one_succeeds() {
 }
 
 #[test]
+fn a_declined_prompt_keeps_reporting_permission_required_until_it_is_resolved() {
+    let temp = TempDir::new().expect("temp dir");
+    // The host sees no installed configuration after a declined prompt, so it
+    // keeps answering "stopped"; the banner must still guide back to the
+    // authorization instead of reading as an unexplained "stopped".
+    let host = Arc::new(FakeHost::with_state("stopped"));
+    *host.start_result.lock().expect("lock") = Some(TunnelError::PermissionDenied);
+    let controller = HostTunController::new(host.clone(), temp.path().to_path_buf());
+    let config = config_file(temp.path());
+
+    controller
+        .start(start_request(&config))
+        .expect_err("declined");
+
+    let status = controller.status(TunBackend::IosPacketTunnel);
+    assert_eq!(
+        status.provider_state,
+        NativeTunProviderState::PermissionRequired
+    );
+    assert_eq!(
+        status.message.as_deref(),
+        Some("the system did not authorize the VPN configuration")
+    );
+
+    // A provider that is up — e.g. the user re-authorized from system
+    // settings — must not inherit the stale decline.
+    *host.state.lock().expect("lock") = "running".to_string();
+    assert_eq!(
+        controller
+            .status(TunBackend::IosPacketTunnel)
+            .provider_state,
+        NativeTunProviderState::Running
+    );
+
+    // And a later successful start clears the decline for good.
+    *host.state.lock().expect("lock") = "stopped".to_string();
+    controller.start(start_request(&config)).expect("starts");
+    assert_eq!(
+        controller
+            .status(TunBackend::IosPacketTunnel)
+            .provider_state,
+        NativeTunProviderState::Stopped
+    );
+    assert!(controller
+        .status(TunBackend::IosPacketTunnel)
+        .message
+        .is_none());
+}
+
+#[test]
 fn a_config_that_cannot_be_read_never_reaches_the_host() {
     let temp = TempDir::new().expect("temp dir");
     let host = Arc::new(FakeHost::default());

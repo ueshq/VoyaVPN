@@ -12,15 +12,16 @@ use voya_app::{
     contract_map::{runtime_status_event, runtime_status_response},
     core_flow::{CoreFlow, CoreFlowSink},
     post_commit::{self, ConfigChange, PostCommitSink},
-    runtime::RuntimeManager,
-    supervisor::SupervisorSnapshot,
+    runtime::{RuntimeError, RuntimeManager},
+    supervisor::{SupervisorError, SupervisorSnapshot},
     tun::TunManager,
 };
 use voya_contracts::{
-    AppError, AppNotice, AppNoticeLevel, CoreState, InvalidationScope, LogCode, LogLevel,
-    NoticeCode, TunStatus,
+    AppError, AppErrorKind, AppErrorSubsystem, AppNotice, AppNoticeLevel, CoreState,
+    InvalidationScope, LogCode, LogLevel, NoticeCode, TunStatus,
 };
 use voya_platform::sysproxy::SystemProxyStatus;
+use voya_platform::tun::NativeTunError;
 
 use crate::{
     app::MobileState,
@@ -35,8 +36,34 @@ pub(super) async fn connect(state: &MobileState) -> Result<Value, AppError> {
 
     answer(
         "connect_active_profile",
-        &runtime_status_response(core_flow(state).connect(&config).await?),
+        &runtime_status_response(
+            core_flow(state)
+                .connect(&config)
+                .await
+                .map_err(declined_vpn_configuration)?,
+        ),
     )
+}
+
+/// Turns a declined iOS VPN-configuration prompt into `elevationRequired`, so
+/// the home screen offers its user-initiated "Authorize again" retry.
+///
+/// The shared `From<SupervisorError>` mapping deliberately does not do this
+/// (`contract_map::errors` keeps that kind to two sources, so a declined
+/// desktop privilege prompt never re-prompts). On iOS the system prompt is the
+/// only path to a tunnel, and the retry is a tap, not an automatic re-prompt —
+/// so the exception lives here, at the mobile shell, and nowhere else.
+fn declined_vpn_configuration(error: RuntimeError) -> AppError {
+    if let RuntimeError::Supervisor(SupervisorError::NativeTun(ref source)) = error {
+        if matches!(source, NativeTunError::PermissionRequired { .. }) {
+            return AppError::new(
+                AppErrorSubsystem::Runtime,
+                AppErrorKind::ElevationRequired,
+                error.to_string(),
+            );
+        }
+    }
+    error.into()
 }
 
 pub(super) async fn disconnect(state: &MobileState) -> Result<Value, AppError> {
@@ -353,5 +380,40 @@ impl voya_app::connection_mode::ConnectionModeSink for HostConnectionModeSink {
     fn tray_refresh(&self) {
         // No tray on a phone; the tab bar is rendered from the same stores the
         // events above already move.
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use voya_platform::tun::TunBackend;
+
+    #[test]
+    fn a_declined_vpn_configuration_offers_authorize_again() {
+        let error = RuntimeError::Supervisor(SupervisorError::NativeTun(
+            NativeTunError::PermissionRequired {
+                backend: TunBackend::IosPacketTunnel,
+                message: "the system did not authorize the VPN configuration".to_string(),
+            },
+        ));
+
+        let mapped = declined_vpn_configuration(error);
+        assert_eq!(mapped.kind, AppErrorKind::ElevationRequired);
+        assert_eq!(mapped.subsystem, AppErrorSubsystem::Runtime);
+    }
+
+    #[test]
+    fn other_tun_failures_stay_internal() {
+        let error = RuntimeError::Supervisor(SupervisorError::NativeTun(
+            NativeTunError::ControllerUnavailable {
+                backend: TunBackend::IosPacketTunnel,
+                message: "provider crashed".to_string(),
+            },
+        ));
+
+        assert_eq!(
+            declined_vpn_configuration(error).kind,
+            AppErrorKind::Internal
+        );
     }
 }

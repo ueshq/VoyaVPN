@@ -47,6 +47,9 @@ struct RecordingTunnel {
     handoffs: Mutex<Vec<Value>>,
     stops: Mutex<u32>,
     running: Mutex<bool>,
+    /// The failure the next `start` answers with, standing in for a declined
+    /// system prompt.
+    start_failure: Mutex<Option<TunnelError>>,
 }
 
 impl TunnelHost for RecordingTunnel {
@@ -55,6 +58,9 @@ impl TunnelHost for RecordingTunnel {
             .lock()
             .expect("lock")
             .push(serde_json::from_str(&handoff_json).expect("a handshake is valid JSON"));
+        if let Some(error) = self.start_failure.lock().expect("lock").take() {
+            return Err(error);
+        }
         *self.running.lock().expect("lock") = true;
         Ok(())
     }
@@ -148,6 +154,49 @@ impl Harness {
 
         serde_json::from_str(&app_error_json).expect("a failure is a serialized AppError")
     }
+}
+
+#[test]
+fn a_declined_vpn_configuration_offers_authorize_again_end_to_end() {
+    let harness = start_app();
+
+    let imported = harness.invoke(
+        "import_profiles_from_text",
+        serde_json::json!({
+            "text": "vless://11111111-1111-1111-1111-111111111111@example.test:443?security=tls&sni=example.test&type=ws&path=%2Fws#Tokyo",
+            "subscriptionId": Value::Null,
+        }),
+    );
+    assert_eq!(imported["imported"], 1, "import result: {imported}");
+    let listing = harness.invoke("list_profile_summaries", serde_json::json!({}));
+    let node_id = listing["entries"][0]["profile"]["id"]
+        .as_str()
+        .expect("id")
+        .to_string();
+    harness.invoke(
+        "set_active_profile",
+        serde_json::json!({ "indexId": node_id }),
+    );
+
+    *harness.tunnel.start_failure.lock().expect("lock") = Some(TunnelError::PermissionDenied);
+    let error = harness.invoke_err("connect_active_profile", serde_json::json!({}));
+
+    // The mobile connect dispatch is the one place a declined VPN-configuration
+    // prompt becomes `elevationRequired`, so the home screen can offer its
+    // user-initiated "Authorize again" retry.
+    assert_eq!(
+        error["kind"]["type"], "elevationRequired",
+        "connect failure: {error}"
+    );
+
+    // And the tunnel status keeps explaining it is the permission that is
+    // missing, not an unexplained "stopped".
+    let status = harness.invoke("tun_status", serde_json::json!({}));
+    assert_eq!(status["providerState"], "permissionRequired", "status: {status}");
+    assert_eq!(
+        status["lastProviderError"], "the system did not authorize the VPN configuration",
+        "status: {status}"
+    );
 }
 
 #[test]

@@ -54,7 +54,26 @@ pub struct HostTunController {
     /// where the provider writes its status and log.
     shared_dir: PathBuf,
     /// The last failure, so `status` can explain a provider that is down.
-    last_error: Mutex<Option<String>>,
+    last_error: Mutex<Option<LastFailure>>,
+}
+
+/// The failure, keeping the one distinction `status` has to act on: a declined
+/// permission prompt never installs a tunnel configuration, so the host keeps
+/// reporting "stopped" afterwards — while the app should guide the user back to
+/// the prompt instead of showing an unexplained "stopped".
+#[derive(Clone)]
+enum LastFailure {
+    PermissionDenied,
+    Other(String),
+}
+
+impl LastFailure {
+    fn message(&self) -> String {
+        match self {
+            Self::PermissionDenied => TunnelError::PermissionDenied.to_string(),
+            Self::Other(message) => message.clone(),
+        }
+    }
 }
 
 impl HostTunController {
@@ -68,8 +87,12 @@ impl HostTunController {
     }
 
     fn record(&self, error: &TunnelError) {
+        let failure = match error {
+            TunnelError::PermissionDenied => LastFailure::PermissionDenied,
+            other => LastFailure::Other(other.to_string()),
+        };
         if let Ok(mut last) = self.last_error.lock() {
-            *last = Some(error.to_string());
+            *last = Some(failure);
         }
     }
 
@@ -82,14 +105,24 @@ impl HostTunController {
 
 impl NativeTunController for HostTunController {
     fn status(&self, backend: TunBackend) -> NativeTunStatus {
-        let state = provider_state(&self.host.status());
-        let message = self.last_error.lock().ok().and_then(|last| last.clone());
+        let mut state = provider_state(&self.host.status());
+        let last = self.last_error.lock().ok().and_then(|last| last.clone());
+
+        // A provider the host still reports as stopped, after the prompt was
+        // declined, is waiting for authorization — not merely idle. A running
+        // or starting provider speaks for itself (e.g. the user re-authorized
+        // from system settings), so only "stopped" is upgraded.
+        if state == NativeTunProviderState::Stopped
+            && matches!(last, Some(LastFailure::PermissionDenied))
+        {
+            state = NativeTunProviderState::PermissionRequired;
+        }
 
         NativeTunStatus {
             backend,
             provider_state: state,
             component_ready: true,
-            message,
+            message: last.map(|failure| failure.message()),
         }
     }
 

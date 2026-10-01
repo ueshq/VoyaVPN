@@ -16,10 +16,14 @@
 //!   speedtest commands.
 //! - **Elevation is a kind, never a sentence.** `TunManagerError::ElevationRequired`
 //!   and `SupervisorError::ElevationNotGranted` are the only two sources of
-//!   [`AppErrorKind::ElevationRequired`], and the only two failures allowed to
-//!   open a privilege prompt. A cancelled or failed *answer* to that prompt is
-//!   deliberately not one of them: re-prompting after the user declined is
-//!   exactly what the retired `authorization` substring match did.
+//!   [`AppErrorKind::ElevationRequired`] in this shared mapping, and the only two
+//!   failures allowed to open a privilege prompt. A cancelled or failed *answer*
+//!   to that prompt is deliberately not one of them: re-prompting after the user
+//!   declined is exactly what the retired `authorization` substring match did.
+//!   The one exception lives outside this layer: the mobile shell's connect
+//!   dispatch maps a declined iOS VPN-configuration prompt to the same kind,
+//!   because there the system prompt is the only path to a tunnel and the
+//!   "Authorize again" retry is a user tap, not an automatic re-prompt.
 
 use voya_contracts::{AppError, AppErrorEntity, AppErrorKind, AppErrorSubsystem, ValidationIssue};
 
