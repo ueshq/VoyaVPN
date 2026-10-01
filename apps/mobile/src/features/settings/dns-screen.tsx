@@ -78,7 +78,9 @@ export function DnsScreen() {
         <ListGroup>{SWITCHES.map(({ key, labelKey }, index) => <SwitchRow key={key} last={index === SWITCHES.length - 1} label={t(labelKey)} isDisabled={saving} value={form[key] ?? false} onChange={(value) => edit({ [key]: value })} />)}</ListGroup>
       </Disclosure>
       {advanced || dirty ? null : <Typography className="text-base text-subtle">{FIELDS.map(({ key, labelKey }) => `${t(labelKey)}: ${form[key] ?? "—"}`).join("\n")}</Typography>}
-      <Typography accessibilityLiveRegion="polite" className="text-sm text-subtle">{saving ? t("settings.saveStatus.saving") : dirty ? t("mobile.unsaved") : t("mobile.saved")}</Typography>
+      {/* "Saved" only after a real save in this session: a page that opens
+          already saying "Saved" teaches the user to ignore the line. */}
+      <Typography accessibilityLiveRegion="polite" className="text-sm text-subtle">{saving ? t("settings.saveStatus.saving") : dirty ? t("mobile.unsaved") : saved ? t("mobile.saved") : null}</Typography>
       <ErrorNotice error={error} message={t("mobile.saveFailed")} />
       <Button isDisabled={!dirty || saving} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>
       <Button variant="ghost" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.restoreDns")}</Button.Label></Button>

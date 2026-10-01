@@ -129,7 +129,10 @@ describe("SettingsScreen", () => {
     const user = userEvent.setup();
     await user.press(await screen.findByText("Reconnect & apply"));
     expect(await screen.findByText("Settings saved, but they could not be applied to the current connection")).toBeOnTheScreen();
-    expect(screen.getByText("Saved")).toBeOnTheScreen();
+    // The DNS form itself is not left marked unsaved by the failed apply, and
+    // a page that never saved in this session shows no "Saved" line at all.
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
+    expect(screen.queryByText("Saved")).toBeNull();
     expect(screen.queryByText("Applied to the current connection")).toBeNull();
     await user.press(screen.getByText("Reconnect & apply"));
     expect(await screen.findByText("Applied to the current connection")).toBeOnTheScreen();

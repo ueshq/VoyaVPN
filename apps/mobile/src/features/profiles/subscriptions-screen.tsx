@@ -151,7 +151,9 @@ function SubscriptionEditor({ item, metadata, close }: { item: Subscription; met
   return <DetailScreen>
     <TextField isInvalid={fields.name}><Label>{t("mobile.name")}</Label><Input accessibilityLabel={t("mobile.name")} value={name} onChangeText={setName} editable={!busy} /><FieldError>{t("subscriptions.validation.name")}</FieldError></TextField>
     <TextField isInvalid={fields.url}><Label>{t("mobile.url")}</Label><Input accessibilityLabel={t("mobile.url")} value={url} onChangeText={setUrl} editable={!busy} autoCorrect={false} autoCapitalize="none" /><FieldError>{t("subscriptions.validation.url")}</FieldError></TextField>
-    <Typography className="text-sm text-subtle">{busy ? t("settings.saveStatus.saving") : dirty ? t("mobile.unsaved") : t("mobile.saved")}</Typography>
+    {/* The banner below says "Saved" after a save; a status line that says it
+        before anything happened teaches the user to ignore both. */}
+    <Typography className="text-sm text-subtle">{busy ? t("settings.saveStatus.saving") : dirty ? t("mobile.unsaved") : null}</Typography>
     <Button isDisabled={!dirty || busy} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>
     <Typography className="text-base text-subtle">{t("nodeGroups.membersCount", { count: members.length })}</Typography>
     <Typography className="text-sm text-subtle">{metadata?.lastUpdateAt ? t("updates.lastUpdated", { time: new Date(metadata.lastUpdateAt * 1000).toLocaleString(language) }) : t("updates.neverUpdated")}</Typography>
