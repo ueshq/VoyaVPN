@@ -11,6 +11,9 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
     private static let logger = Logger(subsystem: PacketTunnelIdentity.subsystem, category: "PacketTunnelProvider")
 
     #if canImport(Libbox)
+        /// libbox keeps one stderr redirect per process and rejects a second,
+        /// while one provider process can serve several startTunnel calls.
+        private static var stderrRedirected = false
         private var commandServer: LibboxCommandServer?
         private lazy var platformInterface = VoyaPacketTunnelPlatformInterface(provider: self)
     #endif
@@ -99,6 +102,24 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
             LibboxSetup(options, &setupError)
             if let setupError {
                 throw PacketTunnelProviderError.libboxSetupFailed(setupError.localizedDescription)
+            }
+
+            // A Go panic or fatal error inside libbox prints to stderr and
+            // exits: no crash report, no stopTunnel, and the host only gets
+            // NEVPNConnectionError "internal error". Keep that output on disk.
+            // libbox moves a non-empty previous file to "stderr.log.old"
+            // first, so the trace of the run that died survives the restart.
+            // Losing it must not block the tunnel, so a failure is only logged.
+            if !Self.stderrRedirected {
+                var stderrError: NSError?
+                LibboxRedirectStderr(paths.stderrURL.path, &stderrError)
+                if let stderrError {
+                    PacketTunnelDiagnostics.shared.appendProviderLog(
+                        "stderr redirect failed: \(stderrError.localizedDescription)"
+                    )
+                } else {
+                    Self.stderrRedirected = true
+                }
             }
 
             #if os(iOS)

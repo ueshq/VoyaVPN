@@ -75,6 +75,7 @@ private enum PacketTunnelTests {
         let paths = try PacketTunnelRuntime.runtimePaths(containerURL: URL(fileURLWithPath: "/tmp/group"))
         try expect(paths.baseURL.path == "/tmp/group/PT", "short base path changed")
         try expect(paths.workingURL.lastPathComponent == "Working" && paths.tempURL.lastPathComponent == "Temp", "working paths changed")
+        try expect(paths.stderrURL.path == "/tmp/group/PT/stderr.log", "stderr capture path changed")
         do {
             _ = try PacketTunnelRuntime.runtimePaths(containerURL: nil)
             throw Failure(message: "accepted missing container")

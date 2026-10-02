@@ -78,7 +78,8 @@ enum PacketTunnelRuntime {
         return PacketTunnelRuntimePaths(
             baseURL: baseURL,
             workingURL: baseURL.appendingPathComponent("Working", isDirectory: true),
-            tempURL: baseURL.appendingPathComponent("Temp", isDirectory: true)
+            tempURL: baseURL.appendingPathComponent("Temp", isDirectory: true),
+            stderrURL: baseURL.appendingPathComponent("stderr.log")
         )
     }
 
@@ -95,6 +96,9 @@ struct PacketTunnelRuntimePaths {
     let baseURL: URL
     let workingURL: URL
     let tempURL: URL
+    /// Where libbox redirects the provider's stderr, so a Go panic that kills
+    /// the process leaves its trace behind.
+    let stderrURL: URL
 }
 
 struct PacketTunnelRuntimeConfig: Codable {
