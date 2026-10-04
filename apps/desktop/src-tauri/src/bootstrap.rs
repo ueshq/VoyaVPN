@@ -74,7 +74,6 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     }
     let OpenedApp {
         services,
-        shared_config,
         config_mutations,
     } = tauri::async_runtime::block_on(opening.finish());
     let seed_dir = core_seed_resources_dir(app.path().resource_dir()?);
@@ -144,11 +143,17 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     );
     let subscription_auto_update = services.spawn_subscription_auto_update(
         Arc::clone(&config_mutations),
-        supervisor.clone(),
-        TargetOs::current(),
+        &supervisor,
         Arc::new(TauriSinks {
             app: app.handle().clone(),
         }),
+    );
+    // Before the self-hosted node: this manager's launcher clears probe
+    // configs a previous run left behind, and the node's self-test writes one.
+    let speedtest_manager = services.speedtest_manager(
+        core_seed_resource_dir.clone(),
+        Arc::new(speedtest_runner),
+        supervisor.clone(),
     );
     let self_host = spawn_self_host(
         app,
@@ -156,15 +161,10 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         &runtime_paths,
         core_seed_resource_dir.clone(),
         supervisor.clone(),
-        Arc::clone(&shared_config),
+        Arc::clone(&config_mutations),
         log_level,
     );
     drop(runtime_guard);
-    let speedtest_manager = services.speedtest_manager(
-        core_seed_resource_dir.clone(),
-        Arc::new(speedtest_runner),
-        supervisor.clone(),
-    );
     voya_app::startup::log_startup_step("start background services", background_started);
     app.manage(AppState {
         services,
@@ -202,7 +202,7 @@ fn spawn_self_host(
     runtime_paths: &AppPaths,
     core_seed_resource_dir: Option<PathBuf>,
     supervisor: CoreSupervisor,
-    shared_config: voya_app::config_mutation::SharedAppConfig,
+    config_mutations: Arc<voya_app::config_mutation::ConfigMutationCoordinator>,
     log_level: String,
 ) -> SelfHostManager {
     let runner = JobAssignedRunner::new(
@@ -226,12 +226,12 @@ fn spawn_self_host(
         network: Arc::new(SystemLocalNetwork),
         host_tunnel: Arc::new(SupervisorTunnelState {
             supervisor,
-            config: shared_config,
+            config: config_mutations,
         }),
         sink: Arc::new(TauriSinks {
             app: app.handle().clone(),
         }),
-        self_tester: Arc::new(ProbeCoreSelfTester),
+        self_tester: Arc::new(ProbeCoreSelfTester::default()),
         log_level,
         restart_backoff: RestartBackoff::default(),
     })

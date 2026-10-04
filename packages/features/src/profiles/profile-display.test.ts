@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TranslationFunction } from "@voya/i18n";
-import type { ProfileSummaryEntry, ProfileTransport } from "@voya/contracts";
+import type { ProfileSummaryEntry } from "@voya/contracts";
 import { makeProfileFixture } from "../test/profile-fixture";
 
 import {
@@ -11,7 +11,6 @@ import {
   profileMemberName,
   profileNameWithoutFlag,
   profileTitle,
-  profileTransportName,
 } from "./profile-display";
 
 function withMetrics(metrics: Partial<ProfileSummaryEntry["metrics"]>): ProfileSummaryEntry {
@@ -74,14 +73,4 @@ describe("profile display projections", () => {
     expect(entryCountry(null)).toBeNull();
   });
 
-  it.each([
-    [null, "tcp"],
-    [{ header: null, host: null, kind: "tcp", path: null }, "tcp"],
-    [{ host: null, kind: "websocket", path: null }, "ws"],
-    [{ host: null, kind: "httpUpgrade", path: null }, "httpupgrade"],
-    [{ host: null, kind: "http2", path: null }, "h2"],
-    [{ authority: null, kind: "grpc", mode: null, serviceName: null }, "grpc"],
-  ] as Array<[ProfileTransport | null, string]>)("maps %j to %s", (transport, expected) => {
-    expect(profileTransportName(transport)).toBe(expected);
-  });
 });

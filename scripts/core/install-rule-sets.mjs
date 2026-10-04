@@ -7,8 +7,10 @@ if (isCliEntrypoint(import.meta.url)) {
     label: "rule-set",
     retry: "Run `pnpm core:rule-sets:install` to retry manually; package builds stage them too.",
     install: async ({ postinstall, repoRoot }) => {
+      const { forceFetch, forceInstall } = parseInstallArgs(process.argv.slice(2));
       const result = await installRuleSetSeeds({
-        force: parseInstallArgs(process.argv.slice(2)).forceInstall || truthy(process.env.VOYAVPN_FORCE_RULE_SETS_FETCH),
+        // Staging a rule set is fetching it, so both flags mean the same here.
+        force: forceInstall || forceFetch || truthy(process.env.VOYAVPN_FORCE_RULE_SETS_FETCH),
         postinstall,
         repoRoot,
       });

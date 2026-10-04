@@ -160,12 +160,14 @@ pub(super) fn report_post_commit_error<R>(
     R: tauri::Runtime,
 {
     let effects = voya_app::post_commit::notice_effects(level, code, detail);
+    // The app-authored line below is what the Logs panel shows; these records
+    // are the file log's copy of the same failure.
     match effects.log_level {
         Some(LogLevel::Error) => {
-            tracing::error!(code = ?effects.notice.code, detail, "post-commit operation failed");
+            tracing::error!(target: voya_app::logging::FILE_ONLY_TARGET, code = ?effects.notice.code, detail, "post-commit operation failed");
         }
         Some(LogLevel::Warn) => {
-            tracing::warn!(code = ?effects.notice.code, detail, "post-commit operation failed");
+            tracing::warn!(target: voya_app::logging::FILE_ONLY_TARGET, code = ?effects.notice.code, detail, "post-commit operation failed");
         }
         Some(_) => {
             tracing::info!(code = ?effects.notice.code, detail, "post-commit operation failed");

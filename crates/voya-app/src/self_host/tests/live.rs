@@ -112,7 +112,7 @@ async fn a_live_node_serves_its_own_self_test_client() {
         network: Arc::new(SystemLocalNetwork),
         host_tunnel: Arc::new(NoTunnel),
         sink: Arc::clone(&sink) as Arc<dyn SelfHostEventSink>,
-        self_tester: Arc::new(ProbeCoreSelfTester),
+        self_tester: Arc::new(ProbeCoreSelfTester::default()),
         log_level: "warn".to_string(),
         restart_backoff: RestartBackoff::default(),
     };

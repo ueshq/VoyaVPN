@@ -63,7 +63,9 @@ pub fn speedtest_status(state: tauri::State<'_, AppState>) -> Result<SpeedtestSt
 pub async fn check_connection_ip(
     state: tauri::State<'_, AppState>,
 ) -> Result<voya_contracts::ConnectionIpResult, AppError> {
-    let config = state.config_mutations().current_config();
+    let config = state
+        .services()
+        .running_core_config(&state.config_mutations().current_config());
     let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
     let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot)
         .await

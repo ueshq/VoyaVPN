@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
+import { ensureSingBoxSeedForBuild } from "../../core/sing-box-installer.mjs";
 import { isCliEntrypoint, repoRootFromScript } from "../../lib/common.mjs";
 import { IOS_DEPLOYMENT_TARGET } from "./ios-bundle-checks.mjs";
 import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
@@ -10,7 +11,7 @@ import { lanAddress, startFixtures, unusedPort } from "./ios-fixtures.mjs";
 const root = repoRootFromScript(import.meta.url);
 const ios = resolve(root, "apps/mobile/ios");
 const bundleId = "app.voyavpn.mobile";
-const smokeTests = ["testSecondaryPagesAndImportCancellation", "testLaunchAndAllPages", "testNodeImportShareQrDelete", "testSubscriptionAutoRefreshAndPolicyGroup", "testRealLatencyTimeoutCancelAndRetry", "testRulesAndSettingsPersist", "testDnsValidationAndPersistence", "testSystemThemeAndForegroundRecovery"];
+const smokeTests = ["testSecondaryPagesAndImportCancellation", "testLaunchAndAllPages", "testNodeImportShareQrDelete", "testSubscriptionAutoRefreshAndPolicyGroup", "testRealLatencyTimeoutCancelAndRetry", "testRulesAndSettingsPersist", "testDnsValidationAndPersistence", "testSystemThemeAndForegroundRecovery", "testDeclinedConnectOffersAuthorizeAgain"];
 
 export function selectRuntime(runtimes) {
   const runtime = runtimes.filter((item) => item.isAvailable && item.identifier.includes(".iOS-"))
@@ -49,7 +50,7 @@ export function executedTestCount(summaryJson) {
 export async function main() {
   assertKnownArguments(process.argv.slice(2));
   const requestedTests = process.argv.filter((value) => value.startsWith("--test=")).map((value) => value.slice(7));
-  const allowedTests = [...smokeTests, "testRuleLibraryUpdate", "testVisualMatrix", "testTabletOrientations", "testUxReviewWalkthrough", "testUxReviewSupplement", "testDeclinedConnectOffersAuthorizeAgain"];
+  const allowedTests = [...smokeTests, "testRuleLibraryUpdate", "testVisualMatrix", "testTabletOrientations", "testUxReviewWalkthrough", "testUxReviewSupplement"];
   if (requestedTests.some((test) => !allowedTests.includes(test))) throw new Error("Unknown --test case");
   const requestedDevices = process.argv.filter((value) => value.startsWith("--device=")).map((value) => value.slice(9));
   const requestedSizes = process.argv.filter((value) => value.startsWith("--content-size=")).map((value) => value.slice(15));
@@ -116,7 +117,11 @@ export async function main() {
     console.log(`iOS ${full ? "full matrix" : "smoke"}; evidence: ${output}`);
     // The smoke test only ever runs on simulators.
     await run("rustup", ["target", "add", "aarch64-apple-ios-sim"]);
-    await run("pnpm", ["native:mobile:rust:ios", "--slice", "simulator"]);
+    // Nothing here measures the backend, so it is built without the release
+    // profile's fat LTO unless a profile was asked for by name.
+    await run("pnpm", ["native:mobile:rust:ios", "--slice", "simulator"], {
+      env: { VOYAVPN_RUST_PROFILE: process.env.VOYAVPN_RUST_PROFILE || "mobile-smoke" },
+    });
     const libbox = resolve(ios, "Frameworks/Libbox.xcframework");
     // The build script owns the pinned version. CI builds it fresh; a developer
     // may reuse their staged copy explicitly while iterating the same pin.
@@ -126,7 +131,10 @@ export async function main() {
       recordInstalledPods(root);
     } else console.log("Pods match the dependency and Podfile fingerprints.");
     await run("pnpm", ["native:mobile:ios:project"]);
-    await run("node", ["scripts/core/install-sing-box.mjs"]);
+    // The fixture server below is the repo's seed, so that is what has to be
+    // there. The installer would stop at a core already in app data and leave
+    // a clean checkout without one.
+    const { seedDir } = await ensureSingBoxSeedForBuild({ repoRoot: root });
     const derived = resolve(ios, "build/DerivedData");
     const buildArgs = ["-workspace", resolve(ios, "VoyaVPN.xcworkspace"), "-scheme", "VoyaVPN", "-configuration", "Release", "-derivedDataPath", derived, "CODE_SIGNING_ALLOWED=NO", "ONLY_ACTIVE_ARCH=YES", "ARCHS=arm64"];
     for (let index = 0; index < selected.length; index += 1) {
@@ -171,7 +179,7 @@ export async function main() {
       const vlessPort = await unusedPort();
       const config = resolve(output, `vless-${index}.json`);
       writeFileSync(config, JSON.stringify({ log: { level: "error" }, inbounds: [{ type: "vless", listen: "127.0.0.1", listen_port: vlessPort, users: [{ uuid: "44444444-4444-4444-4444-444444444444" }] }], outbounds: [{ type: "direct" }] }));
-      const core = spawn(resolve(root, "apps/desktop/src-tauri/resources/core-seeds/sing_box/sing-box"), ["run", "-c", config]);
+      const core = spawn(resolve(seedDir, "sing-box"), ["run", "-c", config]);
       children.add(core);
       core.stdout.on("data", (data) => appendFileSync(resolve(output, "vless.log"), data));
       core.stderr.on("data", (data) => appendFileSync(resolve(output, "vless.log"), data));

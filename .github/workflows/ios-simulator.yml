@@ -40,7 +40,7 @@ jobs:
       - uses: ./.github/actions/setup-node-pnpm
       - uses: ./.github/actions/setup-rust
         with:
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+          targets: aarch64-apple-ios-sim
           cache-key: ios-simulator
       # CocoaPods, Go and Python ship in the macos-26 image. The runner checks
       # prerequisites and builds both frameworks from this checkout's pins.

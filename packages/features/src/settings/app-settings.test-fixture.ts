@@ -8,7 +8,6 @@ export function makeAppSettings({
   return {
     appearance: { language: "en", theme: "system" },
     behavior: {
-      autoCheckIp: false,
       autoCreateSubscriptionGroup: true,
       autostart: false,
       closeAction: "minimizeToTray",

@@ -1,10 +1,10 @@
-import { createEventRouter, type ShellTarget } from "@voya/client/event-router";
+import { createEventRouter } from "@voya/client/event-router";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-import { navigateToTab, openPage } from "~/app/navigation";
+import { navigateToTab } from "~/app/navigation";
 
 import { voyaTransport } from "./platform";
 
@@ -30,7 +30,7 @@ export function EventBridge() {
       onCloseRequested: () => {
         // Desktop-only: a phone has no window to ask about closing.
       },
-      onSelectTab: navigateTarget,
+      onSelectTab: navigateToTab,
       queryClient,
       t: () => translateRef.current,
     });
@@ -50,7 +50,3 @@ export function EventBridge() {
   return null;
 }
 
-function navigateTarget(target: ShellTarget) {
-  if (target.tab === "profiles") navigateToTab("profiles");
-  else openPage(target.tab === "logs" ? "logs" : "activity");
-}

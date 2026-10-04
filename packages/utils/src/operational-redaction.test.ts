@@ -18,9 +18,15 @@ describe("operational redaction", () => {
     expect(redacted).not.toContain("vless://");
   });
 
+  it("redacts the message of a thrown error", () => {
+    expect(redactOperationalError(new Error("download failed at https://cdn.example.test/app"))).toBe(
+      "download failed at [redacted URL]",
+    );
+  });
+
   it("supports localized placeholders for rendered messages", () => {
     expect(
-      redactOperationalError(new Error("download failed at https://cdn.example.test/app"), {
+      redactOperationalMessage("download failed at https://cdn.example.test/app", {
         redactedUrl: "[URL]",
         redactedValue: "[VALUE]",
       }),

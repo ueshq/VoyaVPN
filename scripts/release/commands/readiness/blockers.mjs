@@ -15,6 +15,7 @@ export const blockerScanFiles = [
   "docs/verification/stable-release-gate.md",
   "crates/voya-net/src/lib.rs",
   "crates/voya-net/src/download.rs",
+  "crates/voya-net/src/download/redirect.rs",
   "crates/voya-net/src/subscription.rs",
 ];
 
@@ -172,15 +173,9 @@ export async function scanProductionBlockers(reporter) {
   const matches = [];
   for (const file of blockerScanFiles) {
     const path = resolveRepoPath(file);
-    let text;
-    try {
-      text = await readFile(path, "utf8");
-    } catch (error) {
-      if (error && error.code === "ENOENT") {
-        continue;
-      }
-      throw error;
-    }
+    // A listed file that is gone was renamed or split: skipping it would
+    // quietly shrink the scan, so the read fails and names it.
+    const text = await readFile(path, "utf8");
 
     matches.push(...findProductionBlockersInText(file, text));
   }

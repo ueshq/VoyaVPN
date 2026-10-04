@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import { useState } from "react";
 import { Alert, type AlertButton, Pressable, Text } from "react-native";
 
-import { useBusyAction } from "./use-busy-action";
+import { useBusyAction } from "@voya/features/forms/use-busy-action";
 import { useUnsavedChanges } from "./use-unsaved-changes";
 
 const Stack = createNativeStackNavigator();

@@ -18,7 +18,7 @@ import { createI18nHost, LOCALE_STORAGE_KEY, type I18nSetup, type Locale } from 
  * DOM host gets from a separate chunk does not apply.
  */
 
-export type NativeI18nPlatform = {
+type NativeI18nPlatform = {
   /** A synchronous key/value store, such as MMKV. */
   storage: {
     getString: (key: string) => string | undefined;

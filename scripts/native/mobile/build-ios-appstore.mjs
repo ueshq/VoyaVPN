@@ -218,6 +218,32 @@ export function installProfileForXcode(profile, directory, io = { mkdirSync, rea
   return destination;
 }
 
+/**
+ * What `--skip-native` takes on trust: an archive is a device build, and both
+ * frameworks have to carry a device slice. The simulator smoke lane rebuilds
+ * the Rust host with only its own slice, so "the artifacts are already there"
+ * is routinely false after it, and the archive would find out at link time,
+ * after every pod has compiled. `slices` maps each framework to the directory
+ * names inside it, or `null` when the framework is missing.
+ */
+export function deviceSliceProblems(slices) {
+  return Object.entries(slices).flatMap(([framework, names]) => {
+    if (names === null) return [`${framework} is missing`];
+    const device = names.some((name) => name.startsWith("ios-") && !name.includes("simulator"));
+    return device ? [] : [`${framework} has no device slice (found: ${names.join(", ") || "none"})`];
+  });
+}
+
+/**
+ * The two executables every archive has, by their path inside the app. A scan
+ * that did not reach them checked nothing, and would report a clean bundle.
+ */
+export function scannedBinaryProblems(binaries) {
+  return ["VoyaVPN", "PlugIns/PacketTunnel.appex/PacketTunnel"]
+    .filter((binary) => !binaries.includes(binary))
+    .map((binary) => `the import scan did not reach ${binary}`);
+}
+
 export function resolveIpaPath({ outputDir, version, buildNumber }) {
   return resolve(outputDir, `VoyaVPN_${version}_${buildNumber}.ipa`);
 }
@@ -297,12 +323,12 @@ export function main(argv = process.argv.slice(2)) {
 
   // xcodebuild prints tens of thousands of lines; they go to a file per step.
   let step = 0;
-  const runLogged = (label, program, args, { cwd = root } = {}) => {
+  const runLogged = (label, program, args, { cwd = root, env = process.env } = {}) => {
     const log = resolve(logs, `${String(++step).padStart(3, "0")}-${label}.log`);
     console.log(`→ ${label} (${log})`);
     const fd = openSync(log, "w");
     try {
-      const result = spawnSync(program, args, { cwd, stdio: ["ignore", fd, fd] });
+      const result = spawnSync(program, args, { cwd, env, stdio: ["ignore", fd, fd] });
       if (result.error) throw result.error;
       if (result.status !== 0) throw new Error(`${label} exited ${result.status}; see ${log}`);
     } finally {
@@ -320,6 +346,19 @@ export function main(argv = process.argv.slice(2)) {
     console.warn("! The working tree has uncommitted changes; the build number counts commits only.");
   }
   checkIosBundleInputs(root);
+  if (skipNative) {
+    const frameworks = resolve(ios, "Frameworks");
+    const slices = Object.fromEntries(
+      ["VoyaMobile.xcframework", "Libbox.xcframework"].map((name) => {
+        const framework = resolve(frameworks, name);
+        return [name, existsSync(framework) ? readdirSync(framework) : null];
+      }),
+    );
+    throwProblems(
+      "--skip-native needs the device builds of both frameworks; run without it, or `pnpm native:mobile:rust:ios --slice device` and `pnpm native:mobile:libbox:ios`",
+      deviceSliceProblems(slices),
+    );
+  }
 
   let signing = null;
   if (!unsigned) {
@@ -339,7 +378,12 @@ export function main(argv = process.argv.slice(2)) {
   if (!skipNative) {
     // An archive is a device build; the simulator slice would never be linked.
     runLogged("rustup-targets", "rustup", ["target", "add", "aarch64-apple-ios"]);
-    runLogged("rust-host", "pnpm", ["native:mobile:rust:ios", "--slice", "device"]);
+    // Always the release profile: a `VOYAVPN_RUST_PROFILE` left exported from
+    // an iteration loop would otherwise archive a debug backend, and nothing
+    // after this step can tell.
+    runLogged("rust-host", "pnpm", ["native:mobile:rust:ios", "--slice", "device"], {
+      env: { ...process.env, VOYAVPN_RUST_PROFILE: "release" },
+    });
     if (!reuseLibbox || !existsSync(resolve(ios, "Frameworks/Libbox.xcframework"))) {
       runLogged("libbox", "pnpm", ["native:mobile:libbox:ios"]);
     }
@@ -386,6 +430,7 @@ export function main(argv = process.argv.slice(2)) {
   console.log(`✓ App and PacketTunnel are ${version} (${buildNumber}) for iOS ${minimumOsVersion}+`);
 
   const imports = bundleImportReport(app);
+  throwProblems("Mach-O scan", scannedBinaryProblems(imports.binaries));
   throwProblems("Non-public API (Guideline 2.5.1)", imports.problems);
   throwProblems("Privilege escalation text", bundlePrivilegeEscalationReport(app).problems);
   throwProblems("Architectures", machOArchProblems(app, imports.binaries));

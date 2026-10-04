@@ -636,6 +636,28 @@ async fn rotating_credentials_changes_every_link() {
     assert_eq!(fixture.self_host_spawns(), 2);
 }
 
+/// Both changes rewrite the whole stored record. Read before either wrote, the
+/// rotation would store the `enabled` it had read and start the node the user
+/// had just turned off.
+#[tokio::test]
+async fn a_change_racing_another_builds_on_what_the_first_stored() {
+    let fixture = Fixture::new().await;
+    fixture.manager.set_enabled(true).await.expect("enable");
+
+    let (disabled, rotated) = tokio::join!(
+        fixture.manager.set_enabled(false),
+        fixture.manager.rotate_credentials(),
+    );
+    disabled.expect("disable");
+    let rotated = rotated.expect("rotate");
+
+    assert!(!rotated.config.enabled, "the rotation kept the node off");
+    let state = fixture.manager.state().await.expect("state");
+    assert!(!state.config.enabled);
+    assert_eq!(state.runtime.status, SelfHostRuntimeStatus::Stopped);
+    assert_eq!(fixture.self_host_spawns(), 1, "nothing was started again");
+}
+
 #[tokio::test]
 async fn stats_are_zero_while_stopped_and_shutdown_stops_the_core() {
     let fixture = Fixture::new().await;
@@ -652,6 +674,21 @@ async fn stats_are_zero_while_stopped_and_shutdown_stops_the_core() {
         state.config.enabled,
         "quitting keeps the node enabled for next launch"
     );
+}
+
+/// A click that raced Quit waits on the lifecycle lock `shutdown` holds, and
+/// runs once the teardown is over.
+#[tokio::test]
+async fn a_change_that_lands_after_shutdown_starts_no_core() {
+    let fixture = Fixture::new().await;
+    fixture.manager.shutdown().await;
+
+    fixture.manager.set_enabled(true).await.expect("enable");
+
+    assert_eq!(fixture.self_host_spawns(), 0);
+    let state = fixture.manager.state().await.expect("state");
+    assert!(state.config.enabled, "the choice is kept for next launch");
+    assert_eq!(state.runtime.status, SelfHostRuntimeStatus::Stopped);
 }
 
 #[tokio::test]

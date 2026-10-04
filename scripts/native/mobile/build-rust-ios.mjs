@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 import {
@@ -9,7 +18,7 @@ import {
   run,
 } from "../../lib/common.mjs";
 import { parseArgs } from "../../lib/args.mjs";
-import { generateUniffiBindings } from "./uniffi-bindings.mjs";
+import { generateUniffiBindings, rustProfile } from "./uniffi-bindings.mjs";
 
 /**
  * Builds `voya-mobile-ffi` for iOS and packages it as an xcframework.
@@ -55,7 +64,7 @@ const LIBRARY_NAME = "libvoya_mobile_ffi.a";
 const FRAMEWORK_NAME = "VoyaMobile.xcframework";
 
 const repoRoot = repoRootFromScript(import.meta.url);
-const profile = process.env.VOYAVPN_RUST_PROFILE || "release";
+const { directory: profileDir, profile } = rustProfile();
 const outputRoot = resolve(repoRoot, "apps", "mobile", "ios", "Frameworks");
 const bindingsRoot = resolve(repoRoot, "apps", "mobile", "ios", "VoyaVPN", "Generated");
 
@@ -92,7 +101,8 @@ function buildSlices(targets) {
         triple,
         "--crate-type",
         "staticlib",
-        ...(profile === "release" ? ["--release"] : []),
+        "--profile",
+        profile,
       ],
       { cwd: repoRoot },
     );
@@ -100,7 +110,7 @@ function buildSlices(targets) {
 }
 
 function staticLibrary(triple) {
-  const path = resolve(repoRoot, "target", triple, profile, LIBRARY_NAME);
+  const path = resolve(repoRoot, "target", triple, profileDir, LIBRARY_NAME);
   if (!existsSync(path)) {
     throw new Error(`Expected ${path} after building ${triple}`);
   }
@@ -113,16 +123,15 @@ function packageFramework(targets) {
   rmSync(framework, { force: true, recursive: true });
   mkdirSync(outputRoot, { recursive: true });
 
+  // Libraries only, no `-headers`. The app compiles the generated Swift and
+  // reads the C header from where the bindings are written (the project's
+  // `HEADER_SEARCH_PATHS` and bridging header point there), so a copy inside
+  // the framework would be a second one that nothing reads.
   run(
     "xcodebuild",
     [
       "-create-xcframework",
-      ...targets.flatMap(({ triple }) => [
-        "-library",
-        staticLibrary(triple),
-        "-headers",
-        bindingsRoot,
-      ]),
+      ...targets.flatMap(({ triple }) => ["-library", staticLibrary(triple)]),
       "-output",
       framework,
     ],
@@ -132,17 +141,42 @@ function packageFramework(targets) {
   return framework;
 }
 
+/**
+ * Replaces `directory` with `fresh`, leaving alone every file whose bytes are
+ * already there. Xcode recompiles what a newer timestamp touches, and the
+ * bridging header imports these: rewriting identical bindings rebuilt the app's
+ * Swift after every backend build.
+ */
+export function syncGeneratedFiles(fresh, directory) {
+  mkdirSync(directory, { recursive: true });
+  const wanted = new Set(readdirSync(fresh));
+  for (const name of readdirSync(directory)) {
+    if (!wanted.has(name)) rmSync(resolve(directory, name), { force: true, recursive: true });
+  }
+  for (const name of wanted) {
+    const target = resolve(directory, name);
+    const content = readFileSync(resolve(fresh, name));
+    if (!existsSync(target) || !content.equals(readFileSync(target))) {
+      writeFileSync(target, content);
+    }
+  }
+}
+
 /** The Swift bindings, regenerated from scratch next to the library. */
 function generateBindings(targets) {
-  rmSync(bindingsRoot, { force: true, recursive: true });
-  mkdirSync(bindingsRoot, { recursive: true });
-  generateUniffiBindings({
-    language: "swift",
-    // Any slice describes the same interface.
-    library: staticLibrary(targets[0].triple),
-    outDir: bindingsRoot,
-    repoRoot,
-  });
+  const fresh = mkdtempSync(resolve(tmpdir(), "voya-ios-bindings-"));
+  try {
+    generateUniffiBindings({
+      language: "swift",
+      // Any slice describes the same interface.
+      library: staticLibrary(targets[0].triple),
+      outDir: fresh,
+      repoRoot,
+    });
+    syncGeneratedFiles(fresh, bindingsRoot);
+  } finally {
+    rmSync(fresh, { force: true, recursive: true });
+  }
 }
 
 function buildRustForIos(targets = IOS_TARGETS) {

@@ -13,8 +13,8 @@ use voya_app::input_safety;
 use voya_app::invalidation;
 use voya_app::runtime::RuntimeManager;
 use voya_app::subscriptions::SubscriptionManager;
-use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
-use voya_app::tun::{set_tun_enabled_use_case, TunManager};
+use voya_app::supervisor::SupervisorSnapshot;
+use voya_app::tun::TunManager;
 use voya_contracts::{
     AppError, AppErrorSubsystem, AppNoticeLevel, AppSettings, AppUpdaterState, AppUpdaterStatus,
     AppearanceSettings, CoreSeedInstallResult, CoreSeedInstallStatus,

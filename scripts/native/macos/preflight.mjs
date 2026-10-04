@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, repoRootFromScript, runCli } from "../../lib/common.mjs";
+import { capture, repoRootFromScript, requireDarwin, runCli } from "../../lib/common.mjs";
 import { defaultIsProcessRunning, voyaRuntimeExecutables } from "./local-runtime.mjs";
 import {
   appBundleIdentifier,
@@ -196,9 +196,7 @@ function warnIfInstalledAppRunning() {
 }
 
 function main() {
-  if (process.platform !== "darwin") {
-    throw new Error("pnpm native:macos:preflight must run on macOS.");
-  }
+  requireDarwin("pnpm native:macos:preflight must run on macOS.");
 
   console.log("VoyaVPN macOS local TUN preflight");
   console.log(`Provisioning profile dir: ${provisioningProfileDir}`);

@@ -167,6 +167,8 @@ describe("generateCommandWire", () => {
     expect(wire).toContain('restartCore: { name: "restart_core", params: [] },');
     // `satisfies` is what makes a missing entry a compile error downstream.
     expect(wire).toContain("satisfies Record<keyof VoyaCommands, { name: string; params: readonly string[] }>");
+    // The channel names travel with it, so a native transport types none.
+    expect(wire).toContain('appEvent: "app-event",');
   });
 
   it("refuses a command whose invocation disagrees with its parameters", () => {

@@ -6,13 +6,12 @@ use std::{
 
 use thiserror::Error;
 use voya_contracts::{
-    AppError, TunBackend, TunPlatform, TunPreflight, TunPreflightState, TunProviderDiagnostics,
+    TunBackend, TunPlatform, TunPreflight, TunPreflightState, TunProviderDiagnostics,
     TunProviderState, TunStatus,
 };
 use voya_core::AppConfig;
 
 use crate::blocking::{run_blocking, BlockingTaskError};
-use crate::config_mutation::{CommittedMutation, ConfigMutationCoordinator};
 use voya_platform::{
     coreinfo::TargetOs,
     privilege::ElevationState,
@@ -164,44 +163,36 @@ impl TunManager {
         config: &AppConfig,
     ) -> Result<TunStatus, TunManagerError> {
         let manager = self.clone();
-        let config = config.clone();
+        let enabled = config.tun.enabled;
 
-        run_blocking("TUN status", move || manager.status(&config)).await?
+        run_blocking("TUN status", move || manager.status(enabled)).await?
     }
 
     /// [`Self::plan_set_enabled`] off the caller's async worker.
     pub async fn plan_set_enabled_off_thread(
         &self,
-        config: &AppConfig,
         enabled: bool,
     ) -> Result<TunStatus, TunManagerError> {
         let manager = self.clone();
-        let config = config.clone();
 
-        run_blocking("TUN preflight", move || {
-            manager.plan_set_enabled(&config, enabled)
-        })
-        .await?
+        run_blocking("TUN preflight", move || manager.plan_set_enabled(enabled)).await?
     }
 
-    pub(crate) fn status(&self, config: &AppConfig) -> Result<TunStatus, TunManagerError> {
-        self.status_with_report(config, RegistrationFreshness::Cached)
+    /// `enabled` is the configuration's flag; everything else is probed.
+    pub(crate) fn status(&self, enabled: bool) -> Result<TunStatus, TunManagerError> {
+        self.status_with_report(enabled, RegistrationFreshness::Cached)
             .map(|(status, _report)| status)
     }
 
     /// Run the enable/disable preflight without touching the configuration.
     ///
     /// The probe forks `pluginkit`/`systemextensionsctl`/`sc.exe` and loads
-    /// NetworkExtension preferences, so it runs off the async runtime against a
-    /// snapshot, before any config mutation guard is taken, and the decision is
-    /// applied with [`Self::apply_enabled`]. The returned status is what the
-    /// config will report once applied — only `enabled` is derived from the
-    /// config, everything else comes from the platform probe.
-    pub(crate) fn plan_set_enabled(
-        &self,
-        config: &AppConfig,
-        enabled: bool,
-    ) -> Result<TunStatus, TunManagerError> {
+    /// NetworkExtension preferences, so it runs off the async runtime, before
+    /// any config mutation guard is taken, and the decision is applied with
+    /// [`Self::apply_enabled`]. The returned status is what the config will
+    /// report once applied: nothing but `enabled` ever came from the config,
+    /// so the probe needs none.
+    pub(crate) fn plan_set_enabled(&self, enabled: bool) -> Result<TunStatus, TunManagerError> {
         // macOS has no other capture path, so TUN stays on there. Refuse before
         // probing: nothing about the machine can change the answer.
         if !enabled && self.platform_backend() == PlatformTunBackend::MacosPacketTunnel {
@@ -210,7 +201,7 @@ impl TunManager {
         // Always re-probe here: this is the gate that refuses to enable TUN when
         // PlugInKit elected another bundle's provider, so it must never decide
         // on a memo taken before the user fixed (or broke) the installation.
-        let (status, report) = self.status_with_report(config, RegistrationFreshness::Probe)?;
+        let (status, report) = self.status_with_report(enabled, RegistrationFreshness::Probe)?;
         if enabled && status.provider_path_mismatch {
             return Err(TunManagerError::ProviderPathMismatch {
                 expected: status.expected_provider_path.unwrap_or_default(),
@@ -225,7 +216,7 @@ impl TunManager {
             };
         }
 
-        Ok(TunStatus { enabled, ..status })
+        Ok(status)
     }
 
     /// Apply a change already validated by [`Self::plan_set_enabled`].
@@ -235,7 +226,7 @@ impl TunManager {
 
     fn status_with_report(
         &self,
-        config: &AppConfig,
+        enabled: bool,
         freshness: RegistrationFreshness,
     ) -> Result<(TunStatus, TunPreflightReport), TunManagerError> {
         let elevation_granted = self.elevation.is_granted();
@@ -244,7 +235,7 @@ impl TunManager {
         let registration = self.provider_registration(report.backend, freshness);
         let provider_state = tun_provider_state(native_status.provider_state);
         let status = TunStatus {
-            enabled: config.tun.enabled,
+            enabled,
             backend: tun_backend(report.backend),
             provider_state,
             allow_enable_tun: report.allow_enable_tun && !registration.path_mismatch,
@@ -371,41 +362,6 @@ impl TunManager {
             resolved_provider_path: resolved.first().map(|path| path.display().to_string()),
         }
     }
-}
-
-/// Turns TUN capture on or off: preflight first, then the one-flag commit.
-///
-/// The preflight forks OS helpers and can take seconds, so it runs against a
-/// snapshot before the mutation lock is taken; holding the lock and its open
-/// transaction across it would stall every other settings write. That is safe
-/// because nothing the plan decides depends on the configuration: it reads
-/// only the machine, and the commit applies the single flag to whatever
-/// configuration it finds under the lock rather than writing the snapshot
-/// back. The answer's `enabled` is the committed one — a platform with a single
-/// capture path keeps its flag whatever was asked.
-pub async fn set_tun_enabled_use_case(
-    mutations: &ConfigMutationCoordinator,
-    tun: &TunManager,
-    enabled: bool,
-) -> Result<CommittedMutation<TunStatus>, AppError> {
-    let planned = tun
-        .plan_set_enabled_off_thread(&mutations.current_config(), enabled)
-        .await?;
-    let committed = mutations
-        .mutate(async |_unit_of_work, config| -> Result<(), AppError> {
-            TunManager::apply_enabled(config, enabled);
-            Ok(())
-        })
-        .await?;
-
-    Ok(CommittedMutation {
-        value: TunStatus {
-            enabled: committed.config.tun.enabled,
-            ..planned
-        },
-        config: committed.config,
-        config_changed: committed.config_changed,
-    })
 }
 
 /// Whether a status read may answer from the registration memo.
@@ -544,7 +500,7 @@ mod tests {
         config: &mut AppConfig,
         enabled: bool,
     ) -> Result<TunStatus, TunManagerError> {
-        let status = manager.plan_set_enabled(config, enabled)?;
+        let status = manager.plan_set_enabled(enabled)?;
         TunManager::apply_enabled(config, enabled);
         Ok(status)
     }
@@ -633,7 +589,7 @@ mod tests {
 
         for _ in 0..3 {
             macos_manager(&resolver, &cache)
-                .status(&config)
+                .status(config.tun.enabled)
                 .expect("status");
         }
 
@@ -651,9 +607,11 @@ mod tests {
         let cache = Arc::new(ProviderRegistrationCache::new());
         let manager = macos_manager(&resolver, &cache);
 
-        manager.status(&config).expect("first status");
+        manager.status(config.tun.enabled).expect("first status");
         cache.invalidate();
-        manager.status(&config).expect("status after invalidation");
+        manager
+            .status(config.tun.enabled)
+            .expect("status after invalidation");
 
         assert_eq!(resolver.probes(), 2);
     }
@@ -668,7 +626,7 @@ mod tests {
         let cache = Arc::new(ProviderRegistrationCache::new());
         let manager = macos_manager(&resolver, &cache);
 
-        let status = manager.status(&config).expect("status");
+        let status = manager.status(config.tun.enabled).expect("status");
         assert!(!status.provider_path_mismatch);
 
         resolver.elect(OTHER_PROVIDER);
@@ -681,7 +639,7 @@ mod tests {
         // The fresh probe replaces the memo, so the next status agrees with it.
         assert!(
             manager
-                .status(&config)
+                .status(config.tun.enabled)
                 .expect("status after the re-election")
                 .provider_path_mismatch
         );
@@ -694,7 +652,7 @@ mod tests {
         let elevation = Arc::new(ElevationState::new());
         let manager = TunManager::with_target_os(Arc::clone(&elevation), TargetOs::Linux);
 
-        let status = manager.status(&config).expect("status");
+        let status = manager.status(config.tun.enabled).expect("status");
         assert!(!status.enabled);
         assert!(!status.allow_enable_tun);
         assert!(status.requires_elevation);
@@ -736,132 +694,6 @@ mod tests {
         assert!(config.tun.enabled);
     }
 
-    async fn coordinator(config: AppConfig) -> ConfigMutationCoordinator {
-        ConfigMutationCoordinator::new(
-            voya_db::Database::connect_in_memory()
-                .await
-                .expect("in-memory database"),
-            Arc::new(std::sync::RwLock::new(config)),
-        )
-    }
-
-    #[tokio::test]
-    async fn a_refused_preflight_commits_nothing() {
-        let mutations = coordinator(AppConfig::default()).await;
-        // No elevation grant: Linux refuses to enable TUN.
-        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Linux);
-
-        let error = set_tun_enabled_use_case(&mutations, &manager, true)
-            .await
-            .expect_err("enabling without elevation is refused");
-
-        assert!(matches!(
-            error.kind,
-            voya_contracts::AppErrorKind::ElevationRequired
-        ));
-        assert!(!mutations.current_config().tun.enabled);
-    }
-
-    /// A native controller whose status read waits until the test lets it go.
-    struct GatedNativeTun {
-        entered: std::sync::mpsc::Sender<()>,
-        release: Mutex<std::sync::mpsc::Receiver<()>>,
-    }
-
-    impl NativeTunController for GatedNativeTun {
-        fn status(&self, backend: PlatformTunBackend) -> voya_platform::tun::NativeTunStatus {
-            let _ = self.entered.send(());
-            let _ = self.release.lock().expect("release lock").recv();
-            voya_platform::tun::NativeTunStatus {
-                backend,
-                provider_state: NativeTunProviderState::Stopped,
-                component_ready: true,
-                message: None,
-            }
-        }
-
-        fn start(
-            &self,
-            _request: voya_platform::tun::NativeTunStartRequest,
-        ) -> Result<(), voya_platform::tun::NativeTunError> {
-            Ok(())
-        }
-
-        fn stop(
-            &self,
-            _backend: PlatformTunBackend,
-        ) -> Result<(), voya_platform::tun::NativeTunError> {
-            Ok(())
-        }
-    }
-
-    /// The preflight runs before the mutation lock is taken, so a settings
-    /// write that lands while it probes is neither blocked nor overwritten:
-    /// the commit applies one flag to the configuration it finds.
-    #[tokio::test]
-    async fn a_write_that_lands_during_the_preflight_survives_the_commit() {
-        let mutations = coordinator(AppConfig::default()).await;
-        let elevation = Arc::new(ElevationState::new());
-        elevation.set_granted(true);
-        let (entered, has_entered) = std::sync::mpsc::channel();
-        let (release, released) = std::sync::mpsc::channel();
-        let manager = TunManager::with_target_os_and_native_tun(
-            elevation,
-            TargetOs::Linux,
-            Arc::new(GatedNativeTun {
-                entered,
-                release: Mutex::new(released),
-            }),
-        );
-
-        let enabling = set_tun_enabled_use_case(&mutations, &manager, true);
-        let writing = async {
-            tokio::task::spawn_blocking(move || has_entered.recv())
-                .await
-                .expect("the wait for the probe")
-                .expect("the probe starts");
-            mutations
-                .mutate(async |_unit_of_work, config| -> Result<(), AppError> {
-                    config.system_proxy.mode = voya_core::SysProxyType::ForcedChange;
-                    Ok(())
-                })
-                .await
-                .expect("a write is not blocked by the probe");
-            release.send(()).expect("the probe is still waiting");
-        };
-        let (enabled, ()) = tokio::join!(enabling, writing);
-
-        assert!(enabled.expect("the preflight passes").value.enabled);
-        let committed = mutations.current_config();
-        assert!(committed.tun.enabled);
-        assert_eq!(
-            committed.system_proxy.mode,
-            voya_core::SysProxyType::ForcedChange
-        );
-    }
-
-    /// A phone has one capture path. Turning it off is not refused by the
-    /// preflight, but the commit keeps the flag, and the answer says so.
-    #[tokio::test]
-    async fn a_phone_answers_with_the_flag_the_commit_kept() {
-        let mut config = AppConfig::default();
-        config.tun.enabled = true;
-        config.system_proxy.mode = voya_core::SysProxyType::Unchanged;
-        let mutations = coordinator(config).await.with_target_os(TargetOs::Ios);
-        let manager = TunManager::with_target_os_and_native_tun(
-            Arc::new(ElevationState::new()),
-            TargetOs::Ios,
-            Arc::new(voya_platform::test_support::StoppedNativeTun),
-        );
-
-        let committed = set_tun_enabled_use_case(&mutations, &manager, false)
-            .await
-            .expect("the request is accepted");
-
-        assert!(committed.value.enabled);
-        assert!(mutations.current_config().tun.enabled);
-    }
-
     /// The status probe forks OS helpers, so command handlers run it off the
     /// async runtime against a config snapshot and apply the flag afterwards.
     /// The planned status must match what the applied config reports.
@@ -873,14 +705,14 @@ mod tests {
         let manager = TunManager::with_target_os(elevation, TargetOs::Linux);
 
         let planned = manager
-            .plan_set_enabled(&config, true)
+            .plan_set_enabled(true)
             .expect("plan enable with elevation grant");
         assert!(planned.enabled);
         assert!(!config.tun.enabled);
 
         TunManager::apply_enabled(&mut config, true);
         assert!(config.tun.enabled);
-        assert_eq!(manager.status(&config).expect("status"), planned);
+        assert_eq!(manager.status(config.tun.enabled).expect("status"), planned);
     }
 
     #[test]
@@ -889,7 +721,7 @@ mod tests {
         let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Linux);
 
         assert!(matches!(
-            manager.plan_set_enabled(&config, true),
+            manager.plan_set_enabled(true),
             Err(TunManagerError::ElevationRequired)
         ));
         assert!(!config.tun.enabled);
@@ -901,7 +733,7 @@ mod tests {
         let manager =
             TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Windows);
 
-        let status = manager.status(&config).expect("status");
+        let status = manager.status(config.tun.enabled).expect("status");
         assert!(status.allow_enable_tun);
         assert!(!status.requires_elevation);
         assert_eq!(status.backend, TunBackend::WindowsService);
@@ -949,7 +781,7 @@ mod tests {
                 )],
             }));
 
-        let status = manager.status(&config).expect("status");
+        let status = manager.status(config.tun.enabled).expect("status");
         assert!(status.provider_path_mismatch);
         assert!(!status.allow_enable_tun);
         assert_eq!(
@@ -1003,7 +835,9 @@ mod tests {
         let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Ios)
             .with_native_tun_controller(Arc::new(RunningHostTunnel));
 
-        let status = manager.status(&AppConfig::default()).expect("status");
+        let status = manager
+            .status(AppConfig::default().tun.enabled)
+            .expect("status");
 
         assert_eq!(status.backend, TunBackend::IosPacketTunnel);
         assert_eq!(status.provider_state, TunProviderState::Running);

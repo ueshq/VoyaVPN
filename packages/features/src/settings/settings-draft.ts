@@ -50,7 +50,7 @@ export function applyChanges<T>(original: T, changes: SettingsChange[]): T {
 
 type Edit = SettingsChange & { revision: number };
 type Writer<T> = (change: SettingsChange) => Promise<T>;
-export type SaveFailure = { message: string; fields: Record<string, string> };
+type SaveFailure = { message: string; fields: Record<string, string> };
 type DraftSnapshot = {
   changes: SettingsChange[];
   failures: Record<string, SaveFailure>;

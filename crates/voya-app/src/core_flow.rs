@@ -15,9 +15,8 @@
 //! * On failure the supervisor is asked what actually happened. If the previous
 //!   core survived (the failure happened before the supervisor was touched) the
 //!   UI is told `Connected` and the OS proxy is left alone. Otherwise the UI is
-//!   told `Disconnected` and automatic proxies are restored. macOS forgets the
-//!   endpoint it advertised and reports the settings requiring manual cleanup.
-//!   A native tunnel whose cleanup failed remains `CleanupPending`.
+//!   told `Disconnected` and automatic proxies are restored. A native tunnel
+//!   whose cleanup failed remains `CleanupPending`.
 //! * Emission is best effort. The sink returns nothing, so a webview that is
 //!   tearing down can never rewrite a `MissingCore` error into an emit error.
 
@@ -129,8 +128,16 @@ impl<'flow> CoreFlow<'flow> {
     }
 
     /// Start the core for the active profile.
-    pub async fn connect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+    ///
+    /// `current_config` is read once the flow lock is held, like every entry
+    /// point that takes one: a connect queued behind another flow starts the
+    /// node selected when its turn comes, not the one selected when it was asked.
+    pub async fn connect(
+        &self,
+        current_config: impl FnOnce() -> AppConfig + Send,
+    ) -> Result<SupervisorSnapshot, RuntimeError> {
         let _flow = self.runtime.settings_application().flow_lock.lock().await;
+        let config = &current_config();
         self.announce_start(config, LogCode::Connecting);
         let result = self.runtime.connect(config).await;
 
@@ -139,8 +146,12 @@ impl<'flow> CoreFlow<'flow> {
     }
 
     /// Restart the core, whatever state it is in.
-    pub async fn restart(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+    pub async fn restart(
+        &self,
+        current_config: impl FnOnce() -> AppConfig + Send,
+    ) -> Result<SupervisorSnapshot, RuntimeError> {
         let _flow = self.runtime.settings_application().flow_lock.lock().await;
+        let config = &current_config();
         self.announce_start(config, LogCode::Restarting);
         // `connect` is restart at this layer: starting stops the running core
         // itself; only the announced log codes differ.
@@ -188,8 +199,12 @@ impl<'flow> CoreFlow<'flow> {
     }
 
     /// Stop the core and restore automatic proxies / report manual cleanup.
-    pub async fn disconnect(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
+    pub async fn disconnect(
+        &self,
+        current_config: impl FnOnce() -> AppConfig + Send,
+    ) -> Result<SupervisorSnapshot, RuntimeError> {
         let _flow = self.runtime.settings_application().flow_lock.lock().await;
+        let config = &current_config();
         self.sink.log(LogLevel::Info, LogCode::Disconnecting, None);
         self.sink.core_state(CoreState::Disconnecting, None, None);
 
@@ -209,8 +224,15 @@ impl<'flow> CoreFlow<'flow> {
     }
 
     /// Reconcile a committed node deletion without stopping a newer valid selection.
-    pub async fn disconnect_removed_profile(&self, config: &AppConfig) -> Result<(), RuntimeError> {
+    ///
+    /// `current_config` is read once the flow lock is held, for the reason
+    /// [`Self::handle_core_exit`] gives.
+    pub async fn disconnect_removed_profile(
+        &self,
+        current_config: impl FnOnce() -> AppConfig + Send,
+    ) -> Result<(), RuntimeError> {
         let _flow = self.runtime.settings_application().flow_lock.lock().await;
+        let config = &current_config();
         match self.runtime.disconnect_removed_profile().await {
             Ok(Some(snapshot)) => {
                 self.sink.log(LogLevel::Info, LogCode::Disconnected, None);
@@ -265,6 +287,13 @@ impl<'flow> CoreFlow<'flow> {
                 let config = &current_config();
                 // The pid changed, so the UI needs the new snapshot.
                 self.settle_traffic_mode(config, &snapshot).await;
+                // The restarted core read the config file it was started from,
+                // so it listens where it did before: a port saved since and
+                // not applied yet is not where the system proxy belongs.
+                let config = &self
+                    .runtime
+                    .settings_application()
+                    .running_core_config(config);
                 let _ = self
                     .settle_system_proxy(
                         config,

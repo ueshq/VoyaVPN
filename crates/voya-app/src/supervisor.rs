@@ -66,20 +66,9 @@ impl CoreSupervisor {
         if let Err(error) = std::thread::Builder::new()
             .name("core-supervisor".to_string())
             .spawn(move || {
-                let mut actor = SupervisorActor::new(deps, actor_tx, Some(runtime));
+                let mut actor = SupervisorActor::new(deps, actor_tx, Some(runtime), clash_api_tx);
                 while let Some(command) = rx.blocking_recv() {
-                    let may_change = !matches!(command, SupervisorCommand::Status(_));
                     actor.handle(command);
-                    // After the handler, so a watcher woken by this sees the
-                    // core the command left running.
-                    if may_change {
-                        let access = actor.clash_api_access();
-                        clash_api_tx.send_if_modified(|current| {
-                            let moved = *current != access;
-                            *current = access;
-                            moved
-                        });
-                    }
                 }
             })
         {
@@ -122,17 +111,24 @@ impl CoreSupervisor {
     ///
     /// The generated config decides both the port and the bearer token it
     /// demands, so the supervisor's snapshot is the only authority for either.
-    /// The answer is empty while nothing is connected — and when the supervisor
-    /// cannot be asked — so a client handed it dials nothing. The token never
-    /// leaves the process: it is redacted in `Debug` and reaches only the
-    /// Clash clients.
-    pub async fn clash_api_access(&self) -> ClashApiAccess {
-        self.status()
-            .await
-            .ok()
-            .as_ref()
-            .map(SupervisorSnapshot::clash_api_access)
-            .unwrap_or_default()
+    /// The answer is empty while nothing is connected, so a client handed it
+    /// dials nothing. The token never leaves the process: it is redacted in
+    /// `Debug` and reaches only the Clash clients.
+    ///
+    /// This is what the actor published after its last command, not a question
+    /// put to it: a start can hold the actor for as long as a tunnel takes to
+    /// come up, and a read that queued behind it would hang the connection
+    /// list and the tray for that long to learn what is already known.
+    #[must_use]
+    pub fn clash_api_access(&self) -> ClashApiAccess {
+        self.clash_api.borrow().clone()
+    }
+
+    /// Whether a core is connected, by the same published value: a connected
+    /// core is exactly one with a Clash API to reach.
+    #[must_use]
+    pub fn is_connected(&self) -> bool {
+        self.clash_api.borrow().port.is_some()
     }
 
     /// [`Self::clash_api_access`] as a value to wait on: it moves when a core
@@ -229,6 +225,9 @@ struct SupervisorActor {
     /// (the crash backoff timer, the native TUN health watcher) needs an
     /// explicit handle. `None` in unit tests that drive the actor directly.
     runtime: Option<tokio::runtime::Handle>,
+    /// Which core the Clash API answers on, for everyone who must not wait
+    /// behind a long start to know. See `publish_clash_api`.
+    clash_api: watch::Sender<ClashApiAccess>,
     running: RunningCore,
     /// Shared with the health watchers so a start or stop that supersedes one
     /// makes it exit on its next tick.
@@ -259,10 +258,6 @@ fn process_uses_unix_sudo(
     spec: &CoreProcessSpec,
     tun_enabled: bool,
 ) -> bool {
-    if supervisor_tun_backend(deps.target_os, tun_enabled) != TunBackend::Process {
-        return false;
-    }
-
     should_use_unix_sudo(deps.target_os, tun_enabled, spec.may_need_sudo)
 }
 

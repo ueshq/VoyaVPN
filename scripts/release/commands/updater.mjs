@@ -456,4 +456,4 @@ async function main(argv = []) {
   }
 }
 
-export { main, printHelp };
+export { main };

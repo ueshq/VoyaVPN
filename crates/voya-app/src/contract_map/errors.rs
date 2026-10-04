@@ -53,7 +53,7 @@ use crate::{
     supervisor::SupervisorError,
     sysproxy::SystemProxyManagerError,
     tun::TunManagerError,
-    updates::UpdateManagerError,
+    updates::RuleSetUpdateError,
 };
 
 use AppErrorSubsystem as Sub;
@@ -323,11 +323,11 @@ impl From<ExportManagerError> for AppError {
     }
 }
 
-impl From<UpdateManagerError> for AppError {
-    fn from(error: UpdateManagerError) -> Self {
+impl From<RuleSetUpdateError> for AppError {
+    fn from(error: RuleSetUpdateError) -> Self {
         match error {
-            UpdateManagerError::Database(source) => database_error(&source, Sub::Update),
-            UpdateManagerError::Ruleset(source) => ruleset_error(&source),
+            RuleSetUpdateError::Database(source) => database_error(&source, Sub::Update),
+            RuleSetUpdateError::Ruleset(source) => ruleset_error(&source),
         }
     }
 }
@@ -336,11 +336,9 @@ impl From<SpeedtestError> for AppError {
     fn from(error: SpeedtestError) -> Self {
         match error {
             SpeedtestError::Database(source) => database_error(&source, Sub::Speedtest),
-            SpeedtestError::Profile(source) => Self::from(source),
             SpeedtestError::CoreInfo(ref source) => core_info_error(source, Sub::Speedtest),
             SpeedtestError::Network(ref source) => network(Sub::Speedtest, source),
             SpeedtestError::Io(ref source) => io(Sub::Speedtest, source),
-            SpeedtestError::Path(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::Process(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::ProbeCoreHost(_) => io(Sub::Speedtest, &error),
             SpeedtestError::WriteConfig { .. } => io(Sub::Speedtest, &error),
@@ -370,7 +368,6 @@ impl From<SelfHostError> for AppError {
             SelfHostError::Random(_)
             | SelfHostError::NoFreePort
             | SelfHostError::Config(_)
-            | SelfHostError::NotRunning
             | SelfHostError::Task(_) => internal(Sub::SelfHost, &error),
         }
     }
@@ -466,7 +463,6 @@ impl From<SupervisorError> for AppError {
             SupervisorError::CommandChannelClosed
             | SupervisorError::ResponseDropped
             | SupervisorError::NativeTun(_)
-            | SupervisorError::Job(_)
             | SupervisorError::Elevation(_)
             | SupervisorError::UnknownSudoKillTarget { .. }
             | SupervisorError::MissingNativeTunConfigPath { .. }

@@ -77,16 +77,24 @@ export default tseslint.config(
     },
   },
   {
+    // Node only: a stray `window` or `document` in a build script is a bug
+    // `no-undef` should name.
     files: [
       "apps/desktop/vite.config.ts",
       "apps/desktop/playwright.config.ts",
       "**/vitest.config.ts",
       "eslint.config.js",
       "scripts/**/*.mjs",
-      "apps/desktop/e2e/**/*.ts",
       "apps/web/vite.config.ts",
       "apps/web/scripts/**/*.mjs",
     ],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
+    // Playwright specs run in Node and hand callbacks to the page.
+    files: ["apps/desktop/e2e/**/*.ts"],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },

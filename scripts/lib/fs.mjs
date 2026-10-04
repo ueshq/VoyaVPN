@@ -19,14 +19,21 @@ import { dirname, join, resolve } from "node:path";
  * outside the tree being scanned.
  */
 
-/** Files under `directory`, recursively. Symlinks are skipped. */
-export function walkFilesSync(directory) {
+/**
+ * Files under `directory`, recursively. Symlinks are skipped. `match(name,
+ * path)` can filter files; directories that fail `matchDirectory` are not
+ * descended into.
+ */
+export function walkFilesSync(directory, { match = () => true, matchDirectory = () => true } = {}) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     if (entry.isSymbolicLink()) {
       return [];
     }
     const path = resolve(directory, entry.name);
-    return entry.isDirectory() ? walkFilesSync(path) : [path];
+    if (entry.isDirectory()) {
+      return matchDirectory(entry.name, path) ? walkFilesSync(path, { match, matchDirectory }) : [];
+    }
+    return match(entry.name, path) ? [path] : [];
   });
 }
 

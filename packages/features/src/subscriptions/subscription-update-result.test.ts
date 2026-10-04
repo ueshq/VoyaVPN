@@ -22,7 +22,7 @@ describe("subscription results", () => {
   });
   it("localizes failures without showing network diagnostics", () => {
     expect(() => assertSubscriptionUpdated(result([failed]), i18next.t.bind(i18next))).toThrow("Subscription update failed");
-    expect(subscriptionUpdateMessages(result([{ ...failed, diagnostic: "https://user:secret@example.test/sub?token=private" }]))).not.toMatch(/secret|private/);
+    expect(subscriptionUpdateMessages(result([{ ...failed, diagnostic: "https://user:secret@example.test/sub?token=private" }]), i18next.t.bind(i18next))).not.toMatch(/secret|private/);
   });
   it("explains skipped updates separately from failures", () => {
     expect(subscriptionUpdateMessages(result([{ ...failed, status: "skipped", reason: "sourceChanged" }]), i18next.t.bind(i18next))).toContain("changed while downloading");

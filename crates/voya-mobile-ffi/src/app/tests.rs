@@ -118,12 +118,20 @@ struct Harness {
     _dir: TempDir,
 }
 
+/// The host as an iPhone runs it. Stated rather than taken from the machine
+/// running the tests: a Linux runner is not a platform this host ships on, and
+/// would send every connect down the child-process path a phone does not have.
 fn start_app() -> Harness {
+    start_app_on(TargetOs::Ios)
+}
+
+fn start_app_on(target_os: TargetOs) -> Harness {
     let dir = TempDir::new().expect("temp dir");
     let listener = Arc::new(RecordingListener::default());
     let tunnel = Arc::new(RecordingTunnel::default());
     let probe_core = Arc::new(RecordingProbeCore::default());
-    let app = VoyaApp::new(
+    let app = VoyaApp::open(
+        target_os,
         dir.path().display().to_string(),
         Some("en-US".to_string()),
         Arc::clone(&listener) as Arc<dyn EventListener>,
@@ -241,9 +249,9 @@ fn a_provider_that_dies_settles_the_app_into_disconnected() {
 
         disconnected && kinds("statistics") && kinds("tunChanged") && noticed
     };
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
     while !settled(&harness) && std::time::Instant::now() < deadline {
-        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::thread::sleep(Duration::from_millis(20));
     }
     assert!(
         settled(&harness),
@@ -255,6 +263,51 @@ fn a_provider_that_dies_settles_the_app_into_disconnected() {
     harness.app.shutdown();
 }
 
+/// The host resets application data, or builds a second app on the same file,
+/// right after `shutdown`: nothing of this one may still be using either.
+#[test]
+fn shutdown_disconnects_closes_the_database_and_refuses_later_commands() {
+    let harness = start_app();
+    harness.invoke(
+        "import_profiles_from_text",
+        serde_json::json!({
+            "text": "vless://11111111-1111-1111-1111-111111111111@example.test:443?security=tls&sni=example.test&type=ws&path=%2Fws#Tokyo",
+            "subscriptionId": Value::Null,
+        }),
+    );
+    let listing = harness.invoke("list_profile_summaries", serde_json::json!({}));
+    let node_id = listing["entries"][0]["profile"]["id"].clone();
+    harness.invoke(
+        "set_active_profile",
+        serde_json::json!({ "indexId": node_id }),
+    );
+    let status = harness.invoke("connect_active_profile", serde_json::json!({}));
+    assert_eq!(status["state"], "connected", "connect answered: {status}");
+    let config = AppPaths::new(harness._dir.path())
+        .bin_config_file(voya_app::runtime::MAIN_CONFIG_FILE_NAME);
+    assert!(config.exists(), "the connect wrote no config to remove");
+
+    harness.app.shutdown();
+    // Twice, as a reload followed by a reset does.
+    harness.app.shutdown();
+
+    assert_eq!(harness.tunnel.status(), "stopped");
+    assert!(
+        !config.exists(),
+        "the generated config, with the node's credentials, outlived the app"
+    );
+    assert!(
+        harness
+            .app
+            .runtime
+            .block_on(harness.app.state.services.list_subscriptions())
+            .is_err(),
+        "the database is still open"
+    );
+    let error = harness.invoke_err("runtime_status", serde_json::json!({}));
+    assert_eq!(error["kind"]["type"], "internal", "{error}");
+}
+
 /// The 2026-10 incident: a database written by another build leaves every
 /// command dead until it is reset. The startup failure must carry the typed
 /// `database` kind (so the frontend can offer the reset), and the reset must
@@ -264,7 +317,8 @@ fn a_rejected_database_reports_its_kind_and_the_reset_recovers_it() {
     let dir = TempDir::new().expect("temp dir");
     let data_dir = dir.path().display().to_string();
     let start = || {
-        VoyaApp::new(
+        VoyaApp::open(
+            TargetOs::Ios,
             data_dir.clone(),
             Some("en-US".to_string()),
             Arc::new(RecordingListener::default()) as Arc<dyn EventListener>,
@@ -356,6 +410,31 @@ fn a_declined_vpn_configuration_offers_authorize_again_end_to_end() {
         status["lastProviderError"], "the system did not authorize the VPN configuration",
         "status: {status}"
     );
+}
+
+/// Android's tunnel is the host's `VpnService`: a connect hands it the config
+/// and never looks for a sing-box executable, which no phone has.
+#[test]
+fn android_connects_through_the_host_tunnel() {
+    let harness = start_app_on(TargetOs::Android);
+    harness.invoke(
+        "import_profiles_from_text",
+        serde_json::json!({
+            "text": "vless://11111111-1111-1111-1111-111111111111@example.test:443?security=tls&sni=example.test&type=ws&path=%2Fws#Tokyo",
+            "subscriptionId": Value::Null,
+        }),
+    );
+    let listing = harness.invoke("list_profile_summaries", serde_json::json!({}));
+    harness.invoke(
+        "set_active_profile",
+        serde_json::json!({ "indexId": listing["entries"][0]["profile"]["id"] }),
+    );
+
+    let status = harness.invoke("connect_active_profile", serde_json::json!({}));
+
+    assert_eq!(status["state"], "connected", "connect answered: {status}");
+    assert_eq!(harness.tunnel.handoffs.lock().expect("lock").len(), 1);
+    harness.app.shutdown();
 }
 
 #[test]
@@ -807,7 +886,13 @@ fn a_policy_group_can_be_saved_listed_and_deleted() {
 
 #[test]
 fn the_capture_mode_a_phone_offers_is_the_tunnel_and_only_the_tunnel() {
-    let harness = start_app();
+    for target_os in [TargetOs::Ios, TargetOs::Android] {
+        the_capture_mode_is_the_tunnel_on(target_os);
+    }
+}
+
+fn the_capture_mode_is_the_tunnel_on(target_os: TargetOs) {
+    let harness = start_app_on(target_os);
 
     let status = harness.invoke("connection_mode_status", serde_json::json!({}));
     assert_eq!(status["mode"], "vpn");
@@ -816,12 +901,15 @@ fn the_capture_mode_a_phone_offers_is_the_tunnel_and_only_the_tunnel() {
     assert_eq!(status["systemProxyAvailable"], false);
     assert_eq!(status["vpnAvailable"], true);
 
-    // And the manager refuses to leave it, exactly as it does on macOS.
-    let error = harness.invoke_err(
+    // And asking to leave it changes nothing: the commit keeps the tunnel,
+    // and the answer says so.
+    let kept = harness.invoke(
         "set_connection_mode",
         serde_json::json!({ "mode": "systemProxy" }),
     );
-    assert_eq!(error["kind"]["type"], "unsupported", "{error}");
+    assert_eq!(kept["mode"], "vpn", "{target_os:?}: {kept}");
+    let status = harness.invoke("connection_mode_status", serde_json::json!({}));
+    assert_eq!(status["mode"], "vpn", "{target_os:?}: {status}");
 
     harness.app.shutdown();
 }

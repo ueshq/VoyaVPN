@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   builtInfoProblems,
+  deviceSliceProblems,
   entitlementProblems,
   exportOptionsPlist,
   installProfileForXcode,
   iosProfileProblems,
   parseXcodeMajor,
   resolveIpaPath,
+  scannedBinaryProblems,
   signingBuildSettings,
   xcodeProfileDir,
 } from "./build-ios-appstore.mjs";
@@ -63,6 +65,41 @@ describe("iOS App Store provisioning profiles", () => {
     expect(iosProfileProblems(appProfile, "app.voyavpn.mobile.PacketTunnel")[0]).toMatch(
       /is for 4LUKJ56532\.app\.voyavpn\.mobile, expected 4LUKJ56532\.app\.voyavpn\.mobile\.PacketTunnel/u,
     );
+  });
+});
+
+describe("native artifacts taken on trust by --skip-native", () => {
+  it("accepts frameworks that carry a device slice", () => {
+    expect(
+      deviceSliceProblems({
+        "Libbox.xcframework": ["Info.plist", "ios-arm64", "ios-arm64-simulator"],
+        "VoyaMobile.xcframework": ["Info.plist", "ios-arm64"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("names a framework the simulator lane left without one, and a missing one", () => {
+    expect(
+      deviceSliceProblems({
+        "Libbox.xcframework": null,
+        "VoyaMobile.xcframework": ["Info.plist", "ios-arm64-simulator"],
+      }),
+    ).toEqual([
+      "Libbox.xcframework is missing",
+      "VoyaMobile.xcframework has no device slice (found: Info.plist, ios-arm64-simulator)",
+    ]);
+  });
+});
+
+describe("the Mach-O scan", () => {
+  it("must have reached the app and its extension", () => {
+    const both = ["Frameworks/hermes.framework/hermes", "PlugIns/PacketTunnel.appex/PacketTunnel", "VoyaVPN"];
+
+    expect(scannedBinaryProblems(both)).toEqual([]);
+    expect(scannedBinaryProblems([])).toEqual([
+      "the import scan did not reach VoyaVPN",
+      "the import scan did not reach PlugIns/PacketTunnel.appex/PacketTunnel",
+    ]);
   });
 });
 

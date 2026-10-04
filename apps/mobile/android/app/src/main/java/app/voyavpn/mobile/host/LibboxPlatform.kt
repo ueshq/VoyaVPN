@@ -12,30 +12,59 @@ import java.net.NetworkInterface as JavaNetworkInterface
 
 /** Platform facts shared by the tunnel and the disconnected latency core. */
 abstract class LibboxPlatform(private val context: Context) : PlatformInterface, CommandServerHandler {
+    companion object {
+        /**
+         * Held from `Libbox.setup` until the service it prepares has started.
+         *
+         * `setup` writes the base, working and temp paths into Go globals,
+         * and `startOrReloadService` reads them. The tunnel and a probe core
+         * live in one process, on different threads: a probe setting up in
+         * between would have the tunnel start in the probe's directory, which
+         * the probe deletes when its test ends.
+         */
+        val setupLock = Any()
+    }
+
     private val connectivity get() = context.getSystemService(ConnectivityManager::class.java)
     private val monitors = mutableMapOf<InterfaceUpdateListener, ConnectivityManager.NetworkCallback>()
 
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
         val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = publish(network, listener)
-            override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) = publish(network, listener)
-            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) = publish(network, listener)
-            override fun onLost(network: Network) = publish(connectivity.activeNetwork, listener)
+            /** The network and metered flag last published; the system calls these one at a time. */
+            private var published: Pair<Network?, Boolean>? = null
+
+            private fun report(network: Network?) {
+                published = network to publish(network, listener)
+            }
+
+            override fun onAvailable(network: Network) = report(network)
+            override fun onLinkPropertiesChanged(network: Network, properties: LinkProperties) = report(network)
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                // Signal strength arrives here too, every few seconds, and
+                // each update has the core list every interface again. The
+                // metered flag is the only capability it is told.
+                if (published != network to isMetered(capabilities)) report(network)
+            }
+            override fun onLost(network: Network) = report(connectivity.activeNetwork)
         }
         synchronized(monitors) { monitors.put(listener, callback)?.let(connectivity::unregisterNetworkCallback) }
         connectivity.registerDefaultNetworkCallback(callback)
         publish(connectivity.activeNetwork, listener)
     }
 
-    private fun publish(network: Network?, listener: InterfaceUpdateListener) {
+    private fun isMetered(capabilities: NetworkCapabilities?) =
+        capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false
+
+    /** Tells the core the default interface and returns the metered flag it was told. */
+    private fun publish(network: Network?, listener: InterfaceUpdateListener): Boolean {
         val name = network?.let(connectivity::getLinkProperties)?.interfaceName.orEmpty()
         // `getByName` throws when the interface list cannot be read, and this
         // runs on the system's callback thread, where that would end the
         // process hosting the tunnel.
         val index = if (name.isEmpty()) -1 else runCatching { JavaNetworkInterface.getByName(name)?.index }.getOrNull() ?: -1
-        val capabilities = network?.let(connectivity::getNetworkCapabilities)
-        listener.updateDefaultInterface(name, index,
-            capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false, false)
+        val metered = isMetered(network?.let(connectivity::getNetworkCapabilities))
+        listener.updateDefaultInterface(name, index, metered, false)
+        return metered
     }
 
     override fun closeDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {

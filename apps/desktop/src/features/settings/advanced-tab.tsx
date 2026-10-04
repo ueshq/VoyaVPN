@@ -191,7 +191,15 @@ function RuntimeLogGroup({
       if (!heading) return;
       heading.focus({ preventScroll: true });
       heading.scrollIntoView({ block: "start" });
-      heading.closest("section")?.setAttribute("data-settings-highlight", "true");
+      // Settings stays mounted, so the attribute is taken off when the
+      // animation ends: left on, a second request would have nothing to start.
+      const section = heading.closest("section");
+      section?.setAttribute("data-settings-highlight", "true");
+      section?.addEventListener(
+        "animationend",
+        () => section.removeAttribute("data-settings-highlight"),
+        { once: true },
+      );
       useShellStore.getState().consumeSettingsTarget();
     });
     return () => cancelAnimationFrame(frame);

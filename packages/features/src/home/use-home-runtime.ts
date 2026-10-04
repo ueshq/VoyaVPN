@@ -19,8 +19,7 @@ import { tunProviderLabel, tunProviderPathMismatchDescription } from "../shell/t
 
 /**
  * Runtime controller for the Home screen: connect/disconnect/restart with
- * elevation + missing-core handling, node selection/switching, and the seeded
- * TUN live state. How traffic is captured is chosen in Settings, never here.
+ * elevation + missing-core handling, and the seeded TUN live state. How traffic is captured is chosen in Settings, never here.
  */
 export function useHomeRuntime() {
   const { t } = useI18n();
@@ -65,7 +64,7 @@ export function useHomeRuntime() {
         (entry) => entry.profile.id === groupNow.profileId,
       ) ?? null)
     : null;
-  const { ipQuery: exitIp } = useConnectionIp();
+  const exitIp = useConnectionIp();
 
   const ready = profilesQuery.isSuccess && policyGroupsQuery.isSuccess && (activeProfile !== null || activeGroup !== null);
 

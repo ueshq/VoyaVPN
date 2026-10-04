@@ -1,7 +1,7 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { repoRootFromScript } from "../lib/common.mjs";
-import { readJson } from "../lib/fs.mjs";
+import { readJson, walkFilesSync } from "../lib/fs.mjs";
 import {
   EXTERNAL_KEY_NAMESPACES,
   inspectI18nSource,
@@ -160,27 +160,13 @@ function formatList(items) {
 }
 
 function productionSourceFiles(root) {
-  const files = [];
-  function visit(dir) {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.isDirectory() && ["__tests__", "test", "tests"].includes(entry.name)) {
-        continue;
-      }
-      const path = resolve(dir, entry.name);
-      if (entry.isDirectory()) {
-        visit(path);
-      } else if (
-        entry.isFile()
-        && /\.(ts|tsx)$/.test(entry.name)
-        && !/\.(test|spec)\.(ts|tsx)$/.test(entry.name)
-        && entry.name !== "bindings.ts"
-      ) {
-        files.push(path);
-      }
-    }
-  }
-  visit(root);
-  return files;
+  return walkFilesSync(root, {
+    matchDirectory: (name) => !["__tests__", "test", "tests"].includes(name),
+    match: (name) =>
+      /\.(ts|tsx)$/.test(name)
+      && !/\.(test|spec)\.(ts|tsx)$/.test(name)
+      && name !== "bindings.ts",
+  });
 }
 
 function isPlainObject(value) {

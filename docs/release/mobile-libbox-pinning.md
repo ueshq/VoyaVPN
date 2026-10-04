@@ -102,16 +102,18 @@ macOS, iOS, tvOS, and their simulators. Shipping all of them would add
 megabytes of slices nothing links, so each script keeps only what its app
 loads:
 
-- **iOS** keeps one device slice (`ios-arm64`) and one simulator slice
-  (`ios-arm64_x86_64-simulator`, or `ios-arm64-simulator` on an
-  Apple-silicon-only toolchain). Both are needed, and they cannot be merged
+- **iOS** builds and keeps one device slice (`ios-arm64`) and one simulator
+  slice (`ios-arm64-simulator`; the script asks for `iossimulator/arm64`,
+  because every machine that runs the simulator build is an arm64 Mac). Both
+  are needed, and they cannot be merged
   into a single framework: both are arm64, and no framework holds two slices
   of one architecture. That is what an xcframework is for. The staged
   `Info.plist` is pruned to list exactly the slices that were kept, because
   Xcode reads it to choose one and a plist promising a slice that is not there
   fails the build.
-- **Android** keeps the archive whole: gomobile packages every ABI into one
-  `.aar`, and Gradle's `abiFilters` decides which survive into the APK.
+- **Android** builds the two ABIs Gradle's `abiFilters` keeps (`arm64-v8a`
+  and `x86_64`) and keeps the archive whole: gomobile packages them into one
+  `.aar`. `make lib_android` would compile arm and 386 as well, for nothing.
 
 ## After a bump
 

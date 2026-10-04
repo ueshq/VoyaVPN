@@ -174,16 +174,15 @@ final class VoyaVPNUITests: XCTestCase {
         tap("Rule")
         for (label, value) in values { XCTAssertEqual(visible(app.switches[label]).value as? String, value) }
         open("general")
-        for label in ["Check the exit IP after connecting", "Record detailed connection log"] {
-            let control = visible(app.switches[label])
-            let before = control.value as? String
-            control.tap()
-            XCTAssertTrue(wait { control.value as? String != before })
-            let expected = control.value as? String
-            relaunch()
-            open("general")
-            XCTAssertEqual(visible(app.switches[label]).value as? String, expected)
-        }
+        let label = "Record detailed connection log"
+        let control = visible(app.switches[label])
+        let before = control.value as? String
+        control.tap()
+        XCTAssertTrue(wait { control.value as? String != before })
+        let expected = control.value as? String
+        relaunch()
+        open("general")
+        XCTAssertEqual(visible(app.switches[label]).value as? String, expected)
         tap("Dark")
         relaunch()
         open("general")

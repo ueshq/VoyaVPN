@@ -59,6 +59,14 @@ export function isTlsModeOption(value: unknown): value is TlsMode | "none" {
   );
 }
 
+export function getTransportLabel(kind: ProfileTransport["kind"]) {
+  return TRANSPORT_LABELS[kind];
+}
+
+export function getTlsModeLabel(mode: TlsMode) {
+  return TLS_MODE_LABELS[mode];
+}
+
 export function getProtocolLabel(kind: ProfileKind | null | undefined) {
   return kind == null ? "" : PROFILE_PROTOCOL_LABELS[kind];
 }

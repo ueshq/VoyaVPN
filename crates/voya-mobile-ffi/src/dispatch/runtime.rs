@@ -32,13 +32,11 @@ use crate::{
 use super::{answer, Answer};
 
 pub(super) async fn connect(state: &MobileState) -> Answer {
-    let config = state.config_mutations.current_config();
-
     answer(
         "connect_active_profile",
         &runtime_status_response(
             core_flow(state)
-                .connect(&config)
+                .connect(|| state.config_mutations.current_config())
                 .await
                 .map_err(declined_vpn_configuration)?,
         ),
@@ -67,22 +65,22 @@ fn declined_vpn_configuration(error: RuntimeError) -> AppError {
 }
 
 pub(super) async fn disconnect(state: &MobileState) -> Answer {
-    let config = state.config_mutations.current_config();
-
     answer(
         "disconnect_core",
-        &runtime_status_response(core_flow(state).disconnect(&config).await?),
+        &runtime_status_response(
+            core_flow(state)
+                .disconnect(|| state.config_mutations.current_config())
+                .await?,
+        ),
     )
 }
 
 pub(super) async fn restart(state: &MobileState) -> Answer {
-    let config = state.config_mutations.current_config();
-
     answer(
         "restart_core",
         &runtime_status_response(
             core_flow(state)
-                .restart(&config)
+                .restart(|| state.config_mutations.current_config())
                 .await
                 .map_err(declined_vpn_configuration)?,
         ),
@@ -106,7 +104,9 @@ pub(super) async fn tun_status(state: &MobileState) -> Answer {
 
 /// The exit address of the running connection, looked up through its own proxy.
 pub(super) async fn check_connection_ip(state: &MobileState) -> Answer {
-    let config = state.config_mutations.current_config();
+    let config = state
+        .services
+        .running_core_config(&state.config_mutations.current_config());
     let snapshot = state.supervisor.status().await?;
     let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot).await?;
 
@@ -174,8 +174,9 @@ impl PostCommitSink for MobilePostCommitSink {
 /// Every path that can delete or replace the running target ends here, or the
 /// core stays connected to a profile that is gone.
 pub(super) async fn disconnect_removed_profile(state: &MobileState) -> Result<(), AppError> {
-    let config = state.config_mutations.current_config();
-    core_flow(state).disconnect_removed_profile(&config).await?;
+    core_flow(state)
+        .disconnect_removed_profile(|| state.config_mutations.current_config())
+        .await?;
 
     Ok(())
 }
@@ -318,39 +319,6 @@ impl CoreFlowSink for HostCoreFlowSink {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct TunEnabled {
-    enabled: bool,
-}
-
-pub(super) async fn set_tun_enabled(state: &MobileState, args: &str) -> Answer {
-    let TunEnabled { enabled } = super::arguments("set_tun_enabled", args)?;
-    let planned = voya_app::tun::set_tun_enabled_use_case(
-        &state.config_mutations,
-        &tun_manager(state),
-        enabled,
-    )
-    .await?;
-
-    state.sinks.emit(
-        EventChannel::TransientStream,
-        &TransientStreamEvent::TunChanged(planned.value.clone()),
-    );
-    // `tun.enabled` is committed, and the settings bundle mirrors it; without
-    // this a stale bundle would rewrite the flag back on the next save.
-    finish_config_change(
-        state,
-        "tun-enabled-changed",
-        voya_app::invalidation::connection_mode_scopes(),
-        &planned.config,
-        ConfigChange::TUN,
-    )
-    .await;
-
-    answer("set_tun_enabled", &planned.value)
-}
-
 pub(super) async fn connection_mode_status(state: &MobileState) -> Answer {
     let config = state.config_mutations.current_config();
     let status = tun_manager(state).status_off_thread(&config).await?;
@@ -367,9 +335,9 @@ struct SetMode {
     mode: voya_contracts::ConnectionMode,
 }
 
-/// A phone captures traffic only through its tunnel provider, so the manager
-/// refuses to leave VPN mode here exactly as it does on macOS. The command
-/// stays wired because the frontend shares one settings surface.
+/// A phone captures traffic only through its tunnel provider, so a request to
+/// leave VPN mode commits nothing and answers with the mode that was kept. The
+/// command stays wired because the frontend shares one settings surface.
 pub(super) async fn set_connection_mode(state: &MobileState, args: &str) -> Answer {
     let SetMode { mode } = super::arguments("set_connection_mode", args)?;
     let connected = state.supervisor.status().await?.state;

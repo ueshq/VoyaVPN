@@ -98,11 +98,7 @@ describe("Subscription editor", () => {
       screen.getByRole("button", { name: "Add and update" }),
     );
     await waitFor(() =>
-      expect(ipc.updateSubscriptions).toHaveBeenCalledWith(
-        "created",
-        true,
-        null,
-      ),
+      expect(ipc.updateSubscriptions).toHaveBeenCalledWith("created"),
     );
     expect(close).toHaveBeenCalledWith(false);
   });

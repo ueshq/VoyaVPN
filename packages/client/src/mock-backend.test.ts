@@ -105,9 +105,10 @@ describe("createMockBackend", () => {
       subscriptions: [makeSubscription(0)],
     });
 
-    await expect(
-      seeded.commands.updateSubscriptions("subscription-0", false, null),
-    ).resolves.toMatchObject({ imported: 1, skipped: 0 });
+    await expect(seeded.commands.updateSubscriptions("subscription-0")).resolves.toMatchObject({
+      imported: 1,
+      skipped: 0,
+    });
     await expect(seeded.commands.listProfileSummaries()).resolves.toMatchObject({
       entries: [{ profile: { subscriptionId: "subscription-0" } }],
     });
@@ -191,11 +192,11 @@ describe("the settings surface", () => {
     const settings = await backend.commands.loadAppSettings();
     await backend.commands.saveAppSettings({
       ...settings,
-      behavior: { ...settings.behavior, autoCheckIp: false },
+      behavior: { ...settings.behavior, autoCreateSubscriptionGroup: false },
     });
 
     await expect(backend.commands.loadAppSettings()).resolves.toMatchObject({
-      behavior: { autoCheckIp: false },
+      behavior: { autoCreateSubscriptionGroup: false },
     });
     // The bundle is a projection of the whole config, so every surface derived
     // from it goes stale at once.

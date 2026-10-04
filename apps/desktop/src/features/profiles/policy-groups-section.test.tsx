@@ -51,6 +51,7 @@ function controller(overrides: Partial<ServerTableController>): ServerTableContr
     policyGroupRuntimeState: null,
     policyGroupSubscriptions: [],
     profiles: [],
+    profilesQuery: { data: undefined } as ServerTableController["profilesQuery"],
     removePolicyGroup: vi.fn(),
     setDeletingPolicyGroup: vi.fn(),
     setPolicyGroupEditorOpen: vi.fn(),

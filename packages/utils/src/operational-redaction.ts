@@ -1,6 +1,6 @@
 import { getErrorMessage } from "./error";
 
-export type OperationalRedactionOptions = {
+type OperationalRedactionOptions = {
   redactedUrl?: string;
   redactedValue?: string;
 };
@@ -13,8 +13,8 @@ const SENSITIVE_ASSIGNMENT_PATTERN =
 const SHARE_LINK_PATTERN = /\b(vless|vmess|trojan|ss|ssr|hysteria2|hy2|tuic|wireguard|wg|socks|socks5|anytls|naive|naive\+https):\/\/[^\s<>"')\]]+/gi;
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"')\]]+/gi;
 
-export function redactOperationalError(error: unknown, options?: OperationalRedactionOptions) {
-  return redactOperationalMessage(getErrorMessage(error), options);
+export function redactOperationalError(error: unknown) {
+  return redactOperationalMessage(getErrorMessage(error));
 }
 
 export function redactOperationalMessage(

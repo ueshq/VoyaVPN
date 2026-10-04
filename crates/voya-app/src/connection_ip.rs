@@ -63,10 +63,7 @@ fn ensure_connected(state: SupervisorConnectionState) -> Result<(), ConnectionIp
 
 /// The mixed inbound port the core listens on for this configuration.
 fn probe_port(config: &AppConfig) -> Result<u16, ConnectionIpError> {
-    let port = config
-        .inbounds
-        .first()
-        .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port);
+    let port = config.local_port();
     u16::try_from(port)
         .ok()
         .filter(|port| *port > 0)

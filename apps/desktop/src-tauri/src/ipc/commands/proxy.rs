@@ -5,7 +5,7 @@ use super::{post_commit::*, *};
 pub async fn proxy_list_connections(
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyConnectionsSnapshot, AppError> {
-    let clash_api = state.supervisor().clash_api_access().await;
+    let clash_api = state.supervisor().clash_api_access();
 
     state
         .proxy_runtime()
@@ -82,8 +82,7 @@ pub async fn proxy_start_monitor(
         &state.proxy_monitor_controller(),
         &state.supervisor(),
         std::sync::Arc::new(crate::TauriSinks { app: app.clone() }),
-    )
-    .await;
+    );
 
     voya_app::proxy_runtime::report_monitor_result(result, |status| {
         emit_proxy_monitor_status(&app, status);

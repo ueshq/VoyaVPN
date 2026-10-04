@@ -121,10 +121,9 @@ pub(crate) fn initial_tray_snapshot(state: &AppState) -> TraySnapshot {
 
 pub(crate) async fn tray_snapshot(state: &AppState) -> TraySnapshot {
     let config = state.config_mutations().current_config();
-    let connected = matches!(
-        state.supervisor().status().await,
-        Ok(snapshot) if snapshot.state == SupervisorConnectionState::Connected
-    );
+    // What the supervisor last published: asking it would park the menu
+    // rebuild behind a tunnel that is still starting.
+    let connected = state.supervisor().is_connected();
     let pinned = Some(config.active_profile_id.as_str()).filter(|id| !id.is_empty());
     let (nodes, total_nodes, active_node_id) = match state
         .services()
@@ -185,9 +184,8 @@ pub(crate) async fn tray_connect<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let config = state.config_mutations().current_config();
     let mut result = core_flow(app, &state)
-        .connect(&config)
+        .connect(|| state.config_mutations().current_config())
         .await
         .map_err(AppError::from);
     // The window asks for one-time authorization and tries again; so does the tray.
@@ -195,7 +193,7 @@ pub(crate) async fn tray_connect<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         let elevation = state.elevation_manager().clone();
         result = match run_blocking("elevation request", move || elevation.request()).await {
             Ok(Ok(())) => core_flow(app, &state)
-                .connect(&config)
+                .connect(|| state.config_mutations().current_config())
                 .await
                 .map_err(AppError::from),
             Ok(Err(error)) => Err(AppError::from(error)),
@@ -211,8 +209,10 @@ pub(crate) async fn tray_disconnect<R: tauri::Runtime>(app: &tauri::AppHandle<R>
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let config = state.config_mutations().current_config();
-    if let Err(error) = core_flow(app, &state).disconnect(&config).await {
+    if let Err(error) = core_flow(app, &state)
+        .disconnect(|| state.config_mutations().current_config())
+        .await
+    {
         report_tray_failure(app, &AppError::from(error));
     }
 }

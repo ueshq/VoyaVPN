@@ -10,6 +10,7 @@ fn unix_now_seconds() -> i64 {
         .map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0))
 }
 
+pub(crate) use auto_update::RunningCoreProxy;
 pub use auto_update::{
     due_subscription_ids, AttemptState, AutoUpdateOutcome, SubscriptionAutoUpdateScheduler,
     SubscriptionAutoUpdateSink,

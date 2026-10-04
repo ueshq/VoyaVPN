@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { queryKeys } from "@voya/client/query-keys";
-import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { proxyConnectionsPushCount, useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { voyaCommands } from "@voya/client/transport";
 
 /**
@@ -20,12 +20,21 @@ export function useConnectionsSnapshot(enabled: boolean) {
   const query = useQuery({
     enabled,
     gcTime: 0,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const before = useRuntimeEventStore.getState().proxyConnections;
+      const pushesBefore = proxyConnectionsPushCount();
       const next = await voyaCommands().proxyListConnections();
+      // Cancelled while in flight: the table stopped being wanted, and a
+      // screen that cleared it on the way out must not get this one back.
+      if (signal.aborted) return next;
       // Seed the initial query as well as manual refreshes, but never replace a
-      // newer stream event with a request that was already in flight.
-      if (useRuntimeEventStore.getState().proxyConnections === before) {
+      // newer stream event with a request that was already in flight. A pushed
+      // table still waiting for its frame is such an event too, and writing
+      // this answer would drop it, which is why the pushes are counted and the
+      // store is not the only thing compared. The store itself refuses a table
+      // whose core has gone.
+      const pushed = proxyConnectionsPushCount() !== pushesBefore;
+      if (useRuntimeEventStore.getState().proxyConnections === before && !pushed) {
         setProxyConnections(next);
       }
       return next;

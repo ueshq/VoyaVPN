@@ -214,7 +214,6 @@ export async function installTauriSmokeMock(
       set_active_profile: [...profileScopes, "appSettings"],
       set_active_routing: [...routingScopes, "appSettings"],
       set_connection_mode: connectionModeScopes,
-      set_tun_enabled: connectionModeScopes,
       update_subscriptions: [...subscriptionScopes, ...profileScopes],
       delete_policy_groups: ["policyGroups"],
       save_policy_group: ["policyGroups"],
@@ -438,9 +437,6 @@ export async function installTauriSmokeMock(
             elevationGranted: true,
             requiresElevation: false,
           };
-          return Promise.resolve(clone(state.tun));
-        case "set_tun_enabled":
-          state.tun = { ...state.tun, enabled: Boolean(args.enabled) };
           return Promise.resolve(clone(state.tun));
         case "connection_mode_status":
           return Promise.resolve(connectionModeStatus());
@@ -1177,7 +1173,6 @@ export async function installTauriSmokeMock(
       return {
         appearance: { language: "en", theme: "system" },
         behavior: {
-          autoCheckIp: false,
           autoCreateSubscriptionGroup: true,
           autostart: false,
           closeAction: "minimizeToTray",

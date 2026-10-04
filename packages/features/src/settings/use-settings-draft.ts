@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   useQueryClient,
   type QueryClient,
@@ -87,8 +87,15 @@ export function useSettingsDraft<T>({
   }, [draft, writeRef]);
 
   const failures = Object.values(snapshot.failures);
+  // `applyChanges` copies the whole bundle. Unmemoized, every render of a
+  // settings screen made a new one, and effects keyed on a part of it ran
+  // each time.
+  const value = useMemo(
+    () => (data ? applyChanges(data, snapshot.changes) : null),
+    [data, snapshot.changes],
+  );
   return {
-    value: data ? applyChanges(data, snapshot.changes) : null,
+    value,
     error: failures.length ? failures[0].message : null,
     fieldErrors: Object.assign(
       {},

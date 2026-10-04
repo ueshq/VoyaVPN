@@ -75,12 +75,10 @@ export async function applyUiPreferences(
     preferencesStore.setThemePreview(normalized.theme);
   }
 
-  const currentLanguage = i18next.resolvedLanguage ?? i18next.language;
-  if (currentLanguage === normalized.language) {
-    i18nHost().applyLocale(normalized.language);
-  } else {
-    await i18nHost().changeLocale(normalized.language, { persist });
-  }
+  // Also when the language is the one on screen: a preview already switched
+  // to it, and only this call, made once the backend has acknowledged the
+  // save, stores the choice the next launch starts in.
+  await i18nHost().changeLocale(normalized.language, { persist });
   // A cache refresh or an older save must not replace the user's newer preview.
   if (persist && preview) await applyUiPreferences(preview.preferences, { persist: false });
 }

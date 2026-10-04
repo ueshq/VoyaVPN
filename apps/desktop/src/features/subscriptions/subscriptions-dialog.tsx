@@ -134,7 +134,7 @@ function SubscriptionEditor({
       setForm(saved);
       if (create || needsUpdate) {
         setNeedsUpdate(true);
-        const result = await voyaCommands().updateSubscriptions(saved.id, true, null);
+        const result = await voyaCommands().updateSubscriptions(saved.id);
         assertSubscriptionUpdated(result, t);
         setNeedsUpdate(false);
       }

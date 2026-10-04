@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import type { TranslationFunction } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { requestElevation } from "@voya/client/platform";
 import { useRuntimeBusy } from "@voya/client/runtime-action";
 import {
   tunProviderErrorDescription,
@@ -89,8 +90,7 @@ async function vpnPreflight(t: TranslationFunction): Promise<string | null> {
     return tunProviderPathMismatchDescription(current, t);
   }
   if (current.requiresElevation && !current.elevationGranted) {
-    const granted = await voyaCommands().tunRequestElevation();
-    if (!granted.elevationGranted) {
+    if (!(await requestElevation())) {
       return t("settings.captureMode.authorizationDeclined");
     }
   }

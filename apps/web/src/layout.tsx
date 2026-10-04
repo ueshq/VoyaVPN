@@ -12,7 +12,7 @@ const SHORT_LANGUAGE_NAME: Record<Locale, string> = {
 
 export const CONTAINER = "mx-auto w-full max-w-6xl px-4 sm:px-6";
 
-export type DocumentProps = {
+type DocumentProps = {
   locale: Locale;
   /** `null` for the 404 page, which has no canonical URL or alternates. */
   page: Page | null;

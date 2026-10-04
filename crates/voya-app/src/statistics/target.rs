@@ -30,7 +30,8 @@ struct RunningGroup {
     group_id: String,
     access: ClashApiAccess,
     /// Resolved once per running core: the tags the core answers in were
-    /// generated from the members as they were at launch.
+    /// generated from the members as they were at launch. Empty when they
+    /// could not be resolved, which is remembered like any other answer.
     members: Vec<ProfileIdentity>,
     now_profile_id: Option<String>,
     ticks_until_refresh: u64,
@@ -77,17 +78,17 @@ impl TrafficTarget {
             .as_ref()
             .is_some_and(|group| group.group_id == group_id && group.access == access);
         if !same_core {
-            self.group = None;
-            let members = match PolicyGroupManager::new(&self.database)
+            // A group that cannot be resolved — deleted while its core still
+            // runs — stays unresolved for that core. Asking again on every
+            // tick would scan the node table and log this once a second.
+            let members = PolicyGroupManager::new(&self.database)
                 .resolve(&group_id)
                 .await
-            {
-                Ok((_, members)) => members,
-                Err(error) => {
+                .map(|(_, members)| members)
+                .unwrap_or_else(|error| {
                     tracing::warn!(?error, "failed to resolve the running group's members");
-                    return None;
-                }
-            };
+                    Vec::new()
+                });
             self.group = Some(RunningGroup {
                 group_id,
                 access,
@@ -97,6 +98,9 @@ impl TrafficTarget {
             });
         }
         let group = self.group.as_mut()?;
+        if group.members.is_empty() {
+            return None;
+        }
         if group.ticks_until_refresh == 0 {
             let read = time::timeout(
                 GROUP_MEMBER_READ_TIMEOUT,
@@ -292,5 +296,36 @@ mod tests {
         // A group that no longer exists has no members to count against.
         target.follow(&connected(None, Some("gone"), 9091)).await;
         assert_eq!(target.current(), None);
+    }
+
+    #[tokio::test]
+    async fn an_unresolved_group_is_not_resolved_again_for_the_same_core() {
+        let (mut target, transport, _) = target_with_group().await;
+        let running = connected(None, Some("late"), 9090);
+
+        target.follow(&running).await;
+        assert_eq!(target.current(), None);
+
+        // The group appears afterwards. The core that is running was not
+        // generated from it, so the answer for that core stands.
+        target
+            .database
+            .policy_groups()
+            .upsert(&PolicyGroupItem {
+                id: "late".to_string(),
+                name: "Late".to_string(),
+                strategy: GroupStrategy::UrlTest,
+                member_ids: vec!["tokyo".to_string()],
+                ..PolicyGroupItem::default()
+            })
+            .await
+            .expect("group");
+        transport.now(Some("Tokyo [tokyo]"));
+        target.follow(&running).await;
+        assert_eq!(target.current(), None);
+        assert_eq!(transport.requests(), 0);
+
+        target.follow(&connected(None, Some("late"), 9091)).await;
+        assert_eq!(target.current(), Some("tokyo"));
     }
 }

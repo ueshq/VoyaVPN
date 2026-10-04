@@ -9,7 +9,6 @@ use voya_app::{
         SubscriptionWrite,
     },
 };
-use voya_platform::coreinfo::TargetOs;
 
 use crate::app::MobileState;
 
@@ -43,23 +42,15 @@ pub(super) async fn list_metadata(state: &MobileState) -> Answer {
 #[serde(rename_all = "camelCase")]
 struct UpdateRequest {
     subscription_id: Option<String>,
-    prefer_proxy: bool,
-    proxy_url: Option<String>,
 }
 
 pub(super) async fn update(state: &MobileState, args: &str) -> Answer {
-    let UpdateRequest {
-        subscription_id,
-        prefer_proxy,
-        proxy_url,
-    } = arguments("update_subscriptions", args)?;
+    let UpdateRequest { subscription_id } = arguments("update_subscriptions", args)?;
     let update = update_subscriptions_use_case(
         &state.services,
         &state.config_mutations,
+        &state.supervisor,
         subscription_id,
-        prefer_proxy,
-        proxy_url,
-        TargetOs::current(),
     )
     .await?;
     match update.written {

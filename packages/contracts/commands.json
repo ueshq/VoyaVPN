@@ -70,7 +70,6 @@
   "set_connection_mode",
   "set_log_streaming",
   "set_self_host_enabled",
-  "set_tun_enabled",
   "set_window_acrylic",
   "speedtest_status",
   "system_proxy_status",

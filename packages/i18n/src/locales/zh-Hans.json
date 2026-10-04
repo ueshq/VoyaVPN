@@ -68,7 +68,6 @@
     "chooseNode": "选择节点",
     "selectedNodeLabel": "已选择",
     "exitIp": "出口 IP",
-    "checkIp": "检测出口 IP",
     "checkIpChecking": "检测中…",
     "checkIpFailed": "检测失败",
     "checkIpUnknown": "未知",
@@ -90,12 +89,8 @@
     "authorizationDeclined": "未获得系统授权，无法连接。请重试，并在系统弹窗中允许。",
     "globalModeChip": "全局代理",
     "modePendingReason": "正在切换模式，请稍候",
-    "checkIpNeedsConnection": "连接后可检测出口 IP",
-    "checkIpRetry": "检测失败，点击重试",
     "shortcutHint": "快捷键：{{shortcut}}",
     "emptyGuide": "添加订阅或粘贴链接即可开始使用",
-    "checkIpNotChecked": "未检测",
-    "checkIpAction": "检测",
     "mode": {
       "current": "当前接管：{{mode}}",
       "next": "下次连接：{{mode}}",
@@ -193,7 +188,6 @@
   "options": {
     "autostart": "开机自启",
     "loading": "正在加载",
-    "autoCheckIp": "连接后自动检测出口 IP",
     "autoCreateSubscriptionGroup": "为新订阅自动创建最低延迟策略组",
     "autoCreateSubscriptionGroupHint": "订阅首次导入节点时新增“订阅名 · Auto”策略组，不会自动启用。",
     "startMinimized": "开机启动时隐藏到托盘",

@@ -10,7 +10,7 @@ import type {
   SelfHostState,
 } from "@voya/contracts";
 import { useToastStore } from "@voya/client/toast-store";
-import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
 
 import { SelfHostScreen } from "./self-host-screen";
 import { installFakeCommands } from "@voya/features/test/backend";

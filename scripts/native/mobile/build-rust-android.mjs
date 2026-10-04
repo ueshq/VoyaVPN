@@ -2,7 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { isCliEntrypoint, repoRootFromScript, run } from "../../lib/common.mjs";
-import { generateUniffiBindings } from "./uniffi-bindings.mjs";
+import { generateUniffiBindings, rustProfile } from "./uniffi-bindings.mjs";
 
 /**
  * Builds `voya-mobile-ffi` for Android and drops the `.so` files where Gradle
@@ -12,15 +12,16 @@ import { generateUniffiBindings } from "./uniffi-bindings.mjs";
  * sysroot; without it every link fails on a missing `libc`. The ABI names are
  * Android's, not Rust's, which is why they are listed rather than derived.
  */
+// The two `abiFilters` in `apps/mobile/android/app/build.gradle` keeps; a
+// library for any other ABI would be built and then left out of the app.
 const ANDROID_ABIS = [
   { abi: "arm64-v8a", triple: "aarch64-linux-android" },
-  { abi: "armeabi-v7a", triple: "armv7-linux-androideabi" },
   // The emulator, which is what most development runs on.
   { abi: "x86_64", triple: "x86_64-linux-android" },
 ];
 
 const repoRoot = repoRootFromScript(import.meta.url);
-const profile = process.env.VOYAVPN_RUST_PROFILE || "release";
+const { directory: profileDir, profile } = rustProfile();
 const jniLibs = resolve(repoRoot, "apps", "mobile", "android", "app", "src", "main", "jniLibs");
 const bindingsRoot = resolve(
   repoRoot,
@@ -60,7 +61,8 @@ function buildLibraries() {
       "--lib",
       "--crate-type",
       "cdylib",
-      ...(profile === "release" ? ["--release"] : []),
+      "--profile",
+      profile,
       // bindgen reads UniFFI metadata from the ELF symbol table. Gradle strips
       // the packaged JNI library later, after the bindings have been generated.
       "--", "-C", "strip=none",
@@ -73,7 +75,7 @@ function buildLibraries() {
 function generateBindings() {
   generateUniffiBindings({
     language: "kotlin",
-    library: resolve(repoRoot, "target", ANDROID_ABIS[0].triple, profile, "libvoya_mobile_ffi.so"),
+    library: resolve(repoRoot, "target", ANDROID_ABIS[0].triple, profileDir, "libvoya_mobile_ffi.so"),
     outDir: bindingsRoot,
     repoRoot,
   });

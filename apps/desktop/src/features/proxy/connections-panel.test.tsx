@@ -2,7 +2,7 @@ import { useState } from "react";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
-import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createAppQueryClient } from "@voya/client/query-client";
@@ -385,6 +385,26 @@ describe("ConnectionsPanel", () => {
     ipc.proxyListConnections.mockResolvedValueOnce(snapshot([connection(3)]));
     await userEvent.click(screen.getByRole("button", { name: "Refresh now" }));
     expect(await screen.findByText("host-3.example.test")).toBeInTheDocument();
+  });
+
+  it("keeps a pushed table that is still waiting for its frame when an older read answers", async () => {
+    seed([connection(0)]);
+    let finish!: (snapshot: ProxyConnectionsSnapshot) => void;
+    ipc.proxyListConnections.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    renderConnections();
+    await waitFor(() => expect(ipc.proxyListConnections).toHaveBeenCalledTimes(1));
+    // Pushed, not yet in the store: the read's answer lands before the frame.
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "proxyConnections",
+      payload: snapshot([connection(2)]),
+    });
+    await act(async () => finish(snapshot([connection(1)])));
+    expect(await screen.findByText("host-2.example.test")).toBeInTheDocument();
+    expect(screen.queryByText("host-1.example.test")).not.toBeInTheDocument();
   });
 
   it("offers retry instead of a misleading empty state when the first fetch fails", async () => {

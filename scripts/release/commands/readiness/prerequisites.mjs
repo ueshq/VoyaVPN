@@ -82,8 +82,10 @@ export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStaged
   const verification = verifySeed({ repoRoot, version: DEFAULT_SING_BOX_VERSION });
 
   if (!verification.staged) {
-    reporter.pass("bundled sing-box seed", [
-      `no seed staged for ${process.platform}:${process.arch}; nothing would be bundled`,
+    // Not a pass: the readiness job runs where nothing is staged, so this
+    // check has seen no seed there, and the build jobs verify their own.
+    reporter.skip("bundled sing-box seed", [
+      `no seed staged for ${process.platform}:${process.arch}; nothing here to check`,
     ]);
     return;
   }
@@ -141,7 +143,7 @@ export async function checkRuleSetSeedPinning(
   } = {},
 ) {
   if (!isStaged()) {
-    reporter.pass("bundled rule sets", ["no rule sets staged; the build stages the pinned ones"]);
+    reporter.skip("bundled rule sets", ["no rule sets staged; nothing here to check"]);
     return;
   }
 
@@ -161,7 +163,8 @@ export async function checkRuleSetSeedPinning(
   }
 }
 
-const signingInputNames = [
+/** Every signing input a stable release needs, for both checks that ask. */
+export const signingInputNames = [
   "APPLE_CERTIFICATE",
   "APPLE_CERTIFICATE_PASSWORD",
   "APPLE_ID",

@@ -1,4 +1,4 @@
-//! Generates the Swift and Kotlin bindings for this crate.
+//! Generates the Swift and Kotlin bindings for `voya-mobile-ffi`.
 //!
 //! uniffi reads the *built* library rather than the source, so the bindings
 //! always describe the symbols the artifact beside them really exports. The

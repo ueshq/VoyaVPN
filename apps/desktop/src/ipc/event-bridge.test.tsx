@@ -1,5 +1,5 @@
 import { act, cleanup, waitFor } from "@testing-library/react";
-import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EventBridge } from "@/ipc/event-bridge";
@@ -32,8 +32,6 @@ const bridgeMocks = vi.hoisted(() => {
     refreshSpeedtestStatus: vi.fn(() => Promise.resolve()),
     setActiveTab: vi.fn(),
     setCloseRequestOpen: vi.fn(),
-    setConnectionsView: vi.fn(),
-    openSettings: vi.fn(),
     notifyWhenHidden: vi.fn(() => Promise.resolve(true)),
     transientStreamEventListen: listenFor("transientStreamEvent"),
   };
@@ -68,8 +66,6 @@ vi.mock("@/stores/shell-store", () => ({
     getState: () => ({
       setActiveTab: bridgeMocks.setActiveTab,
       setCloseRequestOpen: bridgeMocks.setCloseRequestOpen,
-      setConnectionsView: bridgeMocks.setConnectionsView,
-      openSettings: bridgeMocks.openSettings,
     }),
   },
 }));
@@ -229,25 +225,12 @@ describe("EventBridge", () => {
     act(() => {
       bridgeMocks.listeners.transientStreamEvent[0]?.({ payload: transient });
       bridgeMocks.listeners.appEvent[0]?.({
-        payload: { kind: "selectTab", payload: "proxyConnections" },
+        payload: { kind: "selectTab", payload: "profiles" },
       });
     });
 
     expect(bridgeMocks.pushTransientEvent).toHaveBeenCalledWith(transient);
-    expect(bridgeMocks.setActiveTab).toHaveBeenCalledWith("connections");
-    expect(bridgeMocks.setConnectionsView).toHaveBeenCalledWith("connections");
-
-    act(() => {
-      bridgeMocks.listeners.appEvent[0]?.({
-        payload: { kind: "selectTab", payload: "logs" },
-      });
-    });
-
-    expect(bridgeMocks.openSettings).toHaveBeenCalledWith("advanced");
-    for (const target of ["profiles"]) {
-      act(() => bridgeMocks.listeners.appEvent[0]?.({ payload: { kind: "selectTab", payload: target } }));
-      expect(bridgeMocks.setActiveTab).toHaveBeenLastCalledWith("profiles");
-    }
+    expect(bridgeMocks.setActiveTab).toHaveBeenLastCalledWith("profiles");
   });
   it("opens the close prompt when the shell asks how to close", async () => {
     renderWithQuery(<EventBridge />);

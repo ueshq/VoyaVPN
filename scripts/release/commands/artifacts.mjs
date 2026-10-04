@@ -355,4 +355,4 @@ async function main(argv = []) {
   console.log(`Collected ${artifacts.length} artifact(s) for ${options.target} in ${relative(repoRoot, outputDir)}`);
 }
 
-export { main, printHelp };
+export { main };

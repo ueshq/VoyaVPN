@@ -9,10 +9,6 @@ use crate::{
 };
 
 /// Writes one profile's sort position without touching its other columns.
-///
-/// Shared by [`ProfileExRepository::set_sort`] and its batched sibling so the
-/// single-row and the whole-list reorder can never drift apart on which columns
-/// a reorder is allowed to overwrite.
 const SET_SORT_STATEMENT: &str = r#"
     INSERT INTO profile_ex_items (index_id, sort) VALUES (?, ?)
     ON CONFLICT(index_id) DO UPDATE SET sort = excluded.sort
@@ -131,29 +127,13 @@ impl<'executor> ProfileExRepository<'executor> {
         max_sort(self.executor, "SELECT MAX(sort) FROM profile_ex_items").await
     }
 
-    /// Assigns one profile's sort position in a single statement.
-    ///
-    /// Reordering calls this once per profile, so the read-modify-write it used
-    /// to do (`ensure`'s SELECT, its insert for a missing row, then an upsert)
-    /// cost two to three separately committed statements per row — hundreds of
-    /// fsynced commits for a large subscription. The upsert leaves every other
-    /// column of an existing row untouched, which is exactly what the previous
-    /// read-then-write did.
-    pub async fn set_sort(&self, index_id: &str, sort: i32) -> Result<()> {
-        run_query!(
-            self.executor,
-            sqlx::query(SET_SORT_STATEMENT).bind(index_id).bind(sort),
-            execute
-        )?;
-
-        Ok(())
-    }
-
     /// Assigns a whole ordering, all-or-nothing, in one transaction.
     ///
-    /// A reorder rewrites every row that moved, and [`Self::set_sort`] on the
-    /// pool autocommits — and therefore fsyncs — once per row, so reordering a
-    /// large subscription paid hundreds of commits for one user gesture.
+    /// A reorder rewrites every row that moved, and one statement per row on
+    /// the pool autocommits — and therefore fsyncs — each time, so reordering a
+    /// large subscription paid hundreds of commits for one user gesture. Each
+    /// row is a single upsert that leaves every other column of an existing
+    /// row untouched.
     ///
     /// The batch runs through `executor::with_connection`, so inside a
     /// [`crate::UnitOfWork`] it joins the caller's transaction: the caller still
@@ -161,8 +141,7 @@ impl<'executor> ProfileExRepository<'executor> {
     /// roll back.
     ///
     /// Entries are applied in the order given, so a caller that lists the same
-    /// profile twice gets the last position it asked for, exactly as repeated
-    /// [`Self::set_sort`] calls would.
+    /// profile twice gets the last position it asked for.
     pub async fn set_sort_many(&self, entries: &[(&str, i32)]) -> Result<()> {
         if entries.is_empty() {
             return Ok(());
@@ -172,21 +151,6 @@ impl<'executor> ProfileExRepository<'executor> {
             Box::pin(set_sort_on(connection, entries))
         })
         .await
-    }
-
-    pub async fn delete_orphans(&self) -> Result<u64> {
-        let result = run_query!(
-            self.executor,
-            sqlx::query(
-                r#"
-            DELETE FROM profile_ex_items
-            WHERE index_id NOT IN (SELECT index_id FROM profile_items)
-            "#,
-            ),
-            execute
-        )?;
-
-        Ok(result.rows_affected())
     }
 }
 

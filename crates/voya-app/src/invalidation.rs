@@ -98,9 +98,9 @@ pub fn settings_bundle_scopes() -> InvalidationBundle {
     )
 }
 
-/// `set_connection_mode` and `set_tun_enabled`.
+/// `set_connection_mode`.
 ///
-/// Both persist `tun.enabled` / `systemProxy.mode`, which the settings
+/// It persists `tun.enabled` / `systemProxy.mode`, which the settings
 /// bundle mirrors — the round-trip that used to let a stale bundle rewrite
 /// `tun.enabled` back to its old value on the next Save-all.
 pub fn connection_mode_scopes() -> InvalidationBundle {

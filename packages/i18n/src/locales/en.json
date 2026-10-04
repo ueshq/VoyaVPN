@@ -68,7 +68,6 @@
     "chooseNode": "Choose a node",
     "selectedNodeLabel": "Selected",
     "exitIp": "Exit IP",
-    "checkIp": "Check exit IP",
     "checkIpChecking": "Checking…",
     "checkIpFailed": "Check failed",
     "checkIpUnknown": "Unknown",
@@ -90,12 +89,8 @@
     "authorizationDeclined": "System authorization was not granted, so VoyaVPN could not connect. Try again and allow it in the system prompt.",
     "globalModeChip": "Global proxy",
     "modePendingReason": "Switching modes, please wait",
-    "checkIpNeedsConnection": "Connect to check the exit IP",
-    "checkIpRetry": "Check failed, try again",
     "shortcutHint": "Shortcut: {{shortcut}}",
     "emptyGuide": "Add a subscription or paste a link to get started",
-    "checkIpNotChecked": "Not checked",
-    "checkIpAction": "Check",
     "mode": {
       "current": "Current capture: {{mode}}",
       "next": "Next connection: {{mode}}",
@@ -193,7 +188,6 @@
   "options": {
     "autostart": "Autostart",
     "loading": "Loading",
-    "autoCheckIp": "Check the exit IP after connecting",
     "autoCreateSubscriptionGroup": "Create a lowest-latency group for new subscriptions",
     "autoCreateSubscriptionGroupHint": "A subscription's first import adds a “name · Auto” policy group. It is never selected for you.",
     "startMinimized": "Start hidden in the tray when launched at login",

@@ -26,7 +26,7 @@ import { Disclosure } from "~/components/disclosure";
 import { EmptyState } from "~/components/empty-state";
 import { ErrorNotice } from "~/components/error-notice";
 import { ListRow } from "~/components/list-row";
-import { useBusyAction } from "~/components/use-busy-action";
+import { useBusyAction } from "@voya/features/forms/use-busy-action";
 import { useUnsavedChanges } from "~/components/use-unsaved-changes";
 import { deleteSafely } from "./delete-safely";
 import { SaveStatus } from "~/components/save-status";
@@ -55,7 +55,7 @@ export function SubscriptionsScreen() {
       const failures: string[] = [];
       for (const id of targets) {
         try {
-          const result = await voyaCommands().updateSubscriptions(id, true, null);
+          const result = await voyaCommands().updateSubscriptions(id);
           result.outcomes.filter((item) => item.status === "failed").forEach((item) => failed.add(item.subscriptionId));
           if (result.updated > 0) summaries.push(formatSubscriptionUpdateSummary(result, t));
           const reason = subscriptionUpdateMessages(result, t);
@@ -166,7 +166,7 @@ function SubscriptionEditor({ item, metadata, onDeleted }: { item: Subscription;
     if (dirty) return;
     setError(null);
     try {
-      const result = await voyaCommands().updateSubscriptions(item.id, true, null);
+      const result = await voyaCommands().updateSubscriptions(item.id);
       const notes = subscriptionUpdateMessages(result, t);
       // Only a failed download is a warning. A skipped one means the
       // subscription was edited while it downloaded; the note says to refresh

@@ -2,6 +2,7 @@
 #import <NetworkExtension/NetworkExtension.h>
 #import <SystemExtensions/SystemExtensions.h>
 #import <dispatch/dispatch.h>
+#import <stdatomic.h>
 #import <stdint.h>
 #import <stdlib.h>
 #import <string.h>
@@ -41,19 +42,22 @@ static NSError *VoyaMakeError(NSString *message) {
 /// these synchronously from a supervisor task, so an unbounded wait would pin
 /// that thread forever; a bounded one surfaces as a normal bridge error.
 static const NSTimeInterval VoyaPreferencesTimeoutSeconds = 15.0;
+static const NSTimeInterval VoyaLastDisconnectErrorTimeoutSeconds = 5.0;
 
 static BOOL VoyaWaitWithTimeout(dispatch_semaphore_t semaphore, NSTimeInterval timeoutSeconds) {
+    // Off the main thread nothing needs servicing while waiting, so the wait
+    // ends the moment the reply arrives instead of at the next poll.
+    if (![NSThread isMainThread]) {
+        dispatch_time_t limit = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeoutSeconds * NSEC_PER_SEC));
+        return dispatch_semaphore_wait(semaphore, limit) == 0;
+    }
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeoutSeconds];
     while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
         if (dispatch_semaphore_wait(semaphore, DISPATCH_TIME_NOW) == 0) {
             return YES;
         }
-        if ([NSThread isMainThread]) {
-            NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:0.05];
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:limit];
-        } else {
-            [NSThread sleepForTimeInterval:0.05];
-        }
+        NSDate *limit = [NSDate dateWithTimeIntervalSinceNow:0.05];
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:limit];
     }
     return NO;
 }
@@ -173,26 +177,36 @@ static NSArray<NETunnelProviderManager *> *VoyaLoadAllManagers(NSError **outErro
     return loadedError == nil ? loadedManagers : nil;
 }
 
-static void VoyaConfigureManager(NETunnelProviderManager *manager) {
+/// Returns whether anything had to change, which is whether the configuration
+/// has to be saved before it can be used.
+static BOOL VoyaConfigureManager(NETunnelProviderManager *manager) {
     NETunnelProviderProtocol *proto = nil;
+    BOOL changed = NO;
     if ([manager.protocolConfiguration isKindOfClass:[NETunnelProviderProtocol class]]) {
         proto = (NETunnelProviderProtocol *)manager.protocolConfiguration;
     } else {
         proto = [[NETunnelProviderProtocol alloc] init];
+        changed = YES;
     }
+    changed = changed
+        || ![proto.providerBundleIdentifier isEqualToString:VoyaProviderBundleIdentifier]
+        || ![proto.serverAddress isEqualToString:VoyaLocalizedDescription]
+        || ![manager.localizedDescription isEqualToString:VoyaLocalizedDescription];
 
     proto.providerBundleIdentifier = VoyaProviderBundleIdentifier;
     proto.serverAddress = VoyaLocalizedDescription;
-    proto.providerConfiguration = @{
-        @"runtimeConfigRelativePath": VoyaRuntimeConfigRelativePath,
-        @"appGroupIdentifier": VoyaAppGroupIdentifier,
-    };
 
     manager.localizedDescription = VoyaLocalizedDescription;
     manager.protocolConfiguration = proto;
+    return changed;
 }
 
-static NETunnelProviderManager *VoyaLoadManager(BOOL createIfMissing, NSError **outError) {
+/// `outNeedsSave` is set when the returned configuration differs from what the
+/// system preferences hold: a new one, or one this had to correct.
+static NETunnelProviderManager *VoyaLoadManager(BOOL createIfMissing, BOOL *outNeedsSave, NSError **outError) {
+    if (outNeedsSave != NULL) {
+        *outNeedsSave = NO;
+    }
     NSError *loadError = nil;
     NSArray<NETunnelProviderManager *> *managers = VoyaLoadAllManagers(&loadError);
     if (loadError != nil) {
@@ -208,7 +222,10 @@ static NETunnelProviderManager *VoyaLoadManager(BOOL createIfMissing, NSError **
             proto = (NETunnelProviderProtocol *)manager.protocolConfiguration;
         }
         if ([proto.providerBundleIdentifier isEqualToString:VoyaProviderBundleIdentifier]) {
-            VoyaConfigureManager(manager);
+            BOOL changed = VoyaConfigureManager(manager);
+            if (outNeedsSave != NULL) {
+                *outNeedsSave = changed;
+            }
             return manager;
         }
     }
@@ -219,7 +236,86 @@ static NETunnelProviderManager *VoyaLoadManager(BOOL createIfMissing, NSError **
 
     NETunnelProviderManager *manager = [[NETunnelProviderManager alloc] init];
     VoyaConfigureManager(manager);
+    if (outNeedsSave != NULL) {
+        *outNeedsSave = YES;
+    }
     return manager;
+}
+
+// The installed configuration, kept between calls. The Rust side asks for the
+// status every few seconds; reading the preferences each time was a round trip
+// to `nesessionmanager` per poll, and a single one that failed or timed out
+// reported an error for a tunnel that was carrying traffic. The iOS host
+// (`SystemTunnelHost.swift`) keeps its manager for the same reason.
+static NETunnelProviderManager *VoyaKnownManager = nil;
+// `YES` once `VoyaKnownManager` holds what the preferences said, `nil` included.
+static BOOL VoyaKnownManagerCurrent = NO;
+// Bumped by every configuration change, so a load that was in flight when one
+// arrived does not mark what it read before it as current.
+static NSUInteger VoyaManagerGeneration = 0;
+
+static NSObject *VoyaManagerLock(void) {
+    static NSObject *lock = nil;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        lock = [[NSObject alloc] init];
+        // Never removed: the bridge lives as long as the process.
+        [[NSNotificationCenter defaultCenter]
+            addObserverForName:NEVPNConfigurationChangeNotification object:nil queue:nil
+            usingBlock:^(NSNotification *notification) {
+                (void)notification;
+                @synchronized (lock) {
+                    VoyaManagerGeneration += 1;
+                    // The object stays: it is the answer of last resort when
+                    // the read that would replace it fails.
+                    VoyaKnownManagerCurrent = NO;
+                }
+            }];
+    });
+    return lock;
+}
+
+static void VoyaRememberManager(NETunnelProviderManager *manager) {
+    @synchronized (VoyaManagerLock()) {
+        VoyaKnownManager = manager;
+        VoyaKnownManagerCurrent = YES;
+        // A read that began before the save holds what the preferences said
+        // then — nothing at all, on a first connect. The notification that
+        // would outdate it is still on its way, so it is outdated here.
+        VoyaManagerGeneration += 1;
+    }
+}
+
+/// The installed configuration for status, stop and diagnostics: the kept one
+/// while nothing changed, a fresh read otherwise, and the last known one when
+/// that read fails. `outError` is set only when there is nothing to fall back on.
+static NETunnelProviderManager *VoyaCurrentManager(NSError **outError) {
+    NSUInteger generation = 0;
+    @synchronized (VoyaManagerLock()) {
+        if (VoyaKnownManagerCurrent) {
+            return VoyaKnownManager;
+        }
+        generation = VoyaManagerGeneration;
+    }
+
+    NSError *loadError = nil;
+    NETunnelProviderManager *manager = VoyaLoadManager(NO, NULL, &loadError);
+    @synchronized (VoyaManagerLock()) {
+        if (loadError != nil) {
+            if (VoyaKnownManager == nil && outError != NULL) {
+                *outError = loadError;
+            }
+            return VoyaKnownManager;
+        }
+        if (generation != VoyaManagerGeneration && VoyaKnownManagerCurrent) {
+            // Saved while this was being read: the saved one is the answer,
+            // and what was read is older than it.
+            return VoyaKnownManager;
+        }
+        VoyaKnownManager = manager;
+        VoyaKnownManagerCurrent = generation == VoyaManagerGeneration;
+        return manager;
+    }
 }
 
 static BOOL VoyaSaveManager(NETunnelProviderManager *manager, NSError **outError) {
@@ -282,8 +378,9 @@ static NSString *VoyaFetchLastDisconnectError(NETunnelProviderSession *session) 
     }];
 #pragma clang diagnostic pop
     // Diagnostics only: a wedged daemon must not hold up the status query
-    // that asked for this context.
-    if (!VoyaWaitWithTimeout(semaphore, VoyaPreferencesTimeoutSeconds)) {
+    // that asked for this context, so it gets less time than a preferences
+    // read the caller cannot do without.
+    if (!VoyaWaitWithTimeout(semaphore, VoyaLastDisconnectErrorTimeoutSeconds)) {
         return @"";
     }
     return disconnectError.localizedDescription ?: @"";
@@ -291,7 +388,7 @@ static NSString *VoyaFetchLastDisconnectError(NETunnelProviderSession *session) 
 
 // Observe only this session. Notifications wake the waiter; bounded polling
 // also handles daemon updates that arrive without a notification.
-static VoyaTunnelWaitResult VoyaWaitForSession(NEVPNConnection *connection, BOOL starting, NSTimeInterval timeout) {
+static VoyaTunnelWaitResult VoyaWaitForSession(NEVPNConnection *connection, BOOL starting, BOOL wasActive, NSTimeInterval timeout) {
     dispatch_semaphore_t changed = dispatch_semaphore_create(0);
     id observer = [[NSNotificationCenter defaultCenter]
         addObserverForName:NEVPNStatusDidChangeNotification object:connection queue:nil
@@ -299,7 +396,7 @@ static VoyaTunnelWaitResult VoyaWaitForSession(NEVPNConnection *connection, BOOL
             (void)notification;
             dispatch_semaphore_signal(changed);
         }];
-    VoyaTunnelWaitResult result = VoyaAwaitTunnel(starting, timeout,
+    VoyaTunnelWaitResult result = VoyaAwaitTunnel(starting, wasActive, timeout,
         ^NEVPNStatus { return connection.status; },
         ^NSTimeInterval { return NSProcessInfo.processInfo.systemUptime; },
         ^{
@@ -317,23 +414,38 @@ static VoyaTunnelWaitResult VoyaWaitForSession(NEVPNConnection *connection, BOOL
     return result;
 }
 
-static BOOL VoyaWaitForDisconnected(NEVPNConnection *connection, NSTimeInterval timeoutSeconds) {
-    return VoyaWaitForSession(connection, NO, timeoutSeconds) == VoyaTunnelDisconnected;
+// Whether the session this process last started is known to have come up. Its
+// start request has then been consumed, so a later stop that finds it already
+// down — the provider exited, or another VPN took over — need not sit out the
+// window kept for a start still queued in nesessionmanager. A start that
+// failed or timed out leaves it clear, and so does a tunnel this process did
+// not start: both get the whole window.
+static atomic_bool VoyaStartedSessionCameUp = false;
+
+static BOOL VoyaWaitForDisconnected(NEVPNConnection *connection, BOOL wasActive, NSTimeInterval timeoutSeconds) {
+    return VoyaWaitForSession(connection, NO, wasActive, timeoutSeconds) == VoyaTunnelDisconnected;
 }
 
 static char *VoyaWaitForConnected(NETunnelProviderSession *session, int64_t timeoutMs) {
-    VoyaTunnelWaitResult result = VoyaWaitForSession(session, YES,
+    VoyaTunnelWaitResult result = VoyaWaitForSession(session, YES, NO,
         (NSTimeInterval)(timeoutMs > 0 ? timeoutMs : 20000) / 1000.0);
-    if (result == VoyaTunnelReady) return VoyaCopyCString(@"ok");
+    if (result == VoyaTunnelReady) {
+        atomic_store(&VoyaStartedSessionCameUp, true);
+        return VoyaCopyCString(@"ok");
+    }
 
     NSString *fallback = result == VoyaTunnelTimedOut
         ? @"Timed out waiting for VoyaVPN PacketTunnel to connect."
         : result == VoyaTunnelInvalid
             ? @"VoyaVPN PacketTunnel became invalid before it became ready."
             : @"VoyaVPN PacketTunnel disconnected before it became ready.";
-    NSString *lastError = VoyaFetchLastDisconnectError(session);
+    // Disconnected here means the provider came up and went down again, which
+    // is how every rejected config ends: the user is waiting for that error.
+    // A session that timed out or went invalid has not disconnected, and the
+    // last disconnect on record is an earlier session's.
+    NSString *lastError = result == VoyaTunnelDisconnected ? VoyaFetchLastDisconnectError(session) : @"";
     [session stopVPNTunnel];
-    BOOL stopped = VoyaWaitForDisconnected(session, 10.0);
+    BOOL stopped = VoyaWaitForDisconnected(session, result == VoyaTunnelDisconnected, 10.0);
     NSDictionary *failure = @{
         @"error": lastError.length > 0 ? lastError : fallback,
         @"cleanupError": stopped ? [NSNull null] : @"Timed out stopping VoyaVPN PacketTunnel; retry disconnect."
@@ -538,7 +650,7 @@ static BOOL VoyaWriteRuntimeConfigData(NSData *data, NSError **outError) {
 char *voya_macos_packet_tunnel_status(void) {
     @autoreleasepool {
         NSError *error = nil;
-        NETunnelProviderManager *manager = VoyaLoadManager(NO, &error);
+        NETunnelProviderManager *manager = VoyaCurrentManager(&error);
         if (error != nil) {
             return VoyaCopyError(error);
         }
@@ -590,7 +702,8 @@ char *voya_macos_packet_tunnel_start(const char *config_path, const char *profil
             return VoyaCopyCString(activationResult);
         }
 
-        NETunnelProviderManager *manager = VoyaLoadManager(YES, &error);
+        BOOL needsSave = NO;
+        NETunnelProviderManager *manager = VoyaLoadManager(YES, &needsSave, &error);
         if (error != nil) {
             return VoyaCopyError(error);
         }
@@ -602,23 +715,36 @@ char *voya_macos_packet_tunnel_start(const char *config_path, const char *profil
         // outside the VPN, while the local network stays reachable.
         if ([manager.protocolConfiguration isKindOfClass:[NETunnelProviderProtocol class]]) {
             NETunnelProviderProtocol *proto = (NETunnelProviderProtocol *)manager.protocolConfiguration;
-            proto.includeAllNetworks = include_all_networks != 0;
+            BOOL includeAllNetworks = include_all_networks != 0;
+            needsSave = needsSave || proto.includeAllNetworks != includeAllNetworks || !proto.excludeLocalNetworks;
+            proto.includeAllNetworks = includeAllNetworks;
             proto.excludeLocalNetworks = YES;
         }
 
+        needsSave = needsSave || !manager.enabled;
         manager.enabled = YES;
-        if (!VoyaSaveManager(manager, &error)) {
-            return VoyaCopyError(error);
+        // Every connect after the first finds the configuration as it left it.
+        // Saving it again costs two round trips to the system and announces a
+        // change, which makes the next status read a third.
+        if (needsSave) {
+            if (!VoyaSaveManager(manager, &error)) {
+                return VoyaCopyError(error);
+            }
+            if (!VoyaReloadManager(manager, &error)) {
+                return VoyaCopyError(error);
+            }
         }
-        if (!VoyaReloadManager(manager, &error)) {
-            return VoyaCopyError(error);
-        }
+        // A save announces a configuration change; either way this is the
+        // object that holds the current one, so the next status read needs no
+        // round trip.
+        VoyaRememberManager(manager);
 
         if (![manager.connection isKindOfClass:[NETunnelProviderSession class]]) {
             return VoyaCopyCString(@"error:VoyaVPN PacketTunnel session is unavailable.");
         }
         NETunnelProviderSession *session = (NETunnelProviderSession *)manager.connection;
         NSDictionary<NSString *, NSObject *> *options = @{@"runtimeConfigJson": runtimeConfigData};
+        atomic_store(&VoyaStartedSessionCameUp, false);
         if (![session startTunnelWithOptions:options andReturnError:&error]) {
             return VoyaCopyError(error);
         }
@@ -629,15 +755,17 @@ char *voya_macos_packet_tunnel_start(const char *config_path, const char *profil
 char *voya_macos_packet_tunnel_stop(void) {
     @autoreleasepool {
         NSError *error = nil;
-        NETunnelProviderManager *manager = VoyaLoadManager(NO, &error);
+        NETunnelProviderManager *manager = VoyaCurrentManager(&error);
         if (error != nil) {
             return VoyaCopyError(error);
         }
         if (manager != nil) {
             [manager.connection stopVPNTunnel];
-            if (!VoyaWaitForDisconnected(manager.connection, 10.0)) {
+            BOOL cameUp = atomic_load(&VoyaStartedSessionCameUp);
+            if (!VoyaWaitForDisconnected(manager.connection, cameUp, 10.0)) {
                 return VoyaCopyCString(@"error:Timed out stopping VoyaVPN PacketTunnel; retry disconnect.");
             }
+            atomic_store(&VoyaStartedSessionCameUp, false);
         }
         return VoyaCopyCString(@"ok");
     }
@@ -646,7 +774,7 @@ char *voya_macos_packet_tunnel_stop(void) {
 char *voya_macos_packet_tunnel_last_error(void) {
     @autoreleasepool {
         NSError *error = nil;
-        NETunnelProviderManager *manager = VoyaLoadManager(NO, &error);
+        NETunnelProviderManager *manager = VoyaCurrentManager(&error);
         if (error != nil) {
             return VoyaCopyError(error);
         }

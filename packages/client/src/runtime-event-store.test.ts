@@ -8,7 +8,7 @@ import type {
   VoyaCommands,
 } from "@voya/contracts";
 
-import { useRuntimeEventStore } from "./runtime-event-store";
+import { proxyConnectionsPushCount, useRuntimeEventStore } from "./runtime-event-store";
 import { setVoyaCommands } from "./transport";
 
 // The store reaches the backend through the registered command surface, so the
@@ -228,6 +228,52 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().proxyConnections?.connections[0]?.id).toBe("connection-1");
   });
 
+  it("refuses a connection table that arrives after its core has gone", () => {
+    const core = {
+      activeProfileId: "tokyo",
+      activeTunBackend: null,
+      connectedDurationMs: 0,
+      mainPid: 42,
+      prePid: null,
+    };
+    const { setCoreState, setProxyConnections } = useRuntimeEventStore.getState();
+    setCoreState({ ...core, state: "connected" });
+    setCoreState({ ...core, mainPid: null, state: "disconnected" });
+
+    // The answer to a "close all" sent just before the disconnect.
+    setProxyConnections(cachedConnections);
+
+    expect(useRuntimeEventStore.getState().proxyConnections).toBeNull();
+
+    setCoreState({ ...core, state: "connected" });
+    setProxyConnections(cachedConnections);
+    expect(useRuntimeEventStore.getState().proxyConnections).toEqual(cachedConnections);
+  });
+
+  it("refuses a pushed connection table that arrives after its core has gone", async () => {
+    vi.useFakeTimers();
+    const core = {
+      activeProfileId: "tokyo",
+      activeTunBackend: null,
+      connectedDurationMs: 0,
+      mainPid: 42,
+      prePid: null,
+    };
+    const { pushTransientEvent, setCoreState } = useRuntimeEventStore.getState();
+    const pushes = proxyConnectionsPushCount();
+    setCoreState({ ...core, state: "connected" });
+    setCoreState({ ...core, mainPid: null, state: "disconnected" });
+
+    // A frame the monitor read just before the core stopped.
+    pushTransientEvent({ kind: "proxyConnections", payload: cachedConnections });
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().proxyConnections).toBeNull();
+    expect(proxyConnectionsPushCount()).toBe(pushes);
+    useRuntimeEventStore.setState({ coreState: null });
+    vi.useRealTimers();
+  });
+
   it("marks stopped monitor status stale while preserving proxy snapshots", () => {
     useRuntimeEventStore.getState().setProxyConnections(cachedConnections);
 
@@ -264,6 +310,22 @@ describe("runtime event store", () => {
       stale: true,
       state: "failed",
     });
+  });
+
+  it("lets a direct answer win over a push still waiting for its frame", async () => {
+    vi.useFakeTimers();
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "proxyConnections",
+      payload: makeConnectionsSnapshot("connection-1", "open.example.com:443", 200, 100),
+    });
+    // What closing every connection answers with.
+    const closed = { connections: [], downloadTotal: 200, uploadTotal: 100 };
+    useRuntimeEventStore.getState().setProxyConnections(closed);
+
+    await vi.advanceTimersByTimeAsync(20);
+
+    expect(useRuntimeEventStore.getState().proxyConnections).toEqual(closed);
+    vi.useRealTimers();
   });
 
   it.each([
@@ -562,13 +624,9 @@ describe("runtime event store", () => {
     vi.useFakeTimers();
     const invalidStatistics = {
       activeProfileId: "profile-a",
-      directDownloadBytesPerSecond: 0,
-      directUploadBytesPerSecond: 0,
       downloadBytesPerSecond: 0,
-      proxyDownloadBytesPerSecond: 0,
-      proxyUploadBytesPerSecond: Number.NaN,
       serverStat: { indexId: "profile-a", totalUp: 1 },
-      uploadBytesPerSecond: 0,
+      uploadBytesPerSecond: Number.NaN,
     } as StatisticsSnapshot;
 
     useRuntimeEventStore.getState().pushTransientEvent({
@@ -664,11 +722,7 @@ function makeConnectionsSnapshot(
 function statisticsSnapshot(indexId: string, downloadBytesPerSecond: number): StatisticsSnapshot {
   return {
     activeProfileId: indexId,
-    directDownloadBytesPerSecond: 1,
-    directUploadBytesPerSecond: 2,
     downloadBytesPerSecond,
-    proxyDownloadBytesPerSecond: null,
-    proxyUploadBytesPerSecond: 4,
     serverStat: {
       dateNow: 5,
       indexId,

@@ -3,15 +3,11 @@
 //! import/commit step holds it, reusing the manager's prepare-then-commit
 //! flow and its compare-and-discard race protection.
 
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use voya_contracts::SubscriptionUpdateResult;
 
-use tokio::{sync::watch, task::JoinHandle, time};
-use voya_core::{SubItem, SubMetadataItem};
+use tokio::{sync::watch, time};
+use voya_core::{AppConfig, SubItem, SubMetadataItem};
 use voya_db::Database;
 use voya_platform::coreinfo::TargetOs;
 
@@ -19,10 +15,9 @@ use super::unix_now_seconds;
 use crate::backoff::exponential_delay;
 
 use crate::{
-    config_mutation::ConfigMutationCoordinator,
-    redaction::redact_urls,
-    subscriptions::SubscriptionManager,
-    supervisor::{CoreSupervisor, SupervisorConnectionState},
+    config_mutation::ConfigMutationCoordinator, redaction::redact_urls,
+    settings::apply::SettingsApplication, shutdown_task::ShutdownTask,
+    subscriptions::SubscriptionManager, supervisor::CoreSupervisor,
     sysproxy::runtime_default_proxy_url,
 };
 
@@ -34,7 +29,7 @@ const FAILURE_BACKOFF_MAX_DOUBLINGS: u32 = 6;
 /// Never re-attempt the same subscription faster than this, regardless of
 /// how short its configured interval is.
 const MIN_ATTEMPT_SPACING_SECONDS: i64 = 60;
-/// Reported when `close()` interrupts an attempt. It is not a source failure,
+/// Reported when `shutdown()` interrupts an attempt. It is not a source failure,
 /// but it is not a success either: the schedule must retry it next launch.
 const SHUTDOWN_MESSAGE: &str = "subscription auto-update stopped for shutdown";
 
@@ -126,87 +121,70 @@ fn failure_backoff_seconds(consecutive_failures: u32) -> i64 {
 }
 
 pub struct SubscriptionAutoUpdateScheduler {
-    shutdown: watch::Sender<bool>,
-    /// Taken by [`Self::shutdown`], so the `Drop` below does not then abort a
-    /// task that already stopped on its own. Behind a lock because the shell
-    /// holds the scheduler by shared reference.
-    handle: Mutex<Option<JoinHandle<()>>>,
+    task: ShutdownTask,
+}
+
+/// Where a download finds the running core's local proxy, if there is one.
+#[derive(Clone)]
+pub(crate) struct RunningCoreProxy {
+    pub(crate) supervisor: CoreSupervisor,
+    pub(crate) settings: SettingsApplication,
+    pub(crate) target_os: TargetOs,
+}
+
+impl RunningCoreProxy {
+    /// The local proxy to download through, or `None` to go direct: nothing
+    /// is connected, or the core runs a native tunnel and has no such port.
+    ///
+    /// "Connected" is what the supervisor last published rather than a
+    /// question put to it: that would queue behind a tunnel still coming up,
+    /// and an exit would wait that long for a run to notice it. Without the
+    /// check a download would first dial the port the last session listened
+    /// on, and hand the request to whatever listens there now.
+    ///
+    /// The port is the running core's: a saved one may still be waiting for
+    /// the reconnect that applies it.
+    pub(crate) fn url(&self, saved: &AppConfig) -> Option<String> {
+        if !self.supervisor.is_connected() {
+            return None;
+        }
+        runtime_default_proxy_url(&self.settings.running_core_config(saved), self.target_os)
+    }
 }
 
 impl SubscriptionAutoUpdateScheduler {
     #[must_use]
-    pub fn spawn(
+    pub(crate) fn spawn(
         database: Database,
         coordinator: Arc<ConfigMutationCoordinator>,
-        supervisor: CoreSupervisor,
-        target_os: TargetOs,
+        proxy: RunningCoreProxy,
         sink: Arc<dyn SubscriptionAutoUpdateSink>,
     ) -> Self {
-        let (shutdown, shutdown_rx) = watch::channel(false);
-        let handle = tokio::spawn(run_scheduler(
-            database,
-            coordinator,
-            supervisor,
-            target_os,
-            sink,
-            shutdown_rx,
-        ));
-
         Self {
-            shutdown,
-            handle: Mutex::new(Some(handle)),
+            task: ShutdownTask::spawn(|shutdown| {
+                run_scheduler(database, coordinator, proxy, sink, shutdown)
+            }),
         }
     }
 
-    /// Requests shutdown without waiting for the loop to stop.
+    /// Requests shutdown and waits for the loop to actually stop.
     ///
     /// An in-flight run abandons its download, skips the subscriptions it has
     /// not started, and discards a fetch that finished after the request rather
     /// than committing a configuration into a runtime that is being torn down.
     /// A commit already in progress still runs to completion — SQLite keeps it
-    /// atomic — and dropping the scheduler aborts the task outright.
-    ///
-    /// Prefer [`Self::shutdown`] on the exit path: Tauri ends the process with
-    /// `std::process::exit`, so nothing here is ever dropped, and a commit that
-    /// is mid-flight when the process goes loses the update it just downloaded.
-    pub fn close(&self) {
-        let _ = self.shutdown.send(true);
-    }
-
-    /// Requests shutdown and waits for the loop to actually stop.
-    ///
-    /// Unlike [`Self::close`] this is safe to call immediately before the
-    /// process exits: it returns once the scheduler has left its loop, so an
-    /// update it had already committed is not raced by the exit.
+    /// atomic — and this returns once the scheduler has left its loop, so an
+    /// update it had already committed is not raced by the exit. Dropping the
+    /// scheduler instead aborts the task outright.
     pub async fn shutdown(&self) {
-        let _ = self.shutdown.send(true);
-        // The guard is dropped before the await: holding a std lock across one
-        // would be a deadlock waiting to happen.
-        let handle = self.handle.lock().ok().and_then(|mut slot| slot.take());
-        if let Some(handle) = handle {
-            // A `JoinError` means the loop panicked or was aborted; either way
-            // it is no longer running, which is all this call promises.
-            let _ = handle.await;
-        }
-    }
-}
-
-impl Drop for SubscriptionAutoUpdateScheduler {
-    fn drop(&mut self) {
-        let _ = self.shutdown.send(true);
-        if let Ok(slot) = self.handle.lock() {
-            if let Some(handle) = slot.as_ref() {
-                handle.abort();
-            }
-        }
+        self.task.shutdown().await;
     }
 }
 
 async fn run_scheduler(
     database: Database,
     coordinator: Arc<ConfigMutationCoordinator>,
-    supervisor: CoreSupervisor,
-    target_os: TargetOs,
+    proxy: RunningCoreProxy,
     sink: Arc<dyn SubscriptionAutoUpdateSink>,
     mut shutdown: watch::Receiver<bool>,
 ) {
@@ -231,8 +209,7 @@ async fn run_scheduler(
                 run_due_updates(
                     &database,
                     &coordinator,
-                    &supervisor,
-                    target_os,
+                    &proxy,
                     sink.as_ref(),
                     &mut attempts,
                     &mut run_shutdown,
@@ -251,8 +228,7 @@ async fn run_scheduler(
 async fn run_due_updates(
     database: &Database,
     coordinator: &ConfigMutationCoordinator,
-    supervisor: &CoreSupervisor,
-    target_os: TargetOs,
+    proxy: &RunningCoreProxy,
     sink: &dyn SubscriptionAutoUpdateSink,
     attempts: &mut BTreeMap<String, AttemptState>,
     shutdown: &mut watch::Receiver<bool>,
@@ -271,7 +247,7 @@ async fn run_due_updates(
     attempts.retain(|id, _| subs.iter().any(|sub| &sub.id == id));
 
     for id in due_subscription_ids(now, &subs, &metadata, attempts) {
-        // `close()` is called during app shutdown, immediately before the
+        // `shutdown()` is called as the app exits, immediately before the
         // runtime is torn down; starting another fetch/commit cycle here would
         // publish a configuration into a runtime that is already going away.
         if *shutdown.borrow() {
@@ -283,8 +259,7 @@ async fn run_due_updates(
         let entry = attempts.entry(id.clone()).or_default();
         entry.last_attempt_unix = unix_now_seconds();
 
-        let outcome =
-            run_single_update(database, coordinator, supervisor, target_os, item, shutdown).await;
+        let outcome = run_single_update(database, coordinator, proxy, item, shutdown).await;
         let entry = attempts.entry(id).or_default();
         if outcome.error.is_none() {
             entry.consecutive_failures = 0;
@@ -301,8 +276,7 @@ async fn run_due_updates(
 async fn run_single_update(
     database: &Database,
     coordinator: &ConfigMutationCoordinator,
-    supervisor: &CoreSupervisor,
-    target_os: TargetOs,
+    proxy: &RunningCoreProxy,
     item: &SubItem,
     shutdown: &mut watch::Receiver<bool>,
 ) -> AutoUpdateOutcome {
@@ -317,15 +291,7 @@ async fn run_single_update(
 
     // Snapshot + fetch happen outside the mutation lock (network I/O).
     let config_snapshot = coordinator.current_config();
-    let connected = matches!(
-        supervisor.status().await.map(|snapshot| snapshot.state),
-        Ok(SupervisorConnectionState::Connected)
-    );
-    let proxy_url = if connected {
-        runtime_default_proxy_url(&config_snapshot, target_os)
-    } else {
-        None
-    };
+    let proxy_url = proxy.url(&config_snapshot);
     // A download runs for as long as its timeout allows, so shutdown has to be
     // able to abandon it rather than only being noticed between subscriptions.
     let manager = SubscriptionManager::new(database);
@@ -337,7 +303,6 @@ async fn run_single_update(
         }
         fetched = SubscriptionManager::prepare_update_of(
             item.clone(),
-            connected,
             proxy_url.as_deref(),
         ) => fetched,
     };
@@ -367,7 +332,7 @@ async fn run_single_update(
         return outcome;
     }
 
-    // Committing here would race the runtime teardown that follows `close()`,
+    // Committing here would race the runtime teardown that follows `shutdown()`,
     // so a fetch that finished after the request is discarded instead.
     if *shutdown.borrow() {
         outcome.error = Some(SHUTDOWN_MESSAGE.to_string());
@@ -485,11 +450,15 @@ mod tests {
         format!("http://{address}/sub")
     }
 
-    fn scheduler_supervisor() -> CoreSupervisor {
-        CoreSupervisor::spawn(SupervisorDeps::new(
-            Arc::new(RecordingRunner::default()),
-            Arc::new(ElevationState::new()),
-        ))
+    fn scheduler_proxy() -> RunningCoreProxy {
+        RunningCoreProxy {
+            supervisor: CoreSupervisor::spawn(SupervisorDeps::new(
+                Arc::new(RecordingRunner::default()),
+                Arc::new(ElevationState::new()),
+            )),
+            settings: SettingsApplication::default(),
+            target_os: TargetOs::Linux,
+        }
     }
 
     async fn scheduler_database(url: String) -> Database {
@@ -530,8 +499,7 @@ mod tests {
         run_due_updates(
             &database,
             &coordinator,
-            &scheduler_supervisor(),
-            TargetOs::Linux,
+            &scheduler_proxy(),
             &sink,
             &mut attempts,
             &mut shutdown_rx,
@@ -575,8 +543,7 @@ mod tests {
         run_due_updates(
             &database,
             &coordinator,
-            &scheduler_supervisor(),
-            TargetOs::Linux,
+            &scheduler_proxy(),
             &sink,
             &mut attempts,
             &mut shutdown_rx,
@@ -597,7 +564,7 @@ mod tests {
         );
     }
 
-    /// `close()` runs immediately before the runtime is disconnected, so a
+    /// `shutdown()` runs immediately before the runtime is disconnected, so a
     /// requested shutdown must stop the scheduler from starting more work.
     #[tokio::test]
     async fn a_requested_shutdown_stops_the_run_before_it_fetches_anything() {
@@ -617,8 +584,7 @@ mod tests {
         run_due_updates(
             &database,
             &coordinator,
-            &scheduler_supervisor(),
-            TargetOs::Linux,
+            &scheduler_proxy(),
             &sink,
             &mut attempts,
             &mut shutdown_rx,
@@ -796,10 +762,9 @@ mod tests {
     }
 
     /// The exit path calls `shutdown()` immediately before Tauri ends the
-    /// process, so it has to actually wait. `close()` only signals, which is
-    /// why the two are separate.
+    /// process, so it has to actually wait.
     #[tokio::test]
-    async fn shutdown_waits_for_the_loop_to_leave_while_close_only_signals() {
+    async fn shutdown_waits_for_the_loop_to_leave() {
         let url = spawn_subscription_fixture("vless://uuid@example.test:443#Node").await;
         let database = scheduler_database(url).await;
         let coordinator = ConfigMutationCoordinator::new(
@@ -809,31 +774,15 @@ mod tests {
         let scheduler = SubscriptionAutoUpdateScheduler::spawn(
             database,
             Arc::new(coordinator),
-            scheduler_supervisor(),
-            TargetOs::Linux,
+            scheduler_proxy(),
             Arc::new(RecordingSink::default()),
         );
-
-        // `close()` returns before the task has necessarily stopped, so the
-        // handle is still there to be awaited.
-        scheduler.close();
-        assert!(
-            scheduler
-                .handle
-                .lock()
-                .expect("auto-update test operation should succeed")
-                .is_some(),
-            "close() must not consume the join handle"
-        );
+        assert!(!scheduler.task.is_joined());
 
         scheduler.shutdown().await;
 
         assert!(
-            scheduler
-                .handle
-                .lock()
-                .expect("auto-update test operation should succeed")
-                .is_none(),
+            scheduler.task.is_joined(),
             "shutdown() must have joined the loop"
         );
         // Idempotent: the exit path is latched, but a double call must not hang.

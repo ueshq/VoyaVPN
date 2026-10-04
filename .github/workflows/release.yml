@@ -63,7 +63,11 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      # `pnpm release -- …` imports only Node's own modules, so the release
+      # jobs that run nothing else skip the workspace install.
       - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install: "false"
 
       - name: Reject stable dry runs
         if: ${{ inputs.channel == 'stable' && inputs.dry_run == true }}
@@ -166,6 +170,12 @@ jobs:
 
       - uses: ./.github/actions/setup-node-pnpm
 
+      # The pinned core and rule sets, re-verified against their digests when
+      # restored. Small next to a target/ tree, so the budget argument above
+      # does not apply, and a release leg no longer depends on GitHub's
+      # download hosts answering.
+      - uses: ./.github/actions/setup-core-seeds
+
       - name: Build Tauri package
         env:
           CI: "true"
@@ -232,6 +242,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install: "false"
 
       - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -267,6 +279,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install: "false"
 
       - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -277,7 +291,6 @@ jobs:
         env:
           CHANNEL: ${{ inputs.channel }}
           DRY_RUN: ${{ inputs.dry_run }}
-          RELEASE_VERSION: ${{ github.ref_name }}
           VOYAVPN_UPDATES_BASE_URL: ${{ vars.VOYAVPN_UPDATES_BASE_URL }}
         run: |
           base_url="${VOYAVPN_UPDATES_BASE_URL:-https://cdn.voyavpn.test/${CHANNEL}/updater}"
@@ -309,6 +322,8 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install: "false"
 
       - name: Generate core asset metadata
         env:
@@ -356,23 +371,19 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install: "false"
 
-      # Pattern downloads instead of nine named steps. Each artifact still
+      # One pattern download instead of nine named steps. Each artifact still
       # lands in its own `voyavpn-<channel>-<target>-<profile>/` directory, and
       # readiness's artifact-manifest walk is recursive, so the package root can
-      # be the download parent.
+      # be the download parent. The braces name the three platforms so the
+      # `*-metadata-*` artifacts stay out; `pattern` is a single glob, and a
+      # list of them on separate lines matches nothing.
       - name: Download package artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: voyavpn-${{ inputs.channel }}-darwin-*-${{ inputs.build_profile }}
-          path: dist/final-readiness/packages
-
-      - name: Download package artifacts (Windows and Linux)
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          pattern: |
-            voyavpn-${{ inputs.channel }}-windows-*-${{ inputs.build_profile }}
-            voyavpn-${{ inputs.channel }}-linux-*-${{ inputs.build_profile }}
+          pattern: voyavpn-${{ inputs.channel }}-{darwin,windows,linux}-*-${{ inputs.build_profile }}
           path: dist/final-readiness/packages
 
       - name: Download release metadata artifacts

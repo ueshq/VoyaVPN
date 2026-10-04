@@ -5,7 +5,8 @@ import { queryKeys } from "@voya/client/query-keys";
 import { appErrorOfKind } from "@voya/client/errors";
 import { validationFieldErrors } from "@voya/client/messages";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { AppSettings, DnsSettings } from "@voya/contracts";
+import type { DnsSettings } from "@voya/contracts";
+import { cacheSavedDns } from "@voya/features/dns/dns-cache";
 import { saveQueue } from "@voya/features/forms/save-queue";
 import { runningConnectionKey } from "@voya/features/home/use-connection-ip";
 import { useSettingsApplyStatus } from "@voya/features/settings/use-settings-apply-status";
@@ -23,7 +24,7 @@ import { DetailScreen } from "~/components/detail-screen";
 import { Disclosure } from "~/components/disclosure";
 import { ErrorNotice } from "~/components/error-notice";
 import { PrimaryButton } from "~/components/primary-button";
-import { useBusyAction } from "~/components/use-busy-action";
+import { useBusyAction } from "@voya/features/forms/use-busy-action";
 import { SwitchRow } from "~/components/switch-row";
 import { useUnsavedChanges } from "~/components/use-unsaved-changes";
 import { SaveStatus } from "~/components/save-status";
@@ -72,8 +73,7 @@ export function DnsScreen() {
       await saveQueue(client).settled();
       const latest = await voyaCommands().loadDnsSettings();
       const result = await voyaCommands().saveDnsSettings({ ...latest, ...patch });
-      client.setQueryData(queryKeys.dns, result);
-      client.setQueryData<AppSettings>(queryKeys.appSettings, (current) => current ? { ...current, dns: result } : current);
+      await cacheSavedDns(client, result);
       setPatch({}); setSaved(true); return true;
     } catch (failure) {
       setError(failure);

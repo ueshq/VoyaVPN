@@ -43,9 +43,9 @@ export const usePreferencesStore = create<PreferencesState>()(
     (set) => ({
       acceptPrivacyNotice: (privacyNoticeVersion) => set({ privacyNoticeVersion }),
       privacyNoticeVersion: null,
-      // Committing a theme also ends any preview of it.
       ruleLibraryUpdatedAt: null,
       setRuleLibraryUpdatedAt: (ruleLibraryUpdatedAt) => set({ ruleLibraryUpdatedAt }),
+      // Committing a theme also ends any preview of it.
       setThemeMode: (themeMode) => set({ themeMode, themePreview: null }),
       setThemePreview: (themePreview) => set({ themePreview }),
       themeMode: "system",

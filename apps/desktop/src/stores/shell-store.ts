@@ -20,7 +20,7 @@ export const SHELL_TABS: readonly ShellTab[] = [
  * Sub-view of the Connections page: the live connection table or the running
  * policy group.
  */
-export type ConnectionsView = "connections" | "proxies";
+type ConnectionsView = "connections" | "proxies";
 
 /** Settings categories: everyday choices first, networking detail under Advanced. */
 export type SettingsTab = "general" | "connection" | "advanced" | "updates";
@@ -40,7 +40,7 @@ type ShellState = {
   settingsTarget: "logs" | null;
   consumeSettingsTarget: () => void;
   setSettingsTab: (tab: SettingsTab) => void;
-  /** Opens Settings at one category, as a deep link does. */
+  /** Opens Settings at one category, optionally scrolled to one section. */
   openSettings: (tab: SettingsTab, target?: "logs") => void;
   /** Active sub-view of the Connections page; survives leaving the page. */
   connectionsView: ConnectionsView;

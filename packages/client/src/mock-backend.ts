@@ -615,7 +615,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
 
     tunStatus: () => resolve(record("tunStatus", [], state.tun)),
 
-    updateSubscriptions: (subscriptionId, preferProxy, proxyUrl) => {
+    updateSubscriptions: (subscriptionId) => {
       const targets = subscriptionId === null
         ? state.subscriptions.map((item) => item.id)
         : [subscriptionId];
@@ -646,9 +646,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       };
 
       invalidate("updateSubscriptions", "profiles", "subscriptions", "subscriptionMetadata");
-      return resolve(
-        record("updateSubscriptions", [subscriptionId, preferProxy, proxyUrl], result),
-      );
+      return resolve(record("updateSubscriptions", [subscriptionId], result));
     },
   };
 

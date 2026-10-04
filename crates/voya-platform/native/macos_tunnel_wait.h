@@ -10,13 +10,17 @@ typedef NS_ENUM(NSInteger, VoyaTunnelWaitResult) {
 
 // The production bridge and the native test harness use the same waiter.
 // Time and status are injected; no VPN profile is needed to exercise races.
+//
+// `wasActive` says the caller already watched this session leave the
+// disconnected state — a start that came up and failed. Its start request has
+// been consumed, so a stop need not sit out the whole window for one.
 static inline VoyaTunnelWaitResult VoyaAwaitTunnel(
-    BOOL starting, NSTimeInterval timeout,
+    BOOL starting, BOOL wasActive, NSTimeInterval timeout,
     NEVPNStatus (^status)(void), NSTimeInterval (^now)(void), void (^wait)(void)
 ) {
     NSTimeInterval deadline = now() + timeout;
     BOOL progressed = NO;
-    BOOL observedActive = NO;
+    BOOL observedActive = wasActive;
     // A stop can race a start request still queued in nesessionmanager. Require
     // a quiet disconnected interval, and keep stopping if it starts late.
     NSTimeInterval disconnectedSince = -1;

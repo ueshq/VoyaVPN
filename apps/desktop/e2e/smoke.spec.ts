@@ -675,11 +675,7 @@ test("routes the three IPC event channels into the shell", async ({ page }) => {
       kind: "statistics",
       payload: {
         activeProfileId: null,
-        directDownloadBytesPerSecond: 0,
-        directUploadBytesPerSecond: 0,
         downloadBytesPerSecond: 4096,
-        proxyDownloadBytesPerSecond: 4096,
-        proxyUploadBytesPerSecond: 2048,
         serverStat: null,
         uploadBytesPerSecond: 2048,
       },

@@ -141,6 +141,17 @@ function createFrameBuffer<T>(empty: () => T, flush: (pending: T) => void): Fram
   };
 }
 
+/**
+ * How many connection tables the stream has pushed. A pushed table waits for
+ * its frame before the store shows it, so a read that wants to know whether a
+ * newer one arrived while it was in flight cannot tell from the store.
+ */
+let proxyConnectionsPushes = 0;
+
+export function proxyConnectionsPushCount() {
+  return proxyConnectionsPushes;
+}
+
 const proxyConnectionsBuffer = createFrameBuffer<ProxyConnectionsSnapshot | null>(
   () => null,
   (snapshot) => {
@@ -213,11 +224,7 @@ const MAX_PAYLOAD_STRING_LENGTH = 4096;
 
 const SERVER_STAT_NUMBER_KEYS = ["dateNow", "todayDown", "todayUp", "totalDown", "totalUp"] as const;
 const STATISTICS_NUMBER_KEYS = [
-  "directDownloadBytesPerSecond",
-  "directUploadBytesPerSecond",
   "downloadBytesPerSecond",
-  "proxyDownloadBytesPerSecond",
-  "proxyUploadBytesPerSecond",
   "uploadBytesPerSecond",
 ] as const;
 
@@ -228,7 +235,7 @@ const initialProxyMonitorStatus: RuntimeProxyMonitorStatus = {
   state: "stopped",
 };
 
-export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
+export const useRuntimeEventStore = create<RuntimeEventState>((set, get) => ({
   clearLogs: () => {
     logLinesBuffer.clear();
     set({ logLines: [] });
@@ -245,7 +252,15 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       if (!payload) {
         return;
       }
+      // The same rule `setProxyConnections` keeps. The table and the core
+      // state are published by different tasks, so a frame read just before
+      // the core stopped can arrive after the stop that cleared the table.
+      const core = get().coreState;
+      if (core !== null && core.state !== "connected") {
+        return;
+      }
 
+      proxyConnectionsPushes += 1;
       proxyConnectionsBuffer.push(() => payload);
       return;
     }
@@ -328,8 +343,16 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     set({ proxyConnections: null });
   },
   setProxyConnections: (proxyConnections) => {
+    // A table belongs to the core that produced it and is cleared when that
+    // core leaves. An answer to a read or a close that was still on its way
+    // must not put it back, or the next connection opens on stale rows.
+    const core = get().coreState;
+    if (core !== null && core.state !== "connected") return;
     const payload = parseProxyConnectionsSnapshot(proxyConnections);
     if (payload) {
+      // An answer to a read or a close is newer than a pushed table still
+      // waiting for its frame, which would otherwise replace it.
+      proxyConnectionsBuffer.clear();
       set({ proxyConnections: payload });
     }
   },
@@ -436,11 +459,7 @@ function parseStatisticsSnapshot(payload: unknown): StatisticsSnapshot | null {
 
   return {
     activeProfileId: payload.activeProfileId,
-    directDownloadBytesPerSecond: payload.directDownloadBytesPerSecond,
-    directUploadBytesPerSecond: payload.directUploadBytesPerSecond,
     downloadBytesPerSecond: payload.downloadBytesPerSecond,
-    proxyDownloadBytesPerSecond: payload.proxyDownloadBytesPerSecond,
-    proxyUploadBytesPerSecond: payload.proxyUploadBytesPerSecond,
     serverStat,
     uploadBytesPerSecond: payload.uploadBytesPerSecond,
   } as StatisticsSnapshot;

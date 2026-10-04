@@ -13,7 +13,7 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * A mixed pinning policy is what allowed it — an exact pin on
  * `@radix-ui/react-dialog` while a caret `@radix-ui/react-alert-dialog`
  * dragged in a second one — so the pins in `packages/ui/package.json` and the
- * `pnpm.overrides` block in the root manifest exist to keep this list at one
+ * `overrides:` block in `pnpm-workspace.yaml` exist to keep this list at one
  * version each, and this gate proves they still do.
  *
  * `@tanstack/react-query` fails the same way for the same reason: the
@@ -97,8 +97,8 @@ if (isCliEntrypoint(import.meta.url)) {
     console.error("\nLockfile duplicate check failed:\n");
     for (const failure of failures) console.error(`- ${failure}`);
     console.error(
-      "\nPin the package in packages/ui/package.json and add a pnpm.overrides" +
-        "\nentry in the root package.json, then run `pnpm install`.",
+      "\nPin the package in packages/ui/package.json and add an entry under" +
+        "\n`overrides:` in pnpm-workspace.yaml, then run `pnpm install`.",
     );
     process.exit(1);
   }

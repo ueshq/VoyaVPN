@@ -17,7 +17,7 @@
 use std::{net::IpAddr, path::PathBuf, sync::Arc};
 
 use crate::{
-    config_mutation::SharedAppConfig,
+    config_mutation::ConfigMutationCoordinator,
     supervisor::{CoreSupervisor, SupervisorConnectionState},
 };
 use futures_util::future::BoxFuture;
@@ -140,7 +140,7 @@ pub trait HostTunnelState: Send + Sync {
 /// backend, or with TUN mode on.
 pub struct SupervisorTunnelState {
     pub supervisor: CoreSupervisor,
-    pub config: SharedAppConfig,
+    pub config: Arc<ConfigMutationCoordinator>,
 }
 
 impl HostTunnelState for SupervisorTunnelState {
@@ -152,11 +152,7 @@ impl HostTunnelState for SupervisorTunnelState {
                 return false;
             };
             snapshot.state == SupervisorConnectionState::Connected
-                && (snapshot.active_tun_backend.is_some()
-                    || config
-                        .read()
-                        .map(|config| config.tun.enabled)
-                        .unwrap_or(false))
+                && (snapshot.active_tun_backend.is_some() || config.current_config().tun.enabled)
         })
     }
 }
@@ -226,8 +222,6 @@ pub enum SelfHostError {
     Clash(#[from] ClashError),
     #[error(transparent)]
     Probe(#[from] ReachabilityProbeError),
-    #[error("the self-hosted node is not running")]
-    NotRunning,
     #[error("background task failed: {0}")]
     Task(#[from] tokio::task::JoinError),
 }

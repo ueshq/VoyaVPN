@@ -1,27 +1,6 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum AutostartPlatform {
-    Windows,
-    Linux,
-    Macos,
-    Ios,
-    Android,
-    Other,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AutostartStatus {
-    pub enabled: bool,
-    pub platform: AutostartPlatform,
-    pub artifact_kind: Option<String>,
-    pub artifact_path: Option<String>,
-    pub artifact_name: Option<String>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportProfilesResult {

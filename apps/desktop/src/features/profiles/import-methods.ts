@@ -10,7 +10,7 @@ export const IMPORT_METHODS = [
   { method: "qrScreen", labelKey: "panes.profiles.importMethods.qrScreen", icon: Monitor },
 ] as const satisfies readonly { method: string; labelKey: TranslationKey; icon: LucideIcon }[];
 
-export type ImportMethod = (typeof IMPORT_METHODS)[number]["method"];
+type ImportMethod = (typeof IMPORT_METHODS)[number]["method"];
 
 /** Runs straight away; the rest open a dialog first. */
 export type DirectImportMethod = Extract<ImportMethod, "clipboard" | "qrScreen">;

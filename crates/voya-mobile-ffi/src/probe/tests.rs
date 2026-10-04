@@ -77,7 +77,10 @@ fn stop_all_reaps_a_core_the_run_walked_away_from() {
 
     // Stopping what shutdown already reaped must not reach the host again.
     kept.stop();
-    assert_eq!(lock_ignoring_poison(&host.stopped).len(), 3);
+    assert_eq!(
+        lock_ignoring_poison(&host.stopped).as_slice(),
+        ["core-2", "core-1"]
+    );
 }
 
 #[test]

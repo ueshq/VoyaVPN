@@ -62,7 +62,7 @@ export function useRoutingScreen() {
   );
   const [perAppOpen, setPerAppOpen] = useState(false);
   const routingsQuery = useQuery(queries.routings);
-  const profilesQuery = useQuery(queries.profileList);
+  const nodeNamesQuery = useQuery({ ...queries.profileList, select: nodeOutboundNames });
   const policyGroupsQuery = useQuery(queries.policyGroups);
 
   const activeRouting = routingsQuery.data?.find((routing) => routing.isActive) ?? null;
@@ -74,10 +74,11 @@ export function useRoutingScreen() {
     () => activeRouting?.rules.slice(offset) ?? NO_RULES,
     [activeRouting, offset],
   );
-  const profileEntries = profilesQuery.data?.entries;
-  const nodeNames = useMemo(
-    () => (profileEntries ? nodeOutboundNames(profileEntries) : null),
-    [profileEntries],
+  // A set, because every rule row looks its outbound up in it.
+  const nodeNameList = nodeNamesQuery.data;
+  const nodeNames = useMemo<ReadonlySet<string> | null>(
+    () => (nodeNameList ? new Set(nodeNameList) : null),
+    [nodeNameList],
   );
   const groupEntries = policyGroupsQuery.data?.entries;
   const groupOutbounds = useMemo<RuleGroupOutbound[] | null>(

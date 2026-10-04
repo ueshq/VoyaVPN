@@ -5,12 +5,10 @@ use std::{
 };
 
 use thiserror::Error;
-use voya_contracts::{AutostartPlatform, AutostartStatus};
-use voya_core::AppConfig;
 use voya_platform::{
     autostart::{
-        apply_autostart, AutostartAdapter, AutostartArtifact, AutostartError, AutostartRequest,
-        StdAutostartAdapter, AUTOSTART_APP_NAME, MACOS_LOGIN_ITEM_BUNDLE_PATH,
+        apply_autostart, AutostartAdapter, AutostartError, AutostartRequest, StdAutostartAdapter,
+        AUTOSTART_APP_NAME,
     },
     coreinfo::TargetOs,
     process::StdProcessRunner,
@@ -46,22 +44,11 @@ impl AutostartManager {
         }
     }
 
-    pub fn status(&self, config: &AppConfig) -> Result<AutostartStatus, AutostartManagerError> {
-        let request = self.request(config.behavior.autostart)?;
-
-        Ok(status_from_request(&request))
-    }
-
-    pub fn set_enabled(
-        &self,
-        config: &mut AppConfig,
-        enabled: bool,
-    ) -> Result<AutostartStatus, AutostartManagerError> {
+    /// Writes or removes the login entry.
+    pub fn set_enabled(&self, enabled: bool) -> Result<(), AutostartManagerError> {
         let request = self.request(enabled)?;
         apply_autostart(self.adapter.as_ref(), &request)?;
-        config.behavior.autostart = enabled;
-
-        Ok(status_from_request(&request))
+        Ok(())
     }
 
     fn request(&self, enabled: bool) -> Result<AutostartRequest, AutostartManagerError> {
@@ -89,18 +76,6 @@ pub enum AutostartManagerError {
     CurrentExe(io::Error),
     #[error("failed to determine a home directory for autostart artifacts")]
     HomeDir,
-}
-
-fn status_from_request(request: &AutostartRequest) -> AutostartStatus {
-    let artifact = request.artifact();
-
-    AutostartStatus {
-        enabled: request.enabled,
-        platform: autostart_platform(request.target_os),
-        artifact_kind: artifact.as_ref().map(artifact_kind).map(str::to_string),
-        artifact_path: artifact.as_ref().and_then(artifact_path),
-        artifact_name: artifact.as_ref().and_then(artifact_name),
-    }
 }
 
 /// Resolve the path a login entry should launch.
@@ -140,53 +115,11 @@ fn home_dir() -> Result<PathBuf, AutostartManagerError> {
         .ok_or(AutostartManagerError::HomeDir)
 }
 
-const fn autostart_platform(os: TargetOs) -> AutostartPlatform {
-    match os {
-        TargetOs::Windows => AutostartPlatform::Windows,
-        TargetOs::Linux => AutostartPlatform::Linux,
-        TargetOs::Macos => AutostartPlatform::Macos,
-        TargetOs::Ios => AutostartPlatform::Ios,
-        TargetOs::Android => AutostartPlatform::Android,
-        TargetOs::Other => AutostartPlatform::Other,
-    }
-}
-
-fn artifact_kind(artifact: &AutostartArtifact) -> &'static str {
-    match artifact {
-        AutostartArtifact::WindowsRunRegistry { .. } => "windowsRunRegistry",
-        AutostartArtifact::LinuxDesktopFile { .. } => "linuxDesktopFile",
-        AutostartArtifact::MacosLoginItem { .. } => "macosLoginItem",
-    }
-}
-
-fn artifact_path(artifact: &AutostartArtifact) -> Option<String> {
-    match artifact {
-        AutostartArtifact::WindowsRunRegistry { key_path, .. } => Some(key_path.clone()),
-        AutostartArtifact::LinuxDesktopFile { path } => Some(path_display(path)),
-        AutostartArtifact::MacosLoginItem { .. } => Some(MACOS_LOGIN_ITEM_BUNDLE_PATH.to_string()),
-    }
-}
-
-fn artifact_name(artifact: &AutostartArtifact) -> Option<String> {
-    match artifact {
-        AutostartArtifact::WindowsRunRegistry { value_name, .. } => Some(value_name.clone()),
-        AutostartArtifact::LinuxDesktopFile { path } => path
-            .file_name()
-            .and_then(|value| value.to_str())
-            .map(ToString::to_string),
-        AutostartArtifact::MacosLoginItem { label, .. } => Some(label.clone()),
-    }
-}
-
-fn path_display(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
-}
-
 #[cfg(test)]
 mod autostart_app_tests {
     use std::sync::Mutex;
 
-    use voya_platform::autostart::{AutostartAdapter, LoginItemState, MACOS_LOGIN_ITEM_LABEL};
+    use voya_platform::autostart::{AutostartAdapter, LoginItemState};
 
     use super::*;
 
@@ -274,19 +207,13 @@ mod autostart_app_tests {
     }
 
     #[test]
-    fn autostart_manager_updates_config_after_adapter_success() {
+    fn autostart_manager_writes_the_linux_desktop_file() {
         let adapter = Arc::new(FakeAutostartAdapter::default());
         let manager =
             AutostartManager::with_adapter(adapter.clone(), TargetOs::Linux, AUTOSTART_APP_NAME);
-        let mut config = AppConfig::default();
 
-        let status = manager
-            .set_enabled(&mut config, true)
-            .expect("autostart set");
+        manager.set_enabled(true).expect("autostart set");
 
-        assert!(config.behavior.autostart);
-        assert!(status.enabled);
-        assert_eq!(status.platform, AutostartPlatform::Linux);
         assert_eq!(*adapter.writes.lock().expect("writes"), 1);
     }
 
@@ -295,23 +222,9 @@ mod autostart_app_tests {
         let adapter = Arc::new(FakeAutostartAdapter::default());
         let manager =
             AutostartManager::with_adapter(adapter.clone(), TargetOs::Macos, AUTOSTART_APP_NAME);
-        let mut config = AppConfig::default();
 
-        let status = manager
-            .set_enabled(&mut config, true)
-            .expect("autostart set");
+        manager.set_enabled(true).expect("autostart set");
 
-        assert!(config.behavior.autostart);
-        assert_eq!(status.platform, AutostartPlatform::Macos);
-        assert_eq!(status.artifact_kind.as_deref(), Some("macosLoginItem"));
-        assert_eq!(
-            status.artifact_path.as_deref(),
-            Some(MACOS_LOGIN_ITEM_BUNDLE_PATH)
-        );
-        assert_eq!(
-            status.artifact_name.as_deref(),
-            Some(MACOS_LOGIN_ITEM_LABEL)
-        );
         assert_eq!(*adapter.login_items.lock().expect("login_items"), [true]);
         assert_eq!(*adapter.writes.lock().expect("writes"), 0);
     }

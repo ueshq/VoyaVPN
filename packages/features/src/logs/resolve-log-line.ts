@@ -6,6 +6,8 @@ import { formatTimeOfDay } from "@voya/utils/formatting";
 export type ResolvedLogLine = StoredLogLine & {
   /** The message alone, in the interface language. */
   text: string;
+  /** The local time of day it was logged at. */
+  time: string;
   /** `time [level] message`: the line as a log file reads, and as it is copied. */
   stamped: string;
   /** `stamped` in lower case, made once so a search only compares. */
@@ -32,8 +34,9 @@ export function resolveLogLine(t: TranslationFunction, line: StoredLogLine): Res
   const cached = resolvedLines.get(line);
   if (cached?.t === t) return cached.resolved;
   const text = logLineText(t, line.body);
-  const stamped = `${formatTimeOfDay(line.loggedAt)} [${line.level}] ${text}`;
-  const resolved = { ...line, searchText: stamped.toLowerCase(), stamped, text };
+  const time = formatTimeOfDay(line.loggedAt);
+  const stamped = `${time} [${line.level}] ${text}`;
+  const resolved = { ...line, searchText: stamped.toLowerCase(), stamped, text, time };
   resolvedLines.set(line, { resolved, t });
   return resolved;
 }

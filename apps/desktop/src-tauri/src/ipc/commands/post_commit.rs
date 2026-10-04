@@ -148,7 +148,7 @@ where
     R: tauri::Runtime,
 {
     core_flow(app, state)
-        .disconnect_removed_profile(&state.config_mutations().current_config())
+        .disconnect_removed_profile(|| state.config_mutations().current_config())
         .await
         .map_err(AppError::from)
 }

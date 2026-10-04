@@ -12,7 +12,7 @@ export const OUTBOUND_LABEL_KEYS = {
   block: "panes.routing.outboundBlock",
 } as const satisfies Record<string, TranslationKey>;
 
-export const GROUP_OUTBOUND_PREFIX = "group:";
+const GROUP_OUTBOUND_PREFIX = "group:";
 
 /** The label key for a built-in outbound tag, or `null` for any other tag. */
 export function outboundLabelKey(tag: string): TranslationKey | null {
@@ -40,12 +40,15 @@ export function groupOutboundValue(id: string) {
  * The nodes a rule can send traffic to, by remarks, in list order. The
  * generator resolves a rule outbound to the first node carrying those remarks
  * and checks the built-in tags first, so duplicates and nodes named after a
- * built-in tag are not separate targets. A set, because every rule row looks
- * its outbound up in it.
+ * built-in tag are not separate targets.
+ *
+ * An array of strings so it can be a query `select`: the result keeps its
+ * identity until a name changes, where the node list itself is replaced by
+ * every delay and country a speed test reports.
  */
-export function nodeOutboundNames(entries: readonly ProfileSummaryEntry[]): ReadonlySet<string> {
+export function nodeOutboundNames(list: { entries: readonly ProfileSummaryEntry[] }): string[] {
   const names = new Set<string>();
-  for (const { profile } of entries) {
+  for (const { profile } of list.entries) {
     if (
       profile.remarks.trim() &&
       !isBuiltinOutbound(profile.remarks) &&
@@ -54,8 +57,7 @@ export function nodeOutboundNames(entries: readonly ProfileSummaryEntry[]): Read
       names.add(profile.remarks);
     }
   }
-
-  return names;
+  return [...names];
 }
 
 /** Where a rule sends matching traffic, as one line of text for a list row. */

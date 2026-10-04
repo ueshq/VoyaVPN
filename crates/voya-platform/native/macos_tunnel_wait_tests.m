@@ -6,14 +6,18 @@ typedef struct {
     double elapsed;
 } WaitOutcome;
 
-static WaitOutcome run(BOOL starting, NSArray<NSNumber *> *states, double timeout) {
+static WaitOutcome runAfter(BOOL starting, BOOL wasActive, NSArray<NSNumber *> *states, double timeout) {
     __block NSUInteger index = 0;
     __block double clock = 0;
-    VoyaTunnelWaitResult result = VoyaAwaitTunnel(starting, timeout,
+    VoyaTunnelWaitResult result = VoyaAwaitTunnel(starting, wasActive, timeout,
         ^NEVPNStatus { return (NEVPNStatus)states[MIN(index, states.count - 1)].integerValue; },
         ^double { return clock; },
         ^{ index++; clock += 0.25; });
     return (WaitOutcome){ result, clock };
+}
+
+static WaitOutcome run(BOOL starting, NSArray<NSNumber *> *states, double timeout) {
+    return runAfter(starting, NO, states, timeout);
 }
 
 int main(void) {
@@ -52,6 +56,10 @@ int main(void) {
         assert(late.result == VoyaTunnelTimedOut && late.elapsed == 10);
         WaitOutcome quiet = run(NO, @[disconnected], 10);
         assert(quiet.result == VoyaTunnelDisconnected && quiet.elapsed == 10);
+        // A start that came up and failed has used its request: the cleanup
+        // needs the quiet second, not the whole window.
+        WaitOutcome failed = runAfter(NO, YES, @[disconnected], 10);
+        assert(failed.result == VoyaTunnelDisconnected && failed.elapsed == 1.0);
         // A transient disconnected sample cannot satisfy the quiet interval.
         WaitOutcome bounced = run(NO, @[connected, disconnected, connecting, disconnected], 10);
         assert(bounced.result == VoyaTunnelDisconnected && bounced.elapsed == 1.75);

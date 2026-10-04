@@ -16,6 +16,11 @@ export class Reporter {
     this.records.push({ status: "PASS", name, details });
   }
 
+  /** A check that had nothing to examine here; it says nothing either way. */
+  skip(name, details = []) {
+    this.records.push({ status: "SKIP", name, details });
+  }
+
   warn(name, details = []) {
     this.records.push({ status: "WARN", name, details });
   }
@@ -51,15 +56,12 @@ export class Reporter {
         current[record.status] += 1;
         return current;
       },
-      { PASS: 0, WARN: 0, FAIL: 0 },
+      { PASS: 0, WARN: 0, FAIL: 0, SKIP: 0 },
     );
 
     console.log("");
-    if (counts.FAIL > 0) {
-      console.log(`Readiness result: FAIL (${counts.PASS} passed, ${counts.WARN} warnings, ${counts.FAIL} failed)`);
-    } else {
-      console.log(`Readiness result: PASS (${counts.PASS} passed, ${counts.WARN} warnings, ${counts.FAIL} failed)`);
-    }
+    const tally = `${counts.PASS} passed, ${counts.WARN} warnings, ${counts.FAIL} failed, ${counts.SKIP} skipped`;
+    console.log(`Readiness result: ${counts.FAIL > 0 ? "FAIL" : "PASS"} (${tally})`);
   }
 
   hasFailures() {

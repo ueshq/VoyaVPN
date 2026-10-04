@@ -34,20 +34,24 @@ import os.log
         }
 
         func openTun(_ options: LibboxTunOptionsProtocol?, ret0_: UnsafeMutablePointer<Int32>?) throws {
-            try runBlocking {
-                try await self.openTunAsync(options, ret0_)
+            guard let ret0_ else {
+                throw platformError("Missing libbox TUN return pointer.")
+            }
+            // Written here, on libbox's thread, and only once the task has
+            // answered. `ret0_` points into the caller's frame: a task that
+            // outlived `runBlocking`'s timeout would write through it after
+            // that frame was gone.
+            ret0_.pointee = try runBlocking {
+                try await self.openTunAsync(options)
             }
         }
 
-        private func openTunAsync(_ options: LibboxTunOptionsProtocol?, _ ret0_: UnsafeMutablePointer<Int32>?) async throws {
+        private func openTunAsync(_ options: LibboxTunOptionsProtocol?) async throws -> Int32 {
             guard let provider else {
                 throw platformError("PacketTunnel provider is unavailable.")
             }
             guard let options else {
                 throw platformError("Missing libbox TUN options.")
-            }
-            guard let ret0_ else {
-                throw platformError("Missing libbox TUN return pointer.")
             }
 
             let settings = try makeNetworkSettings(options)
@@ -55,15 +59,14 @@ import os.log
             try await provider.setTunnelNetworkSettingsAsync(settings)
 
             if let fileDescriptor = provider.packetFlow.value(forKeyPath: "socket.fileDescriptor") as? Int32 {
-                ret0_.pointee = fileDescriptor
-                return
+                return fileDescriptor
             }
 
             let fileDescriptor = LibboxGetTunnelFileDescriptor()
             guard fileDescriptor != -1 else {
                 throw platformError("PacketTunnel file descriptor is unavailable.")
             }
-            ret0_.pointee = fileDescriptor
+            return fileDescriptor
         }
 
         private func makeNetworkSettings(_ options: LibboxTunOptionsProtocol) throws -> NEPacketTunnelNetworkSettings {
@@ -271,12 +274,6 @@ import os.log
 
         func setSystemProxyEnabled(_: Bool) throws {
             throw platformError("The VoyaVPN PacketTunnel sets no system proxy.")
-        }
-
-        func triggerNativeCrash() throws {
-            DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(200)) {
-                fatalError("VoyaVPN debug native crash")
-            }
         }
 
         func writeDebugMessage(_ message: String?) {

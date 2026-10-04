@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 import { createAppQueryClient } from "@voya/client/query-client";
-import { renderWithQuery } from "@/test/render";
+import { renderWithQuery } from "@voya/features/test/render";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 import type { AppSettings, TrafficModeResponse } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";

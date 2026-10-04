@@ -12,7 +12,7 @@ use crate::app::MobileState;
 use super::{answer, arguments, Answer};
 
 pub(super) async fn list_connections(state: &MobileState) -> Answer {
-    let access = state.supervisor.clash_api_access().await;
+    let access = state.supervisor.clash_api_access();
 
     answer(
         "proxy_list_connections",
@@ -73,8 +73,7 @@ pub(super) async fn start_monitor(state: &MobileState) -> Answer {
         &state.proxy_monitor,
         &state.supervisor,
         Arc::clone(&state.sinks) as Arc<_>,
-    )
-    .await;
+    );
 
     answer(
         "proxy_start_monitor",

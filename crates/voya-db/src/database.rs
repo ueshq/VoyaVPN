@@ -140,7 +140,11 @@ impl Database {
         })
     }
 
-    #[cfg(any(test, feature = "test-utils"))]
+    /// Closes every connection and waits for the ones in use to come back.
+    ///
+    /// For a host that outlives its database: a phone resets application data
+    /// by moving the file aside, and a connection left open would go on
+    /// writing to the moved file.
     pub async fn close(&self) {
         self.pool.close().await;
     }

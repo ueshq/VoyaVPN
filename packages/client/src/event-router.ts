@@ -33,24 +33,13 @@ const BACKGROUND_NOTICE_CODES = new Set<NoticeCode["code"]>([
 /** Longest a finished speedtest result waits for its country flag to show. */
 const COUNTRY_REFRESH_MS = 3000;
 
-/**
- * Where a `selectTab` deep link points, with the wire name normalized.
- *
- * `proxyConnections` is one page with two sub-views on the desktop and its own
- * tab on mobile, and the runtime log lives under Settings → Advanced on the
- * desktop but is a page of its own elsewhere. The router says *what* was asked
- * for; each app decides how to get there.
- */
-export type ShellTarget =
-  | { tab: "logs" }
-  | { tab: "profiles" }
-  | { tab: "connections" };
-
-export type EventRouterOptions = {
+type EventRouterOptions = {
   queryClient: QueryClient;
   /** Read per call, so a language change reaches the next notice. */
   t: () => TranslationFunction;
-  onSelectTab: (target: ShellTarget) => void;
+  /** A `selectTab` deep link. The router says what was asked for; each app
+   * decides how to get there. */
+  onSelectTab: (target: ShellTabTarget) => void;
   onCloseRequested: () => void;
   /**
    * Repeats a background-worthy notice where the user will see it while the
@@ -59,7 +48,7 @@ export type EventRouterOptions = {
   notify?: (title: string) => void;
 };
 
-export type EventRouter = {
+type EventRouter = {
   onInvalidate: (event: InvalidateEvent) => void;
   onAppEvent: (event: AppEvent) => void;
   onTransient: (event: TransientStreamEvent) => void;
@@ -134,7 +123,7 @@ export function createEventRouter(options: EventRouterOptions): EventRouter {
         return;
       }
       case "selectTab":
-        options.onSelectTab(toShellTarget(event.payload));
+        options.onSelectTab(event.payload);
         return;
       case "closeRequested":
         options.onCloseRequested();
@@ -171,16 +160,6 @@ export function createEventRouter(options: EventRouterOptions): EventRouter {
   };
 }
 
-function toShellTarget(tab: ShellTabTarget): ShellTarget {
-  switch (tab) {
-    case "logs":
-      return { tab: "logs" };
-    case "profiles":
-      return { tab: "profiles" };
-    case "proxyConnections":
-      return { tab: "connections" };
-  }
-}
 
 function reportEventRouterError(context: string, error: unknown) {
   console.error(`[event-router] ${context}: ${getErrorMessage(error)}`);

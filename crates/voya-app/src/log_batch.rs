@@ -85,8 +85,16 @@ impl<T> LogBatcher<T> {
     where
         F: FnMut(Vec<T>),
     {
+        // Lines can already be queued with nothing left to announce them: a
+        // flusher stopped inside its window had taken the wake, and a push
+        // onto a non-empty queue sends no other. Only the first pass skips
+        // the wait, so a paused queue is still not polled.
+        let mut queued = !self.lock().is_empty();
         loop {
-            self.wake.notified().await;
+            if !queued {
+                self.wake.notified().await;
+            }
+            queued = false;
             time::sleep(window).await;
             // Paused: the lines stay queued, and a push onto a non-empty queue
             // does not wake this again, so it parks until `set_streaming`.
@@ -181,6 +189,40 @@ mod tests {
             *delivered.lock().expect("delivered lock"),
             vec![vec!["early"]]
         );
+    }
+
+    /// A phone replaces its flusher when the host is rebuilt. The one being
+    /// replaced may have taken the wake for lines it never delivered, and
+    /// nothing else would announce them to its successor.
+    #[tokio::test(start_paused = true)]
+    async fn log_batcher_delivers_what_a_replaced_flusher_left_queued() {
+        let batcher = Arc::new(LogBatcher::new(LOG_BATCH_CAPACITY));
+        batcher.set_streaming(true);
+        let delivered = Arc::new(StdMutex::new(Vec::<Vec<u32>>::new()));
+        let spawn = || {
+            let batcher = Arc::clone(&batcher);
+            let delivered = Arc::clone(&delivered);
+            tokio::spawn(async move {
+                batcher
+                    .run(LOG_BATCH_WINDOW, |batch| {
+                        delivered.lock().expect("delivered lock").push(batch);
+                    })
+                    .await;
+            })
+        };
+
+        let first = spawn();
+        batcher.push(1);
+        // Inside the window: the wake is taken, the line is not delivered.
+        time::sleep(LOG_BATCH_WINDOW / 2).await;
+        first.abort();
+        batcher.push(2);
+
+        let second = spawn();
+        time::sleep(LOG_BATCH_WINDOW * 2).await;
+        second.abort();
+
+        assert_eq!(*delivered.lock().expect("delivered lock"), vec![vec![1, 2]]);
     }
 
     /// Nothing reaches the webview while no panel shows the lines; the newest

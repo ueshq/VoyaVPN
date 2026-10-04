@@ -67,7 +67,7 @@ export function clientStorage(): ClientStorage {
  * answer. The default declines, so an app that never registers one simply never
  * retries instead of calling a command it does not have.
  */
-export type ElevationHandler = () => Promise<boolean>;
+type ElevationHandler = () => Promise<boolean>;
 
 let requestElevationHandler: ElevationHandler = async () => false;
 
@@ -89,7 +89,7 @@ export function requestElevation(): Promise<boolean> {
  * rather than the implementation keeps shared code such as `use-node-export`
  * identical on both.
  */
-export type ClipboardAdapter = {
+type ClipboardAdapter = {
   readText: () => Promise<string>;
   writeText: (text: string) => Promise<void>;
 };

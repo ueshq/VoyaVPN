@@ -20,6 +20,7 @@ use tracing_subscriber::{filter::Targets, layer::Context, registry::LookupSpan, 
 use voya_contracts::{LogLevel, LogLineBody, LogLineEvent};
 
 use crate::redaction::redact_url_userinfo;
+use voya_platform::process::CORE_OUTPUT_TARGET;
 
 /// Environment variable that overrides [`log_filter_directives`].
 pub const LOG_FILTER_ENV_VAR: &str = "VOYAVPN_LOG";
@@ -108,6 +109,11 @@ pub fn new_log_line(level: LogLevel, body: LogLineBody) -> LogLineEvent {
     }
 }
 
+/// Target for a record the Logs panel already shows as an app-authored line:
+/// it is written to the file log and skipped by [`LogPanelLayer`], so the
+/// panel does not carry the same failure twice.
+pub const FILE_ONLY_TARGET: &str = "voyavpn::file_only";
+
 /// Forwards `warn`/`error` records to the Logs panel through `queue`.
 ///
 /// `queue` must only queue, never emit: an emit failure traced from this layer
@@ -132,6 +138,13 @@ where
 {
     fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
         let metadata = event.metadata();
+        // Core output reaches the panel through the process log sink. This
+        // copy is off by default and exists for the file log; with the target
+        // re-enabled it would show every core warning twice, and those of the
+        // throwaway speed-test cores the sink keeps out as well.
+        if matches!(metadata.target(), FILE_ONLY_TARGET | CORE_OUTPUT_TARGET) {
+            return;
+        }
         let Some(level) = ui_log_level(metadata.level()) else {
             return;
         };
@@ -228,8 +241,6 @@ const LINE_PADDING: usize = 8;
 
 #[cfg(test)]
 mod tests {
-    use voya_platform::process::CORE_OUTPUT_TARGET;
-
     use super::*;
 
     /// The layer both hosts install: a `warn` reaches the queue as one
@@ -247,6 +258,8 @@ mod tests {
         tracing::subscriber::with_default(subscriber, || {
             tracing::warn!("dial failed for https://alice:secret@example.test/sub");
             tracing::info!("routine chatter must not reach the panel");
+            tracing::error!(target: FILE_ONLY_TARGET, "the panel has its own line for this");
+            tracing::warn!(target: CORE_OUTPUT_TARGET, "the process sink already queued this");
         });
 
         let queued = queued.lock().expect("queue lock");

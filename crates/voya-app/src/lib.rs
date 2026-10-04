@@ -34,6 +34,7 @@ pub mod runtime;
 pub mod self_host;
 pub mod services;
 pub mod settings;
+mod shutdown_task;
 pub mod speedtest;
 pub mod startup;
 pub mod statistics;

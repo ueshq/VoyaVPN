@@ -1,5 +1,4 @@
 import { Alert } from "heroui-native/alert";
-import type { ReactNode } from "react";
 
 type BannerStatus = "danger" | "info" | "warning";
 
@@ -13,18 +12,13 @@ const ALERT_STATUS = {
 /**
  * A message about the screen it sits on — a failure, a warning, the outcome of
  * an action — as a HeroUI `Alert`, so it reads as a message rather than as
- * more of the page. `action` is at most one small button, such as a retry.
- *
- * The alert's root carries `role="alert"` but is not itself an accessibility
- * element, so the action inside stays reachable on its own.
+ * more of the page.
  */
 export function Banner({
-  action,
   liveRegion = false,
   message,
   status,
 }: {
-  action?: ReactNode;
   /** Announce changes to VoiceOver/TalkBack, for outcomes that arrive later. */
   liveRegion?: boolean;
   message: string;
@@ -35,7 +29,6 @@ export function Banner({
       <Alert.Indicator accessible={false} />
       <Alert.Content className="min-w-0 items-start gap-2">
         <Alert.Title accessibilityLiveRegion={liveRegion ? "polite" : undefined}>{message}</Alert.Title>
-        {action}
       </Alert.Content>
     </Alert>
   );

@@ -1,7 +1,6 @@
-import { render, screen, userEvent } from "@testing-library/react-native";
+import { render, screen } from "@testing-library/react-native";
 import type { ReactNode } from "react";
 import { Server } from "lucide-react-native";
-import { Pressable, Text } from "react-native";
 
 import { Banner } from "./banner";
 import { EmptyState } from "./empty-state";
@@ -13,20 +12,10 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("Banner", () => {
-  it("shows its message with the one action it carries", async () => {
-    const retry = jest.fn();
-    await render(
-      <Banner
-        status="danger"
-        message="Could not connect: timed out"
-        action={<Pressable accessibilityRole="button" onPress={retry}><Text>Retry</Text></Pressable>}
-      />,
-      { wrapper },
-    );
+  it("shows its message", async () => {
+    await render(<Banner status="danger" message="Could not connect: timed out" />, { wrapper });
 
     expect(screen.getByText("Could not connect: timed out")).toBeOnTheScreen();
-    await userEvent.setup().press(screen.getByRole("button", { name: "Retry" }));
-    expect(retry).toHaveBeenCalledTimes(1);
   });
 });
 

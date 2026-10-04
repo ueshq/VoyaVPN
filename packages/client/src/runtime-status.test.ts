@@ -129,7 +129,7 @@ describe("runtime status reconciliation", () => {
       { title: i18next.t("status.sysProxyStatusFailed"), description: "proxy read failed", severity: "error" },
       { title: i18next.t("status.tunStatusFailed"), description: "tun read failed", severity: "error" },
     ]);
-    await refreshRuntimeStatusAndReport(i18next.t, ["tun"]);
+    await refreshRuntimeStatus(["tun"]);
     expect(useRuntimeEventStore.getState().tun).toEqual(tun);
     expect(useToastStore.getState().toasts).toHaveLength(3);
   });
@@ -139,7 +139,7 @@ describe("runtime status reconciliation", () => {
     const slow = deferred<TunStatus>();
     commands.runtimeStatus.mockRejectedValue(new Error("core read failed"));
     commands.tunStatus.mockReturnValueOnce(slow.promise);
-    const refresh = refreshRuntimeStatusAndReport(i18next.t, undefined, () => mounted);
+    const refresh = refreshRuntimeStatusAndReport(i18next.t, () => mounted);
     await Promise.resolve();
     mounted = false;
     slow.resolve(tun);

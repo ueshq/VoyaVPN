@@ -1,7 +1,7 @@
 import { IpcCommandError } from "@voya/client/errors";
 import type { AppError, VoyaCommands, VoyaEventName, VoyaEventPayload } from "@voya/contracts";
 import type { TurboModule } from "react-native";
-import { VOYA_COMMAND_WIRE } from "@voya/contracts/commands";
+import { VOYA_COMMAND_WIRE, VOYA_EVENT_CHANNELS } from "@voya/contracts/commands";
 
 import type { VoyaTransport } from "./transport";
 
@@ -68,13 +68,6 @@ export type VoyaNativeEvents = {
     listener: (payload: { channel: string; payloadJson: string }) => void,
   ) => { remove: () => void };
 };
-
-/** The wire name each channel is published under, shared with the host. */
-const CHANNEL_NAMES = {
-  appEvent: "app-event",
-  invalidateEvent: "invalidate-event",
-  transientStreamEvent: "transient-stream-event",
-} as const satisfies Record<VoyaEventName, string>;
 
 /** The one event the native module emits; the channel is in the payload. */
 const NATIVE_EVENT = "VoyaBackendEvent";
@@ -196,7 +189,7 @@ export function createNativeTransport(
       name: Name,
       listener: (payload: VoyaEventPayload<Name>) => void,
     ) => {
-      const channel = CHANNEL_NAMES[name];
+      const channel = VOYA_EVENT_CHANNELS[name];
       const subscription = events.addListener(NATIVE_EVENT, (event) => {
         if (event.channel !== channel) return;
         const payload = tryParse(event.payloadJson);

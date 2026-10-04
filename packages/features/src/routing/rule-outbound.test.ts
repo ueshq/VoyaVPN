@@ -6,16 +6,18 @@ import { appendMatcherLine, describeOutbound, nodeOutboundNames } from "./rule-o
 
 describe("rule outbounds", () => {
   it("lists each routable node name once, in list order", () => {
-    expect([
-      ...nodeOutboundNames([
-        entry("Tokyo"),
-        entry(""),
-        entry("  "),
-        entry("direct"),
-        entry("Osaka"),
-        entry("Tokyo"),
-      ]),
-    ]).toEqual(["Tokyo", "Osaka"]);
+    expect(
+      nodeOutboundNames({
+        entries: [
+          entry("Tokyo"),
+          entry(""),
+          entry("  "),
+          entry("direct"),
+          entry("Osaka"),
+          entry("Tokyo"),
+        ],
+      }),
+    ).toEqual(["Tokyo", "Osaka"]);
   });
 
   it("describes built-in tags, a missing outbound, and node targets", () => {
@@ -43,7 +45,7 @@ describe("rule outbounds", () => {
     expect(describeOutbound("group:gone", none, groups)).toEqual({ kind: "missingGroup", name: "gone" });
     expect(describeOutbound("group:work", none, null)).toEqual({ kind: "group", name: "work" });
     // A node named like a group reference is not offered as a node target.
-    expect(nodeOutboundNames([entry("group:work"), entry("Tokyo")])).toEqual(new Set(["Tokyo"]));
+    expect(nodeOutboundNames({ entries: [entry("group:work"), entry("Tokyo")] })).toEqual(["Tokyo"]);
   });
 
   it("adds a rule-set line once", () => {

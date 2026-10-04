@@ -11,6 +11,7 @@ pub mod elevation;
 pub mod filesystem;
 pub mod firewall;
 pub mod locale;
+pub mod localtime;
 pub mod netif;
 pub mod paths;
 pub mod privilege;

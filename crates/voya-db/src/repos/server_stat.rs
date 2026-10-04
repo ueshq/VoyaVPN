@@ -52,21 +52,6 @@ impl<'executor> ServerStatRepository<'executor> {
         row.map(row_to_server_stat).transpose()
     }
 
-    pub async fn delete_orphans(&self) -> Result<u64> {
-        let result = run_query!(
-            self.executor,
-            sqlx::query(
-                r#"
-            DELETE FROM server_stat_items
-            WHERE index_id NOT IN (SELECT index_id FROM profile_items)
-            "#,
-            ),
-            execute
-        )?;
-
-        Ok(result.rows_affected())
-    }
-
     pub async fn reset_rollover(&self, date_now: i64) -> Result<u64> {
         let result = run_query!(
             self.executor,
@@ -87,25 +72,27 @@ impl<'executor> ServerStatRepository<'executor> {
 
     /// Adds one sample to a profile's counters and returns the stored row.
     ///
-    /// The statistics aggregator calls this every second for as long as a core
-    /// is connected, so it is one statement rather than the read-modify-write it
-    /// used to be (a SELECT, a day-rollover upsert, then a second upsert). Each
-    /// of those was its own autocommit transaction on the pool,
-    /// which meant two to three journalled commits per second just to bump four
-    /// integers. Doing the arithmetic in SQL also makes the update atomic
-    /// against any other writer.
+    /// The statistics aggregator calls this once per flush for as long as a core
+    /// is connected. It is one statement rather than the read-modify-write it
+    /// used to be (a SELECT, a day-rollover upsert, then a second upsert), each
+    /// its own autocommit transaction on the pool. Doing the arithmetic in SQL
+    /// also makes the update atomic against any other writer.
     ///
     /// Unqualified column names in `DO UPDATE SET` are the row's values from
     /// before this insert, so the `CASE` compares the stored day against the
     /// sample's and starts the daily counters over when they differ — the day
     /// rollover that used to take an extra statement.
+    ///
+    /// `None` when the profile is gone. Its row went with it (the foreign key
+    /// cascades), and traffic measured just before a node was deleted has
+    /// nowhere to be counted: that is an answer, not a constraint failure.
     pub async fn add_traffic(
         &self,
         index_id: &str,
         date_now: i64,
         proxy_up: i64,
         proxy_down: i64,
-    ) -> Result<ServerStatItem> {
+    ) -> Result<Option<ServerStatItem>> {
         let up = proxy_up.max(0);
         let down = proxy_down.max(0);
         let row = run_query!(
@@ -114,7 +101,9 @@ impl<'executor> ServerStatRepository<'executor> {
                 r#"
             INSERT INTO server_stat_items (
                 index_id, total_up, total_down, today_up, today_down, date_now
-            ) VALUES (?, ?, ?, ?, ?, ?)
+            )
+            SELECT ?, ?, ?, ?, ?, ?
+            WHERE EXISTS (SELECT 1 FROM profile_items WHERE index_id = ?)
             ON CONFLICT(index_id) DO UPDATE SET
                 total_up = total_up + excluded.total_up,
                 total_down = total_down + excluded.total_down,
@@ -135,11 +124,12 @@ impl<'executor> ServerStatRepository<'executor> {
             .bind(down)
             .bind(up)
             .bind(down)
-            .bind(date_now),
-            fetch_one
+            .bind(date_now)
+            .bind(index_id),
+            fetch_optional
         )?;
 
-        row_to_server_stat(row)
+        row.map(row_to_server_stat).transpose()
     }
 }
 

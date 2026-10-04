@@ -14,8 +14,8 @@ export const commands = {
 	 * 
 	 *  Validation, the pre-commit OS side effects, the commit and both rollback
 	 *  paths are the transaction in voya-app, where they are unit-tested; the only
-	 *  things left here are turning `AppError`s back out of it and dispatching the
-	 *  runtime action it selected.
+	 *  things left here are turning `AppError`s back out of it, the tray's words
+	 *  and announcing the caches.
 	 */
 	saveAppSettings: (settings: AppSettings) => typedError<AppSettings, AppError>(__TAURI_INVOKE("save_app_settings", { settings })),
 	generateQrCode: (content: string) => typedError<QrCodeImage, AppError>(__TAURI_INVOKE("generate_qr_code", { content })),
@@ -72,7 +72,6 @@ export const commands = {
 	resolveCloseRequest: (action: CloseRequestAction, remember: boolean) => typedError<null, AppError>(__TAURI_INVOKE("resolve_close_request", { action, remember })),
 	tunStatus: () => typedError<TunStatus, AppError>(__TAURI_INVOKE("tun_status")),
 	tunProviderDiagnostics: () => typedError<TunProviderDiagnostics, AppError>(__TAURI_INVOKE("tun_provider_diagnostics")),
-	setTunEnabled: (enabled: boolean) => typedError<TunStatus, AppError>(__TAURI_INVOKE("set_tun_enabled", { enabled })),
 	loadDnsSettings: () => typedError<DnsSettings, AppError>(__TAURI_INVOKE("load_dns_settings")),
 	getDefaultDnsSettings: () => typedError<DnsSettings, AppError>(__TAURI_INVOKE("get_default_dns_settings")),
 	saveDnsSettings: (settings: DnsSettings) => typedError<DnsSettings, AppError>(__TAURI_INVOKE("save_dns_settings", { settings })),
@@ -125,7 +124,7 @@ export const commands = {
 	deleteSubscriptions: (ids: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_subscriptions", { ids })),
 	importProfilesFromText: (text: string, subscriptionId: string | null) => typedError<ImportProfilesResult, AppError>(__TAURI_INVOKE("import_profiles_from_text", { text, subscriptionId })),
 	previewImportProfiles: (text: string) => typedError<ImportPreview, AppError>(__TAURI_INVOKE("preview_import_profiles", { text })),
-	updateSubscriptions: (subscriptionId: string | null, preferProxy: boolean, proxyUrl: string | null) => typedError<SubscriptionUpdateResult, AppError>(__TAURI_INVOKE("update_subscriptions", { subscriptionId, preferProxy, proxyUrl })),
+	updateSubscriptions: (subscriptionId: string | null) => typedError<SubscriptionUpdateResult, AppError>(__TAURI_INVOKE("update_subscriptions", { subscriptionId })),
 	listRoutings: () => typedError<Routing_Serialize[], AppError>(__TAURI_INVOKE("list_routings")),
 	saveRouting: (item: Routing_Deserialize) => typedError<Routing_Serialize, AppError>(__TAURI_INVOKE("save_routing", { item })),
 	deleteRoutings: (ids: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_routings", { ids })),
@@ -340,20 +339,8 @@ export type AppearanceSettings = {
 	theme: ThemeMode,
 };
 
-export type AutostartPlatform = "windows" | "linux" | "macos" | "ios" | "android" | "other";
-
-export type AutostartStatus = {
-	enabled: boolean,
-	platform: AutostartPlatform,
-	artifactKind: string | null,
-	artifactPath: string | null,
-	artifactName: string | null,
-};
-
 export type BehaviorSettings = {
 	autostart: boolean,
-	/**  Look up the exit IP each time a connection is established. */
-	autoCheckIp: boolean,
 	/**  What closing the main window does. */
 	closeAction: CloseAction,
 	/**  Keep the window hidden when the app is launched at login. */
@@ -1258,7 +1245,7 @@ export type SettingsApplyStatus = {
 	connected: boolean,
 };
 
-export type ShellTabTarget = "profiles" | "proxyConnections" | "logs";
+export type ShellTabTarget = "profiles";
 
 /**
  *  How a probe ended, as a code rather than a sentence.
@@ -1342,10 +1329,6 @@ export type SpeedtestTarget = { scope: "profiles"; profileIds: string[] };
 
 export type StatisticsSnapshot = {
 	activeProfileId: string | null,
-	proxyUploadBytesPerSecond: number | null,
-	proxyDownloadBytesPerSecond: number | null,
-	directUploadBytesPerSecond: number | null,
-	directDownloadBytesPerSecond: number | null,
 	uploadBytesPerSecond: number | null,
 	downloadBytesPerSecond: number | null,
 	serverStat: ServerStatItem | null,
@@ -1416,7 +1399,7 @@ export type SystemProxySettings = {
 	 *  The persisted OS-proxy mode. Typed rather than a `String`: the enum's
 	 *  `rename_all = "camelCase"` emits exactly the values this field stores
 	 *  (`forcedClear`, `forcedChange`, `unchanged`), and `voya-db` pins that
-	 *  with a value test. The retired `pac` value is normalized at startup.
+	 *  with a value test.
 	 */
 	mode: SystemProxyType,
 	exceptions: string,

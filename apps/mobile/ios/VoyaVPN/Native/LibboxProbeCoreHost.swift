@@ -49,6 +49,10 @@ import Network
                 starting = false
                 lock.unlock()
             }
+            // No core of this host is running, so whatever is under the root
+            // was left by a run the app was killed in the middle of. Nothing
+            // purges the App Group container; this is its only sweep.
+            try? FileManager.default.removeItem(at: workingRoot())
             let coreId = UUID().uuidString
             let paths = try prepareWorkingDirectory(coreId: coreId)
             var started = false

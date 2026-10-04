@@ -2,7 +2,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { repoRootFromScript, run } from "../lib/common.mjs";
-import { checkMobileLegalAssets } from "../native/mobile/legal-assets.mjs";
 
 /**
  * Bundles the mobile app for both platforms.
@@ -19,7 +18,6 @@ const mobileRoot = resolve(repoRoot, "apps/mobile");
 const outputDir = mkdtempSync(join(tmpdir(), "voyavpn-mobile-bundle-"));
 
 try {
-  checkMobileLegalAssets();
   for (const platform of ["ios", "android"]) {
     run(
       "pnpm",

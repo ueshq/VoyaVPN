@@ -11,6 +11,8 @@ import { renderScreen } from "~/test/providers";
 
 import { ActivityScreen } from "./activity-screen";
 
+const MONITOR_FAILED = "Could not read network activity. Retry.";
+
 function renderActivity() {
   return renderScreen(<ActivityScreen />);
 }
@@ -83,6 +85,25 @@ describe("ActivityScreen", () => {
       ).toEqual(["proxyStartMonitor", "proxyStopMonitor"]),
     );
     expect(backend.state.proxyMonitorRunning).toBe(false);
+  });
+
+  it("takes the failure banner down once a later start works", async () => {
+    connect();
+    const backend = mockBackend();
+    const start = backend.commands.proxyStartMonitor;
+    backend.commands.proxyStartMonitor = () => Promise.reject(new Error("core not ready"));
+    await renderActivity();
+    expect(await screen.findByText(MONITOR_FAILED)).toBeOnTheScreen();
+
+    // Coming back to the screen — here, a reconnect — starts it again.
+    backend.commands.proxyStartMonitor = start;
+    await act(async () => {
+      const { coreState, setCoreState } = useRuntimeEventStore.getState();
+      if (coreState) setCoreState({ ...coreState, state: "disconnected" });
+    });
+    await act(async () => connect());
+
+    await waitFor(() => expect(screen.queryByText(MONITOR_FAILED)).not.toBeOnTheScreen());
   });
 
   it("lists what is live, with the exit node and the traffic each one moved", async () => {

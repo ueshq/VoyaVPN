@@ -79,9 +79,10 @@ pub(super) struct Recorded<'a, F> {
 
 /// Measures nodes with a throwaway sing-box per page, probed over SOCKS.
 ///
-/// On macOS a connected PacketTunnel core takes over instead: every connection
-/// then goes through the tunnel, so a probe core would measure the node through
-/// the running VPN rather than directly.
+/// Where the core runs inside a tunnel provider (macOS, both phones) a
+/// connected core takes over instead: every connection then goes through the
+/// tunnel, so a probe core would measure the node through the running VPN
+/// rather than directly.
 #[derive(Clone)]
 pub struct SpeedtestManager {
     pub(super) probe: Arc<dyn SpeedtestProbe>,
@@ -122,8 +123,15 @@ impl SpeedtestManager {
         }
     }
 
-    /// macOS: while the PacketTunnel core is connected, measure through it.
-    /// The check runs per test, so a disconnected app still uses probe cores.
+    #[must_use]
+    pub const fn with_target_os(mut self, target_os: TargetOs) -> Self {
+        self.target_os = target_os;
+        self
+    }
+
+    /// Where the core runs inside a tunnel provider — macOS and both phones —
+    /// measure through it while it is connected. The check runs per test, so a
+    /// disconnected app still uses probe cores.
     #[must_use]
     pub fn with_running_core(mut self, running_core: Arc<dyn RunningCoreProbe>) -> Self {
         self.running_core = Some(running_core);

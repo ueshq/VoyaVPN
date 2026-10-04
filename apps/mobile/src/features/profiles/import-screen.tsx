@@ -23,7 +23,7 @@ import { Banner } from "~/components/banner";
 import { DetailScreen } from "~/components/detail-screen";
 import { ErrorNotice } from "~/components/error-notice";
 import { PrimaryButton } from "~/components/primary-button";
-import { useBusyAction } from "~/components/use-busy-action";
+import { useBusyAction } from "@voya/features/forms/use-busy-action";
 import { deviceActions } from "~/native/device-actions";
 
 /**
@@ -79,7 +79,7 @@ export function ImportScreen() {
     let nodes = 0;
     for (const id of ids) {
       try {
-        const result = await voyaCommands().updateSubscriptions(id, true, null);
+        const result = await voyaCommands().updateSubscriptions(id);
         if (result.outcomes.some((outcome) => outcome.status === "failed")) failed.push(id);
         nodes += result.imported + result.updated;
         const reason = subscriptionUpdateMessages(result, t);

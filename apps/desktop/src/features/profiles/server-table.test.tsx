@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
-import { createTestQueryClient, renderHookWithQuery, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderHookWithQuery, renderWithQuery } from "@voya/features/test/render";
 import { afterEach, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
@@ -690,8 +690,8 @@ describe("ProfilesScreen", () => {
 
     const dialog = screen.getByRole("dialog", { name: "Node details" });
     await waitFor(() => expect(dialog).toHaveTextContent("24.0 KB"));
-    expect(dialog).toHaveTextContent("Transportws");
-    expect(dialog).toHaveTextContent("Securitytls");
+    expect(dialog).toHaveTextContent("TransportWebSocket");
+    expect(dialog).toHaveTextContent("SecurityTLS");
     expect(ipcMocks.getProfile).toHaveBeenCalledWith("profile-3");
   });
 
@@ -1102,7 +1102,7 @@ describe("ProfilesScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() =>
-      expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith("sub-new", true, null),
+      expect(ipcMocks.updateSubscriptions).toHaveBeenCalledWith("sub-new"),
     );
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),

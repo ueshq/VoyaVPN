@@ -32,6 +32,8 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
     /// provider that already exited, with the supervisor's thread — and the
     /// user's next Connect behind it — waiting on this call.
     private static let idleStopQuietPeriod: TimeInterval = 3
+    /// How long a failed start waits to learn why the provider went down.
+    private static let disconnectReasonTimeout: TimeInterval = 5
 
     /// The installed configuration, kept between calls. The Rust side asks for
     /// `status()` every few seconds; reading the preferences each time was a
@@ -80,20 +82,43 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         case .invalid:
             throw TunnelError.PermissionDenied
         case .disconnected:
-            throw TunnelError.Failed(detail: "the tunnel stopped immediately after starting")
+            // The provider came up and went down again, which is how every
+            // rejected config ends: its own reason is what the user needs.
+            throw TunnelError.Failed(
+                detail: lastDisconnectError(manager.connection)
+                    ?? "the tunnel stopped immediately after starting",
+            )
         case .timedOut:
             // The session is still trying. Left alone it could come up after
             // this has reported a failure, with nothing in the app that
-            // believes a tunnel is running.
+            // believes a tunnel is running — so it is stopped, and waited for:
+            // a Connect right after this error must not meet it half down.
             manager.connection.stopVPNTunnel()
-            throw TunnelError.Failed(detail: "the tunnel did not come up within \(Int(Self.startTimeout))s")
+            var detail = "the tunnel did not come up within \(Int(Self.startTimeout))s"
+            switch waitForSettled(starting: false, timeout: Self.stopTimeout, connection: manager.connection) {
+            case .disconnected, .invalid:
+                break
+            case .ready, .timedOut:
+                detail += ", and was still starting \(Int(Self.stopTimeout))s after it was stopped"
+            }
+            throw TunnelError.Failed(detail: detail)
         }
     }
 
     func stop() throws {
         // Nothing installed is already stopped; a read that failed is not, and
-        // says so rather than being reported as a successful stop.
-        guard let manager = try currentManager() else { return }
+        // says so rather than being reported as a successful stop. A
+        // configuration read before still reaches its connection, though, as
+        // it does for `status`: a preferences read that timed out is no reason
+        // to leave the tunnel up.
+        let found: NETunnelProviderManager?
+        do {
+            found = try currentManager()
+        } catch {
+            guard let known = lastKnownManager() else { throw error }
+            found = known
+        }
+        guard let manager = found else { return }
         let connection = manager.connection
         connection.stopVPNTunnel()
 
@@ -163,7 +188,8 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
            manager.localizedDescription == Self.configurationName,
            storedProto?.providerBundleIdentifier == Self.providerBundleIdentifier,
            storedProto?.serverAddress == Self.configurationName,
-           storedProto?.includeAllNetworks == includeAllNetworks
+           storedProto?.includeAllNetworks == includeAllNetworks,
+           storedProto?.excludeLocalNetworks == true
         {
             return manager
         }
@@ -172,6 +198,9 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         // Required and otherwise unused: the provider is chosen by bundle id.
         proto.serverAddress = Self.configurationName
         proto.includeAllNetworks = includeAllNetworks
+        // The kill switch keeps traffic off the open network, not off the
+        // printer and the speaker in the same room; macOS does the same.
+        proto.excludeLocalNetworks = true
         manager.protocolConfiguration = proto
         manager.localizedDescription = Self.configurationName
         manager.isEnabled = true
@@ -206,6 +235,10 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         if generation == managerGeneration {
             manager = found
             managerLoaded = true
+        } else if managerLoaded {
+            // Saved while this was being read: the saved one is the answer,
+            // and what was read is older than it.
+            return manager
         }
         return found
     }
@@ -222,6 +255,10 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         defer { managerLock.unlock() }
         manager = saved
         managerLoaded = true
+        // A read that began before the save holds what the preferences said
+        // then — nothing at all, on a first connect. The notification that
+        // would outdate it is still on its way, so it is outdated here.
+        managerGeneration += 1
     }
 
     /// The user removed or edited the configuration in Settings, or this app
@@ -282,14 +319,35 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         }
     }
 
+    /**
+     * Why the session last went down, as the provider said it; `nil` where the
+     * system cannot say (before iOS 16) or does not answer in time. Diagnostics
+     * only, so the wait is short: the caller already has an error to report.
+     */
+    private func lastDisconnectError(_ connection: NEVPNConnection) -> String? {
+        guard #available(iOS 16.0, *) else { return nil }
+        let semaphore = DispatchSemaphore(value: 0)
+        var reason: String?
+        connection.fetchLastDisconnectError { error in
+            reason = error?.localizedDescription
+            semaphore.signal()
+        }
+        guard semaphore.wait(timeout: .now() + Self.disconnectReasonTimeout) == .success else {
+            return nil
+        }
+
+        return reason.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     // MARK: - Waiting
 
     private enum WaitResult { case ready, disconnected, invalid, timedOut }
 
     /**
      * The same state machine `crates/voya-platform/native/macos_tunnel_wait.h`
-     * runs on macOS, and for the same reasons: a start that never reaches
-     * `connecting` is a permission failure rather than a slow one, and a stop
+     * runs on macOS, and for the same reasons: a start only counts as failed
+     * once the session has been seen leaving `disconnected` and coming back
+     * (an `invalid` configuration is the permission failure), and a stop
      * can race a start still queued in `nesessionmanager`, so a disconnected
      * session only counts after it has stayed that way — for a second once it
      * was seen active, and for `idleStopQuietPeriod` when it never was.

@@ -74,47 +74,11 @@ async fn a_ui_only_change_commits_without_touching_the_runtime() {
         .await
         .expect("ui-only save");
 
-    assert_eq!(outcome.runtime_action, SettingsRuntimeAction::None);
     assert!(outcome.changed);
     assert_eq!(outcome.settings.appearance.language, "zh-Hans");
     assert_eq!(harness.stored().appearance.language, "zh-Hans");
     // The autostart entry did not change, so it was not touched.
     assert!(side_effects.calls().is_empty());
-}
-
-#[tokio::test]
-async fn a_generation_input_change_asks_for_a_core_restart() {
-    let harness = Harness::new().await;
-    let side_effects = RecordingSideEffects::default();
-    let mut settings = baseline();
-    settings.network.tun.mtu = 1400;
-
-    let outcome = save_app_settings(&harness.coordinator, &side_effects, &settings)
-        .await
-        .expect("tun mtu save");
-
-    assert_eq!(outcome.runtime_action, SettingsRuntimeAction::Restart);
-    assert_eq!(harness.stored().tun.mtu, 1400);
-}
-
-/// The system proxy is re-applied rather than restarting the core: nothing the
-/// core reads from its generated config changed.
-#[tokio::test]
-async fn a_system_proxy_change_only_reapplies_the_proxy() {
-    let harness = Harness::new().await;
-    let side_effects = RecordingSideEffects::default();
-    let mut settings = baseline();
-    settings.network.system_proxy.exceptions = "example.test".to_string();
-
-    let outcome = save_app_settings(&harness.coordinator, &side_effects, &settings)
-        .await
-        .expect("system proxy save");
-
-    assert_eq!(
-        outcome.runtime_action,
-        SettingsRuntimeAction::ReapplySystemProxy
-    );
-    assert_eq!(harness.stored().system_proxy.exceptions, "example.test");
 }
 
 #[tokio::test]
@@ -127,7 +91,6 @@ async fn saving_the_same_settings_reports_no_change() {
         .expect("no-op save");
 
     assert!(!outcome.changed);
-    assert_eq!(outcome.runtime_action, SettingsRuntimeAction::None);
 }
 
 #[tokio::test]

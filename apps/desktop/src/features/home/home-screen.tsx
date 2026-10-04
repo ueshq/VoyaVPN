@@ -19,8 +19,8 @@ import { type RuntimeAction } from "@voya/client/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
 import { ConnectedInfo } from "./connected-info";
-import { ExitIpMetric } from "./exit-ip-metric";
 import { HomeWorldMap } from "./home-world-map";
+import { exitIpLabel } from "@voya/features/home/exit-ip-label";
 import { useHomeRuntime } from "@voya/features/home/use-home-runtime";
 import { HomeModeSummary } from "./home-mode-summary";
 
@@ -215,7 +215,12 @@ export function HomeScreen() {
         ) : null}
         {!noNodes ? (
           <ConnectedInfo delayMs={delayMs} t={t}>
-            <ExitIpMetric t={t} />
+            <div>
+              <dt>{t("home.exitIp")}</dt>
+              <dd className="truncate" data-testid="home-exit-ip">
+                {exitIpLabel(home.exitIp, t)}
+              </dd>
+            </div>
           </ConnectedInfo>
         ) : null}
       </div>

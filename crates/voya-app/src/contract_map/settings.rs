@@ -24,7 +24,6 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettings {
         },
         behavior: contracts::BehaviorSettings {
             autostart: config.behavior.autostart,
-            auto_check_ip: config.behavior.auto_check_ip,
             close_action: close_action_to_contract(config.behavior.close_action),
             start_minimized: config.behavior.start_minimized,
             auto_create_subscription_group: config.behavior.auto_create_subscription_group,
@@ -152,7 +151,6 @@ pub fn app_config_from_settings(
         },
         behavior: BehaviorConfig {
             autostart: settings.behavior.autostart,
-            auto_check_ip: settings.behavior.auto_check_ip,
             close_action: close_action_from_contract(settings.behavior.close_action),
             start_minimized: settings.behavior.start_minimized,
             auto_create_subscription_group: settings.behavior.auto_create_subscription_group,
@@ -270,7 +268,6 @@ mod tests {
             },
             behavior: BehaviorConfig {
                 autostart: true,
-                auto_check_ip: false,
                 close_action: voya_core::CloseAction::Ask,
                 start_minimized: true,
                 auto_create_subscription_group: false,

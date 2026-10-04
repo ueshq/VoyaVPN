@@ -1,13 +1,14 @@
-import { act, renderHook } from "@testing-library/react-native";
+import { act, renderHook } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { useBusyAction } from "./use-busy-action";
 
 describe("useBusyAction", () => {
   it("refuses a second action while the first runs, and says it is busy", async () => {
-    const { result } = await renderHook(() => useBusyAction());
+    const { result } = renderHook(() => useBusyAction());
     let finish!: (value: string) => void;
-    const first = jest.fn(() => new Promise<string>((resolve) => (finish = resolve)));
-    const second = jest.fn(async () => "second");
+    const first = vi.fn(() => new Promise<string>((resolve) => (finish = resolve)));
+    const second = vi.fn(async () => "second");
 
     let running!: Promise<string | undefined>;
     await act(async () => {
@@ -24,7 +25,7 @@ describe("useBusyAction", () => {
   });
 
   it("lets a rejection through and is ready for the next action", async () => {
-    const { result } = await renderHook(() => useBusyAction());
+    const { result } = renderHook(() => useBusyAction());
 
     await act(async () => {
       await expect(

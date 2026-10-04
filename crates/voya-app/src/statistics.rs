@@ -1,5 +1,6 @@
 use std::{
-    sync::{Arc, Mutex, PoisonError},
+    future::Future,
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -15,8 +16,11 @@ use voya_db::{Database, DbError};
 use voya_net::clash::{ClashTraffic, ClashWebSocketEvent, ClashWebSocketResource};
 
 use crate::{
-    backoff::sleep_or_shutdown, clash_follow::follow_core_ws, proxy_runtime::ProxyRuntimeManager,
-    supervisor::CoreSupervisor,
+    backoff::sleep_or_shutdown,
+    clash_follow::follow_core_ws,
+    proxy_runtime::ProxyRuntimeManager,
+    shutdown_task::ShutdownTask,
+    supervisor::{ClashApiAccess, CoreSupervisor, SupervisorSnapshot},
 };
 
 mod target;
@@ -49,17 +53,12 @@ pub enum StatisticsError {
 pub struct ServerSpeedSample {
     pub proxy_up_bytes: i64,
     pub proxy_down_bytes: i64,
-    pub direct_up_bytes: i64,
-    pub direct_down_bytes: i64,
 }
 
 impl ServerSpeedSample {
     #[must_use]
     const fn has_traffic(self) -> bool {
-        self.proxy_up_bytes > 0
-            || self.proxy_down_bytes > 0
-            || self.direct_up_bytes > 0
-            || self.direct_down_bytes > 0
+        self.proxy_up_bytes > 0 || self.proxy_down_bytes > 0
     }
 
     fn add(&mut self, sample: Self) {
@@ -69,12 +68,6 @@ impl ServerSpeedSample {
         self.proxy_down_bytes = self
             .proxy_down_bytes
             .saturating_add(sample.proxy_down_bytes.max(0));
-        self.direct_up_bytes = self
-            .direct_up_bytes
-            .saturating_add(sample.direct_up_bytes.max(0));
-        self.direct_down_bytes = self
-            .direct_down_bytes
-            .saturating_add(sample.direct_down_bytes.max(0));
     }
 }
 
@@ -83,10 +76,6 @@ impl ServerSpeedSample {
 pub fn zero_statistics_snapshot() -> StatisticsSnapshot {
     StatisticsSnapshot {
         active_profile_id: None,
-        proxy_upload_bytes_per_second: 0.0,
-        proxy_download_bytes_per_second: 0.0,
-        direct_upload_bytes_per_second: 0.0,
-        direct_download_bytes_per_second: 0.0,
         upload_bytes_per_second: 0.0,
         download_bytes_per_second: 0.0,
         server_stat: None,
@@ -98,10 +87,8 @@ pub trait StatisticsEventSink: Send + Sync {
 }
 
 pub struct StatisticsManager {
-    shutdown: watch::Sender<bool>,
-    /// Writes the samples to SQLite. Taken by `shutdown`, which waits for its
-    /// final flush.
-    aggregator: Mutex<Option<JoinHandle<()>>>,
+    /// Writes the samples to SQLite; `shutdown` waits for its final flush.
+    aggregator: ShutdownTask,
     /// Reads the core's traffic stream; holds nothing worth waiting for.
     collector: JoinHandle<()>,
 }
@@ -114,25 +101,25 @@ impl StatisticsManager {
         event_sink: Arc<dyn StatisticsEventSink>,
     ) -> Self {
         let (sample_tx, sample_rx) = mpsc::channel(STATISTICS_CHANNEL_SIZE);
-        let (shutdown, shutdown_rx) = watch::channel(false);
 
-        let aggregator = tokio::spawn(run_statistics_aggregator(
-            database,
-            supervisor.clone(),
-            proxy_runtime,
-            event_sink,
-            sample_rx,
-            shutdown_rx.clone(),
-        ));
+        let aggregator = ShutdownTask::spawn(|shutdown| {
+            run_statistics_aggregator(
+                database,
+                supervisor.clone(),
+                proxy_runtime,
+                event_sink,
+                sample_rx,
+                shutdown,
+            )
+        });
         let collector = tokio::spawn(run_singbox_statistics_service(
             supervisor,
             sample_tx,
-            shutdown_rx,
+            aggregator.subscribe(),
         ));
 
         Self {
-            shutdown,
-            aggregator: Mutex::new(Some(aggregator)),
+            aggregator,
             collector,
         }
     }
@@ -141,27 +128,13 @@ impl StatisticsManager {
     /// traffic it still buffers. Tauri ends the process with
     /// `std::process::exit`, so a flush that was only signalled would be lost.
     pub async fn shutdown(&self) {
-        let _ = self.shutdown.send(true);
         // It may sit in a websocket connect for seconds; there is nothing to
         // save there.
         self.collector.abort();
-        // The guard is dropped before the await: holding a std lock across one
-        // would be a deadlock waiting to happen. A poisoned slot still holds
-        // the handle, and skipping it would drop the buffered traffic.
-        let aggregator = self
-            .aggregator
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take();
-        if let Some(aggregator) = aggregator {
-            // A `JoinError` means the loop panicked or was aborted; either way
-            // it is no longer running, which is all this call promises.
-            let _ = aggregator.await;
-        }
+        self.aggregator.shutdown().await;
     }
 
     async fn initialize_data(database: &Database, date_now: i64) -> Result<()> {
-        database.server_stats().delete_orphans().await?;
         database.server_stats().reset_rollover(date_now).await?;
 
         Ok(())
@@ -170,34 +143,8 @@ impl StatisticsManager {
 
 impl Drop for StatisticsManager {
     fn drop(&mut self) {
-        let _ = self.shutdown.send(true);
         self.collector.abort();
-        if let Some(aggregator) = self
-            .aggregator
-            .get_mut()
-            .unwrap_or_else(PoisonError::into_inner)
-        {
-            aggregator.abort();
-        }
     }
-}
-
-async fn add_traffic(
-    database: &Database,
-    index_id: &str,
-    date_now: i64,
-    sample: ServerSpeedSample,
-) -> Result<ServerStatItem> {
-    database
-        .server_stats()
-        .add_traffic(
-            index_id,
-            date_now,
-            sample.proxy_up_bytes,
-            sample.proxy_down_bytes,
-        )
-        .await
-        .map_err(Into::into)
 }
 
 /// Traffic measured but not yet written to SQLite.
@@ -266,9 +213,19 @@ async fn flush_traffic_buffer(database: &Database, buffer: &mut TrafficWriteBuff
         return Ok(());
     }
 
-    let stat = add_traffic(database, &index_id, date_now, buffer.buffered).await?;
+    let stat = database
+        .server_stats()
+        .add_traffic(
+            &index_id,
+            date_now,
+            buffer.buffered.proxy_up_bytes,
+            buffer.buffered.proxy_down_bytes,
+        )
+        .await?;
     buffer.buffered = ServerSpeedSample::default();
-    buffer.baseline = Some(stat);
+    // `None`: the node was deleted with bytes still buffered for it. They have
+    // no row to go to, and keeping them would repeat the write every flush.
+    buffer.baseline = stat;
 
     Ok(())
 }
@@ -322,19 +279,21 @@ impl From<ClashTraffic> for ServerSpeedSample {
         Self {
             proxy_up_bytes: i64::try_from(traffic.up).unwrap_or(i64::MAX),
             proxy_down_bytes: i64::try_from(traffic.down).unwrap_or(i64::MAX),
-            direct_up_bytes: 0,
-            direct_down_bytes: 0,
         }
     }
 }
 
+/// The day "today's" counters belong to: the local calendar date, so they
+/// reset at the user's midnight. The UTC day stands in where the platform
+/// cannot say what the local date is.
 #[must_use]
 fn current_day_marker() -> i64 {
-    SystemTime::now()
+    let unix_seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| {
-            i64::try_from(duration.as_secs() / 86_400).unwrap_or(i64::MAX)
-        })
+            i64::try_from(duration.as_secs()).unwrap_or(i64::MAX)
+        });
+    voya_platform::localtime::local_day_number(unix_seconds).unwrap_or(unix_seconds / 86_400)
 }
 
 async fn run_statistics_aggregator(
@@ -350,12 +309,17 @@ async fn run_statistics_aggregator(
     }
 
     let mut interval = time::interval(COALESCE_INTERVAL);
+    // A tick that ran long is followed by the next one a full interval later.
+    // The default bursts to catch up, and each catch-up tick would report the
+    // 0 B/s of the instant it covers.
+    interval.set_missed_tick_behavior(time::MissedTickBehavior::Delay);
     let mut pending = ServerSpeedSample::default();
     let mut emitted_traffic = false;
     let mut day_marker = current_day_marker();
     let mut buffer = TrafficWriteBuffer::default();
     let mut ticks_since_flush = 0_u64;
     let mut target = TrafficTarget::new(database.clone(), proxy_runtime);
+    let mut running_core = RunningCore::new(supervisor.subscribe_clash_api());
 
     loop {
         tokio::select! {
@@ -377,17 +341,19 @@ async fn run_statistics_aggregator(
                 // Only measured bytes need a node to go to, so an idle core
                 // costs the supervisor and the Clash API nothing.
                 if sample.has_traffic() {
-                    follow_running_core(&supervisor, &mut target).await;
+                    let has_target = target.current().is_some();
+                    let snapshot = running_core
+                        .snapshot(has_target, || read_running_core(&supervisor))
+                        .await;
+                    if let Some(snapshot) = snapshot {
+                        target.follow(snapshot).await;
+                    }
                 }
                 let current_day = current_day_marker();
                 if current_day != day_marker {
-                    // Buffered bytes were measured yesterday, and the rollover
-                    // is about to zero today's counters for every row.
-                    if let Err(error) = flush_traffic_buffer(&database, &mut buffer).await {
-                        tracing::warn!(?error, "failed to flush statistics before day rollover");
-                    }
+                    roll_over_statistics_day(&database, &mut buffer, current_day).await;
+                    day_marker = current_day;
                 }
-                day_marker = roll_over_statistics_day(&database, day_marker, current_day).await;
                 ticks_since_flush = ticks_since_flush.saturating_add(1);
                 let flush_due = ticks_since_flush >= TRAFFIC_FLUSH_TICKS;
                 if flush_due {
@@ -423,12 +389,59 @@ async fn run_statistics_aggregator(
     }
 }
 
-/// Points `target` at what the running core serves. A supervisor that does
-/// not answer in time leaves the target where it was.
-async fn follow_running_core(supervisor: &CoreSupervisor, target: &mut TrafficTarget) {
-    if let Ok(Ok(snapshot)) = time::timeout(RUNNING_CORE_TIMEOUT, supervisor.status()).await {
-        target.follow(&snapshot).await;
+/// The supervisor's last answer about the running core, asked for again only
+/// when that core changed.
+///
+/// Asking costs a round trip through the supervisor's own thread, which a core
+/// start or stop occupies for seconds, and it used to be paid on every tick
+/// that carried traffic. What a snapshot says about the traffic's target moves
+/// only with the core, and every start, stop and restart moves the Clash API
+/// access: a start mints a new token and a stop clears it.
+struct RunningCore {
+    access: watch::Receiver<ClashApiAccess>,
+    snapshot: Option<SupervisorSnapshot>,
+}
+
+impl RunningCore {
+    const fn new(access: watch::Receiver<ClashApiAccess>) -> Self {
+        Self {
+            access,
+            snapshot: None,
+        }
     }
+
+    /// The snapshot to follow, or `None` when the supervisor had to be asked
+    /// and did not answer: the target then stays where it was, and the next
+    /// tick asks again.
+    ///
+    /// Traffic that has no target yet always asks. The snapshot it would
+    /// reuse was taken before the core finished connecting.
+    async fn snapshot<Fut>(
+        &mut self,
+        has_target: bool,
+        read: impl FnOnce() -> Fut,
+    ) -> Option<&SupervisorSnapshot>
+    where
+        Fut: Future<Output = Option<SupervisorSnapshot>>,
+    {
+        // A closed channel means the supervisor is gone; asking says so.
+        let moved = self.access.has_changed().unwrap_or(true);
+        if moved || !has_target || self.snapshot.is_none() {
+            // Marked seen before the read, so a core that changes during it
+            // is asked about again.
+            self.access.borrow_and_update();
+            self.snapshot = read().await;
+        }
+        self.snapshot.as_ref()
+    }
+}
+
+/// A supervisor that does not answer in time is not waited for.
+async fn read_running_core(supervisor: &CoreSupervisor) -> Option<SupervisorSnapshot> {
+    time::timeout(RUNNING_CORE_TIMEOUT, supervisor.status())
+        .await
+        .ok()?
+        .ok()
 }
 
 async fn run_singbox_statistics_service(
@@ -463,22 +476,27 @@ async fn run_singbox_statistics_service(
     .await;
 }
 
-/// Rolls every stored profile over when the calendar day changes.
+/// Rolls every stored profile over to `current`, the day that has just begun.
 ///
-/// `add_traffic` only rolls the row it touches, so without this every profile
+/// A traffic write only rolls the row it touches, so without this every profile
 /// other than the active one keeps showing yesterday's "today" totals until the
-/// next launch runs `initialize_data`. Returns the marker to keep using.
-async fn roll_over_statistics_day(database: &Database, previous: i64, current: i64) -> i64 {
-    if previous != current {
-        if let Err(error) = database.server_stats().reset_rollover(current).await {
-            tracing::warn!(
-                ?error,
-                "failed to roll server statistics over to the new day"
-            );
-        }
+/// next launch runs `initialize_data`.
+async fn roll_over_statistics_day(
+    database: &Database,
+    buffer: &mut TrafficWriteBuffer,
+    current: i64,
+) {
+    // Buffered bytes were measured yesterday, and the rollover is about to
+    // zero today's counters for every row.
+    if let Err(error) = flush_traffic_buffer(database, buffer).await {
+        tracing::warn!(?error, "failed to flush statistics before day rollover");
     }
-
-    current
+    if let Err(error) = database.server_stats().reset_rollover(current).await {
+        tracing::warn!(
+            ?error,
+            "failed to roll server statistics over to the new day"
+        );
+    }
 }
 
 /// Emits while traffic flows and once more when it stops, so the speed display
@@ -495,14 +513,8 @@ fn snapshot_from_sample(
 ) -> StatisticsSnapshot {
     StatisticsSnapshot {
         active_profile_id: active_profile_id.map(str::to_string),
-        proxy_upload_bytes_per_second: sample.proxy_up_bytes.max(0) as f64,
-        proxy_download_bytes_per_second: sample.proxy_down_bytes.max(0) as f64,
-        direct_upload_bytes_per_second: sample.direct_up_bytes.max(0) as f64,
-        direct_download_bytes_per_second: sample.direct_down_bytes.max(0) as f64,
-        upload_bytes_per_second: sample.proxy_up_bytes.max(0) as f64
-            + sample.direct_up_bytes.max(0) as f64,
-        download_bytes_per_second: sample.proxy_down_bytes.max(0) as f64
-            + sample.direct_down_bytes.max(0) as f64,
+        upload_bytes_per_second: sample.proxy_up_bytes.max(0) as f64,
+        download_bytes_per_second: sample.proxy_down_bytes.max(0) as f64,
         server_stat: server_stat.map(crate::contract_map::server_stat_to_contract),
     }
 }
@@ -523,8 +535,6 @@ mod tests {
             ServerSpeedSample {
                 proxy_up_bytes: 1234,
                 proxy_down_bytes: 5678,
-                direct_up_bytes: 0,
-                direct_down_bytes: 0,
             }
         );
         let overflow = ServerSpeedSample::from(ClashTraffic {
@@ -536,7 +546,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn statistics_record_tick_keys_persistence_to_active_server_and_sums_display() {
+    async fn statistics_record_tick_keys_persistence_to_active_server() {
         let database = Database::connect_in_memory()
             .await
             .expect("statistics test operation should succeed");
@@ -559,8 +569,6 @@ mod tests {
             ServerSpeedSample {
                 proxy_up_bytes: 1000,
                 proxy_down_bytes: 2000,
-                direct_up_bytes: 300,
-                direct_down_bytes: 400,
             },
             10,
             true,
@@ -568,8 +576,8 @@ mod tests {
         .await
         .expect("statistics test operation should succeed");
 
-        assert_eq!(snapshot.upload_bytes_per_second, 1300.0);
-        assert_eq!(snapshot.download_bytes_per_second, 2400.0);
+        assert_eq!(snapshot.upload_bytes_per_second, 1000.0);
+        assert_eq!(snapshot.download_bytes_per_second, 2000.0);
         assert_eq!(
             snapshot
                 .server_stat
@@ -628,7 +636,6 @@ mod tests {
 
         assert_eq!(snapshot.upload_bytes_per_second, 0.0);
         assert_eq!(snapshot.download_bytes_per_second, 0.0);
-        assert_eq!(snapshot.proxy_download_bytes_per_second, 0.0);
         assert!(snapshot.server_stat.is_none());
         assert!(
             database
@@ -686,8 +693,6 @@ mod tests {
             ServerSpeedSample {
                 proxy_up_bytes: 5,
                 proxy_down_bytes: 7,
-                direct_up_bytes: 11,
-                direct_down_bytes: 13,
             },
             2,
             true,
@@ -730,14 +735,7 @@ mod tests {
                 .expect("statistics test operation should succeed");
         }
 
-        assert_eq!(roll_over_statistics_day(&database, 1, 1).await, 1);
-        assert_eq!(
-            stat_row(&database, "idle").await.today_up,
-            90,
-            "a tick inside the same day must not touch stored totals"
-        );
-
-        assert_eq!(roll_over_statistics_day(&database, 1, 2).await, 2);
+        roll_over_statistics_day(&database, &mut TrafficWriteBuffer::default(), 2).await;
 
         let idle = stat_row(&database, "idle").await;
         assert_eq!(idle.today_up, 0);
@@ -765,7 +763,6 @@ mod tests {
         let sample = ServerSpeedSample {
             proxy_up_bytes: 10,
             proxy_down_bytes: 20,
-            ..ServerSpeedSample::default()
         };
 
         // Tick 1 writes through to establish a baseline the UI can project from.
@@ -821,7 +818,6 @@ mod tests {
         let sample = ServerSpeedSample {
             proxy_up_bytes: 7,
             proxy_down_bytes: 11,
-            ..ServerSpeedSample::default()
         };
 
         tick(&database, config, &mut buffer, sample, false).await;
@@ -834,6 +830,47 @@ mod tests {
 
         assert_eq!(stat_row(&database, "active").await.total_up, 14);
         assert_eq!(stat_row(&database, "active").await.total_down, 22);
+    }
+
+    /// Deleting the connected node disconnects it with up to a flush window
+    /// of its traffic still buffered. That traffic has no row left to go to;
+    /// it must be dropped once, not retried — and warned about — every flush.
+    #[tokio::test]
+    async fn statistics_for_a_deleted_profile_are_dropped_without_an_error() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("statistics test operation should succeed");
+        database
+            .profiles()
+            .upsert(&sample_profile("active"))
+            .await
+            .expect("statistics test operation should succeed");
+        let config = Some("active");
+        let mut buffer = TrafficWriteBuffer::default();
+        let sample = ServerSpeedSample {
+            proxy_up_bytes: 7,
+            proxy_down_bytes: 11,
+        };
+        tick(&database, config, &mut buffer, sample, false).await;
+        tick(&database, config, &mut buffer, sample, false).await;
+        database
+            .profiles()
+            .delete("active")
+            .await
+            .expect("statistics test operation should succeed");
+
+        let snapshot = tick(
+            &database,
+            config,
+            &mut buffer,
+            ServerSpeedSample::default(),
+            true,
+        )
+        .await;
+
+        assert_eq!(snapshot.server_stat, None);
+        assert!(!buffer.buffered.has_traffic());
+        assert!(!buffer.baseline_write_failed);
     }
 
     /// Buffered bytes belong to the profile they were measured on; a switch
@@ -865,6 +902,50 @@ mod tests {
 
         assert_eq!(stat_row(&database, "first").await.total_up, 10);
         assert_eq!(stat_row(&database, "second").await.total_up, 5);
+    }
+
+    /// The supervisor is asked once per core, not once per tick.
+    #[tokio::test]
+    async fn the_running_core_is_read_again_only_when_it_changes() {
+        let (access_tx, access_rx) = watch::channel(ClashApiAccess::default());
+        let mut running_core = RunningCore::new(access_rx);
+        let reads = std::cell::Cell::new(0_u32);
+        let read = || {
+            reads.set(reads.get() + 1);
+            async { Some(SupervisorSnapshot::disconnected()) }
+        };
+
+        assert!(running_core.snapshot(false, read).await.is_some());
+        assert!(running_core.snapshot(true, read).await.is_some());
+        assert!(running_core.snapshot(true, read).await.is_some());
+        assert_eq!(reads.get(), 1, "an unchanged core was asked about again");
+
+        // Traffic nobody is credited with keeps asking: the cached snapshot
+        // was taken before the core finished connecting.
+        assert!(running_core.snapshot(false, read).await.is_some());
+        assert_eq!(reads.get(), 2);
+
+        access_tx
+            .send(ClashApiAccess::new(Some(10_814), None))
+            .expect("the receiver is alive");
+        assert!(running_core.snapshot(true, read).await.is_some());
+        assert!(running_core.snapshot(true, read).await.is_some());
+        assert_eq!(
+            reads.get(),
+            3,
+            "a new core must be asked about exactly once"
+        );
+
+        // No answer leaves nothing to follow, and the next tick asks again.
+        access_tx
+            .send(ClashApiAccess::default())
+            .expect("the receiver is alive");
+        assert!(running_core
+            .snapshot(true, || async { None })
+            .await
+            .is_none());
+        assert!(running_core.snapshot(true, read).await.is_some());
+        assert_eq!(reads.get(), 4);
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use voya_core::{
     AppConfig, ContextPolicyGroup, CoreGenEnv, CoreGenPlatform, LocalPort, PolicyGroupItem,
-    ProfileItem, RoutingItem,
+    ProfileItem, RoutingItem, TunTopology,
 };
 
 use crate::supervisor::ClashApiSecret;
@@ -11,6 +11,7 @@ use crate::supervisor::ClashApiSecret;
 pub(crate) struct SnapshotCoreGenEnv {
     local_socks_port: i32,
     platform: CoreGenPlatform,
+    tun_topology: TunTopology,
     profiles: Vec<ProfileItem>,
     routings: Vec<RoutingItem>,
     policy_groups: Vec<PolicyGroupItem>,
@@ -37,11 +38,9 @@ impl SnapshotCoreGenEnv {
         routings: Vec<RoutingItem>,
     ) -> Self {
         Self {
-            local_socks_port: config
-                .inbounds
-                .first()
-                .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port),
+            local_socks_port: config.local_port(),
             platform,
+            tun_topology: TunTopology::for_platform(platform),
             profiles,
             routings,
             policy_groups: Vec::new(),
@@ -49,6 +48,15 @@ impl SnapshotCoreGenEnv {
             clash_api_secret: None,
             ipv6_unsupported_nodes: BTreeSet::new(),
         }
+    }
+
+    /// One config carries the TUN inbound and the outbounds, whatever the
+    /// platform's default split. Android generates for a Linux kernel, whose
+    /// default is the privileged pre-socks pair, but its `VpnService` runs a
+    /// single core exactly as the PacketTunnel does.
+    pub(crate) const fn with_single_process_tun(mut self) -> Self {
+        self.tun_topology = TunTopology::SingleProcess;
+        self
     }
 
     /// The policy groups routing rules can name.
@@ -86,6 +94,10 @@ impl SnapshotCoreGenEnv {
 impl CoreGenEnv for SnapshotCoreGenEnv {
     fn platform(&self) -> CoreGenPlatform {
         self.platform
+    }
+
+    fn tun_topology(&self) -> TunTopology {
+        self.tun_topology
     }
 
     fn get_profile_by_remarks(&self, remarks: &str) -> Option<ProfileItem> {

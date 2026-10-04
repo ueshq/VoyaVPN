@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
-import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ProcessCandidate, Routing_Serialize, RoutingRule } from "@voya/contracts";

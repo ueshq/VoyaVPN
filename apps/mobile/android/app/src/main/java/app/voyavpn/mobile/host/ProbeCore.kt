@@ -18,16 +18,18 @@ class ProbeCore(private val context: Context) : LibboxPlatform(context) {
         val base = File(context.cacheDir, "probe/${System.nanoTime()}").apply { mkdirs() }
         directory = base
         try {
-            Libbox.setup(SetupOptions().apply {
-                basePath = base.absolutePath
-                workingPath = basePath
-                tempPath = basePath
-                // Libbox's own log buffer is for a command client; nothing
-                // connects one, so it would only hold lines nobody reads.
-                logMaxLines = 0
-            })
-            box = Libbox.newCommandServer(this, this)
-            box?.startOrReloadService(configJson, OverrideOptions())
+            synchronized(setupLock) {
+                Libbox.setup(SetupOptions().apply {
+                    basePath = base.absolutePath
+                    workingPath = basePath
+                    tempPath = basePath
+                    // Libbox's own log buffer is for a command client; nothing
+                    // connects one, so it would only hold lines nobody reads.
+                    logMaxLines = 0
+                })
+                box = Libbox.newCommandServer(this, this)
+                box?.startOrReloadService(configJson, OverrideOptions())
+            }
         } catch (error: Throwable) {
             // Whatever got as far as existing — the directory at least — goes.
             runCatching { stop() }

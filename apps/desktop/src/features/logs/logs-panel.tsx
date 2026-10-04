@@ -32,10 +32,8 @@ import {
 } from "@voya/ui/components/select";
 import { useI18n } from "@voya/i18n/use-i18n";
 
-import { formatTimeOfDay } from "@voya/utils/formatting";
 import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { StoredLogLine } from "@voya/client/runtime-event-store";
 import type { LogLevel } from "@voya/contracts";
 import { restoreFocus } from "@voya/ui/lib/focus";
 import { cn } from "@voya/ui/lib/utils";
@@ -44,7 +42,7 @@ import { writeClipboard } from "@/lib/clipboard";
 import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { toastError, useToastStore } from "@voya/client/toast-store";
 
-import { resolveLogLine } from "@voya/features/logs/resolve-log-line";
+import { type ResolvedLogLine, resolveLogLine } from "@voya/features/logs/resolve-log-line";
 import { useLogStream } from "@voya/features/logs/use-log-stream";
 
 export type LogFilter = "standard" | "issues" | "all";
@@ -69,7 +67,7 @@ export function LogsPanel({
   useLogStream(active);
   const clearLogs = useRuntimeEventStore((state) => state.clearLogs);
   const logLines = useRuntimeEventStore((state) => state.logLines);
-  const [selected, setSelected] = useState<StoredLogLine | null>(null);
+  const [selected, setSelected] = useState<ResolvedLogLine | null>(null);
   const returnFocusRef = useRef<HTMLButtonElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const needle = search.trim().toLowerCase();
@@ -274,7 +272,7 @@ export function LogsPanel({
                       }}
                     >
                       <time className="tabular-nums text-muted-foreground">
-                        {formatTimeOfDay(line.loggedAt)}
+                        {line.time}
                       </time>
                       <Badge
                         className={cn(
@@ -331,12 +329,12 @@ export function LogsPanel({
             <DialogTitle>{t("panes.logs.details")}</DialogTitle>
             <DialogDescription>
               {selected
-                ? `${formatTimeOfDay(selected.loggedAt)} · ${levels[selected.level]}`
+                ? `${selected.time} · ${levels[selected.level]}`
                 : ""}
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="select-text whitespace-pre-wrap font-mono text-sm [overflow-wrap:anywhere]">
-            {selected ? resolveLogLine(t, selected).text : ""}
+            {selected?.text ?? ""}
           </DialogBody>
         </ScrollableDialogContent>
       </Dialog>

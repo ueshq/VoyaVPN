@@ -38,7 +38,7 @@ type ProbeResponse = {
 /** Opens a TCP connection and reports how it ended; never throws. */
 export type Dialer = (address: string, port: number, timeoutMs: number) => Promise<ProbeOutcome>;
 
-export type ProbeDeps = {
+type ProbeDeps = {
   dial: Dialer;
   /** Per-caller rate limit; absent in local development. */
   limiter?: { limit(options: { key: string }): Promise<{ success: boolean }> };

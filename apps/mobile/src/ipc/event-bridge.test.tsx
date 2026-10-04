@@ -73,14 +73,12 @@ describe("EventBridge", () => {
         level: "info",
       },
     });
-    transport.emit("appEvent", { kind: "selectTab", payload: "proxyConnections" });
-    // The runtime log is a Settings row here, not a page of its own.
-    transport.emit("appEvent", { kind: "selectTab", payload: "logs" });
+    transport.emit("appEvent", { kind: "selectTab", payload: "profiles" });
 
     expect(useToastStore.getState().toasts).toMatchObject([
       { description: "the tray handle is gone", severity: "info" },
     ]);
-    expect(mockNavigate.mock.calls.flat()).toEqual(["activity", "logs"]);
+    expect(mockNavigate.mock.calls.flat()).toEqual(["profiles"]);
     await unmount();
   });
 

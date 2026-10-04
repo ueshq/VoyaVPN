@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import type { AppSettings } from "@voya/contracts";

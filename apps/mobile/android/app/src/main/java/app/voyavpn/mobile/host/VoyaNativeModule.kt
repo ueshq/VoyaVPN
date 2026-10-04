@@ -136,6 +136,9 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
      */
     @Synchronized
     private fun resetWithoutHost() {
+        // A reload that got the lock first has handed the database to this
+        // module's successor, which may be opening it right now.
+        check(!invalidated) { "the native module has been invalidated" }
         app.also { app = null }?.shutdown()
         resetDatabase(context.filesDir.absolutePath)
     }
@@ -199,7 +202,27 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
                 VoyaVpnService.state = VoyaVpnService.State.FAILED
                 throw TunnelException.Failed(error.message ?: "could not start the tunnel service")
             }
-            awaitState(VoyaVpnService.State.RUNNING, START_TIMEOUT_MS)
+            if (!awaitState(VoyaVpnService.State.RUNNING, START_TIMEOUT_MS)) {
+                // The service is still trying. Left alone it could come up
+                // after this has reported a failure, holding the device's
+                // traffic with nothing in the app that believes a tunnel runs.
+                try {
+                    context.startService(
+                        Intent(context, VoyaVpnService::class.java).apply {
+                            action = VoyaVpnService.ACTION_STOP
+                        },
+                    )
+                    // The start is still on the service's worker, with the
+                    // stop queued behind it. Reported now, a connect made
+                    // straight away would read whatever that start ends with
+                    // as its own outcome — the state is shared by every
+                    // attempt — so this one is over only once it has settled.
+                    awaitSettled(STOP_TIMEOUT_MS)
+                } catch (error: Throwable) {
+                    android.util.Log.w("VoyaNative", "could not stop a tunnel that never came up", error)
+                }
+                throw TunnelException.Failed("the tunnel did not come up within ${START_TIMEOUT_MS}ms")
+            }
         }
 
         override fun stop() {
@@ -220,7 +243,9 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
                 VoyaVpnService.state = previous
                 throw TunnelException.Failed(error.message ?: "could not reach the tunnel service")
             }
-            awaitState(VoyaVpnService.State.STOPPED, STOP_TIMEOUT_MS)
+            if (!awaitState(VoyaVpnService.State.STOPPED, STOP_TIMEOUT_MS)) {
+                throw TunnelException.Failed("the tunnel was still up after ${STOP_TIMEOUT_MS}ms")
+            }
         }
 
         override fun status(): String = when (VoyaVpnService.state) {
@@ -230,18 +255,30 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
             VoyaVpnService.State.FAILED -> "error"
         }
 
-        private fun awaitState(wanted: VoyaVpnService.State, timeoutMs: Long) {
+        /** `false` when the time ran out; a service that failed throws its reason. */
+        private fun awaitState(wanted: VoyaVpnService.State, timeoutMs: Long): Boolean {
             val deadline = System.currentTimeMillis() + timeoutMs
             while (System.currentTimeMillis() < deadline) {
                 when (VoyaVpnService.state) {
-                    wanted -> return
+                    wanted -> return true
                     VoyaVpnService.State.FAILED -> throw TunnelException.Failed(
                         VoyaVpnService.lastError ?: "the tunnel service failed to start",
                     )
                     else -> Thread.sleep(POLL_INTERVAL_MS)
                 }
             }
-            throw TunnelException.Failed("the tunnel did not reach $wanted within ${timeoutMs}ms")
+            return false
+        }
+
+        /** Waits, for at most `timeoutMs`, until nothing is starting, running or stopping. */
+        private fun awaitSettled(timeoutMs: Long) {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (System.currentTimeMillis() < deadline) {
+                when (VoyaVpnService.state) {
+                    VoyaVpnService.State.STOPPED, VoyaVpnService.State.FAILED -> return
+                    else -> Thread.sleep(POLL_INTERVAL_MS)
+                }
+            }
         }
     }
 

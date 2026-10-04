@@ -30,7 +30,6 @@ use crate::updates::local_singbox_ruleset_paths;
 
 pub const MAIN_CONFIG_FILE_NAME: &str = "config.json";
 pub const PRE_CONFIG_FILE_NAME: &str = "configPre.json";
-const SUDO_SCRIPT_DIR_NAME: &str = "sudo";
 
 #[derive(Clone)]
 pub struct RuntimeManager<'runtime> {
@@ -378,7 +377,6 @@ impl LaunchPreparation {
                 pre,
                 tun_enabled: config.tun.enabled,
                 kill_switch: config.tun.strict_route,
-                sudo_script_dir: paths.temp_dir().join(SUDO_SCRIPT_DIR_NAME),
                 restart_on_crash: true,
                 // Taken from the generated main context, not from the TUN
                 // setting: those disagree on a pre-socks topology.
@@ -442,8 +440,8 @@ fn process_spec(
     context: &CoreConfigContext,
     config_file_name: &str,
 ) -> Result<CoreProcessSpec, RuntimeError> {
-    let spec = if matches!(target_os, TargetOs::Macos | TargetOs::Ios) {
-        // macOS and iOS run sing-box inside the PacketTunnel provider;
+    let spec = if target_os.runs_core_in_tunnel_provider() {
+        // macOS and both phones run sing-box inside their tunnel provider;
         // connecting never requires a standalone executable on disk.
         CoreProcessSpec::native_tun()
     } else {
@@ -657,7 +655,7 @@ pub(crate) async fn load_runtime_core_gen_env(
     let profiles = database.profiles().list().await?;
     let ipv6_unsupported_nodes =
         crate::ipv6_egress::Ipv6EgressStore::new(paths).unsupported_nodes(&profiles);
-    Ok(SnapshotCoreGenEnv::new(
+    let env = SnapshotCoreGenEnv::new(
         config,
         core_gen_platform(target_os),
         profiles,
@@ -665,7 +663,14 @@ pub(crate) async fn load_runtime_core_gen_env(
     )
     .with_policy_groups(database.policy_groups().list().await?)
     .with_singbox_ruleset_paths(local_singbox_ruleset_paths(paths))
-    .with_ipv6_unsupported_nodes(ipv6_unsupported_nodes))
+    .with_ipv6_unsupported_nodes(ipv6_unsupported_nodes);
+
+    // A tunnel provider is one core: there is no second process to split into.
+    Ok(if target_os.runs_core_in_tunnel_provider() {
+        env.with_single_process_tun()
+    } else {
+        env
+    })
 }
 
 pub(crate) const fn core_gen_platform(target_os: TargetOs) -> CoreGenPlatform {
@@ -1089,6 +1094,11 @@ mod tests {
     #[tokio::test]
     async fn runtime_ios_native_tun_writes_single_tun_config() {
         assert_native_tun_writes_single_tun_config(TargetOs::Ios).await;
+    }
+
+    #[tokio::test]
+    async fn runtime_android_native_tun_writes_single_tun_config() {
+        assert_native_tun_writes_single_tun_config(TargetOs::Android).await;
     }
 
     async fn assert_native_tun_writes_single_tun_config(target_os: TargetOs) {

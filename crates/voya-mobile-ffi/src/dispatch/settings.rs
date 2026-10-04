@@ -45,7 +45,7 @@ struct SaveSettings {
 
 /// Validation, the pre-commit side effects, the commit and both rollback paths
 /// are the transaction in `voya_app::settings`, where they are unit-tested.
-/// What is left here is announcing the caches and the runtime action it chose.
+/// What is left here is announcing the caches.
 pub(super) async fn save_app_settings(state: &MobileState, args: &str) -> Answer {
     let SaveSettings { settings } = arguments("save_app_settings", args)?;
     let outcome = voya_app::settings::save_app_settings(

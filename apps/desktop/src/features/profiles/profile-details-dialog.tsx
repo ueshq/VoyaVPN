@@ -18,8 +18,8 @@ import { profileDetailsQuery } from "@voya/client/profile-queries";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { ProfileSummaryEntry } from "@voya/contracts";
 
-import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
-import { profileLatency, profileTitle, profileTransportName } from "@voya/features/profiles/profile-display";
+import { getProtocolLabel, getTlsModeLabel, getTransportLabel } from "@voya/features/profiles/profile-constants";
+import { profileLatency, profileTitle } from "@voya/features/profiles/profile-display";
 import type { ServerTableController } from "./use-server-table";
 
 // Mounted only while open; the statistics selector watches this node alone.
@@ -48,6 +48,7 @@ export function ProfileDetailsDialog({
   const detailsQuery = useQuery(profileDetailsQuery(profile.id));
   const details = detailsQuery.data;
   const transport = details?.profile.transport;
+  const tls = details?.profile.tls;
   const traffic = details?.traffic;
   const bytes = (live: number | null | undefined, stored: number | null | undefined) => {
     const value = live ?? stored;
@@ -62,9 +63,9 @@ export function ProfileDetailsDialog({
     ["panes.profiles.cardFields.group", subscriptionName(item)],
     [
       "panes.profiles.cardFields.transport",
-      transport ? profileTransportName(transport) : "—",
+      transport ? getTransportLabel(transport.kind) : "—",
     ],
-    ["panes.profiles.cardFields.security", details?.profile.tls?.mode ?? "—"],
+    ["panes.profiles.cardFields.security", tls ? getTlsModeLabel(tls.mode) : "—"],
     ["panes.profiles.cardFields.delay", profileLatency(item, t)],
     ["panes.profiles.cardFields.ipInfo", item.metrics.ipInfo || "—"],
     ["panes.profiles.cardFields.todayUp", bytes(stat?.todayUp, traffic?.todayUpload)],

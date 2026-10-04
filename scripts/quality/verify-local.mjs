@@ -31,6 +31,8 @@ if (isCliEntrypoint(import.meta.url)) {
 
     runOrExit(invocation.file, invocation.args, {
       env: { ...process.env, CI: process.env.CI ?? "true" },
+      // Printed above, as the command a reader would type.
+      log: false,
     });
   }
 

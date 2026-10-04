@@ -2,6 +2,7 @@ package app.voyavpn.mobile.host
 
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import android.os.ParcelFileDescriptor
 import io.nekohasekai.libbox.CommandServer
 import io.nekohasekai.libbox.Libbox
@@ -16,22 +17,24 @@ class LibboxTunnel(private val service: VpnService) : LibboxPlatform(service) {
 
     fun start(configJson: String) {
         stop()
-        Libbox.setup(SetupOptions().apply {
-            basePath = service.filesDir.absolutePath
-            workingPath = basePath
-            tempPath = service.cacheDir.absolutePath
-            // Libbox's own log buffer is for a command client; nothing
-            // connects one, so it would only hold lines nobody reads.
-            logMaxLines = 0
-        })
-        val core = Libbox.newCommandServer(this, this)
-        box = core
-        try {
-            // start() exposes a separate command listener; the app uses the Clash API.
-            core.startOrReloadService(configJson, OverrideOptions())
-        } catch (error: Throwable) {
-            runCatching { stop() }
-            throw error
+        synchronized(setupLock) {
+            Libbox.setup(SetupOptions().apply {
+                basePath = service.filesDir.absolutePath
+                workingPath = basePath
+                tempPath = service.cacheDir.absolutePath
+                // Libbox's own log buffer is for a command client; nothing
+                // connects one, so it would only hold lines nobody reads.
+                logMaxLines = 0
+            })
+            val core = Libbox.newCommandServer(this, this)
+            box = core
+            try {
+                // start() exposes a separate command listener; the app uses the Clash API.
+                core.startOrReloadService(configJson, OverrideOptions())
+            } catch (error: Throwable) {
+                runCatching { stop() }
+                throw error
+            }
         }
     }
 
@@ -48,6 +51,10 @@ class LibboxTunnel(private val service: VpnService) : LibboxPlatform(service) {
 
     override fun openTun(options: TunOptions): Int {
         val builder = service.Builder().setSession("VoyaVPN").setMtu(options.mtu)
+        // A VPN is metered unless it says otherwise, and every app would then
+        // hold its updates and backups for as long as this one is connected.
+        // Unset, it takes after the network underneath.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
         val addresses = options.inet4Address
         while (addresses.hasNext()) addresses.next().let { builder.addAddress(it.address(), it.prefix()) }
         val addresses6 = options.inet6Address

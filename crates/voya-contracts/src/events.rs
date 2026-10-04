@@ -93,10 +93,6 @@ pub struct LogLineEvent {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StatisticsSnapshot {
     pub active_profile_id: Option<String>,
-    pub proxy_upload_bytes_per_second: f64,
-    pub proxy_download_bytes_per_second: f64,
-    pub direct_upload_bytes_per_second: f64,
-    pub direct_download_bytes_per_second: f64,
     pub upload_bytes_per_second: f64,
     pub download_bytes_per_second: f64,
     pub server_stat: Option<ServerStatItem>,
@@ -128,8 +124,6 @@ pub struct AppNotice {
 #[serde(rename_all = "camelCase")]
 pub enum ShellTabTarget {
     Profiles,
-    ProxyConnections,
-    Logs,
 }
 
 // The three event channels. Each host puts these payloads on the wire under

@@ -20,7 +20,7 @@ use crate::{
     contract_map::{settings_from_app_config, state_from_app_config},
 };
 
-pub type SharedAppConfig = Arc<RwLock<AppConfig>>;
+pub(crate) type SharedAppConfig = Arc<RwLock<AppConfig>>;
 
 #[derive(Debug, Error)]
 pub enum ConfigMutationError {
@@ -39,7 +39,7 @@ pub struct ConfigMutationCoordinator {
 
 impl ConfigMutationCoordinator {
     #[must_use]
-    pub fn new(database: Database, config: SharedAppConfig) -> Self {
+    pub(crate) fn new(database: Database, config: SharedAppConfig) -> Self {
         Self {
             database,
             config,

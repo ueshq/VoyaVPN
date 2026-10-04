@@ -199,6 +199,52 @@ describe("automatic app settings", () => {
     expect(usePreferencesStore.getState().themeMode).toBe("system");
   });
 
+  it("leaves a preview in place while its own save is still on its way", async () => {
+    const { result, settle, unmount } = mount();
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    const pending = deferred<AppSettings>();
+    settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
+    act(() =>
+      result.current.app.setAppearance({ language: "en", theme: "dark" }),
+    );
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalled());
+    const toasts = useToastStore.getState().toasts.length;
+
+    unmount();
+    // Not switched back to the stored theme for the moment the save takes.
+    expect(usePreferencesStore.getState().themePreview).toBe("dark");
+
+    await act(async () => {
+      pending.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]);
+    });
+    await settle();
+    expect(usePreferencesStore.getState().themeMode).toBe("dark");
+    expect(usePreferencesStore.getState().themePreview).toBeNull();
+    expect(useToastStore.getState().toasts).toHaveLength(toasts);
+  });
+
+  it("switches back, and says so, when the save a preview was left with fails", async () => {
+    const { result, settle, unmount } = mount();
+    await waitFor(() => expect(result.current.app.settings).not.toBeNull());
+    const pending = deferred<AppSettings>();
+    settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
+    act(() =>
+      result.current.app.setAppearance({ language: "en", theme: "dark" }),
+    );
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalled());
+
+    unmount();
+    pending.reject(new Error("appearance failed"));
+    await settle();
+
+    expect(usePreferencesStore.getState().themePreview).toBeNull();
+    expect(usePreferencesStore.getState().themeMode).toBe("system");
+    // One failure, one notice: the detached draft's.
+    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toEqual([
+      "Could not save changes",
+    ]);
+  });
+
   it("keeps the latest preview while an older appearance save completes", async () => {
     const { result, settle } = mount();
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());

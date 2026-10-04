@@ -68,7 +68,6 @@
     "chooseNode": "選擇節點",
     "selectedNodeLabel": "已選擇",
     "exitIp": "出口 IP",
-    "checkIp": "檢測出口 IP",
     "checkIpChecking": "檢測中…",
     "checkIpFailed": "檢測失敗",
     "checkIpUnknown": "未知",
@@ -90,12 +89,8 @@
     "authorizationDeclined": "未取得系統授權，無法連線。請重試，並在系統彈窗中允許。",
     "globalModeChip": "全局代理",
     "modePendingReason": "正在切換模式，請稍候",
-    "checkIpNeedsConnection": "連線後可檢測出口 IP",
-    "checkIpRetry": "檢測失敗，點擊重試",
     "shortcutHint": "快速鍵：{{shortcut}}",
     "emptyGuide": "新增訂閱或貼上連結即可開始使用",
-    "checkIpNotChecked": "未檢測",
-    "checkIpAction": "檢測",
     "mode": {
       "current": "目前接管：{{mode}}",
       "next": "下次連線：{{mode}}",
@@ -193,7 +188,6 @@
   "options": {
     "autostart": "開機自動啟動",
     "loading": "正在載入",
-    "autoCheckIp": "連線後自動檢測出口 IP",
     "autoCreateSubscriptionGroup": "為新訂閱自動建立最低延遲策略群組",
     "autoCreateSubscriptionGroupHint": "訂閱首次匯入節點時新增「訂閱名稱 · Auto」策略群組，不會自動啟用。",
     "startMinimized": "開機啟動時隱藏到系統匣",

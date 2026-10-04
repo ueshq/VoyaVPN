@@ -27,10 +27,9 @@ export function setRuntimeChannels(channels: readonly RuntimeChannel[]) {
 
 export async function refreshRuntimeStatusAndReport(
   t: TranslationFunction,
-  channels?: readonly RuntimeChannel[],
   isMounted: () => boolean = () => true,
 ): Promise<void> {
-  const failures = await refreshRuntimeStatus(channels, isMounted);
+  const failures = await refreshRuntimeStatus(hostChannels, isMounted);
   if (!isMounted()) return;
   for (const { channel, error } of failures) {
     toastError(t(runtimeStatusErrorKeys[channel]), error);

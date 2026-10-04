@@ -4,7 +4,7 @@ use std::{
 };
 
 use thiserror::Error;
-use tokio::{runtime::Handle, sync::watch, task::JoinHandle, time};
+use tokio::{runtime::Handle, sync::watch, time};
 use voya_contracts::{ProxyConnectionItem, ProxyConnectionsSnapshot, ProxyMonitorStatus};
 use voya_core::TrafficMode;
 use voya_net::clash::{
@@ -14,7 +14,9 @@ use voya_net::clash::{
     ReqwestClashHttpTransport,
 };
 
-use crate::{clash_follow::follow_core_ws, supervisor::ClashApiAccess};
+use crate::{
+    clash_follow::follow_core_ws, shutdown_task::ShutdownTask, supervisor::ClashApiAccess,
+};
 
 mod groups;
 mod traffic_mode;
@@ -130,7 +132,7 @@ impl ProxyRuntimeManager {
 
 #[derive(Clone, Default)]
 pub struct ProxyMonitorController {
-    handle: Arc<Mutex<Option<ProxyMonitorHandle>>>,
+    handle: Arc<Mutex<Option<ShutdownTask>>>,
 }
 
 impl ProxyMonitorController {
@@ -155,62 +157,44 @@ impl ProxyMonitorController {
             .lock()
             .map_err(|_| ProxyRuntimeError::MonitorLockPoisoned)?;
         if proxy_runtime_endpoint(&access.borrow()).is_none() {
-            if let Some(handle) = guard.take() {
-                handle.stop();
-            }
+            guard.take();
             tracing::debug!("skipping proxy monitor because state port is unavailable");
             return Ok(ProxyMonitorStatus::stopped());
         }
         if guard.is_some() {
             return Ok(ProxyMonitorStatus::running());
         }
-        let runtime =
-            Handle::try_current().map_err(|_| ProxyRuntimeError::MonitorRuntimeUnavailable)?;
+        // `ShutdownTask::spawn` panics outside a runtime; a host that calls
+        // from one of its own threads gets an error instead.
+        Handle::try_current().map_err(|_| ProxyRuntimeError::MonitorRuntimeUnavailable)?;
 
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
         // Only the connections stream is opened here. The statistics service
         // already holds a /traffic websocket against the same sing-box state
         // port, so a second one would decode every frame twice for numbers the
         // proxy screens do not read.
-        let task = runtime.spawn(follow_core_ws(
-            access,
-            ClashWebSocketResource::Connections,
-            shutdown_rx,
-            move |event| {
-                route_proxy_ws_event(sink.as_ref(), event);
-                std::future::ready(())
-            },
-        ));
-        *guard = Some(ProxyMonitorHandle {
-            shutdown: shutdown_tx,
-            task,
-        });
+        *guard = Some(ShutdownTask::spawn(|shutdown| {
+            follow_core_ws(
+                access,
+                ClashWebSocketResource::Connections,
+                shutdown,
+                move |event| {
+                    route_proxy_ws_event(sink.as_ref(), event);
+                    std::future::ready(())
+                },
+            )
+        }));
 
         Ok(ProxyMonitorStatus::running())
     }
 
     pub fn stop(&self) -> Result<ProxyMonitorStatus> {
-        let mut guard = self
-            .handle
+        // Dropping the task signals it and aborts it.
+        self.handle
             .lock()
-            .map_err(|_| ProxyRuntimeError::MonitorLockPoisoned)?;
-        if let Some(handle) = guard.take() {
-            handle.stop();
-        }
+            .map_err(|_| ProxyRuntimeError::MonitorLockPoisoned)?
+            .take();
 
         Ok(ProxyMonitorStatus::stopped())
-    }
-}
-
-struct ProxyMonitorHandle {
-    shutdown: watch::Sender<bool>,
-    task: JoinHandle<()>,
-}
-
-impl ProxyMonitorHandle {
-    fn stop(self) {
-        let _ = self.shutdown.send(true);
-        self.task.abort();
     }
 }
 
@@ -251,16 +235,13 @@ pub(crate) fn proxy_runtime_endpoint(access: &ClashApiAccess) -> Option<ClashApi
 }
 
 /// Starts `controller` following whichever core `supervisor` is running.
-pub async fn start_monitor_use_case(
+pub fn start_monitor_use_case(
     controller: &ProxyMonitorController,
     supervisor: &crate::supervisor::CoreSupervisor,
     sink: Arc<dyn ProxyRuntimeEventSink>,
 ) -> Result<ProxyMonitorStatus> {
-    // The watch is republished at the end of the actor turn that changed it,
-    // after that command's reply. One round trip through the actor therefore
-    // guarantees the value read below is the core the caller just connected.
-    let _ = supervisor.status().await;
-
+    // The supervisor publishes the running core before it answers the command
+    // that changed it, so a caller that awaited its connect reads that core.
     controller.start(supervisor.subscribe_clash_api(), sink)
 }
 
@@ -373,7 +354,7 @@ pub async fn close_connection_use_case(
         "proxy connection id",
         voya_contracts::AppErrorSubsystem::ProxyRuntime,
     )?;
-    let access = supervisor.clash_api_access().await;
+    let access = supervisor.clash_api_access();
 
     Ok(proxy_runtime
         .close_connection(&access, connection_id.as_deref())
@@ -481,19 +462,17 @@ mod tests {
         watch::channel(access(port))
     }
 
-    fn monitor_shutdown(controller: &ProxyMonitorController) -> watch::Sender<bool> {
+    fn monitor_shutdown(controller: &ProxyMonitorController) -> watch::Receiver<bool> {
         let guard = controller.handle.lock().expect("monitor lock");
-        guard.as_ref().expect("monitor handle").shutdown.clone()
+        guard.as_ref().expect("monitor handle").subscribe()
     }
 
     fn monitor_handle_is_none(controller: &ProxyMonitorController) -> bool {
         controller.handle.lock().expect("monitor lock").is_none()
     }
 
-    fn shutdown_requested(shutdown: &watch::Sender<bool>) -> bool {
-        let receiver = shutdown.subscribe();
-        let requested = *receiver.borrow();
-        requested
+    fn shutdown_requested(shutdown: &watch::Receiver<bool>) -> bool {
+        *shutdown.borrow()
     }
 
     #[tokio::test]

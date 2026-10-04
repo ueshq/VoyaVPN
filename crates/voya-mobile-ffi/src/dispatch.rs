@@ -151,7 +151,6 @@ pub async fn invoke(state: &MobileState, command: &str, args: &str) -> Answer {
         "restart_core" => runtime::restart(state).await,
         "runtime_status" => runtime::status(state).await,
         "tun_status" => runtime::tun_status(state).await,
-        "set_tun_enabled" => runtime::set_tun_enabled(state, args).await,
         "connection_mode_status" => runtime::connection_mode_status(state).await,
         "set_connection_mode" => runtime::set_connection_mode(state, args).await,
         "run_speedtest" => speedtest::run(state, args).await,

@@ -28,8 +28,12 @@ const IOS_SLICE_PREFIX = "ios-";
 /** The simulator slice is an iOS slice too, and both are needed. */
 const SIMULATOR_MARKER = "simulator";
 const XCFRAMEWORK_NAME = "Libbox.xcframework";
-/** What gomobile is asked to bind: a device and the simulator, nothing else. */
-const APPLE_PLATFORMS = "ios,iossimulator";
+/**
+ * What gomobile is asked to bind: a device and the simulator, nothing else.
+ * `iossimulator` alone means arm64 and x86_64, and everything that runs the
+ * simulator build here — the smoke lane, CI's runner — is an arm64 Mac.
+ */
+const APPLE_PLATFORMS = "ios,iossimulator/arm64";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const sourceDir = singBoxSourceDir(repoRoot);
@@ -62,9 +66,9 @@ function buildLibbox() {
  *
  * Named by what they are rather than matched exactly, because the simulator
  * slice's directory name carries its architectures
- * (`ios-arm64_x86_64-simulator` today, `ios-arm64-simulator` on an
- * Apple-silicon-only build) and pinning the spelling would break on the next
- * toolchain.
+ * (`ios-arm64-simulator` for this build, `ios-arm64_x86_64-simulator` for one
+ * that also binds x86_64) and pinning the spelling would break on the next
+ * change of either.
  */
 export function iosSlices(xcframeworkPath) {
   const slices = readdirSync(xcframeworkPath, { withFileTypes: true })

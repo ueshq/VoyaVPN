@@ -5,7 +5,7 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import { Spinner } from "@voya/ui/components/spinner";
-import type { PolicyGroupEntry } from "@voya/contracts";
+import type { PolicyGroupEntry, ProfileSummaryEntry } from "@voya/contracts";
 
 import type { ServerTableController } from "./use-server-table";
 import { PolicyGroupDialog } from "./policy-group-dialog";
@@ -20,6 +20,8 @@ import { SpeedtestButton } from "./server-table-menus";
  * speedtest frame.
  */
 const COLLAPSED_MEMBER_LIMIT = 60;
+
+const NO_NODES: readonly ProfileSummaryEntry[] = [];
 
 /**
  * Policy groups above the node list. The editor and the delete confirmation
@@ -66,7 +68,10 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
       ) : null}
       <PolicyGroupDialog
         group={controller.editingPolicyGroup}
-        nodes={controller.profiles}
+        // The stored list, not `controller.profiles`: that one carries live
+        // speed-test results and is a new array on every result frame, while
+        // the editor only reads names and ids.
+        nodes={controller.profilesQuery.data?.entries ?? NO_NODES}
         onOpenChange={controller.setPolicyGroupEditorOpen}
         open={controller.policyGroupEditorOpen}
         subscriptions={controller.policyGroupSubscriptions}

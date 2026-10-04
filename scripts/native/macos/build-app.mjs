@@ -4,6 +4,7 @@ import {
   captureSpawned,
   isCliEntrypoint,
   repoRootFromScript,
+  requireDarwin,
   run,
   runCli,
   sleepSync,
@@ -92,12 +93,6 @@ function buildLane() {
   return skipNotarization() ? "local" : "developer-id";
 }
 
-function requireMacos() {
-  if (process.platform !== "darwin") {
-    throw new Error("pnpm build:mac must run on macOS.");
-  }
-}
-
 function skipNotarization() {
   return truthy(process.env.VOYAVPN_SKIP_NOTARIZATION);
 }
@@ -148,17 +143,7 @@ function assertInstalledAppGuiNotRunning() {
   }
 }
 
-function assertAppNotRunning() {
-  const running = runningExecutables([...installedAppExecutableNames(), "VoyaPacketTunnel"]);
-  if (running.length) {
-    throw new Error(
-      `VoyaVPN is still running (${running.join(", ")}). Quit the app and disable TUN before pnpm build:mac:local replaces ${installedAppBundle}.`,
-    );
-  }
-}
-
 function installToApplications() {
-  assertAppNotRunning();
   console.log(`Installing ${appBundle} into ${installedAppBundle}`);
   try {
     rmSync(installedAppBundle, { recursive: true, force: true });
@@ -295,7 +280,7 @@ function buildAppStorePackage() {
 }
 
 function main() {
-  requireMacos();
+  requireDarwin("pnpm build:mac must run on macOS.");
   const lane = buildLane();
   if (lane === "app-store") {
     buildAppStorePackage();

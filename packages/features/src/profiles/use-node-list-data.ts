@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { ProfileSummaryEntry, SpeedtestResult } from "@voya/contracts";
 import type { TranslationFunction } from "@voya/i18n/core";
-import { metadataBySubscriptionId } from "../subscriptions/subscription-usage";
 import { nodeListRows, nodeSearchText } from "./node-list-rows";
 
 /**
@@ -12,7 +11,7 @@ import { nodeListRows, nodeSearchText } from "./node-list-rows";
  * Structural rather than the desktop hook's return type: the same shaping
  * feeds the phone's list.
  */
-export type NodeListSelection = {
+type NodeListSelection = {
   collapsed: ReadonlySet<string>;
   hideUnreachable: boolean;
   search: string;
@@ -29,22 +28,7 @@ export function useNodeListData(
   nodeGroups: NodeListSelection,
   t: TranslationFunction,
 ) {
-  const metadataQuery = useQuery(queries.subscriptionMetadata);
-  const subscriptionMetadata = useMemo(
-    () => metadataBySubscriptionId(metadataQuery.data ?? []),
-    [metadataQuery.data],
-  );
   const subscriptionsQuery = useQuery(queries.subscriptions);
-  const subscriptionNames = useMemo(
-    () =>
-      new Map(
-        (subscriptionsQuery.data ?? []).map((item) => [
-          item.id,
-          item.remarks || t("panes.subscriptions.untitled"),
-        ]),
-      ),
-    [subscriptionsQuery.data, t],
-  );
   const speedtestResultsByProfileId = useRuntimeEventStore(
     (state) => state.speedtestResultsByProfileId,
   );
@@ -100,15 +84,7 @@ export function useNodeListData(
       t,
     ],
   );
-  function subscriptionName(item: ProfileSummaryEntry) {
-    return item.profile.subscriptionId
-      ? (subscriptionNames.get(item.profile.subscriptionId) ??
-          t("panes.subscriptions.untitled"))
-      : t("panes.profiles.card.local");
-  }
-
   return {
-    visibleProfileCount: rows.reduce((count, row) => count + (row.kind === "group" ? row.members.length : 0), 0),
     profiles,
     profilesQuery,
     rows,
@@ -117,8 +93,6 @@ export function useNodeListData(
     search,
     speedtestResultsByProfileId,
     subscriptionsQuery,
-    subscriptionMetadata,
-    subscriptionName,
     undecodableProfiles,
   };
 }

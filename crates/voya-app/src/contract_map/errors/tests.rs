@@ -126,14 +126,13 @@ fn the_same_database_failure_is_classified_identically_through_every_manager() {
         SubscriptionManagerError::Database(db_row_error()).into(),
         RoutingManagerError::Database(db_row_error()).into(),
         ExportManagerError::Database(db_row_error()).into(),
-        UpdateManagerError::Database(db_row_error()).into(),
+        RuleSetUpdateError::Database(db_row_error()).into(),
         SpeedtestError::Database(db_row_error()).into(),
         RuntimeError::Database(db_row_error()).into(),
         ConfigMutationError::Database(db_row_error()).into(),
         // Nested through two managers, which is where the old shell mappers
         // disagreed the most.
         SubscriptionManagerError::Profile(ProfileManagerError::Database(db_row_error())).into(),
-        SpeedtestError::Profile(ProfileManagerError::Database(db_row_error())).into(),
     ];
 
     for error in mapped {
@@ -684,20 +683,18 @@ mod guards {
         }
     }
 
-    const fn update(error: &UpdateManagerError) {
+    const fn update(error: &RuleSetUpdateError) {
         match error {
-            UpdateManagerError::Database(_) | UpdateManagerError::Ruleset(_) => (),
+            RuleSetUpdateError::Database(_) | RuleSetUpdateError::Ruleset(_) => (),
         }
     }
 
     const fn speedtest(error: &SpeedtestError) {
         match error {
             SpeedtestError::Database(_)
-            | SpeedtestError::Profile(_)
             | SpeedtestError::Network(_)
             | SpeedtestError::Io(_)
             | SpeedtestError::CoreInfo(_)
-            | SpeedtestError::Path(_)
             | SpeedtestError::Process(_)
             | SpeedtestError::SingboxConfig(_)
             | SpeedtestError::Cancelled
@@ -747,7 +744,6 @@ mod guards {
             | SupervisorError::ElevationNotGranted
             | SupervisorError::Process(_)
             | SupervisorError::NativeTun(_)
-            | SupervisorError::Job(_)
             | SupervisorError::Elevation(_)
             | SupervisorError::UnknownSudoKillTarget { .. }
             | SupervisorError::MissingNativeTunConfigPath { .. }

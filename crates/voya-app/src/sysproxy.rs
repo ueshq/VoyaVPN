@@ -48,8 +48,7 @@ impl SystemProxyManager {
         &self,
         config: &AppConfig,
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
-        let runtime = runtime_system_proxy_config(config, false, self.target_os);
-        self.apply_config(&runtime.config, runtime.force_disable)
+        self.apply_request(&self.runtime_request(config)?)
     }
 
     /// Inspect the effective runtime policy without changing the OS proxy.
@@ -57,17 +56,17 @@ impl SystemProxyManager {
         &self,
         config: &AppConfig,
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
-        let runtime = runtime_system_proxy_config(config, false, self.target_os);
-        self.status_with_force_disable(&runtime.config, runtime.force_disable)
+        Ok(self.service.status(&self.runtime_request(config)?)?)
     }
 
-    fn status_with_force_disable(
+    fn runtime_request(
         &self,
         config: &AppConfig,
-        force_disable: bool,
-    ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
-        let request = self.request(config, force_disable)?;
-        Ok(self.service.status(&request)?)
+    ) -> Result<SystemProxyRequest, SystemProxyManagerError> {
+        let policy = runtime_system_proxy_policy(config, self.target_os);
+        let mut request = self.request(config, policy.force_disable)?;
+        request.item.mode = policy.mode;
+        Ok(request)
     }
 
     fn apply_config(
@@ -75,13 +74,18 @@ impl SystemProxyManager {
         config: &AppConfig,
         force_disable: bool,
     ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
-        let request = self.request(config, force_disable)?;
+        self.apply_request(&self.request(config, force_disable)?)
+    }
 
-        if request_sets_local_proxy(&request) {
+    fn apply_request(
+        &self,
+        request: &SystemProxyRequest,
+    ) -> Result<SystemProxyStatus, SystemProxyManagerError> {
+        if request_sets_local_proxy(request) {
             self.write_dirty_marker()?;
         }
 
-        let status = self.service.apply(&request)?;
+        let status = self.service.apply(request)?;
         if status.management == SystemProxyManagement::Automatic
             && status.effective_type == SysProxyType::ForcedClear
         {
@@ -138,16 +142,11 @@ impl SystemProxyManager {
         force_disable: bool,
     ) -> Result<SystemProxyRequest, SystemProxyManagerError> {
         self.paths.ensure_dirs()?;
-        let socks_port = config
-            .inbounds
-            .first()
-            .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port);
-
         Ok(SystemProxyRequest {
             target_os: self.target_os,
             item: config.system_proxy.clone(),
             force_disable,
-            socks_port,
+            socks_port: config.local_port(),
             script_dir: self.paths.temp_dir().join(SYSPROXY_SCRIPT_DIR_NAME),
         })
     }
@@ -190,32 +189,23 @@ pub enum SystemProxyManagerError {
     DirtyMarkerRemove { path: PathBuf, source: io::Error },
 }
 
-#[derive(Debug, Clone)]
-pub struct RuntimeSystemProxyConfig {
-    pub config: AppConfig,
-    pub force_disable: bool,
+/// What the connected core does to the OS proxy on this platform.
+struct RuntimeProxyPolicy {
+    mode: SysProxyType,
+    force_disable: bool,
 }
 
-#[must_use]
-fn runtime_system_proxy_config(
-    config: &AppConfig,
-    force_disable: bool,
-    target_os: TargetOs,
-) -> RuntimeSystemProxyConfig {
-    let mut runtime = RuntimeSystemProxyConfig {
-        config: config.clone(),
-        force_disable,
+fn runtime_system_proxy_policy(config: &AppConfig, target_os: TargetOs) -> RuntimeProxyPolicy {
+    let force_disable = should_disable_native_tun_system_proxy(config, target_os);
+    let mode = if !force_disable && should_apply_tun_system_proxy_fallback(config, target_os) {
+        SysProxyType::ForcedChange
+    } else {
+        config.system_proxy.mode
     };
-
-    if force_disable {
-        return runtime;
+    RuntimeProxyPolicy {
+        mode,
+        force_disable,
     }
-    if should_disable_native_tun_system_proxy(config, target_os) {
-        runtime.force_disable = true;
-    } else if should_apply_tun_system_proxy_fallback(config, target_os) {
-        runtime.config.system_proxy.mode = SysProxyType::ForcedChange;
-    }
-    runtime
 }
 
 #[must_use]
@@ -231,33 +221,12 @@ fn should_apply_tun_system_proxy_fallback(config: &AppConfig, target_os: TargetO
 }
 
 #[must_use]
-pub fn runtime_proxy_url(
-    prefer_proxy: bool,
-    proxy_url: Option<String>,
-    config: &AppConfig,
-    target_os: TargetOs,
-) -> Option<String> {
-    let explicit = proxy_url.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    });
-
-    if !prefer_proxy {
-        return explicit;
-    }
-    explicit.or_else(|| runtime_default_proxy_url(config, target_os))
-}
-
-#[must_use]
-pub fn runtime_default_proxy_url(config: &AppConfig, target_os: TargetOs) -> Option<String> {
+pub(crate) fn runtime_default_proxy_url(config: &AppConfig, target_os: TargetOs) -> Option<String> {
     if config.tun.enabled && tun_backend(target_os).is_native() {
         return None;
     }
 
-    let port = config
-        .inbounds
-        .first()
-        .map_or(voya_core::DEFAULT_LOCAL_PORT, |inbound| inbound.local_port);
+    let port = config.local_port();
     (1..=65_535)
         .contains(&port)
         .then(|| format!("http://127.0.0.1:{port}"))
@@ -271,10 +240,6 @@ fn request_sets_local_proxy(request: &SystemProxyRequest) -> bool {
     }
 
     request.item.mode == SysProxyType::ForcedChange
-        && matches!(
-            request.target_os,
-            TargetOs::Windows | TargetOs::Linux | TargetOs::Macos
-        )
 }
 
 #[cfg(test)]
@@ -391,7 +356,7 @@ mod tests {
         let mut config = AppConfig::default();
         config.tun.enabled = true;
 
-        let native = runtime_system_proxy_config(&config, false, TargetOs::Macos);
+        let native = runtime_system_proxy_policy(&config, TargetOs::Macos);
         assert!(native.force_disable);
         assert!(runtime_default_proxy_url(&config, TargetOs::Macos).is_none());
         assert!(
@@ -400,11 +365,11 @@ mod tests {
                 .expect("macOS has no system proxy to recover")
         );
 
-        let process = runtime_system_proxy_config(&config, false, TargetOs::Linux);
+        let process = runtime_system_proxy_policy(&config, TargetOs::Linux);
         assert!(!process.force_disable);
-        assert_eq!(process.config.system_proxy.mode, SysProxyType::ForcedChange);
+        assert_eq!(process.mode, SysProxyType::ForcedChange);
         assert_eq!(
-            runtime_proxy_url(true, None, &config, TargetOs::Linux).as_deref(),
+            runtime_default_proxy_url(&config, TargetOs::Linux).as_deref(),
             Some("http://127.0.0.1:10808")
         );
     }

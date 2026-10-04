@@ -13,11 +13,6 @@ version.workspace = true
 [lib]
 crate-type = ["lib"]
 
-[features]
-# `uniffi/cli` carries clap and the bindings generator (~75 crates). Phone
-# library builds leave this off; only `src/bin/uniffi-bindgen.rs` needs it.
-bindgen = ["uniffi/cli"]
-
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
@@ -32,13 +27,8 @@ voya-platform.workspace = true
 
 [dev-dependencies]
 sqlx.workspace = true
-tempfile = "3"
+tempfile.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }
-
-[[bin]]
-name = "uniffi-bindgen"
-path = "src/bin/uniffi-bindgen.rs"
-required-features = ["bindgen"]
 
 [lints]
 workspace = true

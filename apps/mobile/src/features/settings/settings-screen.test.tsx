@@ -27,9 +27,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  // The locale is process-wide, and a test that switches it would otherwise
-  // hand the next one a Chinese UI.
-  await i18nHost().changeLocale("en", { persist: false });
+  // The locale is process-wide, and so is the stored choice: a test that
+  // switches it would otherwise hand the next one a Chinese UI.
+  await i18nHost().changeLocale("en");
   usePreferencesStore.setState(usePreferencesStore.getInitialState());
 });
 
@@ -61,6 +61,9 @@ describe("SettingsScreen", () => {
     expect(await screen.findByText("语言")).toBeOnTheScreen();
     expect(screen.getByText("主题")).toBeOnTheScreen();
     await waitFor(() => expect(mockBackend().state.settings.appearance.language).toBe("zh-Hans"));
+    // Nothing reapplies the backend's value at launch on a phone, so the
+    // stored choice is what the next start comes up in.
+    await waitFor(() => expect(i18nHost().getInitialLocale()).toBe("zh-Hans"));
   });
 
   it("saves a behaviour switch through the backend", async () => {
@@ -70,11 +73,11 @@ describe("SettingsScreen", () => {
     // HeroUI's Switch is a Pressable; a press is the toggle.
     await user.press(
       await screen.findByRole("switch", {
-        name: "Check the exit IP after connecting",
+        name: "Record detailed connection log",
       }),
     );
 
-    await waitFor(() => expect(mockBackend().state.settings.behavior.autoCheckIp).toBe(false));
+    await waitFor(() => expect(mockBackend().state.settings.core.logEnabled).toBe(true));
   });
 
   it("refreshes the rule library and says what arrived", async () => {

@@ -142,7 +142,6 @@ function makeAppSettings(): AppSettings {
   return {
     appearance: { language: "en", theme: "system" },
     behavior: {
-      autoCheckIp: true,
       autoCreateSubscriptionGroup: true,
       autostart: false,
       closeAction: "minimizeToTray",

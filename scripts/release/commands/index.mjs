@@ -397,4 +397,4 @@ async function main(argv = []) {
   console.log(`Wrote release evidence to ${evidencePath}`);
 }
 
-export { main, printHelp };
+export { main };

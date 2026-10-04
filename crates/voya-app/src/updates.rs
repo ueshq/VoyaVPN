@@ -14,53 +14,37 @@ use voya_platform::{
     paths::{AppPaths, RULE_SET_SEED_DIR_NAME},
 };
 
-pub type Result<T> = std::result::Result<T, UpdateManagerError>;
+pub type Result<T> = std::result::Result<T, RuleSetUpdateError>;
 
 /// Where staged rule sets live under the app-data bin directory.
 const SRS_DIR_NAME: &str = "srss";
 
 #[derive(Debug, Error)]
-pub enum UpdateManagerError {
+pub enum RuleSetUpdateError {
     #[error(transparent)]
     Database(#[from] DbError),
     #[error(transparent)]
     Ruleset(#[from] RulesetError),
 }
 
-#[derive(Debug, Clone)]
-pub struct UpdateManager<'db> {
-    database: &'db Database,
-    paths: AppPaths,
-    ruleset: RulesetClient,
-}
+/// Downloads every rule set the saved routing profiles name into the app-data
+/// rule-set directory.
+pub async fn update_srs_assets(
+    database: &Database,
+    paths: &AppPaths,
+    proxy_url: Option<String>,
+) -> Result<Vec<ResourceUpdateFile>> {
+    let routings = database.routings().list().await?;
+    let assets = collect_singbox_ruleset_assets(None, &routings);
+    let acquired = RulesetClient::new()
+        .acquire_srs_assets(
+            &assets,
+            srs_dir(paths),
+            &asset_acquisition_options(proxy_url),
+        )
+        .await?;
 
-impl<'db> UpdateManager<'db> {
-    #[must_use]
-    pub fn new(database: &'db Database, paths: AppPaths) -> Self {
-        Self {
-            database,
-            paths,
-            ruleset: RulesetClient::new(),
-        }
-    }
-
-    pub async fn update_srs_assets(
-        &self,
-        proxy_url: Option<String>,
-    ) -> Result<Vec<ResourceUpdateFile>> {
-        let routings = self.database.routings().list().await?;
-        let assets = collect_singbox_ruleset_assets(None, &routings);
-        let acquired = self
-            .ruleset
-            .acquire_srs_assets(
-                &assets,
-                srs_dir(&self.paths),
-                &asset_acquisition_options(proxy_url),
-            )
-            .await?;
-
-        Ok(acquired.into_iter().map(resource_update_file).collect())
-    }
+    Ok(acquired.into_iter().map(resource_update_file).collect())
 }
 
 /// Copies the packaged rule sets (see `core_seed_resources_dir`) into the

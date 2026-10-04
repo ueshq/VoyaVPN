@@ -7,7 +7,7 @@
 //! native TUN provider has no process this app can see, and a restart keeps
 //! the port while changing the token.
 
-use std::future::Future;
+use std::{future::Future, time::Duration};
 
 use tokio::{sync::watch, time};
 use voya_net::clash::{ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource};
@@ -48,7 +48,9 @@ pub(crate) async fn follow_core_ws<F, Fut>(
         let endpoint = proxy_runtime_endpoint(&access.borrow_and_update());
         let Some(endpoint) = endpoint else {
             reconnect_backoff.reset();
-            if wait_for_core_change(&mut access, &mut shutdown).await {
+            if wait_for_core_change(&mut access, &mut shutdown, WS_RECONNECT_MAX_DELAY).await
+                == CoreWait::Shutdown
+            {
                 break;
             }
             continue;
@@ -94,36 +96,64 @@ pub(crate) async fn follow_core_ws<F, Fut>(
             }
         }
 
-        if sleep_or_shutdown(reconnect_backoff.next_delay(), &mut shutdown).await {
-            break;
+        // A restart drops the old core's socket before the new core is
+        // published, so the retries in between dial an endpoint that is gone
+        // and the delay grows. The delay therefore ends the moment the
+        // supervisor publishes a core: sleeping it out would leave the new
+        // core's first seconds of traffic unread.
+        match wait_for_core_change(&mut access, &mut shutdown, reconnect_backoff.next_delay()).await
+        {
+            CoreWait::Shutdown => break,
+            CoreWait::Changed => reconnect_backoff.reset(),
+            CoreWait::Elapsed => {}
         }
     }
 }
 
-/// Waits for the supervisor to start or stop something; `true` when shutdown
-/// was requested instead. Every state change passes through the supervisor's
-/// actor, so nothing is polled once a second while the core is stopped; the
-/// long fallback is a safety net, and the only wake left once the supervisor
-/// itself is gone.
+/// Why [`wait_for_core_change`] returned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CoreWait {
+    Shutdown,
+    /// The supervisor started, stopped or replaced a core.
+    Changed,
+    /// Nothing moved within the fallback.
+    Elapsed,
+}
+
+/// Waits for the supervisor to start or stop something, for at most
+/// `fallback`. Every state change passes through the supervisor's actor, so
+/// nothing is polled once a second while the core is stopped; the fallback is
+/// a safety net there, the reconnect delay after a failed dial, and the only
+/// wake left once the supervisor itself is gone.
 async fn wait_for_core_change<T>(
     changes: &mut watch::Receiver<T>,
     shutdown: &mut watch::Receiver<bool>,
-) -> bool {
+    fallback: Duration,
+) -> CoreWait {
+    let slept = |stopped| {
+        if stopped {
+            CoreWait::Shutdown
+        } else {
+            CoreWait::Elapsed
+        }
+    };
     tokio::select! {
         changed = changes.changed() => {
             if changed.is_err() {
-                return sleep_or_shutdown(WS_RECONNECT_MAX_DELAY, shutdown).await;
+                return slept(sleep_or_shutdown(fallback, shutdown).await);
             }
-            *shutdown.borrow()
+            if *shutdown.borrow() {
+                CoreWait::Shutdown
+            } else {
+                CoreWait::Changed
+            }
         }
-        stopped = sleep_or_shutdown(WS_RECONNECT_MAX_DELAY, shutdown) => stopped,
+        stopped = sleep_or_shutdown(fallback, shutdown) => slept(stopped),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use super::*;
 
     /// The loop parks here whenever no core is running. Waking on the
@@ -138,9 +168,9 @@ mod tests {
         changes_tx.send_replace(ClashApiAccess::unauthenticated(9090));
 
         let started = time::Instant::now();
-        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
+        let woke = wait_for_core_change(&mut changes, &mut shutdown, WS_RECONNECT_MAX_DELAY).await;
 
-        assert!(!stopped, "a core change is not a shutdown");
+        assert_eq!(woke, CoreWait::Changed, "a core change is not a shutdown");
         assert_eq!(
             started.elapsed(),
             Duration::ZERO,
@@ -156,9 +186,9 @@ mod tests {
         shutdown_tx.send_replace(true);
 
         let started = time::Instant::now();
-        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
+        let woke = wait_for_core_change(&mut changes, &mut shutdown, WS_RECONNECT_MAX_DELAY).await;
 
-        assert!(stopped, "shutdown must break the loop");
+        assert_eq!(woke, CoreWait::Shutdown, "shutdown must break the loop");
         assert_eq!(started.elapsed(), Duration::ZERO);
     }
 
@@ -172,14 +202,41 @@ mod tests {
         drop(changes_tx);
 
         let started = time::Instant::now();
-        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
+        let woke = wait_for_core_change(&mut changes, &mut shutdown, WS_RECONNECT_MAX_DELAY).await;
 
-        assert!(!stopped);
+        assert_eq!(woke, CoreWait::Elapsed);
         assert!(
             started.elapsed() >= WS_RECONNECT_MAX_DELAY,
             "a closed change channel must wait, not busy-loop: {:?}",
             started.elapsed()
         );
+    }
+
+    /// After a failed dial the loop waits out a reconnect delay. A core
+    /// published during that delay is the one worth dialling, so the wait
+    /// ends there instead of running the rest of the delay against the old
+    /// endpoint — and an undisturbed delay still runs its full length.
+    #[tokio::test(start_paused = true)]
+    async fn reconnect_delay_ends_when_a_core_is_published() {
+        let (changes_tx, mut changes) = watch::channel(ClashApiAccess::unauthenticated(9090));
+        let (_shutdown_tx, mut shutdown) = watch::channel(false);
+        let delay = Duration::from_secs(16);
+
+        let started = time::Instant::now();
+        let publish = tokio::spawn(async move {
+            time::sleep(Duration::from_secs(2)).await;
+            changes_tx.send_replace(ClashApiAccess::unauthenticated(9091));
+            changes_tx
+        });
+        let woke = wait_for_core_change(&mut changes, &mut shutdown, delay).await;
+        assert_eq!(woke, CoreWait::Changed);
+        assert_eq!(started.elapsed(), Duration::from_secs(2));
+
+        let _changes_tx = publish.await.expect("the publisher does not panic");
+        let started = time::Instant::now();
+        let woke = wait_for_core_change(&mut changes, &mut shutdown, delay).await;
+        assert_eq!(woke, CoreWait::Elapsed);
+        assert_eq!(started.elapsed(), delay);
     }
 
     /// The reason a core is identified by its access and not by a process id:

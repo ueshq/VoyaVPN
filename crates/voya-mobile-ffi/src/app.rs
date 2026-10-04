@@ -12,12 +12,17 @@
 
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, Weak},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Weak,
+    },
+    time::Duration,
 };
 
 use voya_app::{
     config_mutation::ConfigMutationCoordinator,
     contract_map::errors::database_error,
+    lifecycle::exit_step,
     proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
     services::AppServices,
     speedtest::SpeedtestManager,
@@ -56,6 +61,15 @@ pub enum CommandError {
 
 /// What the app's runtime names its worker threads.
 const RUNTIME_THREAD_NAME: &str = "voya-mobile";
+
+/// How long `shutdown` waits for the tunnel to come down. The host's own stop
+/// is bounded, but it is a blocking call into the platform, and the thread
+/// that invalidates the native module must not wait on it forever.
+const DISCONNECT_SHUTDOWN_LIMIT: Duration = Duration::from_secs(15);
+/// How long `shutdown` waits for commands still holding a connection.
+const DATABASE_SHUTDOWN_LIMIT: Duration = Duration::from_secs(5);
+
+const SHUT_DOWN: &str = "the app has been shut down";
 
 /// The one failure that cannot be reported as itself.
 const UNENCODABLE_FAILURE: &str = r#"{"kind":{"type":"internal"},"subsystem":"app","message":"the failure could not be encoded"}"#;
@@ -141,17 +155,17 @@ pub struct VoyaApp {
     /// [`VoyaApp::invoke`].
     runtime: tokio::runtime::Runtime,
     state: Arc<MobileState>,
+    /// Set by [`VoyaApp::shutdown`]. The platform keeps this object until its
+    /// own collector frees it, long after the host is done with it.
+    shut_down: AtomicBool,
 }
 
-#[uniffi::export]
 impl VoyaApp {
-    /// Opens the app's storage and brings the managers up.
-    ///
-    /// `data_dir` is the container both the app and its tunnel provider can
-    /// reach — the App Group container on iOS — because the handshake stages
-    /// rule sets there. `locale` seeds the language on a fresh install only.
-    #[uniffi::constructor]
-    pub fn new(
+    /// [`VoyaApp::new`] for a stated platform. The host is always built for
+    /// the phone it runs on; the tests stand in for one, on whatever machine
+    /// runs them.
+    pub(crate) fn open(
+        target_os: TargetOs,
         data_dir: String,
         locale: Option<String>,
         events: Arc<dyn EventListener>,
@@ -183,6 +197,7 @@ impl VoyaApp {
         })?;
 
         let state = runtime.block_on(connect(
+            target_os,
             &data_dir,
             paths,
             locale.as_deref(),
@@ -195,7 +210,37 @@ impl VoyaApp {
         // reach, once a Logs screen asks for them.
         crate::logging::attach(runtime.handle(), Arc::clone(&state.sinks));
 
-        Ok(Arc::new(Self { runtime, state }))
+        Ok(Arc::new(Self {
+            runtime,
+            state,
+            shut_down: AtomicBool::new(false),
+        }))
+    }
+}
+
+#[uniffi::export]
+impl VoyaApp {
+    /// Opens the app's storage and brings the managers up.
+    ///
+    /// `data_dir` is the container both the app and its tunnel provider can
+    /// reach — the App Group container on iOS — because the handshake stages
+    /// rule sets there. `locale` seeds the language on a fresh install only.
+    #[uniffi::constructor]
+    pub fn new(
+        data_dir: String,
+        locale: Option<String>,
+        events: Arc<dyn EventListener>,
+        tunnel: Arc<dyn TunnelHost>,
+        probe_core: Arc<dyn ProbeCoreHost>,
+    ) -> Result<Arc<Self>, StartupError> {
+        Self::open(
+            TargetOs::current(),
+            data_dir,
+            locale,
+            events,
+            tunnel,
+            probe_core,
+        )
     }
 
     /// Runs one backend command.
@@ -212,6 +257,14 @@ impl VoyaApp {
     /// call the platform abandons still runs to completion, as a Tauri command
     /// does.
     pub async fn invoke(&self, command: String, args_json: String) -> Result<String, CommandError> {
+        if self.shut_down.load(Ordering::Acquire) {
+            return Err(CommandError::Rejected {
+                app_error_json: encode_app_error(&AppError::internal(
+                    AppErrorSubsystem::App,
+                    SHUT_DOWN.to_string(),
+                )),
+            });
+        }
         let state = Arc::clone(&self.state);
         let name = command.clone();
         let task = self
@@ -230,22 +283,55 @@ impl VoyaApp {
             })
     }
 
-    /// Stops what the app started. Safe to call more than once.
+    /// Stops what the app started and lets go of the database. Safe to call
+    /// more than once.
+    ///
+    /// The host moves the database aside right after this on a reset, and
+    /// builds a second app on the same file after a reload, so the pool has to
+    /// be closed here: the object itself lives until the platform frees it.
     pub fn shutdown(&self) {
-        crate::logging::detach(&self.state.sinks);
+        if self.shut_down.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let state = &self.state;
+        crate::logging::detach(&state.sinks);
+        // Its task holds the sinks, and through them the platform's listener.
+        if let Err(error) = state.proxy_monitor.stop() {
+            tracing::warn!(
+                ?error,
+                "the connection monitor did not stop during shutdown"
+            );
+        }
         // Probe cores belong to the app process, not to the supervisor, and an
-        // abandoned run leaves one listening; the desktop shell reaps them the
+        // abandoned run leaves one listening; the desktop shell reaps them
         // the same way in `apps/desktop/src-tauri/src/lifecycle.rs` and `voya_app::lifecycle`.
-        self.state.speedtest.shutdown();
+        state.speedtest.shutdown();
         self.runtime.block_on(async {
-            if let Err(error) = self.state.supervisor.stop().await {
+            // Through the runtime manager rather than the supervisor: it waits
+            // for a connect still in flight, and removes the generated config,
+            // which carries the node's credentials.
+            let runtime = state.services.runtime(state.supervisor.clone(), None);
+            if let Some(Err(error)) = exit_step(
+                "core disconnect",
+                DISCONNECT_SHUTDOWN_LIMIT,
+                runtime.disconnect(),
+            )
+            .await
+            {
                 tracing::warn!(?error, "the core did not stop cleanly during shutdown");
             }
+            exit_step(
+                "database close",
+                DATABASE_SHUTDOWN_LIMIT,
+                state.services.close(),
+            )
+            .await;
         });
     }
 }
 
 async fn connect(
+    target_os: TargetOs,
     data_dir: &Path,
     paths: AppPaths,
     locale: Option<&str>,
@@ -257,7 +343,7 @@ async fn connect(
     // The error arrives by inference rather than by name: spelling out the
     // persistence crate's error type here would reach past the `voya-app`
     // facade the architecture gate exists to protect.
-    let opening = AppOpening::open(&database_path, paths, TargetOs::current(), locale)
+    let opening = AppOpening::open(&database_path, paths, target_os, locale)
         .await
         .map_err(|error| StartupError::Database {
             app_error_json: encode_app_error(&database_error(&error, AppErrorSubsystem::App)),
@@ -267,7 +353,6 @@ async fn connect(
     let OpenedApp {
         services,
         config_mutations,
-        ..
     } = opening.finish().await;
 
     let sinks = Arc::new(HostSinks::new(events));
@@ -282,6 +367,7 @@ async fn connect(
     Ok(Arc::new_cyclic(|this: &Weak<MobileState>| {
         let supervisor = CoreSupervisor::spawn(
             SupervisorDeps::new(Arc::new(NoProcessRunner), Arc::clone(&elevation))
+                .with_target_os(target_os)
                 .with_native_tun_controller(Arc::clone(&native_tun))
                 .with_event_sink(Arc::new(SupervisorRecoverySink::new(
                     Weak::clone(this),

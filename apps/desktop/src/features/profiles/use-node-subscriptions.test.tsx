@@ -112,7 +112,7 @@ it("updates every subscription at once and ignores a second request while runnin
   expect(result.current.updatingAllSubscriptions).toBe(true);
   await act(() => result.current.updateAllSubscriptions());
   expect(ipc.updateSubscriptions).toHaveBeenCalledOnce();
-  expect(ipc.updateSubscriptions).toHaveBeenCalledWith(null, true, null);
+  expect(ipc.updateSubscriptions).toHaveBeenCalledWith(null);
   await act(async () => { finish(success); await pending; });
   expect(result.current.updatingAllSubscriptions).toBe(false);
   expect(result.current.operationMessage).toBeTruthy();

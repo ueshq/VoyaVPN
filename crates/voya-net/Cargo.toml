@@ -10,9 +10,9 @@ version.workspace = true
 test-utils = []
 
 [dependencies]
-futures-util = "0.3"
+futures-util.workspace = true
 igd-next = { version = "0.17", default-features = false, features = ["aio_tokio"] }
-percent-encoding = "2.3"
+percent-encoding.workspace = true
 # `gzip` lets subscription servers compress their base64 bodies; the response
 # limits count decoded bytes, so it cannot slip past them. Which roots are
 # trusted is a per-target decision; see the two blocks at the bottom.
@@ -33,7 +33,7 @@ tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "time"
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["connect"] }
 tracing.workspace = true
 voya-core.workspace = true
-webpki-roots = "0.26"
+webpki-roots = "1"
 
 # Desktop: the bundled webpki roots *plus* the OS trust store, so a self-hosted
 # server behind a private CA the machine already trusts works too. Clients are
@@ -50,8 +50,8 @@ rustls-native-certs = "0.8"
 
 
 [dev-dependencies]
-base64 = "0.22"
-tempfile = "3"
+base64.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

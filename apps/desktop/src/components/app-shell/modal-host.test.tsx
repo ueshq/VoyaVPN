@@ -1,6 +1,6 @@
 import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ModalHost } from "@/components/app-shell/modal-host";

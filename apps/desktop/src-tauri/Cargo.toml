@@ -8,8 +8,6 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
-[package.metadata]
-
 [package.metadata.cargo-machete]
 # Required by tauri::generate_context!, which cargo-machete cannot observe.
 ignored = ["serde_json"]

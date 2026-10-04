@@ -2,7 +2,9 @@
 //! after a crash, and the network check that feeds the links.
 //!
 //! The `lifecycle` lock serializes every change of the process, so a save
-//! arriving while a crash restart is pending cannot start two cores. It is held
+//! arriving while a crash restart is pending cannot start two cores. It is
+//! taken before the stored record is read, so no change is built on a record
+//! another change is about to replace. It is held
 //! across the slow parts (spawning, stopping, removing router forwards); the
 //! `node` lock beside it is only taken for short reads and writes, so the page
 //! never waits on a starting core. A generation counter, bumped on every start
@@ -186,12 +188,21 @@ impl SelfHostManager {
     }
 
     async fn start_on_launch(&self) -> Result<()> {
+        // Read under the lock: a save that lands during launch must not be
+        // overwritten by the identity this writes back, nor start a node the
+        // user has just turned off.
+        let lifecycle = self.inner.lifecycle.lock().await;
+        // A change that got the lock first has already started the node, and
+        // starting does not stop what runs: a second core would be spawned
+        // over the first one's handle.
+        if self.inner.node.lock().await.core.is_some() {
+            return Ok(());
+        }
         let mut record = self.inner.database.self_host().load().await?;
         if !record.config.enabled {
             return Ok(());
         }
         self.ensure_identity(&mut record).await?;
-        let lifecycle = self.inner.lifecycle.lock().await;
         self.start_locked(&lifecycle, &record).await;
         drop(lifecycle);
         self.after_change();
@@ -207,11 +218,12 @@ impl SelfHostManager {
     pub async fn save_config(&self, config: SelfHostConfig) -> Result<SelfHostState> {
         validate_self_host_config(&config).map_err(SelfHostError::Validation)?;
         let config = normalized_config(config);
+        let lifecycle = self.inner.lifecycle.lock().await;
         let mut record = self.inner.database.self_host().load().await?;
         let restart = core_settings_changed(&record.config, &config);
         let recheck = record.config.upnp_enabled != config.upnp_enabled;
         record.config = config;
-        let state = self.apply(record, restart).await?;
+        let state = self.apply(lifecycle, record, restart).await?;
         if recheck {
             self.inner.check_now.notify_one();
         }
@@ -219,29 +231,39 @@ impl SelfHostManager {
     }
 
     pub async fn set_enabled(&self, enabled: bool) -> Result<SelfHostState> {
+        let lifecycle = self.inner.lifecycle.lock().await;
         let mut record = self.inner.database.self_host().load().await?;
         record.config.enabled = enabled;
-        self.apply(record, false).await
+        self.apply(lifecycle, record, false).await
     }
 
     /// New UUID, keys and short id: every link handed out so far stops working.
     pub async fn rotate_credentials(&self) -> Result<SelfHostState> {
+        let lifecycle = self.inner.lifecycle.lock().await;
         let mut record = self.inner.database.self_host().load().await?;
         record.credentials = Some(mint_credentials()?);
-        self.apply(record, true).await
+        self.apply(lifecycle, record, true).await
     }
 
     /// Stores `record` and brings the process in line with it.
-    async fn apply(&self, mut record: SelfHostRecord, restart: bool) -> Result<SelfHostState> {
+    ///
+    /// `lifecycle` was taken before `record` was read. Each change edits one
+    /// part of the stored record and writes all of it back, so two that read
+    /// before either wrote would have the later one undo the earlier: a
+    /// rotation racing "turn off" stored `enabled` again and started the node,
+    /// and a save racing a rotation put the old credentials back.
+    async fn apply(
+        &self,
+        lifecycle: MutexGuard<'_, ()>,
+        mut record: SelfHostRecord,
+        restart: bool,
+    ) -> Result<SelfHostState> {
         if record.config.enabled {
             self.assign_ports(&mut record).await?;
             if record.credentials.is_none() {
                 record.credentials = Some(mint_credentials()?);
             }
         }
-        // Taken before the save, so racing changes are stored and applied in
-        // the same order.
-        let lifecycle = self.inner.lifecycle.lock().await;
         self.inner.database.self_host().save(&record).await?;
 
         let running = {
@@ -306,6 +328,12 @@ impl SelfHostManager {
     /// Starts the core. `node` is only held to publish `Starting` and then the
     /// outcome, so the page can read the state while the core spawns.
     async fn start_locked(&self, _lifecycle: &MutexGuard<'_, ()>, record: &SelfHostRecord) {
+        // `shutdown` stops the core under this lock and then lets it go. A
+        // command that was queued behind it would start a core nothing is
+        // left to stop: the process ends without dropping anything.
+        if *self.inner.shutdown.borrow() {
+            return;
+        }
         let ports = enabled_ports(&record.config);
         {
             let mut node = self.inner.node.lock().await;
@@ -526,8 +554,7 @@ impl SelfHostManager {
         self.state().await
     }
 
-    /// The network check the watch loop runs. Returns whether the node is
-    /// hosting at all, so the loop can skip idle ticks.
+    /// The network check the watch loop runs.
     pub(super) async fn periodic_check(&self) -> Result<()> {
         self.check(true).await
     }
@@ -621,6 +648,7 @@ impl SelfHostManager {
             let lifecycle = self.inner.lifecycle.lock().await;
             self.stop_locked(&lifecycle).await;
         }
+        self.deps().self_tester.stop();
         self.deps().runner.set_exit_handler(None);
         let tasks = self
             .inner

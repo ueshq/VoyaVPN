@@ -7,7 +7,7 @@ import { PrivacyPage } from "./pages/privacy";
 import { SupportPage } from "./pages/support";
 import { LOCALES, type Locale, type Page, ROUTES, fileFor, notFoundFileFor, urlFor } from "./routes";
 
-export type OutputFile = { file: string; contents: string };
+type OutputFile = { file: string; contents: string };
 
 const PAGE_BODY: Record<Page, (props: { locale: Locale }) => React.ReactNode> = {
   home: HomePage,

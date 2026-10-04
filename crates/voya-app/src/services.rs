@@ -31,7 +31,6 @@ use crate::{
     supervisor::CoreSupervisor,
     sysproxy::SystemProxyManager,
     tun::{ProviderRegistrationCache, TunManager},
-    updates::UpdateManager,
 };
 
 /// A traffic-mode change after its commit.
@@ -53,6 +52,8 @@ pub struct AppServices {
     /// supervisor's Start and Stop.
     runtime_lock: Arc<tokio::sync::Mutex<()>>,
     settings_application: crate::settings::apply::SettingsApplication,
+    /// The platform every manager this facade hands out is built for.
+    target_os: TargetOs,
 }
 
 impl AppServices {
@@ -62,7 +63,22 @@ impl AppServices {
             runtime_paths,
             runtime_lock: Arc::new(tokio::sync::Mutex::new(())),
             settings_application: crate::settings::apply::SettingsApplication::default(),
+            target_os: TargetOs::current(),
         })
+    }
+
+    /// Builds the managers for `target_os` instead of the OS this was
+    /// compiled for. A host states its platform once, at startup, and its
+    /// tests state the one they stand in for.
+    #[must_use]
+    pub const fn with_target_os(mut self, target_os: TargetOs) -> Self {
+        self.target_os = target_os;
+        self
+    }
+
+    #[must_use]
+    pub const fn target_os(&self) -> TargetOs {
+        self.target_os
     }
 
     /// Load the persisted settings projected onto an `AppConfig` for the
@@ -70,11 +86,8 @@ impl AppServices {
     /// starts in the native VPN mode where the platform has one and in the
     /// shipped language closest to `system_locale`, and macOS always loads in
     /// VPN mode.
-    pub async fn load_config_for(
-        &self,
-        target_os: TargetOs,
-        system_locale: Option<&str>,
-    ) -> Result<AppConfig, DbError> {
+    pub async fn load_config_for(&self, system_locale: Option<&str>) -> Result<AppConfig, DbError> {
+        let target_os = self.target_os;
         let stored = self.database.settings().load_stored().await?;
         let fresh = stored.is_none();
         let state = self.database.app_state().load().await?;
@@ -90,13 +103,15 @@ impl AppServices {
         Ok(config)
     }
 
-    #[must_use]
-    pub fn config_mutations(&self, config: SharedAppConfig) -> ConfigMutationCoordinator {
-        ConfigMutationCoordinator::new(self.database.clone(), config)
+    /// Closes the database. Every later read or write through this facade, or
+    /// through a manager it handed out, fails.
+    pub async fn close(&self) {
+        self.database.close().await;
     }
 
-    pub async fn initialize_profile_metrics(&self) -> crate::profiles::Result<u64> {
-        Ok(self.database.profile_exs().delete_orphans().await?)
+    #[must_use]
+    pub(crate) fn config_mutations(&self, config: SharedAppConfig) -> ConfigMutationCoordinator {
+        ConfigMutationCoordinator::new(self.database.clone(), config)
     }
 
     /// The first `limit` nodes' ids and remarks in list order, plus `pinned`
@@ -189,11 +204,6 @@ impl AppServices {
         Ok(committed.value)
     }
 
-    #[must_use]
-    fn updates(&self) -> UpdateManager<'_> {
-        UpdateManager::new(&self.database, self.runtime_paths.clone())
-    }
-
     /// The runtime manager over the recipe both hosts share: one operation
     /// lock, one settings application, and the packaged core seed when the
     /// host has one (the phones run the core inside the tunnel provider and
@@ -204,9 +214,14 @@ impl AppServices {
         supervisor: CoreSupervisor,
         core_seed_resource_dir: Option<PathBuf>,
     ) -> RuntimeManager<'_> {
-        let manager = RuntimeManager::new(&self.database, self.runtime_paths.clone(), supervisor)
-            .with_operation_lock(Arc::clone(&self.runtime_lock))
-            .with_settings_application(self.settings_application.clone());
+        let manager = RuntimeManager::with_target_os(
+            &self.database,
+            self.runtime_paths.clone(),
+            supervisor,
+            self.target_os,
+        )
+        .with_operation_lock(Arc::clone(&self.runtime_lock))
+        .with_settings_application(self.settings_application.clone());
         match core_seed_resource_dir {
             Some(seed_dir) => manager.with_core_seed_resource_dir(seed_dir),
             None => manager,
@@ -222,7 +237,7 @@ impl AppServices {
         elevation: Arc<ElevationState>,
         provider_registration_cache: Option<Arc<ProviderRegistrationCache>>,
     ) -> TunManager {
-        let manager = TunManager::new(elevation);
+        let manager = TunManager::with_target_os(elevation, self.target_os);
         match provider_registration_cache {
             Some(cache) => manager.with_provider_registration_cache(cache),
             None => manager,
@@ -234,7 +249,11 @@ impl AppServices {
     /// one recipe; a phone hands a rejecting runner because it sets no proxy.
     #[must_use]
     pub fn system_proxy_manager(&self, runner: Arc<dyn ProcessRunner>) -> SystemProxyManager {
-        SystemProxyManager::new(SystemProxyService::new(runner), self.runtime_paths.clone())
+        SystemProxyManager::with_target_os(
+            SystemProxyService::new(runner),
+            self.runtime_paths.clone(),
+            self.target_os,
+        )
     }
 
     /// Saves the traffic mode and, while a core is connected, switches it live.
@@ -274,15 +293,34 @@ impl AppServices {
     /// tunnel anyway — the same effect.
     pub async fn update_rule_sets(
         &self,
+        supervisor: &CoreSupervisor,
         config: &AppConfig,
-        target_os: TargetOs,
     ) -> Result<Vec<voya_contracts::ResourceUpdateFile>, AppError> {
-        Ok(self
-            .updates()
-            .update_srs_assets(crate::sysproxy::runtime_default_proxy_url(
-                config, target_os,
-            ))
-            .await?)
+        Ok(crate::updates::update_srs_assets(
+            &self.database,
+            &self.runtime_paths,
+            self.running_core_proxy(supervisor).url(config),
+        )
+        .await?)
+    }
+
+    /// Where a download finds `supervisor`'s core, if it is running one.
+    pub(crate) fn running_core_proxy(
+        &self,
+        supervisor: &CoreSupervisor,
+    ) -> crate::subscriptions::RunningCoreProxy {
+        crate::subscriptions::RunningCoreProxy {
+            supervisor: supervisor.clone(),
+            settings: self.settings_application.clone(),
+            target_os: self.target_os,
+        }
+    }
+
+    /// `saved` as the running core sees its inbounds: a port saved since the
+    /// last connect is not listening until the reconnect that applies it.
+    #[must_use]
+    pub fn running_core_config(&self, saved: &AppConfig) -> AppConfig {
+        self.settings_application.running_core_config(saved)
     }
 
     /// An explicit live mode switch acknowledges that field alone. Other
@@ -323,15 +361,13 @@ impl AppServices {
     pub fn spawn_subscription_auto_update(
         &self,
         coordinator: Arc<ConfigMutationCoordinator>,
-        supervisor: CoreSupervisor,
-        target_os: TargetOs,
+        supervisor: &CoreSupervisor,
         sink: Arc<dyn SubscriptionAutoUpdateSink>,
     ) -> SubscriptionAutoUpdateScheduler {
         SubscriptionAutoUpdateScheduler::spawn(
             self.database.clone(),
             coordinator,
-            supervisor,
-            target_os,
+            self.running_core_proxy(supervisor),
             sink,
         )
     }
@@ -405,8 +441,9 @@ impl AppServices {
         launcher: Arc<dyn crate::speedtest::ProbeCoreLauncher>,
         supervisor: CoreSupervisor,
     ) -> SpeedtestManager {
-        let manager = SpeedtestManager::with_launcher(self.runtime_paths.clone(), launcher);
-        if TargetOs::current().runs_core_in_tunnel_provider() {
+        let manager = SpeedtestManager::with_launcher(self.runtime_paths.clone(), launcher)
+            .with_target_os(self.target_os);
+        if self.target_os.runs_core_in_tunnel_provider() {
             manager.with_running_core(Arc::new(crate::speedtest::SupervisorRunningCoreProbe::new(
                 supervisor,
             )))
@@ -533,12 +570,10 @@ mod tests {
                 AppPaths::new(&app_dir),
             )
             .await
-            .expect("test database");
+            .expect("test database")
+            .with_target_os(target_os);
 
-            let fresh = services
-                .load_config_for(target_os, None)
-                .await
-                .expect("fresh");
+            let fresh = services.load_config_for(None).await.expect("fresh");
             assert_eq!(fresh.tun.enabled, fresh_tun, "{target_os:?}");
 
             let mut stored = AppSettings::default();
@@ -550,10 +585,7 @@ mod tests {
                 .save(&stored)
                 .await
                 .expect("settings");
-            let loaded = services
-                .load_config_for(target_os, None)
-                .await
-                .expect("stored");
+            let loaded = services.load_config_for(None).await.expect("stored");
             assert_eq!(
                 loaded.tun.enabled,
                 target_os == TargetOs::Macos,
@@ -576,17 +608,15 @@ mod tests {
             AppPaths::new(&app_dir),
         )
         .await
-        .expect("test database");
+        .expect("test database")
+        .with_target_os(TargetOs::Linux);
 
         let fresh = services
-            .load_config_for(TargetOs::Linux, Some("zh-Hant-TW"))
+            .load_config_for(Some("zh-Hant-TW"))
             .await
             .expect("fresh");
         assert_eq!(fresh.appearance.language, "zh-Hant");
-        let unknown = services
-            .load_config_for(TargetOs::Linux, None)
-            .await
-            .expect("no locale");
+        let unknown = services.load_config_for(None).await.expect("no locale");
         assert_eq!(unknown.appearance.language, "en");
 
         let mut stored = AppSettings::default();
@@ -598,7 +628,7 @@ mod tests {
             .await
             .expect("settings");
         let chosen = services
-            .load_config_for(TargetOs::Linux, Some("zh-CN"))
+            .load_config_for(Some("zh-CN"))
             .await
             .expect("stored");
         assert_eq!(chosen.appearance.language, "en", "a saved choice wins");

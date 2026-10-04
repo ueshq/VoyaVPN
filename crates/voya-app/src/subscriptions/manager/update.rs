@@ -25,14 +25,14 @@ use crate::subscriptions::unix_now_seconds;
 use super::{is_http_url, Result, SubscriptionManager, SubscriptionManagerError};
 
 impl SubscriptionManager<'_> {
+    /// Downloads through `proxy_url` first when there is one, then directly.
     pub async fn prepare_subscription_update(
         &self,
         subscription_id: Option<&str>,
-        prefer_proxy: bool,
         proxy_url: Option<&str>,
     ) -> Result<PreparedSubscriptionUpdate> {
         let subscriptions = self.database.subscriptions().list().await?;
-        prepare_subscription_snapshot(subscriptions, subscription_id, prefer_proxy, proxy_url).await
+        prepare_subscription_snapshot(subscriptions, subscription_id, proxy_url).await
     }
 
     /// [`Self::prepare_subscription_update`] for one subscription the caller
@@ -41,10 +41,9 @@ impl SubscriptionManager<'_> {
     /// A row edited or deleted since is caught where the update is applied.
     pub(crate) async fn prepare_update_of(
         item: SubItem,
-        prefer_proxy: bool,
         proxy_url: Option<&str>,
     ) -> Result<PreparedSubscriptionUpdate> {
-        prepare_subscription_snapshot(vec![item], None, prefer_proxy, proxy_url).await
+        prepare_subscription_snapshot(vec![item], None, proxy_url).await
     }
 
     /// Persists the fetch failures of a prepared update that will not be
@@ -235,7 +234,6 @@ const SUBSCRIPTION_FETCH_CONCURRENCY: usize = 4;
 async fn prepare_subscription_snapshot(
     subscriptions: Vec<SubItem>,
     subscription_id: Option<&str>,
-    prefer_proxy: bool,
     proxy_url: Option<&str>,
 ) -> Result<PreparedSubscriptionUpdate> {
     let client = SubscriptionClient::new();
@@ -246,7 +244,7 @@ async fn prepare_subscription_snapshot(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     let options = SubscriptionFetchOptions {
-        prefer_proxy,
+        prefer_proxy: proxy_url.is_some(),
         proxy_url: proxy_url.map(str::to_string),
     };
 

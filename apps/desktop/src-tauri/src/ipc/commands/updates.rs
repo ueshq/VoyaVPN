@@ -55,7 +55,7 @@ pub async fn update_srs_assets(
 
     state
         .services()
-        .update_rule_sets(&config, TargetOs::current())
+        .update_rule_sets(&state.supervisor(), &config)
         .await
 }
 

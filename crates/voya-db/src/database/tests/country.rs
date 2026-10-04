@@ -148,7 +148,6 @@ async fn country_results_clear_on_failure_and_cannot_restore_changed_or_deleted_
         .execute(db.pool())
         .await
         .expect("delete");
-    db.profile_exs().delete_orphans().await.expect("clean up");
     assert!(!db
         .profile_exs()
         .set_probe_result(&profile, &success)

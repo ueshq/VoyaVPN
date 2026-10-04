@@ -2,11 +2,12 @@ import { queries } from "@voya/client/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { voyaCommands } from "@voya/client/transport";
-import type { AppSettings, DnsSettings } from "@voya/contracts";
+import type { DnsSettings } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { applyChanges, changedFields } from "@voya/features/settings/settings-draft";
 import { settingsFailure, useSettingsDraft } from "@voya/features/settings/use-settings-draft";
 
+import { cacheSavedDns } from "@voya/features/dns/dns-cache";
 import { dnsSettingsSchema } from "@voya/features/dns/dns-form-schema";
 
 export function useDnsSettings(enabled = true) {
@@ -19,12 +20,7 @@ export function useDnsSettings(enabled = true) {
       const baseline = await voyaCommands().loadDnsSettings();
       const next = dnsSettingsSchema.parse(applyChanges(baseline, [change]));
       const saved = changedFields(baseline, next).length ? await voyaCommands().saveDnsSettings(next) : baseline;
-      await Promise.all([
-        client.cancelQueries({ queryKey: queryKeys.dns }),
-        client.cancelQueries({ queryKey: queryKeys.appSettings }),
-      ]);
-      client.setQueryData(queryKeys.dns, saved);
-      client.setQueryData<AppSettings>(queryKeys.appSettings, (current) => current ? { ...current, dns: saved } : current);
+      await cacheSavedDns(client, saved);
       return saved;
     },
   });

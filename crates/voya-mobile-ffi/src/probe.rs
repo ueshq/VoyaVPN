@@ -30,8 +30,10 @@ pub trait ProbeCoreHost: Send + Sync {
     /// the caller polls the ports.
     fn start(&self, config_json: String) -> Result<String, ProbeCoreError>;
 
-    /// Stops the instance with this id. Called once per started core, and
-    /// never for an id the host did not hand out.
+    /// Stops the instance with this id. Called once per started core, with
+    /// the id `start` returned. A host that returned an empty one is given a
+    /// made-up id it cannot match, and should answer that as it would any
+    /// unknown id.
     fn stop(&self, core_id: String) -> Result<(), ProbeCoreError>;
 }
 
@@ -50,7 +52,7 @@ pub struct HostProbeCoreLauncher {
     /// be torn down between a run and its cleanup, so the launcher keeps the
     /// ids rather than trusting each session to come back.
     live: Arc<Mutex<Vec<String>>>,
-    /// Only for the id a refusing host is never given: see [`stop`].
+    /// Numbers the ids made up for a host that returned an empty one.
     next_local_id: AtomicU64,
 }
 
@@ -121,8 +123,16 @@ impl Drop for HostProbeCore {
 
 fn stop_core(live: &Mutex<Vec<String>>, host: &dyn ProbeCoreHost, core_id: Option<String>) {
     let Some(core_id) = core_id else { return };
-    lock_ignoring_poison(live).retain(|live_id| live_id != &core_id);
-    stop_on_host(host, &core_id);
+    // `stop_all` may have reaped it already; the host is told once per core.
+    let was_live = {
+        let mut live = lock_ignoring_poison(live);
+        let before = live.len();
+        live.retain(|live_id| live_id != &core_id);
+        live.len() != before
+    };
+    if was_live {
+        stop_on_host(host, &core_id);
+    }
 }
 
 fn stop_on_host(host: &dyn ProbeCoreHost, core_id: &str) {

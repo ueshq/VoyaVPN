@@ -17,11 +17,13 @@ impl SupervisorActor {
         deps: SupervisorDeps,
         tx: mpsc::WeakSender<SupervisorCommand>,
         runtime: Option<tokio::runtime::Handle>,
+        clash_api: watch::Sender<ClashApiAccess>,
     ) -> Self {
         Self {
             deps,
             tx,
             runtime,
+            clash_api,
             running: RunningCore::empty(),
             native_tun_generation: Arc::new(AtomicU64::new(0)),
             restart_generation: 0,
@@ -45,10 +47,22 @@ impl SupervisorActor {
         }
     }
 
-    pub(super) fn clash_api_access(&self) -> ClashApiAccess {
-        self.running
+    /// Tells the watchers which core is running now.
+    ///
+    /// Called before a command is answered, so whoever awaited the answer
+    /// reads the core it describes; and as soon as a restart has stopped the
+    /// old core, because bringing the next one up can take as long as the
+    /// tunnel does and nobody should dial the dead port meanwhile.
+    fn publish_clash_api(&self) {
+        let access = self
+            .running
             .snapshot(self.deps.clock.now())
-            .clash_api_access()
+            .clash_api_access();
+        self.clash_api.send_if_modified(|current| {
+            let moved = *current != access;
+            *current = access;
+            moved
+        });
     }
 
     pub(super) fn handle(&mut self, command: SupervisorCommand) {
@@ -56,12 +70,16 @@ impl SupervisorActor {
             // `start` is restart: it stops the running core itself, once its
             // own preconditions have passed.
             SupervisorCommand::Start(request, reply) => {
-                let _ = reply.send(self.user_start(*request));
+                let started = self.user_start(*request);
+                self.publish_clash_api();
+                let _ = reply.send(started);
             }
             SupervisorCommand::Stop(reply) => {
                 self.cancel_pending_restart();
                 self.crash.reset();
-                let _ = reply.send(self.stop());
+                let stopped = self.stop();
+                self.publish_clash_api();
+                let _ = reply.send(stopped);
             }
             SupervisorCommand::Status(reply) => {
                 let _ = reply.send(Ok(self.running.snapshot(self.deps.clock.now())));
@@ -71,16 +89,20 @@ impl SupervisorActor {
                 exit_code,
                 reply,
             } => {
-                let _ = reply.send(self.process_exited(process_id, exit_code));
+                let exited = self.process_exited(process_id, exit_code);
+                self.publish_clash_api();
+                let _ = reply.send(exited);
             }
             SupervisorCommand::NativeTunExited {
                 generation,
                 message,
             } => {
                 self.native_tun_exited(generation, message);
+                self.publish_clash_api();
             }
             SupervisorCommand::DelayedRestart(pending) => {
                 self.delayed_restart(*pending);
+                self.publish_clash_api();
             }
         }
     }
@@ -108,6 +130,7 @@ impl SupervisorActor {
         let plan = self.plan_start(&request, backend)?;
 
         self.stop()?;
+        self.publish_clash_api();
         let now = self.deps.clock.now();
         self.crash.record_start(now);
 
@@ -571,6 +594,11 @@ impl SupervisorActor {
         let tx = self.tx.clone();
         let interval = self.deps.native_tun_health_interval;
         self.spawn_task(async move {
+            // A status that could not be read says nothing about the tunnel:
+            // one stalled round trip to the system's VPN preferences reports
+            // `Error` while the provider keeps carrying traffic. Only a second
+            // one in a row is taken as the provider's own state.
+            let mut unreadable = false;
             loop {
                 tokio::time::sleep(interval).await;
                 // A healthy provider is no exit condition: a watcher whose tick
@@ -595,8 +623,13 @@ impl SupervisorActor {
                 };
 
                 let Some(message) = terminal_native_tun_message(&status) else {
+                    unreadable = false;
                     continue;
                 };
+                if status.provider_state == NativeTunProviderState::Error && !unreadable {
+                    unreadable = true;
+                    continue;
+                }
                 let Some(tx) = tx.upgrade() else {
                     return;
                 };

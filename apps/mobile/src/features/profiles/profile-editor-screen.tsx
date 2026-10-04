@@ -4,7 +4,7 @@ import { profileDetailsQuery } from "@voya/client/profile-queries";
 import { refreshQueries } from "@voya/client/queries";
 import { queryKeys } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
-import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
+import { getProtocolLabel, getTlsModeLabel, getTransportLabel } from "@voya/features/profiles/profile-constants";
 import {
   draftFromProfile,
   parseProfileDraft,
@@ -16,7 +16,6 @@ import {
 } from "@voya/features/forms/zod-errors";
 import type { Profile } from "@voya/contracts";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { TRANSPORT_OPTIONS } from "@voya/features/profiles/profile-constants";
 import { FieldError } from "heroui-native/field-error";
 import { Input } from "heroui-native/input";
 import { Label } from "heroui-native/label";
@@ -30,7 +29,7 @@ import type { RootRoutes } from "~/app/navigation";
 import { DetailScreen } from "~/components/detail-screen";
 import { ErrorNotice } from "~/components/error-notice";
 import { ListRow } from "~/components/list-row";
-import { useBusyAction } from "~/components/use-busy-action";
+import { useBusyAction } from "@voya/features/forms/use-busy-action";
 import { useUnsavedChanges } from "~/components/use-unsaved-changes";
 import { SaveStatus } from "~/components/save-status";
 import { PrimaryButton } from "~/components/primary-button";
@@ -130,12 +129,6 @@ function Editor({ profile }: { profile: Profile }) {
 
   useUnsavedChanges(dirty, busy, save);
 
-  const transportLabel = profile.transport
-    ? (TRANSPORT_OPTIONS.find(
-        (option) => option.value === profile.transport?.kind,
-      )?.label ?? profile.transport.kind)
-    : t("mobile.editorTransportNone");
-
   return (
     <>
       <Typography className="text-base text-subtle">
@@ -190,22 +183,16 @@ function Editor({ profile }: { profile: Profile }) {
         <ListGroup>
           <ListRow
             title={t("mobile.editorProtocol")}
-            description={profile ? getProtocolLabel(profile.protocol.kind) : ""}
+            description={getProtocolLabel(profile.protocol.kind)}
           />
           <ListRow
             title={t("mobile.editorTransport")}
-            description={transportLabel}
+            description={profile.transport ? getTransportLabel(profile.transport.kind) : t("mobile.editorTransportNone")}
           />
           <ListRow
             last
             title={t("mobile.editorTls")}
-            description={
-              profile.tls
-                ? profile.tls.mode === "reality"
-                  ? "REALITY"
-                  : "TLS"
-                : t("mobile.editorTransportNone")
-            }
+            description={profile.tls ? getTlsModeLabel(profile.tls.mode) : t("mobile.editorTransportNone")}
           />
         </ListGroup>
       </View>

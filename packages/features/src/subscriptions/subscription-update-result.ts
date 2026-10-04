@@ -1,6 +1,5 @@
 import type { SubscriptionUpdateResult } from "@voya/contracts";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
-import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 
 /** Outcome state is authoritative; diagnostic messages can include successes. */
 export function isSubscriptionUpdateFailure(result: SubscriptionUpdateResult) {
@@ -23,10 +22,8 @@ export function assertSubscriptionUpdated(result: SubscriptionUpdateResult, t: T
   }
 }
 
-export function subscriptionUpdateMessages(result: SubscriptionUpdateResult, t?: TranslationFunction) {
-  return result.outcomes.filter((item) => item.status !== "success").map((item) =>
-    t ? t(REASONS[item.reason]) : redactOperationalMessage(item.diagnostic ?? item.reason),
-  ).join("\n");
+export function subscriptionUpdateMessages(result: SubscriptionUpdateResult, t: TranslationFunction) {
+  return result.outcomes.filter((item) => item.status !== "success").map((item) => t(REASONS[item.reason])).join("\n");
 }
 
 export function formatSubscriptionUpdateSummary(result: SubscriptionUpdateResult, t: TranslationFunction) {

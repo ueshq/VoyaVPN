@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { renderWithQuery } from "@/test/render";
+import { renderWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { changeLocale } from "@voya/i18n";
 import type { DnsSettings } from "@voya/contracts";

@@ -1,5 +1,5 @@
 import type { TranslationFunction } from "@voya/i18n/core";
-import type { PolicyGroupRuntime, ProfileSummaryEntry, ProfileTransport } from "@voya/contracts";
+import type { PolicyGroupRuntime, ProfileSummaryEntry } from "@voya/contracts";
 import { speedtestOutcomeText } from "@voya/client/messages";
 import { formatDelay } from "@voya/utils/formatting";
 
@@ -16,15 +16,6 @@ export function profileLatencyTone(item: ProfileSummaryEntry): LatencyTone {
   if (outcome && outcome !== "completed") return "poor";
   if (!delayMs || delayMs <= 0) return "unknown";
   return delayMs < 150 ? "good" : "fair";
-}
-
-export function profileTransportName(transport: ProfileTransport | null) {
-  switch (transport?.kind) {
-    case "websocket": return "ws";
-    case "httpUpgrade": return "httpupgrade";
-    case "http2": return "h2";
-    default: return transport?.kind ?? "tcp";
-  }
 }
 
 export function profileNameWithoutFlag(name: string) {

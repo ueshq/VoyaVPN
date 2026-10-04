@@ -158,6 +158,8 @@ impl NativeTunController for RecordingNativeTunController {
 struct FlippableNativeTunController {
     events: SharedEvents,
     status: Arc<Mutex<voya_platform::tun::NativeTunStatus>>,
+    /// How many of the next status reads fail before the real state shows again.
+    unreadable: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl FlippableNativeTunController {
@@ -170,6 +172,7 @@ impl FlippableNativeTunController {
                 component_ready: true,
                 message: None,
             })),
+            unreadable: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         }
     }
 
@@ -182,7 +185,21 @@ impl FlippableNativeTunController {
 
 impl NativeTunController for FlippableNativeTunController {
     fn status(&self, _backend: TunBackend) -> voya_platform::tun::NativeTunStatus {
-        self.status.lock().expect("native tun status").clone()
+        let status = self.status.lock().expect("native tun status").clone();
+        let failed = self
+            .unreadable
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                left.checked_sub(1)
+            })
+            .is_ok();
+        if failed {
+            return voya_platform::tun::NativeTunStatus {
+                provider_state: NativeTunProviderState::Error,
+                message: Some("status read timed out".to_string()),
+                ..status
+            };
+        }
+        status
     }
 
     fn start(&self, request: NativeTunStartRequest) -> Result<(), NativeTunError> {
@@ -400,7 +417,6 @@ async fn supervisor_stop_teardown_order_is_sudo_kill_main_pre() {
             ))),
             tun_enabled: true,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -435,9 +451,6 @@ async fn supervisor_clash_api_watch_moves_on_start_and_stop_but_not_on_status() 
     let mut changes = supervisor.subscribe_clash_api();
     changes.borrow_and_update();
 
-    // The value is published after a command's reply, so the second read
-    // proves the first one's turn of the actor loop has finished.
-    supervisor.status().await.expect("status");
     supervisor.status().await.expect("status");
     assert!(!changes.has_changed().expect("the supervisor is running"));
 
@@ -449,7 +462,6 @@ async fn supervisor_clash_api_watch_moves_on_start_and_stop_but_not_on_status() 
             pre: None,
             tun_enabled: false,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
             clash_api_port: 9090,
             clash_api_secret: None,
@@ -493,7 +505,6 @@ async fn supervisor_sudo_kill_passes_expected_core_name_for_pid_validation() {
             pre: None,
             tun_enabled: true,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -550,7 +561,6 @@ async fn supervisor_sudo_kill_nonzero_status_is_typed_error() {
             pre: None,
             tun_enabled: true,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -588,7 +598,12 @@ fn supervisor_actor_drop_stops_running_core_with_sudo_kill() {
 
     {
         let (tx, _rx) = mpsc::channel(1);
-        let mut actor = SupervisorActor::new(deps, tx.downgrade(), None);
+        let mut actor = SupervisorActor::new(
+            deps,
+            tx.downgrade(),
+            None,
+            watch::channel(ClashApiAccess::default()).0,
+        );
         actor
             .start(SupervisorStartRequest {
                 active_profile_id: Some("active".to_string()),
@@ -600,7 +615,6 @@ fn supervisor_actor_drop_stops_running_core_with_sudo_kill() {
                 pre: None,
                 tun_enabled: true,
                 kill_switch: false,
-                sudo_script_dir: "/tmp/voya/scripts".into(),
                 restart_on_crash: false,
                 clash_api_port: 0,
                 clash_api_secret: None,
@@ -633,7 +647,6 @@ async fn supervisor_elevation_grant_gates_elevated_spawn() {
         pre: None,
         tun_enabled: true,
         kill_switch: false,
-        sudo_script_dir: "/tmp/voya/scripts".into(),
         restart_on_crash: false,
         clash_api_port: 0,
         clash_api_secret: None,
@@ -670,7 +683,6 @@ async fn supervisor_crash_restarts_serialized_lifecycle() {
         pre: None,
         tun_enabled: false,
         kill_switch: false,
-        sudo_script_dir: "/tmp/voya/scripts".into(),
         restart_on_crash: true,
         clash_api_port: 0,
         clash_api_secret: None,
@@ -750,7 +762,6 @@ sleep 30
             pre: None,
             tun_enabled: false,
             kill_switch: false,
-            sudo_script_dir: temp_dir.join("scripts"),
             restart_on_crash: true,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -808,7 +819,6 @@ async fn supervisor_windows_non_tun_process_start_assigns_job() {
             ))),
             tun_enabled: false,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -857,7 +867,6 @@ async fn supervisor_windows_tun_uses_native_service_backend_without_process_spaw
             ),
             tun_enabled: true,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -912,7 +921,6 @@ async fn supervisor_native_tun_health_disconnects_once_without_restart() {
             pre: None,
             tun_enabled: true,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: true,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -971,7 +979,6 @@ async fn supervisor_tun_sudo_wraps_singbox() {
             pre: None,
             tun_enabled: true,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -1005,7 +1012,6 @@ async fn supervisor_tun_partial_start_failure_kills_elevated_main_before_returni
             ))),
             tun_enabled: true,
             kill_switch: false,
-            sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
             clash_api_port: 0,
             clash_api_secret: None,
@@ -1044,7 +1050,6 @@ fn crash_test_request() -> SupervisorStartRequest {
         pre: None,
         tun_enabled: false,
         kill_switch: false,
-        sudo_script_dir: "/tmp/voya/scripts".into(),
         restart_on_crash: true,
         clash_api_port: 0,
         clash_api_secret: None,
@@ -1427,7 +1432,6 @@ async fn supervisor_start_precondition_failure_keeps_the_running_core() {
         pre: None,
         tun_enabled: true,
         kill_switch: false,
-        sudo_script_dir: "/tmp/voya/scripts".into(),
         restart_on_crash: false,
         clash_api_port: 0,
         clash_api_secret: None,
@@ -1561,6 +1565,68 @@ async fn supervisor_ignores_the_health_watcher_of_a_superseded_native_tun_start(
     assert_eq!(reported[0].message, "provider exited");
 }
 
+/// One status read that fails is a stalled system call, not a dead provider:
+/// the tunnel stays up. Two in a row are taken at their word.
+#[tokio::test]
+async fn supervisor_keeps_a_native_tun_whose_status_could_not_be_read_once() {
+    let events = SharedEvents::default();
+    let controller = Arc::new(FlippableNativeTunController::new(
+        events.clone(),
+        TunBackend::WindowsService,
+    ));
+    let sink = RecordingSupervisorEventSink::default();
+    let deps = SupervisorDeps::new(
+        Arc::new(FakeRunner::new(events.clone())),
+        Arc::new(ElevationState::new()),
+    )
+    .with_target_os(TargetOs::Windows)
+    .with_native_tun_controller(controller.clone())
+    .with_native_tun_health_interval(Duration::from_millis(10))
+    .with_event_sink(Arc::new(sink.clone()));
+    let supervisor = CoreSupervisor::spawn(deps);
+    supervisor
+        .start(native_tun_test_request())
+        .await
+        .expect("native tun start");
+
+    controller.unreadable.store(1, Ordering::SeqCst);
+    wait_for_unreadable_statuses_read(&controller).await;
+    // Several healthy ticks after the failed one.
+    tokio::time::sleep(Duration::from_millis(60)).await;
+    assert_eq!(
+        supervisor.status().await.expect("status").state,
+        SupervisorConnectionState::Connected
+    );
+    assert!(sink.events().is_empty());
+
+    controller.unreadable.store(2, Ordering::SeqCst);
+    for _ in 0..100 {
+        if supervisor.status().await.expect("status").state
+            == SupervisorConnectionState::Disconnected
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(
+        supervisor.status().await.expect("status").state,
+        SupervisorConnectionState::Disconnected
+    );
+    assert_eq!(sink.events().len(), 1);
+    assert_eq!(sink.events()[0].message, "status read timed out");
+}
+
+async fn wait_for_unreadable_statuses_read(controller: &Arc<FlippableNativeTunController>) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while controller.unreadable.load(Ordering::SeqCst) != 0 {
+        assert!(
+            Instant::now() < deadline,
+            "the watcher never read the status"
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+}
+
 /// A restart must retire the previous health watcher even when that watcher
 /// never observes a terminal state: its next tick lands after the new provider
 /// is already running, so the state alone would keep it polling forever. Each
@@ -1692,7 +1758,6 @@ async fn supervisor_start_keeps_the_running_core_when_the_sudo_kill_fails() {
         pre: None,
         tun_enabled: true,
         kill_switch: false,
-        sudo_script_dir: "/tmp/voya/scripts".into(),
         restart_on_crash: false,
         clash_api_port: 0,
         clash_api_secret: None,
@@ -1838,9 +1903,74 @@ fn native_tun_test_request() -> SupervisorStartRequest {
         pre: None,
         tun_enabled: true,
         kill_switch: false,
-        sudo_script_dir: "/tmp/voya/scripts".into(),
         restart_on_crash: true,
         clash_api_port: 0,
         clash_api_secret: None,
     }
+}
+
+/// What the Clash API watch said each time the tunnel was asked to start.
+#[derive(Default)]
+struct WatchReadingTunnel {
+    watch: Mutex<Option<watch::Receiver<ClashApiAccess>>>,
+    seen_at_start: Mutex<Vec<Option<u16>>>,
+}
+
+impl NativeTunController for WatchReadingTunnel {
+    fn status(&self, backend: TunBackend) -> voya_platform::tun::NativeTunStatus {
+        voya_platform::tun::NativeTunStatus {
+            backend,
+            provider_state: NativeTunProviderState::Running,
+            component_ready: true,
+            message: None,
+        }
+    }
+
+    fn start(&self, _request: NativeTunStartRequest) -> Result<(), NativeTunError> {
+        let port = self
+            .watch
+            .lock()
+            .expect("watch")
+            .as_ref()
+            .and_then(|watch| watch.borrow().port);
+        self.seen_at_start.lock().expect("seen").push(port);
+        Ok(())
+    }
+
+    fn stop(&self, _backend: TunBackend) -> Result<(), NativeTunError> {
+        Ok(())
+    }
+}
+
+/// A restart stops the old core and then waits on the tunnel, which can take
+/// as long as the system does. The tray, the auto-update and a close-connection
+/// request read the watch meanwhile, and must not be pointed at the port that
+/// has just been closed.
+#[tokio::test]
+async fn a_restart_withdraws_the_stopped_core_before_the_next_one_starts() {
+    let tunnel = Arc::new(WatchReadingTunnel::default());
+    let deps = SupervisorDeps::new(
+        Arc::new(FakeRunner::new(SharedEvents::default())),
+        Arc::new(ElevationState::new()),
+    )
+    .with_target_os(TargetOs::Macos)
+    .with_native_tun_controller(Arc::clone(&tunnel) as Arc<dyn NativeTunController>);
+    let supervisor = CoreSupervisor::spawn(deps);
+    *tunnel.watch.lock().expect("watch") = Some(supervisor.subscribe_clash_api());
+    let request = || SupervisorStartRequest {
+        clash_api_port: 9_190,
+        ..native_tun_test_request()
+    };
+
+    supervisor.start(request()).await.expect("start");
+    // Published before the reply, so no second round trip is needed to read it.
+    assert_eq!(supervisor.clash_api_access().port, Some(9_190));
+    supervisor.start(request()).await.expect("restart");
+
+    assert_eq!(
+        *tunnel.seen_at_start.lock().expect("seen"),
+        [None, None],
+        "the restart's tunnel start still saw the stopped core"
+    );
+    assert_eq!(supervisor.clash_api_access().port, Some(9_190));
 }

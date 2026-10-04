@@ -158,7 +158,6 @@ impl Default for InboundConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BehaviorConfig {
     pub autostart: bool,
-    pub auto_check_ip: bool,
     pub close_action: crate::CloseAction,
     pub start_minimized: bool,
     /// Offer a lowest-latency policy group the first time a subscription
@@ -170,7 +169,6 @@ impl Default for BehaviorConfig {
     fn default() -> Self {
         Self {
             autostart: false,
-            auto_check_ip: false,
             close_action: crate::CloseAction::default(),
             start_minimized: false,
             auto_create_subscription_group: true,

@@ -1,0 +1,33 @@
+[package]
+name = "voya-uniffi-bindgen"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+publish = false
+
+# A package of its own, not a bin of `voya-mobile-ffi`: a bin is built together
+# with its package's library, and that library is the whole backend. Generating
+# bindings then compiled voya-app, sqlx and reqwest for the host a second time.
+
+[features]
+# `uniffi/cli` carries clap and the bindings generator (~75 crates). The one
+# target requires it, so `cargo clippy --workspace` and the test gate build
+# nothing here, and `uniffi` keeps the features `voya-mobile-ffi` asks for.
+cli = ["uniffi/cli"]
+
+[dependencies]
+uniffi = "0.32"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[lints]
+workspace = true
+
+# Used only by the feature-gated bin, which cargo-machete does not build.
+[package.metadata.cargo-machete]
+ignored = ["uniffi"]

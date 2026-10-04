@@ -48,6 +48,17 @@ pub const CORE_OUTPUT_TARGET: &str = "voya::core_output";
 /// misclassify messages that merely mention a level name.
 const CORE_LOG_LEVEL_SCAN_TOKENS: usize = 8;
 
+const CORE_LOG_LEVEL_TOKENS: [(&str, ProcessLogLevel); 8] = [
+    ("TRACE", ProcessLogLevel::Trace),
+    ("DEBUG", ProcessLogLevel::Debug),
+    ("INFO", ProcessLogLevel::Info),
+    ("WARN", ProcessLogLevel::Warn),
+    ("WARNING", ProcessLogLevel::Warn),
+    ("ERROR", ProcessLogLevel::Error),
+    ("FATAL", ProcessLogLevel::Error),
+    ("PANIC", ProcessLogLevel::Error),
+];
+
 /// Classify a core log line by the level token the core itself wrote.
 ///
 /// The stream a line arrives on carries no severity: sing-box writes every level
@@ -60,14 +71,12 @@ pub fn classify_core_log_line(line: &str) -> ProcessLogLevel {
         .take(CORE_LOG_LEVEL_SCAN_TOKENS)
         .find_map(|token| {
             let token = token.trim_matches(|character: char| !character.is_ascii_alphabetic());
-            match token.to_ascii_uppercase().as_str() {
-                "TRACE" => Some(ProcessLogLevel::Trace),
-                "DEBUG" => Some(ProcessLogLevel::Debug),
-                "INFO" => Some(ProcessLogLevel::Info),
-                "WARN" | "WARNING" => Some(ProcessLogLevel::Warn),
-                "ERROR" | "FATAL" | "PANIC" => Some(ProcessLogLevel::Error),
-                _ => None,
-            }
+            // Runs for every line a core writes: compared in place, so no
+            // token is copied just to be upper-cased.
+            CORE_LOG_LEVEL_TOKENS
+                .iter()
+                .find(|(name, _)| token.eq_ignore_ascii_case(name))
+                .map(|(_, level)| *level)
         })
         .unwrap_or(ProcessLogLevel::Info)
 }

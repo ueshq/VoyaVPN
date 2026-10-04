@@ -22,8 +22,8 @@ pub fn load_app_settings(state: tauri::State<'_, AppState>) -> Result<AppSetting
 ///
 /// Validation, the pre-commit OS side effects, the commit and both rollback
 /// paths are the transaction in voya-app, where they are unit-tested; the only
-/// things left here are turning `AppError`s back out of it and dispatching the
-/// runtime action it selected.
+/// things left here are turning `AppError`s back out of it, the tray's words
+/// and announcing the caches.
 #[tauri::command]
 #[specta::specta]
 pub async fn save_app_settings<R: tauri::Runtime>(

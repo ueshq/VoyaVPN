@@ -8,7 +8,7 @@ import {
   settingsIpc,
 } from "@voya/features/settings/settings-backend.test-fixture";
 import type { AppSettings } from "@voya/contracts";
-import { renderWithQuery } from "@/test/render";
+import { renderWithQuery } from "@voya/features/test/render";
 
 import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
 

@@ -1,5 +1,5 @@
 import { act, cleanup, waitFor } from "@testing-library/react";
-import { createTestQueryClient, renderHookWithQuery } from "@/test/render";
+import { createTestQueryClient, renderHookWithQuery } from "@voya/features/test/render";
 
 import { i18next } from "@voya/i18n";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

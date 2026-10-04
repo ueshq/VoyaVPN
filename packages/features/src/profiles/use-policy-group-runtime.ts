@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { PolicyGroupListing, PolicyGroupRuntime } from "@voya/contracts";
@@ -7,6 +7,7 @@ import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
+import { useBusyAction } from "../forms/use-busy-action";
 import { useScreenActive } from "../shell/screen-active";
 
 /** How often a running group's live member and delays are read again; the same everywhere a group shows. */
@@ -120,19 +121,15 @@ export function usePolicyGroupMemberSwitch() {
  */
 export function useGroupDelayTest(run: (operation: () => Promise<void>) => Promise<boolean>) {
   const queryClient = useQueryClient();
-  const [testing, setTesting] = useState(false);
+  const { busy: testing, run: once } = useBusyAction();
 
   async function test() {
-    if (testing) return;
-    setTesting(true);
-    try {
-      await run(async () => {
+    await once(() =>
+      run(async () => {
         const runtime = await voyaCommands().testPolicyGroupDelay();
         if (runtime) queryClient.setQueryData(queryKeys.policyGroupRuntime, runtime);
-      });
-    } finally {
-      setTesting(false);
-    }
+      }),
+    );
   }
 
   return { test, testing };

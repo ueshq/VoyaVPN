@@ -66,7 +66,7 @@ export function useNodeSubscriptions<Trigger = never>(
     if (!claimPending(id ?? UPDATING_ALL)) return;
     try {
       await runOperation(async () => {
-        const result = await voyaCommands().updateSubscriptions(id, true, null);
+        const result = await voyaCommands().updateSubscriptions(id);
         assertSubscriptionUpdated(result, t);
         setOperationMessage(formatSubscriptionUpdateSummary(result, t));
         const failure = subscriptionUpdateMessages(result, t);
@@ -99,7 +99,7 @@ export function useNodeSubscriptions<Trigger = never>(
       for (const id of new Set(ids)) {
         if (!active()) return;
         try {
-          const result = await voyaCommands().updateSubscriptions(id, true, null);
+          const result = await voyaCommands().updateSubscriptions(id);
           assertSubscriptionUpdated(result, t);
           total.imported += result.imported;
           total.updated += result.updated;

@@ -10,8 +10,7 @@ private enum PacketTunnelTests {
     }
 
     private static func config(version: Int = 1, json: String = "{}", status: URL? = nil, log: URL? = nil) -> PacketTunnelRuntimeConfig {
-        PacketTunnelRuntimeConfig(version: version, activeProfileId: "test-profile", mainConfigPath: "config.json",
-                                  statusPath: status?.path, logPath: log?.path, singboxConfigJson: json)
+        PacketTunnelRuntimeConfig(version: version, statusPath: status?.path, logPath: log?.path, singboxConfigJson: json)
     }
 
     static func main() throws {

@@ -101,16 +101,12 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
     subscription_id: Option<String>,
-    prefer_proxy: bool,
-    proxy_url: Option<String>,
 ) -> Result<SubscriptionUpdateContract, AppError> {
     let update = update_subscriptions_use_case(
         state.services(),
         state.config_mutations(),
+        &state.supervisor(),
         subscription_id,
-        prefer_proxy,
-        proxy_url,
-        TargetOs::current(),
     )
     .await?;
     match update.written {

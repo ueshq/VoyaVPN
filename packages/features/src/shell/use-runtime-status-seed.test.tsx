@@ -57,7 +57,7 @@ describe("runtime status hydration and resume", () => {
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
     // No list of its own: the host's registration decides, as it does for the
     // read-back after a runtime action.
-    expect(refresh).toHaveBeenLastCalledWith(expect.any(Function), undefined, expect.any(Function));
+    expect(refresh).toHaveBeenLastCalledWith(expect.any(Function), expect.any(Function));
 
     // Hidden: the resume handler must not sample a surface nobody is looking at.
     visibility.setVisible(false);
@@ -68,7 +68,7 @@ describe("runtime status hydration and resume", () => {
     await act(async () => visibility.notify());
     expect(refresh).toHaveBeenCalledTimes(2);
 
-    const current = refresh.mock.calls.at(-1)?.[2] as () => boolean;
+    const current = refresh.mock.calls.at(-1)?.[1] as () => boolean;
     view.unmount();
     expect(current()).toBe(false);
     expect(visibility.unsubscribeCount()).toBe(1);

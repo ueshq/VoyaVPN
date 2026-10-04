@@ -1,6 +1,6 @@
 //! Thin Tauri adapter over `voya_app::connection_mode`.
 //!
-//! The mode transaction — PAC validation, TUN preflight, the config commit, the
+//! The mode transaction — the TUN preflight, the config commit, the
 //! connected-gated OS proxy apply and its rollback — lives in voya-app so it can
 //! be unit-tested (the shell lib harness is disabled on purpose). All this
 //! module does is turn the transaction's outputs into `TransientStreamEvent`s

@@ -249,7 +249,7 @@ fn process_stop_gives_up_instead_of_blocking_when_the_reaper_never_replies() {
     // A reaper wedged in `wait()` keeps the receiver alive without ever
     // answering; before the bounded wait this pinned the caller forever.
     let (stop_tx, stop_rx) = mpsc::channel::<ChildCommand>();
-    let control = ChildControl { stop_tx };
+    let control = ChildControl { stop_tx, spawn: 0 };
 
     let started = std::time::Instant::now();
     let error = control
@@ -281,9 +281,38 @@ fn process_stop_succeeds_when_the_reaper_already_exited() {
     let (stop_tx, stop_rx) = mpsc::channel::<ChildCommand>();
     drop(stop_rx);
 
-    ChildControl { stop_tx }
+    ChildControl { stop_tx, spawn: 0 }
         .stop_with_timeout(4242, Duration::from_millis(50))
         .expect("a reaped child must not report a stop failure");
+}
+
+/// A pid is free the moment its process is reaped, so the reaper of an exited
+/// child can find a later spawn registered under its own key.
+#[test]
+fn a_reaper_leaves_a_later_spawn_on_its_pid_registered() {
+    let children = Arc::new(Mutex::new(HashMap::new()));
+    let (stop_tx, stop_rx) = mpsc::channel::<ChildCommand>();
+    children
+        .lock()
+        .expect("lock")
+        .insert(4242, ChildControl { stop_tx, spawn: 2 });
+
+    ReapedChild {
+        children: Arc::downgrade(&children),
+        spawn: 1,
+    }
+    .forget(4242);
+    assert!(
+        matches!(stop_rx.try_recv(), Err(mpsc::TryRecvError::Empty)),
+        "the later spawn's stop channel was closed under it"
+    );
+
+    ReapedChild {
+        children: Arc::downgrade(&children),
+        spawn: 2,
+    }
+    .forget(4242);
+    assert!(children.lock().expect("lock").is_empty());
 }
 
 #[test]

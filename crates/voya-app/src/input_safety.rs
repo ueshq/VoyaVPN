@@ -25,8 +25,6 @@ pub type Result<T> = std::result::Result<T, InputSafetyError>;
 
 /// Longest id any command accepts.
 pub const IPC_ID_MAX_CHARS: usize = 128;
-/// Longest proxy URL a command accepts.
-pub const IPC_PROXY_URL_MAX_CHARS: usize = 2048;
 /// Most ids one command accepts in a list.
 pub(crate) const IPC_LIST_MAX_ITEMS: usize = 1024;
 
@@ -73,14 +71,6 @@ pub fn validate_required_text(value: &str, max_chars: usize) -> Result<()> {
     }
 
     validate_text(value, max_chars)
-}
-
-pub fn validate_optional_text(value: Option<&str>, max_chars: usize) -> Result<()> {
-    if let Some(value) = value {
-        validate_text(value, max_chars)?;
-    }
-
-    Ok(())
 }
 
 pub fn validate_present_text(value: Option<&str>, max_chars: usize) -> Result<()> {

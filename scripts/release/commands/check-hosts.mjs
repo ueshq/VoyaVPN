@@ -1,16 +1,6 @@
 import { forbiddenHostReason, placeholderText } from "../validation.mjs";
-import { hasSigningInput } from "./readiness/prerequisites.mjs";
+import { hasSigningInput, signingInputNames } from "./readiness/prerequisites.mjs";
 import { resolveApprovedUpdaterPublicKey } from "../updater-signatures.mjs";
-
-const signingInputNames = [
-  "APPLE_CERTIFICATE",
-  "APPLE_CERTIFICATE_PASSWORD",
-  "APPLE_ID",
-  "APPLE_PASSWORD",
-  "APPLE_TEAM_ID",
-  "WINDOWS_CERTIFICATE_BASE64",
-  "WINDOWS_CERTIFICATE_PASSWORD",
-];
 
 function printHelp() {
   console.log(`Usage: pnpm release -- check-hosts
@@ -40,10 +30,6 @@ function requireValue(name, env) {
     throw new Error(`${name} must not be a placeholder.`);
   }
   return value;
-}
-
-function isPresent(name, env) {
-  return String(env[`HAS_${name}`] ?? "").trim().toLowerCase() === "true";
 }
 
 function requirePresent(name, env) {
@@ -102,4 +88,4 @@ function main(argv = [], { env = process.env } = {}) {
   }
 }
 
-export { main, printHelp, isPresent };
+export { main };

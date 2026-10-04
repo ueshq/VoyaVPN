@@ -132,4 +132,4 @@ async function main(argv = []) {
   console.log(`Wrote core asset evidence to ${evidencePath}`);
 }
 
-export { main, printHelp };
+export { main };

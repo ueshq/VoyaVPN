@@ -125,10 +125,13 @@ export function parsePluginkitMatches(output) {
 function collectPluginkitMatches() {
   const all = captureSpawned("/usr/bin/pluginkit", ["-mDvvv", "-i", providerBundleId], { cwd: repoRoot });
   const active = captureSpawned("/usr/bin/pluginkit", ["-mAvvv", "-i", providerBundleId], { cwd: repoRoot });
-  if (all.status !== 0 && active.status !== 0) {
-    throw new Error(
-      `pluginkit query failed: ${all.stderr || all.stdout || active.stderr || active.stdout}`,
-    );
+  // `pluginkit` exits 0 with "(no matches)", so a non-zero status is a query
+  // that did not run. Either one missing would hide exactly the registrations
+  // this tool exists to find.
+  for (const query of [all, active]) {
+    if (query.status !== 0) {
+      throw new Error(`pluginkit query failed: ${query.stderr || query.stdout}`);
+    }
   }
 
   return {
@@ -150,8 +153,11 @@ function parseSystemExtensionMatches(output) {
 
 function collectSystemExtensionMatches() {
   const result = captureSpawned("/usr/bin/systemextensionsctl", ["list"], { cwd: repoRoot });
+  // An empty list exits 0 as well, so this is a query that did not run. Read
+  // as "nothing registered" it would put a "not registered" row in the report
+  // that nothing observed.
   if (result.status !== 0) {
-    return [];
+    throw new Error(`systemextensionsctl query failed: ${result.stderr || result.stdout}`);
   }
   return parseSystemExtensionMatches(`${result.stdout ?? ""}\n${result.stderr ?? ""}`);
 }

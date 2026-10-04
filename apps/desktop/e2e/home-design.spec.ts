@@ -123,10 +123,6 @@ for (const { layout, language } of [
           activeProfileId: "design-tokyo",
           uploadBytesPerSecond: 12902,
           downloadBytesPerSecond: 2600468,
-          directDownloadBytesPerSecond: null,
-          directUploadBytesPerSecond: null,
-          proxyDownloadBytesPerSecond: null,
-          proxyUploadBytesPerSecond: null,
           serverStat: null,
         },
       });

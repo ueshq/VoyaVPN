@@ -36,7 +36,7 @@ export function useTrafficMode() {
     meta: { errorTitle: t("proxy.trafficModeFailed") },
     onSuccess: async ({ mode }) => {
       // An invalidation read may still be in flight when the command returns.
-      await client.cancelQueries({ queryKey: queryKeys.appSettings });
+      await client.cancelQueries({ exact: true, queryKey: queryKeys.appSettings });
       client.setQueryData<AppSettings>(queryKeys.appSettings, (current) =>
         current
           ? { ...current, proxy: { ...current.proxy, trafficMode: mode } }

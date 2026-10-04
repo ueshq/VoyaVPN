@@ -4,6 +4,7 @@ import {
   capture,
   isCliEntrypoint,
   repoRootFromScript,
+  requireDarwin,
   run,
   runCli,
   truthy,
@@ -147,9 +148,7 @@ function removeUnsupportedLaunchServicesKeys() {
 }
 
 function main() {
-  if (process.platform !== "darwin") {
-    throw new Error("macOS app signing must run on macOS.");
-  }
+  requireDarwin("macOS app signing must run on macOS.");
   if (!existsSync(appBundle)) {
     throw new Error(`macOS app bundle is missing: ${appBundle}`);
   }

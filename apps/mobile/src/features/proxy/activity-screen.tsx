@@ -56,7 +56,10 @@ export function ActivityScreen() {
   useEffect(() => {
     if (!connected || !visible || !focused) return undefined;
 
-    void sendMonitorCommand(() => voyaCommands().proxyStartMonitor()).catch(setError);
+    // A start that works clears what an earlier one reported: this effect
+    // runs again on every return to the screen, and the banner would
+    // otherwise stay over a monitor that is running.
+    void sendMonitorCommand(() => voyaCommands().proxyStartMonitor()).then(() => setError(null), setError);
     return () => {
       void sendMonitorCommand(() => voyaCommands().proxyStopMonitor()).catch(() => undefined);
       // The table this visit streamed is not the next visit's: left in the

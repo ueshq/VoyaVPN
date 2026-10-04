@@ -8,7 +8,7 @@
 //! share-link profiles, in a throwaway probe core like the speed test's.
 
 use std::{
-    sync::{atomic::AtomicBool, Arc},
+    sync::{atomic::AtomicBool, Arc, OnceLock},
     time::Duration,
 };
 
@@ -41,11 +41,36 @@ pub trait NodeSelfTester: Send + Sync {
         deps: &'a SelfHostDeps,
         record: &'a SelfHostRecord,
     ) -> BoxFuture<'a, SelfHostSelfTest>;
+
+    /// Kills a probe core a cancelled self-test left running. Called at exit,
+    /// where nothing is dropped.
+    fn stop(&self) {}
 }
 
 /// The production self-test: a throwaway probe core on the node's runner.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ProbeCoreSelfTester;
+///
+/// One launcher for every run. It is the registry `stop` reaps from, and a
+/// launcher built per run would sweep the probe config directory each time —
+/// the directory a speed test running at that moment keeps its own config in.
+#[derive(Default)]
+pub struct ProbeCoreSelfTester {
+    launcher: OnceLock<Arc<dyn ProbeCoreLauncher>>,
+}
+
+impl ProbeCoreSelfTester {
+    fn launcher(&self, deps: &SelfHostDeps) -> Arc<dyn ProbeCoreLauncher> {
+        Arc::clone(self.launcher.get_or_init(|| {
+            Arc::new(
+                ProcessProbeCoreLauncher::sharing_config_dir(
+                    deps.paths.clone(),
+                    deps.core_seed_resource_dir.clone(),
+                    Arc::clone(&deps.runner),
+                )
+                .with_target_os(deps.target_os),
+            )
+        }))
+    }
+}
 
 impl NodeSelfTester for ProbeCoreSelfTester {
     fn run<'a>(
@@ -53,7 +78,13 @@ impl NodeSelfTester for ProbeCoreSelfTester {
         deps: &'a SelfHostDeps,
         record: &'a SelfHostRecord,
     ) -> BoxFuture<'a, SelfHostSelfTest> {
-        Box::pin(run_self_test(deps, record))
+        Box::pin(run_self_test(self.launcher(deps), deps, record))
+    }
+
+    fn stop(&self) {
+        if let Some(launcher) = self.launcher.get() {
+            launcher.stop_all();
+        }
     }
 }
 
@@ -62,7 +93,11 @@ pub(super) const SKIPPED: SelfHostSelfTest = SelfHostSelfTest {
     shadowsocks: SelfHostSelfTestResult::Skipped,
 };
 
-async fn run_self_test(deps: &SelfHostDeps, record: &SelfHostRecord) -> SelfHostSelfTest {
+async fn run_self_test(
+    launcher: Arc<dyn ProbeCoreLauncher>,
+    deps: &SelfHostDeps,
+    record: &SelfHostRecord,
+) -> SelfHostSelfTest {
     let Some(spec) = selfhost_spec(record, None, &deps.log_level) else {
         return SKIPPED;
     };
@@ -106,14 +141,6 @@ async fn run_self_test(deps: &SelfHostDeps, record: &SelfHostRecord) -> SelfHost
         })
         .collect();
 
-    let launcher: Arc<dyn ProbeCoreLauncher> = Arc::new(
-        ProcessProbeCoreLauncher::new(
-            deps.paths.clone(),
-            deps.core_seed_resource_dir.clone(),
-            Arc::clone(&deps.runner),
-        )
-        .with_target_os(deps.target_os),
-    );
     let cancel = Arc::new(AtomicBool::new(false));
     let session = match start_probe_core_page(&launcher, &entries, &cancel).await {
         Ok(session) => session,

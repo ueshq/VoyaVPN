@@ -147,7 +147,6 @@ pub struct SupervisorStartRequest {
     /// through the generated `strict_route` on Windows and Linux; the macOS
     /// PacketTunnel applies it to the VPN configuration instead.
     pub kill_switch: bool,
-    pub sudo_script_dir: PathBuf,
     pub restart_on_crash: bool,
     /// Clash API port of the *main* generated config.
     ///
@@ -264,8 +263,6 @@ pub enum SupervisorError {
     Process(#[from] ProcessError),
     #[error(transparent)]
     NativeTun(#[from] NativeTunError),
-    #[error("process job error: {0}")]
-    Job(String),
     #[error("elevation error: {0}")]
     Elevation(String),
     #[error("sudo kill target pid {pid} does not match a tracked elevated process")]

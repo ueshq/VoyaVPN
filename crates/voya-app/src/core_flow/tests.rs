@@ -249,8 +249,8 @@ async fn saved_mode_is_applied_before_connect_restart_and_recovery_are_announced
     let flow = harness.flow_with_transport(transport.clone());
     let mut config = active_config();
     config.proxy.traffic_mode = voya_core::TrafficMode::Global;
-    let first = flow.connect(&config).await.expect("connect");
-    flow.restart(&config).await.expect("restart");
+    let first = flow.connect(|| config.clone()).await.expect("connect");
+    flow.restart(|| config.clone()).await.expect("restart");
     flow.restart_if_connected(&config, CoreFlowReason::Connect)
         .await
         .expect("config restart");
@@ -308,7 +308,7 @@ async fn startup_mode_failure_warns_and_keeps_the_saved_preference() {
     config.proxy.traffic_mode = voya_core::TrafficMode::Global;
     let snapshot = harness
         .flow_with_transport(transport)
-        .connect(&config)
+        .connect(|| config.clone())
         .await
         .expect("core still connected");
     assert_eq!(snapshot.state, SupervisorConnectionState::Connected);
@@ -377,7 +377,11 @@ async fn saved_proxy_settings_are_not_applied_while_disconnected() {
 async fn saved_proxy_settings_publish_only_the_proxy_status_while_connected() {
     let harness = Harness::new().await;
     let config = active_config();
-    harness.flow().connect(&config).await.expect("connect");
+    harness
+        .flow()
+        .connect(|| config.clone())
+        .await
+        .expect("connect");
     let before = harness.sink.events().len();
     harness
         .flow()
@@ -391,7 +395,11 @@ async fn saved_proxy_settings_publish_only_the_proxy_status_while_connected() {
 async fn explicit_proxy_application_failure_is_reported_and_keeps_the_core_connected() {
     let harness = Harness::new().await;
     let mut config = active_config();
-    harness.flow().connect(&config).await.expect("connect");
+    harness
+        .flow()
+        .connect(|| config.clone())
+        .await
+        .expect("connect");
     let before = harness.sink.events().len();
     config.system_proxy.mode = voya_core::SysProxyType::ForcedChange;
     harness
@@ -425,7 +433,7 @@ async fn connect_publishes_the_system_proxy_before_connected_then_tun() {
 
     let snapshot = harness
         .flow()
-        .connect(&config)
+        .connect(|| config.clone())
         .await
         .expect("connect succeeds");
 
@@ -452,7 +460,7 @@ async fn a_failure_before_the_supervisor_leaves_the_previous_core_connected() {
     let config = active_config();
     harness
         .flow()
-        .connect(&config)
+        .connect(|| config.clone())
         .await
         .expect("connect succeeds");
 
@@ -467,7 +475,7 @@ async fn a_failure_before_the_supervisor_leaves_the_previous_core_connected() {
 
     let error = harness
         .flow()
-        .restart(&missing)
+        .restart(|| missing.clone())
         .await
         .expect_err("the profile is gone");
 
@@ -502,14 +510,14 @@ async fn disconnect_restores_the_system_proxy_and_zeroes_statistics() {
     let config = active_config();
     harness
         .flow()
-        .connect(&config)
+        .connect(|| config.clone())
         .await
         .expect("connect succeeds");
     let sink_before = harness.sink.events().len();
 
     harness
         .flow()
-        .disconnect(&config)
+        .disconnect(|| config.clone())
         .await
         .expect("disconnect succeeds");
 
@@ -564,7 +572,7 @@ async fn a_restarted_core_refreshes_proxy_state_before_the_snapshot() {
     let harness = Harness::new().await;
     let config = active_config();
     let flow = harness.flow();
-    let snapshot = flow.connect(&config).await.expect("connect");
+    let snapshot = flow.connect(|| config.clone()).await.expect("connect");
     let settled = harness.sink.events().len();
 
     flow.handle_core_exit(
@@ -591,6 +599,56 @@ async fn a_restarted_core_refreshes_proxy_state_before_the_snapshot() {
     );
 }
 
+/// A saved port waits for an apply, and a crash restart reuses the config file
+/// the core was started from: the system proxy follows the core, not the save.
+#[tokio::test]
+async fn a_restarted_core_keeps_the_system_proxy_on_the_port_it_listens_on() {
+    let harness = Harness::new().await;
+    let mut config = active_config();
+    config.system_proxy.mode = voya_core::SysProxyType::ForcedChange;
+    let runner = RecordingRunner::default();
+    let flow = harness.flow_with_proxy_runner(runner.clone());
+    let snapshot = flow.connect(|| config.clone()).await.expect("connect");
+    let running_port = config.local_port().to_string();
+    let applied = runner.oneshots().len();
+    let mut saved = config.clone();
+    saved.inbounds[0].local_port += 100;
+
+    flow.handle_core_exit(
+        || saved.clone(),
+        CoreExitEvent {
+            active_profile_id: Some("active".to_string()),
+            process_id: 11,
+            exit_code: Some(2),
+            outcome: CoreExitOutcome::Restarted {
+                attempt: 1,
+                snapshot,
+            },
+        },
+    )
+    .await;
+
+    let saved_port = saved.local_port().to_string();
+    let recovery = &runner.oneshots()[applied..];
+    let mentions = |port: &str| {
+        recovery.iter().any(|call| {
+            call.arguments
+                .iter()
+                .any(|argument| argument.contains(port))
+        })
+    };
+    assert!(mentions(&running_port), "{recovery:?}");
+    assert!(!mentions(&saved_port), "{recovery:?}");
+    // The port change is still waiting for its reconnect.
+    assert_eq!(
+        flow.runtime
+            .settings_application()
+            .status(&saved, true)
+            .action,
+        SettingsApplyAction::Reconnect
+    );
+}
+
 /// The event is handled on a task of its own, so the user can have
 /// disconnected by the time it runs. Applying the system proxy for that core
 /// would point the system at a port nothing listens on any more.
@@ -599,8 +657,10 @@ async fn a_restarted_core_that_is_no_longer_running_is_not_settled() {
     let harness = Harness::new().await;
     let config = active_config();
     let flow = harness.flow();
-    let snapshot = flow.connect(&config).await.expect("connect");
-    flow.disconnect(&config).await.expect("disconnect");
+    let snapshot = flow.connect(|| config.clone()).await.expect("connect");
+    flow.disconnect(|| config.clone())
+        .await
+        .expect("disconnect");
     let settled = harness.sink.events().len();
 
     flow.handle_core_exit(
@@ -674,7 +734,7 @@ async fn restart_if_connected_restarts_a_running_core() {
     let config = active_config();
     harness
         .flow()
-        .connect(&config)
+        .connect(|| config.clone())
         .await
         .expect("connect succeeds");
     let sink_before = harness.sink.events().len();
@@ -741,7 +801,7 @@ async fn pending_native_cleanup_publishes_the_proxy_state_before_the_pending_sta
     config.tun.enabled = true;
     let error = harness
         .flow_with_proxy_manager(manager)
-        .connect(&config)
+        .connect(|| config.clone())
         .await
         .expect_err("pending cleanup");
     assert!(error.to_string().contains("start failed"));
@@ -767,14 +827,14 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
     let harness = Harness::new().await;
     let mut config = active_config();
     let flow = harness.flow();
-    flow.connect(&config).await.expect("connect");
+    flow.connect(|| config.clone()).await.expect("connect");
     harness
         .database
         .profiles()
         .upsert(&singbox_profile("other"))
         .await
         .expect("another node");
-    flow.disconnect_removed_profile(&config)
+    flow.disconnect_removed_profile(|| config.clone())
         .await
         .expect("still exists");
     assert_eq!(
@@ -786,7 +846,7 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
         .await
         .expect("delete current");
     assert!(config.active_profile_id.is_empty());
-    flow.disconnect_removed_profile(&config)
+    flow.disconnect_removed_profile(|| config.clone())
         .await
         .expect("reconcile");
     let status = harness.supervisor.status().await.expect("status");
@@ -798,8 +858,8 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
     assert!(events.contains(&"notice:Warning:activeSelectionRemoved".into()));
     // A repeated notification must not interrupt a newer valid selection.
     config.active_profile_id = "other".into();
-    flow.connect(&config).await.expect("select other");
-    flow.disconnect_removed_profile(&config)
+    flow.connect(|| config.clone()).await.expect("select other");
+    flow.disconnect_removed_profile(|| config.clone())
         .await
         .expect("late reconciliation");
     assert_eq!(
@@ -812,7 +872,7 @@ async fn removing_the_running_node_stops_it_without_selecting_another_node() {
             .as_deref(),
         Some("other")
     );
-    flow.disconnect(&config).await.expect("cleanup");
+    flow.disconnect(|| config.clone()).await.expect("cleanup");
 }
 
 mod ipv6;

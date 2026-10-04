@@ -1,6 +1,7 @@
 import { capture, repoRootFromScript } from "../../lib/common.mjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +21,11 @@ describe("release readiness production blocker scan", () => {
     expect(blockerScanFiles).toEqual(
       expect.arrayContaining(["crates/voya-net/src/download.rs", "crates/voya-net/src/subscription.rs"]),
     );
+  });
+
+  it("names only files that exist, so a rename cannot shrink the scan", () => {
+    const repoRoot = repoRootFromScript(import.meta.url);
+    expect(blockerScanFiles.filter((file) => !existsSync(join(repoRoot, file)))).toEqual([]);
   });
 
   it("blocks GitHub URLs in production manifest URL fields", () => {
@@ -218,10 +224,11 @@ describe("release readiness packaged updater config evidence", () => {
 
 describe("release readiness core seed pinning", () => {
   function recordingReporter(mode = "dry-run") {
-    const results = { pass: [], fail: [], warn: [] };
+    const results = { pass: [], fail: [], skip: [], warn: [] };
     return {
       results,
       pass: (label, details) => results.pass.push({ label, details }),
+      skip: (label, details) => results.skip.push({ label, details }),
       fail: (label, details) => results.fail.push({ label, details }),
       warn: (label, details) => results.warn.push({ label, details }),
       blocker: (label, details) =>
@@ -229,11 +236,12 @@ describe("release readiness core seed pinning", () => {
     };
   }
 
-  it("passes when no seed is staged and when the staged seed matches the pin", async () => {
+  it("skips when no seed is staged and passes when the staged seed matches the pin", async () => {
     const absent = recordingReporter();
     await checkCoreSeedPinning(absent, { verifySeed: () => ({ ok: false, staged: false }) });
     expect(absent.results.fail).toEqual([]);
-    expect(absent.results.pass).toHaveLength(1);
+    expect(absent.results.pass).toEqual([]);
+    expect(absent.results.skip).toHaveLength(1);
 
     const verified = recordingReporter();
     await checkCoreSeedPinning(verified, {
@@ -252,6 +260,8 @@ describe("release readiness core seed pinning", () => {
     const absent = recordingReporter("stable");
     await checkRuleSetSeedPinning(absent, { isStaged: () => false, verify: () => ({ ok: false }) });
     expect(absent.results.fail).toEqual([]);
+    expect(absent.results.pass).toEqual([]);
+    expect(absent.results.skip).toHaveLength(1);
 
     const verified = recordingReporter("stable");
     await checkRuleSetSeedPinning(verified, { isStaged: () => true, verify: () => ({ code: "verified", ok: true }) });

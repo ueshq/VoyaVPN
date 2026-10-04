@@ -6,15 +6,14 @@
 use voya_contracts::{
     AppError, AppErrorSubsystem, ImportProfilesResult, Subscription, SubscriptionUpdateResult,
 };
-use voya_platform::coreinfo::TargetOs;
 
 use super::SubscriptionManager;
 use crate::{
     config_mutation::{CommittedMutation, ConfigMutationCoordinator},
     contract_map::{subscription_from_contract, subscription_to_contract},
-    input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS, IPC_PROXY_URL_MAX_CHARS},
+    input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS},
     services::AppServices,
-    sysproxy::runtime_proxy_url,
+    supervisor::CoreSupervisor,
 };
 
 const SUBSYSTEM: AppErrorSubsystem = AppErrorSubsystem::Subscription;
@@ -95,34 +94,25 @@ pub enum SubscriptionWrite {
 /// Downloads subscriptions, then imports what arrived.
 ///
 /// The download happens outside the mutation: a network round trip must not
-/// hold the config lock or a pooled database connection.
+/// hold the config lock or a pooled database connection. It goes through the
+/// running core's local proxy while one is connected, and directly otherwise.
 pub async fn update_subscriptions_use_case(
     services: &AppServices,
     mutations: &ConfigMutationCoordinator,
+    supervisor: &CoreSupervisor,
     subscription_id: Option<String>,
-    prefer_proxy: bool,
-    proxy_url: Option<String>,
-    target_os: TargetOs,
 ) -> Result<SubscriptionUpdate, AppError> {
     map_ipc_input(
         input_safety::validate_present_text(subscription_id.as_deref(), IPC_ID_MAX_CHARS),
         "subscription id",
         SUBSYSTEM,
     )?;
-    map_ipc_input(
-        input_safety::validate_optional_text(proxy_url.as_deref(), IPC_PROXY_URL_MAX_CHARS),
-        "proxy URL",
-        SUBSYSTEM,
-    )?;
-    let snapshot = mutations.current_config();
-    let proxy_url = runtime_proxy_url(prefer_proxy, proxy_url, &snapshot, target_os);
+    let proxy_url = services
+        .running_core_proxy(supervisor)
+        .url(&mutations.current_config());
     let prepared = services
         .subscriptions()
-        .prepare_subscription_update(
-            subscription_id.as_deref(),
-            prefer_proxy,
-            proxy_url.as_deref(),
-        )
+        .prepare_subscription_update(subscription_id.as_deref(), proxy_url.as_deref())
         .await?;
     if !prepared.has_imports() {
         // Every fetch failed (or nothing was fetchable), so there is no
@@ -193,16 +183,13 @@ mod tests {
             .await
             .expect("subscription should save");
 
-        let update = update_subscriptions_use_case(
-            &services,
-            &mutations,
-            None,
-            false,
-            None,
-            TargetOs::Linux,
-        )
-        .await
-        .expect("update use case should succeed");
+        let supervisor = CoreSupervisor::spawn(crate::supervisor::SupervisorDeps::new(
+            Arc::new(voya_platform::test_support::RecordingRunner::default()),
+            Arc::new(voya_platform::privilege::ElevationState::new()),
+        ));
+        let update = update_subscriptions_use_case(&services, &mutations, &supervisor, None)
+            .await
+            .expect("update use case should succeed");
 
         assert_eq!(update.result.skipped, 1, "{:?}", update.result);
         assert_eq!(

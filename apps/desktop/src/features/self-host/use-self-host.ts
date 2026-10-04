@@ -14,7 +14,7 @@ import { toastError } from "@voya/client/toast-store";
 /** Live counters refresh this often while the node runs and the page is open. */
 const STATS_INTERVAL_MS = 3000;
 
-export type SelfHostAction = "enable" | "save" | "rotate" | "check" | "firewall";
+type SelfHostAction = "enable" | "save" | "rotate" | "check" | "firewall";
 
 /**
  * The Self-hosted node page's data and actions.

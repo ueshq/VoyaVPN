@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
-import { checkedCapture, repoRootFromScript, run, runCli } from "../../lib/common.mjs";
+import { checkedCapture, repoRootFromScript, requireDarwin, run, runCli } from "../../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const appBundle = resolve(process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(repoRoot, "target", "native", "macos", "VoyaVPN.app"));
@@ -92,9 +92,7 @@ function submitForNotarization(submittedArtifact) {
 }
 
 function main() {
-  if (process.platform !== "darwin") {
-    throw new Error("macOS notarization must run on macOS.");
-  }
+  requireDarwin("macOS notarization must run on macOS.");
   if (distributionMode() === "app-store") {
     throw new Error("App Store/TestFlight builds are submitted through App Store Connect and are not notarized with notarytool.");
   }

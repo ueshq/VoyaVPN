@@ -140,18 +140,6 @@ export function GeneralTab({
 
       <SettingsGroup title={t("settings.sections.behavior")}>
         <SettingsSwitch
-          field="behavior.autoCheckIp"
-          checked={settings.behavior.autoCheckIp}
-          disabled={working}
-          label={t("options.autoCheckIp")}
-          onCheckedChange={(checked) =>
-            update((current) => ({
-              ...current,
-              behavior: { ...current.behavior, autoCheckIp: checked },
-            }))
-          }
-        />
-        <SettingsSwitch
           field="behavior.autoCreateSubscriptionGroup"
           checked={settings.behavior.autoCreateSubscriptionGroup}
           description={t("options.autoCreateSubscriptionGroupHint")}

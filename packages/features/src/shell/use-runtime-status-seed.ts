@@ -32,7 +32,7 @@ export function useRuntimeStatusSeed() {
       if (reading || !mounted) return;
       reading = true;
       try {
-        await refreshRuntimeStatusAndReport(translateRef.current, undefined, () => mounted);
+        await refreshRuntimeStatusAndReport(translateRef.current, () => mounted);
       } finally {
         reading = false;
       }

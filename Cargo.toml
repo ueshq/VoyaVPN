@@ -7,6 +7,7 @@ members = [
     "crates/voya-mobile-ffi",
     "crates/voya-net",
     "crates/voya-platform",
+    "crates/voya-uniffi-bindgen",
     "apps/desktop/src-tauri",
 ]
 resolver = "2"
@@ -19,10 +20,14 @@ rust-version = "1.94"
 version = "0.1.0"
 
 [workspace.dependencies]
+base64 = "0.22"
 # Benchmarks only (`pnpm bench:rust`); no plots or rayon, so the test gate that
 # builds bench targets stays light.
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+futures-util = "0.3"
 libc = "0.2"
+percent-encoding = "2.3"
+regex = "1.12"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 specta = { version = "2.0.0-rc.25", features = ["derive"] }
@@ -31,6 +36,7 @@ sqlx = { version = "0.9.0", default-features = false, features = ["macros", "mig
 tauri = { version = "2.11.2", features = ["tray-icon"] }
 tauri-build = "2.6.2"
 tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
+tempfile = "3"
 thiserror = "2.0"
 # Shared tokio baseline. Crates add what they actually use (`time`, `net`,
 # `rt-multi-thread`, …); `macros`/`rt-multi-thread` live here because nearly
@@ -40,6 +46,7 @@ tokio = { version = "1.52.3", features = ["macros", "rt-multi-thread", "sync"] }
 tracing = "0.1"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "registry", "std"] }
+url = "2.5"
 voya-app = { path = "crates/voya-app" }
 voya-contracts = { path = "crates/voya-contracts" }
 voya-core = { path = "crates/voya-core" }
@@ -67,6 +74,13 @@ opt-level = "z"
 lto = "fat"
 codegen-units = 1
 strip = "symbols"
+
+# The iOS simulator smoke test's backend. It measures nothing about the Rust
+# code, and fat LTO over one codegen unit is most of what its build waits for.
+[profile.mobile-smoke]
+inherits = "release"
+lto = false
+codegen-units = 16
 
 [workspace.lints.rust]
 rust_2018_idioms = "warn"

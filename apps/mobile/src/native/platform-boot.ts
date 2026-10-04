@@ -53,8 +53,8 @@ setAppVisibility({
  * Left alone it reads every React Native app as focused forever, so a polled
  * query — the running policy group, every three seconds — kept polling behind
  * the lock screen, for as long as Android's VPN service kept the process
- * alive. Polling pauses while unfocused; refetch-on-focus is off app-wide, so
- * coming back causes no burst. The same rule as the visibility above: only
+ * alive. Polling pauses while unfocused; refetch-on-focus is off for every
+ * query but the exit address, so coming back causes no burst. The same rule as the visibility above: only
  * `background` counts.
  */
 focusManager.setEventListener((setFocused) => {

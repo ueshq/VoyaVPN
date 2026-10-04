@@ -408,7 +408,7 @@ fn disabled_tun_status() -> TunStatus {
         TargetOs::Linux,
         Arc::new(StoppedNativeTun),
     )
-    .status(&AppConfig::default())
+    .status(AppConfig::default().tun.enabled)
     .expect("TUN status")
 }
 

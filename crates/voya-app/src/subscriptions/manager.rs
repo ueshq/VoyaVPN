@@ -195,11 +195,9 @@ mod tests {
         manager: &SubscriptionManager<'_>,
         config: &mut AppConfig,
         subscription_id: Option<&str>,
-        prefer_proxy: bool,
-        proxy_url: Option<&str>,
     ) -> Result<voya_contracts::SubscriptionUpdateResult> {
         let prepared = manager
-            .prepare_subscription_update(subscription_id, prefer_proxy, proxy_url)
+            .prepare_subscription_update(subscription_id, None)
             .await?;
         manager
             .apply_prepared_subscription_update(config, prepared)
@@ -356,7 +354,7 @@ mod tests {
             })
             .await
             .expect("subscription manager test operation should succeed");
-        let result = update_subscriptions(&manager, &mut config, None, false, None)
+        let result = update_subscriptions(&manager, &mut config, None)
             .await
             .expect("subscription manager test operation should succeed");
         assert_eq!(result.updated, 1);
@@ -405,7 +403,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        let result = update_subscriptions(&manager, &mut config, None, false, None)
+        let result = update_subscriptions(&manager, &mut config, None)
             .await
             .expect("a failing mirror must not fail the subscription update");
 
@@ -467,7 +465,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        update_subscriptions(&manager, &mut config, Some(&sub.id), false, None)
+        update_subscriptions(&manager, &mut config, Some(&sub.id))
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -515,7 +513,7 @@ mod tests {
             .save_subscription(updated_sub)
             .await
             .expect("subscription manager test operation should succeed");
-        update_subscriptions(&manager, &mut config, Some(&sub.id), false, None)
+        update_subscriptions(&manager, &mut config, Some(&sub.id))
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -590,7 +588,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        let result = update_subscriptions(&manager, &mut config, None, false, None)
+        let result = update_subscriptions(&manager, &mut config, None)
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -691,7 +689,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        let failed = update_subscriptions(&manager, &mut config, None, false, None)
+        let failed = update_subscriptions(&manager, &mut config, None)
             .await
             .expect("a failing fetch must not fail the whole update");
         assert_eq!(failed.updated, 0);
@@ -723,7 +721,7 @@ mod tests {
             .save_subscription(healed)
             .await
             .expect("subscription manager test operation should succeed");
-        update_subscriptions(&manager, &mut config, None, false, None)
+        update_subscriptions(&manager, &mut config, None)
             .await
             .expect("subscription manager test operation should succeed");
 
@@ -844,7 +842,7 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
 
-        let result = update_subscriptions(&manager, &mut config, None, false, None)
+        let result = update_subscriptions(&manager, &mut config, None)
             .await
             .expect("one broken filter must not abort the whole batch");
 
@@ -910,7 +908,7 @@ mod tests {
         let original = config.clone();
 
         let prepared = manager
-            .prepare_subscription_update(Some("empty-network"), false, None)
+            .prepare_subscription_update(Some("empty-network"), None)
             .await
             .expect("empty response should produce a skipped result");
 
@@ -952,7 +950,7 @@ mod tests {
             .await
             .expect("subscription should be saved");
         let prepared = manager
-            .prepare_subscription_update(Some("changing-source"), false, None)
+            .prepare_subscription_update(Some("changing-source"), None)
             .await
             .expect("subscription should be prepared");
         assert!(prepared.has_imports());
@@ -1430,12 +1428,12 @@ mod tests {
             .expect("subscription manager test operation should succeed");
         database
             .profile_exs()
-            .set_sort(&original_index_id, 10)
+            .set_sort_many(&[(&original_index_id, 10)])
             .await
             .expect("subscription manager test operation should succeed");
         database
             .profile_exs()
-            .set_sort("active", 20)
+            .set_sort_many(&[("active", 20)])
             .await
             .expect("subscription manager test operation should succeed");
         config.active_profile_id = "active".to_string();

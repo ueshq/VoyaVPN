@@ -204,33 +204,6 @@ async fn statistics_repository_rolls_over_cleans_orphans_and_accumulates() {
         })
         .await
         .expect("database test operation should succeed");
-    sqlx::query("PRAGMA foreign_keys = OFF")
-        .execute(database.pool())
-        .await
-        .expect("database test operation should succeed");
-    database
-        .server_stats()
-        .upsert(&ServerStatItem {
-            index_id: "orphan".to_string(),
-            total_up: 1,
-            total_down: 1,
-            today_up: 1,
-            today_down: 1,
-            date_now: 1,
-        })
-        .await
-        .expect("database test operation should succeed");
-    sqlx::query("PRAGMA foreign_keys = ON")
-        .execute(database.pool())
-        .await
-        .expect("database test operation should succeed");
-
-    let orphaned = database
-        .server_stats()
-        .delete_orphans()
-        .await
-        .expect("database test operation should succeed");
-    assert_eq!(orphaned, 1);
     database
         .server_stats()
         .reset_rollover(2)
@@ -252,7 +225,8 @@ async fn statistics_repository_rolls_over_cleans_orphans_and_accumulates() {
         .server_stats()
         .add_traffic("source", 3, 50, 70)
         .await
-        .expect("database test operation should succeed");
+        .expect("database test operation should succeed")
+        .expect("the profile exists");
     assert_eq!(updated.today_up, 50);
     assert_eq!(updated.today_down, 70);
     assert_eq!(updated.total_up, 1050);
@@ -2278,27 +2252,6 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
             .is_none(),
         "the extension row cascades with its profile"
     );
-
-    sqlx::query("PRAGMA foreign_keys = OFF")
-        .execute(database.pool())
-        .await
-        .expect("foreign keys should be togglable");
-    sqlx::query("INSERT INTO profile_ex_items (index_id, delay, sort) VALUES ('orphan', 0, 0)")
-        .execute(database.pool())
-        .await
-        .expect("the orphan row should be stored");
-    sqlx::query("PRAGMA foreign_keys = ON")
-        .execute(database.pool())
-        .await
-        .expect("foreign keys should be togglable");
-    assert_eq!(
-        database
-            .profile_exs()
-            .delete_orphans()
-            .await
-            .expect("orphan extensions should be removable"),
-        1
-    );
 }
 
 #[tokio::test]
@@ -2315,7 +2268,7 @@ async fn profile_ex_set_sort_upserts_without_disturbing_measurements() {
 
     database
         .profile_exs()
-        .set_sort(&profile.index_id, 7)
+        .set_sort_many(&[(&profile.index_id, 7)])
         .await
         .expect("a missing extension row should be created");
     let created = database
@@ -2342,7 +2295,7 @@ async fn profile_ex_set_sort_upserts_without_disturbing_measurements() {
         .expect("speedtest results should persist");
     database
         .profile_exs()
-        .set_sort(&profile.index_id, 1)
+        .set_sort_many(&[(&profile.index_id, 1)])
         .await
         .expect("an existing extension row should be updated");
 
@@ -2374,14 +2327,14 @@ async fn profile_ex_set_sort_upserts_without_disturbing_measurements() {
 /// including on the pool, inside a unit of work, and for rows that already
 /// carry speedtest results a reorder must not clobber.
 #[tokio::test]
-async fn profile_ex_set_sort_many_matches_repeated_set_sort() {
+async fn profile_ex_set_sort_many_matches_one_row_at_a_time() {
     let ordering = [("sortable-c", 30), ("sortable-a", 10), ("sortable-b", 20)];
 
     let sequential = seeded_sortable_database().await;
     for (index_id, sort) in ordering {
         sequential
             .profile_exs()
-            .set_sort(index_id, sort)
+            .set_sort_many(&[(index_id, sort)])
             .await
             .expect("a per-row reorder should persist");
     }
@@ -2468,7 +2421,7 @@ async fn seeded_sortable_database() -> Database {
         .expect("speedtest results should persist");
     database
         .profile_exs()
-        .set_sort("sortable-c", 99)
+        .set_sort_many(&[("sortable-c", 99)])
         .await
         .expect("an extension row should be creatable");
 
@@ -2481,6 +2434,31 @@ async fn sorted_profile_exs(database: &Database) -> Vec<ProfileExItem> {
         .list()
         .await
         .expect("the extension rows should be listable")
+}
+
+/// Traffic measured just before its node was deleted. The stat row went with
+/// the profile, and writing it back would be a foreign-key failure.
+#[tokio::test]
+async fn add_traffic_for_a_deleted_profile_writes_nothing() {
+    let database = Database::connect_in_memory()
+        .await
+        .expect("database test operation should succeed");
+
+    let written = database
+        .server_stats()
+        .add_traffic("gone", 20_260_907, 100, 200)
+        .await
+        .expect("a missing profile is not an error");
+
+    assert_eq!(written, None);
+    assert_eq!(
+        database
+            .server_stats()
+            .get("gone")
+            .await
+            .expect("stats should read"),
+        None
+    );
 }
 
 #[tokio::test]
@@ -2499,7 +2477,8 @@ async fn add_traffic_accumulates_totals_and_restarts_the_daily_counters() {
         .server_stats()
         .add_traffic(&profile.index_id, 20_260_907, 100, 200)
         .await
-        .expect("the first sample should create the row");
+        .expect("the first sample should create the row")
+        .expect("the profile exists");
     assert_eq!(
         (
             created.total_up,
@@ -2515,7 +2494,8 @@ async fn add_traffic_accumulates_totals_and_restarts_the_daily_counters() {
         .server_stats()
         .add_traffic(&profile.index_id, 20_260_907, 50, 25)
         .await
-        .expect("a second sample on the same day should accumulate");
+        .expect("a second sample on the same day should accumulate")
+        .expect("the profile exists");
     assert_eq!(
         (
             same_day.total_up,
@@ -2530,14 +2510,16 @@ async fn add_traffic_accumulates_totals_and_restarts_the_daily_counters() {
         .server_stats()
         .add_traffic(&profile.index_id, 20_260_907, -10, -10)
         .await
-        .expect("a negative sample should be ignored");
+        .expect("a negative sample should be ignored")
+        .expect("the profile exists");
     assert_eq!((clamped.total_up, clamped.today_up), (150, 150));
 
     let next_day = database
         .server_stats()
         .add_traffic(&profile.index_id, 20_260_908, 5, 6)
         .await
-        .expect("a sample on a new day should roll the daily counters over");
+        .expect("a sample on a new day should roll the daily counters over")
+        .expect("the profile exists");
     assert_eq!(
         (
             next_day.total_up,

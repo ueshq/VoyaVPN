@@ -2,10 +2,8 @@
 //!
 //! Saving settings is not a single write: it maps the contract onto an
 //! `AppConfig`, applies the OS autostart entry *before* the database commit so a
-//! rejected registration cannot be persisted, rolls that change back when a
-//! later step fails,
-//! and finally decides whether the running core has to be restarted or the
-//! system proxy re-applied.
+//! rejected registration cannot be persisted, and rolls that change back when
+//! a later step fails.
 //!
 //! That sequence used to live in `ipc/commands/app.rs`, where the shell's lib
 //! test harness is disabled, so the ordering and the two compensation paths
@@ -14,10 +12,8 @@
 //! the order they run in is what decides whether a failed save leaves the
 //! machine configured for settings that were never stored.
 //!
-//! What deliberately stays in the shell is the *dispatch* of
-//! [`SettingsRuntimeAction`]: restarting the core and re-applying the system
-//! proxy are `core_flow` concerns wired to Tauri event emission, and the
-//! outcome names the action so that adapter is a `match` with no policy in it.
+//! Nothing here touches the running core: a saved change waits until the user
+//! applies it, and [`apply`] works out what that takes.
 
 pub mod apply;
 pub mod save;
@@ -30,10 +26,7 @@ use crate::{
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
     contract_map::{config_from_settings, settings_from_app_config},
     settings::{
-        save::{
-            autostart_changes, saved_config_requires_runtime_restart, settings_runtime_action,
-            ApplyAutostart, SettingsRuntimeAction,
-        },
+        save::{autostart_changes, ApplyAutostart},
         validate::{validate_app_settings, AppSettingsValidationError},
     },
 };
@@ -41,14 +34,9 @@ use crate::{
 /// What the caller needs after a committed settings save.
 #[derive(Debug, Clone)]
 pub struct SettingsSaveOutcome {
-    /// The configuration as committed.
-    pub config: AppConfig,
     /// The committed configuration read back through the contract, so the
     /// caller returns exactly what was stored rather than what was requested.
     pub settings: AppSettings,
-    /// Whether the running core must be restarted, the system proxy re-applied,
-    /// or nothing done at all.
-    pub runtime_action: SettingsRuntimeAction,
     /// `false` when the save was a no-op, so the caller can skip broadcasting a
     /// cache invalidation nothing changed.
     pub changed: bool,
@@ -66,8 +54,7 @@ pub enum SettingsSaveError {
     Commit(ConfigMutationError),
 }
 
-/// Validate, apply the OS side effects, commit, and report what the runtime has
-/// to do about it.
+/// Validate, apply the OS side effects and commit.
 ///
 /// The guard is held across the side effects on purpose: the target config is
 /// derived from the configuration *inside* the guard, so a concurrent mutation
@@ -85,10 +72,6 @@ pub async fn save_app_settings(
         .map_err(SettingsSaveError::Commit)?;
     let original = mutation.config().clone();
     let target = config_from_settings(settings, &original);
-    let runtime_action = settings_runtime_action(
-        saved_config_requires_runtime_restart(&original, &target),
-        original.system_proxy != target.system_proxy,
-    );
 
     // Autostart is applied before the commit so a registration the OS refuses
     // never becomes the stored truth; it is restored if anything after it fails.
@@ -115,8 +98,6 @@ pub async fn save_app_settings(
     Ok(SettingsSaveOutcome {
         settings: settings_from_app_config(&config),
         changed: original != config,
-        runtime_action,
-        config,
     })
 }
 

@@ -7,6 +7,7 @@ import type { ResourceUpdateFile } from "@voya/contracts";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 
 import { saveQueue } from "../forms/save-queue";
+import { useBusyAction } from "../forms/use-busy-action";
 
 /**
  * Refreshing the rule library: the `.srs` rule sets the routing rules name.
@@ -20,26 +21,29 @@ export function useRuleLibraryUpdate() {
   const queue = saveQueue(useQueryClient());
   const [files, setFiles] = useState<ResourceUpdateFile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [updating, setUpdating] = useState(false);
+  const { busy: updating, run } = useBusyAction();
   const updatedAt = usePreferencesStore((state) => state.ruleLibraryUpdatedAt);
 
-  /** The backend publishes the batch all or nothing, so a failure shows no files. */
-  async function update() {
-    setUpdating(true);
-    setError(null);
-    setFiles(null);
-    try {
-      // A queued settings write would otherwise land on top of the assets
-      // this is about to replace.
-      await queue.settled();
-      setFiles(await voyaCommands().updateSrsAssets());
-      usePreferencesStore.getState().setRuleLibraryUpdatedAt(Date.now());
-    } catch (failure) {
-      setFiles([]);
-      setError(redactOperationalError(failure));
-    } finally {
-      setUpdating(false);
-    }
+  /**
+   * The backend publishes the batch all or nothing, so a failure shows no
+   * files. One at a time: a second press before the button disables would run
+   * two downloads into the same directory.
+   */
+  function update() {
+    return run(async () => {
+      setError(null);
+      setFiles(null);
+      try {
+        // A queued settings write would otherwise land on top of the assets
+        // this is about to replace.
+        await queue.settled();
+        setFiles(await voyaCommands().updateSrsAssets());
+        usePreferencesStore.getState().setRuleLibraryUpdatedAt(Date.now());
+      } catch (failure) {
+        setFiles([]);
+        setError(redactOperationalError(failure));
+      }
+    });
   }
 
   return { error, files, update, updatedAt, updating };

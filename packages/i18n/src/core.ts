@@ -109,7 +109,7 @@ export function localeFromLanguageTags(tags: readonly string[]): Locale | undefi
 }
 
 /** The platform facts the setup cannot observe for itself. */
-export type I18nHost = {
+type I18nHost = {
   /** The stored choice, or `null`/`undefined` when there is none. */
   readStoredLocale: () => string | null | undefined;
   /** Persists a chosen locale. Only called when `changeLocale` is asked to persist. */
@@ -122,7 +122,6 @@ export type I18nHost = {
 
 export type I18nSetup = {
   getInitialLocale: () => Locale;
-  applyLocale: (locale?: Locale) => void;
   changeLocale: (locale: Locale, options?: { persist?: boolean }) => Promise<void>;
   /**
    * Settles once the startup locale's resources are in place. An entry point
@@ -167,13 +166,9 @@ export function createI18nHost(host: I18nHost): I18nSetup {
     return localeFromLanguageTags(host.deviceLanguages()) ?? "en";
   };
 
-  const applyLocale = (locale: Locale = getInitialLocale()) => {
-    host.applyLocale(locale);
-  };
-
   const initialLocale = getInitialLocale();
 
-  applyLocale(initialLocale);
+  host.applyLocale(initialLocale);
 
   /**
    * Switch the UI language.
@@ -194,14 +189,20 @@ export function createI18nHost(host: I18nHost): I18nSetup {
     // A locale whose chunk arrives after a later choice was made must not
     // win over it: the stored preference is already the later one.
     if (change !== latestChange) return;
-    await i18next.changeLanguage(locale);
-    applyLocale(locale);
+    // Saving the language already on screen — a preview being acknowledged —
+    // stores the choice above and announces nothing: `changeLanguage` emits
+    // even when the language is the same, and every translated component
+    // would render again.
+    if ((i18next.resolvedLanguage ?? i18next.language) !== locale) {
+      await i18next.changeLanguage(locale);
+    }
+    host.applyLocale(locale);
   };
 
   const localeReady: Promise<void> =
     initialLocale === "en" ? Promise.resolve() : changeLocale(initialLocale, { persist: false });
 
-  const setup: I18nSetup = { getInitialLocale, applyLocale, changeLocale, localeReady };
+  const setup: I18nSetup = { getInitialLocale, changeLocale, localeReady };
   active = setup;
 
   return setup;
@@ -217,7 +218,6 @@ export function createI18nHost(host: I18nHost): I18nSetup {
  * starting, and the initial locale is applied by `createI18nHost` anyway.
  */
 let active: I18nSetup = {
-  applyLocale: () => {},
   changeLocale: async () => {},
   getInitialLocale: () => "en",
   localeReady: Promise.resolve(),

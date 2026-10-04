@@ -16,15 +16,14 @@ use tokio::time;
 use voya_contracts::{SpeedtestOutcome, SpeedtestResult, SpeedtestRunResult, SpeedtestStatus};
 use voya_core::{
     generate_singbox_speedtest_config_json, AppConfig, CoreConfigContextBuilder, LocalPort,
-    ProfileItem, SpeedtestConfig, SpeedtestConfigEntry, DEFAULT_LOCAL_PORT,
-    DEFAULT_SPEED_PING_TEST_URL, LOOPBACK,
+    ProfileItem, SpeedtestConfig, SpeedtestConfigEntry, DEFAULT_SPEED_PING_TEST_URL, LOOPBACK,
 };
 use voya_db::{Database, DbError};
 use voya_net::probe::{is_cancelled, tcp_port_is_open, NetworkProbeError, SocksHttpProbe};
 use voya_platform::{
     coreinfo::{CoreInfoError, TargetOs},
     filesystem,
-    paths::{AppPaths, PathError},
+    paths::AppPaths,
     process::{ProcessError, ProcessHandle, ProcessRole, ProcessRunner, ProcessSpawn},
 };
 
@@ -47,15 +46,11 @@ pub enum SpeedtestError {
     #[error(transparent)]
     Database(#[from] DbError),
     #[error(transparent)]
-    Profile(#[from] crate::profiles::ProfileManagerError),
-    #[error(transparent)]
     Network(#[from] NetworkProbeError),
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
     CoreInfo(#[from] CoreInfoError),
-    #[error(transparent)]
-    Path(#[from] PathError),
     #[error(transparent)]
     Process(#[from] ProcessError),
     #[error(transparent)]
@@ -274,11 +269,7 @@ async fn select_test_items(
         database.profiles().list_by_ids(index_ids).await?
     };
 
-    let base_port = config
-        .inbounds
-        .first()
-        .map_or(DEFAULT_LOCAL_PORT, |inbound| inbound.local_port)
-        + LocalPort::Speedtest.port_offset();
+    let base_port = config.local_port() + LocalPort::Speedtest.port_offset();
 
     profiles
         .into_iter()
@@ -337,7 +328,6 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
         SpeedtestError::SingboxConfig(_) => SpeedtestOutcome::InvalidProfile,
         // The test core could not be found, written out, or launched.
         SpeedtestError::CoreInfo(_)
-        | SpeedtestError::Path(_)
         | SpeedtestError::Process(_)
         | SpeedtestError::ProbeCoreHost(_)
         | SpeedtestError::WriteConfig { .. } => SpeedtestOutcome::CoreUnavailable,
@@ -345,7 +335,6 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
             SpeedtestOutcome::NoAvailablePort
         }
         SpeedtestError::Database(_)
-        | SpeedtestError::Profile(_)
         | SpeedtestError::EmptySelection
         | SpeedtestError::BackgroundTask(_) => SpeedtestOutcome::Failed,
     }
@@ -681,7 +670,6 @@ mod tests {
             Box::pin(async move {
                 if delete {
                     database.profiles().delete("a").await?;
-                    database.profile_exs().delete_orphans().await?;
                 } else {
                     let mut profile = database.profiles().get("a").await?.expect("test profile");
                     profile.transport = Some(voya_core::ProfileTransport::Websocket {

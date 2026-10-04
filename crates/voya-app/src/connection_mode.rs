@@ -211,17 +211,11 @@ impl ConnectionModeManager {
         mode: ConnectionMode,
         connected: SupervisorConnectionState,
     ) -> Result<ConnectionModeOutcome, ConnectionModeError> {
-        let snapshot = coordinator.current_config();
-
         // Entering VPN must clear the elevation / native-provider preflight
         // before anything is written. The probe forks OS helpers, so it runs on
-        // a blocking thread against a snapshot rather than under the mutation
-        // guard's `&mut AppConfig`.
+        // a blocking thread rather than under the mutation guard.
         let enable_tun = mode == ConnectionMode::Vpn;
-        let tun_status = self
-            .tun
-            .plan_set_enabled_off_thread(&snapshot, enable_tun)
-            .await?;
+        let tun_status = self.tun.plan_set_enabled_off_thread(enable_tun).await?;
 
         let (original, committed) = self
             .commit(coordinator, |config| {

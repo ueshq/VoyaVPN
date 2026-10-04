@@ -9,7 +9,10 @@ use std::{
     collections::HashMap,
     io,
     process::{Child, Command, Stdio},
-    sync::{mpsc, Arc, Mutex, MutexGuard, Weak},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, Arc, Mutex, MutexGuard, Weak,
+    },
     thread,
     time::Duration,
 };
@@ -84,13 +87,17 @@ impl ProcessRunner for StdProcessRunner {
         let handle = ProcessHandle::new(child.id(), request.role);
         let exit_handler = lock_ignoring_poison(&self.exit_handler).clone();
         let (stop_tx, stop_rx) = mpsc::channel();
-        lock_ignoring_poison(&self.children).insert(handle.id(), ChildControl { stop_tx });
+        let spawn = NEXT_SPAWN.fetch_add(1, Ordering::Relaxed);
+        lock_ignoring_poison(&self.children).insert(handle.id(), ChildControl { stop_tx, spawn });
         spawn_child_reaper(
             handle.clone(),
             child,
             stop_rx,
             exit_handler,
-            Arc::downgrade(&self.children),
+            ReapedChild {
+                children: Arc::downgrade(&self.children),
+                spawn,
+            },
         );
 
         Ok(handle)
@@ -183,6 +190,38 @@ fn lock_ignoring_poison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 struct ChildControl {
     stop_tx: mpsc::Sender<ChildCommand>,
+    /// Which spawn this is. The map is keyed by pid, and the OS hands a pid
+    /// out again as soon as its process is reaped.
+    spawn: u64,
+}
+
+static NEXT_SPAWN: AtomicU64 = AtomicU64::new(0);
+
+/// A reaper's way back to the control its own child was registered under.
+struct ReapedChild {
+    children: Weak<Mutex<HashMap<u32, ChildControl>>>,
+    spawn: u64,
+}
+
+impl ReapedChild {
+    /// Forgets the child, unless its pid already belongs to a later spawn.
+    ///
+    /// The reaper learns of the exit by reaping, which frees the pid. A spawn
+    /// that lands on it before this runs registers under the same key, and
+    /// removing that entry would close the new child's stop channel: its
+    /// reaper would kill it and report no exit.
+    fn forget(&self, process_id: u32) {
+        let Some(children) = self.children.upgrade() else {
+            return;
+        };
+        let mut children = lock_ignoring_poison(&children);
+        if children
+            .get(&process_id)
+            .is_some_and(|control| control.spawn == self.spawn)
+        {
+            children.remove(&process_id);
+        }
+    }
 }
 
 impl ChildControl {
@@ -250,10 +289,10 @@ fn spawn_child_reaper(
     child: Child,
     stop_rx: mpsc::Receiver<ChildCommand>,
     exit_handler: Option<Arc<dyn ProcessExitHandler>>,
-    children: Weak<Mutex<HashMap<u32, ChildControl>>>,
+    reaped: ReapedChild,
 ) {
     thread::spawn(move || {
-        run_child_reaper(handle, child, stop_rx, exit_handler, children);
+        run_child_reaper(handle, child, stop_rx, exit_handler, reaped);
     });
 }
 
@@ -262,7 +301,7 @@ fn run_child_reaper(
     mut child: Child,
     stop_rx: mpsc::Receiver<ChildCommand>,
     exit_handler: Option<Arc<dyn ProcessExitHandler>>,
-    children: Weak<Mutex<HashMap<u32, ChildControl>>>,
+    reaped: ReapedChild,
 ) {
     loop {
         match stop_rx.recv_timeout(CHILD_REAPER_POLL_INTERVAL) {
@@ -285,7 +324,7 @@ fn run_child_reaper(
 
         match child.try_wait().map_err(ProcessError::Wait) {
             Ok(Some(status)) => {
-                remove_child_control(&children, handle.id());
+                reaped.forget(handle.id());
                 if let Some(exit_handler) = exit_handler {
                     exit_handler.process_exited(ProcessExit {
                         process_id: handle.id(),
@@ -302,7 +341,7 @@ fn run_child_reaper(
                     ?error,
                     "failed to wait for child process exit"
                 );
-                remove_child_control(&children, handle.id());
+                reaped.forget(handle.id());
                 if let Some(exit_handler) = exit_handler {
                     exit_handler.process_exited(ProcessExit {
                         process_id: handle.id(),
@@ -351,13 +390,6 @@ fn terminate(child: &mut Child) -> Result<bool, ProcessError> {
         }
         thread::sleep(CHILD_TERM_POLL_INTERVAL);
     }
-}
-
-fn remove_child_control(children: &Weak<Mutex<HashMap<u32, ChildControl>>>, process_id: u32) {
-    let Some(children) = children.upgrade() else {
-        return;
-    };
-    lock_ignoring_poison(&children).remove(&process_id);
 }
 
 fn build_command(request: &ProcessSpawn) -> Command {

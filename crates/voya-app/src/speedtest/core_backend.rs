@@ -54,6 +54,18 @@ impl ProcessProbeCoreLauncher {
         // A run that died with the process leaves its config behind, and only
         // a launcher that writes them knows to sweep them.
         cleanup_stale_speedtest_configs(&paths);
+        Self::sharing_config_dir(paths, core_seed_resource_dir, runner)
+    }
+
+    /// A second launcher beside the one [`Self::new`] built for the same
+    /// paths. It sweeps nothing: by now a config in the directory may belong
+    /// to a run that is starting.
+    #[must_use]
+    pub fn sharing_config_dir(
+        paths: AppPaths,
+        core_seed_resource_dir: Option<PathBuf>,
+        runner: Arc<dyn ProcessRunner>,
+    ) -> Self {
         let capabilities = core_seed_resource_dir
             .as_deref()
             .map(ProbeCoreCapabilities::read_from_seed_resources)

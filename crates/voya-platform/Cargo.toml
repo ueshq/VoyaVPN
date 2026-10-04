@@ -17,7 +17,7 @@ tracing.workspace = true
 voya-core.workspace = true
 sys-locale = "0.3"
 if-addrs = "0.15"
-base64 = "0.22"
+base64.workspace = true
 
 # Desktop-only. Neither crate builds for iOS or Android — they are written
 # against X11/Wayland, Win32 and AppKit — and neither has anything to do on a
@@ -35,7 +35,7 @@ xcap = "=0.9.8"
 cc = "1.2"
 
 [dev-dependencies]
-tempfile = "3"
+tempfile.workspace = true
 
 [lints]
 workspace = true

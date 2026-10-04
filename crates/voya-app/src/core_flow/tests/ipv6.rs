@@ -85,7 +85,7 @@ async fn a_node_without_ipv6_egress_is_recorded_announced_and_reconnected() {
     let config = active_config();
     assert!(config.tun.ipv6_enabled, "IPv6 is on by default");
 
-    flow.connect(&config).await.expect("connect");
+    flow.connect(|| config.clone()).await.expect("connect");
     assert_eq!(harness.count("ipv6-check"), 1, "a connect asks for a check");
     assert!(!rejects_proxied_ipv6(&harness.running_config()));
 
@@ -122,7 +122,7 @@ async fn a_node_without_ipv6_egress_is_recorded_announced_and_reconnected() {
         harness.count("log:Info:restartedAfterChange(reason=\"ipv6EgressChanged\")"),
         1
     );
-    flow.disconnect(&config).await.expect("cleanup");
+    flow.disconnect(|| config.clone()).await.expect("cleanup");
 }
 
 #[tokio::test]
@@ -140,7 +140,7 @@ async fn a_node_that_reaches_ipv6_again_is_restored() {
     let flow = harness.ipv6_flow(&transport);
     let config = active_config();
 
-    flow.connect(&config).await.expect("connect");
+    flow.connect(|| config.clone()).await.expect("connect");
     assert!(
         rejects_proxied_ipv6(&harness.running_config()),
         "generated from the earlier answer"
@@ -153,7 +153,7 @@ async fn a_node_that_reaches_ipv6_again_is_restored() {
         1
     );
     assert!(!rejects_proxied_ipv6(&harness.running_config()));
-    flow.disconnect(&config).await.expect("cleanup");
+    flow.disconnect(|| config.clone()).await.expect("cleanup");
 }
 
 #[tokio::test]
@@ -165,7 +165,7 @@ async fn a_capable_node_seen_for_the_first_time_needs_no_reconnect() {
     };
     let flow = harness.ipv6_flow(&transport);
     let config = active_config();
-    flow.connect(&config).await.expect("connect");
+    flow.connect(|| config.clone()).await.expect("connect");
     flow.check_ipv6_egress(|| config.clone()).await;
 
     assert_eq!(
@@ -174,7 +174,7 @@ async fn a_capable_node_seen_for_the_first_time_needs_no_reconnect() {
     );
     assert_eq!(harness.count("notice:"), 0);
     assert_eq!(harness.count("log:Info:restartingAfterChange"), 0);
-    flow.disconnect(&config).await.expect("cleanup");
+    flow.disconnect(|| config.clone()).await.expect("cleanup");
 }
 
 #[tokio::test]
@@ -184,12 +184,12 @@ async fn an_untrustworthy_or_unwanted_probe_changes_nothing() {
     let transport = DelayTransport::default();
     let flow = harness.ipv6_flow(&transport);
     let config = active_config();
-    flow.connect(&config).await.expect("connect");
+    flow.connect(|| config.clone()).await.expect("connect");
     flow.check_ipv6_egress(|| config.clone()).await;
     assert_eq!(harness.store().get(&singbox_profile("active")), None);
     assert_eq!(harness.count("notice:"), 0);
     assert_eq!(transport.delay_requests.lock().expect("requests").len(), 1);
-    flow.disconnect(&config).await.expect("cleanup");
+    flow.disconnect(|| config.clone()).await.expect("cleanup");
 
     // IPv6 switched off: nothing to probe for.
     let harness = Harness::new().await;
@@ -200,14 +200,14 @@ async fn an_untrustworthy_or_unwanted_probe_changes_nothing() {
     let flow = harness.ipv6_flow(&transport);
     let mut config = active_config();
     config.tun.ipv6_enabled = false;
-    flow.connect(&config).await.expect("connect");
+    flow.connect(|| config.clone()).await.expect("connect");
     flow.check_ipv6_egress(|| config.clone()).await;
     assert!(transport
         .delay_requests
         .lock()
         .expect("requests")
         .is_empty());
-    flow.disconnect(&config).await.expect("cleanup");
+    flow.disconnect(|| config.clone()).await.expect("cleanup");
 
     // Not connected.
     let harness = Harness::new().await;
@@ -232,7 +232,7 @@ async fn only_a_reconnect_that_can_change_the_node_asks_for_a_check() {
     let transport = DelayTransport::default();
     let flow = harness.ipv6_flow(&transport);
     let config = active_config();
-    flow.connect(&config).await.expect("connect");
+    flow.connect(|| config.clone()).await.expect("connect");
     flow.restart_if_connected(&config, CoreFlowReason::RoutingChanged)
         .await
         .expect("routing restart");
@@ -243,7 +243,7 @@ async fn only_a_reconnect_that_can_change_the_node_asks_for_a_check() {
     flow.restart_if_connected(&config, CoreFlowReason::ActiveProfileChanged)
         .await
         .expect("node restart");
-    flow.restart(&config).await.expect("restart");
+    flow.restart(|| config.clone()).await.expect("restart");
     assert_eq!(harness.count("ipv6-check"), 3);
-    flow.disconnect(&config).await.expect("cleanup");
+    flow.disconnect(|| config.clone()).await.expect("cleanup");
 }

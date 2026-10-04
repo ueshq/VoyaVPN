@@ -19,10 +19,8 @@ pub async fn connect_active_profile<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = state.config_mutations().current_config();
-    let flow = core_flow(&app, &state);
-
-    flow.connect(&config)
+    core_flow(&app, &state)
+        .connect(|| state.config_mutations().current_config())
         .await
         .map(runtime_status_response)
         .map_err(AppError::from)
@@ -34,10 +32,8 @@ pub async fn disconnect_core<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = state.config_mutations().current_config();
-    let flow = core_flow(&app, &state);
-
-    flow.disconnect(&config)
+    core_flow(&app, &state)
+        .disconnect(|| state.config_mutations().current_config())
         .await
         .map(runtime_status_response)
         .map_err(AppError::from)
@@ -49,10 +45,8 @@ pub async fn restart_core<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
 ) -> Result<RuntimeStatusResponse, AppError> {
-    let config = state.config_mutations().current_config();
-    let flow = core_flow(&app, &state);
-
-    flow.restart(&config)
+    core_flow(&app, &state)
+        .restart(|| state.config_mutations().current_config())
         .await
         .map(runtime_status_response)
         .map_err(AppError::from)

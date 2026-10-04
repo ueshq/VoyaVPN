@@ -109,10 +109,11 @@ struct PacketTunnelRuntimePaths {
     let stderrURL: URL
 }
 
+/// What the provider reads of the handshake. The hosts send more — the node's
+/// id, the config's path on their side — and decoding ignores what is not
+/// declared here, so a field nothing reads cannot fail a start by being absent.
 struct PacketTunnelRuntimeConfig: Codable {
     let version: Int
-    let activeProfileId: String?
-    let mainConfigPath: String
     let statusPath: String?
     let logPath: String?
     let singboxConfigJson: String

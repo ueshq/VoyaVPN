@@ -49,9 +49,18 @@ function WindowControls() {
         })
         .catch(() => undefined);
     };
+    // Dragging an edge fires a resize per pointer move; one read per frame
+    // says the same thing as one per event.
+    let frame: number | undefined;
+    const syncOnNextFrame = () => {
+      frame ??= requestAnimationFrame(() => {
+        frame = undefined;
+        sync();
+      });
+    };
 
     sync();
-    void onWindowResized(sync)
+    void onWindowResized(syncOnNextFrame)
       .then((fn) => {
         if (active) unlisten = fn;
         else fn();
@@ -60,6 +69,7 @@ function WindowControls() {
 
     return () => {
       active = false;
+      if (frame !== undefined) cancelAnimationFrame(frame);
       unlisten?.();
     };
   }, []);

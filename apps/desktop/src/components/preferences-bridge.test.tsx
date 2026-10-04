@@ -1,5 +1,5 @@
 import { cleanup, waitFor } from "@testing-library/react";
-import { createTestQueryClient, renderWithQuery } from "@/test/render";
+import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PreferencesBridge } from "@/components/preferences-bridge";

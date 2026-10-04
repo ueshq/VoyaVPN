@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { renderWithQuery } from "@/test/render";
+import { renderWithQuery } from "@voya/features/test/render";
 import { afterEach, beforeAll, vi } from "vitest";
 
 import { App } from "./App";

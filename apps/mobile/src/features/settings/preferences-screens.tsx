@@ -33,7 +33,7 @@ const THEME_MODES = [
 ] as const satisfies readonly { labelKey: TranslationKey; value: ThemeMode }[];
 
 /**
- * General: appearance, language, and the two behaviour switches that mean
+ * General: appearance, language, and the one behaviour switch that means
  * something on a phone. Everything the desktop keeps under Advanced — the
  * capture mode, TUN diagnostics, autostart, the close action — is either a
  * system setting here or has no meaning at all (see `UNSUPPORTED_ON_MOBILE` in
@@ -88,16 +88,6 @@ export function GeneralScreen() {
         <View>
           <SectionHeader title={t("settings.sections.behavior")} />
           <ListGroup>
-            <SwitchRow
-              label={t("options.autoCheckIp")}
-              value={settings.behavior.autoCheckIp}
-              onChange={(autoCheckIp) =>
-                app.update((current) => ({
-                  ...current,
-                  behavior: { ...current.behavior, autoCheckIp },
-                }))
-              }
-            />
             <SwitchRow
               last
               label={t("settings.core.logEnabled")}

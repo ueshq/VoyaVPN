@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { events } from "@/ipc/bindings";
-import { createEventRouter, type ShellTarget } from "@voya/client/event-router";
+import { createEventRouter } from "@voya/client/event-router";
 import { notifyWhenHidden } from "@/ipc/notifications";
 import { isTauriRuntime } from "@/ipc/window";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -41,7 +41,7 @@ export function EventBridge() {
     const router = createEventRouter({
       notify: (title) => void notifyWhenHidden(title),
       onCloseRequested: () => useShellStore.getState().setCloseRequestOpen(true),
-      onSelectTab: navigateTo,
+      onSelectTab: (tab) => useShellStore.getState().setActiveTab(tab),
       queryClient,
       t: () => translateRef.current,
     });
@@ -104,20 +104,6 @@ export function EventBridge() {
   return null;
 }
 
-/** Where each deep-link target lands in the desktop shell. */
-function navigateTo(target: ShellTarget) {
-  const shell = useShellStore.getState();
-  if (target.tab === "logs") {
-    // The runtime log lives under Settings → Advanced.
-    shell.openSettings("advanced");
-    return;
-  }
-  // Seed the sub-view before mounting the destination screen.
-  if (target.tab === "connections") {
-    shell.setConnectionsView("connections");
-  }
-  shell.setActiveTab(target.tab);
-}
 
 function safeUnlisten(eventName: string, unlisten: Unlisten) {
   try {

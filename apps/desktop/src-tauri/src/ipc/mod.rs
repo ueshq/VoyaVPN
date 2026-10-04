@@ -29,7 +29,6 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::resolve_close_request::<tauri::Wry>,
         commands::tun_status,
         commands::tun_provider_diagnostics,
-        commands::set_tun_enabled::<tauri::Wry>,
         commands::load_dns_settings,
         commands::get_default_dns_settings,
         commands::save_dns_settings::<tauri::Wry>,
@@ -75,12 +74,12 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         commands::update_srs_assets,
         commands::install_core_seed,
         commands::get_self_host_state,
-        commands::save_self_host_config::<tauri::Wry>,
-        commands::set_self_host_enabled::<tauri::Wry>,
-        commands::rotate_self_host_credentials::<tauri::Wry>,
+        commands::save_self_host_config,
+        commands::set_self_host_enabled,
+        commands::rotate_self_host_credentials,
         commands::get_self_host_stats,
-        commands::run_self_host_environment_check::<tauri::Wry>,
-        commands::apply_self_host_firewall_rule::<tauri::Wry>,
+        commands::run_self_host_environment_check,
+        commands::apply_self_host_firewall_rule,
         window::minimize_window,
         window::toggle_maximize_window,
         window::close_window,
@@ -120,8 +119,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::ResourceUpdateFile>()
         .typ::<voya_contracts::AppSettings>()
         .typ::<voya_contracts::AppearanceSettings>()
-        .typ::<voya_contracts::AutostartStatus>()
-        .typ::<voya_contracts::AutostartPlatform>()
         .typ::<voya_contracts::QrCodeImage>()
         .typ::<voya_contracts::QrScanResult>()
         .typ::<voya_contracts::QrScanStatus>()

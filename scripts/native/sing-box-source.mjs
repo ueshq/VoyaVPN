@@ -27,6 +27,18 @@ export function singBoxSourceDir(repoRoot, env = process.env) {
 }
 
 /**
+ * Installs gomobile from the checkout, the first step of every Libbox build.
+ *
+ * It names the Go doing the building first, read inside the checkout so it is
+ * the toolchain `go.mod` selects there: nothing else records which compiler
+ * produced the library that ends up inside the tunnel.
+ */
+export function installLibboxTools(sourceDir, { logger = console } = {}) {
+  logger.log(`Go toolchain: ${checkedCapture("go", ["version"], { cwd: sourceDir }).stdout.trim()}`);
+  run("make", ["lib_install"], { cwd: sourceDir });
+}
+
+/**
  * Clones or updates the checkout and puts it on the pinned ref.
  *
  * A dirty checkout is refused rather than built: the artifact would then be
@@ -40,18 +52,6 @@ export function singBoxSourceDir(repoRoot, env = process.env) {
  * for it. A ref with no pinned commit needs the same explicit opt-out the seed
  * archive does.
  */
-/**
- * Installs gomobile from the checkout, the first step of every Libbox build.
- *
- * It names the Go doing the building first, read inside the checkout so it is
- * the toolchain `go.mod` selects there: nothing else records which compiler
- * produced the library that ends up inside the tunnel.
- */
-export function installLibboxTools(sourceDir, { logger = console } = {}) {
-  logger.log(`Go toolchain: ${checkedCapture("go", ["version"], { cwd: sourceDir }).stdout.trim()}`);
-  run("make", ["lib_install"], { cwd: sourceDir });
-}
-
 export function ensureSingBoxSource({
   env = process.env,
   logger = console,

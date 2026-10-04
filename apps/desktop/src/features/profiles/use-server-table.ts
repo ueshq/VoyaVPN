@@ -1,7 +1,10 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 
+import { queries } from "@voya/client/queries";
 import { useI18n } from "@voya/i18n/use-i18n";
-import type { ImportProfilesResult } from "@voya/contracts";
+import type { ImportProfilesResult, ProfileSummaryEntry } from "@voya/contracts";
+import { metadataBySubscriptionId } from "@voya/features/subscriptions/subscription-usage";
 import { useProfileActivation } from "@voya/client/runtime-action";
 import { useNodeSelection } from "@voya/features/profiles/use-node-selection";
 import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
@@ -22,6 +25,29 @@ export function useServerTable() {
   const nodeGroups = { ...useNodeSelection(searchRef), searchRef };
   const operation = useNodeOperation();
   const data = useNodeListData(nodeGroups, t);
+  // Usage and names are drawn on the desktop's group cards and details dialog
+  // only, so they are read here rather than in the list data both apps share.
+  const metadataQuery = useQuery(queries.subscriptionMetadata);
+  const subscriptionMetadata = useMemo(
+    () => metadataBySubscriptionId(metadataQuery.data ?? []),
+    [metadataQuery.data],
+  );
+  const subscriptionNames = useMemo(
+    () =>
+      new Map(
+        (data.subscriptionsQuery.data ?? []).map((item) => [
+          item.id,
+          item.remarks || t("panes.subscriptions.untitled"),
+        ]),
+      ),
+    [data.subscriptionsQuery.data, t],
+  );
+  function subscriptionName(item: ProfileSummaryEntry) {
+    return item.profile.subscriptionId
+      ? (subscriptionNames.get(item.profile.subscriptionId) ??
+          t("panes.subscriptions.untitled"))
+      : t("panes.profiles.card.local");
+  }
   const listView = useNodeListVirtual(data.rows, data.search);
   const editor = useNodeEditor(operation, listView.viewportRef, t);
   const activation = useProfileActivation(t);
@@ -53,6 +79,9 @@ export function useServerTable() {
     activation,
     ...operation,
     ...data,
+    subscriptionMetadata,
+    subscriptionName,
+    visibleProfileCount: data.rows.reduce((count, row) => count + (row.kind === "group" ? row.members.length : 0), 0),
     ...listView,
     ...editor,
     ...subscriptions,

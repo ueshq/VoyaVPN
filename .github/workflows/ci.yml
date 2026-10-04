@@ -43,7 +43,7 @@ jobs:
       # and cargo-audit's separate database/filters produced a second, drifting
       # opinion (deny.toml's ignore list is the single source of truth).
       - name: Install cargo-deny
-        uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2
         with:
           tool: cargo-deny@0.19.9
 
@@ -86,10 +86,14 @@ jobs:
         with:
           components: clippy, rustfmt
 
+      # Every script this job runs imports Node built-ins only, and nothing in
+      # the Rust build reads node_modules, so the workspace is not installed.
       - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install: "false"
 
       - name: Install cargo-machete
-        uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2
         with:
           tool: cargo-machete@0.9.2
 
@@ -212,18 +216,18 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          targets: aarch64-linux-android,x86_64-linux-android
           cache-key: mobile-Android
 
       # `cargo-ndk` is what turns a Rust target triple into the NDK's clang and
       # sysroot; without it every Android link fails on a missing libc.
       - name: Install cargo-ndk
-        uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2
         with:
           tool: cargo-ndk@3.5.4
 
       - name: Check the mobile host for Android
-        run: cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 check -p voya-mobile-ffi --locked
+        run: cargo ndk -t arm64-v8a -t x86_64 check -p voya-mobile-ffi --locked
 
   desktop-smoke:
     name: Linux native desktop smoke
@@ -241,7 +245,7 @@ jobs:
       - uses: ./.github/actions/setup-node-pnpm
 
       - name: Install tauri-driver
-        uses: taiki-e/install-action@6f976d36f95ad1b0a4bc57cf2ba09b1fab25dc10 # v2
+        uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2
         with:
           tool: tauri-driver@2.0.6
 
@@ -309,12 +313,13 @@ jobs:
           done
 
       # The app-side Swift has no host-side build — it reaches React,
-      # NetworkExtension, Libbox and the uniffi bindings — so this checks the
-      # one thing that can be checked without an Xcode project: that it parses.
-      - name: Parse the iOS Swift sources
+      # NetworkExtension, Libbox and the uniffi bindings — so this checks what
+      # can be checked without an Xcode project: that it parses, and that the
+      # UI tests and the shared PacketTunnel sources typecheck for iOS.
+      - name: Check the iOS Swift sources
         if: ${{ runner.os == 'macOS' }}
         run: node scripts/quality/mobile-swift.mjs
 
-      - name: Test macOS tunnel waiter without network changes
+      - name: Test the macOS native bridges and the PacketTunnel sources
         if: ${{ runner.os == 'macOS' }}
         run: node scripts/native/macos/test-bridge.mjs

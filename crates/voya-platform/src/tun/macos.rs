@@ -213,8 +213,9 @@ fn bridge_command_failed(action: &'static str, output: &str) -> NativeTunError {
 
 /// Status must stay cheap: it runs on every `tun_status` IPC, on every TUN
 /// enable, and on every tick of the supervisor health watcher. Only the bridge
-/// last-error and the provider's own status file are consulted here — both are
-/// local reads. Registration evidence, the host log tail and `codesign` output
+/// last-error and the provider's own status file are consulted here, and only
+/// for a tunnel that is down: the first is a bounded round trip to the system's
+/// session manager, the second a local read. Registration evidence, the host log tail and `codesign` output
 /// belong to `diagnostics()` behind the `tun_provider_diagnostics` IPC, which
 /// the UI calls on demand when it has to explain a Stopped or Error state.
 fn macos_packet_tunnel_status_message(

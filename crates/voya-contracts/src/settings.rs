@@ -54,8 +54,6 @@ impl Default for AppearanceSettings {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BehaviorSettings {
     pub autostart: bool,
-    /// Look up the exit IP each time a connection is established.
-    pub auto_check_ip: bool,
     /// What closing the main window does.
     pub close_action: CloseAction,
     /// Keep the window hidden when the app is launched at login.
@@ -69,7 +67,6 @@ impl Default for BehaviorSettings {
     fn default() -> Self {
         Self {
             autostart: false,
-            auto_check_ip: false,
             close_action: CloseAction::default(),
             start_minimized: false,
             auto_create_subscription_group: true,
@@ -225,7 +222,7 @@ pub struct SystemProxySettings {
     /// The persisted OS-proxy mode. Typed rather than a `String`: the enum's
     /// `rename_all = "camelCase"` emits exactly the values this field stores
     /// (`forcedClear`, `forcedChange`, `unchanged`), and `voya-db` pins that
-    /// with a value test. The retired `pac` value is normalized at startup.
+    /// with a value test.
     pub mode: SystemProxyType,
     pub exceptions: String,
     pub bypass_local: bool,
