@@ -203,14 +203,23 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
         }
 
         override fun stop() {
-            if (VoyaVpnService.state == VoyaVpnService.State.STOPPED) return
+            val previous = VoyaVpnService.state
+            if (previous == VoyaVpnService.State.STOPPED) return
             VoyaVpnService.lastError = null
             VoyaVpnService.state = VoyaVpnService.State.STOPPING
-            context.startService(
-                Intent(context, VoyaVpnService::class.java).apply {
-                    action = VoyaVpnService.ACTION_STOP
-                },
-            )
+            try {
+                context.startService(
+                    Intent(context, VoyaVpnService::class.java).apply {
+                        action = VoyaVpnService.ACTION_STOP
+                    },
+                )
+            } catch (error: Throwable) {
+                // The command never reached the service — Android refuses a
+                // background start once no foreground service is alive — so
+                // nothing will ever move the state on from STOPPING.
+                VoyaVpnService.state = previous
+                throw TunnelException.Failed(error.message ?: "could not reach the tunnel service")
+            }
             awaitState(VoyaVpnService.State.STOPPED, STOP_TIMEOUT_MS)
         }
 

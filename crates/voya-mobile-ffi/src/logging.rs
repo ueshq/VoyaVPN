@@ -32,11 +32,10 @@ use crate::sinks::HostSinks;
 static LOG_LINES: LazyLock<Arc<LogBatcher<LogLineEvent>>> =
     LazyLock::new(|| Arc::new(LogBatcher::new(LOG_BATCH_CAPACITY)));
 
-/// Who delivers a flushed batch. Swapped by every `VoyaApp` construction so
-/// lines always reach the app instance the platform is talking to; the
-/// subscriber itself is installed once per process.
-type Deliver = Arc<dyn Fn(Vec<LogLineEvent>) + Send + Sync>;
-static DELIVER: RwLock<Option<Deliver>> = RwLock::new(None);
+/// Whose listener a flushed batch goes to. Swapped by every `VoyaApp`
+/// construction so lines always reach the app instance the platform is talking
+/// to; the subscriber itself is installed once per process.
+static DELIVER: RwLock<Option<Arc<HostSinks>>> = RwLock::new(None);
 
 /// The one flusher task. Replaced by each `attach` so a fresh `VoyaApp` (and
 /// each test harness) delivers on its own runtime and to its own listener.
@@ -67,15 +66,32 @@ pub(crate) fn install_subscriber() {
 
 /// Point delivery at this app's sinks and start the flusher on its runtime.
 pub(crate) fn attach(runtime: &tokio::runtime::Handle, sinks: Arc<HostSinks>) {
-    {
-        // A panic while a deliver closure runs cannot leave the swap
-        // half-done in a way that matters for log delivery.
-        let mut deliver = DELIVER.write().unwrap_or_else(PoisonError::into_inner);
-        *deliver = Some(Arc::new(move |batch: Vec<LogLineEvent>| {
-            sinks.emit_log_lines(batch);
-        }));
-    }
+    // A panic while a batch is delivered cannot leave the swap half-done in a
+    // way that matters for log delivery.
+    *DELIVER.write().unwrap_or_else(PoisonError::into_inner) = Some(sinks);
     spawn_flusher(runtime, Arc::clone(&LOG_LINES), flush_to_current_deliver);
+}
+
+/// Stops delivery to an app that is shutting down. Its sinks hold the
+/// platform's event listener, which a later line must not reach once the host
+/// module is gone. Nothing happens when a newer app has attached since: the
+/// lines are that one's by then.
+pub(crate) fn detach(sinks: &Arc<HostSinks>) {
+    let mut deliver = DELIVER.write().unwrap_or_else(PoisonError::into_inner);
+    if !deliver
+        .as_ref()
+        .is_some_and(|current| Arc::ptr_eq(current, sinks))
+    {
+        return;
+    }
+    *deliver = None;
+    if let Some(flusher) = FLUSHER
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
+    {
+        flusher.abort();
+    }
 }
 
 /// Starts or pauses delivery — what `set_log_streaming` answers on a phone.
@@ -111,13 +127,13 @@ fn spawn_flusher(
     }));
 }
 
-/// What the process-wide flusher delivers through: whichever closure the
-/// latest `attach` installed.
+/// What the process-wide flusher delivers through: the sinks of whichever app
+/// attached last.
 fn flush_to_current_deliver(batch: Vec<LogLineEvent>) {
     // The same poison stance as the swap in `attach`.
     let deliver = DELIVER.read().unwrap_or_else(PoisonError::into_inner);
-    if let Some(deliver) = deliver.as_ref() {
-        deliver(batch);
+    if let Some(sinks) = deliver.as_ref() {
+        sinks.emit_log_lines(batch);
     }
 }
 

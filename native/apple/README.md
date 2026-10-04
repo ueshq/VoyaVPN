@@ -26,8 +26,8 @@ reaching into another app's group.
 
 ## Files
 
-- `PacketTunnel/PacketTunnelProvider.swift` — the provider itself: start, stop,
-  and the tunnel settings it installs.
+- `PacketTunnel/PacketTunnelProvider.swift` — the provider itself: start and
+  stop, serialized on one queue.
 - `PacketTunnel/PacketTunnelRuntime.swift` — the host handshake payload, its
   validation, and the libbox working paths. The base is `PT/` at the container
   root: short because libbox once bound a command socket under it, and kept
@@ -35,7 +35,10 @@ reaching into another app's group.
   does not open that socket — the app reads the core through its Clash API.
 - `PacketTunnel/PacketTunnelDiagnostics.swift` — the provider's status file and
   rotating log, both confined to the container.
-- `PacketTunnel/PacketTunnelPlatform.swift` — the libbox `PlatformInterface`.
+- `PacketTunnel/PacketTunnelPlatform.swift` — the libbox `PlatformInterface`,
+  including the tunnel network settings built from the options libbox hands it.
+- `DefaultInterfaceMonitor.swift` — the `NWPathMonitor` behind libbox's
+  default-interface callbacks, shared with the iOS app's probe core.
 - `PacketTunnelTests.swift` — a `@main` binary, not XCTest: it runs the runtime
   and diagnostics in a temporary directory without loading a NetworkExtension.
   `pnpm check:native:macos:bridge` compiles and runs it, and `check:rust:test`

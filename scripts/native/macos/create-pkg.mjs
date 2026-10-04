@@ -43,7 +43,7 @@ const appContents = resolve(appBundle, "Contents");
 const pkgDir = resolve(process.env.VOYAVPN_MACOS_PKG_DIR || resolve(repoRoot, "target", "release", "bundle", "pkg"));
 
 /** The Mac App Store accepts installer packages signed by one of these. */
-export const installerIdentityPattern = /3rd Party Mac Developer Installer:|Mac Installer Distribution:/;
+const installerIdentityPattern = /3rd Party Mac Developer Installer:|Mac Installer Distribution:/;
 /** ...around an app signed by one of these. */
 const appStoreApplicationAuthority = /^Authority=(?:3rd Party Mac Developer Application|Apple Distribution):/m;
 

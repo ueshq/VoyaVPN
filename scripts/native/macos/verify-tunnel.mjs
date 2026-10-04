@@ -5,7 +5,6 @@ import {
   isCliEntrypoint,
   repoRootFromScript,
   requireDarwin,
-  run,
   runCli,
   truthy,
 } from "../../lib/common.mjs";
@@ -180,7 +179,6 @@ function verifyLaunchServicesMetadata() {
 
 function main() {
   requireDarwin("macOS native tunnel verification must run on macOS.");
-  run(process.execPath, [resolve(repoRoot, "scripts/native/macos/test-bridge.mjs")], { cwd: repoRoot });
   tunnel = initializeTunnelLayout(appContents, inferDistribution({ appContents }));
   requirePath(appBundle, "macOS app bundle", { log: true });
   verifyLaunchServicesMetadata();

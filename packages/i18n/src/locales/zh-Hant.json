@@ -286,7 +286,6 @@
         "copied": "已將 {{count}} 個節點的匯出內容複製到剪貼簿。",
         "export": "匯出",
         "noProfiles": "沒有可匯出的節點。",
-        "noSelection": "請至少選擇一個節點再匯出。",
         "shareLinks": "分享連結",
         "showQr": "顯示 QR Code",
         "skippedUnsupported": "已略過 {{count}} 個不支援分享連結的節點。"

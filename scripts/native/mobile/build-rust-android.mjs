@@ -12,7 +12,7 @@ import { generateUniffiBindings } from "./uniffi-bindings.mjs";
  * sysroot; without it every link fails on a missing `libc`. The ABI names are
  * Android's, not Rust's, which is why they are listed rather than derived.
  */
-export const ANDROID_ABIS = [
+const ANDROID_ABIS = [
   { abi: "arm64-v8a", triple: "aarch64-linux-android" },
   { abi: "armeabi-v7a", triple: "armv7-linux-androideabi" },
   // The emulator, which is what most development runs on.
@@ -79,7 +79,7 @@ function generateBindings() {
   });
 }
 
-export function buildRustForAndroid() {
+function buildRustForAndroid() {
   requireEnvironment();
   buildLibraries();
   generateBindings();

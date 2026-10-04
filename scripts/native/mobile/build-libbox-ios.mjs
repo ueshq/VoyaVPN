@@ -9,7 +9,7 @@ import {
   run,
   runCli,
 } from "../../lib/common.mjs";
-import { ensureSingBoxSource, singBoxSourceDir } from "../sing-box-source.mjs";
+import { ensureSingBoxSource, installLibboxTools, singBoxSourceDir } from "../sing-box-source.mjs";
 
 /**
  * Builds the iOS `Libbox.xcframework` the PacketTunnel extension links.
@@ -49,7 +49,7 @@ const targetXCFramework = resolve(
  */
 function buildLibbox() {
   rmSync(resolve(sourceDir, XCFRAMEWORK_NAME), { force: true, recursive: true });
-  run("make", ["lib_install"], { cwd: sourceDir });
+  installLibboxTools(sourceDir);
   run(
     "go",
     ["run", "./cmd/internal/build_libbox", "-target", "apple", "-platform", APPLE_PLATFORMS],
@@ -154,7 +154,7 @@ function pruneInfoPlist(destination, slices, plist) {
   }
 }
 
-export function buildLibboxForIos() {
+function buildLibboxForIos() {
   requireDarwin("Libbox.xcframework must be built on macOS with Xcode command line tools.");
   ensureSingBoxSource({ repoRoot, sourceDir });
   buildLibbox();

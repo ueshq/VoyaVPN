@@ -235,7 +235,15 @@ impl<'flow> CoreFlow<'flow> {
     }
 
     /// React to a core process that exited on its own.
-    pub async fn handle_core_exit(&self, config: &AppConfig, event: CoreExitEvent) {
+    ///
+    /// `current_config` is read once the flow lock is held: the flow this
+    /// waits behind may be the very settings save whose proxy the recovery is
+    /// about to apply or restore.
+    pub async fn handle_core_exit(
+        &self,
+        current_config: impl FnOnce() -> AppConfig + Send,
+        event: CoreExitEvent,
+    ) {
         let exit = describe_exit(&event);
         match event.outcome {
             CoreExitOutcome::Restarted { attempt, snapshot } => {
@@ -254,6 +262,7 @@ impl<'flow> CoreFlow<'flow> {
                 if !self.is_running_core(&snapshot).await {
                     return;
                 }
+                let config = &current_config();
                 // The pid changed, so the UI needs the new snapshot.
                 self.settle_traffic_mode(config, &snapshot).await;
                 let _ = self
@@ -295,14 +304,20 @@ impl<'flow> CoreFlow<'flow> {
                 if self.core_is_connected().await {
                     return;
                 }
-                self.settle_disconnected(config, event.active_profile_id, None)
+                self.settle_disconnected(&current_config(), event.active_profile_id, None)
                     .await;
             }
         }
     }
 
     /// React to a native TUN provider that reached a terminal state.
-    pub async fn handle_native_tun_exit(&self, config: &AppConfig, event: NativeTunExitEvent) {
+    /// `current_config` is read under the flow lock, as in
+    /// [`Self::handle_core_exit`].
+    pub async fn handle_native_tun_exit(
+        &self,
+        current_config: impl FnOnce() -> AppConfig + Send,
+        event: NativeTunExitEvent,
+    ) {
         self.sink.log(
             LogLevel::Error,
             LogCode::NativeTunExited,
@@ -316,7 +331,8 @@ impl<'flow> CoreFlow<'flow> {
         // Same reasoning as a core that gave up: settle after any flow that is
         // in progress, against the state the supervisor is in by then.
         let _flow = self.runtime.settings_application().flow_lock.lock().await;
-        self.reconcile(config, CoreFlowReason::Disconnect).await;
+        self.reconcile(&current_config(), CoreFlowReason::Disconnect)
+            .await;
     }
 
     async fn is_running_core(&self, snapshot: &SupervisorSnapshot) -> bool {

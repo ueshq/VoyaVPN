@@ -12,10 +12,10 @@ import { captureSpawned, isCliEntrypoint, repoRootFromScript, runCli } from "../
  * project and the staged frameworks. What *can* be checked anywhere with the
  * command line tools is that they parse — which catches the mistakes that are
  * otherwise found by a twenty-minute Xcode build, or by nobody until someone
- * tries to ship. The UI tests are included because they are the one place a
- * mistake stays quiet: they only compile during `xcodebuild test`, which
- * nothing in CI runs, so a typo in them would surface on someone's machine
- * minutes into a simulator run.
+ * tries to ship. The UI tests are included because they otherwise compile
+ * only during the simulator lane's `xcodebuild build-for-testing`: that runs
+ * for a pull request touching the mobile app, minutes into a macOS job, where
+ * this says so in seconds on any machine.
  *
  * The provider sources shared with macOS are typechecked properly by
  * `pnpm check:native:macos:bridge`; this covers the app-side half.
@@ -28,7 +28,7 @@ const SOURCE_DIRS = [
 /** Single files outside those directories. */
 const SOURCE_FILES = [["apps", "mobile", "ios", "VoyaVPN", "AppDelegate.swift"]];
 
-export function swiftSources(root) {
+function swiftSources(root) {
   return [
     ...SOURCE_DIRS.flatMap((segments) => {
       const directory = resolve(root, ...segments);

@@ -2,7 +2,11 @@ import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 import { checkedCapture, run, truthy } from "../lib/common.mjs";
-import { DEFAULT_SING_BOX_VERSION, singBoxSourcePinStatus } from "../core/sing-box-installer.mjs";
+import {
+  DEFAULT_SING_BOX_VERSION,
+  SING_BOX_SOURCE_REPOSITORY,
+  singBoxSourcePinStatus,
+} from "../core/sing-box-installer.mjs";
 
 /**
  * The one sing-box checkout every native build works from.
@@ -36,6 +40,18 @@ export function singBoxSourceDir(repoRoot, env = process.env) {
  * for it. A ref with no pinned commit needs the same explicit opt-out the seed
  * archive does.
  */
+/**
+ * Installs gomobile from the checkout, the first step of every Libbox build.
+ *
+ * It names the Go doing the building first, read inside the checkout so it is
+ * the toolchain `go.mod` selects there: nothing else records which compiler
+ * produced the library that ends up inside the tunnel.
+ */
+export function installLibboxTools(sourceDir, { logger = console } = {}) {
+  logger.log(`Go toolchain: ${checkedCapture("go", ["version"], { cwd: sourceDir }).stdout.trim()}`);
+  run("make", ["lib_install"], { cwd: sourceDir });
+}
+
 export function ensureSingBoxSource({
   env = process.env,
   logger = console,
@@ -50,7 +66,7 @@ export function ensureSingBoxSource({
 
   if (!existsSync(sourceDir)) {
     mkdirSync(dirname(sourceDir), { recursive: true });
-    run("git", ["clone", "https://github.com/SagerNet/sing-box.git", sourceDir], { cwd: repoRoot });
+    run("git", ["clone", SING_BOX_SOURCE_REPOSITORY, sourceDir], { cwd: repoRoot });
   }
 
   const status = checkedCapture("git", ["status", "--porcelain"], { cwd: sourceDir }).stdout.trim();
@@ -60,10 +76,16 @@ export function ensureSingBoxSource({
     );
   }
 
-  run("git", ["fetch", "--tags", "--force"], { cwd: sourceDir });
-  run("git", ["checkout", ref], { cwd: sourceDir });
+  const head = () => checkedCapture("git", ["rev-parse", "HEAD"], { cwd: sourceDir }).stdout.trim().toLowerCase();
+  // The pinned commit is what is trusted, not the tag. A clean checkout already
+  // on it has nothing to learn from the network, so every build after the
+  // first skips the fetch.
+  if (!(pin.pinned && !status && head() === pin.expected)) {
+    run("git", ["fetch", "--tags", "--force"], { cwd: sourceDir });
+    run("git", ["checkout", ref], { cwd: sourceDir });
+  }
 
-  const commit = checkedCapture("git", ["rev-parse", "HEAD"], { cwd: sourceDir }).stdout.trim().toLowerCase();
+  const commit = head();
   if (pin.pinned && commit !== pin.expected) {
     throw new Error(`sing-box ${ref} resolved to ${commit}, not the pinned ${pin.expected}`);
   }

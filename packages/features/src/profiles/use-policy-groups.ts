@@ -1,5 +1,5 @@
 import { queries } from "@voya/client/queries";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { TranslationFunction } from "@voya/i18n/core";
@@ -41,6 +41,10 @@ export function usePolicyGroups(
   const [editingPolicyGroup, setEditingPolicyGroup] = useState<PolicyGroup | null>(null);
   const [policyGroupEditorOpen, setPolicyGroupEditorOpen] = useState(false);
   const [deletingPolicyGroup, setDeletingGroup] = useState<PolicyGroupEntry | null>(null);
+  const [deletingPolicyGroupPending, setDeletingPolicyGroupPending] = useState(false);
+  // The state disables the button a render later; the ref refuses the second
+  // press of a double click, which lands before that render.
+  const deleteInFlight = useRef(false);
 
   // The confirmation shows the page's operation error as its own. Opening it
   // starts clean, or a failed export from a minute ago would read as the
@@ -85,8 +89,14 @@ export function usePolicyGroups(
 
   async function removePolicyGroup() {
     const entry = deletingPolicyGroup;
-    if (!entry) return;
+    if (!entry || deleteInFlight.current) return;
+    deleteInFlight.current = true;
+    setDeletingPolicyGroupPending(true);
+    // `runOperation` reports a failure instead of throwing, so the guard is
+    // always released.
     const removed = await operation.runOperation(() => voyaCommands().deletePolicyGroups([entry.group.id]));
+    deleteInFlight.current = false;
+    setDeletingPolicyGroupPending(false);
     if (removed) setDeletingPolicyGroup(null);
   }
 
@@ -95,6 +105,7 @@ export function usePolicyGroups(
     choosePolicyGroupMember,
     coreConnected,
     deletingPolicyGroup,
+    deletingPolicyGroupPending,
     editingPolicyGroup,
     openGroupEditor,
     policyGroupEditorOpen,

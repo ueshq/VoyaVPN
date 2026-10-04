@@ -74,6 +74,11 @@ describe("useConnectedDurationMs", () => {
       visible = true;
       notify();
     });
+    // Caught up at once, not a second after coming back.
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
+    expect(result.current).toBe(70_000);
     await act(async () => {
       jest.advanceTimersByTime(1000);
     });

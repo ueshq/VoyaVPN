@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { IpcCommandError } from "@voya/client/errors";
-import { importLineText } from "@voya/client/messages";
+import { importLineText, isImportLineNotice } from "@voya/client/messages";
 import { clipboard } from "@voya/client/platform";
 import { refreshQueries } from "@voya/client/queries";
 import { subscriptionRefreshRoots } from "@voya/client/query-keys";
@@ -101,10 +101,16 @@ export function ImportScreen() {
     if (!preview || preview.text !== text) return;
     const result = await voyaCommands().importProfilesFromText(preview.text, null);
     const added = new Set(result.addedSubscriptionIds);
-    for (const source of await voyaCommands().listSubscriptions()) {
-      const name = sourceNames[source.url]?.trim();
-      if (added.has(source.id) && name) await voyaCommands().saveSubscription({ ...source, remarks: name });
-    }
+    // The import is committed by now. A name that cannot be applied leaves
+    // the subscription under its default one, to be renamed from its own
+    // page; letting that throw would call a finished import failed and skip
+    // the first download below.
+    try {
+      for (const source of await voyaCommands().listSubscriptions()) {
+        const name = sourceNames[source.url]?.trim();
+        if (added.has(source.id) && name) await voyaCommands().saveSubscription({ ...source, remarks: name });
+      }
+    } catch { /* see above */ }
     setPreview(null); setText(""); setMessage(formatImportSummary(result, t));
     setImportedCount(result.imported);
     await refreshQueries(client, ...subscriptionRefreshRoots);
@@ -139,7 +145,7 @@ export function ImportScreen() {
         subscriptions: t("mobile.previewSubscriptions", { count: preview.data.subscriptionUrls.length }),
         invalid: t("mobile.previewInvalid", { count: preview.data.failed }),
       })}</Typography>
-      {preview.data.lineIssues.map((issue, index) => <Typography key={`issue-${index}`} className={issue.code.code === "subscriptionSourceAdded" ? "text-sm text-subtle" : "text-sm text-danger"}>{importLineText(t, issue)}</Typography>)}
+      {preview.data.lineIssues.map((issue, index) => <Typography key={`issue-${index}`} className={isImportLineNotice(issue) ? "text-sm text-subtle" : "text-sm text-danger"}>{importLineText(t, issue)}</Typography>)}
       {(allNodes ? preview.data.nodes : preview.data.nodes.slice(0, previewLimit)).map((node, index) => <Typography key={index} className="text-base text-foreground">{node.name} · {getProtocolLabelLoose(node.protocol)} · {node.address}</Typography>)}
       {preview.data.nodes.length > previewLimit ? <Button variant="secondary" accessibilityState={{ expanded: allNodes }} onPress={() => setAllNodes(!allNodes)}><Button.Label>{allNodes ? t("mobile.collapsePreview") : t("mobile.expandPreview", { count: preview.data.nodes.length })}</Button.Label></Button> : null}
       {preview.data.subscriptionUrls.map((url) => <View key={url} className="gap-2">

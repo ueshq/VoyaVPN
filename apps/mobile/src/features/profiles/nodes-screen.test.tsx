@@ -262,9 +262,43 @@ describe("NodesScreen", () => {
     await act(() => confirm?.onPress?.());
     alert.mockRestore();
 
-    // The sheet is still open, and the reason is on it rather than on the
-    // list's banner behind the modal.
-    expect(await screen.findByText("database is locked")).toBeOnTheScreen();
+    // The sheet is still open, and the failure is on it rather than on the
+    // list's banner behind the modal: in the app's words, with the backend's
+    // own diagnostic one tap away.
+    expect(await screen.findByText("Could not complete this action. Retry or view diagnostics.")).toBeOnTheScreen();
     expect(screen.getByText("Delete")).toBeOnTheScreen();
+    expect(screen.queryByText("database is locked")).toBeNull();
+    await user.press(screen.getByText("Technical details"));
+    expect(await screen.findByText("database is locked")).toBeOnTheScreen();
+  });
+
+  it("leaves share-link actions off a node whose protocol has none", async () => {
+    const backend = mockBackend();
+    const [first] = backend.state.profiles;
+    backend.state.profiles = [
+      { ...first, profile: { ...first.profile, kind: "http" } },
+      ...backend.state.profiles.slice(1),
+    ];
+    await renderNodes();
+    const user = userEvent.setup();
+
+    await user.longPress(await screen.findByText(first.profile.remarks));
+
+    expect(await screen.findByRole("button", { name: "Test latency" })).toBeOnTheScreen();
+    for (const name of ["Copy link", "Share…", "Show QR"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+  });
+
+  it("keeps a failed QR export in the sheet", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+    mockBackend().commands.exportProfileShareLinks = () => Promise.reject(new Error("export refused"));
+
+    await user.longPress(await screen.findByText("🇯🇵 Tokyo"));
+    await user.press(await screen.findByText("Show QR"));
+
+    expect(await screen.findByText("Could not complete this action. Retry or view diagnostics.")).toBeOnTheScreen();
+    expect(screen.getByText("Show QR")).toBeOnTheScreen();
   });
 });

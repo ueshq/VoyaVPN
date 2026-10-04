@@ -568,9 +568,8 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
     /**
      * Measures every selected node at once, the way a very fast backend would.
      *
-     * The results stream on the transient channel *and* come back in the
-     * answer, because that is what the real backend does; a screen that only
-     * reads one of the two would look right here and be wrong on a device.
+     * The results stream on the transient channel and the answer carries
+     * only the counts, because that is what the real backend does.
      */
     runSpeedtest: (request) => {
       const profileIds = request.target.profileIds;
@@ -597,7 +596,6 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
         record("runSpeedtest", [request], {
           cancelled: false,
           completedCount: results.length,
-          results,
           selectedCount: profileIds.length,
         }),
       );

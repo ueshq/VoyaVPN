@@ -286,7 +286,6 @@
         "copied": "已将 {{count}} 个节点的导出内容复制到剪贴板。",
         "export": "导出",
         "noProfiles": "没有可导出的节点。",
-        "noSelection": "请至少选择一个节点再导出。",
         "shareLinks": "分享链接",
         "showQr": "显示二维码",
         "skippedUnsupported": "已跳过 {{count}} 个不支持分享链接的节点。"

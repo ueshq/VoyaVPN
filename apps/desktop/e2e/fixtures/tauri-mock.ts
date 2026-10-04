@@ -684,7 +684,6 @@ export async function installTauriSmokeMock(
           return Promise.resolve({
             cancelled: false,
             completedCount: 0,
-            results: [],
             selectedCount: 0,
           } satisfies SpeedtestRunResult);
         case "cancel_speedtest":

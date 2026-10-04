@@ -183,12 +183,17 @@ export function createI18nHost(host: I18nHost): I18nSetup {
    * stored preference. Without it a consumer has to re-declare this module's
    * private storage key and snapshot/restore storage around the call.
    */
+  let latestChange = 0;
   const changeLocale = async (locale: Locale, options?: { persist?: boolean }) => {
+    const change = ++latestChange;
     if (options?.persist !== false) {
       host.persistLocale(locale);
     }
 
     await loadLocale(locale);
+    // A locale whose chunk arrives after a later choice was made must not
+    // win over it: the stored preference is already the later one.
+    if (change !== latestChange) return;
     await i18next.changeLanguage(locale);
     applyLocale(locale);
   };

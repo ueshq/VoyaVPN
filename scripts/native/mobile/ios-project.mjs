@@ -31,7 +31,7 @@ const SCRIPT = "ios-project.rb";
  * the `pod` wrapper rather than hardcoding a Homebrew Cellar version, which
  * changes with every CocoaPods release.
  */
-export function rubyWithXcodeproj({ captureCommand = capture } = {}) {
+function rubyWithXcodeproj({ captureCommand = capture } = {}) {
   const probe = (binary, env) =>
     captureCommand(binary, ["-e", "require 'xcodeproj'"], { env: { ...process.env, ...env } })
       .status === 0;
@@ -74,7 +74,7 @@ function missingGemMessage() {
   ].join("\n");
 }
 
-export function wireIosProject() {
+function wireIosProject() {
   requireDarwin("The iOS project can only be wired up on macOS.");
   const repoRoot = repoRootFromScript(import.meta.url);
   const { binary, env } = rubyWithXcodeproj();

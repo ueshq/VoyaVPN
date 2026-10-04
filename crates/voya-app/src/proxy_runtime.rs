@@ -886,4 +886,43 @@ mod tests {
             .any(|request| request.method == ClashHttpMethod::Put
                 && request.body == Some(json!({ "name": "Tokyo [tokyo]" }))));
     }
+
+    #[tokio::test]
+    async fn group_now_names_the_current_member_and_nothing_for_an_unknown_tag() {
+        let transport = MockTransport::default();
+        let port = u16::try_from(DEFAULT_LOCAL_PORT + 5).expect("state port");
+        let manager = ProxyRuntimeManager::with_transport(Arc::new(transport.clone()));
+        let members = vec![voya_core::ProfileIdentity {
+            index_id: "osaka".to_string(),
+            remarks: "Osaka".to_string(),
+            subscription_id: None,
+        }];
+
+        transport.respond(
+            "/proxies/proxy",
+            json!({ "name": "proxy", "type": "URLTest", "now": "Osaka [osaka]" }),
+        );
+        assert_eq!(
+            manager
+                .group_now(&access(port), &members)
+                .await
+                .expect("group now")
+                .as_deref(),
+            Some("osaka")
+        );
+
+        // A node renamed since the launch no longer recomputes to the tag the
+        // running config carries.
+        transport.respond(
+            "/proxies/proxy",
+            json!({ "name": "proxy", "type": "URLTest", "now": "Kyoto [kyoto]" }),
+        );
+        assert_eq!(
+            manager
+                .group_now(&access(port), &members)
+                .await
+                .expect("group now"),
+            None
+        );
+    }
 }

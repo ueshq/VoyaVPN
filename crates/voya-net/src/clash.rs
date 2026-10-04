@@ -649,6 +649,23 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn clash_get_proxy_reads_one_group_by_encoded_tag() {
+        let transport = MockTransport::default();
+        transport.respond(
+            "/proxies/auto%20group",
+            json!({ "name": "auto group", "type": "URLTest", "all": ["Tokyo [a1]"], "now": "Tokyo [a1]" }),
+        );
+        let client = ClashRestClient::with_transport(
+            ClashApiEndpoint::loopback(9090),
+            Arc::new(transport.clone()),
+        );
+
+        let group = client.get_proxy("auto group").await.expect("group");
+        assert_eq!(group.now.as_deref(), Some("Tokyo [a1]"));
+        assert_eq!(transport.requests()[0].method, ClashHttpMethod::Get);
+    }
+
+    #[tokio::test]
     async fn clash_proxy_delay_encodes_the_tag_and_url() {
         let transport = MockTransport::default();
         transport.respond(

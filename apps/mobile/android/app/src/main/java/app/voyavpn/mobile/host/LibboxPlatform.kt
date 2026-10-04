@@ -29,7 +29,10 @@ abstract class LibboxPlatform(private val context: Context) : PlatformInterface,
 
     private fun publish(network: Network?, listener: InterfaceUpdateListener) {
         val name = network?.let(connectivity::getLinkProperties)?.interfaceName.orEmpty()
-        val index = if (name.isEmpty()) -1 else JavaNetworkInterface.getByName(name)?.index ?: -1
+        // `getByName` throws when the interface list cannot be read, and this
+        // runs on the system's callback thread, where that would end the
+        // process hosting the tunnel.
+        val index = if (name.isEmpty()) -1 else runCatching { JavaNetworkInterface.getByName(name)?.index }.getOrNull() ?: -1
         val capabilities = network?.let(connectivity::getNetworkCapabilities)
         listener.updateDefaultInterface(name, index,
             capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == false, false)

@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, Mutex, PoisonError, RwLock},
+    sync::{Arc, Mutex, PoisonError},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -10,14 +10,17 @@ use tokio::{
     time,
 };
 use voya_contracts::StatisticsSnapshot;
-use voya_core::{text::nonempty_string, AppConfig, ServerStatItem};
+use voya_core::ServerStatItem;
 use voya_db::{Database, DbError};
 use voya_net::clash::{ClashTraffic, ClashWebSocketEvent, ClashWebSocketResource};
 
 use crate::{
-    backoff::sleep_or_shutdown, clash_follow::follow_core_ws, config_mutation::SharedAppConfig,
+    backoff::sleep_or_shutdown, clash_follow::follow_core_ws, proxy_runtime::ProxyRuntimeManager,
     supervisor::CoreSupervisor,
 };
+
+mod target;
+use target::TrafficTarget;
 
 const STATISTICS_CHANNEL_SIZE: usize = 64;
 const COALESCE_INTERVAL: Duration = Duration::from_secs(1);
@@ -30,6 +33,9 @@ const TRAFFIC_FLUSH_INTERVAL: Duration = Duration::from_secs(10);
 /// Coalesced ticks per flush. The aggregator's only clock is its tick.
 const TRAFFIC_FLUSH_TICKS: u64 = TRAFFIC_FLUSH_INTERVAL.as_secs() / COALESCE_INTERVAL.as_secs();
 const SINGBOX_INITIAL_DELAY: Duration = Duration::from_secs(5);
+/// The supervisor answers from its own thread, which a core start or stop
+/// occupies for seconds; a tick does not wait that long to learn the target.
+const RUNNING_CORE_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub type Result<T> = std::result::Result<T, StatisticsError>;
 
@@ -91,17 +97,6 @@ pub trait StatisticsEventSink: Send + Sync {
     fn emit_statistics(&self, snapshot: StatisticsSnapshot);
 }
 
-/// The node traffic is counted against, read from the live configuration on
-/// every tick so a switch needs no restart of the loop.
-///
-/// A poisoned lock reads as no node rather than stopping the loop.
-fn active_profile_id(config: &RwLock<AppConfig>) -> Option<String> {
-    config
-        .read()
-        .ok()
-        .and_then(|config| nonempty_string(Some(config.active_profile_id.as_str())))
-}
-
 pub struct StatisticsManager {
     shutdown: watch::Sender<bool>,
     /// Writes the samples to SQLite. Taken by `shutdown`, which waits for its
@@ -115,7 +110,7 @@ impl StatisticsManager {
     pub fn spawn(
         database: Database,
         supervisor: CoreSupervisor,
-        config: SharedAppConfig,
+        proxy_runtime: ProxyRuntimeManager,
         event_sink: Arc<dyn StatisticsEventSink>,
     ) -> Self {
         let (sample_tx, sample_rx) = mpsc::channel(STATISTICS_CHANNEL_SIZE);
@@ -123,7 +118,8 @@ impl StatisticsManager {
 
         let aggregator = tokio::spawn(run_statistics_aggregator(
             database,
-            config,
+            supervisor.clone(),
+            proxy_runtime,
             event_sink,
             sample_rx,
             shutdown_rx.clone(),
@@ -343,7 +339,8 @@ fn current_day_marker() -> i64 {
 
 async fn run_statistics_aggregator(
     database: Database,
-    config: SharedAppConfig,
+    supervisor: CoreSupervisor,
+    proxy_runtime: ProxyRuntimeManager,
     event_sink: Arc<dyn StatisticsEventSink>,
     mut sample_rx: mpsc::Receiver<ServerSpeedSample>,
     mut shutdown: watch::Receiver<bool>,
@@ -358,6 +355,7 @@ async fn run_statistics_aggregator(
     let mut day_marker = current_day_marker();
     let mut buffer = TrafficWriteBuffer::default();
     let mut ticks_since_flush = 0_u64;
+    let mut target = TrafficTarget::new(database.clone(), proxy_runtime);
 
     loop {
         tokio::select! {
@@ -376,7 +374,11 @@ async fn run_statistics_aggregator(
             _ = interval.tick() => {
                 let sample = pending;
                 pending = ServerSpeedSample::default();
-                let active_profile_id = active_profile_id(&config);
+                // Only measured bytes need a node to go to, so an idle core
+                // costs the supervisor and the Clash API nothing.
+                if sample.has_traffic() {
+                    follow_running_core(&supervisor, &mut target).await;
+                }
                 let current_day = current_day_marker();
                 if current_day != day_marker {
                     // Buffered bytes were measured yesterday, and the rollover
@@ -393,7 +395,7 @@ async fn run_statistics_aggregator(
                 }
                 match record_statistics_tick(
                     &database,
-                    active_profile_id.as_deref(),
+                    target.current(),
                     &mut buffer,
                     sample,
                     day_marker,
@@ -418,6 +420,14 @@ async fn run_statistics_aggregator(
     // discarded.
     if let Err(error) = flush_traffic_buffer(&database, &mut buffer).await {
         tracing::warn!(?error, "failed to flush buffered statistics on shutdown");
+    }
+}
+
+/// Points `target` at what the running core serves. A supervisor that does
+/// not answer in time leaves the target where it was.
+async fn follow_running_core(supervisor: &CoreSupervisor, target: &mut TrafficTarget) {
+    if let Ok(Ok(snapshot)) = time::timeout(RUNNING_CORE_TIMEOUT, supervisor.status()).await {
+        target.follow(&snapshot).await;
     }
 }
 

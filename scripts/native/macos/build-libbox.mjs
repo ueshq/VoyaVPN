@@ -10,7 +10,7 @@ import {
   runCli,
 } from "../../lib/common.mjs";
 import { libboxBinaryPath } from "./tunnel-layout.mjs";
-import { ensureSingBoxSource, singBoxSourceDir } from "../sing-box-source.mjs";
+import { ensureSingBoxSource, installLibboxTools, singBoxSourceDir } from "../sing-box-source.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const sourceDir = singBoxSourceDir(repoRoot);
@@ -29,7 +29,7 @@ const targetFramework = resolve(
  */
 function buildLibbox() {
   rmSync(resolve(sourceDir, "Libbox.xcframework"), { force: true, recursive: true });
-  run("make", ["lib_install"], { cwd: sourceDir });
+  installLibboxTools(sourceDir);
   run("go", ["run", "./cmd/internal/build_libbox", "-target", "apple", "-platform", "macos"], {
     cwd: sourceDir,
   });
@@ -47,7 +47,7 @@ export function findUniversalMacosFramework(xcframeworkPath) {
   return candidates[0];
 }
 
-export function assertUniversalMacosFramework(frameworkPath, captureCommand = capture) {
+function assertUniversalMacosFramework(frameworkPath, captureCommand = capture) {
   const binary = libboxBinaryPath(frameworkPath);
   if (!existsSync(binary)) {
     throw new Error(`Libbox.framework binary was not found at ${binary}`);

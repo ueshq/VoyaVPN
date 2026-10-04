@@ -121,7 +121,6 @@ pub struct SpeedtestRunResult {
     pub cancelled: bool,
     pub selected_count: u32,
     pub completed_count: u32,
-    pub results: Vec<SpeedtestResult>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]

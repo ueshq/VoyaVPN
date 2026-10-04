@@ -306,10 +306,10 @@ impl AppServices {
     pub fn spawn_statistics(
         &self,
         supervisor: CoreSupervisor,
-        config: SharedAppConfig,
+        proxy_runtime: crate::proxy_runtime::ProxyRuntimeManager,
         event_sink: Arc<dyn StatisticsEventSink>,
     ) -> StatisticsManager {
-        StatisticsManager::spawn(self.database.clone(), supervisor, config, event_sink)
+        StatisticsManager::spawn(self.database.clone(), supervisor, proxy_runtime, event_sink)
     }
 
     /// Starts the background subscription auto-update loop.
@@ -366,7 +366,8 @@ impl AppServices {
 
         Ok(manager
             .run_with_callback(&self.database, config, profile_ids, on_results)
-            .await?)
+            .await?
+            .into())
     }
 
     #[must_use]

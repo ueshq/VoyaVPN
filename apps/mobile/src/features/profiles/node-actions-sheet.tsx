@@ -1,11 +1,12 @@
 import { deleteSafely } from "./delete-safely";
 import { openPage } from "~/app/navigation";
+import { profileShareQrQuery } from "@voya/client/profile-queries";
 import { refreshQueries } from "@voya/client/queries";
-import { profileShareQrQueryKey, queryKeys } from "@voya/client/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import { profileTitle } from "@voya/features/profiles/profile-display";
 import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
-import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
+import { supportsShareLinkExport } from "@voya/features/profiles/server-table-actions";
 import type { useNodeExport } from "@voya/features/profiles/use-node-export";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useQueryClient } from "@tanstack/react-query";
@@ -20,7 +21,7 @@ import { useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
-import { Banner } from "~/components/banner";
+import { ErrorNotice } from "~/components/error-notice";
 import { useContentColumn } from "~/components/content-column";
 import { ListRow } from "~/components/list-row";
 import { useToneColor } from "~/components/tone";
@@ -33,14 +34,12 @@ export function NodeActionsSheet({
   exports,
   onClose,
   onClosed,
-  operation,
   onTest,
 }: {
   entry: ProfileSummaryEntry | null;
   exports: ReturnType<typeof useNodeExport>;
   onClose: () => void;
   onClosed: () => void;
-  operation: NodeOperation;
   onTest: (id: string) => void;
 }) {
   const { t } = useI18n();
@@ -52,8 +51,9 @@ export function NodeActionsSheet({
   const column = useContentColumn(480);
   const titleRef = useRef<Text>(null);
   // A failure is shown here, in the sheet: the list's own banner is behind
-  // the modal, hidden from sight and from the screen reader alike.
-  const [failure, setFailure] = useState<string | null>(null);
+  // the modal, hidden from sight and from the screen reader alike. Kept as
+  // the error itself, so `ErrorNotice` words it by kind.
+  const [failure, setFailure] = useState<unknown>(null);
   // Which of the sheet's two views the screen reader was last sent to. Focus
   // moves when a view appears — not each time its title is laid out again, or
   // rotating the phone would drag the reader back to the top.
@@ -64,11 +64,7 @@ export function NodeActionsSheet({
 
   // Rendered by the backend so both shells show the same code; a phone has no
   // canvas to draw one on anyway.
-  const qrQuery = useQuery({
-    enabled: share !== null,
-    queryFn: () => voyaCommands().generateQrCode(share ?? ""),
-    queryKey: profileShareQrQueryKey(share ?? ""),
-  });
+  const qrQuery = useQuery({ ...profileShareQrQuery(share ?? ""), enabled: share !== null });
 
   function focusTitle() {
     const target = findNodeHandle(titleRef.current);
@@ -92,16 +88,31 @@ export function NodeActionsSheet({
     requestAnimationFrame(onClosed);
   }
 
-  async function remove(indexId: string) {
+  /** Runs one of the sheet's own actions; a failure stays in the sheet. */
+  async function attempt(action: () => Promise<void>) {
     setFailure(null);
-    const removed = await operation.runOperation(async () => {
+    try {
+      await action();
+      return true;
+    } catch (error) {
+      setFailure(error);
+      return false;
+    }
+  }
+
+  async function remove(indexId: string) {
+    const removed = await attempt(async () => {
       await deleteSafely([indexId], () => voyaCommands().deleteProfiles([indexId]));
       await refreshQueries(queryClient, queryKeys.profiles);
-    }, setFailure);
+    });
     if (removed) close();
   }
 
   const open = entry !== null || share !== null;
+  // The backend exports a share link for some protocols only; the three
+  // actions built on one are left out rather than offered and refused.
+  const exportable = entry !== null && supportsShareLinkExport(entry.profile.kind);
+  const owned = entry !== null && entry.profile.subscriptionId !== null;
 
   const shareLabel = t("mobile.copy");
   const qrTitle = t("panes.profiles.export.showQr");
@@ -151,7 +162,7 @@ export function NodeActionsSheet({
                     </Typography>
                     <Typography className="text-sm text-subtle" numberOfLines={1}>{entry.profile.address}</Typography>
                   </View>
-                  {failure ? <Banner status="danger" message={failure} liveRegion /> : null}
+                  <ErrorNotice error={failure} />
                   <ListGroup>
                     {entry.profile.subscriptionId === null ? (
                       <SheetAction
@@ -165,30 +176,38 @@ export function NodeActionsSheet({
                         }}
                       />
                     ) : null}
-                    <SheetAction
-                      icon={Copy}
-                      color={actionColor}
-                      label={shareLabel}
-                      onPress={() => {
-                        void exports.handleExport([entry.profile.id]);
-                        close();
-                      }}
-                    />
-                    <SheetAction icon={Share2} color={actionColor} label={t("mobile.share")} onPress={() => {
-                      setFailure(null);
-                      void operation.runOperation(async () => {
-                        const result = await voyaCommands().exportProfileShareLinks([entry.profile.id]);
-                        await Share.share({ message: result.text });
-                      }, setFailure);
-                    }} />
-                    <SheetAction icon={Gauge} color={actionColor} label={t("mobile.testNode")} onPress={() => { onTest(entry.profile.id); close(); }} />
-                    <SheetAction
-                      icon={QrCode}
-                      color={actionColor}
-                      label={qrTitle}
-                      last={entry.profile.subscriptionId !== null}
-                      onPress={() => void exports.handleExport([entry.profile.id], "qr")}
-                    />
+                    {exportable ? (
+                      <>
+                        <SheetAction
+                          icon={Copy}
+                          color={actionColor}
+                          label={shareLabel}
+                          onPress={() => {
+                            void exports.handleExport([entry.profile.id]);
+                            close();
+                          }}
+                        />
+                        <SheetAction icon={Share2} color={actionColor} label={t("mobile.share")} onPress={() => void attempt(async () => {
+                          const result = await voyaCommands().exportProfileShareLinks([entry.profile.id]);
+                          await Share.share({ message: result.text });
+                        })} />
+                      </>
+                    ) : null}
+                    <SheetAction icon={Gauge} color={actionColor} label={t("mobile.testNode")} last={owned && !exportable} onPress={() => { onTest(entry.profile.id); close(); }} />
+                    {exportable ? (
+                      <SheetAction
+                        icon={QrCode}
+                        color={actionColor}
+                        label={qrTitle}
+                        last={owned}
+                        // Asked for here rather than through the list's export:
+                        // its failure banner sits behind this sheet.
+                        onPress={() => void attempt(async () => {
+                          const result = await voyaCommands().exportProfileShareLinks([entry.profile.id]);
+                          exports.setShareQrContent(result.text);
+                        })}
+                      />
+                    ) : null}
                     {entry.profile.subscriptionId === null ? (
                       <SheetAction
                         destructive

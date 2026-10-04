@@ -27,7 +27,7 @@ export function parseArgs(argv) {
 }
 
 /** Bytes under `path`, following nothing: symlinks count as themselves. */
-export function diskSize(path) {
+function diskSize(path) {
   const stat = lstatSync(path);
   if (!stat.isDirectory()) return stat.size;
   return readdirSync(path).reduce((sum, name) => sum + diskSize(join(path, name)), 0);

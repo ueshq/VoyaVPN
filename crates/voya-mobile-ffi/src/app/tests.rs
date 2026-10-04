@@ -897,20 +897,19 @@ fn a_latency_test_asks_the_host_for_a_probe_core_and_reports_what_it_said() {
     // run failing as a whole.
     assert_eq!(result["selectedCount"], 1, "run result: {result}");
     assert_eq!(result["cancelled"], false);
-    let results = result["results"].as_array().expect("results");
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0]["indexId"], node_id.as_str());
-    assert_eq!(results[0]["outcome"], "coreUnavailable");
 
-    // The measurements ride the transient channel as well as the answer, so a
-    // long run fills the list in as it goes.
+    // The answer carries only the counts: the measurements ride the transient
+    // channel, so a long run fills the list in as it goes. The last word on
+    // the node is the refusal, after the marker that it was being tested.
     let streamed = harness.listener.on_channel(EventChannel::TransientStream);
-    assert!(
-        streamed
-            .iter()
-            .any(|event| event["kind"] == "speedtestResults"),
-        "no speedtest results were streamed: {streamed:?}"
-    );
+    let last = streamed
+        .iter()
+        .filter(|event| event["kind"] == "speedtestResults")
+        .filter_map(|event| event["payload"].as_array())
+        .flatten()
+        .rfind(|result| result["indexId"] == node_id.as_str())
+        .unwrap_or_else(|| panic!("no speedtest results were streamed: {streamed:?}"));
+    assert_eq!(last["outcome"], "coreUnavailable");
 }
 
 #[test]

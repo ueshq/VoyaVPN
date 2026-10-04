@@ -43,8 +43,8 @@ import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
  * passed on the command line. See docs/release/mobile-ios-signing.md.
  */
 
-export const appBundleId = "app.voyavpn.mobile";
-export const tunnelBundleId = "app.voyavpn.mobile.PacketTunnel";
+const appBundleId = "app.voyavpn.mobile";
+const tunnelBundleId = "app.voyavpn.mobile.PacketTunnel";
 const appGroup = "group.app.voyavpn.mobile";
 const tunnelCapability = "packet-tunnel-provider";
 const minimumOsVersion = IOS_DEPLOYMENT_TARGET;

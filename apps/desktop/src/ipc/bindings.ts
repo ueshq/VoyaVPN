@@ -1324,7 +1324,6 @@ export type SpeedtestRunResult = {
 	cancelled: boolean,
 	selectedCount: number,
 	completedCount: number,
-	results: SpeedtestResult[],
 };
 
 export type SpeedtestSettings = {

@@ -191,13 +191,6 @@ function stageProvisioningProfiles() {
   return { app: appProfile, packetTunnel: packetTunnelProfile };
 }
 
-function findLibboxFramework() {
-  if (!existsSync(libboxFramework)) {
-    return null;
-  }
-  return libboxFramework;
-}
-
 function libboxFrameworkLinkage(frameworkPath) {
   const binary = libboxBinaryPath(frameworkPath);
   const result = captureSpawned("file", [binary], { cwd: repoRoot });
@@ -235,8 +228,8 @@ function removeDirectoryIfEmpty(path) {
 }
 
 function buildPacketTunnel() {
-  const libboxFramework = findLibboxFramework();
-  if (!libboxFramework) {
+  const hasLibbox = existsSync(libboxFramework);
+  if (!hasLibbox) {
     const message = `Libbox.framework not found at ${libboxFramework}; PacketTunnel will build but fail closed until the framework is provided.`;
     if (truthy(process.env.VOYAVPN_REQUIRE_LIBBOX)) {
       throw new Error(message);
@@ -288,7 +281,7 @@ function buildPacketTunnel() {
     "-dead_strip",
   ];
 
-  if (libboxFramework) {
+  if (hasLibbox) {
     args.push(
       "-F",
       dirname(libboxFramework),
@@ -309,6 +302,7 @@ function buildPacketTunnel() {
   // Must run before codesign, which seals the stripped bytes.
   run("xcrun", ["strip", "-x", appexBinary], { cwd: repoRoot });
 
+  const versions = packetTunnelVersions();
   writePlist(
     resolve(nativeRoot, "PacketTunnel", "Info.plist"),
     resolve(appexContents, "Info.plist"),
@@ -316,14 +310,14 @@ function buildPacketTunnel() {
       "$(PRODUCT_MODULE_NAME)": "VoyaPacketTunnel",
       "$(EXECUTABLE_NAME)": packetTunnelExecutableName,
       "$(MACOSX_DEPLOYMENT_TARGET)": deployment.minimumSystemVersion,
-      "$(MARKETING_VERSION)": packetTunnelVersions().marketing,
-      "$(CURRENT_PROJECT_VERSION)": packetTunnelVersions().build,
+      "$(MARKETING_VERSION)": versions.marketing,
+      "$(CURRENT_PROJECT_VERSION)": versions.build,
       "$(BUNDLE_PACKAGE_TYPE)": tunnelLayout.infoPackageType,
     },
   );
 
   rmSync(embeddedLibboxFramework, { force: true, recursive: true });
-  if (libboxFramework) {
+  if (hasLibbox) {
     const linkage = libboxFrameworkLinkage(libboxFramework);
     if (linkage === "static") {
       removeDirectoryIfEmpty(appexFrameworks);
@@ -331,7 +325,6 @@ function buildPacketTunnel() {
       return;
     }
 
-    rmSync(embeddedLibboxFramework, { force: true, recursive: true });
     mkdirSync(appexFrameworks, { recursive: true });
     cpSync(libboxFramework, embeddedLibboxFramework, {
       dereference: false,

@@ -18,8 +18,7 @@ import {
 import { Label } from "@voya/ui/components/label";
 import { Textarea } from "@voya/ui/components/textarea";
 import { cn } from "@voya/ui/lib/utils";
-import { voyaCommands } from "@voya/client/transport";
-import { profileShareQrQueryKey } from "@voya/client/query-keys";
+import { profileShareQrQuery } from "@voya/client/profile-queries";
 
 type ShareQrDialogProps = {
   content: string;
@@ -46,12 +45,9 @@ export function ShareQrImage({
 }) {
   const { t } = useI18n();
   const qrCodeQuery = useQuery({
+    ...profileShareQrQuery(content),
     enabled: enabled && content.trim().length > 0,
-    gcTime: 0,
     placeholderData: keepPreviousData,
-    queryFn: () => voyaCommands().generateQrCode(content),
-    queryKey: profileShareQrQueryKey(content),
-    staleTime: Infinity,
   });
   const imageSource = useMemo(() => {
     if (!qrCodeQuery.data) {

@@ -19,7 +19,7 @@ import { Textarea } from "@voya/ui/components/textarea";
 import { Spinner } from "@voya/ui/components/spinner";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { voyaCommands } from "@voya/client/transport";
-import { importLineText } from "@voya/client/messages";
+import { importLineText, isImportLineNotice } from "@voya/client/messages";
 import type { ImportProfilesResult } from "@voya/contracts";
 
 import { qrScanErrorCode } from "@/features/profiles/qr-errors";
@@ -85,9 +85,7 @@ export function ImportProfilesDialog({
       if (!activeRef.current) return;
       // Subscription URLs are not problems: they are updated right after, and
       // the page banner reports how that went.
-      const onlyAddedSubscriptions = result.lineIssues.every(
-        (issue) => issue.code.code === "subscriptionSourceAdded",
-      );
+      const onlyAddedSubscriptions = result.lineIssues.every(isImportLineNotice);
       if (
         (result.imported > 0 || result.addedSubscriptionIds.length > 0) &&
         result.failed === 0 &&

@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { profileDetailsQuery } from "@voya/client/profile-queries";
 import { refreshQueries } from "@voya/client/queries";
-import { profileDetailsQueryKey, queryKeys } from "@voya/client/query-keys";
+import { queryKeys } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 import {
@@ -44,11 +45,8 @@ import { PrimaryButton } from "~/components/primary-button";
  */
 export function ProfileEditorScreen({ route }: NativeStackScreenProps<RootRoutes, "editProfile">) {
   const { t } = useI18n();
-  const details = useQuery({
-    queryFn: () => voyaCommands().getProfile(route.params.id),
-    // Under the profiles root, so a save — here or anywhere — refreshes it.
-    queryKey: profileDetailsQueryKey(route.params.id),
-  });
+  // Under the profiles root, so a save — here or anywhere — refreshes it.
+  const details = useQuery(profileDetailsQuery(route.params.id));
 
   return (
     // The navigation bar already names this page; every other stack page
@@ -132,7 +130,7 @@ function Editor({ profile }: { profile: Profile }) {
 
   useUnsavedChanges(dirty, busy, save);
 
-  const transportLabel = profile?.transport
+  const transportLabel = profile.transport
     ? (TRANSPORT_OPTIONS.find(
         (option) => option.value === profile.transport?.kind,
       )?.label ?? profile.transport.kind)
@@ -202,7 +200,7 @@ function Editor({ profile }: { profile: Profile }) {
             last
             title={t("mobile.editorTls")}
             description={
-              profile?.tls
+              profile.tls
                 ? profile.tls.mode === "reality"
                   ? "REALITY"
                   : "TLS"

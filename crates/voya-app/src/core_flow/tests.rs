@@ -258,7 +258,7 @@ async fn saved_mode_is_applied_before_connect_restart_and_recovery_are_announced
     // which is the one running by the time the event is handled.
     let running = harness.supervisor.status().await.expect("status");
     flow.handle_core_exit(
-        &config,
+        || config.clone(),
         CoreExitEvent {
             active_profile_id: Some("active".into()),
             process_id: 11,
@@ -536,7 +536,7 @@ async fn giving_up_on_a_crashed_core_disconnects_and_restores_the_system_proxy()
     harness
         .flow()
         .handle_core_exit(
-            &config,
+            || config.clone(),
             CoreExitEvent {
                 active_profile_id: Some("active".to_string()),
                 process_id: 4242,
@@ -568,7 +568,7 @@ async fn a_restarted_core_refreshes_proxy_state_before_the_snapshot() {
     let settled = harness.sink.events().len();
 
     flow.handle_core_exit(
-        &config,
+        || config.clone(),
         CoreExitEvent {
             active_profile_id: Some("active".to_string()),
             process_id: 11,
@@ -604,7 +604,7 @@ async fn a_restarted_core_that_is_no_longer_running_is_not_settled() {
     let settled = harness.sink.events().len();
 
     flow.handle_core_exit(
-        &config,
+        || config.clone(),
         CoreExitEvent {
             active_profile_id: Some("active".to_string()),
             process_id: 11,
@@ -631,7 +631,7 @@ async fn a_scheduled_restart_is_reported_as_connecting() {
     harness
         .flow()
         .handle_core_exit(
-            &config,
+            || config.clone(),
             CoreExitEvent {
                 active_profile_id: Some("active".to_string()),
                 process_id: 7,

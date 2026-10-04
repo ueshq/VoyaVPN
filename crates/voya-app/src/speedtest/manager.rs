@@ -136,7 +136,7 @@ impl SpeedtestManager {
         config: &AppConfig,
         index_ids: Vec<String>,
         on_results: F,
-    ) -> Result<SpeedtestRunResult>
+    ) -> Result<SpeedtestRun>
     where
         F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
@@ -148,7 +148,7 @@ impl SpeedtestManager {
             if is_cancelled(&cancel) {
                 // Superseded while queued: it never marked anything pending,
                 // so there is nothing to write back.
-                Ok(SpeedtestRunResult {
+                Ok(SpeedtestRun {
                     cancelled: true,
                     selected_count: 0,
                     completed_count: 0,
@@ -171,7 +171,7 @@ impl SpeedtestManager {
         index_ids: Vec<String>,
         cancel: CancellationFlag,
         on_results: F,
-    ) -> Result<SpeedtestRunResult>
+    ) -> Result<SpeedtestRun>
     where
         F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
@@ -230,7 +230,7 @@ impl SpeedtestManager {
         }
         results.extend(finalized?);
 
-        Ok(SpeedtestRunResult {
+        Ok(SpeedtestRun {
             cancelled,
             selected_count: u32::try_from(selected.len()).unwrap_or(u32::MAX),
             completed_count,

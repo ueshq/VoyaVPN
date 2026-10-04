@@ -14,11 +14,16 @@ describe("iOS Rust slices", () => {
       selectIosTargets(["--slice", "device"]).map((target) => target.triple),
       ["aarch64-apple-ios"],
     );
+    assert.deepEqual(
+      selectIosTargets(["--", "--slice=device"]).map((target) => target.triple),
+      ["aarch64-apple-ios"],
+    );
   });
 
   it("refuses a slice it does not know rather than building everything", () => {
     assert.throws(() => selectIosTargets(["--slice", "sim"]), /takes "device" or "simulator"/);
-    assert.throws(() => selectIosTargets(["--slice"]), /takes "device" or "simulator"/);
+    assert.throws(() => selectIosTargets(["--slice"]), /--slice requires a value/);
+    assert.throws(() => selectIosTargets(["--slices", "device"]), /Unknown argument: --slices/);
   });
 
   it("only asks rustup for the targets being built", () => {

@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { isCliEntrypoint, repoRootFromScript, run, runCli } from "../../lib/common.mjs";
-import { ensureSingBoxSource, singBoxSourceDir } from "../sing-box-source.mjs";
+import { ensureSingBoxSource, installLibboxTools, singBoxSourceDir } from "../sing-box-source.mjs";
 
 /**
  * Builds the `libbox.aar` the Android app links.
@@ -26,7 +26,7 @@ const libsRoot = resolve(repoRoot, "apps", "mobile", "android", "app", "libs");
 const targetAar = resolve(process.env.VOYAVPN_LIBBOX_ANDROID_AAR || resolve(libsRoot, AAR_NAME));
 
 function buildLibbox() {
-  run("make", ["lib_install"], { cwd: sourceDir });
+  installLibboxTools(sourceDir);
   run("make", ["lib_android"], { cwd: sourceDir });
 }
 
@@ -44,7 +44,7 @@ export function stageLibboxAar({ builtAar = resolve(sourceDir, BUILT_AAR), desti
   return destination;
 }
 
-export function buildLibboxForAndroid() {
+function buildLibboxForAndroid() {
   ensureSingBoxSource({ repoRoot, sourceDir });
   buildLibbox();
   console.log(`libbox.aar staged at ${stageLibboxAar()}`);

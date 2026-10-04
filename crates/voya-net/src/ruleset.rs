@@ -156,7 +156,7 @@ impl RulesetClient {
             .await?;
         let bytes = validate_asset(file_name, &response.body)?;
         let staged_path = staging_dir.join(file_name);
-        // Asset bodies run to hundreds of megabytes, so the write goes through tokio's blocking
+        // An asset body can run to tens of megabytes, so the write goes through tokio's blocking
         // pool instead of stalling the worker that also serves IPC and the statistics stream.
         if let Some(parent) = staged_path.parent() {
             tokio::fs::create_dir_all(parent)

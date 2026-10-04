@@ -60,6 +60,24 @@ impl ProxyRuntimeManager {
         })
     }
 
+    /// The member traffic goes through right now, without the delays
+    /// [`Self::group_state`] reads for every member; `None` when the core
+    /// names a member that is not among `members`.
+    pub async fn group_now(
+        &self,
+        access: &ClashApiAccess,
+        members: &[ProfileIdentity],
+    ) -> Result<Option<String>> {
+        let now_tag = self.client(access)?.get_proxy(PROXY_TAG).await?.now;
+        Ok(now_tag.and_then(|now_tag| {
+            member_tags(members)
+                .into_iter()
+                .zip(members)
+                .find(|(tag, _)| *tag == now_tag)
+                .map(|(_, member)| member.index_id.clone())
+        }))
+    }
+
     /// Switches the running selector to the member `profile_id`.
     pub async fn select_group_member(
         &self,

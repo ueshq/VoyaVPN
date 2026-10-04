@@ -249,7 +249,6 @@ export function NodesScreen() {
           const target = findNodeHandle(node ?? importRef.current);
           if (target != null) AccessibilityInfo.setAccessibilityFocus(target);
         }}
-        operation={operation}
         onTest={(id) => void speedtest.handleSpeedtest({ profileIds: [id], scope: "profiles" })}
       />
     </>

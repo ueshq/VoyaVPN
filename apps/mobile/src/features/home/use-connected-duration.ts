@@ -28,8 +28,15 @@ export function useConnectedDurationMs(): number | null {
 
   useEffect(() => {
     if (!ticking) return undefined;
-    const timer = setInterval(() => setNow(performance.now()), 1000);
-    return () => clearInterval(timer);
+    const tick = () => setNow(performance.now());
+    // `now` stood still while Home was off screen; catch up at once rather
+    // than show the figure from when it left for the first second back.
+    const resume = setTimeout(tick, 0);
+    const timer = setInterval(tick, 1000);
+    return () => {
+      clearTimeout(resume);
+      clearInterval(timer);
+    };
   }, [ticking]);
 
   return duration == null ? null : duration + Math.max(0, now - (receivedAt ?? now));

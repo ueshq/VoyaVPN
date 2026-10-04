@@ -28,6 +28,7 @@ const COLLAPSED_MEMBER_LIMIT = 60;
 export function PolicyGroupsSection({ controller }: { controller: ServerTableController }) {
   const {
     deletingPolicyGroup,
+    deletingPolicyGroupPending,
     operationError,
     policyGroupEntries,
     profiles,
@@ -90,8 +91,11 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
           event.preventDefault();
           void removePolicyGroup();
         }}
-        onOpenChange={(open) => !open && setDeletingPolicyGroup(null)}
+        onOpenChange={(open) =>
+          !open && !deletingPolicyGroupPending && setDeletingPolicyGroup(null)
+        }
         open={deletingPolicyGroup !== null}
+        pending={deletingPolicyGroupPending}
         title={t("policyGroups.deleteTitle", { name: deletingPolicyGroup?.group.name })}
       />
     </>

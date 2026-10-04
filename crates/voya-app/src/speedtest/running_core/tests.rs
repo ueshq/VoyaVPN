@@ -159,7 +159,7 @@ fn ids(values: &[&str]) -> Vec<String> {
     values.iter().map(ToString::to_string).collect()
 }
 
-fn outcome_of(run: &SpeedtestRunResult, index_id: &str) -> (SpeedtestOutcome, Option<i32>) {
+fn outcome_of(run: &SpeedtestRun, index_id: &str) -> (SpeedtestOutcome, Option<i32>) {
     let result = run
         .results
         .iter()

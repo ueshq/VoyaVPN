@@ -33,7 +33,11 @@ jobs:
         with:
           cache: "false"
 
+      # `pnpm audit` reads the lockfile and cargo-deny reads Cargo metadata;
+      # neither needs the workspace installed.
       - uses: ./.github/actions/setup-node-pnpm
+        with:
+          install: "false"
 
       # Only cargo-deny runs the RustSec check: it already covers advisories,
       # and cargo-audit's separate database/filters produced a second, drifting

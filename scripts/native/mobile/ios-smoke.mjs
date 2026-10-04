@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { isCliEntrypoint, repoRootFromScript } from "../../lib/common.mjs";
@@ -136,6 +136,15 @@ export async function main() {
       console.log(`Preparing ${type.name}: ${activeDevice}`);
       if (index === 0) {
         phase = "build";
+        // DerivedData outlives a run locally. An xctestrun left by an older
+        // Xcode or SDK sorts ahead of the one this build writes, and each run
+        // leaves its per-device copies behind.
+        const staleProducts = resolve(derived, "Build/Products");
+        if (existsSync(staleProducts)) {
+          for (const file of readdirSync(staleProducts)) {
+            if (file.endsWith(".xctestrun")) rmSync(resolve(staleProducts, file), { force: true });
+          }
+        }
         await run("xcodebuild", ["build-for-testing", ...buildArgs, "-destination", "generic/platform=iOS Simulator"], { label: "build-for-testing" });
       }
       phase = "environment";
@@ -156,7 +165,9 @@ export async function main() {
       for (let attempt = 0; attempt < 30 && !ready; attempt += 1) { ready = await databaseReady(); if (!ready) await pause(500); }
       if (!ready) { phase = "product"; throw new Error("Native backend did not initialize its database."); }
       await sim(["terminate", activeDevice, bundleId]);
-      await databaseReady();
+      // This write is the one that survives the app's own exit. Without it the
+      // tests would measure against the default internet endpoints, not the fixture.
+      if (!(await databaseReady())) { phase = "product"; throw new Error("The fixture endpoints could not be written after the app stopped."); }
       const vlessPort = await unusedPort();
       const config = resolve(output, `vless-${index}.json`);
       writeFileSync(config, JSON.stringify({ log: { level: "error" }, inbounds: [{ type: "vless", listen: "127.0.0.1", listen_port: vlessPort, users: [{ uuid: "44444444-4444-4444-4444-444444444444" }] }], outbounds: [{ type: "direct" }] }));
@@ -201,8 +212,9 @@ export async function main() {
         // a renamed Swift test would turn this gate green by running nothing.
         const summary = await run("xcrun", ["xcresulttool", "get", "test-results", "summary", "--path", resultPath], { allowFailure: true, label: `summary-${index}-${category}` });
         const executed = summary.code === 0 ? executedTestCount(summary.stdout) : null;
-        const ranEverything = executed === null || executed === tests.length;
-        if (!ranEverything) console.error(`XCTest ran ${executed} of the ${tests.length} requested tests for ${type.name}/${category}.`);
+        // An unreadable summary is not a pass: it leaves the same hole open.
+        const ranEverything = executed === tests.length;
+        if (!ranEverything && result.code === 0) console.error(executed === null ? `Could not confirm how many of the ${tests.length} requested tests XCTest ran for ${type.name}/${category}.` : `XCTest ran ${executed} of the ${tests.length} requested tests for ${type.name}/${category}.`);
         results.push({ device: type.name, category, tests, executed, passed: result.code === 0 && ranEverything, resultPath });
         await run("xcrun", ["xcresulttool", "export", "attachments", "--path", resultPath, "--output-path", resolve(output, `attachments-${index}-${category}`)], { allowFailure: true });
         await sim(["spawn", activeDevice, "log", "show", "--last", "1h", "--style", "compact", "--predicate", 'process == "VoyaVPN"'], { allowFailure: true, label: `native-log-${index}-${category}` });

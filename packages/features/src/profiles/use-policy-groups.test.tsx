@@ -222,6 +222,33 @@ describe("usePolicyGroups", () => {
     expect(result.current.deletingPolicyGroup).toBeNull();
   });
 
+  it("sends one delete for a double-clicked confirmation", async () => {
+    let finish: (removed: boolean) => void = () => {};
+    const runOperation = vi.fn(async (operation: () => Promise<unknown>) => {
+      await operation();
+      return new Promise<boolean>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const { result } = mount([entry("g1", false)], runOperation);
+    act(() => result.current.setDeletingPolicyGroup(entry("g1", false)));
+
+    let first = Promise.resolve();
+    await act(async () => {
+      first = result.current.removePolicyGroup();
+      await result.current.removePolicyGroup();
+    });
+    expect(ipc.deletePolicyGroups).toHaveBeenCalledOnce();
+    expect(result.current.deletingPolicyGroupPending).toBe(true);
+
+    await act(async () => {
+      finish(true);
+      await first;
+    });
+    expect(result.current.deletingPolicyGroupPending).toBe(false);
+    expect(result.current.deletingPolicyGroup).toBeNull();
+  });
+
   it("opens the editor for a new group or an existing one", () => {
     const { result } = mount([]);
     expect(result.current.policyGroupEditorOpen).toBe(false);

@@ -18,7 +18,7 @@ import { isCliEntrypoint, repoRootFromScript, requireDarwin, run } from "../../l
  */
 
 /** The `fill` of the rounded rect in `apps/desktop/src-tauri/app-icon.svg`. */
-export const IOS_ICON_BACKGROUND = "#1A58F2";
+const IOS_ICON_BACKGROUND = "#1A58F2";
 const appIconSet = "apps/mobile/ios/VoyaVPN/Images.xcassets/AppIcon.appiconset";
 
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);

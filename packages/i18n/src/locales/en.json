@@ -286,7 +286,6 @@
         "copied": "Copied export data for {{count}} node(s) to clipboard.",
         "export": "Export",
         "noProfiles": "There are no nodes to export.",
-        "noSelection": "Select at least one node to export.",
         "shareLinks": "Share links",
         "showQr": "Show QR",
         "skippedUnsupported": "Skipped {{count}} node(s) without a share link."

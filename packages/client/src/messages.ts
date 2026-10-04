@@ -212,6 +212,14 @@ export function speedtestOutcomeText(
   return t(SPEEDTEST_OUTCOME_KEYS[outcome]);
 }
 
+/**
+ * Whether a reported line is news rather than a problem: a subscription URL
+ * among the pasted lines was added as a source, not rejected.
+ */
+export function isImportLineNotice(issue: ImportLineIssue) {
+  return issue.code.code === "subscriptionSourceAdded";
+}
+
 /** One reported line of an import, with its 1-based line number. */
 export function importLineText(t: TranslationFunction, issue: ImportLineIssue) {
   return t(IMPORT_LINE_KEYS[issue.code.code], {

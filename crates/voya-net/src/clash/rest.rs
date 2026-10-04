@@ -210,6 +210,13 @@ impl ClashRestClient {
         self.request(ClashHttpMethod::Get, "/proxies", None).await
     }
 
+    /// One outbound or group by tag. For a group that is its `now` and `all`
+    /// without every member's delay history, which `get_proxies` drags along.
+    pub async fn get_proxy(&self, tag: &str) -> Result<ClashProxy> {
+        let path = format!("/proxies/{}", encode_segment(tag));
+        self.request(ClashHttpMethod::Get, &path, None).await
+    }
+
     /// Switches the selector `group` to its member `member`.
     pub async fn select_proxy(&self, group: &str, member: &str) -> Result<()> {
         let path = format!("/proxies/{}", encode_segment(group));

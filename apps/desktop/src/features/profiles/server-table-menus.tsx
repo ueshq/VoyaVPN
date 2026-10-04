@@ -39,6 +39,7 @@ import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import type { TranslationFunction as TranslateFn } from "@voya/i18n";
+import { supportsShareLinkExport } from "@voya/features/profiles/server-table-actions";
 import type { ServerTableController } from "./use-server-table";
 
 type ExportMenuEntry = {
@@ -266,6 +267,7 @@ function ProfileMenuItems({
         </SubTrigger>
         <SubContent>
           <ExportMenuItems
+            disabled={!supportsShareLinkExport(item.profile.kind)}
             onExport={() => void handleExport([indexId])}
             onShowQr={() => void handleExport([indexId], "qr")}
             primitives={{ Item }}
@@ -299,7 +301,7 @@ export function ExportMenuItems({
   onShowQr: () => void;
   primitives?: Pick<MenuPrimitives, "Item">;
   t: TranslateFn;
-  /** Nothing to export, such as a group without nodes. */
+  /** Nothing to export: a group without nodes, or a protocol with no share link. */
   disabled?: boolean;
 }) {
   return (

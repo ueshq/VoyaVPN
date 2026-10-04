@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { clipboard } from "@voya/client/platform";
 import { voyaCommands } from "@voya/client/transport";
-import { importLineText } from "@voya/client/messages";
+import { importLineText, isImportLineNotice } from "@voya/client/messages";
 import type { ImportProfilesResult, QrScanFailureReason } from "@voya/contracts";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
@@ -100,7 +100,7 @@ export function useNodeImport(
           mergeResult(total, result);
           messages.push(
             ...result.lineIssues
-              .filter((issue) => issue.code.code !== "subscriptionSourceAdded")
+              .filter((issue) => !isImportLineNotice(issue))
               .map((issue) => redactOperationalError(importLineText(t, issue))),
           );
         } catch (error) {

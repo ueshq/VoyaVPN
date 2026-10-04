@@ -16,10 +16,10 @@ import { useCopiedLabel } from "~/components/use-copied-label";
 const FADE_WIDTH = 16;
 
 /**
- * Fields the editor has no control over: the rule's database identity and the
- * two passthrough lists the desktop's `routing-form-values` documents as
- * "the editor has no fields for these". They explain storage, not behaviour,
- * so the page leaves them out of what it shows and what it copies.
+ * Fields the editor has no control over: the rule's database identity, and
+ * the inbound tags and rule kind that the desktop's `routing-form-values`
+ * carries through a save untouched. They explain storage, not behaviour, so
+ * the page leaves them out of what it shows and what it copies.
  */
 const INTERNAL_FIELDS = new Set(["id", "inboundTags", "kind"]);
 

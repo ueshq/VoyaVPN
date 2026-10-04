@@ -22,8 +22,8 @@ import { sha256FileSync } from "../../lib/fs.mjs";
 import { singBoxExecutableName, singBoxSeedDir } from "../../core/sing-box-installer.mjs";
 
 export const WINDOWS_TUN_SERVICE_NAME = "VoyaVPNTunnelService";
-export const WINDOWS_TUN_SERVICE_DISPLAY_NAME = "VoyaVPN Tunnel Service";
-export const WINDOWS_TUN_SERVICE_DESCRIPTION =
+const WINDOWS_TUN_SERVICE_DISPLAY_NAME = "VoyaVPN Tunnel Service";
+const WINDOWS_TUN_SERVICE_DESCRIPTION =
   "Runs VoyaVPN transparent TUN with sing-box and Wintun.";
 export const WINDOWS_TUN_EXIT_STOP_TIMEOUT = 20;
 export const WINDOWS_TUN_EXIT_COPY_FAILED = 21;
@@ -115,7 +115,7 @@ function stopService({ captureCommand, wait, cwd, timeoutMs, pollIntervalMs }) {
   );
 }
 
-export function requireWindows(platform = process.platform) {
+function requireWindows(platform = process.platform) {
   if (platform !== "win32") {
     throw new Error("Windows tunnel service commands must run on Windows.");
   }
@@ -158,7 +158,7 @@ export function tunnelRuntimeStagingPath(env = process.env) {
   return win32.join(programData, productDirName, runtimeStagingDirName);
 }
 
-export function singBoxSeedExecutablePath(repoRoot = defaultRepoRoot) {
+function singBoxSeedExecutablePath(repoRoot = defaultRepoRoot) {
   return resolve(singBoxSeedDir(repoRoot), singBoxExecutableName("win32"));
 }
 
@@ -381,7 +381,7 @@ export function uninstallTunnelService({
   return { destinationPath, singBoxDestinationPath, serviceExisted: existed };
 }
 
-export function queryTunnelService({
+function queryTunnelService({
   platform = process.platform,
   repoRoot = defaultRepoRoot,
   runCommand = run,
@@ -391,7 +391,7 @@ export function queryTunnelService({
   runSc(runCommand, ["qc", WINDOWS_TUN_SERVICE_NAME], repoRoot);
 }
 
-export function tunnelServiceHelp(logger = console) {
+function tunnelServiceHelp(logger = console) {
   logger.log("usage: node scripts/native/windows/tunnel-service.mjs <build|install|uninstall|status>");
   logger.log("  install/uninstall must run from an elevated Windows terminal.");
 }
@@ -410,7 +410,7 @@ export function tunnelServiceErrorExitCode(error) {
   return 1;
 }
 
-export function runTunnelServiceCommand(command, options = {}) {
+function runTunnelServiceCommand(command, options = {}) {
   switch (command) {
     case "build":
       return buildTunnelService(options);

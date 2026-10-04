@@ -229,7 +229,6 @@ describe("ProfilesScreen", () => {
     ipcMocks.runSpeedtest.mockResolvedValue({
       cancelled: false,
       completedCount: 0,
-      results: [],
       selectedCount: 0,
     });
     ipcMocks.scanScreenQr.mockResolvedValue({
@@ -590,7 +589,6 @@ describe("ProfilesScreen", () => {
       cancelled: true,
       completedCount: 0,
       selectedCount: 1,
-      results: [],
     });
     expect(
       await screen.findByRole("button", { name: "Test group" }),
@@ -1336,6 +1334,29 @@ describe("ProfilesScreen", () => {
       ),
     ).toBeInTheDocument();
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
+  });
+
+  it("does not offer a share link for a protocol that has none", async () => {
+    mockProfileList([
+      makeProfile(0, {
+        protocol: {
+          kind: "http",
+          password: "",
+          server: { address: "http.example.test", port: 8080 },
+          username: "",
+        },
+        remarks: "HTTP node",
+      }),
+    ]);
+
+    renderProfiles();
+
+    expect(await screen.findByText("HTTP node")).toBeInTheDocument();
+    const menu = await openRowContextMenu();
+    const exportMenu = await openContextSubmenu(menu, "Export");
+    for (const item of within(exportMenu).getAllByRole("menuitem")) {
+      expect(item).toHaveAttribute("data-disabled");
+    }
   });
 
   it("keeps the QR dialog closed when share link export fails", async () => {

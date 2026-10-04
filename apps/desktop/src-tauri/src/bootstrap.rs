@@ -133,9 +133,11 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
                 app: app.handle().clone(),
             })),
     );
+    // One Clash client for the commands and the statistics loop alike.
+    let proxy_runtime = ProxyRuntimeManager::new();
     let statistics_manager = services.spawn_statistics(
         supervisor.clone(),
-        Arc::clone(&shared_config),
+        proxy_runtime.clone(),
         Arc::new(TauriSinks {
             app: app.handle().clone(),
         }),
@@ -175,7 +177,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         speedtest_manager,
         system_proxy_manager,
         proxy_monitor_controller: ProxyMonitorController::new(),
-        proxy_runtime: ProxyRuntimeManager::new(),
+        proxy_runtime,
         provider_registration_cache: Arc::new(ProviderRegistrationCache::new()),
         self_host,
     });

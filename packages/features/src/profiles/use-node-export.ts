@@ -34,13 +34,7 @@ export function useNodeExport(
     indexIds: string[],
     destination: ProfileExportDestination = "clipboard",
   ) {
-    await runOperation(async () => {
-      if (indexIds.length === 0) {
-        setOperationError(t("panes.profiles.export.noSelection"));
-        return;
-      }
-      await performExport(indexIds, destination);
-    });
+    await runOperation(() => performExport(indexIds, destination));
   }
 
   async function handleGroupExport(

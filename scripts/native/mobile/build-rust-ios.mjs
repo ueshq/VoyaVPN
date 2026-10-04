@@ -8,6 +8,7 @@ import {
   requireDarwin,
   run,
 } from "../../lib/common.mjs";
+import { parseArgs } from "../../lib/args.mjs";
 import { generateUniffiBindings } from "./uniffi-bindings.mjs";
 
 /**
@@ -35,9 +36,13 @@ export const IOS_TARGETS = [
  * is the whole dependency graph again for a library nothing will load.
  */
 export function selectIosTargets(argv, targets = IOS_TARGETS) {
-  const flag = argv.indexOf("--slice");
-  if (flag === -1) return targets;
-  const wanted = argv[flag + 1];
+  // Through the shared reader, so `--slice=device` works and a misspelt flag
+  // is an error rather than a silent build of both slices.
+  const { slice: wanted } = parseArgs(
+    argv.filter((argument) => argument !== "--"),
+    { "--slice": { key: "slice" } },
+  );
+  if (wanted === undefined) return targets;
   const selected = targets.filter((target) => target.runsOn === wanted);
   if (selected.length === 0) {
     throw new Error(`--slice takes "device" or "simulator", not ${JSON.stringify(wanted)}`);
@@ -140,7 +145,7 @@ function generateBindings(targets) {
   });
 }
 
-export function buildRustForIos(targets = IOS_TARGETS) {
+function buildRustForIos(targets = IOS_TARGETS) {
   requireDarwin("The iOS xcframework can only be built on macOS.");
   ensureTargets(targets);
   buildSlices(targets);

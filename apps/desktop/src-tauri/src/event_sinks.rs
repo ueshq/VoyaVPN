@@ -102,7 +102,9 @@ impl SubscriptionAutoUpdateSink for TauriSinks {
         );
         let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
-            let state = app.state::<AppState>();
+            let Some(state) = app.try_state::<AppState>() else {
+                return;
+            };
             if let Err(error) = ipc::commands::disconnect_removed_profile(&app, &state).await {
                 tracing::warn!(?error, "failed to disconnect removed node");
             }
@@ -122,9 +124,9 @@ impl SupervisorEventSink for TauriSinks {
             let Some(state) = app.try_state::<AppState>() else {
                 return;
             };
-            let config = state.config_mutations().current_config();
             let flow = ipc::commands::core_flow(&app, &state);
-            flow.handle_native_tun_exit(&config, event).await;
+            flow.handle_native_tun_exit(|| state.config_mutations().current_config(), event)
+                .await;
         });
     }
 
@@ -134,9 +136,9 @@ impl SupervisorEventSink for TauriSinks {
             let Some(state) = app.try_state::<AppState>() else {
                 return;
             };
-            let config = state.config_mutations().current_config();
             let flow = ipc::commands::core_flow(&app, &state);
-            flow.handle_core_exit(&config, event).await;
+            flow.handle_core_exit(|| state.config_mutations().current_config(), event)
+                .await;
         });
     }
 }
@@ -169,13 +171,12 @@ impl ProcessLogSink for TauriSinks {
         level: ProcessLogLevel,
         line: String,
     ) {
-        // Speedtest spawns one throwaway core per node, each with its own
-        // startup banner, and every line here costs a JSON-serialized IPC event
-        // plus a store write in the webview. A latency run over a few hundred
-        // nodes therefore drowned the Logs panel in output about cores the user
-        // never started. The lines still reach the rotating file log through
-        // `drain_child_pipe`'s `tracing` call, which is where a probe failure is
-        // actually diagnosed.
+        // Speedtest starts a throwaway core per page of nodes, each with its
+        // own startup banner, so a latency run over a few hundred nodes would
+        // fill the Logs panel with output about cores the user never started.
+        // `drain_child_pipe` still hands the lines to `tracing`, under the
+        // `voya::core_output` target the default filter silences: diagnosing a
+        // probe failure from the file log takes `VOYAVPN_LOG` to enable it.
         if role == ProcessRole::Probe {
             return;
         }

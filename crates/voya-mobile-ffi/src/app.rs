@@ -232,6 +232,7 @@ impl VoyaApp {
 
     /// Stops what the app started. Safe to call more than once.
     pub fn shutdown(&self) {
+        crate::logging::detach(&self.state.sinks);
         // Probe cores belong to the app process, not to the supervisor, and an
         // abandoned run leaves one listening; the desktop shell reaps them the
         // the same way in `apps/desktop/src-tauri/src/lifecycle.rs` and `voya_app::lifecycle`.

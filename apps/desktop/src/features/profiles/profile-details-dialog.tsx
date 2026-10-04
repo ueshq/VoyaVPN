@@ -14,8 +14,7 @@ import {
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { formatBytes } from "@voya/utils/formatting";
-import { voyaCommands } from "@voya/client/transport";
-import { profileDetailsQueryKey } from "@voya/client/query-keys";
+import { profileDetailsQuery } from "@voya/client/profile-queries";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { ProfileSummaryEntry } from "@voya/contracts";
 
@@ -46,10 +45,7 @@ export function ProfileDetailsDialog({
     (state) => state.serverStatsByProfileId[item.profile.id],
   );
   const { profile } = item;
-  const detailsQuery = useQuery({
-    queryFn: () => voyaCommands().getProfile(profile.id),
-    queryKey: profileDetailsQueryKey(profile.id),
-  });
+  const detailsQuery = useQuery(profileDetailsQuery(profile.id));
   const details = detailsQuery.data;
   const transport = details?.profile.transport;
   const traffic = details?.traffic;

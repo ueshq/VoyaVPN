@@ -532,7 +532,9 @@ final class VoyaVPNUITests: XCTestCase {
         open("profiles")
         try importText(required("QA_SUBSCRIPTION_URL"))
         open("subscriptions")
-        let subscription = row("192.168.1.3")
+        // An unnamed subscription is listed under its URL's host, which is
+        // whatever LAN address the machine running the fixtures has.
+        let subscription = row(URL(string: required("QA_SUBSCRIPTION_URL"))?.host ?? "")
         if ready(visible(subscription)) {
             subscription.tap()
             captureStable("s2-subscription-edit")
@@ -624,10 +626,8 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertEqual(String(data: try fixture("clipboard"), encoding: .utf8), value, "Simulator clipboard fixture changed before import")
         if !app.buttons["Read clipboard"].exists { tap("Add nodes or subscription") }
         tap("Read clipboard")
-        for host in [XCUIApplication(bundleIdentifier: "com.apple.springboard")] {
-            let allow = host.buttons["Allow Paste"]
-            if allow.waitForExistence(timeout: 1) { allow.tap() }
-        }
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow Paste"]
+        if allow.waitForExistence(timeout: 1) { allow.tap() }
     }
 
     private func importText(_ value: String) throws {
@@ -649,6 +649,8 @@ final class VoyaVPNUITests: XCTestCase {
         while Date() < deadline {
             let value = String(data: try fixture("clipboard"), encoding: .utf8) ?? ""
             if value.contains(host) { return value }
+            // Each read makes the fixture server spawn `simctl pbpaste`.
+            Thread.sleep(forTimeInterval: 0.25)
         }
         XCTFail("The exported share link must reach the system clipboard")
         return ""

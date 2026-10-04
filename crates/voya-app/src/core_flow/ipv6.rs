@@ -114,10 +114,9 @@ impl CoreFlow<'_> {
                 .await
                 .ok()?;
             self.proxy_runtime
-                .group_state(access, &members)
+                .group_now(access, &members)
                 .await
-                .ok()?
-                .now_profile_id?
+                .ok()??
         } else {
             snapshot.active_profile_id.clone()?
         };

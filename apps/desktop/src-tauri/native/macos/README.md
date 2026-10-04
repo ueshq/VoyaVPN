@@ -36,9 +36,9 @@ pnpm native:macos:dmg
 ```
 
 `pnpm native:macos:libbox` clones the pinned sing-box source tag, builds the
-Apple XCFramework, validates its universal macOS slice, and stages only
-`src-tauri/native/macos/Frameworks/Libbox.framework`. iOS and tvOS slices are
-discarded. Override the source or destination with:
+Apple XCFramework for the macOS platform alone, validates its universal slice,
+and stages `src-tauri/native/macos/Frameworks/Libbox.framework`. Override the
+source or destination with:
 
 - `VOYAVPN_SING_BOX_REF`: sing-box git ref, defaults to the app's pinned
   sing-box version. A ref with no pinned commit also needs

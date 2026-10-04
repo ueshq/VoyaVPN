@@ -80,7 +80,12 @@ pub(super) async fn restart(state: &MobileState) -> Answer {
 
     answer(
         "restart_core",
-        &runtime_status_response(core_flow(state).restart(&config).await?),
+        &runtime_status_response(
+            core_flow(state)
+                .restart(&config)
+                .await
+                .map_err(declined_vpn_configuration)?,
+        ),
     )
 }
 
@@ -234,9 +239,8 @@ impl voya_app::supervisor::SupervisorEventSink for SupervisorRecoverySink {
             return;
         };
         self.runtime.spawn(async move {
-            let config = state.config_mutations.current_config();
             core_flow(&state)
-                .handle_native_tun_exit(&config, event)
+                .handle_native_tun_exit(|| state.config_mutations.current_config(), event)
                 .await;
         });
     }
@@ -246,8 +250,9 @@ impl voya_app::supervisor::SupervisorEventSink for SupervisorRecoverySink {
             return;
         };
         self.runtime.spawn(async move {
-            let config = state.config_mutations.current_config();
-            core_flow(&state).handle_core_exit(&config, event).await;
+            core_flow(&state)
+                .handle_core_exit(|| state.config_mutations.current_config(), event)
+                .await;
         });
     }
 }

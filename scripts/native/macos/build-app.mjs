@@ -6,6 +6,7 @@ import {
   repoRootFromScript,
   run,
   runCli,
+  sleepSync,
   truthy,
 } from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
@@ -192,8 +193,17 @@ function runNetworkExtensionDoctor(appPath, env, extraArgs = []) {
     return;
   }
   console.warn("PlugInKit election can lag right after registration; retrying the NetworkExtension doctor once...");
-  run("sleep", ["3"], commandOptions(env));
+  sleepSync(3000);
   run("node", args, commandOptions(env));
+}
+
+/**
+ * The source-level bridge and provider tests, once per build. They test the
+ * sources, not a bundle, so `native:macos:tunnel:verify` — which a lane runs
+ * for the app and again for the mounted DMG — does not repeat them.
+ */
+function runBridgeTests(env) {
+  run("node", ["scripts/native/macos/test-bridge.mjs"], commandOptions(env));
 }
 
 function requireAppleSilicon() {
@@ -272,6 +282,7 @@ function buildAppStorePackage() {
   run("pnpm", ["tauri:build", "--bundles", "app"], commandOptions(commonEnv));
   run("pnpm", ["native:macos:tunnel"], commandOptions(verifyEnv));
   run("pnpm", ["native:macos:app:sign"], commandOptions(commonEnv));
+  runBridgeTests(verifyEnv);
   run("pnpm", ["native:macos:tunnel:verify"], commandOptions(verifyEnv));
   run("pnpm", ["native:macos:pkg"], commandOptions(verifyEnv));
 
@@ -328,6 +339,7 @@ function main() {
   run("pnpm", ["tauri:build", "--bundles", "app"], commandOptions(commonEnv));
   run("pnpm", ["native:macos:tunnel"], commandOptions(tunnelEnv));
   run("pnpm", ["native:macos:app:sign"], commandOptions(commonEnv));
+  runBridgeTests(verifyEnv);
   run("pnpm", ["native:macos:tunnel:verify"], commandOptions(verifyEnv));
 
   if (!notarizationSkipped) {

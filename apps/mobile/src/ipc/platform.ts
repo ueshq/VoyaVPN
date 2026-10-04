@@ -25,7 +25,7 @@ export function registerMobileBackend(backend: VoyaTransport = createTransport()
 
   // Both halves are native here. The desktop reads through the backend because
   // a WebView read needs a user gesture; React Native has no such restriction,
-  // so `use-node-import` reaches the same clipboard either way.
+  // so the import screen's Paste reads the system clipboard directly.
   setClipboard({
     readText: () => Clipboard.getString(),
     writeText: async (text) => Clipboard.setString(text),

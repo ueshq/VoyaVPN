@@ -82,6 +82,10 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         case .disconnected:
             throw TunnelError.Failed(detail: "the tunnel stopped immediately after starting")
         case .timedOut:
+            // The session is still trying. Left alone it could come up after
+            // this has reported a failure, with nothing in the app that
+            // believes a tunnel is running.
+            manager.connection.stopVPNTunnel()
             throw TunnelError.Failed(detail: "the tunnel did not come up within \(Int(Self.startTimeout))s")
         }
     }

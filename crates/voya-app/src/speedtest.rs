@@ -79,6 +79,27 @@ pub enum SpeedtestError {
     EmptySelection,
 }
 
+/// What one run did. `results` stays in the app: every one of them already
+/// reached the host through the run's `on_results`, so only the counts cross
+/// IPC, as a [`SpeedtestRunResult`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpeedtestRun {
+    pub cancelled: bool,
+    pub selected_count: u32,
+    pub completed_count: u32,
+    pub results: Vec<SpeedtestResult>,
+}
+
+impl From<SpeedtestRun> for SpeedtestRunResult {
+    fn from(run: SpeedtestRun) -> Self {
+        Self {
+            cancelled: run.cancelled,
+            selected_count: run.selected_count,
+            completed_count: run.completed_count,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerTestItem {
     pub index_id: String,
