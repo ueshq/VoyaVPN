@@ -6,6 +6,15 @@ import { z } from "zod";
 /** The URL forms the backend accepts: `http(s)://` plus anything but spaces. */
 const SUBSCRIPTION_URL = /^https?:\/\/\S+$/i;
 
+/**
+ * Whether `url` is one a subscription can be fetched from. For a form that has
+ * no use for the whole schema; it is the schema's own rule, so a URL one
+ * screen accepts is never one another rejects.
+ */
+export function isSubscriptionUrl(url: string) {
+  return SUBSCRIPTION_URL.test(url.trim());
+}
+
 /** `autoUpdateIntervalMinutes` is an `i32` in the database; hours must fit. */
 const MAX_INTERVAL_MINUTES = 2_147_483_647;
 

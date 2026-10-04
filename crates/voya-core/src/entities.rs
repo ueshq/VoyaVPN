@@ -467,7 +467,8 @@ impl Default for SubItem {
 }
 
 /// Server-reported subscription usage captured from response headers
-/// (`subscription-userinfo`, `profile-title`) on the latest successful fetch.
+/// (`subscription-userinfo`, `profile-title`) on the latest successful fetch,
+/// plus the outcome of the latest update attempt (which may have failed).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SubMetadataItem {
     pub subscription_id: String,
@@ -476,6 +477,12 @@ pub struct SubMetadataItem {
     pub total_bytes: Option<i64>,
     pub expire_at: Option<i64>,
     pub last_update_at: Option<i64>,
+    /// When the latest update attempt ran, successful or not. Distinct from
+    /// `last_update_at`, which only moves when the fetch produced nodes.
+    pub last_attempt_at_unix: Option<i64>,
+    pub last_attempt_failed: Option<bool>,
+    /// Redacted reason the latest attempt failed; cleared by a success.
+    pub last_attempt_error: Option<String>,
     pub profile_title: Option<String>,
 }
 
@@ -545,6 +552,18 @@ pub struct ProfileExItem {
     pub message: Option<String>,
     pub ip_info: Option<String>,
     pub country_code: Option<String>,
+}
+
+impl ProfileExItem {
+    /// Forgets what was measured through the node: its delay, the outcome
+    /// message, and where its exit was. A node whose connection details changed
+    /// is not the node those were measured on; its place in the list is.
+    pub fn clear_measurements(&mut self) {
+        self.country_code = None;
+        self.delay = 0;
+        self.message = None;
+        self.ip_info = None;
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -16,7 +16,22 @@ const QR_MIN_DIMENSION: u32 = 256;
 /// a few megabytes of grey pixels rather than tens.
 pub const QR_IMAGE_MAX_SIDE: u32 = 1600;
 
-pub fn generate_svg(content: &str) -> Result<QrCodeImage, QrCodeError> {
+/// Longest text a share QR is asked to carry.
+const QR_CONTENT_MAX_CHARS: usize = 4096;
+
+/// The share QR for `content`, refusing text no code could hold or that
+/// carries control characters other than line breaks.
+pub fn generate_qr_code_use_case(content: &str) -> Result<QrCodeImage, voya_contracts::AppError> {
+    crate::input_safety::map_ipc_input(
+        crate::input_safety::validate_qr_content(content, QR_CONTENT_MAX_CHARS),
+        "QR content",
+        voya_contracts::AppErrorSubsystem::Qr,
+    )?;
+
+    Ok(generate_svg(content)?)
+}
+
+fn generate_svg(content: &str) -> Result<QrCodeImage, QrCodeError> {
     let trimmed = content.trim();
     if trimmed.is_empty() {
         return Err(QrCodeError::EmptyContent);

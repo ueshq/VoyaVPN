@@ -84,7 +84,10 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertTrue(row(title).isSelected)
         open("home")
         tap("Connect")
-        XCTAssertTrue(app.buttons["Technical details"].waitForExistence(timeout: timeout))
+        // A simulator cannot grant the VPN configuration, so the connect ends
+        // as a declined authorization — which Home answers with a way to ask
+        // again, and no diagnostic that would only repeat the sentence above it.
+        XCTAssertTrue(app.buttons["Authorize again"].waitForExistence(timeout: timeout))
         tap("Connect")
         XCTAssertTrue(app.staticTexts["Disconnected"].exists)
         open("profiles")

@@ -21,6 +21,8 @@ use crate::{
 #[derive(Default)]
 struct RecordingListener {
     events: Mutex<Vec<(String, Value)>>,
+    /// The runtime and thread each event was published from.
+    callers: Mutex<Vec<(Option<tokio::runtime::Id>, Option<String>)>>,
 }
 
 impl RecordingListener {
@@ -39,6 +41,12 @@ impl EventListener for RecordingListener {
     fn on_event(&self, channel: String, payload_json: String) {
         let payload = serde_json::from_str(&payload_json).expect("events are valid JSON");
         self.events.lock().expect("lock").push((channel, payload));
+        self.callers.lock().expect("lock").push((
+            tokio::runtime::Handle::try_current()
+                .ok()
+                .map(|handle| handle.id()),
+            std::thread::current().name().map(str::to_string),
+        ));
     }
 }
 
@@ -136,24 +144,172 @@ fn start_app() -> Harness {
 impl Harness {
     /// Runs one command the way the platform does, and unwraps the answer.
     fn invoke(&self, command: &str, args: Value) -> Value {
-        let json = self
-            .app
-            .runtime
-            .block_on(self.app.invoke(command.to_string(), args.to_string()))
+        let json = block_on_foreign(self.app.invoke(command.to_string(), args.to_string()))
             .unwrap_or_else(|error| panic!("{command} failed: {error}"));
 
         serde_json::from_str(&json).expect("a command answers with JSON")
     }
 
     fn invoke_err(&self, command: &str, args: Value) -> Value {
-        let CommandError::Rejected { app_error_json } = self
-            .app
-            .runtime
-            .block_on(self.app.invoke(command.to_string(), args.to_string()))
-            .expect_err("expected a failure");
+        let CommandError::Rejected { app_error_json } =
+            block_on_foreign(self.app.invoke(command.to_string(), args.to_string()))
+                .expect_err("expected a failure");
 
         serde_json::from_str(&app_error_json).expect("a failure is a serialized AppError")
     }
+}
+
+/// Drives a future the way a platform thread does: polled where it stands,
+/// with no tokio runtime entered. `Runtime::block_on` would enter the app's
+/// runtime first and hide exactly what [`a_command_runs_on_the_apps_own_runtime`]
+/// is about.
+fn block_on_foreign<F: std::future::Future>(future: F) -> F::Output {
+    struct Unpark(std::thread::Thread);
+
+    impl std::task::Wake for Unpark {
+        fn wake(self: Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+
+    let waker = Arc::new(Unpark(std::thread::current())).into();
+    let mut context = std::task::Context::from_waker(&waker);
+    let mut future = std::pin::pin!(future);
+    loop {
+        match future.as_mut().poll(&mut context) {
+            std::task::Poll::Ready(output) => return output,
+            std::task::Poll::Pending => std::thread::park(),
+        }
+    }
+}
+
+/// The platform polls `invoke` from a thread with no runtime. The command must
+/// still run on the app's own workers, or everything it spawns — the proxy
+/// monitor, a speedtest, the IPv6 check — has no runtime to land on.
+#[test]
+fn a_command_runs_on_the_apps_own_runtime() {
+    let harness = start_app();
+    harness.listener.callers.lock().expect("lock").clear();
+
+    // Emits its status from the command body itself.
+    harness.invoke("proxy_stop_monitor", serde_json::json!({}));
+
+    let callers = harness.listener.callers.lock().expect("lock").clone();
+    assert!(!callers.is_empty(), "the command published its status");
+    for (runtime, thread) in callers {
+        assert_eq!(runtime, Some(harness.app.runtime.handle().id()));
+        assert!(
+            thread.is_some_and(|name| name.starts_with(RUNTIME_THREAD_NAME)),
+            "published from one of the app's workers"
+        );
+    }
+}
+
+/// When the provider goes down on its own, the supervisor asks for recovery
+/// and the app has to end up saying "disconnected": the state event, zeroed
+/// statistics and the tunnel status, not only a notice over a screen that
+/// still reads "connected".
+#[test]
+fn a_provider_that_dies_settles_the_app_into_disconnected() {
+    use voya_app::supervisor::{NativeTunExitEvent, SupervisorEventSink};
+
+    let harness = start_app();
+    let sink = SupervisorRecoverySink::new(
+        Arc::downgrade(&harness.app.state),
+        harness.app.runtime.handle().clone(),
+    );
+
+    // From the test thread, which has no runtime — as the supervisor's actor
+    // calls it from a thread that is not a command's.
+    sink.native_tun_exited(NativeTunExitEvent {
+        active_profile_id: None,
+        backend: voya_platform::tun::TunBackend::IosPacketTunnel,
+        message: "the provider stopped".to_string(),
+    });
+
+    let settled = |harness: &Harness| {
+        let stream = harness.listener.on_channel(EventChannel::TransientStream);
+        let kinds = |kind: &str| stream.iter().any(|event| event["kind"] == kind);
+        let disconnected = stream.iter().any(|event| {
+            event["kind"] == "coreState" && event["payload"]["state"] == "disconnected"
+        });
+        let noticed = harness
+            .listener
+            .on_channel(EventChannel::App)
+            .iter()
+            .any(|event| event.to_string().contains("nativeTunStopped"));
+
+        disconnected && kinds("statistics") && kinds("tunChanged") && noticed
+    };
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !settled(&harness) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(
+        settled(&harness),
+        "recovery should announce the disconnect: {:?} / {:?}",
+        harness.listener.on_channel(EventChannel::TransientStream),
+        harness.listener.on_channel(EventChannel::App),
+    );
+
+    harness.app.shutdown();
+}
+
+/// The 2026-10 incident: a database written by another build leaves every
+/// command dead until it is reset. The startup failure must carry the typed
+/// `database` kind (so the frontend can offer the reset), and the reset must
+/// make the next construction succeed.
+#[test]
+fn a_rejected_database_reports_its_kind_and_the_reset_recovers_it() {
+    let dir = TempDir::new().expect("temp dir");
+    let data_dir = dir.path().display().to_string();
+    let start = || {
+        VoyaApp::new(
+            data_dir.clone(),
+            Some("en-US".to_string()),
+            Arc::new(RecordingListener::default()) as Arc<dyn EventListener>,
+            Arc::new(RecordingTunnel::default()) as Arc<dyn TunnelHost>,
+            Arc::new(RecordingProbeCore::default()) as Arc<dyn ProbeCoreHost>,
+        )
+    };
+
+    start().expect("the host starts on an empty directory");
+    // Forge a database from a different build: the same version recorded with
+    // another checksum is exactly what an edited-in-place baseline produces.
+    let database_path = dir.path().join(voya_app::startup::DATABASE_NAME);
+    tokio::runtime::Runtime::new()
+        .expect("test runtime")
+        .block_on(async {
+            let options = sqlx::sqlite::SqliteConnectOptions::new().filename(&database_path);
+            let pool = sqlx::sqlite::SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect_with(options)
+                .await
+                .expect("open the forged database");
+            sqlx::query("UPDATE _sqlx_migrations SET checksum = X'deadbeef'")
+                .execute(&pool)
+                .await
+                .expect("plant a stale checksum");
+            pool.close().await;
+        });
+
+    let Err(StartupError::Database { app_error_json }) = start() else {
+        panic!("a rejected database must fail startup as a database error");
+    };
+    let error: Value =
+        serde_json::from_str(&app_error_json).expect("a startup failure is a serialized AppError");
+    assert_eq!(
+        error.pointer("/kind/type").and_then(Value::as_str),
+        Some("database")
+    );
+    assert_eq!(
+        error.pointer("/kind/code").and_then(Value::as_str),
+        Some("schemaUnsupported"),
+        "{app_error_json}"
+    );
+
+    reset_application_data(data_dir.clone()).expect("the reset moves the database aside");
+    start().expect("the host starts again after the reset");
 }
 
 #[test]
@@ -192,7 +348,10 @@ fn a_declined_vpn_configuration_offers_authorize_again_end_to_end() {
     // And the tunnel status keeps explaining it is the permission that is
     // missing, not an unexplained "stopped".
     let status = harness.invoke("tun_status", serde_json::json!({}));
-    assert_eq!(status["providerState"], "permissionRequired", "status: {status}");
+    assert_eq!(
+        status["providerState"], "permissionRequired",
+        "status: {status}"
+    );
     assert_eq!(
         status["lastProviderError"], "the system did not authorize the VPN configuration",
         "status: {status}"
@@ -455,6 +614,53 @@ fn arguments_that_do_not_match_a_command_are_rejected_before_it_runs() {
             .is_some_and(|message| message.contains("set_active_profile")),
         "the failure should name the command: {error}"
     );
+
+    harness.app.shutdown();
+}
+
+/// The envelope's two edges: a command that takes nothing is sent no
+/// arguments at all, and one that returns nothing still answers with JSON.
+#[test]
+fn a_blank_payload_is_no_arguments_and_a_unit_answer_is_null() {
+    let harness = start_app();
+
+    let settings = block_on_foreign(
+        harness
+            .app
+            .invoke("load_app_settings".to_string(), String::new()),
+    )
+    .expect("a command without arguments accepts a blank payload");
+    assert!(serde_json::from_str::<Value>(&settings)
+        .expect("a command answers with JSON")
+        .is_object());
+
+    assert_eq!(
+        harness.invoke("set_log_streaming", serde_json::json!({ "enabled": false })),
+        Value::Null
+    );
+}
+
+/// The ids a command names are checked in `voya-app`, so a phone refuses the
+/// same input the desktop does rather than passing it to the database.
+#[test]
+fn an_id_with_control_characters_is_refused_as_validation() {
+    let harness = start_app();
+
+    for (command, args) in [
+        ("delete_routings", serde_json::json!({ "ids": ["bad\nid"] })),
+        ("get_profile", serde_json::json!({ "indexId": "bad\nid" })),
+        (
+            "proxy_close_connection",
+            serde_json::json!({ "connectionId": "bad\nid" }),
+        ),
+        (
+            "export_profile_share_links",
+            serde_json::json!({ "indexIds": ["bad\nid"] }),
+        ),
+    ] {
+        let error = harness.invoke_err(command, args);
+        assert_eq!(error["kind"]["type"], "validation", "{command}: {error}");
+    }
 
     harness.app.shutdown();
 }

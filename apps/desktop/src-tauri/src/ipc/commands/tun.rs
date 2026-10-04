@@ -10,7 +10,8 @@ pub async fn tun_request_elevation(
     state: tauri::State<'_, AppState>,
 ) -> Result<TunStatus, AppError> {
     let config = state.config_mutations().current_config();
-    let current = tun_status_off_thread(&state, config.clone()).await?;
+    let tun = tun_manager(&state);
+    let current = tun.status_off_thread(&config).await?;
     if !current.requires_elevation {
         return Ok(current);
     }
@@ -20,7 +21,7 @@ pub async fn tun_request_elevation(
         .await?
         .map_err(AppError::from)?;
 
-    tun_status_off_thread(&state, config).await
+    Ok(tun.status_off_thread(&config).await?)
 }
 
 #[tauri::command]
@@ -28,7 +29,7 @@ pub async fn tun_request_elevation(
 pub async fn tun_status(state: tauri::State<'_, AppState>) -> Result<TunStatus, AppError> {
     let config = state.config_mutations().current_config();
 
-    tun_status_off_thread(&state, config).await
+    Ok(tun_manager(&state).status_off_thread(&config).await?)
 }
 
 #[tauri::command]
@@ -52,24 +53,15 @@ pub async fn set_tun_enabled<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     enabled: bool,
 ) -> Result<TunStatus, AppError> {
-    let planned = state
-        .config_mutations()
-        .mutate(async |_unit_of_work, config| -> Result<_, AppError> {
-            // The preflight probe forks OS helpers, so it runs off the runtime
-            // against a snapshot; only the validated flag change happens under the
-            // guard.
-            let status = plan_tun_enabled_off_thread(&state, config.clone(), enabled).await?;
-            TunManager::apply_enabled(config, enabled);
-            Ok::<_, AppError>(status)
-        })
-        .await?;
+    let planned =
+        set_tun_enabled_use_case(state.config_mutations(), &tun_manager(&state), enabled).await?;
     let status = planned.value;
     let config = planned.config;
     if let Err(error) = emit_tun_changed(&app, &status) {
         report_post_commit_error(
             &app,
             NoticeCode::TunStatusRefreshFailed,
-            &format!("{error:?}"),
+            &error.message,
             AppNoticeLevel::Warning,
         );
     }

@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { restoreFocus } from "@voya/ui/lib/focus";
 import { voyaCommands } from "@voya/client/transport";
 import type { ImportProfilesResult, Profile } from "@voya/contracts";
+import { refreshQueries } from "@voya/client/queries";
 import { queryKeys } from "@voya/client/query-keys";
 import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
 import type { DialogImportMethod } from "@/features/profiles/import-methods";
@@ -92,10 +93,10 @@ export function useNodeEditor(
     setOperationMessage(formatImportSummary(result, t));
     const importedIndexIds = result.importedProfileIds;
     if (importedIndexIds.length > 0) {
-      // Refresh the complete list after import. `import_profiles_from_text` still emits profiles +
-      // subscriptions + subscriptionMetadata for every other cache.
-      const refreshedProfiles = await voyaCommands().listProfileSummaries();
-      if (isActive()) queryClient.setQueryData(queryKeys.profileList, refreshedProfiles);
+      // The list is refreshed before the dialog closes, so the new nodes are
+      // there when it does. A refetch that fails is the list's own error to
+      // show — it must not turn an import that succeeded into a failed one.
+      await refreshQueries(queryClient, queryKeys.profileList);
     }
   }
 

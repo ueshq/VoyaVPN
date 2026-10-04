@@ -8,8 +8,8 @@ use tokio::sync::Mutex;
 
 use crate::{
     AppStateRepository, DbError, PolicyGroupRepository, ProfileExRepository, ProfileRepository,
-    Result, RoutingRepository, SelfHostRepository, ServerStatRepository, SettingsRepository,
-    SubscriptionMetadataRepository, SubscriptionRepository,
+    Result, RoutingRepository, SchemaRejectionReason, SelfHostRepository, ServerStatRepository,
+    SettingsRepository, SubscriptionMetadataRepository, SubscriptionRepository,
 };
 
 pub const DATABASE_NAME: &str = "voyavpn.sqlite";
@@ -231,10 +231,11 @@ async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> 
     .fetch_one(pool)
     .await?;
     let expected = latest_migration_version();
-    let unsupported = |found| DbError::UnsupportedDatabaseSchema {
+    let unsupported = |found, reason| DbError::UnsupportedDatabaseSchema {
         path: path.to_path_buf(),
         found,
         expected,
+        reason,
         manual_reset_command: manual_database_reset_command(path),
     };
     let has_bookkeeping: i64 = sqlx::query_scalar(
@@ -246,7 +247,7 @@ async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> 
         return if user_table_count == 0 {
             Ok(())
         } else {
-            Err(unsupported(None))
+            Err(unsupported(None, SchemaRejectionReason::Unrecognized))
         };
     }
 
@@ -267,7 +268,7 @@ async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> 
             .iter()
             .any(|row| row.get::<String, _>("name") == *name)
     }) {
-        return Err(unsupported(None));
+        return Err(unsupported(None, SchemaRejectionReason::Unrecognized));
     }
     let rows =
         sqlx::query("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
@@ -281,18 +282,44 @@ async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> 
     let found = rows
         .last()
         .and_then(|row| row.try_get::<i64, _>("version").ok());
-    if rows.len() != 1 || user_table_count == 0 {
-        return Err(unsupported(found));
+    if rows.len() != 1 {
+        return Err(unsupported(
+            found,
+            SchemaRejectionReason::MigrationRecords { count: rows.len() },
+        ));
+    }
+    if user_table_count == 0 {
+        return Err(unsupported(found, SchemaRejectionReason::Unrecognized));
     }
     let row = &rows[0];
-    let success: i64 = row.try_get("success").map_err(|_| unsupported(found))?;
-    let checksum: Vec<u8> = row.try_get("checksum").map_err(|_| unsupported(found))?;
-    if success != 1
-        || !MIGRATOR.iter().any(|baseline| {
-            Some(baseline.version) == found && baseline.checksum.as_ref() == checksum.as_slice()
-        })
+    let success: i64 = row
+        .try_get("success")
+        .map_err(|_| unsupported(found, SchemaRejectionReason::Unrecognized))?;
+    let checksum: Vec<u8> = row
+        .try_get("checksum")
+        .map_err(|_| unsupported(found, SchemaRejectionReason::Unrecognized))?;
+    if success != 1 {
+        return Err(unsupported(found, SchemaRejectionReason::Incomplete));
+    }
+    let Some(found_version) = found else {
+        return Err(unsupported(found, SchemaRejectionReason::Unrecognized));
+    };
+    if !MIGRATOR
+        .iter()
+        .any(|baseline| baseline.version == found_version)
     {
-        return Err(unsupported(found));
+        return Err(unsupported(
+            found,
+            SchemaRejectionReason::Version {
+                found: found_version,
+                expected,
+            },
+        ));
+    }
+    if !MIGRATOR.iter().any(|baseline| {
+        baseline.version == found_version && baseline.checksum.as_ref() == checksum.as_slice()
+    }) {
+        return Err(unsupported(found, SchemaRejectionReason::ChecksumMismatch));
     }
     Ok(())
 }

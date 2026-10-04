@@ -5,9 +5,9 @@ import { View, useWindowDimensions } from "react-native";
 /**
  * A screen's large title, left-aligned, scrolling with the content.
  *
- * It stands in for a navigation bar — there is none — so it carries the
- * header role VoiceOver uses to jump between screens' titles. `trailing` holds
- * the screen's page-level actions.
+ * On a tab screen it stands in for a navigation bar — those screens have
+ * none — so it carries the header role VoiceOver uses to jump between
+ * screens' titles. `trailing` holds the screen's page-level actions.
  */
 export function PageHeader({ title, trailing }: { title: string; trailing?: ReactNode }) {
   const { width, fontScale } = useWindowDimensions();

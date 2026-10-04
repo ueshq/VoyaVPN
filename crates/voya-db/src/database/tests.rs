@@ -688,6 +688,9 @@ async fn subscription_metadata_round_trips_and_cascades_with_subscription_delete
         download_bytes: Some(2048),
         total_bytes: Some(10_737_418_240),
         expire_at: Some(1_924_992_000),
+        last_attempt_at_unix: None,
+        last_attempt_error: None,
+        last_attempt_failed: None,
         last_update_at: Some(1_756_800_000),
         profile_title: Some("Demo Plan".to_string()),
     };
@@ -1237,7 +1240,7 @@ async fn existing_legacy_database_is_rejected_without_modification() {
         }
         other => panic!("unexpected error: {other}"),
     }
-    assert!(error.to_string().contains("reset it manually with"));
+    assert!(error.to_string().contains("migration bookkeeping"));
     assert_eq!(
         fs::read(path).expect("legacy database should remain readable"),
         before
@@ -2764,4 +2767,59 @@ fn endpoint(address: &str, port: i32) -> ServerEndpoint {
         address: address.to_string(),
         port,
     }
+}
+
+/// A mutation is refused by the first subscription-owned id in the order the
+/// caller gave them, whatever the list order is, and an id that names nothing
+/// refuses nothing.
+#[tokio::test]
+async fn first_subscription_owner_follows_the_argument_order() {
+    let database = Database::connect_in_memory()
+        .await
+        .expect("database test operation should succeed");
+    for id in ["sub-a", "sub-b"] {
+        database
+            .subscriptions()
+            .upsert(&SubItem {
+                id: id.to_string(),
+                remarks: id.to_string(),
+                ..SubItem::default()
+            })
+            .await
+            .expect("subscription should persist");
+    }
+    for (index_id, subscription_id) in [
+        ("manual", None),
+        ("from-a", Some("sub-a")),
+        ("from-b", Some("sub-b")),
+    ] {
+        database
+            .profiles()
+            .upsert(&ProfileItem {
+                index_id: index_id.to_string(),
+                subscription_id: subscription_id.map(str::to_string),
+                ..sample_profile()
+            })
+            .await
+            .expect("profile should persist");
+    }
+    let owner = |ids: &[&str]| {
+        let ids = ids.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let database = &database;
+        async move {
+            database
+                .profiles()
+                .first_subscription_owner(&ids)
+                .await
+                .expect("database test operation should succeed")
+        }
+    };
+
+    assert_eq!(
+        owner(&["manual", "from-b", "from-a"]).await.as_deref(),
+        Some("sub-b")
+    );
+    assert_eq!(owner(&["from-a", "from-b"]).await.as_deref(), Some("sub-a"));
+    assert_eq!(owner(&["manual", "deleted-meanwhile"]).await, None);
+    assert_eq!(owner(&[]).await, None);
 }

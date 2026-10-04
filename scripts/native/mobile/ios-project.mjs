@@ -7,6 +7,7 @@ import {
   repoRootFromScript,
   requireDarwin,
   run,
+  runCli,
 } from "../../lib/common.mjs";
 
 /**
@@ -85,10 +86,5 @@ export function wireIosProject() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    wireIosProject();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(wireIosProject);
 }

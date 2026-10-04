@@ -5,16 +5,15 @@ const plugin = vi.hoisted(() => ({
   requestPermission: vi.fn(),
   sendNotification: vi.fn(),
 }));
-// `isTauriRuntime` is not this module's business, but the shared backend
-// registration the test setup runs imports it from here; an absent export
-// would throw there rather than fail a test.
+// The one command this module asks: whether the window is on screen. The
+// shared backend registration the test setup runs takes the same object, and
+// only passes it along.
 const windowApi = vi.hoisted(() => ({
-  isTauriRuntime: vi.fn(() => true),
   isWindowVisible: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/plugin-notification", () => plugin);
-vi.mock("@/ipc/window", () => windowApi);
+vi.mock("@/ipc/commands", () => ({ ipcCommands: windowApi }));
 
 // A fresh module is a fresh launch: the "asked once" memory is module state.
 async function launch() {

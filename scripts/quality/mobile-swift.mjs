@@ -1,7 +1,7 @@
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { capture, isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
+import { captureSpawned, isCliEntrypoint, repoRootFromScript, runCli } from "../lib/common.mjs";
 
 /**
  * Parses the iOS app's own Swift: the app delegate, the native modules, and
@@ -52,8 +52,7 @@ export function main() {
   }
 
   const sources = swiftSources(root);
-  const result = capture("xcrun", ["swiftc", "-parse", ...sources], { cwd: root });
-  if (result.error) throw result.error;
+  const result = captureSpawned("xcrun", ["swiftc", "-parse", ...sources], { cwd: root });
   if (result.status !== 0) {
     throw new Error(`iOS Swift sources did not parse:\n${result.stderr ?? ""}`);
   }
@@ -62,10 +61,5 @@ export function main() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

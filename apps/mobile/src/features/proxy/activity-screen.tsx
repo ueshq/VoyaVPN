@@ -1,9 +1,8 @@
 import { useIsFocused } from "@react-navigation/native";
 import { ErrorNotice } from "~/components/error-notice";
-import { useQuery } from "@tanstack/react-query";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useAppVisible } from "@voya/client/use-app-visible";
-import { queryKeys } from "@voya/client/query-keys";
+import { createCommandQueue } from "@voya/client/command-queue";
 import { voyaCommands } from "@voya/client/transport";
 import {
   arrangeConnections,
@@ -11,7 +10,8 @@ import {
   connectionKey,
   connectionSearchHay,
 } from "@voya/features/proxy/connection-display";
-import { connectionRoute } from "@voya/features/proxy/connection-route";
+import { connectionRoute, routeLabel } from "@voya/features/proxy/connection-route";
+import { useConnectionsSnapshot } from "@voya/features/proxy/use-connections-snapshot";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ProxyConnectionItem } from "@voya/contracts";
 import { Button } from "heroui-native/button";
@@ -28,17 +28,10 @@ import { withListPositions } from "~/components/list-positions";
 import { ListRow } from "~/components/list-row";
 import { useScreenInsets } from "~/components/use-screen-insets";
 
-/**
- * The node a connection's chain ends at, when it is a node at all.
- *
- * The desktop shows the whole chain in a detail panel; a phone row has space
- * for the one fact that matters — which exit this connection is using.
- */
-function routeNode(connection: ProxyConnectionItem) {
-  const route = connectionRoute(connection);
-
-  return route.kind === "proxy" ? route.node : route.kind;
-}
+// The host's start waits on the core before it begins, and its stop does not,
+// so the two go through one queue: a quick flip of focus or visibility always
+// ends in the state asked for last.
+const sendMonitorCommand = createCommandQueue();
 
 /**
  * Live connections.
@@ -52,7 +45,6 @@ export function ActivityScreen() {
   const insets = useScreenInsets();
   const [search, setSearch] = useState("");
   const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
-  const streamed = useRuntimeEventStore((state) => state.proxyConnections);
   const visible = useAppVisible();
   const focused = useIsFocused();
   const monitor = useRuntimeEventStore((state) => state.proxyMonitorStatus);
@@ -64,33 +56,40 @@ export function ActivityScreen() {
   useEffect(() => {
     if (!connected || !visible || !focused) return undefined;
 
-    void voyaCommands().proxyStartMonitor().catch(setError);
+    void sendMonitorCommand(() => voyaCommands().proxyStartMonitor()).catch(setError);
     return () => {
-      void voyaCommands().proxyStopMonitor().catch(() => undefined);
+      void sendMonitorCommand(() => voyaCommands().proxyStopMonitor()).catch(() => undefined);
+      // The table this visit streamed is not the next visit's: left in the
+      // store it would be shown over the fresh read until the first push.
+      useRuntimeEventStore.getState().clearProxyConnections();
     };
   }, [connected, visible, focused, attempt]);
 
-  // The stream is the live source; the query is the first paint before the
-  // first push arrives, and the fallback while the monitor is starting.
-  const snapshotQuery = useQuery({
-    enabled: connected && visible && focused,
-    queryFn: () => voyaCommands().proxyListConnections(),
-    queryKey: queryKeys.proxyConnections,
-  });
-  const snapshot = streamed ?? snapshotQuery.data ?? null;
+  // The stream is the live source; the read is the first paint before the
+  // first push arrives, and the fallback while the monitor is starting. Both
+  // land in the store, so a visit never starts from the previous one's table.
+  const {
+    query: snapshotQuery,
+    setProxyConnections,
+    snapshot,
+  } = useConnectionsSnapshot(connected && visible && focused);
   const connections = useMemo(() => snapshot?.connections ?? [], [snapshot]);
 
   const needle = search.trim().toLowerCase();
+  const searching = needle.length > 0;
+  // Per snapshot, not per keystroke: the table can hold thousands of rows.
+  const searchHays = useMemo(
+    () => (searching ? connections.map(connectionSearchHay) : null),
+    [connections, searching],
+  );
   const rows = useMemo(
     () =>
-      arrangeConnections([...connections], {
+      arrangeConnections(connections, {
         routeTexts: null,
-        search: needle
-          ? { hays: connections.map(connectionSearchHay), needle }
-          : null,
+        search: searchHays ? { hays: searchHays, needle } : null,
         sort: null,
       }),
-    [connections, needle],
+    [connections, searchHays, needle],
   );
   const positioned = useMemo(() => withListPositions(rows), [rows]);
 
@@ -99,7 +98,9 @@ export function ActivityScreen() {
       { text: t("actions.cancel"), style: "cancel" },
       { text: t("activity.disconnectAll"), style: "destructive", onPress: () => {
         setClosing(true); setCloseError(null);
-        void voyaCommands().proxyCloseConnection(null).catch(setCloseError).finally(() => setClosing(false));
+        // The answer is the table after the close; without it the closed
+        // rows stay until the next push.
+        void voyaCommands().proxyCloseConnection(null).then(setProxyConnections).catch(setCloseError).finally(() => setClosing(false));
       } },
     ]);
   }
@@ -112,7 +113,9 @@ export function ActivityScreen() {
         last={last}
         title={item.host}
         titleLines={1}
-        description={[item.process, routeNode(item)].filter(Boolean).join(" · ")}
+        // The desktop shows the whole chain in a detail panel; a phone row has
+        // space for the one fact that matters — where this connection leaves.
+        description={[item.process, routeLabel(connectionRoute(item), t)].filter(Boolean).join(" · ")}
         trailing={
           <Typography className="text-sm text-subtle tabular-nums">
             {`${t("mobile.upload")} ${connectionBytes(item.upload)} · ${t("mobile.download")} ${connectionBytes(item.download)}`}
@@ -134,7 +137,7 @@ export function ActivityScreen() {
           description={t("activity.connectHint")}
           action={
             <Button
-              className="bg-accent-soft py-3"
+              className="py-3"
               variant="secondary"
               onPress={() => navigateToTab("home")}
             >

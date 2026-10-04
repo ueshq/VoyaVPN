@@ -1,15 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { formatClock, formatDelay } from "@voya/utils/formatting";
+import { formatDelay, formatDurationMs } from "@voya/utils/formatting";
 
 import type { TranslationFunction } from "@voya/i18n";
-
-function formatConnectionDuration(milliseconds: number | null) {
-  if (milliseconds == null) return "—";
-  const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
-  return formatClock(Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60);
-}
 
 /** The backend owns elapsed time; the renderer only interpolates between samples. */
 export function ConnectedInfo({
@@ -58,7 +52,7 @@ export function ConnectedInfo({
   return (
     <dl className="home-metrics" data-testid="home-connected-info">
       <div><dt>{t("home.latency")}</dt><dd>{delayMs == null ? "—" : formatDelay(delayMs)}</dd></div>
-      <div><dt>{t("home.duration")}</dt><dd data-testid="home-connection-duration">{formatConnectionDuration(elapsed)}</dd></div>
+      <div><dt>{t("home.duration")}</dt><dd data-testid="home-connection-duration">{elapsed == null ? "—" : formatDurationMs(elapsed)}</dd></div>
       {children}
     </dl>
   );

@@ -1,4 +1,10 @@
-import { capture, commandFailure, sleepSync, validateTiming } from "../../lib/common.mjs";
+import {
+  captureSpawned,
+  checkedCapture,
+  commandFailure,
+  sleepSync,
+  validateTiming,
+} from "../../lib/common.mjs";
 import { appBundleIdentifier as defaultProviderId } from "./tunnel-layout.mjs";
 
 const packetTunnelExecutable = "VoyaPacketTunnel";
@@ -20,10 +26,7 @@ function escapeRegExp(value) {
 export function defaultIsProcessRunning(executable) {
   const program = "/usr/bin/pgrep";
   const args = ["-x", executable];
-  const result = capture(program, args);
-  if (result.error) {
-    throw result.error;
-  }
+  const result = captureSpawned(program, args);
   if (result.status === 0) {
     return true;
   }
@@ -36,26 +39,14 @@ export function defaultIsProcessRunning(executable) {
 function defaultListConnections() {
   const program = "/usr/sbin/scutil";
   const args = ["--nc", "list"];
-  const result = capture(program, args);
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw commandFailure(program, args, result);
-  }
+  const result = checkedCapture(program, args);
   return parseScutilNetworkConnections(result.stdout ?? "");
 }
 
 function defaultStopConnection(id) {
   const program = "/usr/sbin/scutil";
   const args = ["--nc", "stop", id];
-  const result = capture(program, args);
-  if (result.error) {
-    throw result.error;
-  }
-  if (result.status !== 0) {
-    throw commandFailure(program, args, result);
-  }
+  checkedCapture(program, args);
 }
 
 function isDisconnected(connection) {

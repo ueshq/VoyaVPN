@@ -8,6 +8,7 @@ import {
   requireDarwin,
   run,
 } from "../../lib/common.mjs";
+import { generateUniffiBindings } from "./uniffi-bindings.mjs";
 
 /**
  * Builds `voya-mobile-ffi` for iOS and packages it as an xcframework.
@@ -21,9 +22,29 @@ import {
  * the module map and the `.swift` file always describe the library beside them.
  */
 export const IOS_TARGETS = [
-  { triple: "aarch64-apple-ios", slice: "ios-arm64" },
-  { triple: "aarch64-apple-ios-sim", slice: "ios-arm64-simulator" },
+  { triple: "aarch64-apple-ios", slice: "ios-arm64", runsOn: "device" },
+  { triple: "aarch64-apple-ios-sim", slice: "ios-arm64-simulator", runsOn: "simulator" },
 ];
+
+/**
+ * The slices a build asked for: `--slice device`, `--slice simulator`, or
+ * both when it says nothing.
+ *
+ * A lane that only ever runs on one of them — the simulator smoke test, the
+ * App Store archive — otherwise pays for a release build of the other, which
+ * is the whole dependency graph again for a library nothing will load.
+ */
+export function selectIosTargets(argv, targets = IOS_TARGETS) {
+  const flag = argv.indexOf("--slice");
+  if (flag === -1) return targets;
+  const wanted = argv[flag + 1];
+  const selected = targets.filter((target) => target.runsOn === wanted);
+  if (selected.length === 0) {
+    throw new Error(`--slice takes "device" or "simulator", not ${JSON.stringify(wanted)}`);
+  }
+
+  return selected;
+}
 
 const LIBRARY_NAME = "libvoya_mobile_ffi.a";
 const FRAMEWORK_NAME = "VoyaMobile.xcframework";
@@ -40,11 +61,11 @@ export function missingTargets(installed, wanted = IOS_TARGETS) {
   return wanted.map((target) => target.triple).filter((triple) => !present.has(triple));
 }
 
-function ensureTargets() {
+function ensureTargets(targets) {
   const installed = checkedCapture("rustup", ["target", "list", "--installed"])
     .stdout.split("\n")
     .map((line) => line.trim());
-  const missing = missingTargets(installed);
+  const missing = missingTargets(installed, targets);
 
   if (missing.length > 0) {
     throw new Error(
@@ -53,8 +74,8 @@ function ensureTargets() {
   }
 }
 
-function buildSlices() {
-  for (const { triple } of IOS_TARGETS) {
+function buildSlices(targets) {
+  for (const { triple } of targets) {
     run(
       "cargo",
       [
@@ -82,7 +103,7 @@ function staticLibrary(triple) {
   return path;
 }
 
-function packageFramework() {
+function packageFramework(targets) {
   const framework = resolve(outputRoot, FRAMEWORK_NAME);
   rmSync(framework, { force: true, recursive: true });
   mkdirSync(outputRoot, { recursive: true });
@@ -91,7 +112,7 @@ function packageFramework() {
     "xcodebuild",
     [
       "-create-xcframework",
-      ...IOS_TARGETS.flatMap(({ triple }) => [
+      ...targets.flatMap(({ triple }) => [
         "-library",
         staticLibrary(triple),
         "-headers",
@@ -106,49 +127,29 @@ function packageFramework() {
   return framework;
 }
 
-/**
- * Generates the Swift bindings next to the library.
- *
- * uniffi reads the built library rather than the source, so this runs after the
- * build: the bindings then describe the very symbols the framework exports.
- */
-function generateBindings() {
+/** The Swift bindings, regenerated from scratch next to the library. */
+function generateBindings(targets) {
   rmSync(bindingsRoot, { force: true, recursive: true });
   mkdirSync(bindingsRoot, { recursive: true });
-
-  run(
-    "cargo",
-    [
-      "run",
-      "-p",
-      "voya-mobile-ffi",
-      "--features",
-      "bindgen",
-      "--bin",
-      "uniffi-bindgen",
-      "--",
-      "generate",
-      "--library",
-      staticLibrary(IOS_TARGETS[0].triple),
-      "--language",
-      "swift",
-      "--out-dir",
-      bindingsRoot,
-    ],
-    { cwd: repoRoot },
-  );
+  generateUniffiBindings({
+    language: "swift",
+    // Any slice describes the same interface.
+    library: staticLibrary(targets[0].triple),
+    outDir: bindingsRoot,
+    repoRoot,
+  });
 }
 
-export function buildRustForIos() {
+export function buildRustForIos(targets = IOS_TARGETS) {
   requireDarwin("The iOS xcframework can only be built on macOS.");
-  ensureTargets();
-  buildSlices();
-  generateBindings();
-  const framework = packageFramework();
-  console.log(`Built ${framework}`);
+  ensureTargets(targets);
+  buildSlices(targets);
+  generateBindings(targets);
+  const framework = packageFramework(targets);
+  console.log(`Built ${framework} (${targets.map((target) => target.slice).join(", ")})`);
   console.log(`Swift bindings in ${bindingsRoot}`);
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  buildRustForIos();
+  buildRustForIos(selectIosTargets(process.argv.slice(2)));
 }

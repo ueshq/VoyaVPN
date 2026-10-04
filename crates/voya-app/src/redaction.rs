@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 /// Placeholder substituted for a whole URL by [`redact_urls`].
 pub const REDACTED_URL: &str = "[redacted URL]";
 
@@ -14,7 +16,8 @@ pub fn redact_urls(value: &str) -> String {
     let bytes = value.as_bytes();
     let mut search_from = 0;
     let mut last_copied = 0;
-    let mut redacted = String::with_capacity(value.len());
+    // Grown on the first match: most text has no URL in it.
+    let mut redacted = String::new();
     let mut changed = false;
 
     while let Some(scheme_end) = find_scheme_separator(bytes, search_from) {
@@ -26,6 +29,9 @@ pub fn redact_urls(value: &str) -> String {
         }
 
         let url_end = find_url_end(bytes, scheme_end + 3);
+        if !changed {
+            redacted.reserve(value.len());
+        }
         redacted.push_str(&value[last_copied..scheme_start]);
         redacted.push_str(REDACTED_URL);
         last_copied = url_end;
@@ -45,12 +51,16 @@ pub fn redact_urls(value: &str) -> String {
 ///
 /// The function intentionally avoids parsing the whole line as a URL because
 /// core processes often emit URLs inside larger log messages.
+///
+/// Borrowed when nothing was redacted: this runs on every line the core
+/// prints and every event the file log writes, and almost none carry
+/// credentials.
 #[must_use]
-pub fn redact_url_userinfo(value: &str) -> String {
+pub fn redact_url_userinfo(value: &str) -> Cow<'_, str> {
     let bytes = value.as_bytes();
     let mut search_from = 0;
     let mut last_copied = 0;
-    let mut redacted = String::with_capacity(value.len());
+    let mut redacted = String::new();
     let mut changed = false;
 
     while let Some(scheme_end) = find_scheme_separator(bytes, search_from) {
@@ -79,6 +89,9 @@ pub fn redact_url_userinfo(value: &str) -> String {
             continue;
         }
 
+        if !changed {
+            redacted.reserve(value.len());
+        }
         redacted.push_str(&value[last_copied..authority_start]);
         redacted.push_str("<redacted>@");
         last_copied = userinfo_end + 1;
@@ -88,9 +101,9 @@ pub fn redact_url_userinfo(value: &str) -> String {
 
     if changed {
         redacted.push_str(&value[last_copied..]);
-        redacted
+        Cow::Owned(redacted)
     } else {
-        value.to_string()
+        Cow::Borrowed(value)
     }
 }
 

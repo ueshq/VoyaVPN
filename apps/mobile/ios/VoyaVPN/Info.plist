@@ -60,8 +60,12 @@
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
+	<!-- Prerequisite for react-native-screens' `statusBarStyle` (App.tsx): with
+	     this false, UIKit never asks any view controller for
+	     preferredStatusBarStyle, so the theme-following status bar never
+	     applies and screens logs an error in debug builds. -->
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
+	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan a QR code to add a node or subscription.</string>
 </dict>

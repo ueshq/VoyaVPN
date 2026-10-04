@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { events } from "@/ipc/bindings";
@@ -7,7 +7,6 @@ import { notifyWhenHidden } from "@/ipc/notifications";
 import { isTauriRuntime } from "@/ipc/window";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
-import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { getErrorMessage } from "@voya/utils/error";
 import { useShellStore } from "@/stores/shell-store";
 
@@ -27,8 +26,6 @@ type RegisteredUnlisten = {
  */
 export function EventBridge() {
   const queryClient = useQueryClient();
-  const mountedRef = useMountedRef();
-  const listenerGenerationRef = useRef(0);
   // A notice arrives as a code, and the toast store holds finished text, so it
   // is resolved by the router. The ref keeps `t` out of the effect's deps:
   // re-running it on every language change would tear down and re-register
@@ -49,28 +46,26 @@ export function EventBridge() {
       t: () => translateRef.current,
     });
 
-    const generation = ++listenerGenerationRef.current;
+    // One flag per run of the effect: a registration that resolves after this
+    // run was cleaned up is unlistened on the spot rather than kept.
+    let disposed = false;
     const unlisteners: RegisteredUnlisten[] = [];
 
-    const listenerRegistrations = [
-      registerEventListener("invalidateEvent", () =>
+    registerEventListener("invalidateEvent", () =>
         events.invalidateEvent.listen((event) => {
           router.onInvalidate(event.payload);
         }),
-      ),
-      registerEventListener("appEvent", () =>
+    );
+    registerEventListener("appEvent", () =>
         events.appEvent.listen((event) => {
           router.onAppEvent(event.payload);
         }),
-      ),
-      registerEventListener("transientStreamEvent", () =>
+    );
+    registerEventListener("transientStreamEvent", () =>
         events.transientStreamEvent.listen((event) => {
           router.onTransient(event.payload);
         }),
-      ),
-    ];
-
-    void Promise.allSettled(listenerRegistrations);
+    );
 
     function registerEventListener(eventName: string, listen: () => Promise<Unlisten>) {
       let registration: Promise<Unlisten>;
@@ -79,12 +74,12 @@ export function EventBridge() {
         registration = listen();
       } catch (error) {
         reportEventBridgeError(`failed to register ${eventName}`, error);
-        return Promise.resolve();
+        return;
       }
 
-      return registration
+      void registration
         .then((unlisten) => {
-          if (!mountedRef.current || generation !== listenerGenerationRef.current) {
+          if (disposed) {
             safeUnlisten(eventName, unlisten);
             return;
           }
@@ -97,11 +92,14 @@ export function EventBridge() {
     }
 
     return () => {
+      disposed = true;
       router.dispose();
-      listenerGenerationRef.current += 1;
-      drainUnlisteners(unlisteners);
+      // Newest first, the order they were taken down in before.
+      for (const { eventName, unlisten } of unlisteners.reverse()) {
+        safeUnlisten(eventName, unlisten);
+      }
     };
-  }, [mountedRef, queryClient, translateRef]);
+  }, [queryClient, translateRef]);
 
   return null;
 }
@@ -116,20 +114,9 @@ function navigateTo(target: ShellTarget) {
   }
   // Seed the sub-view before mounting the destination screen.
   if (target.tab === "connections") {
-    shell.setConnectionsView(target.view);
+    shell.setConnectionsView("connections");
   }
   shell.setActiveTab(target.tab);
-}
-
-function drainUnlisteners(unlisteners: RegisteredUnlisten[]) {
-  while (unlisteners.length > 0) {
-    const registered = unlisteners.pop();
-    if (!registered) {
-      continue;
-    }
-
-    safeUnlisten(registered.eventName, registered.unlisten);
-  }
 }
 
 function safeUnlisten(eventName: string, unlisten: Unlisten) {

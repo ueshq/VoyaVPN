@@ -1,5 +1,6 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { formatDateTime } from "@voya/utils/format-date-time";
 import { Button } from "heroui-native/button";
 import { Typography } from "heroui-native/text";
 import { useState } from "react";
@@ -11,7 +12,7 @@ import { closeSingleConnection } from "./connection-actions";
 
 export function ConnectionDetailsScreen({ route, navigation }: NativeStackScreenProps<RootRoutes, "connectionDetails">) {
   const { connection } = route.params;
-  const { t } = useI18n();
+  const { language, t } = useI18n();
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   async function close() {
@@ -24,7 +25,7 @@ export function ConnectionDetailsScreen({ route, navigation }: NativeStackScreen
   return <DetailScreen>
     <Typography selectable className="text-xl font-semibold text-foreground">{connection.host}</Typography>
     <Typography selectable className="text-base text-foreground">{[connection.source, connection.destination].join(" → ")}</Typography>
-    <Typography className="text-base text-subtle">{[connection.network, connection.connectionType, connection.start].filter(Boolean).join(" · ")}</Typography>
+    <Typography className="text-base text-subtle">{[connection.network, connection.connectionType, connection.start ? formatDateTime(connection.start, language) : null].filter(Boolean).join(" · ")}</Typography>
     <Typography className="text-base text-foreground">{t("mobile.upload")} {connectionBytes(connection.upload)} · {t("mobile.download")} {connectionBytes(connection.download)}</Typography>
     <Typography selectable className="text-base text-foreground">{connection.chains.join(" → ")}</Typography>
     {connection.rule ? <Typography selectable className="text-base text-subtle">{connection.rule} {connection.rulePayload}</Typography> : null}

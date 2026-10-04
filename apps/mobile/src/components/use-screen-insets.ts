@@ -8,9 +8,11 @@ import { useContentColumn } from "./content-column";
  * The content-container style of a screen's scrolling content: its vertical
  * padding, and on an iPad the centred column.
  *
- * There is no navigation header: each screen draws its own large title, so the
- * content starts under the status bar and the title scrolls away with it. The
- * tab bar floats over the bottom of the screen, so the content ends above it.
+ * A tab screen has no navigation header: it draws its own large title, so the
+ * content starts under the status bar and the title scrolls away with it. A
+ * stack page sits under the navigation bar, which already clears the status
+ * bar. The tab bar floats over the bottom of a tab screen, so the content ends
+ * above it.
  *
  * The context is read directly rather than through `useBottomTabBarHeight`,
  * which throws outside a tab navigator — and a screen rendered on its own, as

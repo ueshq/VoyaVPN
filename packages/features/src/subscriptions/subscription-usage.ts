@@ -1,4 +1,6 @@
 import type { SubscriptionMetadata } from "@voya/contracts";
+import type { TranslationFunction } from "@voya/i18n/core";
+import { formatBytes } from "@voya/utils/formatting";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -56,6 +58,41 @@ export function isExpired(
 
 export function isTrafficExhausted(metadata: SubscriptionMetadata | null | undefined): boolean {
   return remainingTrafficBytes(metadata) === 0;
+}
+
+/**
+ * What a subscription's server says is left of it, in words: the remaining
+ * traffic when it reports a quota, and the remaining days — or that it has
+ * expired — when it reports an expiry. A figure the server does not report is
+ * left out rather than shown as zero, and one that has run out is marked.
+ */
+export function subscriptionUsageStats(
+  metadata: SubscriptionMetadata | null | undefined,
+  t: TranslationFunction,
+  nowMs: number = Date.now(),
+): { destructive: boolean; key: "days" | "traffic"; label: string }[] {
+  const stats: ReturnType<typeof subscriptionUsageStats> = [];
+  const remaining = remainingTrafficBytes(metadata);
+  if (remaining != null) {
+    stats.push({
+      destructive: remaining === 0,
+      key: "traffic",
+      label: t("home.subscriptionCard.remainingTraffic", { amount: formatBytes(remaining) }),
+    });
+  }
+  const days = remainingDays(metadata?.expireAt, nowMs);
+  if (days != null) {
+    const expired = isExpired(metadata?.expireAt, nowMs);
+    stats.push({
+      destructive: expired,
+      key: "days",
+      label: expired
+        ? t("home.subscriptionCard.expired")
+        : t("home.subscriptionCard.remainingDays", { days }),
+    });
+  }
+
+  return stats;
 }
 
 /** Largest sensible unit + signed value for `Intl.RelativeTimeFormat`. */

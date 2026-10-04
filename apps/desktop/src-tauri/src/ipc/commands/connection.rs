@@ -9,7 +9,7 @@ pub async fn connection_mode_status(
     state: tauri::State<'_, AppState>,
 ) -> Result<ConnectionModeStatus, AppError> {
     let config = state.config_mutations().current_config();
-    let tun_status = tun_status_off_thread(&state, config.clone()).await?;
+    let tun_status = tun_manager(&state).status_off_thread(&config).await?;
 
     Ok(voya_app::connection_mode::connection_mode_status(
         &config,

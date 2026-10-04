@@ -23,6 +23,9 @@ pub(crate) const TRAY_ID: &str = "main";
 
 /// Set while a rebuild is queued, so a burst of state changes costs one.
 static REFRESH_QUEUED: AtomicBool = AtomicBool::new(false);
+/// Held across one rebuild. A rebuild reads its snapshot and then applies it,
+/// so two at once could finish out of order and leave the older menu showing.
+static REBUILD: tauri::async_runtime::Mutex<()> = tauri::async_runtime::Mutex::const_new(());
 
 pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     // Built without the node list, then refreshed off the startup path.
@@ -75,6 +78,9 @@ pub(crate) fn refresh_tray_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>) ->
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        let _rebuild = REBUILD.lock().await;
+        // Cleared only now: a change that lands from here on queues the next
+        // rebuild, and one that landed while this waited is already covered.
         REFRESH_QUEUED.store(false, Ordering::SeqCst);
         if let Err(error) = rebuild_tray(&app).await {
             tracing::warn!(?error, "failed to rebuild the tray menu");

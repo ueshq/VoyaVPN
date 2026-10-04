@@ -45,7 +45,7 @@ export const VOYA_COMMAND_WIRE = {
 	deleteProfiles: { name: "delete_profiles", params: ["indexIds"] },
 	exportProfileShareLinks: { name: "export_profile_share_links", params: ["indexIds"] },
 	setActiveProfile: { name: "set_active_profile", params: ["indexId"] },
-	moveProfile: { name: "move_profile", params: ["subscriptionId", "indexId", "action", "position"] },
+	moveProfile: { name: "move_profile", params: ["indexId", "action", "position"] },
 	listPolicyGroups: { name: "list_policy_groups", params: [] },
 	savePolicyGroup: { name: "save_policy_group", params: ["group"] },
 	deletePolicyGroups: { name: "delete_policy_groups", params: ["ids"] },

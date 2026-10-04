@@ -7,6 +7,7 @@ import type {
   RuntimeStatusResponse,
   VoyaCommands,
 } from "@voya/contracts";
+import { queryKeys } from "./query-keys";
 import { useRuntimeEventStore } from "./runtime-event-store";
 import { beginRuntimeRead } from "./runtime-state-version";
 import { useRuntimeActionStore } from "./runtime-action-store";
@@ -365,7 +366,9 @@ describe("selectProfile", () => {
 
     await expect(selecting).resolves.toBe(true);
     expect(ipcMocks.setActiveProfile).toHaveBeenCalledWith("node");
-    expect(invalidate).toHaveBeenCalledOnce();
+    // Only the node list, which carries the active marker: an unscoped
+    // invalidation would refetch every mounted query in the app.
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith({ queryKey: queryKeys.profiles });
     expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
     expect(useRuntimeActionStore.getState().switchingId).toBeNull();
   });

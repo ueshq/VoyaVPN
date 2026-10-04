@@ -7,6 +7,8 @@ use voya_core::{
 };
 use voya_db::AppStateRecord;
 
+use crate::dns::normalize_dns;
+
 use super::{
     close_action_from_contract, close_action_to_contract, dns_from_contract, dns_to_contract,
     sysproxy_type_from_contract, sysproxy_type_to_contract, tls_fragment_mode_from_contract,
@@ -69,7 +71,11 @@ pub fn settings_from_app_config(config: &AppConfig) -> contracts::AppSettings {
                 })
                 .collect(),
         },
-        dns: dns_to_contract(config.dns.clone()),
+        // Normalized so the settings view states the same DNS values the
+        // dedicated DNS read does: a fresh install would otherwise show empty
+        // fields and off switches here while a save silently materializes the
+        // defaults behind them.
+        dns: dns_to_contract(normalize_dns(config.dns.clone())),
         speed_test: contracts::SpeedtestSettings {
             timeout_seconds: config.speed_test.timeout_seconds,
             latency_url: config.speed_test.latency_url.clone(),
@@ -194,7 +200,9 @@ pub fn app_config_from_settings(
                 secondary_port_enabled: item.secondary_port_enabled,
             })
             .collect(),
-        dns: dns_from_contract(settings.dns.clone()),
+        // The same normalization on the way in: a settings write is a full
+        // replacement, so blank DNS fields must not persist as blank.
+        dns: normalize_dns(dns_from_contract(settings.dns.clone())),
     }
 }
 
@@ -375,7 +383,7 @@ mod tests {
             &contracts::AppSettings::default(),
             &AppStateRecord::default(),
         );
-        mapped.dns = crate::dns::normalize_dns(mapped.dns);
+        mapped.dns = normalize_dns(mapped.dns);
 
         assert_eq!(
             mapped,

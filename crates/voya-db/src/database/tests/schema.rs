@@ -39,7 +39,7 @@ async fn current_baseline_is_the_only_initialization_record() {
             .await
             .expect("records");
     assert_eq!(records.len(), 1);
-    assert_eq!((records[0].0, records[0].1), (11, 1));
+    assert_eq!((records[0].0, records[0].1), (12, 1));
     assert_eq!(MIGRATOR.iter().count(), 1);
     assert_eq!(
         records[0].2,
@@ -55,13 +55,13 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
         "UPDATE _sqlx_migrations SET success = 0",
         "UPDATE _sqlx_migrations SET success = 2",
         "UPDATE _sqlx_migrations SET checksum = X'00'",
-        "UPDATE _sqlx_migrations SET version = 12",
+        "UPDATE _sqlx_migrations SET version = 13",
         "INSERT INTO _sqlx_migrations SELECT 8, description, installed_on, success, checksum, execution_time FROM _sqlx_migrations",
         "ALTER TABLE _sqlx_migrations DROP COLUMN checksum",
         "UPDATE _sqlx_migrations SET version = 'invalid'",
     ];
     let old_versions =
-        (1..=10).map(|version| ("UPDATE _sqlx_migrations SET version = ?", Some(version)));
+        (1..=11).map(|version| ("UPDATE _sqlx_migrations SET version = ?", Some(version)));
     for (mutation, version) in mutations
         .into_iter()
         .map(|sql| (sql, None))
@@ -104,7 +104,7 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
         assert!(
             matches!(
                 error,
-                DbError::UnsupportedDatabaseSchema { expected: 11, .. }
+                DbError::UnsupportedDatabaseSchema { expected: 12, .. }
             ),
             "{mutation}: {error}"
         );
@@ -122,6 +122,42 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
             assert!(!PathBuf::from(format!("{}{suffix}", fixture.path().display())).exists());
         }
     }
+}
+
+/// The 2026-10 incident: commit e26f46e edited the baseline file in place, so
+/// databases created by either side of that edit record the same version with
+/// different checksums. The refusal must name the checksum, not print the
+/// absurd "found version Some(11), expected version 11".
+#[tokio::test]
+async fn a_same_version_stale_checksum_baseline_names_the_checksum() {
+    let fixture = TempDatabase::new("stale-checksum.sqlite");
+    let database = Database::connect(fixture.path())
+        .await
+        .expect("current database");
+    database
+        .profiles()
+        .upsert(&sample_profile())
+        .await
+        .expect("user data");
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = X'deadbeef'")
+        .execute(database.pool())
+        .await
+        .expect("stale checksum at the current version");
+    database.close().await;
+
+    let error = Database::connect(fixture.path())
+        .await
+        .expect_err("stale baseline");
+    assert!(matches!(
+        error,
+        DbError::UnsupportedDatabaseSchema {
+            reason: SchemaRejectionReason::ChecksumMismatch,
+            ..
+        }
+    ));
+    let message = error.to_string();
+    assert!(message.contains("checksum"), "{message}");
+    assert!(!message.contains("rm "), "{message}");
 }
 
 #[tokio::test]

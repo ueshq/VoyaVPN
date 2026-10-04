@@ -1,9 +1,8 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import { IpcCommandError } from "@voya/client/errors";
 import { setClipboard } from "@voya/client/platform";
-import type { MockBackend } from "@voya/client/mock-backend";
-import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
-import { mockTransport } from "~/test/mock-transport";
+import { registerMobileBackend } from "~/ipc/platform";
+import { mockBackend, mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
 import { makeTestQueryClient, TestProviders } from "~/test/providers";
 import * as native from "~/native/device-actions";
@@ -19,7 +18,7 @@ function mockDeviceActions(actions: Partial<DeviceActions>) {
 beforeAll(async () => { await localeReady; });
 test("preview is read-only; confirming imports and updates only subscription sources", async () => {
   registerMobileBackend(mockTransport());
-  const backend = voyaTransport() as MockBackend;
+  const backend = mockBackend();
   const client = makeTestQueryClient();
   const readText = jest.fn(async () => "https://provider.example.test/new\nvless://token@example.test:443#Mixed");
   setClipboard({ readText, writeText: async () => {} });
@@ -28,7 +27,10 @@ test("preview is read-only; confirming imports and updates only subscription sou
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
   await user.press(screen.getByText("Preview"));
-  await screen.findByText("Found 1 nodes, 1 subscriptions and 0 invalid items.");
+  await screen.findByText("Found 1 node, 1 subscription and 0 invalid items.");
+  // The preview names the protocol the way the rest of the app does — the
+  // label, not the raw scheme the parser reported.
+  expect(screen.getByText("Mixed · VLESS · example.test")).toBeOnTheScreen();
   expect(backend.state.calls.some((call) => call.command === "importProfilesFromText")).toBe(false);
   expect(screen.queryByText("Read clipboard")).toBeNull();
   await user.press(screen.getByText("Edit"));
@@ -41,13 +43,31 @@ test("preview is read-only; confirming imports and updates only subscription sou
   await unmount(); client.clear();
 });
 
+test("a subscription's downloaded nodes count as imported, and lead on to the node list", async () => {
+  registerMobileBackend(mockTransport());
+  const client = makeTestQueryClient();
+  setClipboard({ readText: async () => "https://provider.example.test/only", writeText: async () => {} });
+  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const user = userEvent.setup();
+  await user.press(screen.getByText("Read clipboard"));
+  await user.press(screen.getByText("Preview"));
+  await user.press(await screen.findByText("Confirm import"));
+
+  // The link itself is no node; the node arrives with the subscription's
+  // first download, which is part of the same import as far as the user goes.
+  expect(await screen.findByText("Choose a node")).toBeOnTheScreen();
+  expect(screen.getByText(/Imported 1 node/)).toBeOnTheScreen();
+  expect(screen.queryByText(/Imported 0 nodes/)).toBeNull();
+  await unmount(); client.clear();
+});
+
 test("camera denial offers recovery and multiple image codes require a choice before preview", async () => {
   registerMobileBackend(mockTransport());
   const device = mockDeviceActions({
     scanQr: jest.fn().mockRejectedValue({ code: "cameraDenied" }),
     pickQr: jest.fn().mockResolvedValue(["vless://one@example.test:443#One", "vless://two@example.test:443#Two"]),
   });
-  const backend = voyaTransport() as MockBackend;
+  const backend = mockBackend();
   const client = makeTestQueryClient();
   const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
   const user = userEvent.setup();
@@ -79,7 +99,7 @@ test("an unknown native failure uses a general recovery message, not invalid-lin
 // screen that must not read as "This item no longer exists".
 test("text with nothing importable gets import advice, whichever way the backend reports it", async () => {
   registerMobileBackend(mockTransport());
-  const backend = voyaTransport() as MockBackend;
+  const backend = mockBackend();
   const client = makeTestQueryClient();
   setClipboard({ readText: async () => "not-a-node", writeText: async () => {} });
   const preview = jest.spyOn(backend.commands, "previewImportProfiles")
@@ -101,7 +121,7 @@ test("text with nothing importable gets import advice, whichever way the backend
 
 test("a subscription line in the preview is information, not a red problem", async () => {
   registerMobileBackend(mockTransport());
-  const backend = voyaTransport() as MockBackend;
+  const backend = mockBackend();
   const client = makeTestQueryClient();
   setClipboard({ readText: async () => "https://provider.example.test/sub", writeText: async () => {} });
   const preview = jest.spyOn(backend.commands, "previewImportProfiles").mockResolvedValue({
@@ -112,7 +132,7 @@ test("a subscription line in the preview is information, not a red problem", asy
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
   await user.press(screen.getByText("Preview"));
-  await screen.findByText("Line 1 was added as a subscription; it is being updated to import its nodes.");
+  await screen.findByText("Line 1 will be added as a subscription and updated to import its nodes once you confirm.");
   preview.mockRestore(); await unmount(); client.clear();
 });
 
@@ -124,7 +144,7 @@ test("after a confirmed import the summary replaces the input form until the use
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
   await user.press(screen.getByText("Preview"));
-  await screen.findByText("Found 1 nodes, 1 subscriptions and 0 invalid items.");
+  await screen.findByText("Found 1 node, 1 subscription and 0 invalid items.");
   await user.press(screen.getByText("Confirm import"));
   await screen.findByText(/Imported \d+ node/);
 
@@ -136,5 +156,32 @@ test("after a confirmed import the summary replaces the input form until the use
 
   await user.press(screen.getByText("Add nodes or subscription"));
   expect(screen.getByText("Read clipboard")).toBeOnTheScreen();
+  await unmount(); client.clear();
+});
+
+test("a summary with no imported nodes offers no node picker", async () => {
+  registerMobileBackend(mockTransport());
+  // A subscription that downloads, and has nothing in it.
+  mockBackend().commands.updateSubscriptions = async (subscriptionId) => ({
+    imported: 0,
+    messages: [],
+    outcomes: [{ subscriptionId: subscriptionId ?? "", status: "success", reason: "updated", imported: 0, removedExisting: 0, diagnostic: null }],
+    removedExisting: 0,
+    skipped: 0,
+    updated: 0,
+  });
+  const client = makeTestQueryClient();
+  setClipboard({ readText: async () => "https://provider.example.test/only-a-subscription", writeText: async () => {} });
+  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const user = userEvent.setup();
+  await user.press(screen.getByText("Read clipboard"));
+  await user.press(screen.getByText("Preview"));
+  await screen.findByText("Found 0 nodes, 1 subscription and 0 invalid items.");
+  await user.press(screen.getByText("Confirm import"));
+  await screen.findByText("Imported 0 nodes.");
+
+  // Nothing was imported, so the only sensible next step is importing again.
+  expect(screen.queryByText("Choose a node")).toBeNull();
+  expect(screen.getByText("Add nodes or subscription")).toBeOnTheScreen();
   await unmount(); client.clear();
 });

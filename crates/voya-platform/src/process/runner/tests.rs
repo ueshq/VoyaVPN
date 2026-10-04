@@ -310,6 +310,28 @@ impl ProcessExitHandler for RecordingExitHandler {
     }
 }
 
+/// A helper that started and hung is not one that could not be started; the
+/// two send whoever reads the error looking in different places.
+#[cfg(unix)]
+#[test]
+fn std_process_runner_reports_a_hung_helper_as_timed_out() {
+    let timeout = Duration::from_millis(100);
+
+    let error = StdProcessRunner::new()
+        .run_oneshot(
+            ProcessSpawn::new(ProcessRole::Probe, "/bin/sh")
+                .with_arguments(["-c".to_string(), "sleep 30".to_string()])
+                .with_timeout(timeout),
+        )
+        .expect_err("the helper is cut off");
+
+    assert!(
+        matches!(&error, ProcessError::TimedOut { executable, timeout: reported }
+            if executable == Path::new("/bin/sh") && *reported == timeout),
+        "{error:?}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn std_process_runner_reports_and_reaps_exited_children() {

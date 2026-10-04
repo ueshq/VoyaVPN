@@ -24,6 +24,23 @@ describe("Windows title-bar controls", () => {
     vi.clearAllMocks();
     windowMocks.isWindowMaximized.mockResolvedValue(false);
     windowMocks.onWindowResized.mockResolvedValue(vi.fn());
+    // Commands answer with promises, as the real binding does.
+    windowMocks.closeWindow.mockResolvedValue(undefined);
+    windowMocks.minimizeWindow.mockResolvedValue(undefined);
+    windowMocks.toggleMaximizeWindow.mockResolvedValue(undefined);
+  });
+
+  it("leaves a window command that fails without an unhandled rejection", async () => {
+    const user = userEvent.setup();
+    windowMocks.minimizeWindow.mockRejectedValue(new Error("no window"));
+    windowMocks.isWindowMaximized.mockRejectedValue(new Error("no window"));
+    render(<TitleBar layout="windows" />);
+
+    await waitFor(() => expect(windowMocks.isWindowMaximized).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Minimize" }));
+
+    // Vitest fails the run on an unhandled rejection; reaching here is the test.
+    expect(windowMocks.minimizeWindow).toHaveBeenCalledOnce();
   });
 
   it("minimizes, maximizes, and closes the active window", async () => {

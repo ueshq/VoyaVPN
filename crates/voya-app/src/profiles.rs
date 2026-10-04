@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use thiserror::Error;
 use voya_contracts::MoveAction;
 use voya_core::{
@@ -225,10 +227,7 @@ impl<'db> ProfileManager<'db> {
                 };
                 existing.index_id.clone_from(&profile.index_id);
                 if !voya_core::profile_items_match(previous, &profile, false) {
-                    existing.country_code = None;
-                    existing.delay = 0;
-                    existing.message = None;
-                    existing.ip_info = None;
+                    existing.clear_measurements();
                 }
                 existing
             }
@@ -282,11 +281,11 @@ impl<'db> ProfileManager<'db> {
         ))
     }
 
-    /// Moves a manual node within its list. The caller refetches the listing
+    /// Moves a manual node among the manual nodes; a subscription's nodes keep
+    /// the order their source gave them. The caller refetches the listing
     /// through the invalidation this causes, so nothing is returned.
     pub async fn move_profile(
         &self,
-        subscription_id: Option<&str>,
         index_id: &str,
         action: MoveAction,
         position: Option<i32>,
@@ -298,16 +297,10 @@ impl<'db> ProfileManager<'db> {
             .list_with_profile_ex(None)
             .await?
             .items;
-        if !items.iter().any(|(p, _)| p.index_id == index_id) {
-            return Err(ProfileManagerError::ProfileNotFound(index_id.to_string()));
-        }
         let members = items
             .iter()
             .enumerate()
-            .filter(|(_, (p, _))| {
-                p.subscription_id.is_none()
-                    && subscription_id.is_none_or(|id| p.subscription_id.as_deref() == Some(id))
-            })
+            .filter(|(_, (p, _))| p.subscription_id.is_none())
             .collect::<Vec<_>>();
         let from = members
             .iter()
@@ -328,62 +321,41 @@ impl<'db> ProfileManager<'db> {
             .collect::<Vec<_>>();
         let moved = ordered.remove(from);
         ordered.insert(to, moved);
-        self.renumber_sort(&items).await?;
+        let sort_of = members
+            .iter()
+            .map(|(_, (p, ex))| (p.index_id.as_str(), ex.sort))
+            .collect::<HashMap<_, _>>();
+        // Each manual node takes the gap-based key of the slot it lands in, so
+        // the list reads `10, 20, 30, …` with subscription nodes keeping theirs.
+        // Rows already carrying their key are left out: after the first move
+        // only the rows between the old and the new position change. The rest
+        // go out in one transaction — one at a time cost a commit, and its
+        // fsync, per node.
         let updates = members
             .iter()
             .zip(ordered)
-            .map(|((slot, _), id)| {
-                (
-                    id,
+            .filter_map(|((slot, _), id)| {
+                let sort =
                     (i32::try_from(*slot).unwrap_or(i32::MAX / DEFAULT_PROFILE_SORT_STEP - 1) + 1)
-                        * DEFAULT_PROFILE_SORT_STEP,
-                )
+                        * DEFAULT_PROFILE_SORT_STEP;
+                (sort_of.get(id) != Some(&sort)).then_some((id, sort))
             })
             .collect::<Vec<_>>();
         self.database.profile_exs().set_sort_many(&updates).await?;
         Ok(())
     }
 
-    /// Rewrites the gap-based sort keys so the list reads `10, 20, 30, …`.
-    ///
-    /// The gaps are what let `move_profile` place a row between two neighbours
-    /// with a single `±1` write. Rows that already carry their target value are
-    /// left out of the batch, because after the first renumber a move only
-    /// actually shifts the rows between the old and the new position.
-    ///
-    /// Every remaining row goes out through `set_sort_many`, which applies the
-    /// whole ordering in one transaction. Writing them one at a time cost an
-    /// autocommit — and its fsync — per profile, so reordering a large
-    /// subscription paid hundreds of commits for a single user gesture.
-    async fn renumber_sort(&self, items: &[(ProfileItem, ProfileExItem)]) -> Result<()> {
-        let reordered = items
-            .iter()
-            .enumerate()
-            .filter_map(|(offset, (profile, profile_ex))| {
-                let sort =
-                    (i32::try_from(offset).unwrap_or(i32::MAX - 1) + 1) * DEFAULT_PROFILE_SORT_STEP;
-                (profile.subscription_id.is_none() && profile_ex.sort != sort)
-                    .then_some((profile.index_id.as_str(), sort))
-            })
-            .collect::<Vec<_>>();
-
-        Ok(self
-            .database
-            .profile_exs()
-            .set_sort_many(&reordered)
-            .await?)
-    }
-
     /// Validate a complete user mutation before its first write.
     pub(crate) async fn require_manual(&self, ids: &[String]) -> Result<()> {
-        for id in ids {
-            if let Some(profile) = self.database.profiles().get(id).await? {
-                if let Some(owner) = profile.subscription_id {
-                    return Err(ProfileManagerError::SubscriptionReadOnly(owner));
-                }
-            }
+        match self
+            .database
+            .profiles()
+            .first_subscription_owner(ids)
+            .await?
+        {
+            Some(owner) => Err(ProfileManagerError::SubscriptionReadOnly(owner)),
+            None => Ok(()),
         }
-        Ok(())
     }
 
     pub async fn ensure_active_profile(&self, config: &mut AppConfig) -> Result<bool> {
@@ -615,110 +587,9 @@ fn empty_server_stat(index_id: &str) -> ServerStatItem {
     }
 }
 
-// The contract-typed node use cases both hosts share: each checks its
-// arguments, runs the mutation and returns what was committed.
+mod use_cases;
 
-/// Saves a manual node.
-pub async fn save_profile_use_case(
-    mutations: &crate::config_mutation::ConfigMutationCoordinator,
-    profile: voya_contracts::Profile,
-) -> std::result::Result<
-    crate::config_mutation::CommittedMutation<voya_contracts::ProfileDetails>,
-    voya_contracts::AppError,
-> {
-    mutations
-        .mutate(
-            async |unit_of_work, config| -> std::result::Result<_, voya_contracts::AppError> {
-                Ok(crate::contract_map::profile_details_to_contract(
-                    ProfileManager::new_in(unit_of_work)
-                        .save_profile(config, crate::contract_map::profile_from_contract(profile))
-                        .await?,
-                ))
-            },
-        )
-        .await
-}
-
-/// Deletes manual nodes, which may include the running one.
-pub async fn delete_profiles_use_case(
-    mutations: &crate::config_mutation::ConfigMutationCoordinator,
-    index_ids: Vec<String>,
-) -> std::result::Result<crate::config_mutation::CommittedMutation<u32>, voya_contracts::AppError> {
-    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS};
-    map_ipc_input(
-        input_safety::validate_text_list(&index_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "node id",
-        voya_contracts::AppErrorSubsystem::Profile,
-    )?;
-    mutations
-        .mutate(
-            async |unit_of_work, config| -> std::result::Result<_, voya_contracts::AppError> {
-                let deleted = ProfileManager::new_in(unit_of_work)
-                    .delete_profiles(config, &index_ids)
-                    .await?;
-                Ok(u32::try_from(deleted).unwrap_or(u32::MAX))
-            },
-        )
-        .await
-}
-
-/// Makes a node the one connecting uses.
-pub async fn set_active_profile_use_case(
-    mutations: &crate::config_mutation::ConfigMutationCoordinator,
-    index_id: String,
-) -> std::result::Result<
-    crate::config_mutation::CommittedMutation<voya_contracts::ProfileDetails>,
-    voya_contracts::AppError,
-> {
-    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS};
-    map_ipc_input(
-        input_safety::validate_required_text(&index_id, IPC_ID_MAX_CHARS),
-        "node id",
-        voya_contracts::AppErrorSubsystem::Profile,
-    )?;
-    mutations
-        .mutate(
-            async |unit_of_work, config| -> std::result::Result<_, voya_contracts::AppError> {
-                Ok(crate::contract_map::profile_details_to_contract(
-                    ProfileManager::new_in(unit_of_work)
-                        .set_active_profile(config, &index_id)
-                        .await?,
-                ))
-            },
-        )
-        .await
-}
-
-/// Moves a node within its subscription, or among the manual nodes.
-pub async fn move_profile_use_case(
-    mutations: &crate::config_mutation::ConfigMutationCoordinator,
-    subscription_id: Option<String>,
-    index_id: String,
-    action: MoveAction,
-    position: Option<i32>,
-) -> std::result::Result<(), voya_contracts::AppError> {
-    use crate::input_safety::{self, map_ipc_input, IPC_ID_MAX_CHARS};
-    map_ipc_input(
-        input_safety::validate_present_text(subscription_id.as_deref(), IPC_ID_MAX_CHARS),
-        "subscription id",
-        voya_contracts::AppErrorSubsystem::Profile,
-    )?;
-    map_ipc_input(
-        input_safety::validate_required_text(&index_id, IPC_ID_MAX_CHARS),
-        "node id",
-        voya_contracts::AppErrorSubsystem::Profile,
-    )?;
-    mutations
-        .mutate(
-            async |unit_of_work, _config| -> std::result::Result<_, voya_contracts::AppError> {
-                Ok(ProfileManager::new_in(unit_of_work)
-                    .move_profile(subscription_id.as_deref(), &index_id, action, position)
-                    .await?)
-            },
-        )
-        .await?;
-    Ok(())
-}
+pub use use_cases::*;
 
 #[cfg(test)]
 mod tests {
@@ -829,7 +700,7 @@ mod tests {
 
         config.active_profile_id = "a".to_string();
         manager
-            .move_profile(None, &c.profile.index_id, MoveAction::Top, None)
+            .move_profile(&c.profile.index_id, MoveAction::Top, None)
             .await
             .expect("profile manager test operation should succeed");
         let moved = manager
@@ -887,7 +758,7 @@ mod tests {
         ));
         assert!(matches!(
             manager
-                .move_profile(Some("sub-scope"), "s3", MoveAction::Position, Some(0))
+                .move_profile("s3", MoveAction::Position, Some(0))
                 .await,
             Err(ProfileManagerError::SubscriptionReadOnly(_))
         ));
@@ -909,11 +780,54 @@ mod tests {
         );
     }
 
-    /// `renumber_sort` pushes the whole ordering through one batched write, so
-    /// the gap-based keys it hands out and the speedtest results it must leave
-    /// alone are pinned here.
+    /// The ownership check is one statement for the whole selection, so the
+    /// largest batch the IPC boundary admits is still refused by its last id.
     #[tokio::test]
-    async fn renumber_sort_rewrites_gap_based_keys_without_touching_measurements() {
+    async fn the_largest_batch_is_refused_by_a_subscription_node_at_its_end() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
+        database
+            .subscriptions()
+            .upsert(&SubItem {
+                id: "sub-tail".to_string(),
+                remarks: "Tail".to_string(),
+                url: "https://example.test/tail".to_string(),
+                ..SubItem::default()
+            })
+            .await
+            .expect("profile manager test operation should succeed");
+        let manager = ProfileManager::new(&database);
+        let mut config = AppConfig::default();
+        manager
+            .save_profile(&mut config, sample_profile("manual", "Manual", 500))
+            .await
+            .expect("profile manager test operation should succeed");
+        let mut owned = sample_profile("owned", "Owned", 600);
+        owned.subscription_id = Some("sub-tail".to_string());
+        manager
+            .save_imported_profile(&mut config, owned)
+            .await
+            .expect("profile manager test operation should succeed");
+
+        let mut ids = (0..crate::input_safety::IPC_LIST_MAX_ITEMS - 2)
+            .map(|index| format!("unknown-{index}"))
+            .collect::<Vec<_>>();
+        ids.push("manual".to_string());
+        ids.push("owned".to_string());
+
+        assert!(matches!(
+            manager.delete_profiles(&mut config, &ids).await,
+            Err(ProfileManagerError::SubscriptionReadOnly(owner)) if owner == "sub-tail"
+        ));
+        assert_eq!(database.profiles().list().await.expect("profiles").len(), 2);
+    }
+
+    /// A move writes the whole ordering in one batch, so the gap-based keys
+    /// it hands out and the speedtest results it must leave alone are pinned
+    /// here.
+    #[tokio::test]
+    async fn moving_a_node_hands_out_gap_based_keys_without_touching_measurements() {
         let database = Database::connect_in_memory()
             .await
             .expect("profile manager test operation should succeed");
@@ -938,31 +852,29 @@ mod tests {
             .await
             .expect("seed measurement");
 
-        let mut items = database
-            .profiles()
-            .list_with_profile_ex(None)
-            .await
-            .expect("profile manager test operation should succeed")
-            .items;
-        items.reverse();
+        let listed = || async {
+            manager
+                .list_summaries(&config)
+                .await
+                .expect("profile manager test operation should succeed")
+                .items
+                .into_iter()
+                .map(|item| (item.profile.remarks, item.profile_ex.sort))
+                .collect::<Vec<_>>()
+        };
+        let keyed = |order: [&str; 4]| {
+            order
+                .into_iter()
+                .zip([10, 20, 30, 40])
+                .map(|(remarks, sort)| (remarks.to_string(), sort))
+                .collect::<Vec<_>>()
+        };
+
         manager
-            .renumber_sort(&items)
+            .move_profile("r4", MoveAction::Top, None)
             .await
             .expect("profile manager test operation should succeed");
-        let renumbered = manager
-            .list_summaries(&config)
-            .await
-            .expect("profile manager test operation should succeed")
-            .items;
-
-        assert_eq!(
-            renumbered
-                .iter()
-                .map(|item| (item.profile.remarks.as_str(), item.profile_ex.sort))
-                .collect::<Vec<_>>(),
-            vec![("R4", 10), ("R3", 20), ("R2", 30), ("R1", 40)],
-            "a renumber must hand out the gap-based keys in listing order"
-        );
+        assert_eq!(listed().await, keyed(["R4", "R1", "R2", "R3"]));
         assert_eq!(
             database
                 .profile_exs()
@@ -971,33 +883,22 @@ mod tests {
                 .expect("profile manager test operation should succeed")
                 .delay,
             123,
-            "a batched renumber must not discard speedtest results"
+            "a batched reorder must not discard speedtest results"
         );
 
-        // Re-numbering the persisted order has nothing left to move and must
-        // preserve the existing gap-based keys.
-        let items = database
-            .profiles()
-            .list_with_profile_ex(None)
-            .await
-            .expect("profile manager test operation should succeed")
-            .items;
+        // A move that leaves the node where it is has nothing to write and
+        // must keep the keys as they are.
         manager
-            .renumber_sort(&items)
+            .move_profile("r4", MoveAction::Top, None)
             .await
             .expect("profile manager test operation should succeed");
-        let renumbered_again = manager
-            .list_summaries(&config)
+        assert_eq!(listed().await, keyed(["R4", "R1", "R2", "R3"]));
+
+        manager
+            .move_profile("r1", MoveAction::Bottom, None)
             .await
-            .expect("profile manager test operation should succeed")
-            .items;
-        assert_eq!(
-            renumbered_again
-                .iter()
-                .map(|item| (item.profile.remarks.as_str(), item.profile_ex.sort))
-                .collect::<Vec<_>>(),
-            vec![("R4", 10), ("R3", 20), ("R2", 30), ("R1", 40)]
-        );
+            .expect("profile manager test operation should succeed");
+        assert_eq!(listed().await, keyed(["R4", "R2", "R3", "R1"]));
     }
 
     fn sample_profile(index_id: &str, remarks: &str, port: i32) -> ProfileItem {

@@ -1,6 +1,6 @@
 use voya_app::subscriptions::{
     delete_subscriptions_use_case, import_profiles_use_case, save_subscription_use_case,
-    update_subscriptions_use_case,
+    update_subscriptions_use_case, SubscriptionWrite,
 };
 
 use super::{post_commit::*, *};
@@ -113,15 +113,23 @@ pub async fn update_subscriptions<R: tauri::Runtime>(
         TargetOs::current(),
     )
     .await?;
-    if let Some(config_changed) = update.config_changed {
-        emit_then_disconnect_removed(&app, &state, |app| {
-            emit_invalidation(
-                app,
-                "subscriptions-updated",
-                invalidation::subscription_scopes(true, config_changed),
-            )
-        })
-        .await?;
+    match update.written {
+        SubscriptionWrite::Nothing => {}
+        SubscriptionWrite::FailuresOnly => emit_invalidation(
+            &app,
+            "subscriptions-updated",
+            invalidation::subscription_scopes(false, false),
+        ),
+        SubscriptionWrite::Nodes { config_changed } => {
+            emit_then_disconnect_removed(&app, &state, |app| {
+                emit_invalidation(
+                    app,
+                    "subscriptions-updated",
+                    invalidation::subscription_scopes(true, config_changed),
+                )
+            })
+            .await?;
+        }
     }
 
     Ok(update.result)

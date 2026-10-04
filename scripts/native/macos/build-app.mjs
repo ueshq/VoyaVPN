@@ -1,16 +1,24 @@
 import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, checkedCapture, isCliEntrypoint, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import {
+  captureSpawned,
+  isCliEntrypoint,
+  repoRootFromScript,
+  run,
+  runCli,
+  truthy,
+} from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
 import { appBundleIdentifier, packetTunnelBundleIdentifier, resolveDmgPath } from "./tunnel-layout.mjs";
 import { requestedMacAppStoreBuild } from "../../tauri/mac-app-store-config.mjs";
-import { prepareVoyaForLocalBuild } from "./local-runtime.mjs";
+import { defaultIsProcessRunning, prepareVoyaForLocalBuild } from "./local-runtime.mjs";
 import {
   defaultProvisioningProfileDir,
   distributionProfileLabel,
   formatProfileSelectionError,
   installedProvisioningProfileDir,
   localProvisioningUdid,
+  plistBuddy,
   resolveProfileFromEnv,
   resolveSigningIdentity,
 } from "./provisioning.mjs";
@@ -28,13 +36,10 @@ function commandOptions(env = process.env) {
 }
 
 function commandStatus(program, args, env = process.env) {
-  const result = capture(program, args, {
+  const result = captureSpawned(program, args, {
     ...commandOptions(env),
     stdio: "inherit",
   });
-  if (result.error) {
-    throw result.error;
-  }
   return result.status ?? 1;
 }
 
@@ -115,37 +120,22 @@ function requireNotaryCredentials(lane) {
   );
 }
 
-function plistValue(plistPath, keyPath) {
-  return checkedCapture("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], commandOptions()).stdout.trim();
-}
-
 function installedExecutableName() {
   const infoPlist = resolve(installedAppBundle, "Contents", "Info.plist");
   if (!existsSync(infoPlist)) {
     return "VoyaVPN";
   }
-  try {
-    return plistValue(infoPlist, ":CFBundleExecutable") || "VoyaVPN";
-  } catch {
-    return "VoyaVPN";
-  }
+  return plistBuddy(infoPlist, ":CFBundleExecutable", true) || "VoyaVPN";
 }
 
 function installedAppExecutableNames() {
   return new Set([installedExecutableName(), "voyavpn", "VoyaVPN"]);
 }
 
+// A `pgrep` that fails outright is an error, not "nothing is running": this
+// guards replacing the installed app.
 function runningExecutables(executables) {
-  const running = [];
-  for (const executable of new Set(executables)) {
-    const result = capture("pgrep", ["-x", executable], {
-      cwd: repoRoot,
-    });
-    if (result.status === 0) {
-      running.push(executable);
-    }
-  }
-  return running;
+  return [...new Set(executables)].filter(defaultIsProcessRunning);
 }
 
 function assertInstalledAppGuiNotRunning() {
@@ -399,10 +389,5 @@ function main() {
 
 // Guarded like sign-app.mjs: importing this module must not start a build.
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

@@ -6,13 +6,13 @@
 //! a Clash API delay request against the PacketTunnel core. While disconnected
 //! the manager launches probe cores from the packaged seed instead.
 
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, sync::OnceLock};
 
 use futures_util::{stream, StreamExt};
 use voya_core::{is_latency_probe_candidate, latency_probe_tag, ConfigType};
-use voya_net::clash::{ClashError, ClashRestClient};
+use voya_net::clash::{ClashError, ClashHttpTransport, ClashRestClient, ReqwestClashHttpTransport};
 
-use super::manager::{next_ready_batch, persist_and_report, record_item_failures};
+use super::manager::{next_ready_batch, persist_and_report, record_item_failures, Recorded};
 use super::*;
 use crate::proxy_runtime::proxy_runtime_endpoint;
 use crate::supervisor::{CoreSupervisor, SupervisorConnectionState};
@@ -21,14 +21,16 @@ use crate::supervisor::{CoreSupervisor, SupervisorConnectionState};
 /// Clash transport abandons any request after 30 s.
 const RUNNING_CORE_TIMEOUT_MS: RangeInclusive<u32> = 1_000..=25_000;
 
-/// Reaches the running core for a speedtest run.
-///
-/// `connect` returns a delay client bound to the core running now, or `None`
-/// while nothing is connected (which sends the run to probe cores). The same
-/// trait carries `delay` so a connected run and its handle are one object.
+/// Finds the running core for a speedtest run: a delay client bound to the
+/// core running now, or `None` while nothing is connected (which sends the run
+/// to probe cores).
 pub trait RunningCoreProbe: Send + Sync {
-    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>>;
+    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreDelay>>>;
+}
 
+/// Measures one probe outbound through the core [`RunningCoreProbe::connect`]
+/// found.
+pub trait RunningCoreDelay: Send + Sync {
     fn delay(
         &self,
         tag: String,
@@ -40,18 +42,25 @@ pub trait RunningCoreProbe: Send + Sync {
 #[derive(Clone)]
 pub struct SupervisorRunningCoreProbe {
     supervisor: CoreSupervisor,
+    /// Built on the first connected run and kept: every run talks to the same
+    /// loopback API, so a client per run would only discard its connections.
+    transport: Arc<OnceLock<Arc<dyn ClashHttpTransport>>>,
 }
 
 impl SupervisorRunningCoreProbe {
     #[must_use]
-    pub const fn new(supervisor: CoreSupervisor) -> Self {
-        Self { supervisor }
+    pub fn new(supervisor: CoreSupervisor) -> Self {
+        Self {
+            supervisor,
+            transport: Arc::default(),
+        }
     }
 }
 
 impl RunningCoreProbe for SupervisorRunningCoreProbe {
-    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>> {
+    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreDelay>>> {
         let supervisor = self.supervisor.clone();
+        let transport = Arc::clone(&self.transport);
         Box::pin(async move {
             let snapshot = match supervisor.status().await {
                 Ok(snapshot) => snapshot,
@@ -64,38 +73,24 @@ impl RunningCoreProbe for SupervisorRunningCoreProbe {
                 return None;
             }
             let endpoint = proxy_runtime_endpoint(&snapshot.clash_api_access())?;
-            Some(Arc::new(ClashRunningCoreProbe {
-                client: ClashRestClient::new(endpoint),
-            }) as Arc<dyn RunningCoreProbe>)
+            let transport =
+                Arc::clone(transport.get_or_init(|| Arc::new(ReqwestClashHttpTransport::new())));
+            Some(
+                Arc::new(ClashRestClient::with_transport(endpoint, transport))
+                    as Arc<dyn RunningCoreDelay>,
+            )
         })
     }
-
-    fn delay(
-        &self,
-        _tag: String,
-        _test_url: String,
-        _timeout_ms: u32,
-    ) -> BoxFuture<'static, std::result::Result<u32, ClashError>> {
-        Box::pin(async { Err(ClashError::WebSocketClosed) })
-    }
 }
 
-struct ClashRunningCoreProbe {
-    client: ClashRestClient,
-}
-
-impl RunningCoreProbe for ClashRunningCoreProbe {
-    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>> {
-        Box::pin(async { None })
-    }
-
+impl RunningCoreDelay for ClashRestClient {
     fn delay(
         &self,
         tag: String,
         test_url: String,
         timeout_ms: u32,
     ) -> BoxFuture<'static, std::result::Result<u32, ClashError>> {
-        let client = self.client.clone();
+        let client = self.clone();
         Box::pin(async move { client.proxy_delay(&tag, &test_url, timeout_ms).await })
     }
 }
@@ -103,13 +98,13 @@ impl RunningCoreProbe for ClashRunningCoreProbe {
 impl SpeedtestManager {
     pub(super) async fn run_through_running_core<F>(
         &self,
-        core: Arc<dyn RunningCoreProbe>,
+        core: Arc<dyn RunningCoreDelay>,
         database: &Database,
         config: &AppConfig,
         items: &[ServerTestItem],
         cancel: CancellationFlag,
-        on_results: &F,
-    ) -> Result<Vec<SpeedtestResult>>
+        recorded: &mut Recorded<'_, F>,
+    ) -> Result<()>
     where
         F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
@@ -138,7 +133,9 @@ impl SpeedtestManager {
             }
             measurable.push((index, latency_probe_tag(&build.context, &item.profile)));
         }
-        let mut results = record_item_failures(database, failures, items, on_results).await?;
+        recorded
+            .results
+            .extend(record_item_failures(database, failures, items, recorded.on_results).await?);
 
         let test_url = latency_test_url(&config.speed_test).to_string();
         let timeout_ms = running_core_timeout_ms(&config.speed_test);
@@ -172,10 +169,12 @@ impl SpeedtestManager {
                     ))
                 })
                 .collect();
-            results.extend(persist_and_report(database, writes, on_results).await?);
+            recorded
+                .results
+                .extend(persist_and_report(database, writes, recorded.on_results).await?);
         }
 
-        Ok(results)
+        Ok(())
     }
 }
 

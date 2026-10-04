@@ -15,26 +15,33 @@ import { useProcessRulesSupported } from "@/features/routing/use-process-rules-s
 
 const VISIBLE_APPS = 4;
 
+type PerAppSummaryCardProps = {
+  /** Global mode skips every rule, this one included. */
+  locked?: boolean;
+  onEdit: () => void;
+  routing: Routing_Serialize | null;
+};
+
 /**
  * The per-app proxy rule at a glance. It is one managed rule pinned ahead of
  * every other rule, so the page shows it here rather than as a list row and
  * edits it through its own dialog.
  */
-export function PerAppSummaryCard({
+export function PerAppSummaryCard(props: PerAppSummaryCardProps) {
+  // The status read belongs to the card that shows it: where the tunnel cannot
+  // match apps there is no card, and nothing to ask the backend for.
+  return useProcessRulesSupported() ? <SupportedPerAppSummaryCard {...props} /> : null;
+}
+
+function SupportedPerAppSummaryCard({
   locked = false,
   onEdit,
   routing,
-}: {
-  /** Global mode skips every rule, this one included. */
-  locked?: boolean;
-  onEdit: () => void;
-  routing: Routing_Serialize | null;
-}) {
+}: PerAppSummaryCardProps) {
+
   const { t } = useI18n();
   const { mode, processes } = readPerAppRule(routing);
   const statusQuery = useQuery(queries.connectionMode);
-  const processRulesSupported = useProcessRulesSupported();
-  if (!processRulesSupported) return null;
   const on = mode !== "off";
   const shown = processes.slice(0, VISIBLE_APPS);
   const hidden = processes.length - shown.length;

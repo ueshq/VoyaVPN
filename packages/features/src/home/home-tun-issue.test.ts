@@ -57,4 +57,27 @@ describe("homeTunIssue", () => {
 
     expect(homeTunIssue(mismatch, t())).toContain("/tmp/VoyaVPN.app");
   });
+
+  // Connect-time complaints wait for something to connect: after the selected
+  // node is deleted, a stale authorization failure must not outlive it on the
+  // Home screen. An installation-level path mismatch stays stated regardless.
+  it("holds connect-time complaints while nothing is selected, but keeps path mismatches", () => {
+    const denied = tun({
+      backend: "iosPacketTunnel",
+      providerState: "permissionRequired",
+      lastProviderError: "the system did not authorize the VPN configuration",
+    });
+
+    expect(homeTunIssue(denied, t(), { ready: false })).toBeNull();
+    expect(homeTunIssue(denied, t(), { ready: true })).toContain("Settings → VPN");
+
+    const mismatch = tun({
+      backend: "macosPacketTunnel",
+      expectedProviderPath: "/Applications/VoyaVPN.app",
+      providerPathMismatch: true,
+      providerState: "error",
+      resolvedProviderPath: "/tmp/VoyaVPN.app",
+    });
+    expect(homeTunIssue(mismatch, t(), { ready: false })).toContain("/tmp/VoyaVPN.app");
+  });
 });

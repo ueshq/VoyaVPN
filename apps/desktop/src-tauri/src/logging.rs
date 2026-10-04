@@ -20,29 +20,20 @@
 use std::{
     io::{self, Write as _},
     path::Path,
-    str::FromStr as _,
 };
 
-use tracing::Subscriber;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::{
-    filter::Targets,
     fmt::{self, writer::MakeWriter},
-    layer::{Context, SubscriberExt as _},
-    registry::LookupSpan,
+    layer::SubscriberExt as _,
     util::SubscriberInitExt as _,
-    Layer,
 };
 use voya_app::{
-    logging::{
-        log_filter_directives, ui_log_level, TracingLineVisitor, LOG_FILE_RETENTION_DAYS,
-        LOG_FILTER_ENV_VAR,
-    },
+    logging::{env_log_filter, LogPanelLayer, LOG_FILE_RETENTION_DAYS, LOG_FILTER_ENV_VAR},
     redaction::redact_url_userinfo,
 };
 
 use crate::ipc::commands::queue_log_line;
-use voya_contracts::LogLineBody;
 
 const LOG_FILE_PREFIX: &str = "voyavpn";
 const LOG_FILE_SUFFIX: &str = "log";
@@ -59,18 +50,12 @@ pub(crate) fn install<R>(app: tauri::AppHandle<R>, log_dir: &Path)
 where
     R: tauri::Runtime,
 {
-    let directives = log_filter_directives(
-        std::env::var(LOG_FILTER_ENV_VAR)
-            .ok()
-            .or_else(|| std::env::var("RUST_LOG").ok())
-            .as_deref(),
-    );
-    let Ok(filter) = Targets::from_str(&directives) else {
+    let (filter, rejected) = env_log_filter();
+    if let Some(directives) = rejected {
         report(&format!(
-            "ignoring invalid {LOG_FILTER_ENV_VAR} value {directives:?}"
+            "ignoring invalid {LOG_FILTER_ENV_VAR} value {directives:?}; using the default filter"
         ));
-        return;
-    };
+    }
 
     let file_layer = match build_file_appender(log_dir) {
         Ok(appender) => Some(
@@ -90,7 +75,11 @@ where
 
     if let Err(error) = tracing_subscriber::registry()
         .with(file_layer)
-        .with(LogPanelLayer { app })
+        // Queued, never emitted from the layer: an emit failure traced from
+        // it would re-enter it. The file layer still records the event.
+        .with(LogPanelLayer::new(move |level, body| {
+            queue_log_line(&app, level, body);
+        }))
         .with(filter)
         .try_init()
     {
@@ -114,39 +103,6 @@ fn build_file_appender(
         .filename_suffix(LOG_FILE_SUFFIX)
         .max_log_files(LOG_FILE_RETENTION_DAYS)
         .build(log_dir)
-}
-
-/// Forwards `warn`/`error` records to the desktop Logs panel.
-struct LogPanelLayer<R: tauri::Runtime> {
-    app: tauri::AppHandle<R>,
-}
-
-impl<S, R> Layer<S> for LogPanelLayer<R>
-where
-    S: Subscriber + for<'lookup> LookupSpan<'lookup>,
-    R: tauri::Runtime,
-{
-    fn on_event(&self, event: &tracing::Event<'_>, _ctx: Context<'_, S>) {
-        let metadata = event.metadata();
-        let Some(level) = ui_log_level(metadata.level()) else {
-            return;
-        };
-
-        let mut visitor = TracingLineVisitor::new();
-        event.record(&mut visitor);
-
-        // Queued, never emitted from here: an emit failure traced from this
-        // layer would re-enter it. The file layer still records the event.
-        queue_log_line(
-            &self.app,
-            level,
-            // A `tracing` event: developer diagnostics with a module target,
-            // not an app-authored sentence, so it stays raw like core output.
-            LogLineBody::Diagnostic {
-                line: visitor.into_line(metadata.target()),
-            },
-        );
-    }
 }
 
 /// Strips URL userinfo from formatted events before they reach disk.

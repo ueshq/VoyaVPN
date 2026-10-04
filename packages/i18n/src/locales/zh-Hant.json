@@ -1,6 +1,7 @@
 {
   "actions": {
     "add": "新增",
+    "back": "返回",
     "cancel": "取消",
     "clear": "清除",
     "close": "關閉",
@@ -203,8 +204,10 @@
     "dns": {
       "blockBindingQuery": "屏蔽 HTTPS/SVCB 查詢",
       "bootstrapDns": "引導 DNS",
+      "bootstrapDnsPlaceholder": "例如 119.29.29.29",
       "commonHosts": "常用 Hosts",
       "directDns": "直連 DNS",
+      "directDnsPlaceholder": "例如 119.29.29.29",
       "directStrategy": "直連解析策略",
       "errorCount": "{{count}} 項錯誤",
       "expectedIps": "預期 IP 範圍",
@@ -214,6 +217,7 @@
       "loading": "正在載入 DNS 設定",
       "proxyStrategy": "代理解析策略",
       "remoteDns": "遠程 DNS",
+      "remoteDnsPlaceholder": "例如 https://cloudflare-dns.com/dns-query",
       "title": "DNS",
       "strategyHint": "解析網域時優先使用 IPv4 或 IPv6。",
       "strategyIpv6Off": "需在設定中開啟 IPv6 後才生效；IPv6 關閉時所有查詢僅使用 IPv4。",
@@ -331,27 +335,29 @@
         "clipboard": "從剪貼簿匯入",
         "clipboardEmpty": "剪貼簿為空。",
         "clipboardUnavailable": "無法讀取剪貼簿文字。",
-        "discardedNodeOverrides": "已捨棄 {{count}} 個節點級覆寫項，將使用全域設定。",
         "summary": {
           "deduped": "已略過內容中的 {{count}} 個重複項。",
           "failed": "{{count}} 個解析失敗。",
           "filtered": "已篩除 {{count}} 個。",
-          "imported": "已匯入 {{count}} 個節點。",
           "removedDuplicates": "已移除 {{count}} 個重複項。",
           "skipped": "已略過 {{count}} 個。",
           "target": "目標：{{target}}。",
           "updated": "其中 {{count}} 個為既有節點，已重新整理。",
-          "removedExisting": "已移除 {{count}} 個已下架節點。"
+          "removedExisting": "已移除 {{count}} 個已下架節點。",
+          "imported_one": "已匯入 {{count, number}} 個節點。",
+          "imported_other": "已匯入 {{count, number}} 個節點。"
         },
         "importing": "正在匯入節點…",
         "line": {
-          "subscriptionSourceAdded": "第 {{line}} 行已新增為訂閱，正在更新以匯入節點。",
+          "subscriptionSourceAdded": "第 {{line}} 行將作為訂閱新增，確認後更新並匯入其節點。",
           "unsupportedTransport": "第 {{line}} 行已略過：不支援 {{transport}} 傳輸方式，請向服務商改用 WebSocket、gRPC 等傳輸的節點。",
           "parseFailed": "第 {{line}} 行已略過：無法辨識連結格式。",
           "unsupportedProtocol": "第 {{line}} 行已略過：不支援這種連結類型。",
           "missingField": "第 {{line}} 行已略過：{{protocol}} 連結缺少 {{field}}。",
           "invalidPort": "第 {{line}} 行已略過：{{protocol}} 連結的連接埠 {{port}} 無效。"
-        }
+        },
+        "discardedNodeOverrides_one": "已忽略連結中的 {{count, number}} 個節點級設定（如 TLS 指紋、多路複用、限速），將使用全域設定。",
+        "discardedNodeOverrides_other": "已忽略連結中的 {{count, number}} 個節點級設定（如 TLS 指紋、多路複用、限速），將使用全域設定。"
       },
       "importMethods": {
         "qrScreen": "掃描螢幕 QR 碼",
@@ -899,9 +905,9 @@
       "vpnOnly": "僅在 VPN 模式下生效，可在「連線 → 網路接管方式」中切換。"
     },
     "logs": {
-      "coreLogOff": "詳細連線日誌未開啟，這裡只顯示 VoyaVPN 自身的記錄。開啟上方「記錄詳細連線日誌」可查看連線細節。",
+      "coreLogOff": "詳細連線日誌未開啟，這裡只顯示 VoyaVPN 自身的記錄。開啟「設定 → 一般」中的「記錄詳細連線日誌」可查看連線細節。",
       "coreLogWaiting": "詳細連線日誌已開啟，暫未收到核心日誌。",
-      "coreLogReceived": "詳細連線日誌已開啟，已收到核心日誌。"
+      "coreLogOn": "詳細連線日誌已開啟。"
     }
   },
   "speedtest": {
@@ -1104,13 +1110,14 @@
   },
   "nodeGroups": {
     "local": "本地節點",
-    "membersCount": "{{count}} 個節點",
     "test": "測試本組",
     "empty": "此分組暫無節點。",
     "moreFor": "「{{name}}」的更多操作",
     "autoUpdateOff": "自動更新已關閉",
     "showAllMembers": "顯示全部 {{count}} 個",
-    "showFewerMembers": "收合"
+    "showFewerMembers": "收合",
+    "membersCount_one": "{{count}} 個節點",
+    "membersCount_other": "{{count}} 個節點"
   },
   "common": {
     "advanced": "更多參數",
@@ -1208,6 +1215,8 @@
   "mobile": {
     "add": "新增節點或訂閱",
     "connection": "連線與 DNS",
+    "trafficModeRule": "按規則分流",
+    "trafficModeGlobal": "全域代理",
     "maintenance": "維護與診斷",
     "about": "關於與說明",
     "subscriptions": "管理訂閱",
@@ -1221,10 +1230,11 @@
     "keepEditing": "繼續編輯",
     "failed": "操作未完成，請重試或查看診斷。",
     "saveFailed": "設定未儲存，請修正標紅欄位；目前繼續使用原設定。",
+    "screenErrorDescription": "此頁面意外中斷。請重試，若仍未恢復請重新開啟應用程式。",
     "diagnostics": "檢視診斷",
     "details": "技術詳情",
+    "rawError": "原始錯誤訊息（英文）：",
     "deleteConfirm": "確認刪除？",
-    "deleteHint": "將刪除所選節點或訂閱及其關聯節點。若正在使用，將先中斷連線；中斷失敗時保留資料。",
     "copy": "複製連結",
     "share": "分享…",
     "scan": "掃描 QR 碼",
@@ -1233,7 +1243,6 @@
     "importHelp": "貼上服務商提供的訂閱位址或節點連結，也可以掃描 QR 碼。確認前不會新增資料。",
     "preview": "預覽",
     "confirmImport": "確認匯入",
-    "previewCount": "辨識到 {{nodes}} 個節點、{{sources}} 個訂閱，{{failed}} 項無效。",
     "importInvalid": "沒有可匯入內容，請檢查連結是否完整。",
     "cameraDenied": "相機權限未開啟，請在系統設定中允許存取，或選擇圖片辨識。",
     "noQr": "沒有辨識到 QR 碼，請更換清晰的圖片。",
@@ -1256,8 +1265,10 @@
     "allLogs": "全部日誌",
     "appLogs": "應用程式日誌",
     "coreLogs": "核心日誌",
-    "copyDiagnostics": "複製去識別化診斷",
+    "copyDiagnostics": "複製診斷",
+    "copyFailed": "複製失敗",
     "copyJson": "複製 JSON",
+    "copied": "已複製",
     "ruleDetails": "規則詳情",
     "ruleEffect": "符合此規則的流量將使用：{{target}}",
     "quicHint": "阻擋 QUIC 可使支援回退的應用程式改用 TCP；無法回退的應用程式可能連線失敗。",
@@ -1272,7 +1283,7 @@
     "support": "支援",
     "privacyContinue": "繼續",
     "help": "使用說明",
-    "helpText": "首次使用：新增設定 → 預覽並匯入 → 選擇節點 → 返回主頁連線。連線失敗時先確認訂閱有效、節點可達及 VPN 授權，再開啟診斷檢視記錄。訂閱位址失效可在「節點 → 管理訂閱」修改。",
+    "helpText": "首次使用：新增設定 → 預覽並匯入 → 選擇節點 → 返回主頁連線。連線失敗時先確認訂閱有效、節點可達及 VPN 授權，再開啟診斷檢視記錄。訂閱位址失效可在「設定 → 管理訂閱」修改。",
     "licenses": "開源授權",
     "updateFailed": "訂閱更新失敗，請檢查位址或網路後重試。",
     "updateEmpty": "訂閱未提供可用節點，已保留原節點。",
@@ -1283,13 +1294,35 @@
     "currentSelection": "目前節點",
     "authorizeAgain": "重新授權",
     "sourceMissing": "此訂閱已不存在，請返回訂閱列表。",
-    "deleteCount": "將移除此訂閱及其關聯的 {{count}} 個節點。",
     "invalidFields": "部分內容無效，請檢查標紅欄位或匯入的連結。",
     "missingItem": "此項目已不存在，請重新整理清單後重新選擇。",
     "networkFailed": "網路請求失敗，請檢查網路連線和來源位址後重試。",
     "unsupportedAction": "此裝置暫不支援此操作，可檢視診斷瞭解詳情。",
     "expandPreview": "檢視全部 {{count}} 個節點",
     "collapsePreview": "收起預覽",
-    "androidScannerPrivacy": "Android 的 QR 圖片及識別結果由 ML Kit 在裝置本機處理。Google 會接收 SDK 的效能和使用指標；SDK 也可能存取 Google 取得更新與相容性資訊。"
+    "androidScannerPrivacy": "Android 的 QR 圖片及識別結果由 ML Kit 在裝置本機處理。Google 會接收 SDK 的效能和使用指標；SDK 也可能存取 Google 取得更新與相容性資訊。",
+    "updateFailedAt": "上次更新失敗於 {{time}}",
+    "subsEmptyTitle": "暫無訂閱",
+    "subsEmptyDescription": "新增訂閱位址，節點將自動匯入。",
+    "previewSummary": "辨識到 {{nodes}}、{{subscriptions}}，{{invalid}}。",
+    "previewNodes_one": "{{count}} 個節點",
+    "previewNodes_other": "{{count}} 個節點",
+    "previewSubscriptions_one": "{{count}} 個訂閱",
+    "previewSubscriptions_other": "{{count}} 個訂閱",
+    "previewInvalid_one": "{{count}} 項無效",
+    "previewInvalid_other": "{{count}} 項無效",
+    "deleteDescription_one": "將移除此訂閱及其關聯的 {{count}} 個節點。若正在使用，將先中斷連線；中斷失敗時保留資料。",
+    "deleteDescription_other": "將移除此訂閱及其關聯的 {{count}} 個節點。若正在使用，將先中斷連線；中斷失敗時保留資料。",
+    "deleteNodeHint": "將移除此節點。若正在使用，將先中斷連線；中斷失敗時保留資料。",
+    "editNode": "編輯節點",
+    "address": "位址",
+    "port": "連接埠",
+    "editorFieldsHint": "可編輯名稱、位址與連接埠；協定、傳輸與安全設定保持不變。",
+    "editorSummary": "保持不變的設定",
+    "editorProtocol": "協定",
+    "editorTransport": "傳輸",
+    "editorTls": "安全",
+    "editorTransportNone": "無",
+    "openLogs": "開啟日誌"
   }
 }

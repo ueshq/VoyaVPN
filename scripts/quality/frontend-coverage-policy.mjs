@@ -91,6 +91,9 @@ export const runtimeModules = [
   // Promoted into the runtime tier once the typed-contract passes gave them
   // real tests. Measured at promotion: modal-host 92/80.
   { path: "apps/desktop/src/components/app-shell/modal-host.tsx", lines: 82, branches: 70 },
+  // 2026-10-04: the dialog the host used to hold moved here when the host
+  // began loading it on demand; the floor it was promoted with moves with it.
+  { path: "apps/desktop/src/components/app-shell/missing-core-dialog.tsx", lines: 82, branches: 70 },
   // The Rules page: one active rule set, a sortable rule list, its dialogs and
   // the traffic mode that locks them in global mode.
   { path: "apps/desktop/src/features/routing/routing-rule-list.tsx", lines: 90, branches: 90 },

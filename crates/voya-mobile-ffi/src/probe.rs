@@ -88,7 +88,11 @@ impl ProbeCoreLauncher for HostProbeCoreLauncher {
     }
 
     fn stop_all(&self) {
-        for core_id in std::mem::take(&mut *lock_ignoring_poison(&self.live)) {
+        // Taken into a local first: a guard created in the `for` expression
+        // lives until the loop ends, and every stop below is a blocking call
+        // into the host that would run with `live` locked.
+        let live = std::mem::take(&mut *lock_ignoring_poison(&self.live));
+        for core_id in live {
             stop_on_host(self.host.as_ref(), &core_id);
         }
     }

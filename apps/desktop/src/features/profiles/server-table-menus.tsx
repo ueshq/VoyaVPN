@@ -34,7 +34,7 @@ import {
   type MenuPrimitives,
 } from "@/components/app-shell/menu-primitives";
 import { voyaCommands } from "@voya/client/transport";
-import type { ProfileSummaryEntry, SpeedtestTarget } from "@voya/contracts";
+import type { MoveAction, ProfileSummaryEntry, SpeedtestTarget } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
@@ -51,6 +51,18 @@ const EXPORT_MENU_ENTRIES: readonly ExportMenuEntry[] = [
   { icon: Link, labelKey: "panes.profiles.export.shareLinks", mode: "export" },
   { icon: QrCode, labelKey: "panes.profiles.export.showQr", mode: "qr" },
 ];
+
+/** The four places a manual node can be sent, in menu order. */
+const MOVE_ITEMS = [
+  { action: "top", icon: ChevronsUp, labelKey: "panes.profiles.menu.moveTop" },
+  { action: "up", icon: ArrowUp, labelKey: "panes.profiles.menu.moveUp" },
+  { action: "down", icon: ArrowDown, labelKey: "panes.profiles.menu.moveDown" },
+  { action: "bottom", icon: ChevronsDown, labelKey: "panes.profiles.menu.moveBottom" },
+] as const satisfies readonly {
+  action: MoveAction;
+  icon: LucideIcon;
+  labelKey: TranslationKey;
+}[];
 
 export function SpeedtestButton({
   busyElsewhere = false,
@@ -231,46 +243,19 @@ function ProfileMenuItems({
             {t("panes.profiles.menu.move")}
           </SubTrigger>
           <SubContent>
-            <Item
-              onSelect={() =>
-                void runOperation(() =>
-                  voyaCommands().moveProfile(null, indexId, "top", null),
-                )
-              }
-            >
-              <ChevronsUp className="size-4" aria-hidden="true" />
-              {t("panes.profiles.menu.moveTop")}
-            </Item>
-            <Item
-              onSelect={() =>
-                void runOperation(() =>
-                  voyaCommands().moveProfile(null, indexId, "up", null),
-                )
-              }
-            >
-              <ArrowUp className="size-4" aria-hidden="true" />
-              {t("panes.profiles.menu.moveUp")}
-            </Item>
-            <Item
-              onSelect={() =>
-                void runOperation(() =>
-                  voyaCommands().moveProfile(null, indexId, "down", null),
-                )
-              }
-            >
-              <ArrowDown className="size-4" aria-hidden="true" />
-              {t("panes.profiles.menu.moveDown")}
-            </Item>
-            <Item
-              onSelect={() =>
-                void runOperation(() =>
-                  voyaCommands().moveProfile(null, indexId, "bottom", null),
-                )
-              }
-            >
-              <ChevronsDown className="size-4" aria-hidden="true" />
-              {t("panes.profiles.menu.moveBottom")}
-            </Item>
+            {MOVE_ITEMS.map(({ action, icon: Icon, labelKey }) => (
+              <Item
+                key={action}
+                onSelect={() =>
+                  void runOperation(() =>
+                    voyaCommands().moveProfile(indexId, action, null),
+                  )
+                }
+              >
+                <Icon className="size-4" aria-hidden="true" />
+                {t(labelKey)}
+              </Item>
+            ))}
           </SubContent>
         </Sub>
       ) : null}

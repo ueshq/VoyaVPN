@@ -8,9 +8,12 @@ import android.content.Context
 import android.content.Intent
 import android.net.VpnService
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import app.voyavpn.mobile.MainActivity
 import app.voyavpn.mobile.R
+import java.util.concurrent.Executors
 
 /**
  * The tunnel, as a foreground service.
@@ -29,10 +32,27 @@ import app.voyavpn.mobile.R
 class VoyaVpnService : VpnService() {
     private val tunnel = LibboxTunnel(this)
 
+    /**
+     * Where the core is started and stopped.
+     *
+     * Every entry point below is called on the main thread, and starting the
+     * core is not quick: Libbox is set up, the TUN is opened, rule sets are
+     * loaded. Done inline that froze the UI for the whole start and was one
+     * slow rule set away from an ANR. One thread, so a stop still runs after
+     * the start it follows — `LibboxTunnel` is not synchronized and relies on
+     * that order.
+     */
+    private val worker = Executors.newSingleThreadExecutor { runnable -> Thread(runnable, "voya-tunnel") }
+    private val mainThread = Handler(Looper.getMainLooper())
+
+    /** The id of the newest command this instance was given. Main thread only. */
+    private var latestStartId = 0
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        latestStartId = startId
         when (intent?.action) {
             ACTION_STOP -> {
-                stopTunnel()
+                stopTunnel(startId)
                 return START_NOT_STICKY
             }
             else -> Unit
@@ -40,52 +60,99 @@ class VoyaVpnService : VpnService() {
 
         val config = intent?.getStringExtra(EXTRA_CONFIG_JSON)
         if (config == null) {
-            // Restarted by the system with no command to restart *with*: there
-            // is nothing to reconnect to, and pretending otherwise would leave
-            // a running service with no core in it.
-            stopSelf()
+            // Started by the system with no command to start *with*: there is
+            // nothing to connect to, and pretending otherwise would leave a
+            // running service with no core in it.
+            stopSelfResult(startId)
             return START_NOT_STICKY
         }
 
+        // From here on this instance is the one whose tunnel the shared state
+        // describes; see [report].
+        current = this
+        // The foreground promise has to be kept on this thread, within seconds
+        // of `startForegroundService`; only the core moves off it.
         startForeground(NOTIFICATION_ID, notification())
-        return try {
-            val handoff = org.json.JSONObject(config)
-            require(handoff.getInt("version") == 1) { "unsupported tunnel handoff version" }
-            tunnel.start(handoff.getString("singboxConfigJson"))
-            state = State.RUNNING
-            START_STICKY
-        } catch (error: Throwable) {
-            lastError = error.message ?: error.toString()
-            state = State.FAILED
-            stopTunnel()
-            START_NOT_STICKY
+        worker.execute {
+            try {
+                val handoff = org.json.JSONObject(config)
+                require(handoff.getInt("version") == 1) { "unsupported tunnel handoff version" }
+                tunnel.start(handoff.getString("singboxConfigJson"))
+                report(State.RUNNING)
+            } catch (error: Throwable) {
+                report(State.FAILED, error.message ?: error.toString())
+                closeTunnel(startId)
+            }
         }
+        // Not sticky: a restart after the process is killed arrives without
+        // the configuration, so it could only start the app to stop again.
+        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
-        stopTunnel()
+        // Nothing to stop the service for: it is already going.
+        stopTunnel(startId = null)
+        // Queued work still runs; nothing new is accepted for a dead service.
+        worker.shutdown()
+        // A later instance takes the shared state over when it starts; until
+        // one does, this instance's last close may still report.
+        if (current === this) current = null
         super.onDestroy()
     }
 
-    /** The system revoked the VPN — another app took it, or the user did. */
+    /**
+     * The system revoked the VPN — another app took it, or the user did.
+     *
+     * Reported as stopped once the core has actually stopped, by the close
+     * below: said here, a status read or a waiting stop would see "stopped"
+     * while Libbox still held the TUN.
+     */
     override fun onRevoke() {
-        lastError = "another app took over the VPN connection"
-        state = State.STOPPED
-        stopTunnel()
+        stopTunnel(latestStartId)
         super.onRevoke()
     }
 
-    private fun stopTunnel() {
+    private fun stopTunnel(startId: Int?) {
+        // `onDestroy` can follow a stop that already shut the worker down.
+        runCatching { worker.execute { closeTunnel(startId) } }
+    }
+
+    /**
+     * On [worker]. `startId` is the command this close answers; the service is
+     * stopped for it, unless a newer command has arrived in the meantime.
+     */
+    private fun closeTunnel(startId: Int?) {
         try {
             tunnel.stop()
-            if (state != State.FAILED) state = State.STOPPED
+            if (state != State.FAILED) report(State.STOPPED)
         } catch (error: Throwable) {
-            lastError = error.message ?: error.toString()
-            state = State.FAILED
+            report(State.FAILED, error.message ?: error.toString())
             return
         }
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        if (startId == null) return
+        mainThread.post {
+            // Reporting STOPPED above let a waiting stop return, and a
+            // reconnect may already have been delivered to this instance: its
+            // notification and its service are not this close's to take down.
+            if (latestStartId != startId) return@post
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelfResult(startId)
+        }
+    }
+
+    /**
+     * Writes the shared state, for the instance that owns it.
+     *
+     * The state is process-wide and outlives an instance, and an instance being
+     * destroyed still has a close queued on its own worker. Once a reconnect
+     * has created the next instance, that late close would otherwise write
+     * "stopped" over a tunnel that is starting or running.
+     */
+    private fun report(next: State, error: String? = null) {
+        val owner = current
+        if (owner != null && owner !== this) return
+        if (error != null) lastError = error
+        state = next
     }
 
     private fun notification(): Notification {
@@ -140,5 +207,9 @@ class VoyaVpnService : VpnService() {
         @Volatile
         var lastError: String? = null
             internal set
+
+        /** The instance that last took a start command, while it lives. */
+        @Volatile
+        private var current: VoyaVpnService? = null
     }
 }

@@ -6,6 +6,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 
 import { DisabledReason } from "@/components/disabled-reason";
 
+import { exitIpLabel } from "@voya/features/home/exit-ip-label";
 import { useConnectionIp } from "@voya/features/home/use-connection-ip";
 
 /** The exit address of the running connection; the lookup lives in `useConnectionIp`. */
@@ -14,16 +15,7 @@ export function ExitIpMetric({ t }: { t: TranslationFunction }) {
   const checking = ipQuery.fetchStatus === "fetching";
   const result = ipQuery.data;
 
-  let value = t("home.checkIpNotChecked");
-  if (checking) {
-    value = t("home.checkIpChecking");
-  } else if (ipQuery.isError) {
-    value = t("home.checkIpFailed");
-  } else if (result) {
-    value = [result.ip ?? t("home.checkIpUnknown"), result.countryCode]
-      .filter(Boolean)
-      .join(" · ");
-  }
+  const value = exitIpLabel(ipQuery, t);
 
   return (
     <div>

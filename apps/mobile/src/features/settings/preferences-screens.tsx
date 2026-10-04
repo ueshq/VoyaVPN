@@ -2,9 +2,9 @@ import { ErrorNotice } from "~/components/error-notice";
 import { openPage } from "~/app/navigation";
 import { useAppSettings } from "@voya/features/settings/use-app-settings";
 import { useRuleLibraryUpdate } from "@voya/features/updates/use-rule-library-update";
-import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { localeOptions } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { formatDateTime } from "@voya/utils/format-date-time";
 import type { ThemeMode } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n/core";
 import { Button } from "heroui-native/button";
@@ -22,6 +22,8 @@ import { SectionHeader } from "~/components/section-header";
 import { SegmentedControl } from "~/components/segmented-control";
 import { SwitchRow } from "~/components/switch-row";
 import { useToneColor } from "~/components/tone";
+
+import { useCoreLogEnabled } from "./use-core-log-enabled";
 
 /** The three theme choices, in the order the desktop offers them. */
 const THEME_MODES = [
@@ -121,14 +123,13 @@ export function GeneralScreen() {
  */
 export function MaintenanceScreen() {
   const { language, t } = useI18n();
-  const app = useAppSettings();
-  const hasCoreLogs = useRuntimeEventStore((state) => state.logLines.some((line) => line.body.source === "core"));
+  const coreLog = useCoreLogEnabled();
   const ruleLibrary = useRuleLibraryUpdate();
 
   return (
     <DetailScreen gap="gap-6">
-      {app.working ? <Spinner size="sm" /> : null}
-      <ErrorNotice error={app.error} retry={app.retry} />
+      {coreLog.isPending ? <Spinner size="sm" /> : null}
+      <ErrorNotice error={coreLog.error} retry={() => void coreLog.refetch()} />
 
       <Card className="gap-4 p-5">
         <IconBadge icon={Database} />
@@ -143,7 +144,7 @@ export function MaintenanceScreen() {
             {ruleLibrary.updatedAt === null
               ? t("updates.neverUpdated")
               : t("updates.lastUpdated", {
-                  time: new Date(ruleLibrary.updatedAt).toLocaleString(language),
+                  time: formatDateTime(ruleLibrary.updatedAt, language),
                 })}
           </Typography>
           {ruleLibrary.files?.length ? (
@@ -154,7 +155,7 @@ export function MaintenanceScreen() {
         </View>
         <ErrorNotice error={ruleLibrary.error} />
         <Button
-          className="bg-accent-soft py-3"
+          className="py-3"
           variant="secondary"
           isDisabled={ruleLibrary.updating}
           onPress={() => void ruleLibrary.update()}
@@ -164,21 +165,32 @@ export function MaintenanceScreen() {
         </Button>
       </Card>
 
-      <ListGroup>
-        {/* The lines themselves get a screen of their own; this says whether
-            the backend is delivering any, which the core-log switch under
-            General decides. */}
-        <ListRow
-          last
-          leading={<IconBadge icon={ScrollText} size="sm" tone="neutral" />}
+      {/* The same card as the rule library above: the two blocks are peers —
+          data this app keeps current — so they present the same way, and the
+          logs card names where the lines live rather than being a lone list
+          row under a feature card. */}
+      <Card className="gap-4 p-5">
+        <IconBadge icon={ScrollText} />
+        <View className="gap-1">
+          <Typography accessibilityRole="header" maxFontSizeMultiplier={2} className="text-lg font-semibold text-foreground">
+            {t("tabs.logs")}
+          </Typography>
+          {/* The lines themselves get a screen of their own; this says whether
+              the core's are among them, which the core-log switch under
+              General decides. Whether any have arrived is not claimed here:
+              lines are only delivered while the Logs screen is open. */}
+          <Typography className="text-base text-subtle">
+            {t(coreLog.data ? "settings.logs.coreLogOn" : "settings.logs.coreLogOff")}
+          </Typography>
+        </View>
+        <Button
           testID="maintenance-logs"
-          chevron
-          title={t("tabs.logs")}
+          variant="secondary"
           onPress={() => openPage("logs")}
-          description={!app.settings?.core.logEnabled ? t("settings.logs.coreLogOff") : hasCoreLogs ? t("settings.logs.coreLogReceived") : t("settings.logs.coreLogWaiting")}
-          descriptionLines={0}
-        />
-      </ListGroup>
+        >
+          <Button.Label>{t("mobile.openLogs")}</Button.Label>
+        </Button>
+      </Card>
     </DetailScreen>
   );
 }

@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { voyaCommands } from "@voya/client/transport";
 import { clipboard } from "@voya/client/platform";
-import { profilesByNodeGroup, type NodeSourceKey } from "@voya/features/profiles/node-list-rows";
+import { profilesByNodeGroup, type NodeSourceKey } from "./node-list-rows";
 import {
   supportsShareLinkExport,
   type ProfileExportDestination,
-} from "@voya/features/profiles/server-table-actions";
+} from "./server-table-actions";
 import type { TranslationFunction } from "@voya/i18n/core";
-import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
+import type { NodeOperation } from "./use-node-operation";
 
 export function useNodeExport(
   { runOperation, setOperationError, setOperationMessage }: NodeOperation,
@@ -48,6 +48,10 @@ export function useNodeExport(
     destination: ProfileExportDestination = "clipboard",
   ) {
     await runOperation(async () => {
+      // Read afresh on purpose, not from the list cache: what is exported is
+      // the group's complete membership as it is now, and a group deleted or
+      // emptied since the menu opened must export nothing rather than what
+      // the screen last showed.
       const listing = await voyaCommands().listProfileSummaries();
       const entries = profilesByNodeGroup(listing.entries).get(groupKey) ?? [];
       const exportable = entries.filter((item) =>

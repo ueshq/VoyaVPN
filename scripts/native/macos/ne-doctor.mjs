@@ -1,6 +1,13 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run } from "../../lib/common.mjs";
+import {
+  captureSpawned,
+  isCliEntrypoint,
+  repoRootFromScript,
+  requireDarwin,
+  run,
+  runCli,
+} from "../../lib/common.mjs";
 import { parseArgs } from "../../lib/args.mjs";
 import { defaultIsProcessRunning, voyaRuntimeExecutables } from "./local-runtime.mjs";
 import {
@@ -42,13 +49,6 @@ Options:
   --app PATH   Legal VoyaVPN.app path. Defaults to /Applications/VoyaVPN.app.
   --dev        Also allow target/release/bundle/macos/VoyaVPN.app for local release builds.
   --yes, -y    Confirm removing more than one registration in a single --fix.`);
-}
-
-function throwIfSpawnFailed(result) {
-  if (result.error) {
-    throw result.error;
-  }
-  return result;
 }
 
 function appBundleFromInput(path) {
@@ -123,8 +123,8 @@ export function parsePluginkitMatches(output) {
 }
 
 function collectPluginkitMatches() {
-  const all = throwIfSpawnFailed(capture("/usr/bin/pluginkit", ["-mDvvv", "-i", providerBundleId], { cwd: repoRoot }));
-  const active = throwIfSpawnFailed(capture("/usr/bin/pluginkit", ["-mAvvv", "-i", providerBundleId], { cwd: repoRoot }));
+  const all = captureSpawned("/usr/bin/pluginkit", ["-mDvvv", "-i", providerBundleId], { cwd: repoRoot });
+  const active = captureSpawned("/usr/bin/pluginkit", ["-mAvvv", "-i", providerBundleId], { cwd: repoRoot });
   if (all.status !== 0 && active.status !== 0) {
     throw new Error(
       `pluginkit query failed: ${all.stderr || all.stdout || active.stderr || active.stdout}`,
@@ -149,7 +149,7 @@ function parseSystemExtensionMatches(output) {
 }
 
 function collectSystemExtensionMatches() {
-  const result = throwIfSpawnFailed(capture("/usr/bin/systemextensionsctl", ["list"], { cwd: repoRoot }));
+  const result = captureSpawned("/usr/bin/systemextensionsctl", ["list"], { cwd: repoRoot });
   if (result.status !== 0) {
     return [];
   }
@@ -285,11 +285,11 @@ function unregisterEntry(entry) {
   }
 
   if (entry.appBundle) {
-    throwIfSpawnFailed(capture(
+    captureSpawned(
       "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
       ["-f", "-u", entry.appBundle],
       { cwd: repoRoot, stdio: "inherit" },
-    ));
+    );
   }
 }
 
@@ -306,10 +306,10 @@ function registerLegalApp(appBundle) {
   );
   if (provider.mode === "app-extension") {
     run("/usr/bin/pluginkit", ["-a", appBundle], { cwd: repoRoot });
-    throwIfSpawnFailed(capture("/usr/bin/pluginkit", ["-a", provider.path], {
+    captureSpawned("/usr/bin/pluginkit", ["-a", provider.path], {
       cwd: repoRoot,
       stdio: "inherit",
-    }));
+    });
   } else {
     console.log("System Extension activation is requested by the app when TUN starts; the doctor only refreshes LaunchServices.");
   }
@@ -425,10 +425,5 @@ function main() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

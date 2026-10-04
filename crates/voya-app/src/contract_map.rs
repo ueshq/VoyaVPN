@@ -220,7 +220,8 @@ pub fn core_seed_install_result(
 ) -> voya_contracts::CoreSeedInstallResult {
     voya_contracts::CoreSeedInstallResult {
         status: match outcome.status {
-            voya_platform::coreinfo::CoreSeedCopyStatus::Copied => {
+            voya_platform::coreinfo::CoreSeedCopyStatus::Copied
+            | voya_platform::coreinfo::CoreSeedCopyStatus::Refreshed => {
                 voya_contracts::CoreSeedInstallStatus::Installed
             }
             voya_platform::coreinfo::CoreSeedCopyStatus::AlreadyInstalled => {

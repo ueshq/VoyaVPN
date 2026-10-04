@@ -7,7 +7,7 @@ use crate::{
     coreinfo::TargetOs,
     process::{
         reg_add_arguments, GeneratedScript, ProcessError, ProcessOutput, ProcessRole,
-        ProcessRunner, ProcessSpawn,
+        ProcessRunner, ProcessSpawn, HELPER_TIMEOUT,
     },
 };
 

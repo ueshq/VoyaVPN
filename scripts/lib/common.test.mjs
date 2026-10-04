@@ -1,9 +1,18 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { checkedCapture, commandFailure, describeCommand, environmentValue, run, validateTiming } from "./common.mjs";
+import {
+  captureSpawned,
+  checkedCapture,
+  commandFailure,
+  describeCommand,
+  environmentValue,
+  run,
+  runCli,
+  validateTiming,
+} from "./common.mjs";
 
 const temporaryDirectories = [];
 afterEach(() => {
@@ -48,6 +57,30 @@ describe("checked command capture", () => {
     expect(failure.message).toContain("--password *** --token=***");
     expect(failure.message).not.toContain("secret-value");
     expect(failure.message).not.toContain("secret-token");
+  });
+});
+
+describe("spawned command capture", () => {
+  it("hands back a non-zero exit as an answer rather than a failure", () => {
+    const { script } = commandFixture('process.stdout.write("nothing found\\n"); process.exit(1);');
+    expect(captureSpawned(process.execPath, [script])).toMatchObject({
+      status: 1, stdout: "nothing found\n",
+    });
+  });
+
+  it("throws the spawn error when a command cannot be started", () => {
+    const { directory } = commandFixture("");
+    expect(() => captureSpawned(join(directory, "missing-command"), [])).toThrow(
+      expect.objectContaining({ code: "ENOENT" }),
+    );
+  });
+
+  it("runs through an injected capture and still reports its spawn error", () => {
+    const refused = Object.assign(new Error("fork refused"), { code: "EAGAIN" });
+    expect(() => captureSpawned("tool", [], {}, () => ({ error: refused }))).toThrow(refused);
+    expect(captureSpawned("tool", ["--flag"], { cwd: "/" }, (...call) => ({ call, status: 3 }))).toEqual({
+      call: ["tool", ["--flag"], { cwd: "/" }], status: 3,
+    });
   });
 });
 
@@ -105,5 +138,33 @@ describe("command argument redaction", () => {
 
     expect(() => run(process.execPath, [script, "--password", "hunter2"])).toThrow(/--password \*\*\*/);
     expect(() => run(process.execPath, [script, "--password", "hunter2"])).not.toThrow(/hunter2/);
+  });
+});
+
+describe("script entry point", () => {
+  it("reports a failure as its message and a non-zero exit, not a stack trace", () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    runCli(() => {
+      throw new Error("the certificate is missing");
+    });
+
+    expect(error).toHaveBeenCalledWith("the certificate is missing");
+    expect(exit).toHaveBeenCalledWith(1);
+    vi.restoreAllMocks();
+  });
+
+  it("leaves a successful run alone", () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation(() => undefined);
+    let ran = false;
+
+    runCli(() => {
+      ran = true;
+    });
+
+    expect(ran).toBe(true);
+    expect(exit).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 });

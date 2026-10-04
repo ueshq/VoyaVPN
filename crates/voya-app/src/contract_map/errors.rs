@@ -343,9 +343,7 @@ impl From<SpeedtestError> for AppError {
             SpeedtestError::Path(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::Process(ref source) => io(Sub::Speedtest, source),
             SpeedtestError::ProbeCoreHost(_) => io(Sub::Speedtest, &error),
-            SpeedtestError::CreateConfigDir { .. } | SpeedtestError::WriteConfig { .. } => {
-                io(Sub::Speedtest, &error)
-            }
+            SpeedtestError::WriteConfig { .. } => io(Sub::Speedtest, &error),
             SpeedtestError::EmptySelection => invalid(Sub::Speedtest, "profileIds", &error),
             SpeedtestError::SingboxConfig(ref source) => internal(Sub::Speedtest, source),
             SpeedtestError::Cancelled
@@ -444,9 +442,10 @@ impl From<RuntimeError> for AppError {
                     .map(|message| validation_issue_to_contract("activeProfile", message.clone()))
                     .collect(),
             ),
-            RuntimeError::CreateConfigDir { .. }
+            RuntimeError::ReadConfig { .. }
             | RuntimeError::WriteConfig { .. }
             | RuntimeError::RemoveConfig { .. } => io(Sub::Runtime, &error),
+            RuntimeError::Task(ref source) => internal(Sub::Runtime, source),
             RuntimeError::Path(ref source) => io(Sub::Runtime, source),
             RuntimeError::SingboxConfig(ref source) => internal(Sub::Runtime, source),
         }
@@ -486,9 +485,9 @@ impl From<TunManagerError> for AppError {
             TunManagerError::VpnRequired => {
                 AppError::new(Sub::Tun, AppErrorKind::Unsupported, error.to_string())
             }
-            TunManagerError::UnsupportedPlatform | TunManagerError::ProviderPathMismatch { .. } => {
-                internal(Sub::Tun, &error)
-            }
+            TunManagerError::UnsupportedPlatform
+            | TunManagerError::ProviderPathMismatch { .. }
+            | TunManagerError::Task(_) => internal(Sub::Tun, &error),
         }
     }
 }
@@ -524,7 +523,7 @@ impl From<ConnectionModeError> for AppError {
                 Self::new(Sub::SysProxy, sysproxy_kind(source), error.to_string())
             }
             ConnectionModeError::SystemProxyRollbackFailed { .. }
-            | ConnectionModeError::Task { .. } => internal(Sub::SysProxy, &error),
+            | ConnectionModeError::Task(_) => internal(Sub::SysProxy, &error),
         }
     }
 }
@@ -658,6 +657,14 @@ fn not_found(
 
 fn network(subsystem: AppErrorSubsystem, error: &impl std::fmt::Display) -> AppError {
     AppError::new(subsystem, AppErrorKind::Network, error.to_string())
+}
+
+/// A blocking task that panicked or was cancelled, for a command that runs OS
+/// work off the async threads and has no narrower error of its own.
+impl From<crate::blocking::BlockingTaskError> for AppError {
+    fn from(error: crate::blocking::BlockingTaskError) -> Self {
+        internal(Sub::App, &error)
+    }
 }
 
 fn io(subsystem: AppErrorSubsystem, error: &impl std::fmt::Display) -> AppError {

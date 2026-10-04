@@ -35,32 +35,19 @@ struct FakeDelay {
 }
 
 impl RunningCoreProbe for FakeCore {
-    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>> {
+    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreDelay>>> {
         let delay = self.connected.then(|| {
             Arc::new(FakeDelay {
                 answers: self.answers.clone(),
                 block_until_cancelled: self.block_until_cancelled.clone(),
                 requests: Arc::clone(&self.requests),
-            }) as Arc<dyn RunningCoreProbe>
+            }) as Arc<dyn RunningCoreDelay>
         });
         Box::pin(async move { delay })
     }
-
-    fn delay(
-        &self,
-        _tag: String,
-        _test_url: String,
-        _timeout_ms: u32,
-    ) -> BoxFuture<'static, std::result::Result<u32, ClashError>> {
-        Box::pin(async { Err(ClashError::WebSocketClosed) })
-    }
 }
 
-impl RunningCoreProbe for FakeDelay {
-    fn connect(&self) -> BoxFuture<'static, Option<Arc<dyn RunningCoreProbe>>> {
-        Box::pin(async { None })
-    }
-
+impl RunningCoreDelay for FakeDelay {
     fn delay(
         &self,
         tag: String,
@@ -313,4 +300,48 @@ async fn running_core_speedtest_stops_waiting_on_cancel() {
     assert!(run.cancelled);
     assert_eq!(outcome_of(&run, "a").0, SpeedtestOutcome::Cancelled);
     assert_eq!(outcome_of(&run, "b").0, SpeedtestOutcome::Cancelled);
+}
+
+/// A run that fails after the selection was marked `Testing` must still take
+/// those markers off: nothing sweeps them at startup, so they would otherwise
+/// read as "testing" for good.
+#[tokio::test]
+async fn running_core_speedtest_that_fails_leaves_no_pending_markers() {
+    let database = database_with(&[vmess("a"), vmess("b")]).await;
+    // Rejects the measured delay and nothing else, so the result write fails
+    // while the pending marker before it and the cleanup after it go through.
+    sqlx::query(
+        "CREATE TRIGGER reject_measured_delay BEFORE UPDATE ON profile_ex_items \
+         WHEN NEW.delay = 77 BEGIN SELECT RAISE(ABORT, 'injected write failure'); END",
+    )
+    .execute(database.pool())
+    .await
+    .expect("install trigger");
+    let Harness { manager, .. } = manager(FakeCore {
+        connected: true,
+        answers: vec![("a", Ok(77)), ("b", Ok(77))],
+        ..FakeCore::default()
+    });
+
+    let run = manager
+        .run_with_callback(&database, &AppConfig::default(), ids(&["a", "b"]), |_| {})
+        .await;
+
+    assert!(
+        matches!(run, Err(SpeedtestError::Database(_))),
+        "the write failure is the run's error: {run:?}"
+    );
+    for id in ["a", "b"] {
+        let stored = database
+            .profile_exs()
+            .get(id)
+            .await
+            .expect("read")
+            .expect("row");
+        assert_eq!(
+            stored.message.as_deref(),
+            Some(SpeedtestOutcome::Skipped.as_stored()),
+            "{id} is no longer pending"
+        );
+    }
 }

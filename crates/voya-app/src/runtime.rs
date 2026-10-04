@@ -1,7 +1,7 @@
 use std::{
     io,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, Mutex as StdMutex, PoisonError},
 };
 
 use thiserror::Error;
@@ -14,12 +14,13 @@ use voya_db::{Database, DbError};
 use voya_platform::{
     coreinfo::{
         copy_seed_core_asset, core_launch, discover_executable, discover_packaged_seed_executable,
-        CoreInfoError, TargetOs,
+        CoreInfoError, TargetOs, CORE_DIR_NAME,
     },
     filesystem,
     paths::{AppPaths, PathError},
 };
 
+use crate::blocking::{run_blocking, BlockingTaskError};
 use crate::coregen::SnapshotCoreGenEnv;
 use crate::supervisor::{
     ClashApiSecret, CoreProcessSpec, CoreSupervisor, SupervisorConnectionState, SupervisorError,
@@ -176,12 +177,6 @@ impl<'runtime> RuntimeManager<'runtime> {
     }
 
     async fn start_core(&self, config: &AppConfig) -> Result<SupervisorSnapshot, RuntimeError> {
-        self.paths.ensure_dirs()?;
-
-        enum LaunchTarget {
-            Node(Box<voya_core::ProfileItem>),
-            Group(voya_core::PolicyGroupItem),
-        }
         // A node and a group are never active together; which one this launch
         // uses decides the generated outbounds and what the snapshot reports.
         let target = match config.active_target() {
@@ -208,9 +203,102 @@ impl<'runtime> RuntimeManager<'runtime> {
         let env = load_runtime_core_gen_env(self.database, &self.paths, config, self.target_os)
             .await?
             .with_clash_api_secret(clash_api_secret.clone());
+
+        // Generating a config for thousands of nodes and writing it out is
+        // CPU and file work, and this runs under the runtime lock: on an async
+        // worker it would stall every other task for as long as it took.
+        let launch = LaunchPreparation {
+            paths: self.paths.clone(),
+            core_seed_resource_dir: self.core_seed_resource_dir.clone(),
+            target_os: self.target_os,
+            config: config.clone(),
+            target,
+            env,
+            clash_api_secret,
+        };
+        let PreparedLaunch { request, replaced } =
+            run_blocking("core launch preparation", move || launch.prepare()).await??;
+
+        match self.supervisor.start(request).await {
+            Ok(snapshot) => {
+                self.settings_application.core_applied(config);
+                Ok(snapshot)
+            }
+            Err(error) => {
+                // A start that failed while it was still being planned never
+                // stopped the previous core, and that core reads these same
+                // paths again on a crash restart — with the Clash API secret
+                // the supervisor still publishes for it. So it gets back the
+                // files it was started from; with nothing running, a failed
+                // start leaves no credential-bearing config behind at all.
+                let previous_core_running = self.supervisor.status().await.is_ok_and(|snapshot| {
+                    snapshot.state != SupervisorConnectionState::Disconnected
+                });
+                let replaced = if previous_core_running {
+                    replaced
+                } else {
+                    ReplacedConfigs::default()
+                };
+                // File writes, like the forward path's: off the async threads.
+                let paths = self.paths.clone();
+                if let Err(task_error) =
+                    run_blocking("core config rollback", move || replaced.put_back(&paths)).await
+                {
+                    tracing::warn!(
+                        error = ?task_error,
+                        "failed to put the core configs back after a failed start"
+                    );
+                }
+                Err(error.into())
+            }
+        }
+    }
+}
+
+enum LaunchTarget {
+    Node(Box<voya_core::ProfileItem>),
+    Group(voya_core::PolicyGroupItem),
+}
+
+/// Everything a launch needs, owned, so the blocking half can run it.
+struct LaunchPreparation {
+    paths: AppPaths,
+    core_seed_resource_dir: Option<PathBuf>,
+    target_os: TargetOs,
+    config: AppConfig,
+    target: LaunchTarget,
+    env: SnapshotCoreGenEnv,
+    clash_api_secret: ClashApiSecret,
+}
+
+/// A start request whose config files are on disk, and what they replaced.
+struct PreparedLaunch {
+    request: SupervisorStartRequest,
+    replaced: ReplacedConfigs,
+}
+
+impl LaunchPreparation {
+    /// Generates both configs, writes them, and builds the start request.
+    ///
+    /// Nothing is written until everything that can still fail has been
+    /// resolved, and a write that fails half-way puts the previous files back:
+    /// until the supervisor accepts the request, the core that is running
+    /// still owns them.
+    fn prepare(self) -> Result<PreparedLaunch, RuntimeError> {
+        let Self {
+            paths,
+            core_seed_resource_dir,
+            target_os,
+            config,
+            target,
+            env,
+            clash_api_secret,
+        } = self;
+        paths.ensure_dirs()?;
+
         let mut contexts = match &target {
             LaunchTarget::Node(profile) => {
-                CoreConfigContextBuilder::new(&env).build_all(config, profile)
+                CoreConfigContextBuilder::new(&env).build_all(&config, profile)
             }
             LaunchTarget::Group(group) => {
                 let members: Vec<voya_core::ProfileItem> =
@@ -218,7 +306,7 @@ impl<'runtime> RuntimeManager<'runtime> {
                         .into_iter()
                         .cloned()
                         .collect();
-                CoreConfigContextBuilder::new(&env).build_all_for_group(config, group, &members)
+                CoreConfigContextBuilder::new(&env).build_all_for_group(&config, group, &members)
             }
         };
         let (active_profile_id, active_group_id) = match &target {
@@ -232,10 +320,9 @@ impl<'runtime> RuntimeManager<'runtime> {
                 warnings: validation.warnings,
             });
         }
-        // A config that generates but is suspicious used to say nothing at all:
-        // the warnings only travelled on the error variant. `warn` is the level
-        // the desktop log layer forwards to the Logs panel, so these reach the
-        // user rather than only the file log.
+        // `warn` is the level the desktop log layer forwards to the Logs panel,
+        // so a config that generates but is suspicious reaches the user rather
+        // than only the file log.
         for warning in &validation.warnings {
             tracing::warn!(
                 profile = ?active_profile_id,
@@ -243,100 +330,200 @@ impl<'runtime> RuntimeManager<'runtime> {
                 "core config generation warning: {warning:?}"
             );
         }
-        if self.target_os.runs_core_in_tunnel_provider() {
+        if target_os.runs_core_in_tunnel_provider() {
             // This core is the only one — macOS's PacketTunnel, a phone's
             // provider — so the speedtest measures nodes through it
             // (`speedtest::running_core`) and every node that can carry a
             // probe outbound gets one.
-            contexts.main_result.context.latency_probe_nodes = env.profiles().to_vec();
+            contexts.main_result.context.latency_probe_nodes = env.into_profiles();
         }
 
-        let main_config_path = write_runtime_config(
-            &self.paths,
+        let seed_dir = core_seed_resource_dir.as_deref();
+        let main_context = &contexts.main_result.context;
+        let pre_context = contexts
+            .pre_socks_result
+            .as_ref()
+            .map(|result| &result.context);
+        let main_json = generate_singbox_config_json(main_context)?;
+        let pre_json = pre_context.map(generate_singbox_config_json).transpose()?;
+        let main = process_spec(
+            &paths,
+            seed_dir,
+            target_os,
+            main_context,
             MAIN_CONFIG_FILE_NAME,
-            &contexts.main_result.context,
         )?;
-        let main_spec = self.process_spec(&contexts.main_result.context, MAIN_CONFIG_FILE_NAME)?;
+        let pre = pre_context
+            .map(|context| process_spec(&paths, seed_dir, target_os, context, PRE_CONFIG_FILE_NAME))
+            .transpose()?;
 
-        let pre = if let Some(pre_result) = &contexts.pre_socks_result {
-            write_runtime_config(&self.paths, PRE_CONFIG_FILE_NAME, &pre_result.context)?;
-            Some(self.process_spec(&pre_result.context, PRE_CONFIG_FILE_NAME)?)
-        } else {
-            cleanup_config_file(&self.paths, PRE_CONFIG_FILE_NAME)?;
-            None
+        let replaced = ReplacedConfigs::read(&paths)?;
+        let written =
+            write_runtime_config(&paths, MAIN_CONFIG_FILE_NAME, &main_json).and_then(|()| {
+                match &pre_json {
+                    Some(json) => write_runtime_config(&paths, PRE_CONFIG_FILE_NAME, json),
+                    None => cleanup_config_file(&paths, PRE_CONFIG_FILE_NAME),
+                }
+            });
+        if let Err(error) = written {
+            replaced.put_back(&paths);
+            return Err(error);
+        }
+
+        Ok(PreparedLaunch {
+            request: SupervisorStartRequest {
+                active_profile_id,
+                active_group_id,
+                main,
+                pre,
+                tun_enabled: config.tun.enabled,
+                kill_switch: config.tun.strict_route,
+                sudo_script_dir: paths.temp_dir().join(SUDO_SCRIPT_DIR_NAME),
+                restart_on_crash: true,
+                // Taken from the generated main context, not from the TUN
+                // setting: those disagree on a pre-socks topology.
+                clash_api_port: main_context.clash_api_port(),
+                clash_api_secret: Some(clash_api_secret),
+            },
+            replaced,
+        })
+    }
+}
+
+/// The two runtime config files as they were before a launch overwrote them;
+/// `None` for one that did not exist.
+#[derive(Default)]
+struct ReplacedConfigs {
+    main: Option<Vec<u8>>,
+    pre: Option<Vec<u8>>,
+}
+
+impl ReplacedConfigs {
+    fn read(paths: &AppPaths) -> Result<Self, RuntimeError> {
+        let read = |file_name| {
+            let path = paths.bin_config_file(file_name);
+            filesystem::read_file_if_exists(&path)
+                .map_err(|source| RuntimeError::ReadConfig { path, source })
         };
 
-        let request = SupervisorStartRequest {
-            active_profile_id,
-            active_group_id,
-            main: main_spec,
-            pre,
-            tun_enabled: config.tun.enabled,
-            kill_switch: config.tun.strict_route,
-            sudo_script_dir: self.paths.temp_dir().join(SUDO_SCRIPT_DIR_NAME),
-            restart_on_crash: true,
-            // Taken from the generated main context, not from the TUN setting:
-            // those disagree on a pre-socks topology.
-            clash_api_port: contexts.main_result.context.clash_api_port(),
-            clash_api_secret: Some(clash_api_secret),
-        };
+        Ok(Self {
+            main: read(MAIN_CONFIG_FILE_NAME)?,
+            pre: read(PRE_CONFIG_FILE_NAME)?,
+        })
+    }
 
-        match self.supervisor.start(request).await {
-            Ok(snapshot) => {
-                self.settings_application.core_applied(config);
-                Ok(snapshot)
-            }
-            Err(error) => {
-                // The start error is what the caller needs; a failed removal
-                // only leaves a credential-bearing config behind, so say so.
-                if let Err(cleanup) = filesystem::remove_file_if_exists(&main_config_path) {
-                    tracing::warn!(
-                        path = %main_config_path.display(),
-                        error = ?cleanup,
-                        "failed to remove core config after a failed start"
-                    );
-                }
-                if let Err(cleanup) = cleanup_config_file(&self.paths, PRE_CONFIG_FILE_NAME) {
-                    tracing::warn!(error = ?cleanup, "failed to remove pre-core config after a failed start");
-                }
-                Err(error.into())
+    /// Undoes a launch's writes. Best-effort: the caller is already reporting
+    /// the failure that led here, and that one is what the user can act on.
+    fn put_back(self, paths: &AppPaths) {
+        for (file_name, contents) in [
+            (MAIN_CONFIG_FILE_NAME, self.main),
+            (PRE_CONFIG_FILE_NAME, self.pre),
+        ] {
+            let path = paths.bin_config_file(file_name);
+            let restored = match contents {
+                Some(contents) => filesystem::write_private_file_with_parent(&path, contents),
+                None => filesystem::remove_file_if_exists(&path),
+            };
+            if let Err(error) = restored {
+                tracing::warn!(
+                    path = %path.display(),
+                    ?error,
+                    "failed to put a core config back after a failed start"
+                );
             }
         }
     }
+}
 
-    fn process_spec(
-        &self,
-        context: &CoreConfigContext,
-        config_file_name: &str,
-    ) -> Result<CoreProcessSpec, RuntimeError> {
-        let spec = if matches!(self.target_os, TargetOs::Macos | TargetOs::Ios) {
-            // macOS and iOS run sing-box inside the PacketTunnel provider;
-            // connecting never requires a standalone executable on disk.
-            CoreProcessSpec::native_tun()
-        } else {
-            let executable = resolve_core_executable(
-                &self.paths,
-                self.core_seed_resource_dir.as_deref(),
-                self.target_os,
-            )?;
-            CoreProcessSpec::new(core_launch(executable, &self.paths, config_file_name))
-        };
+fn process_spec(
+    paths: &AppPaths,
+    core_seed_resource_dir: Option<&Path>,
+    target_os: TargetOs,
+    context: &CoreConfigContext,
+    config_file_name: &str,
+) -> Result<CoreProcessSpec, RuntimeError> {
+    let spec = if matches!(target_os, TargetOs::Macos | TargetOs::Ios) {
+        // macOS and iOS run sing-box inside the PacketTunnel provider;
+        // connecting never requires a standalone executable on disk.
+        CoreProcessSpec::native_tun()
+    } else {
+        let executable = resolve_core_executable(paths, core_seed_resource_dir, target_os)?;
+        CoreProcessSpec::new(core_launch(executable, paths, config_file_name))
+    };
 
-        // Only the process whose config carries the tun inbound needs root:
-        // with a pre-socks split the main core does all remote I/O and must
-        // stay unprivileged.
-        Ok(spec
-            .with_config_path(self.paths.bin_config_file(config_file_name))
-            .with_display_log(context.node.display_log)
-            .with_may_need_sudo(context.is_tun_enabled))
-    }
+    // Only the process whose config carries the tun inbound needs root:
+    // with a pre-socks split the main core does all remote I/O and must
+    // stay unprivileged.
+    Ok(spec
+        .with_config_path(paths.bin_config_file(config_file_name))
+        .with_display_log(context.node.display_log)
+        .with_may_need_sudo(context.is_tun_enabled))
 }
 
 /// Locates the sing-box executable, staging the packaged seed if needed.
 ///
 /// Shared with the speedtest backend: a probe core has to resolve exactly the
 /// binary the runtime would launch.
+///
+/// The answer is remembered for the process. Resolving reads two seed
+/// manifests, creates directories and sets permissions, and a stale installed
+/// core is replaced file by file; a connect, every page of a speedtest and the
+/// self-hosted node each ask, and none of that changes between their calls.
+/// Only a success is remembered, and only while the file is still there.
 pub(crate) fn resolve_core_executable(
+    paths: &AppPaths,
+    core_seed_resource_dir: Option<&Path>,
+    target_os: TargetOs,
+) -> Result<PathBuf, CoreInfoError> {
+    let bin_dir = paths.core_bin_dir(CORE_DIR_NAME);
+    let asked = |resolved: &ResolvedCore| {
+        resolved.bin_dir == bin_dir
+            && resolved.seed_dir.as_deref() == core_seed_resource_dir
+            && resolved.target_os == target_os
+    };
+    let remembered = lock_resolved_cores()
+        .iter()
+        .find(|resolved| asked(resolved))
+        .map(|resolved| resolved.executable.clone());
+    if let Some(executable) = remembered {
+        if matches!(filesystem::file_exists(&executable), Ok(true)) {
+            return Ok(executable);
+        }
+    }
+
+    let executable = locate_core_executable(paths, core_seed_resource_dir, target_os)?;
+    let mut resolved = lock_resolved_cores();
+    resolved.retain(|resolved| !asked(resolved));
+    resolved.push(ResolvedCore {
+        bin_dir,
+        seed_dir: core_seed_resource_dir.map(Path::to_path_buf),
+        target_os,
+        executable: executable.clone(),
+    });
+
+    Ok(executable)
+}
+
+/// What a resolution was asked and what it answered.
+struct ResolvedCore {
+    bin_dir: PathBuf,
+    seed_dir: Option<PathBuf>,
+    target_os: TargetOs,
+    executable: PathBuf,
+}
+
+/// One entry in a running app, which has one data directory and one bundle;
+/// keyed all the same, so that neither a second set of paths nor a parallel
+/// test evicts an answer someone else is relying on.
+static RESOLVED_CORES: StdMutex<Vec<ResolvedCore>> = StdMutex::new(Vec::new());
+
+fn lock_resolved_cores() -> std::sync::MutexGuard<'static, Vec<ResolvedCore>> {
+    RESOLVED_CORES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
+fn locate_core_executable(
     paths: &AppPaths,
     core_seed_resource_dir: Option<&Path>,
     target_os: TargetOs,
@@ -404,16 +591,13 @@ pub(crate) fn write_core_config(
     Ok(path)
 }
 
-fn write_runtime_config(
-    paths: &AppPaths,
-    file_name: &str,
-    context: &CoreConfigContext,
-) -> Result<PathBuf, RuntimeError> {
-    let json = generate_singbox_config_json(context)?;
-    write_core_config(paths, file_name, &json).map_err(|error| RuntimeError::WriteConfig {
-        path: error.path,
-        source: error.source,
-    })
+fn write_runtime_config(paths: &AppPaths, file_name: &str, json: &str) -> Result<(), RuntimeError> {
+    write_core_config(paths, file_name, json)
+        .map(|_| ())
+        .map_err(|error| RuntimeError::WriteConfig {
+            path: error.path,
+            source: error.source,
+        })
 }
 
 fn cleanup_runtime_state(paths: &AppPaths) -> Result<(), RuntimeError> {
@@ -444,8 +628,10 @@ pub enum RuntimeError {
         errors: Vec<ValidationMessage>,
         warnings: Vec<ValidationMessage>,
     },
-    #[error("failed to create runtime config directory {path}: {source}")]
-    CreateConfigDir { path: PathBuf, source: io::Error },
+    #[error("failed to read runtime config {path}: {source}")]
+    ReadConfig { path: PathBuf, source: io::Error },
+    #[error(transparent)]
+    Task(#[from] BlockingTaskError),
     #[error("failed to write runtime config {path}: {source}")]
     WriteConfig { path: PathBuf, source: io::Error },
     #[error("failed to remove runtime config {path}: {source}")]
@@ -615,18 +801,84 @@ mod tests {
         assert!(!contexts.main_result.context.is_tun_enabled);
         assert!(pre_context.is_tun_enabled);
 
-        let main_spec = manager
-            .process_spec(&contexts.main_result.context, MAIN_CONFIG_FILE_NAME)
-            .expect("runtime test operation should succeed");
-        let pre_spec = manager
-            .process_spec(pre_context, PRE_CONFIG_FILE_NAME)
-            .expect("runtime test operation should succeed");
+        let spec = |context, file_name| {
+            process_spec(manager.paths(), None, TargetOs::Linux, context, file_name)
+                .expect("runtime test operation should succeed")
+        };
+        let main_spec = spec(&contexts.main_result.context, MAIN_CONFIG_FILE_NAME);
+        let pre_spec = spec(pre_context, PRE_CONFIG_FILE_NAME);
 
         assert!(
             !main_spec.may_need_sudo,
             "the non-TUN main core must not be launched as root"
         );
         assert!(pre_spec.may_need_sudo);
+    }
+
+    #[tokio::test]
+    async fn a_restart_refused_while_planning_leaves_the_running_cores_config_alone() {
+        // The running core is restarted from these files if it crashes, and
+        // the supervisor goes on publishing the Clash API secret it was started
+        // with. A start that is refused before the old core is stopped used to
+        // leave the *new* config behind: the next crash restart then came up
+        // with a secret nobody knew, and every Clash call answered 401.
+        let database = Database::connect_in_memory()
+            .await
+            .expect("runtime test operation should succeed");
+        let paths = temp_paths();
+        paths
+            .ensure_dirs()
+            .expect("runtime test operation should succeed");
+        write_fake_core_executable(&paths);
+        let supervisor = CoreSupervisor::spawn(
+            SupervisorDeps::new(
+                Arc::new(RecordingRunner::default()),
+                Arc::new(voya_platform::privilege::ElevationState::new()),
+            )
+            .with_target_os(TargetOs::Linux),
+        );
+        let manager =
+            RuntimeManager::with_target_os(&database, paths.clone(), supervisor, TargetOs::Linux);
+        let mut config = AppConfig {
+            active_profile_id: "active".to_string(),
+            ..AppConfig::default()
+        };
+        database
+            .profiles()
+            .upsert(&active_singbox_profile("active"))
+            .await
+            .expect("runtime test operation should succeed");
+        manager
+            .connect(&config)
+            .await
+            .expect("the first connect succeeds");
+        let main_path = paths.bin_config_file(MAIN_CONFIG_FILE_NAME);
+        let running_config = fs::read(&main_path).expect("the running core's config");
+
+        // TUN on Linux needs an elevation grant this test never gives, so the
+        // supervisor refuses the request while it is still planning it.
+        config.tun.enabled = true;
+        let refused = manager.connect(&config).await;
+
+        assert!(matches!(
+            refused,
+            Err(RuntimeError::Supervisor(
+                SupervisorError::ElevationNotGranted
+            ))
+        ));
+        assert_eq!(
+            manager.status().await.expect("status").state,
+            SupervisorConnectionState::Connected
+        );
+        assert_eq!(
+            fs::read(&main_path).expect("config"),
+            running_config,
+            "the running core's config must survive the refused restart"
+        );
+        assert!(
+            !paths.bin_config_file(PRE_CONFIG_FILE_NAME).exists(),
+            "the refused TUN topology's second config must not be left behind"
+        );
     }
 
     #[test]
@@ -943,6 +1195,34 @@ mod tests {
         assert_eq!(spawns.len(), 1);
         assert_eq!(spawns[0].executable, app_data_exe);
         assert_ne!(spawns[0].executable, seed_exe);
+    }
+
+    #[test]
+    fn the_core_executable_is_resolved_once_and_again_only_when_it_is_gone() {
+        let paths = temp_paths();
+        let seed_root = core_seed_resources_dir(paths.app_dir().join("resources"));
+        let seed_exe = write_seed_core_executable(&seed_root, b"seed one");
+        let manifest = seed_exe.with_file_name("sing-box.seed.json");
+        fs::write(&manifest, br#"{"executableSha256":"one"}"#).expect("manifest");
+        let resolve = || {
+            resolve_core_executable(&paths, Some(&seed_root), TargetOs::Linux)
+                .expect("the core resolves")
+        };
+        let installed = resolve();
+        assert_eq!(fs::read(&installed).expect("installed core"), b"seed one");
+
+        // A different packaged core would replace the installed one — on a
+        // resolution. A second ask in the same process is answered from memory
+        // and stages nothing.
+        fs::write(&seed_exe, b"seed two").expect("seed");
+        fs::write(&manifest, br#"{"executableSha256":"two"}"#).expect("manifest");
+        assert_eq!(resolve(), installed);
+        assert_eq!(fs::read(&installed).expect("installed core"), b"seed one");
+
+        // A remembered path is only an answer while the file is there.
+        fs::remove_file(&installed).expect("remove");
+        assert_eq!(resolve(), installed);
+        assert_eq!(fs::read(&installed).expect("installed core"), b"seed two");
     }
 
     #[tokio::test]

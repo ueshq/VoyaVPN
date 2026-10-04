@@ -23,9 +23,8 @@ const IMPORTED = "imported";
 
 /**
  * `Trigger` is whatever the caller wants focus to return to once a dialog
- * closes — an `HTMLElement` on the desktop, nothing on a phone, where a sheet
- * dismisses back to the list on its own. It is carried, never inspected, so the
- * hook needs no DOM.
+ * closes — the `HTMLElement` that opened it. It is carried, never inspected,
+ * so the hook's own tests need no DOM node to stand in for one.
  */
 export function useNodeSubscriptions<Trigger = never>(
   { runOperation, setOperationError, setOperationMessage }: NodeOperation,

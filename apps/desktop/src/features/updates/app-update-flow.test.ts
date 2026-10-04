@@ -87,6 +87,43 @@ describe("app update flow", () => {
   });
 });
 
+describe("download progress granularity", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // One event per network chunk is thousands of them; only a step the panel
+  // can show is reported.
+  it("skips chunks smaller than a percent, and a fixed step while the size is unknown", async () => {
+    const downloadAndInstall = vi.fn(async (onEvent: (event: unknown) => void) => {
+      onEvent({ data: { contentLength: 1000 }, event: "Started" });
+      onEvent({ data: { chunkLength: 4 }, event: "Progress" });
+      onEvent({ data: { chunkLength: 4 }, event: "Progress" });
+      onEvent({ data: { chunkLength: 4 }, event: "Progress" });
+      onEvent({ event: "Finished" });
+    });
+    updater.check.mockResolvedValue(makeTauriUpdate({ downloadAndInstall }));
+    const progress = vi.fn();
+    await installCheckedAppUpdate(progress);
+    expect(progress.mock.calls.map(([value]) => value.downloaded)).toEqual([0, 12, 12]);
+
+    const unsized = vi.fn(async (onEvent: (event: unknown) => void) => {
+      onEvent({ data: {}, event: "Started" });
+      onEvent({ data: { chunkLength: 1024 }, event: "Progress" });
+      onEvent({ data: { chunkLength: 256 * 1024 }, event: "Progress" });
+      onEvent({ event: "Finished" });
+    });
+    updater.check.mockResolvedValue(makeTauriUpdate({ downloadAndInstall: unsized }));
+    progress.mockClear();
+    await installCheckedAppUpdate(progress);
+    expect(progress.mock.calls.map(([value]) => value)).toEqual([
+      { downloaded: 0, finished: false, total: null },
+      { downloaded: 257 * 1024, finished: false, total: null },
+      { downloaded: 257 * 1024, finished: true, total: null },
+    ]);
+  });
+});
+
 function makeTauriUpdate(overrides: Record<string, unknown> = {}) {
   return {
     body: null,

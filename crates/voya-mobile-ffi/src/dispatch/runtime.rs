@@ -6,9 +6,9 @@
 
 use std::sync::Arc;
 
-use serde_json::Value;
 use voya_app::{
     config_mutation::AppConfig,
+    connection_mode::ConnectionModeSink,
     contract_map::{runtime_status_event, runtime_status_response},
     core_flow::{CoreFlow, CoreFlowSink},
     post_commit::{self, ConfigChange, PostCommitSink},
@@ -17,21 +17,21 @@ use voya_app::{
     tun::TunManager,
 };
 use voya_contracts::{
-    AppError, AppErrorKind, AppErrorSubsystem, AppNotice, AppNoticeLevel, CoreState,
-    InvalidationScope, LogCode, LogLevel, NoticeCode, TunStatus,
+    AppError, AppErrorKind, AppErrorSubsystem, AppNoticeLevel, CoreState, LogCode, LogLevel,
+    NoticeCode, TunStatus,
 };
 use voya_platform::sysproxy::SystemProxyStatus;
 use voya_platform::tun::NativeTunError;
 
 use crate::{
     app::MobileState,
-    events::{AppEvent, EventChannel, TransientStreamEvent},
+    events::{EventChannel, TransientStreamEvent},
     sinks::HostSinks,
 };
 
-use super::answer;
+use super::{answer, Answer};
 
-pub(super) async fn connect(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn connect(state: &MobileState) -> Answer {
     let config = state.config_mutations.current_config();
 
     answer(
@@ -66,7 +66,7 @@ fn declined_vpn_configuration(error: RuntimeError) -> AppError {
     error.into()
 }
 
-pub(super) async fn disconnect(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn disconnect(state: &MobileState) -> Answer {
     let config = state.config_mutations.current_config();
 
     answer(
@@ -75,7 +75,7 @@ pub(super) async fn disconnect(state: &MobileState) -> Result<Value, AppError> {
     )
 }
 
-pub(super) async fn restart(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn restart(state: &MobileState) -> Answer {
     let config = state.config_mutations.current_config();
 
     answer(
@@ -84,20 +84,23 @@ pub(super) async fn restart(state: &MobileState) -> Result<Value, AppError> {
     )
 }
 
-pub(super) async fn status(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn status(state: &MobileState) -> Answer {
     answer(
         "runtime_status",
         &runtime_status_response(runtime_manager(state).status().await?),
     )
 }
 
-pub(super) async fn tun_status(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn tun_status(state: &MobileState) -> Answer {
     let config = state.config_mutations.current_config();
-    answer("tun_status", &tun_manager(state).status(&config)?)
+    answer(
+        "tun_status",
+        &tun_manager(state).status_off_thread(&config).await?,
+    )
 }
 
 /// The exit address of the running connection, looked up through its own proxy.
-pub(super) async fn check_connection_ip(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn check_connection_ip(state: &MobileState) -> Answer {
     let config = state.config_mutations.current_config();
     let snapshot = state.supervisor.status().await?;
     let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot).await?;
@@ -111,7 +114,7 @@ pub(super) async fn check_connection_ip(state: &MobileState) -> Result<Value, Ap
 pub(super) async fn finish_config_change(
     state: &MobileState,
     reason: &str,
-    scopes: voya_app::invalidation::InvalidationBundle,
+    bundle: voya_app::invalidation::InvalidationBundle,
     config: &AppConfig,
     change: ConfigChange,
 ) {
@@ -121,7 +124,26 @@ pub(super) async fn finish_config_change(
         },
         &core_flow(state),
         reason,
-        &scopes.1,
+        Some(bundle),
+        config,
+        change,
+    )
+    .await;
+}
+
+/// The restart-only tail, for a caller that already announced its caches.
+async fn restart_after_config_change(
+    state: &MobileState,
+    config: &AppConfig,
+    change: ConfigChange,
+) {
+    post_commit::finish_config_change(
+        &MobilePostCommitSink {
+            sinks: Arc::clone(&state.sinks),
+        },
+        &core_flow(state),
+        "",
+        None,
         config,
         change,
     )
@@ -133,18 +155,12 @@ struct MobilePostCommitSink {
 }
 
 impl PostCommitSink for MobilePostCommitSink {
-    fn invalidate(
-        &self,
-        reason: &str,
-        scopes: &[InvalidationScope],
-        refresh_failed_code: NoticeCode,
-    ) {
-        self.sinks
-            .invalidate(reason, (refresh_failed_code, scopes.to_vec()));
+    fn invalidate(&self, reason: &str, bundle: voya_app::invalidation::InvalidationBundle) {
+        self.sinks.invalidate(reason, bundle);
     }
 
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
-        self.sinks.notice(level, code, Some(detail.to_string()));
+        self.sinks.notice(level, code, detail);
     }
 }
 
@@ -166,7 +182,7 @@ pub(super) fn core_flow(state: &MobileState) -> CoreFlow<'_> {
         tun_manager(state),
         Arc::new(HostCoreFlowSink {
             sinks: Arc::clone(&state.sinks),
-            state: state.this.get().cloned(),
+            state: std::sync::Weak::clone(&state.this),
         }),
         state.proxy_runtime.clone(),
     )
@@ -187,11 +203,59 @@ fn tun_manager(state: &MobileState) -> TunManager {
         .with_native_tun_controller(Arc::clone(&state.native_tun))
 }
 
+/// What the supervisor calls when the core goes down without being asked.
+///
+/// The same recovery the desktop runs (`event_sinks.rs`): the core flow settles
+/// the app into "disconnected" — the state event, zeroed statistics, the TUN
+/// status — and raises the notice. Without it the phone kept showing
+/// "connected" over a tunnel that was gone.
+///
+/// Both callbacks arrive on the supervisor's own actor, so the recovery runs
+/// on a task of the app's runtime: it re-enters the runtime manager, and the
+/// actor must stay free for the commands that recovery may issue.
+pub(crate) struct SupervisorRecoverySink {
+    state: std::sync::Weak<MobileState>,
+    runtime: tokio::runtime::Handle,
+}
+
+impl SupervisorRecoverySink {
+    pub(crate) const fn new(
+        state: std::sync::Weak<MobileState>,
+        runtime: tokio::runtime::Handle,
+    ) -> Self {
+        Self { state, runtime }
+    }
+}
+
+impl voya_app::supervisor::SupervisorEventSink for SupervisorRecoverySink {
+    fn native_tun_exited(&self, event: voya_app::supervisor::NativeTunExitEvent) {
+        // An app that is going away has nobody left to tell.
+        let Some(state) = self.state.upgrade() else {
+            return;
+        };
+        self.runtime.spawn(async move {
+            let config = state.config_mutations.current_config();
+            core_flow(&state)
+                .handle_native_tun_exit(&config, event)
+                .await;
+        });
+    }
+
+    fn core_exited(&self, event: voya_app::supervisor::CoreExitEvent) {
+        let Some(state) = self.state.upgrade() else {
+            return;
+        };
+        self.runtime.spawn(async move {
+            let config = state.config_mutations.current_config();
+            core_flow(&state).handle_core_exit(&config, event).await;
+        });
+    }
+}
+
 struct HostCoreFlowSink {
     sinks: Arc<HostSinks>,
-    /// For the background IPv6 egress check; `None` before the state is
-    /// shared, when no core can be connected yet.
-    state: Option<std::sync::Weak<MobileState>>,
+    /// For the background IPv6 egress check.
+    state: std::sync::Weak<MobileState>,
 }
 
 impl CoreFlowSink for HostCoreFlowSink {
@@ -216,19 +280,11 @@ impl CoreFlowSink for HostCoreFlowSink {
     }
 
     fn system_proxy_changed(&self, status: &SystemProxyStatus) {
-        self.sinks.emit(
-            EventChannel::TransientStream,
-            &TransientStreamEvent::SysProxyChanged(
-                voya_app::contract_map::system_proxy_status_to_contract(status.clone()),
-            ),
-        );
+        ConnectionModeSink::system_proxy_changed(&*self.sinks, status);
     }
 
     fn tun_changed(&self, status: &TunStatus) {
-        self.sinks.emit(
-            EventChannel::TransientStream,
-            &TransientStreamEvent::TunChanged(status.clone()),
-        );
+        ConnectionModeSink::tun_changed(&*self.sinks, status);
     }
 
     fn statistics_zero(&self) {
@@ -239,26 +295,16 @@ impl CoreFlowSink for HostCoreFlowSink {
     }
 
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
-        self.sinks.emit(
-            EventChannel::App,
-            &AppEvent::Notice(AppNotice {
-                code,
-                detail: Some(detail.to_string()),
-                level,
-            }),
-        );
+        self.sinks.notice(level, code, detail);
     }
 
     fn request_ipv6_egress_check(&self) {
-        let Some(state) = self.state.as_ref().and_then(std::sync::Weak::upgrade) else {
+        let Some(state) = self.state.upgrade() else {
             return;
         };
-        // Called from a command running on the app's runtime. The probe takes
-        // seconds and may reconnect, which needs the flow lock the settling
-        // connect still holds: run it on its own flow, later.
-        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
-            return;
-        };
+        // The probe takes seconds and may reconnect, which needs the flow lock
+        // the settling connect still holds: run it on its own flow, later.
+        let runtime = state.runtime.clone();
         runtime.spawn(async move {
             core_flow(&state)
                 .check_ipv6_egress(|| state.config_mutations.current_config())
@@ -273,16 +319,14 @@ struct TunEnabled {
     enabled: bool,
 }
 
-pub(super) async fn set_tun_enabled(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn set_tun_enabled(state: &MobileState, args: &str) -> Answer {
     let TunEnabled { enabled } = super::arguments("set_tun_enabled", args)?;
-    let planned = state
-        .config_mutations
-        .mutate(async |_unit_of_work, config| -> Result<_, AppError> {
-            let status = tun_manager(state).plan_set_enabled(config, enabled)?;
-            TunManager::apply_enabled(config, enabled);
-            Ok(status)
-        })
-        .await?;
+    let planned = voya_app::tun::set_tun_enabled_use_case(
+        &state.config_mutations,
+        &tun_manager(state),
+        enabled,
+    )
+    .await?;
 
     state.sinks.emit(
         EventChannel::TransientStream,
@@ -302,9 +346,9 @@ pub(super) async fn set_tun_enabled(state: &MobileState, args: &Value) -> Result
     answer("set_tun_enabled", &planned.value)
 }
 
-pub(super) async fn connection_mode_status(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn connection_mode_status(state: &MobileState) -> Answer {
     let config = state.config_mutations.current_config();
-    let status = tun_manager(state).status(&config)?;
+    let status = tun_manager(state).status_off_thread(&config).await?;
 
     answer(
         "connection_mode_status",
@@ -321,18 +365,13 @@ struct SetMode {
 /// A phone captures traffic only through its tunnel provider, so the manager
 /// refuses to leave VPN mode here exactly as it does on macOS. The command
 /// stays wired because the frontend shares one settings surface.
-pub(super) async fn set_connection_mode(
-    state: &MobileState,
-    args: &Value,
-) -> Result<Value, AppError> {
+pub(super) async fn set_connection_mode(state: &MobileState, args: &str) -> Answer {
     let SetMode { mode } = super::arguments("set_connection_mode", args)?;
     let connected = state.supervisor.status().await?.state;
     let outcome = voya_app::connection_mode::ConnectionModeManager::new(
         state.system_proxy_manager.clone(),
         tun_manager(state),
-        Arc::new(HostConnectionModeSink {
-            sinks: Arc::clone(&state.sinks),
-        }),
+        Arc::clone(&state.sinks) as Arc<dyn ConnectionModeSink>,
     )
     .set_connection_mode(&state.config_mutations, mode, connected)
     .await?;
@@ -343,44 +382,10 @@ pub(super) async fn set_connection_mode(
     );
 
     if outcome.tun_flag_changed {
-        finish_config_change(
-            state,
-            "connection-mode-restart",
-            (NoticeCode::ConnectionModeRefreshFailed, Vec::new()),
-            &outcome.config,
-            ConfigChange::CONNECTION_MODE,
-        )
-        .await;
+        restart_after_config_change(state, &outcome.config, ConfigChange::CONNECTION_MODE).await;
     }
 
     answer("set_connection_mode", &outcome.status)
-}
-
-struct HostConnectionModeSink {
-    sinks: Arc<HostSinks>,
-}
-
-impl voya_app::connection_mode::ConnectionModeSink for HostConnectionModeSink {
-    fn system_proxy_changed(&self, status: &SystemProxyStatus) {
-        self.sinks.emit(
-            EventChannel::TransientStream,
-            &TransientStreamEvent::SysProxyChanged(
-                voya_app::contract_map::system_proxy_status_to_contract(status.clone()),
-            ),
-        );
-    }
-
-    fn tun_changed(&self, status: &TunStatus) {
-        self.sinks.emit(
-            EventChannel::TransientStream,
-            &TransientStreamEvent::TunChanged(status.clone()),
-        );
-    }
-
-    fn tray_refresh(&self) {
-        // No tray on a phone; the tab bar is rendered from the same stores the
-        // events above already move.
-    }
 }
 
 #[cfg(test)]

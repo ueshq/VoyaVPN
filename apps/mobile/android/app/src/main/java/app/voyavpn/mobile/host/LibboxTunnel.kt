@@ -20,7 +20,9 @@ class LibboxTunnel(private val service: VpnService) : LibboxPlatform(service) {
             basePath = service.filesDir.absolutePath
             workingPath = basePath
             tempPath = service.cacheDir.absolutePath
-            logMaxLines = 500
+            // Libbox's own log buffer is for a command client; nothing
+            // connects one, so it would only hold lines nobody reads.
+            logMaxLines = 0
         })
         val core = Libbox.newCommandServer(this, this)
         box = core

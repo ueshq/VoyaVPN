@@ -4,13 +4,9 @@ use std::{
         atomic::{AtomicBool, Ordering},
         LazyLock,
     },
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-use voya_app::{
-    log_batch::{LogBatcher, LOG_BATCH_CAPACITY, LOG_BATCH_WINDOW},
-    supervisor::ClashApiAccess,
-};
+use voya_app::log_batch::{LogBatcher, LOG_BATCH_CAPACITY, LOG_BATCH_WINDOW};
 
 use super::*;
 
@@ -22,26 +18,7 @@ static LOG_LINES: LazyLock<LogBatcher<LogLineEvent>> =
 /// here, which `get_or_init` would deadlock on.
 static LOG_FLUSHER_STARTED: AtomicBool = AtomicBool::new(false);
 
-/// How to reach the Clash API of the core that is actually running, if any.
-///
-/// The generated main config decides both the port and the bearer token it
-/// demands, so the supervisor snapshot is the only authority for either. An
-/// empty value means no core is connected and there is nothing to dial.
-///
-/// The token is never logged or returned over IPC: it stays inside this
-/// process, is redacted in `Debug`, and only reaches the Clash clients.
-pub(super) async fn current_clash_api_access(state: &AppState) -> ClashApiAccess {
-    state
-        .supervisor()
-        .status()
-        .await
-        .ok()
-        .as_ref()
-        .map(SupervisorSnapshot::clash_api_access)
-        .unwrap_or_default()
-}
-
-pub(super) fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
+pub(crate) fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
     state.services().runtime(
         state.supervisor(),
         state.core_seed_resource_dir().map(Path::to_path_buf),
@@ -64,7 +41,7 @@ pub(super) fn tun_manager(state: &AppState) -> TunManager {
 /// thread, and even an `async` one would stall a tokio worker while it forks
 /// `pluginkit`/`systemextensionsctl`/`sc.exe`/`networksetup` or waits on an
 /// authorization dialog. Every command that reaches such work funnels through
-/// here, matching the pattern already used by `list_process_candidates`.
+/// here.
 pub(super) async fn run_blocking<T>(
     label: &'static str,
     work: impl FnOnce() -> T + Send + 'static,
@@ -72,45 +49,7 @@ pub(super) async fn run_blocking<T>(
 where
     T: Send + 'static,
 {
-    tauri::async_runtime::spawn_blocking(work)
-        .await
-        .map_err(|error| {
-            AppError::internal(
-                AppErrorSubsystem::App,
-                format!("{label} task failed: {error}"),
-            )
-        })
-}
-
-/// Reads the current TUN status without blocking the caller's thread.
-pub(super) async fn tun_status_off_thread(
-    state: &AppState,
-    config: AppConfig,
-) -> Result<TunStatus, AppError> {
-    let manager = tun_manager(state);
-
-    run_blocking("TUN status", move || manager.status(&config))
-        .await?
-        .map_err(AppError::from)
-}
-
-/// Validates a TUN enable/disable request without blocking the caller's thread.
-///
-/// The caller applies the decision with `TunManager::apply_enabled` once it
-/// holds the config mutation guard, so the blocking probe never runs while the
-/// guard's `&mut AppConfig` is borrowed.
-pub(super) async fn plan_tun_enabled_off_thread(
-    state: &AppState,
-    config: AppConfig,
-    enabled: bool,
-) -> Result<TunStatus, AppError> {
-    let manager = tun_manager(state);
-
-    run_blocking("TUN preflight", move || {
-        manager.plan_set_enabled(&config, enabled)
-    })
-    .await?
-    .map_err(AppError::from)
+    Ok(voya_app::blocking::run_blocking(label, work).await?)
 }
 
 /// Emits one typed event, failing the way a command reports its own errors.
@@ -191,14 +130,7 @@ where
                 .await;
         });
     }
-    LOG_LINES.push(LogLineEvent {
-        id: next_log_line_id(),
-        logged_at_ms: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0.0, |elapsed| elapsed.as_secs_f64() * 1000.0),
-        level,
-        body,
-    });
+    LOG_LINES.push(voya_app::logging::new_log_line(level, body));
 }
 
 pub(crate) fn emit_core_state<R>(
@@ -216,11 +148,9 @@ where
     )
 }
 
-/// A change that was already committed, whose follow-up work failed.
-///
-/// `code` names the message; `detail` is the untranslated error behind it, so
-/// it goes to the log line and the toast's second line but never into the
-/// title the user reads.
+/// A notice raised after a change was committed — usually follow-up work that
+/// failed. `voya_app::post_commit::notice_effects` decides what is logged and
+/// what the toast carries; this only puts both on their channels.
 pub(super) fn report_post_commit_error<R>(
     app: &tauri::AppHandle<R>,
     code: NoticeCode,
@@ -229,29 +159,28 @@ pub(super) fn report_post_commit_error<R>(
 ) where
     R: tauri::Runtime,
 {
-    match level {
-        AppNoticeLevel::Info => tracing::info!(?code, detail, "post-commit operation failed"),
-        AppNoticeLevel::Warning => {
-            tracing::warn!(?code, detail, "post-commit operation failed");
+    let effects = voya_app::post_commit::notice_effects(level, code, detail);
+    match effects.log_level {
+        Some(LogLevel::Error) => {
+            tracing::error!(code = ?effects.notice.code, detail, "post-commit operation failed");
         }
-        AppNoticeLevel::Error => tracing::error!(?code, detail, "post-commit operation failed"),
+        Some(LogLevel::Warn) => {
+            tracing::warn!(code = ?effects.notice.code, detail, "post-commit operation failed");
+        }
+        Some(_) => {
+            tracing::info!(code = ?effects.notice.code, detail, "post-commit operation failed");
+        }
+        None => tracing::info!(code = ?effects.notice.code, "post-commit notice"),
     }
-
-    let log_level = match level {
-        AppNoticeLevel::Info => LogLevel::Info,
-        AppNoticeLevel::Warning => LogLevel::Warn,
-        AppNoticeLevel::Error => LogLevel::Error,
-    };
-    emit_app_log(app, log_level, LogCode::PostCommitFailed, Some(detail));
-    emit_or_warn(
-        app,
-        AppEvent::Notice(AppNotice {
-            level,
-            code,
-            detail: Some(detail.to_string()),
-        }),
-        "post-commit notice",
-    );
+    if let Some(log_level) = effects.log_level {
+        emit_app_log(
+            app,
+            log_level,
+            voya_app::post_commit::POST_COMMIT_LOG_CODE,
+            Some(detail),
+        );
+    }
+    emit_or_warn(app, AppEvent::Notice(effects.notice), "post-commit notice");
 }
 
 #[cfg(not(feature = "mac-app-store"))]

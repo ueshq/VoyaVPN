@@ -74,7 +74,7 @@ pub enum SettingsSaveError {
 /// cannot be silently overwritten by a target computed from a stale snapshot.
 pub async fn save_app_settings(
     coordinator: &ConfigMutationCoordinator,
-    autostart: &dyn ApplyAutostart,
+    autostart: &impl ApplyAutostart,
     settings: &AppSettings,
 ) -> Result<SettingsSaveOutcome, SettingsSaveError> {
     validate_app_settings(settings).map_err(SettingsSaveError::Validation)?;
@@ -94,9 +94,9 @@ pub async fn save_app_settings(
     // never becomes the stored truth; it is restored if anything after it fails.
     let autostart_changed = autostart_changes(&original, &target);
     if autostart_changed {
-        if let Err(error) = autostart.apply_autostart(&target) {
+        if let Err(error) = apply_autostart_off_thread(autostart, &target).await {
             tracing::error!(?error, "settings autostart side effect failed");
-            restore_autostart(autostart, &original);
+            restore_autostart(autostart, &original).await;
             return Err(SettingsSaveError::Autostart(error));
         }
     }
@@ -106,7 +106,7 @@ pub async fn save_app_settings(
         Ok(config) => config,
         Err(error) => {
             if autostart_changed {
-                restore_autostart(autostart, &original);
+                restore_autostart(autostart, &original).await;
             }
             return Err(SettingsSaveError::Commit(error));
         }
@@ -120,8 +120,28 @@ pub async fn save_app_settings(
     })
 }
 
-fn restore_autostart(autostart: &dyn ApplyAutostart, original: &AppConfig) {
-    if let Err(error) = autostart.apply_autostart(original) {
+/// The login entry is written by an OS helper (`reg`, `SMAppService`, a file
+/// write) with no deadline of its own, and the save holds the mutation guard
+/// and SQLite's write lock while it runs. Keeping it off the async worker means
+/// only this save waits on it.
+async fn apply_autostart_off_thread(
+    autostart: &impl ApplyAutostart,
+    config: &AppConfig,
+) -> Result<(), voya_contracts::AppError> {
+    let autostart = autostart.clone();
+    let config = config.clone();
+    tokio::task::spawn_blocking(move || autostart.apply_autostart(&config))
+        .await
+        .unwrap_or_else(|error| {
+            Err(voya_contracts::AppError::internal(
+                voya_contracts::AppErrorSubsystem::Autostart,
+                format!("autostart task failed: {error}"),
+            ))
+        })
+}
+
+async fn restore_autostart(autostart: &impl ApplyAutostart, original: &AppConfig) {
+    if let Err(error) = apply_autostart_off_thread(autostart, original).await {
         tracing::error!(
             ?error,
             "failed to restore the login entry after a failed save"

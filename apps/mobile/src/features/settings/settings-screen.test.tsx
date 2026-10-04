@@ -152,20 +152,16 @@ describe("SettingsScreen", () => {
     await waitFor(() => expect(mockBackend().state.settings.dns.fakeIp).toBe(true));
   });
 
-  it("derives log status from the saved switch and only core log sources", async () => {
+  it("says whether the detailed log is on, and claims nothing about lines it cannot see", async () => {
     mockBackend().state.settings.core.logEnabled = true;
     await renderSettings("maintenance");
-    expect(await screen.findByText("Detailed connection logging is enabled; no core logs yet.")).toBeOnTheScreen();
-    for (const source of ["diagnostic", "app", "core"] as const) {
-      await act(() => useRuntimeEventStore.setState({ logLines: [{
-        id: 1, loggedAt: Date.now(), level: "info", body: source === "app"
-          ? { source, code: { code: "disconnected" }, detail: null }
-          : { source, line: "history" },
-      }] }));
-      expect(screen.getByText(source === "core"
-        ? "Detailed connection logging is enabled; core logs have been received."
-        : "Detailed connection logging is enabled; no core logs yet.")).toBeOnTheScreen();
-    }
+    expect(await screen.findByText("Detailed connection logging is on.")).toBeOnTheScreen();
+    // Lines are only delivered while the Logs screen is open, so what the
+    // buffer happens to hold says nothing about whether the core is logging.
+    await act(() => useRuntimeEventStore.setState({ logLines: [{
+      id: 1, loggedAt: Date.now(), level: "info", body: { source: "core", line: "history" },
+    }] }));
+    expect(screen.getByText("Detailed connection logging is on.")).toBeOnTheScreen();
   });
 
   it("streams logs only while the log page is open", async () => {
@@ -174,5 +170,19 @@ describe("SettingsScreen", () => {
     expect(screen.getByText(/Keeps the latest 500 entries/)).toBeOnTheScreen();
     await unmount();
     await waitFor(() => expect(mockBackend().state.logStreaming).toBe(false));
+  });
+
+  it("does not call an empty core segment a failed search", async () => {
+    mockBackend().state.settings.core.logEnabled = false;
+    await renderSettings("logs");
+    const user = userEvent.setup();
+
+    await user.press(await screen.findByText("Core logs"));
+
+    // No search was typed: the source segment alone emptied the list, so the
+    // empty state says why rather than blaming a search that never happened.
+    expect(await screen.findByText("No log lines")).toBeOnTheScreen();
+    expect(screen.getByText(/Detailed connection logging is off/)).toBeOnTheScreen();
+    expect(screen.queryByText("No matching log lines")).toBeNull();
   });
 });

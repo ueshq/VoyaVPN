@@ -3,6 +3,7 @@ import { resolve, win32 } from "node:path";
 
 import {
   capture,
+  captureSpawned,
   checkedCapture,
   environmentValue,
   isCliEntrypoint,
@@ -304,15 +305,12 @@ export function elevateTunnelServiceInstall({
   ].join("\n");
   const executable = powershellExecutable(env);
   const args = ["-NoProfile", "-NonInteractive", "-Command", script];
-  const result = captureCommand(executable, args, {
-    cwd: repoRoot,
-    env: elevatedEnv,
-    stdio: "inherit",
-    windowsHide: true,
-  });
-  if (result.error) {
-    throw result.error;
-  }
+  const result = captureSpawned(
+    executable,
+    args,
+    { cwd: repoRoot, env: elevatedEnv, stdio: "inherit", windowsHide: true },
+    captureCommand,
+  );
   if (result.status !== 0) {
     const messages = new Map([
       [1223, () => "Windows service installation was cancelled at the UAC prompt."],

@@ -1,4 +1,10 @@
 -- Current VoyaVPN database baseline. Historical databases are not upgraded.
+--
+-- Editing this file's content ALWAYS requires renaming its version prefix
+-- (0011 → 0012 → …): the validator accepts only a database whose single
+-- migration record matches this file's name-derived version AND checksum.
+-- An in-place edit keeps both at the old version, so every existing database
+-- is rejected at startup — which is what commit e26f46e did to 0011.
 
 CREATE TABLE app_settings (
     id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
@@ -91,6 +97,9 @@ CREATE TABLE subscription_metadata (
     total_bytes INTEGER,
     expire_at INTEGER,
     last_update_at INTEGER,
+    last_attempt_at_unix INTEGER,
+    last_attempt_failed INTEGER CHECK (last_attempt_failed IS NULL OR last_attempt_failed IN (0, 1)),
+    last_attempt_error TEXT,
     profile_title TEXT,
     FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
 );

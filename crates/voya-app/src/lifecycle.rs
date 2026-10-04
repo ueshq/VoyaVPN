@@ -1,7 +1,11 @@
 //! What closing the window, launching at login and exiting do, decided without
 //! Tauri.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::{
+    future::Future,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 
 use voya_contracts::CloseRequestAction;
 use voya_core::{AppConfig, CloseAction};
@@ -49,6 +53,32 @@ pub fn remember_close_action(config: &mut AppConfig, action: CloseRequestAction)
     let changed = config.behavior.close_action != remembered;
     config.behavior.close_action = remembered;
     changed
+}
+
+/// Runs one step of the exit teardown, abandoning it after `limit`.
+///
+/// The teardown runs its steps one after another on the thread that is
+/// quitting, and each waits on work owned by other tasks: a commit in flight,
+/// a router that has stopped answering, a privileged kill. Every one of those
+/// is bounded on its own, but a step that never returned would keep the app
+/// from ever exiting, so each also gets a deadline here. `None` means the step
+/// was abandoned; the caller decides what that leaves undone.
+pub async fn exit_step<T>(
+    what: &'static str,
+    limit: Duration,
+    step: impl Future<Output = T>,
+) -> Option<T> {
+    match tokio::time::timeout(limit, step).await {
+        Ok(value) => Some(value),
+        Err(_) => {
+            tracing::error!(
+                step = what,
+                ?limit,
+                "exit step did not finish in time; exiting without it"
+            );
+            None
+        }
+    }
 }
 
 /// One-shot latch guarding the application's exit teardown.

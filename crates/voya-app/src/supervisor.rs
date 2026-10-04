@@ -23,9 +23,10 @@ use voya_platform::{
 #[derive(Clone)]
 pub struct CoreSupervisor {
     tx: mpsc::Sender<SupervisorCommand>,
-    /// Bumped after every command that can change the snapshot (anything but
-    /// `Status`), so a watcher can wait for a start or stop instead of polling.
-    changes: watch::Receiver<u64>,
+    /// How to reach the running core's Clash API, republished after every
+    /// command that can alter it (anything but `Status`), so a watcher waits
+    /// for a start or stop instead of polling.
+    clash_api: watch::Receiver<ClashApiAccess>,
 }
 
 impl CoreSupervisor {
@@ -45,16 +46,16 @@ impl CoreSupervisor {
     #[must_use]
     pub fn spawn(deps: SupervisorDeps) -> Self {
         let (tx, mut rx) = mpsc::channel(16);
-        let (changes_tx, changes) = watch::channel(0_u64);
+        let (clash_api_tx, clash_api) = watch::channel(ClashApiAccess::default());
         let supervisor = Self {
             tx: tx.clone(),
-            changes: changes.clone(),
+            clash_api: clash_api.clone(),
         };
         let runtime = tokio::runtime::Handle::current();
         deps.runner
             .set_exit_handler(Some(Arc::new(SupervisorProcessExitHandler {
                 tx: tx.downgrade(),
-                changes,
+                clash_api,
                 runtime: runtime.clone(),
             })));
         // Only the returned `CoreSupervisor` holds a strong sender, so the loop
@@ -69,10 +70,15 @@ impl CoreSupervisor {
                 while let Some(command) = rx.blocking_recv() {
                     let may_change = !matches!(command, SupervisorCommand::Status(_));
                     actor.handle(command);
-                    // After the handler, so a watcher woken by this reads the
-                    // snapshot the command produced.
+                    // After the handler, so a watcher woken by this sees the
+                    // core the command left running.
                     if may_change {
-                        changes_tx.send_modify(|tick| *tick = tick.wrapping_add(1));
+                        let access = actor.clash_api_access();
+                        clash_api_tx.send_if_modified(|current| {
+                            let moved = *current != access;
+                            *current = access;
+                            moved
+                        });
                     }
                 }
             })
@@ -112,13 +118,29 @@ impl CoreSupervisor {
         self.request(SupervisorCommand::Status).await
     }
 
-    /// A tick that moves after every command that may have changed the
-    /// snapshot. Mark it seen *before* reading [`Self::status`], so a change
-    /// landing in between still wakes the next `changed()`. It closes when the
-    /// supervisor's actor ends.
+    /// How to reach the Clash API of the core that is actually running, if any.
+    ///
+    /// The generated config decides both the port and the bearer token it
+    /// demands, so the supervisor's snapshot is the only authority for either.
+    /// The answer is empty while nothing is connected — and when the supervisor
+    /// cannot be asked — so a client handed it dials nothing. The token never
+    /// leaves the process: it is redacted in `Debug` and reaches only the
+    /// Clash clients.
+    pub async fn clash_api_access(&self) -> ClashApiAccess {
+        self.status()
+            .await
+            .ok()
+            .as_ref()
+            .map(SupervisorSnapshot::clash_api_access)
+            .unwrap_or_default()
+    }
+
+    /// [`Self::clash_api_access`] as a value to wait on: it moves when a core
+    /// starts, stops, or is replaced by one with a new token, and it is empty
+    /// while nothing is connected. It closes when the supervisor's actor ends.
     #[must_use]
-    pub fn subscribe_changes(&self) -> watch::Receiver<u64> {
-        self.changes.clone()
+    pub fn subscribe_clash_api(&self) -> watch::Receiver<ClashApiAccess> {
+        self.clash_api.clone()
     }
 
     async fn request<F>(&self, build: F) -> Result<SupervisorSnapshot, SupervisorError>
@@ -140,7 +162,7 @@ impl CoreSupervisor {
 
 struct SupervisorProcessExitHandler {
     tx: mpsc::WeakSender<SupervisorCommand>,
-    changes: watch::Receiver<u64>,
+    clash_api: watch::Receiver<ClashApiAccess>,
     runtime: tokio::runtime::Handle,
 }
 
@@ -151,7 +173,7 @@ impl ProcessExitHandler for SupervisorProcessExitHandler {
         };
         let supervisor = CoreSupervisor {
             tx,
-            changes: self.changes.clone(),
+            clash_api: self.clash_api.clone(),
         };
         self.runtime.spawn(async move {
             if let Err(error) = supervisor

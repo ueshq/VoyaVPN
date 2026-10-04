@@ -10,10 +10,23 @@ import os.log
 public final class PacketTunnelProvider: NEPacketTunnelProvider {
     private static let logger = Logger(subsystem: PacketTunnelIdentity.subsystem, category: "PacketTunnelProvider")
 
+    /// Starts and stops run here, one at a time. NetworkExtension may ask for
+    /// a stop while a start is still bringing libbox up; taken side by side,
+    /// the stop found no service yet and returned, and the start then left one
+    /// running that nothing would ever close. In turn, a stop that arrives
+    /// mid-start waits for it and tears down what it built. Static because
+    /// libbox's setup is per process, and one provider process can serve
+    /// several tunnel sessions.
+    private static let lifecycleQueue = DispatchQueue(label: "\(PacketTunnelIdentity.subsystem).lifecycle")
+
     #if canImport(Libbox)
         /// libbox keeps one stderr redirect per process and rejects a second,
         /// while one provider process can serve several startTunnel calls.
+        /// Touched only on `lifecycleQueue`.
         private static var stderrRedirected = false
+        /// The running service. Touched only on `lifecycleQueue`: libbox
+        /// could reach it from threads of its own only through its command
+        /// socket, which this provider never opens.
         private var commandServer: LibboxCommandServer?
         private lazy var platformInterface = VoyaPacketTunnelPlatformInterface(provider: self)
     #endif
@@ -22,12 +35,12 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
         options: [String: NSObject]?,
         completionHandler: @escaping (Error?) -> Void
     ) {
-        Task.detached(priority: .userInitiated) {
+        Self.lifecycleQueue.async {
             do {
                 let runtimeConfig = try PacketTunnelRuntime.loadRuntimeConfig(options: options)
                 PacketTunnelDiagnostics.shared.configure(runtimeConfig)
                 PacketTunnelDiagnostics.shared.writeStatus(state: "starting", breadcrumb: "startTunnel entered")
-                try await self.startSingBox(runtimeConfig)
+                try self.startSingBox(runtimeConfig)
                 PacketTunnelDiagnostics.shared.writeStatus(state: "running", breadcrumb: "sing-box service started")
                 completionHandler(nil)
             } catch {
@@ -46,45 +59,26 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
         with reason: NEProviderStopReason,
         completionHandler: @escaping () -> Void
     ) {
-        #if canImport(Libbox)
-            do {
-                try commandServer?.closeService()
-            } catch {
-                commandServer?.writeMessage(2, message: "VoyaVPN stop service: \(error.localizedDescription)")
-            }
-            platformInterface.reset()
-            commandServer?.close()
-            commandServer = nil
-        #endif
-        PacketTunnelDiagnostics.shared.writeStatus(state: "stopped", breadcrumb: "stopTunnel reason \(reason.rawValue)")
-        completionHandler()
-    }
-
-    public override func handleAppMessage(
-        _ messageData: Data,
-        completionHandler: ((Data?) -> Void)?
-    ) {
-        do {
-            let runtimeConfig = try JSONDecoder().decode(PacketTunnelRuntimeConfig.self, from: messageData)
-            try PacketTunnelRuntime.validate(runtimeConfig)
+        Self.lifecycleQueue.async {
             #if canImport(Libbox)
-                try commandServer?.startOrReloadService(runtimeConfig.singboxConfigJson, options: LibboxOverrideOptions())
-                PacketTunnelDiagnostics.shared.writeStatus(state: "running", breadcrumb: "service reloaded from app message")
-                completionHandler?(nil)
-            #else
-                throw PacketTunnelProviderError.singBoxRuntimeUnavailable
+                let server = self.commandServer
+                self.commandServer = nil
+                do {
+                    try server?.closeService()
+                } catch {
+                    PacketTunnelDiagnostics.shared.appendProviderLog(
+                        "VoyaVPN stop service: \(error.localizedDescription)"
+                    )
+                }
+                self.platformInterface.reset()
+                server?.close()
             #endif
-        } catch {
-            PacketTunnelDiagnostics.shared.writeStatus(
-                state: "failed",
-                lastError: error.localizedDescription,
-                breadcrumb: "app message failed: \(error.localizedDescription)"
-            )
-            completionHandler?(error.localizedDescription.data(using: .utf8))
+            PacketTunnelDiagnostics.shared.writeStatus(state: "stopped", breadcrumb: "stopTunnel reason \(reason.rawValue)")
+            completionHandler()
         }
     }
 
-    private func startSingBox(_ runtimeConfig: PacketTunnelRuntimeConfig) async throws {
+    private func startSingBox(_ runtimeConfig: PacketTunnelRuntimeConfig) throws {
         try PacketTunnelRuntime.validate(runtimeConfig)
         #if canImport(Libbox)
             let paths = try PacketTunnelRuntime.runtimePaths()
@@ -95,7 +89,11 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
             options.basePath = paths.baseURL.path
             options.workingPath = paths.workingURL.path
             options.tempPath = paths.tempURL.path
-            options.logMaxLines = 3000
+            // libbox's log buffer is kept for a command client, and none ever
+            // connects; the app reads the core's log through its Clash API.
+            // In an extension iOS ends at roughly 50 MB, lines nobody reads
+            // are not worth holding.
+            options.logMaxLines = 0
             options.debug = false
 
             var setupError: NSError?
@@ -142,15 +140,20 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
 
             do {
-                try server.start()
+                // `server.start()` is not called: it opens libbox's command
+                // socket in the App Group container, and nothing connects to
+                // it — the app reads the core through its Clash API, as the
+                // Android service and the probe core already do.
                 try server.startOrReloadService(runtimeConfig.singboxConfigJson, options: LibboxOverrideOptions())
             } catch {
                 server.close()
+                // libbox may already have opened the TUN and started the
+                // interface monitor before it failed; neither is its to undo.
+                platformInterface.reset()
                 throw PacketTunnelProviderError.libboxServiceFailed(error.localizedDescription)
             }
 
             commandServer = server
-            server.writeMessage(2, message: "VoyaVPN PacketTunnel started.")
             PacketTunnelDiagnostics.shared.appendProviderLog("VoyaVPN PacketTunnel started.")
         #else
             throw PacketTunnelProviderError.singBoxRuntimeUnavailable
@@ -161,23 +164,6 @@ public final class PacketTunnelProvider: NEPacketTunnelProvider {
 
 #if canImport(Libbox)
     extension PacketTunnelProvider {
-        func writeLog(_ message: String) {
-            commandServer?.writeMessage(2, message: message)
-            PacketTunnelDiagnostics.shared.appendProviderLog(message)
-        }
-
-        func closeService() throws {
-            try commandServer?.closeService()
-            platformInterface.reset()
-        }
-
-        func reloadService() throws {
-            let runtimeConfig = try PacketTunnelRuntime.loadRuntimeConfig()
-            try PacketTunnelRuntime.validate(runtimeConfig)
-            try commandServer?.startOrReloadService(runtimeConfig.singboxConfigJson, options: LibboxOverrideOptions())
-            PacketTunnelDiagnostics.shared.writeStatus(state: "running", breadcrumb: "service reloaded")
-        }
-
         func setTunnelNetworkSettingsAsync(_ settings: NEPacketTunnelNetworkSettings?) async throws {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 setTunnelNetworkSettings(settings) { error in

@@ -3,6 +3,7 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, writeFileSy
 import { resolve } from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { isCliEntrypoint, repoRootFromScript } from "../../lib/common.mjs";
+import { IOS_DEPLOYMENT_TARGET } from "./ios-bundle-checks.mjs";
 import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
 import { lanAddress, startFixtures, unusedPort } from "./ios-fixtures.mjs";
 
@@ -18,7 +19,35 @@ export function selectRuntime(runtimes) {
   return runtime.identifier;
 }
 
+// `--` is what `pnpm run <script> -- <args>` can leave in front of the arguments.
+const FLAGS = ["--", "--full", "--matrix-only", "--reuse-libbox"];
+const VALUE_FLAGS = ["--test=", "--device=", "--content-size="];
+
+/**
+ * Rejects an argument this script does not read. Every option is looked up by
+ * name, so a misspelt one (`--devices=`) used to be ignored and the run fell
+ * back to the default device while reporting success for the one asked for.
+ */
+export function assertKnownArguments(args) {
+  const unknown = args.filter((arg) => !FLAGS.includes(arg) && !VALUE_FLAGS.some((flag) => arg.startsWith(flag)));
+  if (unknown.length) throw new Error(`Unknown argument: ${unknown.join(", ")}`);
+}
+
+/**
+ * How many tests an `xcresulttool get test-results summary` reports having
+ * run, or `null` when it does not say (an Xcode without that subcommand).
+ */
+export function executedTestCount(summaryJson) {
+  try {
+    const { totalTestCount } = JSON.parse(summaryJson);
+    return Number.isInteger(totalTestCount) ? totalTestCount : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function main() {
+  assertKnownArguments(process.argv.slice(2));
   const requestedTests = process.argv.filter((value) => value.startsWith("--test=")).map((value) => value.slice(7));
   const allowedTests = [...smokeTests, "testRuleLibraryUpdate", "testVisualMatrix", "testTabletOrientations", "testUxReviewWalkthrough", "testUxReviewSupplement", "testDeclinedConnectOffersAuthorizeAgain"];
   if (requestedTests.some((test) => !allowedTests.includes(test))) throw new Error("Unknown --test case");
@@ -85,8 +114,9 @@ export async function main() {
     });
     writeFileSync(resolve(output, "environment.json"), JSON.stringify({ xcode: xcode.stdout, runtime, devices: selected, address, full, matrixOnly }, null, 2));
     console.log(`iOS ${full ? "full matrix" : "smoke"}; evidence: ${output}`);
-    await run("rustup", ["target", "add", "aarch64-apple-ios", "aarch64-apple-ios-sim"]);
-    await run("pnpm", ["native:mobile:rust:ios"]);
+    // The smoke test only ever runs on simulators.
+    await run("rustup", ["target", "add", "aarch64-apple-ios-sim"]);
+    await run("pnpm", ["native:mobile:rust:ios", "--slice", "simulator"]);
     const libbox = resolve(ios, "Frameworks/Libbox.xcframework");
     // The build script owns the pinned version. CI builds it fresh; a developer
     // may reuse their staged copy explicitly while iterating the same pin.
@@ -155,7 +185,7 @@ export async function main() {
         const sdk = (await run("xcrun", ["--sdk", "iphonesimulator", "--show-sdk-path"])).stdout;
         const executable = resolve(output, "probe-core-tests");
         phase = "build";
-        await run("xcrun", ["swiftc", "-sdk", sdk, "-target", "arm64-apple-ios16.0-simulator", "-F", resolve(libbox, slice), "-framework", "Libbox", "-framework", "UIKit", "-framework", "CoreGraphics", "-framework", "CoreText", "-framework", "CoreTelephony", "-framework", "UniformTypeIdentifiers", "-framework", "SystemConfiguration", "-framework", "Network", "-lresolv", "-Xlinker", "-dead_strip", "-Xlinker", "-no_compact_unwind", resolve(root, "scripts/native/mobile/ProbeCoreTests.swift"), resolve(ios, "VoyaVPN/Native/LibboxProbeCoreHost.swift"), resolve(root, "native/apple/DefaultInterfaceMonitor.swift"), "-o", executable], { label: "probe-build" });
+        await run("xcrun", ["swiftc", "-sdk", sdk, "-target", `arm64-apple-ios${IOS_DEPLOYMENT_TARGET}-simulator`, "-F", resolve(libbox, slice), "-framework", "Libbox", "-framework", "UIKit", "-framework", "CoreGraphics", "-framework", "CoreText", "-framework", "CoreTelephony", "-framework", "UniformTypeIdentifiers", "-framework", "SystemConfiguration", "-framework", "Network", "-lresolv", "-Xlinker", "-dead_strip", "-Xlinker", "-no_compact_unwind", resolve(root, "scripts/native/mobile/ProbeCoreTests.swift"), resolve(ios, "VoyaVPN/Native/LibboxProbeCoreHost.swift"), resolve(root, "native/apple/DefaultInterfaceMonitor.swift"), "-o", executable], { label: "probe-build" });
         phase = "product";
         await sim(["spawn", activeDevice, executable, resolve(container, "Documents"), String(await unusedPort())]);
       }
@@ -167,7 +197,13 @@ export async function main() {
         if (!requestedTests.length && type.name.startsWith("iPad")) tests.push("testTabletOrientations");
         const resultPath = resolve(output, `${index}-${category}.xcresult`);
         const result = await run("xcodebuild", ["test-without-building", "-xctestrun", testRun, "-destination", `platform=iOS Simulator,id=${activeDevice}`, "-parallel-testing-enabled", "NO", "-resultBundlePath", resultPath, ...tests.map((test) => `-only-testing:VoyaVPNUITests/VoyaVPNUITests/${test}`)], { label: `tests-${index}-${category}`, allowFailure: true });
-        results.push({ device: type.name, category, tests, passed: result.code === 0, resultPath });
+        // xcodebuild exits 0 when `-only-testing` names nothing that exists, so
+        // a renamed Swift test would turn this gate green by running nothing.
+        const summary = await run("xcrun", ["xcresulttool", "get", "test-results", "summary", "--path", resultPath], { allowFailure: true, label: `summary-${index}-${category}` });
+        const executed = summary.code === 0 ? executedTestCount(summary.stdout) : null;
+        const ranEverything = executed === null || executed === tests.length;
+        if (!ranEverything) console.error(`XCTest ran ${executed} of the ${tests.length} requested tests for ${type.name}/${category}.`);
+        results.push({ device: type.name, category, tests, executed, passed: result.code === 0 && ranEverything, resultPath });
         await run("xcrun", ["xcresulttool", "export", "attachments", "--path", resultPath, "--output-path", resolve(output, `attachments-${index}-${category}`)], { allowFailure: true });
         await sim(["spawn", activeDevice, "log", "show", "--last", "1h", "--style", "compact", "--predicate", 'process == "VoyaVPN"'], { allowFailure: true, label: `native-log-${index}-${category}` });
         // A remaining run directory signals failed stop/cancellation cleanup.

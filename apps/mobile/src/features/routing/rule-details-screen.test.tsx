@@ -15,18 +15,60 @@ const RULE: RoutingRule = {
   enabled: true, remarks: "AI services", scope: "routing",
 };
 
-test("the rule's JSON reaches the clipboard verbatim", async () => {
+/** What the page shows and copies: the rule's behaviour, without the storage
+ *  fields and unset keys the raw serialization carries. */
+const DISPLAYED_JSON = JSON.stringify(
+  {
+    outbound: "proxy",
+    domain: ["openai.com"],
+    enabled: true,
+    remarks: "AI services",
+    scope: "routing",
+  },
+  null,
+  2,
+);
+
+async function renderScreen() {
   const writeText = jest.fn(async () => {});
   setClipboard({ readText: async () => "", writeText });
   const client = makeTestQueryClient();
   const props = {
     route: { key: "ruleDetails", name: "ruleDetails", params: { rule: RULE, target: "proxy" } },
   } as unknown as NativeStackScreenProps<RootRoutes, "ruleDetails">;
-  const { unmount } = await render(<RuleDetailsScreen {...props} />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const rendered = await render(<RuleDetailsScreen {...props} />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  return { rendered, writeText, client, user: userEvent.setup() };
+}
+
+test("the page shows the rule's settings, not its storage fields", async () => {
+  const { rendered, client } = await renderScreen();
 
   expect(screen.getByText("AI services")).toBeOnTheScreen();
-  await userEvent.setup().press(screen.getByText("Copy JSON"));
-  expect(writeText).toHaveBeenCalledWith(JSON.stringify(RULE, null, 2));
+  // Behaviour fields render; the internal identity and unset keys do not.
+  expect(screen.getByText(/"outbound": "proxy"/)).toBeOnTheScreen();
+  expect(screen.queryByText(/rule-1/)).toBeNull();
+  expect(screen.queryByText(/inboundTags/)).toBeNull();
+  expect(screen.queryByText(/"port"/)).toBeNull();
 
-  await unmount(); client.clear();
+  await rendered.unmount(); client.clear();
+});
+
+test("the copy button reaches for exactly what the page shows", async () => {
+  const { rendered, writeText, client, user } = await renderScreen();
+
+  await user.press(screen.getByText("Copy JSON"));
+  expect(writeText).toHaveBeenCalledWith(DISPLAYED_JSON);
+  expect(await screen.findByText("Copied")).toBeOnTheScreen();
+
+  await rendered.unmount(); client.clear();
+});
+
+test("a refused clipboard says Copy failed instead of staying silent", async () => {
+  const { rendered, writeText, client, user } = await renderScreen();
+  writeText.mockRejectedValue(new Error("clipboard refused"));
+
+  await user.press(screen.getByText("Copy JSON"));
+  expect(await screen.findByText("Copy failed")).toBeOnTheScreen();
+
+  await rendered.unmount(); client.clear();
 });

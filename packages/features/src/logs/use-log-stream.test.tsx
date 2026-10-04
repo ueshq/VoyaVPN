@@ -27,6 +27,13 @@ setAppVisibility({
   },
 });
 
+/** Lets the queued commands go out: each waits for the one before it. */
+async function sent() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
 function setVisible(next: boolean) {
   visible = next;
   act(() => notifyVisibility?.());
@@ -42,27 +49,53 @@ describe("log stream", () => {
     vi.restoreAllMocks();
   });
 
-  it("streams only while the screen is mounted and the app is on screen", () => {
+  it("streams only while the screen is mounted and the app is on screen", async () => {
     const { unmount } = renderHook(() => useLogStream());
+    await sent();
     expect(setLogStreaming.mock.calls).toEqual([[true]]);
 
     // Hidden into the tray, or backgrounded: the backend holds lines until the
     // app comes back.
     setVisible(false);
+    await sent();
     expect(setLogStreaming.mock.calls.at(-1)).toEqual([false]);
 
     setVisible(true);
+    await sent();
     expect(setLogStreaming.mock.calls.at(-1)).toEqual([true]);
 
     unmount();
+    await sent();
     expect(setLogStreaming.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 
-  it("asks for nothing while hidden", () => {
+  it("asks for nothing while hidden", async () => {
     visible = false;
     renderHook(() => useLogStream()).unmount();
+    await sent();
 
     expect(setLogStreaming).not.toHaveBeenCalled();
+  });
+
+  it("never lets a stop overtake the start it follows", async () => {
+    // A host that runs commands side by side gives no order between them; a
+    // screen left while its start is still out must still end up stopped.
+    let finishStart = () => {};
+    setLogStreaming.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishStart = () => resolve(null);
+        }),
+    );
+    const { unmount } = renderHook(() => useLogStream());
+    await sent();
+    unmount();
+    await sent();
+    expect(setLogStreaming.mock.calls).toEqual([[true]]);
+
+    finishStart();
+    await sent();
+    expect(setLogStreaming.mock.calls).toEqual([[true], [false]]);
   });
 
   it("shrugs off a failed call", async () => {
@@ -70,7 +103,7 @@ describe("log stream", () => {
 
     const { unmount } = renderHook(() => useLogStream());
     unmount();
-    await Promise.resolve();
+    await sent();
 
     expect(setLogStreaming).toHaveBeenCalledTimes(2);
   });

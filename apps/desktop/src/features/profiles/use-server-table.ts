@@ -30,12 +30,19 @@ export function useServerTable() {
   const exports = useNodeExport(operation, t);
   // A subscription URL only creates the source; updating it straight away is
   // what brings its nodes in, so the user never meets an empty group.
-  async function handleImported(
-    result: ImportProfilesResult,
-    isActive: () => boolean = () => true,
-  ) {
+  async function handleImported(result: ImportProfilesResult, isActive: () => boolean) {
     await editor.handleDialogImport(result, isActive);
     await subscriptions.updateImportedSubscriptions(result.addedSubscriptionIds, isActive);
+  }
+  /**
+   * The dialog's version: it does not wait for the downloads. They take as
+   * long as the network does, and a dialog that has submitted cannot be closed
+   * until this returns — so the page banner, which reports the update, would
+   * sit behind a modal the user could not dismiss.
+   */
+  async function handleDialogImported(result: ImportProfilesResult) {
+    await editor.handleDialogImport(result);
+    void subscriptions.updateImportedSubscriptions(result.addedSubscriptionIds, () => true);
   }
   const imports = useNodeImport(operation, handleImported, t);
   const speedtest = useNodeSpeedtest(operation);
@@ -53,7 +60,7 @@ export function useServerTable() {
     ...speedtest,
     ...imports,
     ...policyGroups,
-    handleImported,
+    handleDialogImported,
   };
 }
 

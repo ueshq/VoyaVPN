@@ -7,7 +7,6 @@
 //! themselves are `voya_app::routing`'s use cases.
 
 use serde::Deserialize;
-use serde_json::Value;
 use voya_app::{
     invalidation,
     post_commit::ConfigChange,
@@ -17,13 +16,13 @@ use voya_app::{
         save_routing_use_case, set_active_routing_use_case,
     },
 };
-use voya_contracts::{AppError, MoveAction, Routing, RoutingRule};
+use voya_contracts::{MoveAction, Routing, RoutingRule};
 
 use crate::app::MobileState;
 
-use super::{answer, arguments, runtime::finish_config_change};
+use super::{answer, arguments, runtime::finish_config_change, Answer};
 
-pub(super) async fn list(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn list(state: &MobileState) -> Answer {
     answer(
         "list_routings",
         &list_routings_use_case(&state.services).await?,
@@ -36,7 +35,7 @@ struct SaveRouting {
     item: Routing,
 }
 
-pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn save(state: &MobileState, args: &str) -> Answer {
     let SaveRouting { item } = arguments("save_routing", args)?;
     let saved = save_routing_use_case(&state.config_mutations, item).await?;
     finish_config_change(
@@ -57,7 +56,7 @@ struct Ids {
     ids: Vec<String>,
 }
 
-pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn delete(state: &MobileState, args: &str) -> Answer {
     let Ids { ids } = arguments("delete_routings", args)?;
     let deleted = delete_routings_use_case(&state.config_mutations, ids).await?;
     finish_config_change(
@@ -78,7 +77,7 @@ struct Id {
     id: String,
 }
 
-pub(super) async fn set_active(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn set_active(state: &MobileState, args: &str) -> Answer {
     let Id { id } = arguments("set_active_routing", args)?;
     let active = set_active_routing_use_case(&state.config_mutations, id).await?;
     finish_config_change(
@@ -100,7 +99,7 @@ struct SaveRule {
     rule: RoutingRule,
 }
 
-pub(super) async fn save_rule(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn save_rule(state: &MobileState, args: &str) -> Answer {
     let SaveRule { routing_id, rule } = arguments("save_routing_rule", args)?;
     let saved = save_routing_rule_use_case(&state.config_mutations, routing_id, rule).await?;
     finish_config_change(
@@ -122,7 +121,7 @@ struct DeleteRules {
     rule_ids: Vec<String>,
 }
 
-pub(super) async fn delete_rules(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn delete_rules(state: &MobileState, args: &str) -> Answer {
     let DeleteRules {
         routing_id,
         rule_ids,
@@ -150,7 +149,7 @@ struct MoveRule {
     position: Option<i32>,
 }
 
-pub(super) async fn move_rule(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn move_rule(state: &MobileState, args: &str) -> Answer {
     let MoveRule {
         routing_id,
         rule_id,
@@ -183,7 +182,7 @@ struct ResetRules {
     routing_id: String,
 }
 
-pub(super) async fn reset_rules(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn reset_rules(state: &MobileState, args: &str) -> Answer {
     let ResetRules { routing_id } = arguments("reset_routing_rules", args)?;
     let reset = reset_routing_rules_use_case(&state.config_mutations, routing_id).await?;
     finish_config_change(

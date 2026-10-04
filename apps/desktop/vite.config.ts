@@ -86,7 +86,8 @@ export default defineConfig({
               test: /node_modules[\\/](react|react-dom)[\\/]/,
             },
             {
-              // The dialog, toast and checkbox primitives the shell renders.
+              // What the shell itself renders: the toast primitives. Dialogs
+              // and the checkbox load with whatever opens them.
               name: startupGroup("vendor-radix"),
               priority: 34,
               test: /node_modules[\\/]@radix-ui[\\/]/,

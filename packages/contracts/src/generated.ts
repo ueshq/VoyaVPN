@@ -87,7 +87,7 @@ export type VoyaCommands = {
 	deleteProfiles: (indexIds: string[]) => Promise<number>,
 	exportProfileShareLinks: (indexIds: string[]) => Promise<ExportProfilesResult>,
 	setActiveProfile: (indexId: string) => Promise<ProfileDetails>,
-	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => Promise<null>,
+	moveProfile: (indexId: string, action: MoveAction, position: number | null) => Promise<null>,
 	listPolicyGroups: () => Promise<PolicyGroupListing>,
 	/**
 	 *  Saves a group. Editing the group a running core uses restarts the core so
@@ -1379,7 +1379,8 @@ export type Subscription = {
 
 /**
  *  Usage metadata reported by the subscription server on the latest successful
- *  fetch (`subscription-userinfo` and `profile-title` response headers).
+ *  fetch (`subscription-userinfo` and `profile-title` response headers), plus
+ *  the outcome of the latest update attempt (which may have failed).
  */
 export type SubscriptionMetadata = {
 	subscriptionId: string,
@@ -1388,6 +1389,14 @@ export type SubscriptionMetadata = {
 	totalBytes: number | null,
 	expireAt: number | null,
 	lastUpdateAt: number | null,
+	/**
+	 *  When the latest update attempt ran, successful or not. Distinct from
+	 *  `last_update_at`, which only moves when the fetch produced nodes.
+	 */
+	lastAttemptAt: number | null,
+	lastAttemptFailed: boolean | null,
+	/**  Redacted reason the latest attempt failed; cleared by a success. */
+	lastAttemptError: string | null,
 	profileTitle: string | null,
 };
 

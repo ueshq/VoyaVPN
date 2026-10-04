@@ -10,8 +10,9 @@ import { toastError } from "./toast-store";
  * Defaults are tuned for a local IPC backend rather than a flaky network:
  * command failures are deterministic typed `AppError` values, so retrying only
  * delays the error UI, and the backend already pushes invalidation events
- * (ADR 0002 channel 1), which makes focus refetching redundant chatter. React
- * Native has no window focus, so the setting is inert there.
+ * (ADR 0002 channel 1), which makes focus refetching redundant chatter. The
+ * phone tells TanStack Query when it is in the background so that polling
+ * pauses there; with this off, coming back causes no burst of refetches.
  *
  * The mutation cache is the safety net that keeps a failed mutation from
  * disappearing silently: every rejection surfaces as a toast. A feature can

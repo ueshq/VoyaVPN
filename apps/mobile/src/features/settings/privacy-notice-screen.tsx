@@ -21,13 +21,17 @@ const STATEMENTS = [
 
 function NoticeLink({ label, testID, url }: { label: string; testID: string; url: string }) {
   return (
-    <View className="items-start">
-      <LinkButton testID={testID} accessibilityRole="link" className="min-h-control" onPress={() => void openExternalLink(url)}>
-        <LinkButton.Label className="text-accent">{label}</LinkButton.Label>
-      </LinkButton>
-      {/* The address itself, so it can be read and copied even if no browser opens. */}
-      <Typography selectable className="text-sm text-subtle">{url}</Typography>
-    </View>
+    <LinkButton
+      testID={testID}
+      accessibilityRole="link"
+      className="min-h-control"
+      // The address rides along for VoiceOver instead of being printed again
+      // under the link: one blue line, not a line and its grey echo.
+      accessibilityLabel={`${label}: ${url}`}
+      onPress={() => void openExternalLink(url)}
+    >
+      <LinkButton.Label className="text-accent">{label}</LinkButton.Label>
+    </LinkButton>
   );
 }
 

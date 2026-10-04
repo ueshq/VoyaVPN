@@ -28,6 +28,8 @@ pub struct SubscriptionFetchOptions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubscriptionFetchResult {
     pub content: String,
+    /// One per response, for its headers and attempts. Each `body` is empty:
+    /// the text was moved into `content`.
     pub downloads: Vec<DownloadResponse>,
     /// Extra `more_url` mirrors that could not be fetched, in source order.
     ///
@@ -104,14 +106,18 @@ impl SubscriptionClient {
         }
         let converted = nonempty_str(source.convert_target.as_deref()).is_some();
         let mut downloads = Vec::new();
-        let main = self
+        let mut main = self
             .download
             .download_text(text_request(main_url, source, options))
             .await?;
+        // The body moves into `content`: what stays in `downloads` is the
+        // response's metadata, and a second copy of a multi-megabyte list held
+        // for the whole import would only be memory.
+        let body = std::mem::take(&mut main.body);
         let mut content = if converted {
-            main.body.clone()
+            body
         } else {
-            decode_base64_payload(&main.body).unwrap_or_else(|| main.body.clone())
+            decode_base64_payload(&body).unwrap_or(body)
         };
         downloads.push(main);
 
@@ -132,7 +138,7 @@ impl SubscriptionClient {
         {
             // The primary list is already downloaded and decoded here, so a rejected or dead
             // mirror is recorded and skipped instead of failing the whole subscription.
-            let additional = match self.fetch_more_url(url, source, options, url_policy).await {
+            let mut additional = match self.fetch_more_url(url, source, options, url_policy).await {
                 Ok(additional) => additional,
                 Err(error) => {
                     failed_more_urls.push(FailedSubscriptionSource {
@@ -142,8 +148,8 @@ impl SubscriptionClient {
                     continue;
                 }
             };
-            let body =
-                decode_base64_payload(&additional.body).unwrap_or_else(|| additional.body.clone());
+            let body = std::mem::take(&mut additional.body);
+            let body = decode_base64_payload(&body).unwrap_or(body);
             if !body.is_empty() {
                 if !content.ends_with('\n') && !content.is_empty() {
                     content.push('\n');

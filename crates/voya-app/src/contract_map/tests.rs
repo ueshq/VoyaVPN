@@ -129,6 +129,31 @@ fn dns_mapping_round_trips_every_distinct_field() {
     assert_eq!(restored.dns, item);
 }
 
+/// A fresh install holds a blank `DnsConfig`, and the settings view used to
+/// state it as-is: empty fields, switches off. The first save then merged the
+/// DNS read — which normalizes — behind the user's back and the defaults
+/// appeared as changes they never made. Both settings mappings now state the
+/// same resolved values the DNS read does.
+#[test]
+fn settings_mappings_normalize_a_blank_dns_config() {
+    let config = voya_core::AppConfig::default();
+
+    let bundle = settings_from_app_config(&config);
+    assert_eq!(bundle.dns, default_dns_settings());
+
+    let restored = config_from_settings(
+        &voya_contracts::AppSettings {
+            dns: voya_contracts::DnsSettings::default(),
+            ..bundle.clone()
+        },
+        &config,
+    );
+    assert_eq!(
+        restored.dns,
+        crate::dns::normalize_dns(DnsConfig::default())
+    );
+}
+
 #[test]
 fn profile_mapping_round_trips_every_distinct_field() {
     let profile = ProfileItem {

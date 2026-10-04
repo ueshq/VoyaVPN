@@ -15,6 +15,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::download::{read_response_text_limited, LimitedBodyReadError};
+
 /// Placeholder until the service is deployed on its own domain; the shell
 /// overrides it with `VOYAVPN_PROBE_URL`.
 pub const DEFAULT_PROBE_BASE_URL: &str = "https://probe.voyavpn.app";
@@ -85,6 +87,20 @@ pub enum ReachabilityProbeError {
     Http(#[from] reqwest::Error),
 }
 
+/// Either answer is a few hundred bytes; a body past this is not one.
+const ANSWER_LIMIT: usize = 64 * 1024;
+
+async fn read_answer(response: reqwest::Response) -> Result<String, ReachabilityProbeError> {
+    read_response_text_limited(response, ANSWER_LIMIT)
+        .await
+        .map_err(|error| match error {
+            LimitedBodyReadError::Read { source } => ReachabilityProbeError::Http(source),
+            too_large @ LimitedBodyReadError::TooLarge { .. } => {
+                ReachabilityProbeError::Decode(too_large.to_string())
+            }
+        })
+}
+
 /// Two direct HTTP clients, each pinned to one address family.
 ///
 /// Each is built on first use, and clones share them. The app creates this
@@ -144,7 +160,7 @@ impl ReachabilityProbeClient {
                 status: status.as_u16(),
             });
         }
-        let body = response.text().await?;
+        let body = read_answer(response).await?;
         serde_json::from_str(&body)
             .map_err(|error| ReachabilityProbeError::Decode(error.to_string()))
     }
@@ -167,7 +183,7 @@ impl ReachabilityProbeClient {
                 status: response.status().as_u16(),
             });
         }
-        let body = response.text().await?;
+        let body = read_answer(response).await?;
         parse_trace_address(&body)
             .ok_or_else(|| ReachabilityProbeError::Decode("trace carried no ip line".to_string()))
     }

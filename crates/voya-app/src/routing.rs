@@ -1,10 +1,11 @@
 use thiserror::Error;
-use voya_contracts::{AppError, MoveAction, Routing, RoutingRule};
+use voya_contracts::{AppError, AppErrorSubsystem, MoveAction, Routing, RoutingRule};
 use voya_core::{AppConfig, RoutingItem, RulesItem};
 use voya_db::{Database, DatabaseSession, DbError, UnitOfWork};
 
 use crate::config_mutation::{CommittedMutation, ConfigMutationCoordinator};
 use crate::contract_map::{routing_from_contract, routing_to_contract, rule_from_contract};
+use crate::input_safety::{require_id, require_ids};
 
 const DEFAULT_ROUTING_SORT_STEP: i32 = 10;
 
@@ -324,8 +325,9 @@ fn generate_rule_id() -> String {
 // The contract-typed routing use cases both hosts share.
 //
 // Each mutation is one `mutate` → `RoutingManager::new_in` → contract map
-// body returning the committed result, so a host keeps only its own input
-// validation and post-commit tail.
+// body returning the committed result. The ids a command names are checked
+// here, before the mutation opens, so both hosts refuse the same input and a
+// host keeps only its post-commit tail.
 
 /// Every routing profile in list order, as the public DTO.
 pub async fn list_routings_use_case(
@@ -362,6 +364,7 @@ pub async fn delete_routings_use_case(
     mutations: &ConfigMutationCoordinator,
     ids: Vec<String>,
 ) -> std::result::Result<CommittedMutation<u32>, AppError> {
+    require_ids(&ids, "routing id", AppErrorSubsystem::Routing)?;
     mutations
         .mutate(
             async |unit_of_work, config| -> std::result::Result<u32, AppError> {
@@ -378,6 +381,7 @@ pub async fn set_active_routing_use_case(
     mutations: &ConfigMutationCoordinator,
     id: String,
 ) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    require_id(&id, "routing id", AppErrorSubsystem::Routing)?;
     mutations
         .mutate(
             async |unit_of_work, config| -> std::result::Result<Routing, AppError> {
@@ -397,6 +401,7 @@ pub async fn save_routing_rule_use_case(
     routing_id: String,
     rule: RoutingRule,
 ) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    require_id(&routing_id, "routing id", AppErrorSubsystem::Routing)?;
     mutations
         .mutate(
             async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
@@ -416,6 +421,8 @@ pub async fn delete_routing_rules_use_case(
     routing_id: String,
     rule_ids: Vec<String>,
 ) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    require_id(&routing_id, "routing id", AppErrorSubsystem::Routing)?;
+    require_ids(&rule_ids, "routing rule id", AppErrorSubsystem::Routing)?;
     mutations
         .mutate(
             async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
@@ -437,6 +444,8 @@ pub async fn move_routing_rule_use_case(
     action: MoveAction,
     position: Option<i32>,
 ) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    require_id(&routing_id, "routing id", AppErrorSubsystem::Routing)?;
+    require_id(&rule_id, "routing rule id", AppErrorSubsystem::Routing)?;
     mutations
         .mutate(
             async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
@@ -456,6 +465,7 @@ pub async fn reset_routing_rules_use_case(
     mutations: &ConfigMutationCoordinator,
     routing_id: String,
 ) -> std::result::Result<CommittedMutation<Routing>, AppError> {
+    require_id(&routing_id, "routing id", AppErrorSubsystem::Routing)?;
     mutations
         .mutate(
             async |unit_of_work, _config| -> std::result::Result<Routing, AppError> {
@@ -475,6 +485,51 @@ mod tests {
     use voya_db::Database;
 
     use super::*;
+
+    /// An id is checked before the mutation opens, so a refused command
+    /// neither reads nor writes: both hosts answer the same way.
+    #[tokio::test]
+    async fn a_routing_use_case_refuses_an_unusable_id_before_it_mutates() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("routing manager test operation should succeed");
+        let mutations = ConfigMutationCoordinator::new(
+            database,
+            std::sync::Arc::new(std::sync::RwLock::new(AppConfig::default())),
+        );
+        let bad = || "bad\nid".to_string();
+
+        let refused = [
+            delete_routings_use_case(&mutations, vec![bad()])
+                .await
+                .err(),
+            set_active_routing_use_case(&mutations, bad()).await.err(),
+            delete_routing_rules_use_case(&mutations, "routing".to_string(), vec![bad()])
+                .await
+                .err(),
+            move_routing_rule_use_case(
+                &mutations,
+                bad(),
+                "rule".to_string(),
+                MoveAction::Top,
+                None,
+            )
+            .await
+            .err(),
+            reset_routing_rules_use_case(&mutations, String::new())
+                .await
+                .err(),
+        ];
+
+        for error in refused {
+            let error = error.expect("an unusable id is refused");
+            assert!(matches!(
+                error.kind,
+                voya_contracts::AppErrorKind::Validation { .. }
+            ));
+            assert_eq!(error.subsystem, AppErrorSubsystem::Routing);
+        }
+    }
 
     #[tokio::test]
     async fn routing_manager_selects_active_and_moves_rules() {

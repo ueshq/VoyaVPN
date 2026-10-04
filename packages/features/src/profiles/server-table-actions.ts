@@ -30,9 +30,10 @@ export function supportsShareLinkExport(kind: ProfileKind) {
  * differently worded sentences.
  */
 export function formatImportSummary(result: ImportProfilesResult, t: TranslateFn) {
-  const parts = [
-    t("panes.profiles.import.summary.imported", { count: result.imported.toLocaleString() }),
-  ];
+  // The two plural messages take their count as a number: that is what picks
+  // the form, and the message formats it. The others have one form each and
+  // take theirs already formatted.
+  const parts = [t("panes.profiles.import.summary.imported", { count: result.imported })];
 
   if (result.updated > 0) {
     parts.push(t("panes.profiles.import.summary.updated", { count: result.updated.toLocaleString() }));
@@ -65,9 +66,7 @@ export function formatImportSummary(result: ImportProfilesResult, t: TranslateFn
   }
   if (result.discardedNodeOverrides > 0) {
     parts.push(
-      t("panes.profiles.import.discardedNodeOverrides", {
-        count: result.discardedNodeOverrides.toLocaleString(),
-      }),
+      t("panes.profiles.import.discardedNodeOverrides", { count: result.discardedNodeOverrides }),
     );
   }
 

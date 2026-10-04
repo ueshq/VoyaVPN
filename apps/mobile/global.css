@@ -59,6 +59,16 @@
     height: auto;
     min-height: var(--spacing-control);
   }
+
+  /* A disabled primary button must read as unavailable. HeroUI's disabled
+     state is opacity only, which left a half-transparent accent fill behind
+     the still-white label (~2:1) — bright blue that looks pressable. The
+     fill swaps to the muted surface; the call sites pair it with a
+     `text-subtle` label, because the label element cannot be reached from
+     the root's state. */
+  .button--primary-disabled {
+    background-color: var(--muted);
+  }
 }
 
 @theme {
@@ -118,7 +128,13 @@
  * HeroUI paints its buttons, switches and focus rings from its own `--accent`
  * (a system blue), while every Voya selection state — `text-brand`,
  * `bg-brand-tint` — uses the brand blue above. Two blues side by side read as
- * two meanings, so HeroUI's slot takes the brand value.
+ * two meanings, so HeroUI's slot takes a brand value.
+ *
+ * The fill value is the desktop's emphasis blue (`--primary` in
+ * `packages/ui/src/styles/globals.css`): #0969da in light, #1f6feb in dark,
+ * white label in both. Dark `--voya-brand` (#4493f8) is a text/icon tint —
+ * as a fill it needs a near-black label, which made the dark primary CTA
+ * read as disabled next to its light self.
  *
  * This works because Uniwind's native compiler writes each theme's variables
  * into one map in document order, so a later declaration of the same name
@@ -127,7 +143,7 @@
  * override without being restated. It has to come after the
  * `heroui-native/styles` import, and both variants must declare the same
  * names, like the block above. Check it on a device: a primary Button must be
- * #0969da in light and #4493f8 in dark.
+ * #0969da on white in light and #1f6feb on white in dark.
  */
 @layer theme {
   :root {
@@ -137,8 +153,35 @@
     }
 
     @variant dark {
-      --accent: var(--voya-brand);
-      --accent-foreground: #0d1117;
+      --accent: #1f6feb;
+      --accent-foreground: #ffffff;
+    }
+  }
+}
+
+/*
+ * The switch's off-state track.
+ *
+ * HeroUI animates the track colour in Reanimated from `--color-default`, so a
+ * Tailwind class cannot reach it — this variable is the only lever. Stock dark
+ * `--default` (oklch 27.4%) sits six lightness points off `--surface` (21%),
+ * which read as no track at all on the dark cards. The bump to 34% matches
+ * iOS's own off switch and still leaves the track clearly "off" next to the
+ * accent-blue on state. Light restates the stock value unchanged, because the
+ * two variant blocks must declare the same names.
+ *
+ * `--default` also feeds `default-soft`, `default-hover` and the field
+ * fallback — check secondary buttons, chips and inputs in dark after touching
+ * this. Check it on a device: an off Switch on a card must be visible.
+ */
+@layer theme {
+  :root {
+    @variant light {
+      --default: oklch(94% 0.001 286.375);
+    }
+
+    @variant dark {
+      --default: oklch(34% 0.006 286.033);
     }
   }
 }

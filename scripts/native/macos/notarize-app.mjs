@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
-import { checkedCapture, repoRootFromScript, run } from "../../lib/common.mjs";
+import { checkedCapture, repoRootFromScript, run, runCli } from "../../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const appBundle = resolve(process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(repoRoot, "target", "native", "macos", "VoyaVPN.app"));
@@ -108,9 +108,4 @@ function main() {
   console.log(`macOS notarization completed for ${target}`);
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-}
+runCli(main);

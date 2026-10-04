@@ -105,13 +105,7 @@ pub async fn apply_pending_settings<R: tauri::Runtime>(
 #[tauri::command]
 #[specta::specta]
 pub fn generate_qr_code(content: String) -> Result<QrCodeImage, AppError> {
-    map_ipc_input(
-        input_safety::validate_qr_content(&content, IPC_QR_CONTENT_MAX_CHARS),
-        "QR content",
-        AppErrorSubsystem::Qr,
-    )?;
-
-    voya_app::qr::generate_svg(&content).map_err(AppError::from)
+    voya_app::qr::generate_qr_code_use_case(&content)
 }
 
 // `async` because capturing every display is a multi-hundred-millisecond

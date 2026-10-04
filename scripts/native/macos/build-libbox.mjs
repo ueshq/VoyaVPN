@@ -2,10 +2,12 @@ import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "no
 import { dirname, join, resolve } from "node:path";
 import {
   capture,
+  captureSpawned,
   isCliEntrypoint,
   repoRootFromScript,
   requireDarwin,
   run,
+  runCli,
 } from "../../lib/common.mjs";
 import { libboxBinaryPath } from "./tunnel-layout.mjs";
 import { ensureSingBoxSource, singBoxSourceDir } from "../sing-box-source.mjs";
@@ -17,10 +19,20 @@ const targetFramework = resolve(
   process.env.VOYAVPN_LIBBOX_FRAMEWORK || resolve(frameworkRoot, "Libbox.framework"),
 );
 
+/**
+ * The macOS slice, and only that one.
+ *
+ * `make lib_apple` is `build_libbox -target apple`, which defaults to
+ * `ios,iossimulator,tvos,tvossimulator,macos`: four platforms `stageLibbox`
+ * throws away, each compiled with every Go dependency. The iOS script names
+ * its platforms for the same reason.
+ */
 function buildLibbox() {
   rmSync(resolve(sourceDir, "Libbox.xcframework"), { force: true, recursive: true });
   run("make", ["lib_install"], { cwd: sourceDir });
-  run("make", ["lib_apple"], { cwd: sourceDir });
+  run("go", ["run", "./cmd/internal/build_libbox", "-target", "apple", "-platform", "macos"], {
+    cwd: sourceDir,
+  });
 }
 
 export function findUniversalMacosFramework(xcframeworkPath) {
@@ -40,10 +52,7 @@ export function assertUniversalMacosFramework(frameworkPath, captureCommand = ca
   if (!existsSync(binary)) {
     throw new Error(`Libbox.framework binary was not found at ${binary}`);
   }
-  const result = captureCommand("lipo", ["-archs", binary], { cwd: repoRoot });
-  if (result.error) {
-    throw result.error;
-  }
+  const result = captureSpawned("lipo", ["-archs", binary], { cwd: repoRoot }, captureCommand);
   if (result.status !== 0) {
     throw new Error(`lipo -archs ${binary} failed with status ${result.status}: ${result.stderr ?? ""}`);
   }
@@ -87,10 +96,5 @@ export function main() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

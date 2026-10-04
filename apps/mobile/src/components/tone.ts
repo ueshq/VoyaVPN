@@ -25,11 +25,25 @@ const TONE_TEXT = {
 } as const satisfies Record<Tone, string>;
 
 /**
- * A tone's foreground as a colour value, for the props that take one — an
- * SVG icon's `color` is not a style, so a class cannot reach it.
+ * The colour a class resolves to, for the props that take a value — an SVG
+ * fill or an icon's `color` is not a style, so a class cannot reach it.
+ *
+ * Resolved from the class rather than read as a theme variable: Uniwind keeps
+ * only the variables some `className` actually uses, and asking for the class
+ * is what puts its variable in the build. For the same reason the class must
+ * be written out where this is called — Tailwind finds classes by scanning
+ * the source.
  */
-export function useToneColor(tone: Tone) {
-  const { color } = useResolveClassNames(TONE_TEXT[tone]);
+export function useClassColor(
+  className: string,
+  property: "backgroundColor" | "color" = "color",
+) {
+  const value = useResolveClassNames(className)[property];
 
-  return typeof color === "string" ? color : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
+/** A tone's foreground as a colour value. */
+export function useToneColor(tone: Tone) {
+  return useClassColor(TONE_TEXT[tone]);
 }

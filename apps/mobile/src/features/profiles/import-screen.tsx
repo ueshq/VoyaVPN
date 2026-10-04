@@ -1,12 +1,16 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { IpcCommandError } from "@voya/client/errors";
 import { importLineText } from "@voya/client/messages";
 import { clipboard } from "@voya/client/platform";
+import { refreshQueries } from "@voya/client/queries";
+import { subscriptionRefreshRoots } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import type { ImportPreview } from "@voya/contracts";
 import { formatImportSummary } from "@voya/features/profiles/server-table-actions";
+import { getProtocolLabelLoose } from "@voya/features/profiles/profile-constants";
 import { subscriptionUpdateMessages } from "@voya/features/subscriptions/subscription-update-result";
+import { redactUrlQuery, urlHost } from "@voya/utils/redact-url-query";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "heroui-native/button";
 import { Input } from "heroui-native/input";
@@ -18,6 +22,8 @@ import { navigateToTab } from "~/app/navigation";
 import { Banner } from "~/components/banner";
 import { DetailScreen } from "~/components/detail-screen";
 import { ErrorNotice } from "~/components/error-notice";
+import { PrimaryButton } from "~/components/primary-button";
+import { useBusyAction } from "~/components/use-busy-action";
 import { deviceActions } from "~/native/device-actions";
 
 /**
@@ -42,45 +48,54 @@ export function ImportScreen() {
   const [preview, setPreview] = useState<{ text: string; data: ImportPreview } | null>(null);
   const [allNodes, setAllNodes] = useState(false);
   const [sourceNames, setSourceNames] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
-  const busyRef = useRef(false);
+  const { busy, run: runOnce } = useBusyAction();
   const [error, setError] = useState<unknown>(null);
   const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [choices, setChoices] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [failedIds, setFailedIds] = useState<string[]>([]);
+  const [importedCount, setImportedCount] = useState(0);
   const [denied, setDenied] = useState(false);
   function edit(value: string) { setText(value); setPreview(null); setAllNodes(false); setMessage(null); setError(null); setChoices([]); }
-  async function run(action: () => Promise<void>) {
-    if (busyRef.current) return;
-    busyRef.current = true; setBusy(true); setError(null); setErrorMessage(undefined); setDenied(false);
+  const run = (action: () => Promise<void>) => runOnce(async () => {
+    setError(null); setErrorMessage(undefined); setDenied(false);
     try { await action(); }
     catch (failure) {
       setError(failure);
       const code = failure && typeof failure === "object" && "code" in failure ? failure.code : null;
       setDenied(code === "cameraDenied");
       setErrorMessage(code === "cameraDenied" ? t("mobile.cameraDenied") : code === "noQr" ? t("mobile.noQr") : nothingImportable(failure) ? t("mobile.importInvalid") : undefined);
-    } finally { busyRef.current = false; setBusy(false); }
-  }
+    }
+  });
   async function recognize(camera: boolean) {
     const values = await (camera ? deviceActions().scanQr(t("actions.cancel")) : deviceActions().pickQr());
     if (!values) return;
     if (values.length === 1) edit(values[0]); else setChoices(values);
   }
+  /** Downloads the given subscriptions; answers with the nodes they brought and what to say about the ones that did not. */
   async function updateSources(ids: string[]) {
     const failed: string[] = [];
     const notes: string[] = [];
+    let nodes = 0;
     for (const id of ids) {
       try {
         const result = await voyaCommands().updateSubscriptions(id, true, null);
         if (result.outcomes.some((outcome) => outcome.status === "failed")) failed.push(id);
+        nodes += result.imported + result.updated;
         const reason = subscriptionUpdateMessages(result, t);
         if (reason) notes.push(reason);
       } catch { failed.push(id); notes.push(t("mobile.updateFailed")); }
     }
     setFailedIds(failed);
-    if (notes.length) setMessage((value) => [value, ...notes].filter(Boolean).join("\n"));
-    await client.invalidateQueries();
+    // Nothing was updated, so nothing went stale.
+    if (ids.length) await refreshQueries(client, ...subscriptionRefreshRoots);
+
+    return { nodes, notes };
+  }
+  async function retryFailed() {
+    const retried = await updateSources(failedIds);
+    setImportedCount((count) => count + retried.nodes);
+    if (retried.notes.length) setMessage((value) => [value, ...retried.notes].filter(Boolean).join("\n"));
   }
   async function commit() {
     if (!preview || preview.text !== text) return;
@@ -91,8 +106,18 @@ export function ImportScreen() {
       if (added.has(source.id) && name) await voyaCommands().saveSubscription({ ...source, remarks: name });
     }
     setPreview(null); setText(""); setMessage(formatImportSummary(result, t));
-    await client.invalidateQueries();
-    await updateSources(result.addedSubscriptionIds);
+    setImportedCount(result.imported);
+    await refreshQueries(client, ...subscriptionRefreshRoots);
+    // A subscription's nodes arrive with its first download, not with the
+    // import that added it. They count: a page that said "Imported 0 nodes"
+    // under a list that had just filled, and offered no way on to it, read as
+    // a failed import.
+    const downloaded = await updateSources(result.addedSubscriptionIds);
+    if (downloaded.nodes > 0 || downloaded.notes.length > 0) {
+      const imported = result.imported + downloaded.nodes;
+      setImportedCount(imported);
+      setMessage([formatImportSummary({ ...result, imported }, t), ...downloaded.notes].join("\n"));
+    }
   }
   return <DetailScreen key={preview ? "preview" : message ? "summary" : "input"}>
     <ErrorNotice error={error} message={errorMessage} />
@@ -106,25 +131,35 @@ export function ImportScreen() {
     </View>
     {choices.length ? <><Typography className="text-base text-foreground">{t("mobile.chooseQr")}</Typography>{choices.map((value, index) => <Button key={index} variant="secondary" onPress={() => edit(value)}><Button.Label numberOfLines={2}>{value}</Button.Label></Button>)}</> : null}
     {denied ? <Button variant="secondary" onPress={() => void Linking.openSettings()}><Button.Label>{t("tabs.settings")}</Button.Label></Button> : null}
-    <Button isDisabled={busy || !text.trim()} onPress={() => void run(async () => { const data = await voyaCommands().previewImportProfiles(text); Keyboard.dismiss(); setMessage(null); setPreview({ text, data }); })}><Button.Label>{t("mobile.preview")}</Button.Label></Button>
+    <PrimaryButton label={t("mobile.preview")} isDisabled={busy || !text.trim()} onPress={() => void run(async () => { const data = await voyaCommands().previewImportProfiles(text); Keyboard.dismiss(); setMessage(null); setPreview({ text, data }); })} />
     </> : null}
     {preview ? <>
-      <Typography className="text-base text-foreground">{t("mobile.previewCount", { nodes: preview.data.nodes.length, sources: preview.data.subscriptionUrls.length, failed: preview.data.failed })}</Typography>
+      <Typography className="text-base text-foreground">{t("mobile.previewSummary", {
+        nodes: t("mobile.previewNodes", { count: preview.data.nodes.length }),
+        subscriptions: t("mobile.previewSubscriptions", { count: preview.data.subscriptionUrls.length }),
+        invalid: t("mobile.previewInvalid", { count: preview.data.failed }),
+      })}</Typography>
       {preview.data.lineIssues.map((issue, index) => <Typography key={`issue-${index}`} className={issue.code.code === "subscriptionSourceAdded" ? "text-sm text-subtle" : "text-sm text-danger"}>{importLineText(t, issue)}</Typography>)}
-      {(allNodes ? preview.data.nodes : preview.data.nodes.slice(0, previewLimit)).map((node, index) => <Typography key={index} className="text-base text-foreground">{node.name} · {node.protocol} · {node.address}</Typography>)}
+      {(allNodes ? preview.data.nodes : preview.data.nodes.slice(0, previewLimit)).map((node, index) => <Typography key={index} className="text-base text-foreground">{node.name} · {getProtocolLabelLoose(node.protocol)} · {node.address}</Typography>)}
       {preview.data.nodes.length > previewLimit ? <Button variant="secondary" accessibilityState={{ expanded: allNodes }} onPress={() => setAllNodes(!allNodes)}><Button.Label>{allNodes ? t("mobile.collapsePreview") : t("mobile.expandPreview", { count: preview.data.nodes.length })}</Button.Label></Button> : null}
       {preview.data.subscriptionUrls.map((url) => <View key={url} className="gap-2">
-        <Typography selectable className="text-base text-foreground">{new URL(url).hostname}{"\n"}{url}</Typography>
+        {/* The token never prints: the value is masked, the host and path are
+            what identify the source. */}
+        <Typography selectable className="text-base text-foreground">{urlHost(url)}{"\n"}{redactUrlQuery(url)}</Typography>
         <TextField><Label>{t("mobile.name")}</Label><Input accessibilityLabel={t("mobile.name")} placeholder={t("mobile.name")} value={sourceNames[url] ?? ""} editable={!busy} onChangeText={(value) => setSourceNames((previous) => ({ ...previous, [url]: value }))} /></TextField>
       </View>)}
       <Button variant="secondary" isDisabled={busy} onPress={() => { setPreview(null); setAllNodes(false); }}><Button.Label>{t("actions.edit")}</Button.Label></Button>
-      <Button isDisabled={busy || !(preview.data.nodes.length || preview.data.subscriptionUrls.length)} onPress={() => void run(commit)}><Button.Label>{t("mobile.confirmImport")}</Button.Label></Button>
+      <PrimaryButton label={t("mobile.confirmImport")} isDisabled={busy || !(preview.data.nodes.length || preview.data.subscriptionUrls.length)} onPress={() => void run(commit)} />
     </> : null}
     {message ? <>
       <Banner status={failedIds.length ? "warning" : "info"} message={message} liveRegion />
-      {failedIds.length ? <Button variant="secondary" isDisabled={busy} onPress={() => void run(() => updateSources(failedIds))}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
-      <Button variant="secondary" onPress={() => navigateToTab("profiles")}><Button.Label>{t("home.chooseNode")}</Button.Label></Button>
-      <Button variant="secondary" isDisabled={busy} onPress={() => { setMessage(null); setFailedIds([]); }}><Button.Label>{t("mobile.add")}</Button.Label></Button>
+      {/* One primary action, by what the user most plausibly does next: retry
+          what failed, go pick from what imported, or import something else. */}
+      {failedIds.length ? <PrimaryButton label={t("mobile.retryFailed")} isDisabled={busy} onPress={() => void run(retryFailed)} /> : null}
+      {importedCount > 0 ? <Button onPress={() => navigateToTab("profiles")}><Button.Label>{t("home.chooseNode")}</Button.Label></Button> : null}
+      <Button variant={failedIds.length || importedCount > 0 ? "secondary" : undefined} isDisabled={busy} className={busy && !(failedIds.length || importedCount > 0) ? "button--primary-disabled" : undefined} onPress={() => { setMessage(null); setFailedIds([]); }}>
+        <Button.Label className={busy && !(failedIds.length || importedCount > 0) ? "text-subtle" : undefined}>{t("mobile.add")}</Button.Label>
+      </Button>
     </> : null}
   </DetailScreen>;
 }

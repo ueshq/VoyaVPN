@@ -14,6 +14,7 @@ import {
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { formatDateTime } from "@voya/utils/format-date-time";
 import type { ProxyConnectionItem } from "@voya/contracts";
 import { outboundLabelKey } from "@voya/features/routing/rule-outbound";
 import { connectionBytes } from "@voya/features/proxy/connection-display";
@@ -55,11 +56,9 @@ export function ConnectionDetails({
   });
   const activeRules =
     routingsQuery.data?.find((routing) => routing.isActive)?.rules ?? null;
-  const date = connection?.start ? new Date(connection.start) : null;
-  const startedAt =
-    date && Number.isFinite(date.getTime())
-      ? date.toLocaleString(language)
-      : connection?.start;
+  const startedAt = connection?.start
+    ? formatDateTime(connection.start, language)
+    : connection?.start;
   // What it is, where it went, how it got there, and how much went through.
   const groups: Field[][] = connection
     ? [

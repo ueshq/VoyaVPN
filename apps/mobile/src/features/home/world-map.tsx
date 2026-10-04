@@ -3,7 +3,8 @@ import type { HomeMapMarker } from "@voya/features/home/map-marker";
 import { WORLD_MAP_LAND } from "@voya/features/home/world-map-land";
 import { View } from "react-native";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
-import { useResolveClassNames } from "uniwind";
+
+import { useClassColor } from "~/components/tone";
 
 const VIEW_BOX = `0 0 ${WORLD_MAP_BOX.width} ${WORLD_MAP_BOX.height}`;
 
@@ -17,11 +18,7 @@ const VIEW_BOX = `0 0 ${WORLD_MAP_BOX.width} ${WORLD_MAP_BOX.height}`;
  * same place on both.
  */
 export function WorldMap({ marker }: { marker: HomeMapMarker | null }) {
-  // Resolved from the class rather than read as a variable: Uniwind keeps only
-  // the theme variables some `className` actually uses, and an SVG fill is not
-  // one. Asking for the class is what puts `--color-map-land` in the build.
-  const { backgroundColor } = useResolveClassNames("bg-map-land");
-  const land = typeof backgroundColor === "string" ? backgroundColor : "transparent";
+  const land = useClassColor("bg-map-land", "backgroundColor") ?? "transparent";
   const position = marker ? worldMapPosition(marker.countryCode) : null;
 
   return (

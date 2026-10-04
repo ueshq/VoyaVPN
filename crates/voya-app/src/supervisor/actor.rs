@@ -45,6 +45,12 @@ impl SupervisorActor {
         }
     }
 
+    pub(super) fn clash_api_access(&self) -> ClashApiAccess {
+        self.running
+            .snapshot(self.deps.clock.now())
+            .clash_api_access()
+    }
+
     pub(super) fn handle(&mut self, command: SupervisorCommand) {
         match command {
             // `start` is restart: it stops the running core itself, once its
@@ -288,6 +294,11 @@ impl SupervisorActor {
         }
 
         for handle in &running.elevated {
+            // Unlike the steps around it this one returns: an elevated core's
+            // tracked process is its `sudo` wrapper, and stopping the wrapper
+            // after the privileged kill was refused would orphan a root-owned
+            // core the supervisor could never reach again. Leaving everything
+            // tracked keeps the stop retryable.
             self.sudo_kill(handle, running)?;
         }
 
@@ -316,7 +327,12 @@ impl SupervisorActor {
     ) -> Result<SupervisorSnapshot, SupervisorError> {
         match self.stop_running(&running) {
             Ok(()) => Err(start_error),
-            Err(cleanup_error) => Err(cleanup_error),
+            Err(cleanup_error) => {
+                // The cleanup error is what the caller has to act on, but it
+                // says nothing about why the start failed in the first place.
+                tracing::warn!(error = ?start_error, "core start failed before its cleanup did");
+                Err(cleanup_error)
+            }
         }
     }
 

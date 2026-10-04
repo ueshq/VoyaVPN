@@ -4,6 +4,7 @@ import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { beforeEach, expect, it, vi } from "vitest";
 import { queryKeys } from "@voya/client/query-keys";
 import { SettingsApplyStatus } from "./settings-apply-status";
+import { useSettingsApplyStatus } from "@voya/features/settings/use-settings-apply-status";
 import { installFakeCommands } from "@voya/features/test/backend";
 const ipc = installFakeCommands({
   getSettingsApplyStatus: vi.fn(),
@@ -58,6 +59,19 @@ it("retains the pending proxy action after failure and retries it", async () => 
     await screen.findByRole("button", { name: "Apply proxy settings" }),
   ).toBeEnabled();
 });
+it("drops a failed apply's error once nothing is left to apply", async () => {
+  ipc.getSettingsApplyStatus.mockResolvedValue({ connected: true, action: "reapplyProxy" });
+  ipc.applyPendingSettings.mockRejectedValue(new Error("proxy failed"));
+  const { client, container } = mount();
+  await userEvent.click(await screen.findByRole("button", { name: "Apply proxy settings" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("proxy failed");
+
+  // The core reconnected from elsewhere: there is nothing to retry any more.
+  ipc.getSettingsApplyStatus.mockResolvedValue({ connected: true, action: "none" });
+  await client.refetchQueries({ queryKey: queryKeys.settingsApply });
+
+  await waitFor(() => expect(container).toBeEmptyDOMElement());
+});
 it("hides the banner when disconnected and prevents apply while saving", async () => {
   ipc.getSettingsApplyStatus.mockResolvedValue({
     connected: false,
@@ -99,4 +113,43 @@ it("says when changes are being saved and once they are saved", async () => {
   ).toBeInTheDocument();
   view.rerender(status({ failed: true, saved: true, saving: false }));
   expect(view.container).toBeEmptyDOMElement();
+});
+it("asks once on mount, and again when a save finishes", async () => {
+  ipc.getSettingsApplyStatus.mockResolvedValue({
+    connected: true,
+    action: "none",
+  });
+  const client = createTestQueryClient({ gcTime: 0 });
+  const view = renderWithQuery(<SettingsApplyStatus saving={false} failed={false} />, {
+    queryClient: client,
+  });
+  await waitFor(() => expect(client.isFetching()).toBe(0));
+  expect(ipc.getSettingsApplyStatus).toHaveBeenCalledOnce();
+
+  // While a save runs the answer would describe the settings before it.
+  view.rerender(<SettingsApplyStatus saving failed={false} />);
+  await waitFor(() => expect(client.isFetching()).toBe(0));
+  expect(ipc.getSettingsApplyStatus).toHaveBeenCalledOnce();
+
+  view.rerender(<SettingsApplyStatus saving={false} failed={false} />);
+  await waitFor(() => expect(ipc.getSettingsApplyStatus).toHaveBeenCalledTimes(2));
+});
+it("asks once when a caller enables it as its connection appears", async () => {
+  // Home's summary: disabled while disconnected, keyed by the connection.
+  function Summary({ connection }: { connection: string | null }) {
+    useSettingsApplyStatus({ enabled: connection !== null, refreshKey: connection });
+    return null;
+  }
+  ipc.getSettingsApplyStatus.mockResolvedValue({ connected: true, action: "none" });
+  const client = createTestQueryClient({ gcTime: 0 });
+  const view = renderWithQuery(<Summary connection={null} />, { queryClient: client });
+  expect(ipc.getSettingsApplyStatus).not.toHaveBeenCalled();
+
+  view.rerender(<Summary connection="tokyo::1" />);
+  await waitFor(() => expect(client.isFetching()).toBe(0));
+  expect(ipc.getSettingsApplyStatus).toHaveBeenCalledOnce();
+
+  // The next connection is a new answer even while the last one is fresh.
+  view.rerender(<Summary connection="tokyo::2" />);
+  await waitFor(() => expect(ipc.getSettingsApplyStatus).toHaveBeenCalledTimes(2));
 });

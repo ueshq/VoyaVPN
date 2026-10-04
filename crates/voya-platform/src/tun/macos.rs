@@ -359,8 +359,8 @@ pub(super) fn macos_packet_tunnel_diagnostics() -> NativeTunDiagnostics {
 
 #[cfg(target_os = "macos")]
 fn macos_packet_tunnel_host_log_tail() -> Vec<String> {
-    let output = Command::new("/usr/bin/log")
-        .args([
+    let output = output_with_timeout(
+        Command::new("/usr/bin/log").args([
             "show",
             "--last",
             "15m",
@@ -368,8 +368,9 @@ fn macos_packet_tunnel_host_log_tail() -> Vec<String> {
             "compact",
             "--predicate",
             "process == \"VoyaPacketTunnel\" OR processImagePath CONTAINS \"VoyaPacketTunnel\" OR (process == \"nesessionmanager\" AND (eventMessage CONTAINS \"app.voyavpn.desktop.PacketTunnel\" OR eventMessage CONTAINS \"VoyaVPN\" OR eventMessage CONTAINS \"Validation failed\" OR eventMessage CONTAINS \"Signature check failed\"))",
-        ])
-        .output();
+        ]),
+        HELPER_TIMEOUT,
+    );
 
     let Ok(output) = output else {
         return Vec::new();

@@ -1,11 +1,11 @@
-use super::{post_commit::*, support::*, *};
+use super::{post_commit::*, *};
 
 #[tauri::command]
 #[specta::specta]
 pub async fn proxy_list_connections(
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyConnectionsSnapshot, AppError> {
-    let clash_api = current_clash_api_access(&state).await;
+    let clash_api = state.supervisor().clash_api_access().await;
 
     state
         .proxy_runtime()
@@ -21,17 +21,12 @@ pub async fn proxy_close_connection<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     connection_id: Option<String>,
 ) -> Result<ProxyConnectionsSnapshot, AppError> {
-    map_ipc_input(
-        input_safety::validate_present_text(connection_id.as_deref(), IPC_ID_MAX_CHARS),
-        "proxy connection id",
-        AppErrorSubsystem::ProxyRuntime,
-    )?;
-    let clash_api = current_clash_api_access(&state).await;
-    let snapshot = state
-        .proxy_runtime()
-        .close_connection(&clash_api, connection_id.as_deref())
-        .await
-        .map_err(AppError::from)?;
+    let snapshot = voya_app::proxy_runtime::close_connection_use_case(
+        state.proxy_runtime(),
+        &state.supervisor(),
+        connection_id,
+    )
+    .await?;
 
     emit_invalidation(
         &app,
@@ -58,27 +53,23 @@ pub(crate) async fn apply_traffic_mode<R: tauri::Runtime>(
     state: &AppState,
     mode: voya_contracts::TrafficMode,
 ) -> Result<voya_contracts::TrafficModeResponse, AppError> {
-    let mode = traffic_mode_from_contract(mode);
-    let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
-    let outcome = state
-        .proxy_runtime()
-        .change_traffic_mode(state.config_mutations(), &snapshot, mode)
-        .await
-        .map_err(AppError::from)?;
-    // The preference is already committed, including when a live step fails.
-    state
+    let change = state
         .services()
-        .acknowledge_traffic_mode(&snapshot, &outcome);
+        .change_traffic_mode(
+            state.config_mutations(),
+            &state.supervisor(),
+            state.proxy_runtime(),
+            mode,
+        )
+        .await?;
+    // The preference is already committed, including when a live step fails.
     emit_invalidation(
         app,
         "proxy-traffic-mode-changed",
-        invalidation::proxy_runtime_scopes(outcome.config_changed),
+        invalidation::proxy_runtime_scopes(change.config_changed),
     );
-    outcome.runtime_result.map_err(AppError::from)?;
 
-    Ok(voya_contracts::TrafficModeResponse {
-        mode: traffic_mode_to_contract(outcome.mode),
-    })
+    change.applied
 }
 
 #[tauri::command]
@@ -87,11 +78,12 @@ pub async fn proxy_start_monitor(
     app: tauri::AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<ProxyMonitorStatus, AppError> {
-    let clash_api = current_clash_api_access(&state).await;
-    let result = state.proxy_monitor_controller().start(
-        &clash_api,
+    let result = voya_app::proxy_runtime::start_monitor_use_case(
+        &state.proxy_monitor_controller(),
+        &state.supervisor(),
         std::sync::Arc::new(crate::TauriSinks { app: app.clone() }),
-    );
+    )
+    .await;
 
     voya_app::proxy_runtime::report_monitor_result(result, |status| {
         emit_proxy_monitor_status(&app, status);

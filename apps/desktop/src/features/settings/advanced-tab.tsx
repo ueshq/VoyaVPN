@@ -181,6 +181,9 @@ function RuntimeLogGroup({
   const [search, setSearch] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
   const target = useShellStore((state) => state.settingsTarget);
+  // Settings keeps every visited tab mounted, so being mounted says nothing
+  // about being shown: without this the log stream stayed on behind General.
+  const shown = useShellStore((state) => state.settingsTab === "advanced");
   useEffect(() => {
     if (target !== "logs") return;
     const frame = requestAnimationFrame(() => {
@@ -210,6 +213,7 @@ function RuntimeLogGroup({
       ) : null}
       <div className="h-[28rem] min-h-0 overflow-hidden rounded-md border">
         <LogsPanel
+          active={shown}
           filter={filter}
           onFilterChange={setFilter}
           onSearchChange={setSearch}

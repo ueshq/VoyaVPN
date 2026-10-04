@@ -30,17 +30,16 @@ import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import {
-  buildPerAppRule,
-  findPerAppRule,
   normalizeProcessNames,
   PER_APP_MODE_LABEL_KEYS,
   readPerAppRule,
+  savePerAppRule,
   type PerAppProxyMode,
 } from "@/features/routing/per-app-proxy-rule";
 
+/** Mounted while it is open: the Rules page renders it only then. */
 type PerAppProxyDialogProps = {
   onOpenChange: (open: boolean) => void;
-  open: boolean;
 };
 
 const MODE_OPTIONS: PerAppProxyMode[] = ["off", "include", "exclude"];
@@ -57,47 +56,33 @@ const MODE_HINT_KEYS = {
  * fed by an OS process picker plus manual entry. sing-box process rules only
  * match TUN traffic, so a hint appears when the current mode is not VPN.
  */
-export function PerAppProxyDialog({
-  onOpenChange,
-  open,
-}: PerAppProxyDialogProps) {
+export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
   const { t } = useI18n();
-  const { error, pending: saving, setError, submit } = useDialogSubmit();
+  const { error, pending: saving, submit } = useDialogSubmit();
   const [manualEntry, setManualEntry] = useState("");
   const [mode, setMode] = useState<PerAppProxyMode>("off");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
-  // Tracks whether the form was seeded for the current open cycle.
+  // Whether the form has been seeded from the active routing yet.
   const [seeded, setSeeded] = useState(false);
 
-  const routingsQuery = useQuery({
-    enabled: open,
-    ...queries.routings,
-  });
+  const routingsQuery = useQuery(queries.routings);
   const candidatesQuery = useQuery({
-    enabled: open,
     queryFn: () => voyaCommands().listProcessCandidates(),
     queryKey: queryKeys.processCandidates,
-    staleTime: 30_000,
   });
-  const modeStatusQuery = useQuery({ ...queries.connectionMode, enabled: open });
+  const modeStatusQuery = useQuery(queries.connectionMode);
 
   const activeRouting =
     routingsQuery.data?.find((routing) => routing.isActive) ?? null;
 
-  // Seed the form from the active routing once per open cycle. Adjusting state
+  // Seed the form from the active routing once it has loaded. Adjusting state
   // during render (React's documented pattern) instead of in an effect avoids
   // a cascading-render lint and an extra paint.
-  if (!open && seeded) {
-    setSeeded(false);
-  }
-  if (open && !seeded && routingsQuery.data != null) {
+  if (!seeded && routingsQuery.data != null) {
     const state = readPerAppRule(activeRouting);
     setMode(state.mode);
     setSelected(state.processes);
-    setManualEntry("");
-    setSearch("");
-    setError(null);
     setSeeded(true);
   }
 
@@ -142,37 +127,9 @@ export function PerAppProxyDialog({
       return;
     }
     await submit(async () => {
-        const existing = findPerAppRule(activeRouting);
-        const processes = normalizeProcessNames(selected);
-        if (mode === "off") {
-          // Turning it off keeps the chosen apps on a disabled rule, so turning
-          // it back on does not mean picking them all again.
-          if (existing && processes.length > 0) {
-            await voyaCommands().saveRoutingRule(activeRouting.id, {
-              ...existing,
-              enabled: false,
-              process: processes,
-            });
-          } else if (existing) {
-            await voyaCommands().deleteRoutingRules(activeRouting.id, [existing.id]);
-          }
-        } else {
-          const saved = await voyaCommands().saveRoutingRule(
-            activeRouting.id,
-            buildPerAppRule(mode, processes, existing),
-          );
-          // The backend appends a new rule to the end of the rule set, which puts
-          // it behind the catch-all rule every built-in routing ends with — a
-          // process rule there can never match. Pin the managed rule to the top so
-          // the listed apps really do take precedence, as documented in
-          // per-app-proxy-rule.ts.
-          const savedRule = findPerAppRule(saved);
-          if (savedRule && saved.rules[0]?.id !== savedRule.id) {
-            await voyaCommands().moveRoutingRule(saved.id, savedRule.id, "top", null);
-          }
-        }
-        // The routing-rule commands emit the `routings` invalidation.
-        onOpenChange(false);
+      await savePerAppRule(activeRouting, mode, selected);
+      // The routing-rule commands emit the `routings` invalidation.
+      onOpenChange(false);
     });
   }
 
@@ -182,7 +139,7 @@ export function PerAppProxyDialog({
   const missingApps = mode !== "off" && normalizeProcessNames(selected).length === 0;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open onOpenChange={onOpenChange}>
       <ScrollableDialogContent closeLabel={t("actions.close")} width="54rem">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

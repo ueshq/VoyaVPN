@@ -4,6 +4,7 @@ import {
   EXTERNAL_KEY_NAMESPACES,
   inspectI18nSource,
   isUserVisibleText,
+  pluralBaseKey,
   unusedTranslationKeys,
 } from "./i18n-analyzer.mjs";
 
@@ -121,6 +122,21 @@ describe("i18n AST analyzer", () => {
         externalPrefixes: ["startupFailure."],
       }),
     ).toEqual(["status.stale"]);
+  });
+
+  it("counts a plural form as used when source names its base", () => {
+    expect(pluralBaseKey("nodes.count_one")).toBe("nodes.count");
+    expect(pluralBaseKey("nodes.count_other")).toBe("nodes.count");
+    expect(pluralBaseKey("nodes.count")).toBeNull();
+    expect(pluralBaseKey("nodes.another")).toBeNull();
+
+    expect(
+      unusedTranslationKeys({
+        keys: ["nodes.count_one", "nodes.count_other", "rules.count_one", "rules.count_other"],
+        // A form picked by hand does not count: only the base is ever named.
+        literals: new Set(["nodes.count", "rules.count_one"]),
+      }),
+    ).toEqual(["rules.count_one", "rules.count_other"]);
   });
 
   it("names a reader for every namespace read outside the frontend", () => {

@@ -1,20 +1,45 @@
 //! Policy groups: the saved definitions and the running group's live member.
 
 use serde::Deserialize;
-use serde_json::Value;
 use voya_app::{
     invalidation,
     policy_groups::{
-        delete_policy_groups_use_case, save_policy_group_use_case, select_member_use_case,
-        set_active_policy_group_use_case, test_running_policy_group_delay,
+        delete_policy_groups_use_case, list_policy_groups_use_case, running_policy_group_runtime,
+        save_policy_group_use_case, select_member_use_case, set_active_policy_group_use_case,
+        test_running_policy_group_delay,
     },
     post_commit::ConfigChange,
 };
-use voya_contracts::{AppError, AppNoticeLevel, NoticeCode, PolicyGroup};
+use voya_contracts::{AppNoticeLevel, NoticeCode, PolicyGroup};
 
 use crate::app::MobileState;
 
-use super::{answer, arguments, runtime::finish_config_change};
+use super::{answer, arguments, runtime::finish_config_change, Answer};
+
+pub(super) async fn list(state: &MobileState) -> Answer {
+    let config = state.config_mutations.current_config();
+
+    answer(
+        "list_policy_groups",
+        &list_policy_groups_use_case(&state.services, &config).await?,
+    )
+}
+
+/// The running policy group as the core sees it, or `None` when no group is in
+/// use. Reads the live member and each member's delay through the core's own
+/// Clash API — on a phone that is the loopback inside the tunnel provider,
+/// which is reachable per device rather than per process.
+pub(super) async fn runtime(state: &MobileState) -> Answer {
+    let snapshot = state.supervisor.status().await?;
+    let runtime = running_policy_group_runtime(
+        &snapshot,
+        &state.services.policy_groups(),
+        &state.proxy_runtime,
+    )
+    .await?;
+
+    answer("policy_group_runtime", &runtime)
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,7 +47,7 @@ struct SaveGroup {
     group: PolicyGroup,
 }
 
-pub(super) async fn save(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn save(state: &MobileState, args: &str) -> Answer {
     let SaveGroup { group } = arguments("save_policy_group", args)?;
     let saved = save_policy_group_use_case(&state.config_mutations, group).await?;
 
@@ -53,7 +78,7 @@ struct Ids {
     ids: Vec<String>,
 }
 
-pub(super) async fn delete(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn delete(state: &MobileState, args: &str) -> Answer {
     let Ids { ids } = arguments("delete_policy_groups", args)?;
     let deleted = delete_policy_groups_use_case(&state.config_mutations, ids).await?;
     state.sinks.invalidate(
@@ -72,7 +97,7 @@ struct Id {
     id: String,
 }
 
-pub(super) async fn set_active(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn set_active(state: &MobileState, args: &str) -> Answer {
     let Id { id } = arguments("set_active_policy_group", args)?;
     let active = set_active_policy_group_use_case(&state.config_mutations, id).await?;
     state.sinks.invalidate(
@@ -92,7 +117,7 @@ struct SelectMember {
 
 /// Stores a selector's member and, when that group is running, switches the
 /// core to it live. The choice is kept even if the live switch fails.
-pub(super) async fn select_member(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn select_member(state: &MobileState, args: &str) -> Answer {
     let SelectMember {
         group_id,
         profile_id,
@@ -110,7 +135,7 @@ pub(super) async fn select_member(state: &MobileState, args: &Value) -> Result<V
         state.sinks.notice(
             AppNoticeLevel::Warning,
             NoticeCode::PolicyGroupSelectionRuntimeUpdateFailed,
-            Some(message),
+            &message,
         );
     }
     state.sinks.invalidate(
@@ -123,7 +148,7 @@ pub(super) async fn select_member(state: &MobileState, args: &Value) -> Result<V
 
 /// Probes every member of the running group through the core and returns the
 /// group with those delays; `null` while no group runs.
-pub(super) async fn test_delay(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn test_delay(state: &MobileState) -> Answer {
     let snapshot = state.supervisor.status().await?;
     let runtime = test_running_policy_group_delay(
         &snapshot,

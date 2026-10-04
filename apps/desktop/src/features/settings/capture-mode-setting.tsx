@@ -8,7 +8,7 @@ import type { ConnectionMode } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { SettingsGroup } from "./settings-form";
-import { useCaptureMode } from "@/features/settings/use-capture-mode";
+import { activeCaptureMode, useCaptureMode } from "@/features/settings/use-capture-mode";
 
 const OPTIONS = [
   {
@@ -27,6 +27,18 @@ const OPTIONS = [
   value: ConnectionMode;
 }>;
 
+/** What the running connection captures with, in the status line's words. */
+const ACTIVE_STATUS_KEYS = {
+  systemProxy: "settings.captureMode.status.proxyActive",
+  vpn: "settings.captureMode.status.vpnActive",
+} as const satisfies Record<ConnectionMode, TranslationKey>;
+
+/** Connected with neither path in effect: which one the settings ask for. */
+const INACTIVE_STATUS_KEYS = {
+  systemProxy: "settings.captureMode.status.proxyInactive",
+  vpn: "settings.captureMode.status.vpnInactive",
+} as const satisfies Record<ConnectionMode, TranslationKey>;
+
 /**
  * The Windows and Linux choice between the platform VPN and the system proxy.
  * It is independent of the traffic mode on Rules, which decides where captured
@@ -38,17 +50,13 @@ export function CaptureModeSetting() {
   const capture = useCaptureMode();
   const vpnOnly = useRuntimeEventStore((state) => state.tun?.backend === "macosPacketTunnel");
   // The saved choice above, and here what the running connection really does.
-  const statusKey = useRuntimeEventStore((state): TranslationKey => {
-    if (state.coreState?.state !== "connected")
-      return "settings.captureMode.status.disconnected";
-    if (state.coreState.activeTunBackend)
-      return "settings.captureMode.status.vpnActive";
-    if (state.sysProxy?.effectiveMode === "forcedChange")
-      return "settings.captureMode.status.proxyActive";
-    if (state.tun?.enabled)
-      return "settings.captureMode.status.vpnInactive";
-    return "settings.captureMode.status.proxyInactive";
-  });
+  const active = useRuntimeEventStore(activeCaptureMode);
+  const statusKey: TranslationKey =
+    active === null
+      ? "settings.captureMode.status.disconnected"
+      : active === "inactive"
+        ? INACTIVE_STATUS_KEYS[capture.mode]
+        : ACTIVE_STATUS_KEYS[active];
   if (!capture.available) return vpnOnly ? (
     <SettingsGroup title={t("settings.sections.captureMode")}>
       <div className="grid gap-1">

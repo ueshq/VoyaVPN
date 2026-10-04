@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 
 import { AppSidebar, SHELL_PANEL_ID } from "@/components/app-shell/app-sidebar";
-import { CloseRequestDialog } from "@/components/app-shell/close-request-dialog";
 import { AppErrorBoundary } from "@/components/app-shell/error-boundary";
 import { ModalHost } from "@/components/app-shell/modal-host";
 import {
@@ -80,7 +79,7 @@ export function AppShell() {
   const { titleBarLayout } = useWindowChrome();
 
   useProxyMonitorLifecycle(activeTab);
-  useRuntimeStatusSeed(["coreState", "sysProxy", "tun"]);
+  useRuntimeStatusSeed();
   useShellShortcuts();
   // Windows borderless chrome is the only Acrylic target; the hook no-ops elsewhere.
   useAcrylicWindow(titleBarLayout === "windows");
@@ -109,8 +108,11 @@ export function AppShell() {
         </div>
       </WindowChromeContext>
 
-      <ModalHost />
-      <CloseRequestDialog />
+      {/* The dialogs are lazy chunks outside the screen boundary above: one
+          that fails to load must not take the shell down with it. */}
+      <AppErrorBoundary>
+        <ModalHost />
+      </AppErrorBoundary>
       <Toaster />
     </main>
   );
@@ -128,14 +130,17 @@ function ScreenFallback() {
 }
 
 /**
- * Binds the proxy-monitor controller to the shell: the tab decides whether a
- * proxy-runtime surface is on screen, the controller owns everything else.
+ * Binds the proxy-monitor controller to the shell: the tab and its sub-view
+ * decide whether the connection table is on screen — the running-group
+ * sub-view beside it polls for itself and reads none of this stream — and the
+ * controller owns everything else.
  * A window hidden into the tray shows nothing either, so the monitor also
  * stops then: the backend otherwise kept serializing the whole connection
  * table every second for a webview nobody was looking at.
  */
 function useProxyMonitorLifecycle(activeTab: ShellTab) {
   const coreConnected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
+  const tableShown = useShellStore((state) => state.connectionsView === "connections");
   const visible = useAppVisible();
   const { t } = useI18n();
   // The controller is created once; this ref keeps its error path pointing at
@@ -167,7 +172,7 @@ function useProxyMonitorLifecycle(activeTab: ShellTab) {
 
   useEffect(() => {
     controllerRef.current?.setWanted(
-      coreConnected && activeTab === "connections" && visible,
+      coreConnected && activeTab === "connections" && tableShown && visible,
     );
-  }, [activeTab, coreConnected, visible]);
+  }, [activeTab, coreConnected, tableShown, visible]);
 }

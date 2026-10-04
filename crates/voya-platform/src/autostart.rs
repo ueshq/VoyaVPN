@@ -9,7 +9,9 @@ use thiserror::Error;
 use crate::{
     coreinfo::TargetOs,
     filesystem,
-    process::{reg_add_arguments, ProcessError, ProcessRole, ProcessRunner, ProcessSpawn},
+    process::{
+        reg_add_arguments, ProcessError, ProcessRole, ProcessRunner, ProcessSpawn, HELPER_TIMEOUT,
+    },
 };
 
 pub const AUTOSTART_APP_NAME: &str = "VoyaVPN";
@@ -406,7 +408,8 @@ fn run_checked(
     let output = runner.run_oneshot(
         ProcessSpawn::new(ProcessRole::Autostart, executable.to_path_buf())
             .with_arguments(arguments.to_vec())
-            .with_display_log(false),
+            .with_display_log(false)
+            .with_timeout(HELPER_TIMEOUT),
     )?;
     if output.success() {
         Ok(())

@@ -1,11 +1,12 @@
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { RuntimeStatusResponse } from "@voya/contracts";
+import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { makeAppSettings } from "@voya/features/settings/app-settings.test-fixture";
 
@@ -79,6 +80,52 @@ describe("ExitIpMetric", () => {
 
     expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP");
     expect(ipc.checkConnectionIp).toHaveBeenCalledOnce();
+  });
+
+  it("keeps one result: a new connection drops the previous one's", async () => {
+    const user = userEvent.setup();
+    useRuntimeEventStore.setState({ coreState: connected });
+    const queryClient = createTestQueryClient();
+    renderWithQuery(<Metric />, { queryClient });
+    await user.click(screen.getByRole("button", { name: "Check exit IP" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"),
+    );
+
+    // A reconnect is a new core process, so a new key.
+    act(() => {
+      useRuntimeEventStore.setState({ coreState: { ...connected, mainPid: 43 } });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("Not checked"),
+    );
+    const cached = queryClient.getQueryCache().findAll({ queryKey: queryKeys.connectionIp });
+    expect(cached.map((query) => query.queryKey[1])).toEqual(["tokyo:43:0"]);
+  });
+
+  it("forgets the address when the same node reconnects with no process to tell them apart", async () => {
+    // A core inside the system's tunnel provider has no process id, and the
+    // reconnect below happens with Home unmounted — from the tray, say.
+    const user = userEvent.setup();
+    const inProvider = { ...connected, mainPid: null };
+    const { setCoreState } = useRuntimeEventStore.getState();
+    act(() => setCoreState(inProvider));
+    const queryClient = createTestQueryClient();
+    const view = renderWithQuery(<Metric />, { queryClient });
+    await user.click(screen.getByRole("button", { name: "Check exit IP" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"),
+    );
+
+    view.unmount();
+    act(() => {
+      setCoreState({ ...inProvider, state: "disconnected" });
+      setCoreState(inProvider);
+    });
+    renderWithQuery(<Metric />, { queryClient });
+
+    expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("Not checked");
   });
 
   it("checks automatically on connect when enabled and reports a failure", async () => {

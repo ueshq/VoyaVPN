@@ -10,6 +10,21 @@ const runtimeStatusErrorKeys = {
   tun: "status.tunStatusFailed",
 } satisfies Record<RuntimeChannel, TranslationKey>;
 
+/**
+ * The runtime channels this host can read.
+ *
+ * A host delta, registered at startup like the other platform seams. The
+ * desktop reads all three: the OS may have changed the proxy or the tunnel
+ * while the window was away. A phone reads only `coreState` —
+ * `system_proxy_status` is not a command it has, so asking would report a
+ * failure after every connect, and there the tunnel provider *is* the core.
+ */
+let hostChannels: readonly RuntimeChannel[] = ["coreState", "sysProxy", "tun"];
+
+export function setRuntimeChannels(channels: readonly RuntimeChannel[]) {
+  hostChannels = channels;
+}
+
 export async function refreshRuntimeStatusAndReport(
   t: TranslationFunction,
   channels?: readonly RuntimeChannel[],
@@ -24,7 +39,7 @@ export async function refreshRuntimeStatusAndReport(
 
 /** Shared by the shell seed and explicit action reconciliation, never by Home mount. */
 export async function refreshRuntimeStatus(
-  channels: readonly RuntimeChannel[] = ["coreState", "sysProxy", "tun"],
+  channels: readonly RuntimeChannel[] = hostChannels,
   isMounted: () => boolean = () => true,
 ): Promise<Array<{ channel: RuntimeChannel; error: unknown }>> {
   const store = useRuntimeEventStore.getState();

@@ -10,9 +10,27 @@ import {
 } from "@voya/features/shell/tun-provider-text";
 import type { ConnectionMode } from "@voya/contracts";
 import { voyaCommands } from "@voya/client/transport";
-import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { useRuntimeEventStore, type RuntimeEventState } from "@voya/client/runtime-event-store";
 import { refreshRuntimeStatusAndReport } from "@voya/client/runtime-status";
 import { runtimeActionPending, useRuntimeActionStore } from "@voya/client/runtime-action-store";
+
+/** The capture mode the settings hold, whatever a running connection does. */
+export function savedCaptureMode(state: RuntimeEventState): ConnectionMode {
+  return state.tun?.enabled ? "vpn" : "systemProxy";
+}
+
+/**
+ * What the running connection really captures with: `null` while not
+ * connected, and `"inactive"` while connected with neither path in effect.
+ * Home's summary and the setting's status line both describe this, each in its
+ * own words.
+ */
+export function activeCaptureMode(state: RuntimeEventState): ConnectionMode | "inactive" | null {
+  if (state.coreState?.state !== "connected") return null;
+  if (state.coreState.activeTunBackend) return "vpn";
+
+  return state.sysProxy?.effectiveMode === "forcedChange" ? "systemProxy" : "inactive";
+}
 
 /**
  * How traffic is captured on Windows and Linux: the platform VPN or the system
@@ -24,9 +42,7 @@ export function useCaptureMode() {
   const available = useRuntimeEventStore(
     (state) => state.sysProxy?.management === "automatic",
   );
-  const mode: ConnectionMode = useRuntimeEventStore((state) =>
-    state.tun?.enabled ? "vpn" : "systemProxy",
-  );
+  const mode = useRuntimeEventStore(savedCaptureMode);
   const modePending = useRuntimeActionStore((state) => state.modePending);
   const [error, setError] = useState<string | null>(null);
   // A pending connect blocks the switch too: flipping TUN while the core is

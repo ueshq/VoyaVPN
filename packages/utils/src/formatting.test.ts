@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatBytes, formatBytesPerSecond, formatClock, formatDelay } from "./formatting";
+import {
+  formatBytes,
+  formatBytesPerSecond,
+  formatClock,
+  formatDelay,
+  formatDurationMs,
+} from "./formatting";
 
 describe("formatting", () => {
   it("formats byte counts with shared binary units", () => {
@@ -27,6 +33,14 @@ describe("formatting", () => {
     expect(formatDelay(null)).toBe("");
     expect(formatDelay(undefined)).toBe("");
     expect(formatDelay(-1)).toBe("");
+  });
+
+  it("formats an elapsed time without wrapping the hours", () => {
+    expect(formatDurationMs(0)).toBe("00:00:00");
+    expect(formatDurationMs(999)).toBe("00:00:00");
+    expect(formatDurationMs(3_725_400)).toBe("01:02:05");
+    expect(formatDurationMs(100 * 3_600_000 + 59_000)).toBe("100:00:59");
+    expect(formatDurationMs(-5_000)).toBe("00:00:00");
   });
 
   it("formats clock readings as zero-padded HH:MM:SS", () => {

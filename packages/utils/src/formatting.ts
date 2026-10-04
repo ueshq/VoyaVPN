@@ -34,6 +34,12 @@ export function formatClock(hours: number, minutes: number, seconds: number) {
   return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
+/** An elapsed time as `HH:MM:SS`; a negative one reads as zero. */
+export function formatDurationMs(milliseconds: number) {
+  const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
+  return formatClock(Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60);
+}
+
 /** The wall-clock time of day of a timestamp, in the user's local timezone. */
 export function formatTimeOfDay(timestampMs: number) {
   const date = new Date(timestampMs);

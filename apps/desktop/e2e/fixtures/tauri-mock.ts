@@ -600,6 +600,9 @@ export async function installTauriSmokeMock(
               {
                 subscriptionId: source.id,
                 lastUpdateAt: Math.floor(Date.now() / 1000),
+                lastAttemptAt: Math.floor(Date.now() / 1000),
+                lastAttemptError: null,
+                lastAttemptFailed: false,
                 uploadBytes: null,
                 downloadBytes: null,
                 totalBytes: null,

@@ -14,6 +14,6 @@ pub use blob::BlobError;
 pub use database::{
     manual_database_reset_command, Database, DatabaseSession, UnitOfWork, DATABASE_NAME,
 };
-pub use error::{DbError, Result};
+pub use error::{DbError, Result, SchemaRejectionReason};
 pub use repos::*;
 pub use reset::{move_database_aside, DatabaseBackup};

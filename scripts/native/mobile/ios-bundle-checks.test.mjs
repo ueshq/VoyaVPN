@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { repoRootFromScript } from "../../lib/common.mjs";
 import {
+  IOS_DEPLOYMENT_TARGET,
   iosBundleProblems,
   parsePlist,
   parseStrings,
@@ -125,5 +129,16 @@ describe("app and PacketTunnel identity", () => {
 describe("the checked-in iOS bundle inputs", () => {
   it("pass every check", () => {
     expect(iosBundleProblems(repoRootFromScript(import.meta.url))).toEqual([]);
+  });
+});
+
+describe("iOS deployment target", () => {
+  it("is the one the Xcode project is wired with", () => {
+    const wiring = readFileSync(
+      resolve(repoRootFromScript(import.meta.url), "scripts/native/mobile/ios-project.rb"),
+      "utf8",
+    );
+
+    expect(wiring).toContain(`DEPLOYMENT_TARGET = '${IOS_DEPLOYMENT_TARGET}'`);
   });
 });

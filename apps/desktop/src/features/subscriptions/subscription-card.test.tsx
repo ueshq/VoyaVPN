@@ -9,6 +9,9 @@ const metadata: SubscriptionMetadata = {
   downloadBytes: 1024,
   totalBytes: 2048,
   expireAt: null,
+  lastAttemptAt: null,
+  lastAttemptError: null,
+  lastAttemptFailed: null,
   lastUpdateAt: null,
   profileTitle: null,
 };

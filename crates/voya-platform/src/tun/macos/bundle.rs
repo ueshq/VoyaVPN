@@ -92,11 +92,13 @@ fn probe_macos_packet_tunnel_packaging_error() -> Option<String> {
         return None;
     }
     let appex = macos_packet_tunnel_appex_path()?;
-    let output = Command::new("/usr/bin/codesign")
-        .args(["-d", "--entitlements", ":-"])
-        .arg(&appex)
-        .output()
-        .ok()?;
+    let output = output_with_timeout(
+        Command::new("/usr/bin/codesign")
+            .args(["-d", "--entitlements", ":-"])
+            .arg(&appex),
+        HELPER_TIMEOUT,
+    )
+    .ok()?;
     let text = command_output_text(&output.stdout, &output.stderr);
     if text.contains("packet-tunnel-provider-systemextension") {
         return Some(
@@ -175,10 +177,11 @@ pub fn parse_systemextensionsctl_state(output: &str, bundle_id: &str) -> Option<
 
 #[cfg(target_os = "macos")]
 fn macos_systemextensionsctl_output() -> Option<String> {
-    let output = Command::new("/usr/bin/systemextensionsctl")
-        .arg("list")
-        .output()
-        .ok()?;
+    let output = output_with_timeout(
+        Command::new("/usr/bin/systemextensionsctl").arg("list"),
+        HELPER_TIMEOUT,
+    )
+    .ok()?;
     Some(command_output_text(&output.stdout, &output.stderr))
 }
 
@@ -227,13 +230,14 @@ pub(super) fn macos_system_extension_registration_lines() -> Vec<String> {
 pub(in crate::tun) fn platform_provider_registration_paths(
     bundle_id: &str,
 ) -> Result<Vec<PathBuf>, NativeTunError> {
-    let output = Command::new("/usr/bin/pluginkit")
-        .args(["-mAvvv", "-i", bundle_id])
-        .output()
-        .map_err(|source| NativeTunError::Command {
-            action: "query macOS PacketTunnel provider registration",
-            source,
-        })?;
+    let output = output_with_timeout(
+        Command::new("/usr/bin/pluginkit").args(["-mAvvv", "-i", bundle_id]),
+        HELPER_TIMEOUT,
+    )
+    .map_err(|source| NativeTunError::Command {
+        action: "query macOS PacketTunnel provider registration",
+        source,
+    })?;
 
     if !output.status.success() {
         if String::from_utf8_lossy(&output.stderr).contains("unauthorized discovery flag") {

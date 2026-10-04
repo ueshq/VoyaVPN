@@ -4,7 +4,7 @@ import {
   sendNotification,
 } from "@tauri-apps/plugin-notification";
 
-import { isWindowVisible } from "@/ipc/window";
+import { ipcCommands } from "@/ipc/commands";
 
 /**
  * Sole entry point for the Tauri notification plugin.
@@ -29,7 +29,8 @@ async function permissionGranted() {
 /** Shows an OS notification while the main window is hidden. Resolves whether one was shown. */
 export async function notifyWhenHidden(title: string): Promise<boolean> {
   try {
-    if (await isWindowVisible()) return false;
+    // On screen rather than hidden into the tray: the toast is enough.
+    if (await ipcCommands.isWindowVisible()) return false;
     if (!(await permissionGranted())) return false;
     sendNotification({ title });
     return true;

@@ -2,6 +2,7 @@ import type { TranslationKey } from "@voya/i18n/core";
 
 import type { RoutingRule, Routing_Serialize } from "@voya/contracts";
 
+import { voyaCommands } from "@voya/client/transport";
 import { PER_APP_SENTINEL } from "@voya/features/routing/sentinel-rules";
 
 /**
@@ -60,6 +61,47 @@ export function buildPerAppRule(
     remarks: PER_APP_SENTINEL,
     scope: "routing",
   };
+}
+
+/**
+ * Saves the dialog's choice as the routing's managed rule.
+ *
+ * Turning it off keeps the chosen apps on a disabled rule, so turning it back
+ * on does not mean picking them all again; with no apps left there is nothing
+ * to keep and the rule goes.
+ *
+ * Turning it on pins the rule to the top. The backend appends a new rule to
+ * the end of the rule set, behind the catch-all every built-in routing ends
+ * with, where a process rule can never match.
+ */
+export async function savePerAppRule(
+  routing: Routing_Serialize,
+  mode: PerAppProxyMode,
+  selected: readonly string[],
+): Promise<void> {
+  const existing = findPerAppRule(routing);
+  const processes = normalizeProcessNames(selected);
+  if (mode === "off") {
+    if (existing && processes.length > 0) {
+      await voyaCommands().saveRoutingRule(routing.id, {
+        ...existing,
+        enabled: false,
+        process: processes,
+      });
+    } else if (existing) {
+      await voyaCommands().deleteRoutingRules(routing.id, [existing.id]);
+    }
+    return;
+  }
+
+  const saved = await voyaCommands().saveRoutingRule(
+    routing.id,
+    buildPerAppRule(mode, processes, existing),
+  );
+  const savedRule = findPerAppRule(saved);
+  if (savedRule && saved.rules[0]?.id !== savedRule.id) {
+    await voyaCommands().moveRoutingRule(saved.id, savedRule.id, "top", null);
+  }
 }
 
 /** Trims, drops empties, and dedupes case-insensitively preserving order. */

@@ -2,9 +2,10 @@
  * Platform facts the shared stores need but cannot observe for themselves.
  *
  * The desktop shell reads them from the DOM (`window.localStorage`,
- * `matchMedia`); React Native reads them from MMKV and `Appearance`. Injecting
- * them keeps every persisted store in this package free of a `window`
- * reference, which is the only thing that made them desktop-private before.
+ * `document.visibilityState`); React Native reads them from MMKV and
+ * `AppState`. Injecting them keeps every persisted store in this package free
+ * of a `window` reference, which is the only thing that made them
+ * desktop-private before.
  */
 
 /** The subset of the Web Storage API zustand's `createJSONStorage` needs. */

@@ -1,6 +1,7 @@
 {
   "actions": {
     "add": "Add",
+    "back": "Back",
     "cancel": "Cancel",
     "clear": "Clear",
     "close": "Close",
@@ -203,8 +204,10 @@
     "dns": {
       "blockBindingQuery": "Block HTTPS/SVCB",
       "bootstrapDns": "Bootstrap DNS",
+      "bootstrapDnsPlaceholder": "e.g. 119.29.29.29",
       "commonHosts": "Common hosts",
       "directDns": "Direct DNS",
+      "directDnsPlaceholder": "e.g. 119.29.29.29",
       "directStrategy": "Direct strategy",
       "errorCount": "{{count}} errors",
       "expectedIps": "Expected IPs",
@@ -214,6 +217,7 @@
       "loading": "Loading DNS settings",
       "proxyStrategy": "Proxy strategy",
       "remoteDns": "Remote DNS",
+      "remoteDnsPlaceholder": "e.g. https://cloudflare-dns.com/dns-query",
       "title": "DNS",
       "strategyHint": "Prefer IPv4 or IPv6 when resolving a hostname.",
       "strategyIpv6Off": "Takes effect after IPv6 is enabled in Settings; while IPv6 is off every query uses IPv4 only.",
@@ -331,27 +335,29 @@
         "clipboard": "Import from clipboard",
         "clipboardEmpty": "Clipboard is empty.",
         "clipboardUnavailable": "Could not read text from the clipboard.",
-        "discardedNodeOverrides": "Discarded {{count}} node-level override(s); global settings will be used.",
         "summary": {
           "deduped": "{{count}} duplicate(s) skipped from payload.",
           "failed": "{{count}} failed to parse.",
           "filtered": "{{count}} filtered.",
-          "imported": "Imported {{count}} node(s).",
           "removedDuplicates": "{{count}} duplicate(s) removed.",
           "skipped": "{{count}} skipped.",
           "target": "Target: {{target}}.",
           "updated": "{{count}} existing node(s) refreshed.",
-          "removedExisting": "{{count}} node(s) no longer offered removed."
+          "removedExisting": "{{count}} node(s) no longer offered removed.",
+          "imported_one": "Imported {{count, number}} node.",
+          "imported_other": "Imported {{count, number}} nodes."
         },
         "importing": "Importing nodes…",
         "line": {
-          "subscriptionSourceAdded": "Line {{line}} was added as a subscription; it is being updated to import its nodes.",
+          "subscriptionSourceAdded": "Line {{line}} will be added as a subscription and updated to import its nodes once you confirm.",
           "unsupportedTransport": "Line {{line}} was skipped: the {{transport}} transport is not supported. Ask your provider for a WebSocket or gRPC node.",
           "parseFailed": "Line {{line}} was skipped: the link is not in a format VoyaVPN can read.",
           "unsupportedProtocol": "Line {{line}} was skipped: this kind of link is not supported.",
           "missingField": "Line {{line}} was skipped: the {{protocol}} link is missing {{field}}.",
           "invalidPort": "Line {{line}} was skipped: {{port}} is not a valid port in the {{protocol}} link."
-        }
+        },
+        "discardedNodeOverrides_one": "Ignored {{count, number}} per-node setting from the link (TLS fingerprint, mux, speed limits); global settings will be used.",
+        "discardedNodeOverrides_other": "Ignored {{count, number}} per-node settings from the link (TLS fingerprint, mux, speed limits); global settings will be used."
       },
       "importMethods": {
         "qrScreen": "Scan screen",
@@ -899,9 +905,9 @@
       "vpnOnly": "Available in VPN mode. Choose it under Connection → Traffic capture."
     },
     "logs": {
-      "coreLogOff": "Detailed connection logging is off, so only VoyaVPN's own messages appear here. Turn on “Record detailed connection log” above for connection details.",
+      "coreLogOff": "Detailed connection logging is off, so only VoyaVPN's own messages appear here. Turn on “Record detailed connection log” under Settings → General for connection details.",
       "coreLogWaiting": "Detailed connection logging is enabled; no core logs yet.",
-      "coreLogReceived": "Detailed connection logging is enabled; core logs have been received."
+      "coreLogOn": "Detailed connection logging is on."
     }
   },
   "speedtest": {
@@ -1104,13 +1110,14 @@
   },
   "nodeGroups": {
     "local": "Local nodes",
-    "membersCount": "{{count}} nodes",
     "test": "Test group",
     "empty": "No nodes in this group.",
     "moreFor": "More actions for {{name}}",
     "autoUpdateOff": "Auto-update off",
     "showAllMembers": "Show all {{count}}",
-    "showFewerMembers": "Show fewer"
+    "showFewerMembers": "Show fewer",
+    "membersCount_one": "{{count}} node",
+    "membersCount_other": "{{count}} nodes"
   },
   "common": {
     "advanced": "More settings",
@@ -1208,6 +1215,8 @@
   "mobile": {
     "add": "Add nodes or subscription",
     "connection": "Connection & DNS",
+    "trafficModeRule": "Rule-based routing",
+    "trafficModeGlobal": "Global proxy",
     "maintenance": "Maintenance & diagnostics",
     "about": "About & help",
     "subscriptions": "Manage subscriptions",
@@ -1221,10 +1230,11 @@
     "keepEditing": "Keep editing",
     "failed": "Could not complete this action. Retry or view diagnostics.",
     "saveFailed": "Not saved. Correct the highlighted fields; the previous settings remain in use.",
+    "screenErrorDescription": "This screen stopped unexpectedly. Try again, or reopen the app if it keeps happening.",
     "diagnostics": "View diagnostics",
     "details": "Technical details",
+    "rawError": "Raw error message (English):",
     "deleteConfirm": "Delete this item?",
-    "deleteHint": "Deletes the selected node or subscription and its nodes. If in use, the tunnel disconnects first; data is kept if disconnection fails.",
     "copy": "Copy link",
     "share": "Share…",
     "scan": "Scan QR code",
@@ -1233,7 +1243,6 @@
     "importHelp": "Paste a subscription URL or node link from your provider, or scan a QR code. Nothing is added until you confirm.",
     "preview": "Preview",
     "confirmImport": "Confirm import",
-    "previewCount": "Found {{nodes}} nodes, {{sources}} subscriptions and {{failed}} invalid items.",
     "importInvalid": "No importable content. Check that the link is complete.",
     "cameraDenied": "Camera access is denied. Allow access in system settings or choose an image.",
     "noQr": "No QR code found. Choose a clearer image.",
@@ -1256,8 +1265,10 @@
     "allLogs": "All logs",
     "appLogs": "App logs",
     "coreLogs": "Core logs",
-    "copyDiagnostics": "Copy redacted diagnostics",
+    "copyDiagnostics": "Copy diagnostics",
+    "copyFailed": "Copy failed",
     "copyJson": "Copy JSON",
+    "copied": "Copied",
     "ruleDetails": "Rule details",
     "ruleEffect": "Matching traffic uses: {{target}}",
     "quicHint": "Blocking QUIC lets compatible apps fall back to TCP; apps without fallback may fail to connect.",
@@ -1272,7 +1283,7 @@
     "support": "Support",
     "privacyContinue": "Continue",
     "help": "Help",
-    "helpText": "Get started: add a configuration → preview and import → choose a node → connect from Home. If it fails, check the subscription, node reachability and VPN permission, then open diagnostics. Update expired URLs under Nodes → Manage subscriptions.",
+    "helpText": "Get started: add a configuration → preview and import → choose a node → connect from Home. If it fails, check the subscription, node reachability and VPN permission, then open diagnostics. Update expired URLs under Settings → Manage subscriptions.",
     "licenses": "Open-source licenses",
     "updateFailed": "Subscription update failed. Check the URL or network and retry.",
     "updateEmpty": "No usable nodes were returned. Existing nodes were kept.",
@@ -1283,13 +1294,35 @@
     "currentSelection": "Selected node",
     "authorizeAgain": "Authorize again",
     "sourceMissing": "This subscription is no longer available. Return to the subscription list.",
-    "deleteCount": "This removes the subscription and {{count}} associated nodes.",
     "invalidFields": "Some values are invalid. Check the highlighted fields or the imported link.",
     "missingItem": "This item no longer exists. Refresh the list and choose again.",
     "networkFailed": "The network request failed. Check your connection and source address, then retry.",
     "unsupportedAction": "This action is unavailable on this device. View diagnostics for details.",
     "expandPreview": "Show all {{count}} nodes",
     "collapsePreview": "Collapse preview",
-    "androidScannerPrivacy": "On Android, QR images and decoded content are processed on-device by ML Kit. Google receives SDK performance and usage metrics; the SDK may also contact Google for updates and compatibility information."
+    "androidScannerPrivacy": "On Android, QR images and decoded content are processed on-device by ML Kit. Google receives SDK performance and usage metrics; the SDK may also contact Google for updates and compatibility information.",
+    "updateFailedAt": "Last update failed {{time}}",
+    "subsEmptyTitle": "No subscriptions",
+    "subsEmptyDescription": "Add a subscription URL and its nodes import automatically.",
+    "previewSummary": "Found {{nodes}}, {{subscriptions}} and {{invalid}}.",
+    "previewNodes_one": "{{count}} node",
+    "previewNodes_other": "{{count}} nodes",
+    "previewSubscriptions_one": "{{count}} subscription",
+    "previewSubscriptions_other": "{{count}} subscriptions",
+    "previewInvalid_one": "{{count}} invalid item",
+    "previewInvalid_other": "{{count}} invalid items",
+    "deleteDescription_one": "This removes the subscription and its {{count}} associated node. If it is in use, the tunnel disconnects first; data is kept if disconnection fails.",
+    "deleteDescription_other": "This removes the subscription and its {{count}} associated nodes. If it is in use, the tunnel disconnects first; data is kept if disconnection fails.",
+    "deleteNodeHint": "This removes the node. If it is in use, the tunnel disconnects first; data is kept if disconnection fails.",
+    "editNode": "Edit node",
+    "address": "Address",
+    "port": "Port",
+    "editorFieldsHint": "The name, address and port can be edited; the protocol, transport and security settings stay as they are.",
+    "editorSummary": "Unchanged settings",
+    "editorProtocol": "Protocol",
+    "editorTransport": "Transport",
+    "editorTls": "Security",
+    "editorTransportNone": "None",
+    "openLogs": "Open logs"
   }
 }

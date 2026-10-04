@@ -6,18 +6,13 @@ use super::*;
 #[tauri::command]
 #[specta::specta]
 pub async fn list_process_candidates() -> Result<Vec<voya_contracts::ProcessCandidate>, AppError> {
-    tauri::async_runtime::spawn_blocking(voya_platform::apps::list_process_candidates)
-        .await
-        .map(|candidates| {
-            candidates
-                .into_iter()
-                .map(voya_app::contract_map::process_candidate_to_contract)
-                .collect()
-        })
-        .map_err(|error| {
-            AppError::internal(
-                AppErrorSubsystem::App,
-                format!("process enumeration task failed: {error}"),
-            )
-        })
+    let candidates = support::run_blocking(
+        "process enumeration",
+        voya_platform::apps::list_process_candidates,
+    )
+    .await?;
+    Ok(candidates
+        .into_iter()
+        .map(voya_app::contract_map::process_candidate_to_contract)
+        .collect())
 }

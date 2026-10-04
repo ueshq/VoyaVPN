@@ -5,13 +5,20 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+use futures_util::{stream, StreamExt, TryStreamExt};
 use thiserror::Error;
 use voya_core::{text::nonempty_str, RoutingItem, RulesItem, DEFAULT_SINGBOX_RULESET_URL};
 
 use crate::{DownloadAttempt, DownloadClient, DownloadError, DownloadRequest};
 
-const RULESET_ASSET_RESPONSE_LIMIT_BYTES: usize = 256 * 1024 * 1024;
+/// The most one rule set may weigh. Each is held whole in memory until it is
+/// staged, [`SRS_DOWNLOAD_CONCURRENCY`] of them at a time — on a phone too —
+/// so the bound is what the largest published sets need (a few MiB) with room
+/// to grow, not what a desktop could spare.
+const RULESET_ASSET_RESPONSE_LIMIT_BYTES: usize = 64 * 1024 * 1024;
 static STAGING_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+/// How many rule sets download at once; the same bound subscriptions use.
+const SRS_DOWNLOAD_CONCURRENCY: usize = 4;
 
 /// First bytes of a sing-box binary rule set (`common/srs`).
 const SRS_MAGIC: &[u8] = b"SRS";
@@ -98,13 +105,25 @@ impl RulesetClient {
     ) -> Result<Vec<AcquiredRuleset>> {
         let target_dir = target_dir.as_ref();
         let staging = StagingDir::create(target_dir).await?;
-        let mut acquired = Vec::new();
-
+        // A few at a time: the files are independent, and one after another a
+        // library update takes as long as the sum of its downloads. `buffered`
+        // keeps the answers in `assets` order, and the first failure ends the
+        // batch before anything is published.
+        // The futures are built by a plain loop: a closure that returns them
+        // makes the whole future fail the `Send` bound its callers spawn it
+        // under ("implementation of `Send` is not general enough").
+        let mut downloads = Vec::with_capacity(assets.len());
         for asset in assets {
-            let staged = self
-                .stage_asset(&asset.url, &asset.file_name, staging.path(), options)
-                .await?;
-            acquired.push(AcquiredRuleset {
+            downloads.push(self.stage_asset(&asset.url, &asset.file_name, staging.path(), options));
+        }
+        let staged = stream::iter(downloads)
+            .buffered(SRS_DOWNLOAD_CONCURRENCY)
+            .try_collect::<Vec<_>>()
+            .await?;
+        let acquired = assets
+            .iter()
+            .zip(staged)
+            .map(|(asset, staged)| AcquiredRuleset {
                 name: asset.tag.clone(),
                 file_name: asset.file_name.clone(),
                 url: asset.url.clone(),
@@ -112,8 +131,8 @@ impl RulesetClient {
                 bytes: staged.bytes,
                 used_proxy: staged.used_proxy,
                 attempts: staged.attempts,
-            });
-        }
+            })
+            .collect();
 
         staging
             .commit(

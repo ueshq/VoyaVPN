@@ -84,7 +84,7 @@ export const commands = {
 	deleteProfiles: (indexIds: string[]) => typedError<number, AppError>(__TAURI_INVOKE("delete_profiles", { indexIds })),
 	exportProfileShareLinks: (indexIds: string[]) => typedError<ExportProfilesResult, AppError>(__TAURI_INVOKE("export_profile_share_links", { indexIds })),
 	setActiveProfile: (indexId: string) => typedError<ProfileDetails, AppError>(__TAURI_INVOKE("set_active_profile", { indexId })),
-	moveProfile: (subscriptionId: string | null, indexId: string, action: MoveAction, position: number | null) => typedError<null, AppError>(__TAURI_INVOKE("move_profile", { subscriptionId, indexId, action, position })),
+	moveProfile: (indexId: string, action: MoveAction, position: number | null) => typedError<null, AppError>(__TAURI_INVOKE("move_profile", { indexId, action, position })),
 	listPolicyGroups: () => typedError<PolicyGroupListing, AppError>(__TAURI_INVOKE("list_policy_groups")),
 	/**
 	 *  Saves a group. Editing the group a running core uses restarts the core so
@@ -1367,7 +1367,8 @@ export type Subscription = {
 
 /**
  *  Usage metadata reported by the subscription server on the latest successful
- *  fetch (`subscription-userinfo` and `profile-title` response headers).
+ *  fetch (`subscription-userinfo` and `profile-title` response headers), plus
+ *  the outcome of the latest update attempt (which may have failed).
  */
 export type SubscriptionMetadata = {
 	subscriptionId: string,
@@ -1376,6 +1377,14 @@ export type SubscriptionMetadata = {
 	totalBytes: number | null,
 	expireAt: number | null,
 	lastUpdateAt: number | null,
+	/**
+	 *  When the latest update attempt ran, successful or not. Distinct from
+	 *  `last_update_at`, which only moves when the fetch produced nodes.
+	 */
+	lastAttemptAt: number | null,
+	lastAttemptFailed: boolean | null,
+	/**  Redacted reason the latest attempt failed; cleared by a success. */
+	lastAttemptError: string | null,
 	profileTitle: string | null,
 };
 

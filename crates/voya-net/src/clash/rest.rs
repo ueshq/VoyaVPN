@@ -170,11 +170,6 @@ impl fmt::Debug for ClashRestClient {
 
 impl ClashRestClient {
     #[must_use]
-    pub fn new(endpoint: ClashApiEndpoint) -> Self {
-        Self::with_transport(endpoint, Arc::new(ReqwestClashHttpTransport::new()))
-    }
-
-    #[must_use]
     pub fn with_transport(
         endpoint: ClashApiEndpoint,
         transport: Arc<dyn ClashHttpTransport>,

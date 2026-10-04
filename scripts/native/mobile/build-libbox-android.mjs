@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { isCliEntrypoint, repoRootFromScript, run } from "../../lib/common.mjs";
+import { isCliEntrypoint, repoRootFromScript, run, runCli } from "../../lib/common.mjs";
 import { ensureSingBoxSource, singBoxSourceDir } from "../sing-box-source.mjs";
 
 /**
@@ -51,10 +51,5 @@ export function buildLibboxForAndroid() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    buildLibboxForAndroid();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(buildLibboxForAndroid);
 }

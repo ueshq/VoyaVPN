@@ -19,5 +19,5 @@ pub use manager::{
 };
 pub use use_cases::{
     delete_subscriptions_use_case, import_profiles_use_case, save_subscription_use_case,
-    update_subscriptions_use_case, SubscriptionUpdate,
+    update_subscriptions_use_case, SubscriptionUpdate, SubscriptionWrite,
 };

@@ -1,7 +1,10 @@
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, marker::PhantomData};
 
 use futures_util::StreamExt;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{
+    de::{value::MapAccessDeserializer, IgnoredAny, MapAccess, SeqAccess, Visitor},
+    Deserialize, Deserializer, Serialize,
+};
 use serde_json::Value;
 use thiserror::Error;
 use tokio::net::TcpStream;
@@ -180,9 +183,9 @@ impl ClashWebSocketSession {
             match message {
                 Message::Text(text) => return decode_ws_event(self.resource, &text),
                 Message::Binary(bytes) => {
-                    let text = String::from_utf8(bytes.to_vec())
+                    let text = std::str::from_utf8(&bytes)
                         .map_err(|error| ClashError::Decode(error.to_string()))?;
-                    return decode_ws_event(self.resource, &text);
+                    return decode_ws_event(self.resource, text);
                 }
                 Message::Close(_) => return Err(ClashError::WebSocketClosed),
                 Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {}
@@ -276,7 +279,6 @@ pub struct ClashConnectionMetadata {
     pub destination_port: Option<String>,
     #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub host: Option<String>,
-    pub uid: Option<Value>,
     #[serde(deserialize_with = "deserialize_optional_string_lossy")]
     pub process: Option<String>,
     #[serde(deserialize_with = "deserialize_optional_string_lossy")]
@@ -317,32 +319,17 @@ fn decode_ws_event(resource: ClashWebSocketResource, source: &str) -> Result<Cla
     }
 }
 
+/// The connection table is the one message that is large and arrives every
+/// second, so its list and its objects are decoded straight off the input:
+/// building a `Value` tree of every connection first, only to take it apart
+/// again, was most of the work.
 fn deserialize_connections_lossy<'de, D>(
     deserializer: D,
 ) -> std::result::Result<Vec<ClashConnection>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    Option::<Value>::deserialize(deserializer).map(|value| match value {
-        Some(Value::Array(items)) => items
-            .into_iter()
-            .enumerate()
-            .filter_map(
-                |(index, item)| match serde_json::from_value::<ClashConnection>(item) {
-                    Ok(connection) => Some(connection),
-                    Err(error) => {
-                        tracing::debug!(
-                            index,
-                            error = %error,
-                            "dropping malformed Clash connection"
-                        );
-                        None
-                    }
-                },
-            )
-            .collect(),
-        _ => Vec::new(),
-    })
+    deserializer.deserialize_any(LossyConnectionsVisitor)
 }
 
 fn deserialize_metadata_lossy<'de, D>(
@@ -351,11 +338,113 @@ fn deserialize_metadata_lossy<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    Option::<Value>::deserialize(deserializer).map(|value| {
-        value
-            .and_then(|value| serde_json::from_value(value).ok())
-            .unwrap_or_default()
-    })
+    LossyObject::deserialize(deserializer).map(|LossyObject(metadata)| metadata.unwrap_or_default())
+}
+
+/// `T` when the input is a JSON object and nothing when it is anything else;
+/// the anything else is consumed, so the decoder carries on behind it.
+struct LossyObject<T>(Option<T>);
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for LossyObject<T> {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(LossyObjectVisitor(PhantomData))
+    }
+}
+
+/// Every scalar a visitor may be handed, answered with `$value`.
+macro_rules! scalars_are {
+    ($value:expr) => {
+        fn visit_bool<E>(self, _: bool) -> std::result::Result<Self::Value, E> {
+            Ok($value)
+        }
+
+        fn visit_i64<E>(self, _: i64) -> std::result::Result<Self::Value, E> {
+            Ok($value)
+        }
+
+        fn visit_u64<E>(self, _: u64) -> std::result::Result<Self::Value, E> {
+            Ok($value)
+        }
+
+        fn visit_f64<E>(self, _: f64) -> std::result::Result<Self::Value, E> {
+            Ok($value)
+        }
+
+        fn visit_str<E>(self, _: &str) -> std::result::Result<Self::Value, E> {
+            Ok($value)
+        }
+
+        fn visit_unit<E>(self) -> std::result::Result<Self::Value, E> {
+            Ok($value)
+        }
+    };
+}
+
+struct LossyObjectVisitor<T>(PhantomData<T>);
+
+impl<'de, T: Deserialize<'de>> Visitor<'de> for LossyObjectVisitor<T> {
+    type Value = LossyObject<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("any JSON value")
+    }
+
+    scalars_are!(LossyObject(None));
+
+    fn visit_map<A>(self, map: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        T::deserialize(MapAccessDeserializer::new(map)).map(|value| LossyObject(Some(value)))
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        while seq.next_element::<IgnoredAny>()?.is_some() {}
+        Ok(LossyObject(None))
+    }
+}
+
+struct LossyConnectionsVisitor;
+
+impl<'de> Visitor<'de> for LossyConnectionsVisitor {
+    type Value = Vec<ClashConnection>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("any JSON value")
+    }
+
+    scalars_are!(Vec::new());
+
+    fn visit_seq<A>(self, mut seq: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut connections = Vec::new();
+        let mut index = 0_usize;
+        while let Some(LossyObject(item)) = seq.next_element::<LossyObject<ClashConnection>>()? {
+            match item {
+                Some(connection) => connections.push(connection),
+                None => tracing::debug!(index, "dropping malformed Clash connection"),
+            }
+            index += 1;
+        }
+
+        Ok(connections)
+    }
+
+    fn visit_map<A>(self, mut map: A) -> std::result::Result<Self::Value, A::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        while map.next_entry::<IgnoredAny, IgnoredAny>()?.is_some() {}
+        Ok(Vec::new())
+    }
 }
 
 fn deserialize_optional_string_lossy<'de, D>(
@@ -587,7 +676,7 @@ mod tests {
     #[tokio::test]
     async fn clash_reqwest_transport_reports_the_status_of_a_failed_request() {
         let port = spawn_clash_http_response("/other", "200 OK", Some(2), b"{}".to_vec()).await;
-        let client = ClashRestClient::new(ClashApiEndpoint::loopback(port));
+        let client = loopback_client(port);
 
         let error = client
             .proxy_delay("probe:missing:00", "https://probe.example/", 1_000)
@@ -627,7 +716,7 @@ mod tests {
             br#"{"connections":[]}"#.to_vec(),
         )
         .await;
-        let client = ClashRestClient::new(ClashApiEndpoint::loopback(port));
+        let client = loopback_client(port);
 
         let response = client.get_connections().await.expect("connections");
 
@@ -644,7 +733,7 @@ mod tests {
             br#"{"connections":[]}"#.to_vec(),
         )
         .await;
-        let client = ClashRestClient::new(ClashApiEndpoint::loopback(port));
+        let client = loopback_client(port);
 
         let error = client
             .get_connections()
@@ -710,6 +799,36 @@ mod tests {
                 .as_deref(),
             Some("93.184.216.34")
         );
+    }
+
+    #[test]
+    fn clash_connections_that_are_not_a_list_of_objects_decode_as_none() {
+        for connections in [
+            "null",
+            "7",
+            r#""soon""#,
+            r#"{"id": "not a list"}"#,
+            r#"[1, null, "text", [{"id": "nested"}]]"#,
+        ] {
+            let decoded = decode_connections_message(&format!(
+                r#"{{"connections": {connections}, "uploadTotal": 9}}"#
+            ))
+            .expect("connections event");
+
+            assert!(decoded.connections.is_empty(), "{connections}");
+            // Whatever stood in the list's place was consumed, not tripped over.
+            assert_eq!(decoded.upload_total, 9, "{connections}");
+        }
+
+        let metadata = decode_connections_message(
+            r#"{"connections": [{"id": "a", "metadata": ["tcp"], "upload": 3}]}"#,
+        )
+        .expect("connections event");
+        assert_eq!(
+            metadata.connections[0].metadata,
+            ClashConnectionMetadata::default()
+        );
+        assert_eq!(metadata.connections[0].upload, 3);
     }
 
     #[test]
@@ -931,5 +1050,11 @@ mod tests {
         });
 
         port
+    }
+    fn loopback_client(port: u16) -> ClashRestClient {
+        ClashRestClient::with_transport(
+            ClashApiEndpoint::loopback(port),
+            Arc::new(ReqwestClashHttpTransport::new()),
+        )
     }
 }

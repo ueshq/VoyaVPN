@@ -122,6 +122,13 @@ pub(crate) async fn max_sort(
     Ok(max.unwrap_or(0))
 }
 
+/// `ids` as the JSON array a `json_each(?)` statement binds: the statement
+/// stays the same size however many there are.
+pub(crate) fn json_id_array(ids: &[String]) -> String {
+    // Strings always serialize; the fallback only keeps this infallible.
+    serde_json::to_string(ids).unwrap_or_else(|_| "[]".to_string())
+}
+
 /// `SELECT EXISTS(SELECT 1 FROM <table> WHERE <id> = ?)` with the id bound.
 pub(crate) async fn row_exists(
     executor: RepositoryExecutor<'_>,

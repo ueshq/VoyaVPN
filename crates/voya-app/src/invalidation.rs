@@ -18,7 +18,9 @@
 //!   `original != *mutation.config()`, which over-approximates in the safe
 //!   direction: an extra refetch of an in-memory projection, never a miss.
 
-use voya_contracts::{InvalidationScope, NoticeCode};
+use std::collections::BTreeSet;
+
+use voya_contracts::{InvalidateEvent, InvalidationScope, NoticeCode, QueryInvalidation};
 
 /// The caches a change invalidates, plus the notice raised if announcing them fails.
 pub type InvalidationBundle = (NoticeCode, Vec<InvalidationScope>);
@@ -142,6 +144,48 @@ pub fn self_host_scopes() -> InvalidationBundle {
     )
 }
 
+/// The event a committed change is announced with: each scope once, in the
+/// enum's order, so the payload does not depend on how a caller assembled its
+/// list — and is the same event on the desktop and on a phone.
+#[must_use]
+pub fn invalidate_event(reason: &str, scopes: Vec<InvalidationScope>) -> InvalidateEvent {
+    let scopes: BTreeSet<InvalidationScope> = scopes.into_iter().collect();
+
+    InvalidateEvent {
+        keys: scopes
+            .into_iter()
+            .map(|scope| QueryInvalidation {
+                scope,
+                reason: reason.to_string(),
+            })
+            .collect(),
+    }
+}
+
+/// Whether a change shows in the desktop's tray menu.
+///
+/// The menu lists nodes and policy groups, marks the active one of each, and
+/// carries the traffic mode and the language — the last three all out of the
+/// settings bundle. Rebuilding it costs three queries and a native menu, so a
+/// closed connection or a self-hosted node's status does not get to.
+#[must_use]
+pub fn shows_in_tray(scopes: &[InvalidationScope]) -> bool {
+    scopes.iter().any(|scope| match scope {
+        InvalidationScope::Profiles
+        | InvalidationScope::PolicyGroups
+        | InvalidationScope::AppSettings
+        | InvalidationScope::UiPreferences => true,
+        InvalidationScope::Subscriptions
+        | InvalidationScope::SubscriptionMetadata
+        | InvalidationScope::Routings
+        | InvalidationScope::Dns
+        | InvalidationScope::ConnectionMode
+        | InvalidationScope::ProxyConnections
+        | InvalidationScope::PolicyGroupRuntime
+        | InvalidationScope::SelfHost => false,
+    })
+}
+
 fn push_config_scopes(scopes: &mut Vec<InvalidationScope>, config_changed: bool) {
     if config_changed {
         scopes.push(InvalidationScope::AppSettings);
@@ -154,6 +198,41 @@ mod tests {
 
     fn scopes(bundle: InvalidationBundle) -> Vec<InvalidationScope> {
         bundle.1
+    }
+
+    #[test]
+    fn an_invalidate_event_names_each_scope_once_in_a_fixed_order() {
+        let event = invalidate_event(
+            "why",
+            vec![
+                InvalidationScope::AppSettings,
+                InvalidationScope::Profiles,
+                InvalidationScope::AppSettings,
+            ],
+        );
+
+        let scopes: Vec<_> = event.keys.iter().map(|key| key.scope).collect();
+        assert_eq!(
+            scopes,
+            vec![InvalidationScope::Profiles, InvalidationScope::AppSettings]
+        );
+        assert!(event.keys.iter().all(|key| key.reason == "why"));
+    }
+
+    #[test]
+    fn the_tray_follows_only_what_it_shows() {
+        // Nodes, groups, and the active target / traffic mode / language that
+        // ride the settings bundle.
+        assert!(shows_in_tray(&scopes(profile_scopes(false))));
+        assert!(shows_in_tray(&scopes(policy_group_scopes(false))));
+        assert!(shows_in_tray(&scopes(proxy_runtime_scopes(true))));
+        assert!(shows_in_tray(&scopes(settings_bundle_scopes())));
+        assert!(shows_in_tray(&scopes(subscription_scopes(true, false))));
+
+        assert!(!shows_in_tray(&scopes(proxy_runtime_scopes(false))));
+        assert!(!shows_in_tray(&scopes(self_host_scopes())));
+        assert!(!shows_in_tray(&scopes(routing_scopes(false))));
+        assert!(!shows_in_tray(&scopes(subscription_scopes(false, false))));
     }
 
     #[test]

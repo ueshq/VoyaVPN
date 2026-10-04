@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
+    time::Duration,
 };
 #[cfg(unix)]
 use std::{
@@ -105,6 +106,10 @@ pub struct ProcessSpawn {
     pub environment: BTreeMap<String, String>,
     pub display_log: bool,
     pub generated_scripts: Vec<GeneratedScript>,
+    /// How long [`ProcessRunner::run_oneshot`] waits before it kills the child
+    /// and fails. `None` waits for as long as the child takes, which is what a
+    /// helper that puts an authorization prompt in front of the user needs.
+    pub timeout: Option<Duration>,
 }
 
 impl ProcessSpawn {
@@ -118,6 +123,7 @@ impl ProcessSpawn {
             environment: BTreeMap::new(),
             display_log: true,
             generated_scripts: Vec::new(),
+            timeout: None,
         }
     }
 
@@ -134,6 +140,7 @@ impl ProcessSpawn {
             environment: BTreeMap::new(),
             display_log,
             generated_scripts: Vec::new(),
+            timeout: None,
         })
     }
 
@@ -152,6 +159,15 @@ impl ProcessSpawn {
     #[must_use]
     pub fn with_display_log(mut self, display_log: bool) -> Self {
         self.display_log = display_log;
+        self
+    }
+
+    /// Bounds a one-shot helper that asks the user nothing. A helper that never
+    /// returns would otherwise hold its caller — the supervisor's actor, a
+    /// blocking-pool thread — for good.
+    #[must_use]
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
         self
     }
 
@@ -218,6 +234,9 @@ pub use runner::StdProcessRunner;
 mod scripts;
 pub use scripts::write_generated_scripts;
 
+mod bounded;
+pub(crate) use bounded::{output_with_timeout, HELPER_TIMEOUT};
+
 mod job;
 pub use job::{
     JobAssignedRunner, NoopProcessJobFactory, PlatformProcessJobFactory, ProcessJob,
@@ -230,6 +249,12 @@ pub enum ProcessError {
     Spawn {
         executable: PathBuf,
         source: io::Error,
+    },
+    /// A bounded one-shot helper that was killed for outliving its timeout.
+    #[error("process {executable} did not exit within {}s", timeout.as_secs())]
+    TimedOut {
+        executable: PathBuf,
+        timeout: Duration,
     },
     #[error("failed while waiting for process: {0}")]
     Wait(io::Error),

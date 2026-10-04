@@ -51,8 +51,6 @@ export function ShareQrImage({
     placeholderData: keepPreviousData,
     queryFn: () => voyaCommands().generateQrCode(content),
     queryKey: profileShareQrQueryKey(content),
-    refetchOnWindowFocus: false,
-    retry: false,
     staleTime: Infinity,
   });
   const imageSource = useMemo(() => {

@@ -134,23 +134,6 @@ where
     }
 
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {
-        // What the IPv6 check found is news, not a failed post-commit step.
-        if matches!(
-            code,
-            NoticeCode::NodeIpv6Unsupported { .. } | NoticeCode::NodeIpv6Restored { .. }
-        ) {
-            tracing::info!(?code, "node IPv6 egress changed");
-            emit_or_warn(
-                &self.app,
-                AppEvent::Notice(AppNotice {
-                    level,
-                    code,
-                    detail: None,
-                }),
-                "IPv6 egress notice",
-            );
-            return;
-        }
         report_post_commit_error(&self.app, code, detail, level);
     }
 

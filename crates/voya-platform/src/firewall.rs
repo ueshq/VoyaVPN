@@ -17,7 +17,7 @@ use thiserror::Error;
 
 use crate::{
     coreinfo::TargetOs,
-    process::{ProcessError, ProcessRole, ProcessRunner, ProcessSpawn},
+    process::{ProcessError, ProcessRole, ProcessRunner, ProcessSpawn, HELPER_TIMEOUT},
 };
 
 /// Display name of the one rule the app owns.
@@ -70,7 +70,11 @@ impl FirewallService {
         if !self.manages_firewall() {
             return Ok(FirewallRuleStatus::NotManaged);
         }
-        let output = self.runner.run_oneshot(powershell(&status_script()))?;
+        // Only the read is bounded: the write goes through an elevation prompt
+        // the user answers in their own time.
+        let output = self
+            .runner
+            .run_oneshot(powershell(&status_script()).with_timeout(HELPER_TIMEOUT))?;
         match output.status_code {
             Some(0) => {
                 let allowed = output

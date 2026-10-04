@@ -8,7 +8,7 @@
 use std::{
     collections::BTreeSet,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use voya_contracts::{
@@ -28,6 +28,10 @@ use super::{process::core_executable, selftest::SKIPPED, SelfHostDeps};
 /// Routers drop a forward when its lease runs out; the watch loop renews it
 /// well before that.
 pub(super) const PORT_MAPPING_LEASE_SECONDS: u32 = 3600;
+/// Gateway discovery is bounded by the mapper itself; the SOAP calls after it
+/// are not, and a router that accepts the connection and never answers would
+/// hold the check — and every check queued behind it — for good.
+const PORT_MAPPING_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// What the probe service could tell about one family.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -411,8 +415,12 @@ async fn port_mapping(
         .filter(|port| !wanted || !input.ports.contains(port))
         .collect::<Vec<_>>();
     if !stale.is_empty() {
-        if let Err(error) = deps.port_mapper.unmap(stale).await {
-            tracing::debug!(%error, "could not remove stale router forwards");
+        match tokio::time::timeout(PORT_MAPPING_TIMEOUT, deps.port_mapper.unmap(stale)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::debug!(%error, "could not remove stale router forwards");
+            }
+            Err(_) => tracing::debug!("timed out removing stale router forwards"),
         }
     }
     let disabled = |status| MappingOutcome {
@@ -428,11 +436,29 @@ async fn port_mapping(
     if !wanted || tunnel_active {
         return disabled(SelfHostPortMappingStatus::Disabled);
     }
-    match deps
-        .port_mapper
-        .map(input.ports.clone(), PORT_MAPPING_LEASE_SECONDS)
-        .await
-    {
+    let failed = |detail: String| MappingOutcome {
+        report: SelfHostPortMappingReport {
+            status: SelfHostPortMappingStatus::Failed,
+            gateway_external_address: None,
+            mapped_ports: Vec::new(),
+            detail: Some(detail),
+        },
+        gateway_external_address: None,
+        mapped_ports: Vec::new(),
+    };
+    let mapping = tokio::time::timeout(
+        PORT_MAPPING_TIMEOUT,
+        deps.port_mapper
+            .map(input.ports.clone(), PORT_MAPPING_LEASE_SECONDS),
+    )
+    .await;
+    let Ok(mapping) = mapping else {
+        return failed(format!(
+            "the router did not answer within {}s",
+            PORT_MAPPING_TIMEOUT.as_secs()
+        ));
+    };
+    match mapping {
         Ok(result) => {
             let status = if result.mapped.is_empty() {
                 SelfHostPortMappingStatus::Failed
@@ -461,16 +487,7 @@ async fn port_mapping(
             }
         }
         Err(PortMappingError::NoGateway(_)) => disabled(SelfHostPortMappingStatus::NoGateway),
-        Err(error) => MappingOutcome {
-            report: SelfHostPortMappingReport {
-                status: SelfHostPortMappingStatus::Failed,
-                gateway_external_address: None,
-                mapped_ports: Vec::new(),
-                detail: Some(error.to_string()),
-            },
-            gateway_external_address: None,
-            mapped_ports: Vec::new(),
-        },
+        Err(error) => failed(error.to_string()),
     }
 }
 

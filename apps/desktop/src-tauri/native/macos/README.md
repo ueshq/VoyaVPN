@@ -15,11 +15,11 @@ Runtime shape:
 - PacketTunnel extension bundle id: `app.voyavpn.desktop.PacketTunnel`
 - App Group: `group.app.voyavpn.desktop`
 - Runtime config file: `Library/Application Support/VoyaVPN/packet-tunnel-runtime.json`
-- libbox base dir: `PT/` at the App Group container root. libbox binds
-  `<base>/command.sock`, and macOS caps unix-socket paths (`sun_path`) at 104
-  bytes, so this directory must stay short — a base under
-  `Library/Application Support/...` already exceeds the limit and makes
-  `bind()` fail with `invalid argument`.
+- libbox base dir: `PT/` at the App Group container root. It is short because
+  libbox once bound `<base>/command.sock` there and macOS caps unix-socket
+  paths (`sun_path`) at 104 bytes. The provider no longer opens that socket —
+  the app reads the core through its Clash API — but installed tunnels keep
+  their cache and working files in this directory, so it stays where it is.
 
 The Tauri app writes the generated sing-box JSON into the App Group container
 and starts the VPN profile in-process through NetworkExtension. The extension
@@ -41,7 +41,8 @@ Apple XCFramework, validates its universal macOS slice, and stages only
 discarded. Override the source or destination with:
 
 - `VOYAVPN_SING_BOX_REF`: sing-box git ref, defaults to the app's pinned
-  sing-box version.
+  sing-box version. A ref with no pinned commit also needs
+  `VOYAVPN_ALLOW_UNPINNED_SING_BOX=1`.
 - `VOYAVPN_SING_BOX_SOURCE_DIR`: local sing-box source checkout.
 - `VOYAVPN_LIBBOX_FRAMEWORK`: existing or target universal macOS `Libbox.framework` path.
 

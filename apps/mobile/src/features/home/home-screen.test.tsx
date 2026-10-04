@@ -2,11 +2,10 @@ import { screen, userEvent } from "@testing-library/react-native";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
-import type { MockBackend } from "@voya/client/mock-backend";
 import { IpcCommandError } from "@voya/client/errors";
 import { makeMockSeed } from "@voya/client/mock-seed";
 
-import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
+import { registerMobileBackend } from "~/ipc/platform";
 import { mockBackend, mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
 import { renderScreen } from "~/test/providers";
@@ -67,6 +66,14 @@ describe("HomeScreen", () => {
     expect(screen.getByText("Connect")).toBeOnTheScreen();
   });
 
+  it("describes the traffic mode in plain words and offers the rules tab through it", async () => {
+    await renderHome();
+
+    // "Rule" alone reads as a label for nothing; the words say what the mode
+    // does, and the button is the shortcut to where the mode is switched.
+    expect(await screen.findByRole("button", { name: "Rule-based routing" })).toBeOnTheScreen();
+  });
+
   it("connects through the shared runtime action and then offers to disconnect", async () => {
     await renderHome();
     const user = userEvent.setup();
@@ -83,30 +90,19 @@ describe("HomeScreen", () => {
     ).toContain("connectActiveProfile");
   });
 
-  it("shows the live transfer rates the statistics stream reports", async () => {
+  it("shows the connection time and no transfer rates once connected", async () => {
     await renderHome();
     await userEvent.setup().press(await screen.findByText("Connect"));
     await screen.findByText("Connected");
 
-    useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "statistics",
-      payload: {
-        activeProfileId: "profile-0",
-        directDownloadBytesPerSecond: 0,
-        directUploadBytesPerSecond: 0,
-        downloadBytesPerSecond: 2048,
-        proxyDownloadBytesPerSecond: 2048,
-        proxyUploadBytesPerSecond: 1024,
-        serverStat: null,
-        uploadBytesPerSecond: 1024,
-      },
-    });
-
-    expect(await screen.findByText("2.0 KB/s")).toBeOnTheScreen();
-    expect(screen.getByText("1.0 KB/s")).toBeOnTheScreen();
+    expect(screen.getByText("Connection time")).toBeOnTheScreen();
+    expect(screen.getByText(/^\d\d:\d\d:\d\d$/)).toBeOnTheScreen();
+    // The host has no statistics sampler, so there are no rates to show.
+    expect(screen.queryByText(/\/s$/)).toBeNull();
   });
+
   it("keeps a listing failure distinct from an empty configuration", async () => {
-    const backend = voyaTransport() as MockBackend;
+    const backend = mockBackend();
     const listing = jest.spyOn(backend.commands, "listProfileSummaries").mockRejectedValue(new Error("offline"));
     await renderHome();
     await screen.findByText("Could not complete this action. Retry or view diagnostics.");
@@ -116,7 +112,7 @@ describe("HomeScreen", () => {
   });
 
   it("offers Authorize again when a connect is refused the VPN configuration", async () => {
-    const backend = voyaTransport() as MockBackend;
+    const backend = mockBackend();
     // The mobile connect dispatch maps a declined iOS VPN prompt to this kind.
     const connect = jest.spyOn(backend.commands, "connectActiveProfile").mockRejectedValue(
       new IpcCommandError({
@@ -133,6 +129,28 @@ describe("HomeScreen", () => {
     expect(screen.getByText("Authorize again")).toBeOnTheScreen();
     expect(screen.queryByText(/native TUN permission is required/)).toBeNull();
     connect.mockRestore();
+  });
+
+  it("keeps a stale tunnel complaint off the screen once the selected node is gone", async () => {
+    // The state a refused connect leaves behind: the tunnel still says the
+    // authorization is missing, and the node the connect was for is deleted.
+    const tun = { ...makeMockSeed().tun, backend: "iosPacketTunnel", providerPathMismatch: false } as const;
+    useRuntimeEventStore.setState({
+      tun: { ...tun, lastProviderError: "the system did not authorize the VPN configuration", providerState: "permissionRequired" },
+    });
+    mockBackend().state.profiles = mockBackend().state.profiles.map((entry) => ({ ...entry, isActive: false }));
+    const first = await renderHome();
+
+    expect(await first.findByText("No node selected")).toBeOnTheScreen();
+    expect(first.queryByText(/iOS asks to add a VPN configuration/)).toBeNull();
+    expect(first.queryByText("View diagnostics")).toBeNull();
+    await first.unmount();
+
+    // With a node selected again the same status is worth saying once more.
+    mockBackend().state.profiles = mockBackend().state.profiles.map((entry, index) => ({ ...entry, isActive: index === 0 }));
+    const second = await renderHome();
+    expect(await screen.findByText(/iOS asks to add a VPN configuration/)).toBeOnTheScreen();
+    await second.unmount();
   });
 
 });

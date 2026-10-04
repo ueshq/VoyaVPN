@@ -68,7 +68,7 @@ test("Home directs import to Nodes, where the result waits for an explicit conne
   await expect(dialog).toHaveCount(0);
   await expect(page.locator("#shell-tab-profiles")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("server-row")).toHaveCount(1);
-  await expect(page.getByText("Imported 1 node(s).", { exact: true })).toBeVisible();
+  await expect(page.getByText("Imported 1 node.", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as { calls: { command: string }[] }).calls.filter(({ command }) => ["connect_active_profile", "set_active_profile", "restart_core"].includes(command)))).toEqual([]);
   await page.getByTestId("server-row").getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByRole("button", { name: "In use", exact: true })).toBeVisible();

@@ -33,13 +33,17 @@ class VoyaQrActivity : ComponentActivity() {
     // AndroidX uses the system picker when available and documents on older OS versions.
     private val picker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) { finish(); return@registerForActivityResult }
-        try {
-            val image = InputImage.fromFilePath(this, uri)
-            decoder.process(image).addOnSuccessListener { codes ->
-                val values = codes.mapNotNull { it.rawValue }.distinct()
-                if (values.isEmpty()) fail("noQr") else succeed(values)
-            }.addOnFailureListener { fail("noQr") }
-        } catch (_: Exception) { fail("noQr") }
+        // Reading and decoding the picked file is disk work, so it leaves the
+        // main thread; the decoder's listeners come back to it on their own.
+        executor.execute {
+            try {
+                val image = InputImage.fromFilePath(this, uri)
+                decoder.process(image).addOnSuccessListener { codes ->
+                    val values = codes.mapNotNull { it.rawValue }.distinct()
+                    if (values.isEmpty()) fail("noQr") else succeed(values)
+                }.addOnFailureListener { fail("noQr") }
+            } catch (_: Exception) { runOnUiThread { fail("noQr") } }
+        }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

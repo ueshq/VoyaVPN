@@ -1,4 +1,17 @@
+import { parseArgs } from "../lib/args.mjs";
 import { repoRootFromScript } from "../lib/common.mjs";
+
+/** The flags both seed installers take on the command line. */
+export function parseInstallArgs(argv) {
+  return parseArgs(
+    argv,
+    {
+      "--force": { key: "forceInstall", value: true },
+      "--force-fetch": { key: "forceFetch", value: true },
+    },
+    { forceFetch: false, forceInstall: false },
+  );
+}
 
 /**
  * The CLI wrapper shared by the two seed installers that `postinstall` runs.

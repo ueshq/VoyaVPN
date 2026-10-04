@@ -30,7 +30,7 @@ export function connectionShortcutLabel(t: TranslationFunction) {
 }
 
 /**
- * App-wide keys. The platform modifier with 1–5 opens a page in sidebar order,
+ * App-wide keys. The platform modifier with a digit opens that page in sidebar order,
  * and with Shift+C connects or disconnects from whichever page is showing.
  */
 export function useShellShortcuts() {

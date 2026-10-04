@@ -24,20 +24,26 @@ final class PacketTunnelDiagnostics {
     private let logger = Logger(subsystem: PacketTunnelIdentity.subsystem, category: "PacketTunnelProvider")
     private var providerStatusURLOverride: URL?
     private var providerLogURLOverride: URL?
-    /// Serializes provider-log appends. libbox forwards every sing-box log line
-    /// here from arbitrary Go threads, and the handle, byte counter and
-    /// formatter below are shared mutable state.
+    /// Serializes provider-log appends. The provider writes from its lifecycle
+    /// queue and libbox's callbacks from Go threads, and the handle, byte
+    /// counter and formatter below are shared mutable state.
     private let providerLogQueue = DispatchQueue(label: "\(PacketTunnelIdentity.subsystem).log")
     private let providerLogTimestampFormatter = ISO8601DateFormatter()
     private var providerLogHandle: FileHandle?
     private var providerLogBytes = 0
 
     func configure(_ runtimeConfig: PacketTunnelRuntimeConfig) {
-        providerStatusURLOverride = containedDiagnosticsURL(runtimeConfig.statusPath, kind: "status")
-        providerLogURLOverride = containedDiagnosticsURL(runtimeConfig.logPath, kind: "log")
-        // The cached log handle belongs to the previous destination; drop it so
-        // the next line opens the one this run was configured with.
-        providerLogQueue.sync { closeProviderLog() }
+        let statusURL = containedDiagnosticsURL(runtimeConfig.statusPath, kind: "status")
+        let logURL = containedDiagnosticsURL(runtimeConfig.logPath, kind: "log")
+        // On the queue with everything else that reads them: a goroutine of the
+        // previous session may still be logging while this one is configured.
+        providerLogQueue.sync {
+            providerStatusURLOverride = statusURL
+            providerLogURLOverride = logURL
+            // The cached log handle belongs to the previous destination; drop
+            // it so the next line opens the one this run was configured with.
+            closeProviderLog()
+        }
     }
 
     /// Accept a host-supplied diagnostics path only when it resolves inside the
@@ -87,8 +93,8 @@ final class PacketTunnelDiagnostics {
     }
 
     private func providerStatusURL() throws -> URL {
-        if let providerStatusURLOverride {
-            return providerStatusURLOverride
+        if let override = providerLogQueue.sync(execute: { providerStatusURLOverride }) {
+            return override
         }
         guard let containerURL = containerURL() else {
             throw PacketTunnelProviderError.missingAppGroupContainer
@@ -97,6 +103,7 @@ final class PacketTunnelDiagnostics {
         return containerURL.appendingPathComponent(providerStatusRelativePath)
     }
 
+    /// Only called on `providerLogQueue`.
     private func providerLogURL() throws -> URL {
         if let providerLogURLOverride {
             return providerLogURLOverride
@@ -152,13 +159,15 @@ final class PacketTunnelDiagnostics {
 
     /// Appends one line to the provider log.
     ///
-    /// This sits on the sing-box logging path inside the process that carries
-    /// every packet, so it must not cost anything proportional to the file:
-    /// the handle stays open and is appended to, and the file is rotated once
-    /// it crosses the cap instead of being read back, trimmed and atomically
-    /// rewritten per line. The write stays synchronous on a serial queue so a
-    /// log burst applies backpressure instead of growing an unbounded backlog
-    /// inside the tunnel process.
+    /// The log holds the provider's own events — and libbox's debug output,
+    /// should `debug` ever be switched on, which is every line the core
+    /// writes. It runs inside the process that carries every packet, so it
+    /// must not cost anything proportional to the file: the handle stays open
+    /// and is appended to, and the file is rotated once it crosses the cap
+    /// instead of being read back, trimmed and atomically rewritten per line.
+    /// The write stays synchronous on a serial queue so a burst applies
+    /// backpressure instead of growing an unbounded backlog inside the tunnel
+    /// process.
     func appendProviderLog(_ message: String) {
         let timestamp = Date()
         providerLogQueue.sync {

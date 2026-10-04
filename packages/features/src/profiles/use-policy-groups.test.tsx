@@ -69,13 +69,15 @@ function runtime(groupId: string, nowProfileId = "a"): PolicyGroupRuntime {
   return { groupId, members: [{ delayMs: 30, profileId: "a", remarks: "Tokyo" }], nowProfileId };
 }
 
+const setOperationError = vi.fn();
+
 function mount(entries: PolicyGroupEntry[], runOperation = vi.fn(async (operation: () => Promise<unknown>) => {
   await operation();
   return true;
 })) {
   ipc.listPolicyGroups.mockResolvedValue({ entries } satisfies PolicyGroupListing);
   const hook = renderHookWithQuery(() =>
-    usePolicyGroups({ runOperation }, i18next.t.bind(i18next)),
+    usePolicyGroups({ runOperation, setOperationError }, i18next.t.bind(i18next)),
   );
   return { ...hook, runOperation };
 }
@@ -168,6 +170,24 @@ describe("usePolicyGroups", () => {
     expect(result.current.coreConnected).toBe(true);
   });
 
+  it("leaves the running group unread for a screen that does not show it", async () => {
+    ipc.listPolicyGroups.mockResolvedValue({ entries: [entry("g1", true)] } satisfies PolicyGroupListing);
+    useRuntimeEventStore.setState({ coreState: connectedCore });
+    const { result } = renderHookWithQuery(() =>
+      usePolicyGroups(
+        { runOperation: vi.fn(), setOperationError },
+        i18next.t.bind(i18next),
+        { live: false },
+      ),
+    );
+
+    await waitFor(() => expect(result.current.policyGroupEntries).toHaveLength(1));
+
+    expect(result.current.coreConnected).toBe(true);
+    expect(result.current.policyGroupRuntimeState).toBeNull();
+    expect(ipc.policyGroupRuntime).not.toHaveBeenCalled();
+  });
+
   it("re-measures the running group and keeps what the core reports", async () => {
     ipc.testPolicyGroupDelay.mockResolvedValue(runtime("g1", "b"));
     const { queryClient, result, runOperation } = mount([entry("g1", true)]);
@@ -191,6 +211,8 @@ describe("usePolicyGroups", () => {
     expect(ipc.deletePolicyGroups).not.toHaveBeenCalled();
 
     act(() => result.current.setDeletingPolicyGroup(entry("g1", false)));
+    // The confirmation shows the page's error as its own, so it opens clean.
+    expect(setOperationError).toHaveBeenLastCalledWith(null);
     await act(() => result.current.removePolicyGroup());
     expect(ipc.deletePolicyGroups).toHaveBeenLastCalledWith(["g1"]);
     expect(result.current.deletingPolicyGroup?.group.id).toBe("g1");

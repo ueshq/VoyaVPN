@@ -39,6 +39,7 @@ use voya_platform::{
 };
 
 use crate::{
+    blocking::{run_blocking, BlockingTaskError},
     config_mutation::{ConfigMutationCoordinator, ConfigMutationError},
     supervisor::SupervisorConnectionState,
     sysproxy::{SystemProxyManager, SystemProxyManagerError},
@@ -155,10 +156,6 @@ pub struct ConnectionModeOutcome {
     /// Only a TUN flip needs a running core to be restarted; a system-proxy
     /// flavor change is picked up live.
     pub tun_flag_changed: bool,
-    /// Whether the commit rewrote the persisted configuration. Always true
-    /// for a mode switch today, but reported so a caller can follow
-    /// `config_changed` rather than assume.
-    pub config_changed: bool,
 }
 
 #[derive(Debug, Error)]
@@ -178,11 +175,8 @@ pub enum ConnectionModeError {
         source: SystemProxyManagerError,
         rollback: ConfigMutationError,
     },
-    #[error("{context} task failed: {message}")]
-    Task {
-        context: &'static str,
-        message: String,
-    },
+    #[error(transparent)]
+    Task(#[from] BlockingTaskError),
 }
 
 /// The single owner of the connection-mode / system-proxy transaction.
@@ -224,9 +218,12 @@ impl ConnectionModeManager {
         // a blocking thread against a snapshot rather than under the mutation
         // guard's `&mut AppConfig`.
         let enable_tun = mode == ConnectionMode::Vpn;
-        let tun_status = self.plan_tun(&snapshot, enable_tun).await?;
+        let tun_status = self
+            .tun
+            .plan_set_enabled_off_thread(&snapshot, enable_tun)
+            .await?;
 
-        let (original, committed, config_changed) = self
+        let (original, committed) = self
             .commit(coordinator, |config| {
                 apply_connection_mode(config, mode);
             })
@@ -248,7 +245,6 @@ impl ConnectionModeManager {
             system_proxy_applied,
             tun_status,
             tun_flag_changed,
-            config_changed,
         })
     }
 
@@ -257,13 +253,12 @@ impl ConnectionModeManager {
     /// seconds behind the global mutation lock.
     ///
     /// Returns the pre-mutation configuration alongside the commit so the
-    /// caller can compute `tun_flag_changed` and roll back, and the
-    /// coordinator's `config_changed` so a cache refresh can follow it.
+    /// caller can compute `tun_flag_changed` and roll back.
     async fn commit(
         &self,
         coordinator: &ConfigMutationCoordinator,
         mutate: impl FnOnce(&mut AppConfig),
-    ) -> Result<(AppConfig, AppConfig, bool), ConnectionModeError> {
+    ) -> Result<(AppConfig, AppConfig), ConnectionModeError> {
         let committed = coordinator
             .mutate(async move |_unit_of_work, config| {
                 let original = config.clone();
@@ -271,7 +266,7 @@ impl ConnectionModeManager {
                 Ok::<AppConfig, ConnectionModeError>(original)
             })
             .await?;
-        Ok((committed.value, committed.config, committed.config_changed))
+        Ok((committed.value, committed.config))
     }
 
     /// Apply the committed mode to the machine — but only while a core is
@@ -318,7 +313,13 @@ impl ConnectionModeManager {
         original: &AppConfig,
     ) -> Result<(), ConfigMutationError> {
         let mut mutation = coordinator.begin().await?;
-        *mutation.config_mut() = original.clone();
+        // Only what `apply_connection_mode` writes. The failed apply ran for
+        // seconds outside the guard, so anything else committed meanwhile — a
+        // settings save, a subscription update, another active node — is not
+        // this transaction's to undo.
+        let config = mutation.config_mut();
+        config.tun.enabled = original.tun.enabled;
+        config.system_proxy.mode = original.system_proxy.mode;
         mutation.commit().await.map(|_| ())
     }
 
@@ -335,6 +336,7 @@ impl ConnectionModeManager {
             manager.apply_runtime_config(&config)
         })
         .await
+        .map_err(Into::into)
     }
 
     async fn planned_status(
@@ -350,36 +352,6 @@ impl ConnectionModeManager {
         .await?
         .map_err(Into::into)
     }
-
-    async fn plan_tun(
-        &self,
-        config: &AppConfig,
-        enabled: bool,
-    ) -> Result<TunStatus, ConnectionModeError> {
-        let manager = self.tun.clone();
-        let config = config.clone();
-
-        run_blocking("TUN preflight", move || {
-            manager.plan_set_enabled(&config, enabled)
-        })
-        .await?
-        .map_err(Into::into)
-    }
-}
-
-async fn run_blocking<T>(
-    context: &'static str,
-    work: impl FnOnce() -> T + Send + 'static,
-) -> Result<T, ConnectionModeError>
-where
-    T: Send + 'static,
-{
-    tokio::task::spawn_blocking(work)
-        .await
-        .map_err(|error| ConnectionModeError::Task {
-            context,
-            message: error.to_string(),
-        })
 }
 
 #[cfg(test)]

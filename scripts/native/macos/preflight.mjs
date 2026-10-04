@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, repoRootFromScript } from "../../lib/common.mjs";
+import { capture, repoRootFromScript, runCli } from "../../lib/common.mjs";
+import { defaultIsProcessRunning, voyaRuntimeExecutables } from "./local-runtime.mjs";
 import {
   appBundleIdentifier,
   libboxBinaryPath,
@@ -183,9 +184,8 @@ function checkLibbox() {
 }
 
 function warnIfInstalledAppRunning() {
-  for (const executable of ["voyavpn", "VoyaVPN", "VoyaPacketTunnel"]) {
-    const result = capture("pgrep", ["-x", executable]);
-    if (result.status === 0) {
+  for (const executable of voyaRuntimeExecutables) {
+    if (defaultIsProcessRunning(executable)) {
       warn(
         executable === "VoyaPacketTunnel"
           ? `The PacketTunnel provider (${executable}) is running; disable TUN before the build replaces ${installedAppBundle}.`
@@ -232,9 +232,4 @@ function main() {
   );
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-}
+runCli(main);

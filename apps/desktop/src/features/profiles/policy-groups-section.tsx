@@ -5,14 +5,13 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
 import { Spinner } from "@voya/ui/components/spinner";
-import { formatDelay } from "@voya/utils/formatting";
 import type { PolicyGroupEntry } from "@voya/contracts";
 
 import type { ServerTableController } from "./use-server-table";
 import { PolicyGroupDialog } from "./policy-group-dialog";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
-import { PolicyGroupMemberChip } from "./policy-group-member-chip";
-import { profileMemberName } from "@voya/features/profiles/profile-display";
+import { PolicyGroupMemberChips } from "./policy-group-member-chip";
+import { runtimeMemberDelays } from "@voya/features/profiles/profile-display";
 import { SpeedtestButton } from "./server-table-menus";
 
 /**
@@ -38,9 +37,12 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
   } = controller;
   // The last speed test's delay per node, looked up once per list rather than
   // searched per member of every card.
+  // `profiles` changes on every speed-test frame; without a group there is
+  // no card to read the map, so it is not rebuilt for nothing.
+  const hasGroups = policyGroupEntries.length > 0;
   const testedDelays = useMemo(
-    () => new Map(profiles.map((item) => [item.profile.id, item.metrics.delayMs || null])),
-    [profiles],
+    () => new Map(hasGroups ? profiles.map((item) => [item.profile.id, item.metrics.delayMs || null]) : []),
+    [hasGroups, profiles],
   );
 
   return (
@@ -133,9 +135,7 @@ function PolicyGroupCard({
       ? (group.selectedProfileId ?? members[0]?.profileId ?? null)
       : null);
   // A running group reports its members' delays; otherwise the last speed test does.
-  const delays: ReadonlyMap<string, number | null> = live
-    ? new Map(live.members.map((member) => [member.profileId, member.delayMs]))
-    : testedDelays;
+  const delays = live ? runtimeMemberDelays(live) : testedDelays;
   const collapsible = members.length > COLLAPSED_MEMBER_LIMIT;
   const shownMembers =
     collapsible && !showAllMembers ? members.slice(0, COLLAPSED_MEMBER_LIMIT) : members;
@@ -250,20 +250,16 @@ function PolicyGroupCard({
       </div>
       {members.length ? (
         <div className="flex flex-wrap gap-2 px-5 pb-4">
-          {shownMembers.map((member) => (
-            <PolicyGroupMemberChip
-              current={member.profileId === currentId}
-              delay={formatDelay(delays.get(member.profileId))}
-              key={member.profileId}
-              name={profileMemberName(member.remarks, member.profileId)}
-              onChoose={
-                group.strategy === "selector"
-                  ? (profileId) => void choosePolicyGroupMember(group.id, profileId)
-                  : undefined
-              }
-              profileId={member.profileId}
-            />
-          ))}
+          <PolicyGroupMemberChips
+            currentId={currentId}
+            delays={delays}
+            members={shownMembers}
+            onChoose={
+              group.strategy === "selector"
+                ? (profileId) => void choosePolicyGroupMember(group.id, profileId)
+                : undefined
+            }
+          />
           {collapsible ? (
             <Button
               aria-expanded={showAllMembers}

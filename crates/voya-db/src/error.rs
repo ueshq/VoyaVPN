@@ -6,6 +6,25 @@ use voya_contracts::DatabaseErrorCode;
 
 pub type Result<T> = std::result::Result<T, DbError>;
 
+/// Why [`DbError::UnsupportedDatabaseSchema`] refused a database.
+///
+/// The refusal message used to print only `found`/`expected` versions, so a
+/// checksum mismatch read as the absurd "found Some(11), expected version 11".
+/// Each variant names the check that actually failed.
+#[derive(Debug, Error)]
+pub enum SchemaRejectionReason {
+    #[error("it holds {count} migration records where exactly one is expected")]
+    MigrationRecords { count: usize },
+    #[error("its baseline record was written by a different build of VoyaVPN (checksum mismatch)")]
+    ChecksumMismatch,
+    #[error("its schema version {found} is not this build's baseline {expected}")]
+    Version { found: i64, expected: i64 },
+    #[error("its migration bookkeeping is not a VoyaVPN database's")]
+    Unrecognized,
+    #[error("its baseline record says initialization did not complete")]
+    Incomplete,
+}
+
 #[derive(Debug, Error)]
 pub enum DbError {
     #[error(transparent)]
@@ -19,13 +38,12 @@ pub enum DbError {
         enum_name: &'static str,
         value: String,
     },
-    #[error(
-        "unsupported Voya database schema at {path}: found version {found:?}, expected version {expected}; reset it manually with: {manual_reset_command}"
-    )]
+    #[error("unsupported Voya database schema at {path}: {reason} (this build's baseline is version {expected})")]
     UnsupportedDatabaseSchema {
         path: PathBuf,
         found: Option<i64>,
         expected: i64,
+        reason: SchemaRejectionReason,
         manual_reset_command: String,
     },
     #[error("filesystem error at {path}: {source}")]
@@ -153,11 +171,20 @@ mod tests {
             path: PathBuf::from("/tmp/voyavpn.sqlite"),
             found: Some(9),
             expected: 1,
+            reason: SchemaRejectionReason::Version {
+                found: 9,
+                expected: 1,
+            },
             manual_reset_command: "rm /tmp/voyavpn.sqlite".to_string(),
         };
 
         assert_eq!(schema.code(), DatabaseErrorCode::SchemaUnsupported);
         assert_eq!(schema.reset_command(), Some("rm /tmp/voyavpn.sqlite"));
+        // The refusal message names the real reason instead of a shell command
+        // the user cannot run on a phone.
+        let message = schema.to_string();
+        assert!(message.contains("schema version 9"), "{message}");
+        assert!(!message.contains("rm "), "{message}");
     }
 
     #[test]

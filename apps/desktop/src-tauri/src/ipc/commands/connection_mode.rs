@@ -39,7 +39,7 @@ where
             report_post_commit_error(
                 &self.app,
                 NoticeCode::SystemProxyStatusRefreshFailed,
-                &format!("{error:?}"),
+                &error.message,
                 AppNoticeLevel::Warning,
             );
         }
@@ -50,7 +50,7 @@ where
             report_post_commit_error(
                 &self.app,
                 NoticeCode::TunStatusRefreshFailed,
-                &format!("{error:?}"),
+                &error.message,
                 AppNoticeLevel::Warning,
             );
         }

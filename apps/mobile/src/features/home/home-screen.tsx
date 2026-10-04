@@ -1,29 +1,35 @@
 import { profileTitle } from "@voya/features/profiles/profile-display";
-import { homeMapMarker } from "@voya/features/home/map-marker";
-import { useConnectionIp } from "@voya/features/home/use-connection-ip";
+import { exitIpLabel } from "@voya/features/home/exit-ip-label";
 import { useHomeRuntime } from "@voya/features/home/use-home-runtime";
-import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { formatBytesPerSecond, formatClock } from "@voya/utils/formatting";
+import { formatDurationMs } from "@voya/utils/formatting";
 import type { CoreState } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n/core";
 import { Button } from "heroui-native/button";
 import { Card } from "heroui-native/card";
 import { LinkButton } from "heroui-native/link-button";
-import { Separator } from "heroui-native/separator";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
-import { ArrowDown, ArrowUp, Clock, Globe, type LucideIcon } from "lucide-react-native";
+import {
+  ChevronRight,
+  Clock,
+  Globe,
+  Server,
+  type LucideIcon,
+} from "lucide-react-native";
+import type { ReactNode } from "react";
 import { View } from "react-native";
 
+import { EmptyState } from "~/components/empty-state";
 import { ErrorNotice } from "~/components/error-notice";
-import { useTrafficMode } from "@voya/features/routing/use-traffic-mode";
+import { useSavedTrafficMode } from "@voya/features/routing/use-traffic-mode";
 import { navigateToTab, openPage } from "~/app/navigation";
 import { Banner } from "~/components/banner";
 import { DetailScreen } from "~/components/detail-screen";
 import { PageHeader } from "~/components/page-header";
 import { useToneColor } from "~/components/tone";
 
+import { useConnectedDurationMs } from "./use-connected-duration";
 import { WorldMap } from "./world-map";
 
 /**
@@ -38,26 +44,15 @@ import { WorldMap } from "./world-map";
 export function HomeScreen() {
   const { t } = useI18n();
   const runtime = useHomeRuntime();
-  const trafficMode = useTrafficMode();
-  const primaryLabel = runtime.connected || runtime.state === "cleanupPending" ? "actions.disconnect" : !runtime.hasNodes ? "mobile.add" : !runtime.ready ? "home.chooseNode" : "actions.connect";
-  const { ipQuery } = useConnectionIp();
-  const statistics = useRuntimeEventStore((state) => state.statistics);
+  const trafficMode = useSavedTrafficMode();
+  const subtleColor = useToneColor("neutral");
+  const primary = primaryAction(runtime);
+  const ipQuery = runtime.exitIp;
 
   const nodeName = runtime.nodeEntry
     ? profileTitle(runtime.nodeEntry.profile.remarks, t)
     : null;
-  const groupRuntime = runtime.groupRuntime;
-  const groupEntry = groupRuntime?.nowProfileId
-    ? (runtime.profiles.find((entry) => entry.profile.id === groupRuntime.nowProfileId) ?? null)
-    : null;
-  const marker = homeMapMarker({
-    connected: runtime.connected,
-    exitCountryCode: ipQuery.data?.countryCode,
-    groupEntry,
-    hasNodes: runtime.hasNodes,
-    isGroup: runtime.activeGroup !== null,
-    nodeEntry: runtime.nodeEntry,
-  });
+  const marker = runtime.marker;
 
   return (
     <DetailScreen accessibilityLabel={t("home.aria")}>
@@ -66,95 +61,166 @@ export function HomeScreen() {
       <Card className="gap-5 p-5">
         {runtime.hasNodes ? <WorldMap marker={marker} /> : null}
 
-        <View className="items-center gap-1">
-          <View className="max-w-full flex-row items-center gap-2">
-            <View accessible={false} className={`h-2.5 w-2.5 rounded-full ${STATE_DOT[runtime.state]}`} />
-            <Typography maxFontSizeMultiplier={1.6} className="shrink text-2xl font-semibold text-foreground">
-              {runtime.hasNodes ? t(CORE_STATE_KEYS[runtime.state]) : t("panes.profiles.empty")}
-            </Typography>
+        {/* With no nodes at all the empty-state card below is the message —
+            a second "No nodes" line above the CTA would only repeat it. */}
+        {runtime.hasNodes ? (
+          <View className="items-center gap-1">
+            <View className="max-w-full flex-row items-center gap-2">
+              <View
+                accessible={false}
+                className={`h-2.5 w-2.5 rounded-full ${STATE_DOT[runtime.state]}`}
+              />
+              <Typography
+                maxFontSizeMultiplier={1.6}
+                className="shrink text-2xl font-semibold text-foreground"
+              >
+                {t(CORE_STATE_KEYS[runtime.state])}
+              </Typography>
+            </View>
+            <LinkButton
+              className="min-h-12 max-w-full"
+              onPress={() => navigateToTab("profiles")}
+            >
+              <LinkButton.Label className="text-center text-accent">
+                {runtime.activeGroup
+                  ? runtime.activeGroup.group.name
+                  : (nodeName ?? t("home.noSelection"))}
+              </LinkButton.Label>
+            </LinkButton>
+            {/* The traffic mode in words a first-time user can parse, and the
+                way to change it: the switcher lives at the top of the Rules
+                tab, so the label is the shortcut there. Subtle, not accent —
+                the node name above is already the blue thing to tap. */}
+            <LinkButton className="min-h-9" onPress={() => navigateToTab("rules")}>
+              <LinkButton.Label className="text-center text-sm text-subtle">
+                {t(
+                  trafficMode.mode === "global"
+                    ? "mobile.trafficModeGlobal"
+                    : "mobile.trafficModeRule",
+                )}
+              </LinkButton.Label>
+              <ChevronRight size={16} color={subtleColor} accessible={false} />
+            </LinkButton>
+            {runtime.groupNow ? (
+              <Typography className="text-center text-sm text-subtle">
+                {t("home.groupVia", { node: profileTitle(runtime.groupNow.remarks, t) })}
+              </Typography>
+            ) : null}
           </View>
-          {runtime.hasNodes ? <>
-          <LinkButton className="min-h-12 max-w-full" onPress={() => navigateToTab("profiles")}>
-            <LinkButton.Label className="text-center text-accent">
-              {runtime.activeGroup
-                ? runtime.activeGroup.group.name
-                : (nodeName ?? t("home.noSelection"))}
-            </LinkButton.Label>
-          </LinkButton>
-          <Typography className="text-sm text-subtle">{t(trafficMode.mode === "global" ? "proxy.trafficModeGlobal" : "panes.routing.trafficModeRule")}</Typography>
-          </> : null}
-          {runtime.activeGroup && runtime.groupRuntime?.nowProfileId ? (
-            <Typography className="text-center text-sm text-subtle">
-              {t("home.groupVia", { node: groupMemberName(runtime, t) })}
-            </Typography>
-          ) : null}
-        </View>
+        ) : null}
 
         <Button
           // A disconnect is the calm, reversible choice once connected, so it
-          // steps down from the solid accent to the tinted one.
-          className={`min-h-14 h-auto rounded-3xl py-3 ${runtime.connected ? "bg-accent-soft" : ""}`}
+          // steps down from the solid accent to the neutral secondary one.
+          className="min-h-14 h-auto rounded-3xl py-3"
           size="lg"
           variant={runtime.connected ? "secondary" : "primary"}
-          isDisabled={runtime.busy || runtime.modePending || (!runtime.connected && runtime.state !== "cleanupPending" && (runtime.profilesPending || Boolean(runtime.profilesError)))}
-          onPress={() => runtime.connected || runtime.state === "cleanupPending" ? runtime.handlePrimaryAction() : !runtime.hasNodes ? openPage("import") : !runtime.ready ? navigateToTab("profiles") : runtime.handlePrimaryAction()}
-          accessibilityLabel={t(primaryLabel)}
+          // Only the connect action needs the profile list; "Choose a node"
+          // just navigates, so it must never sit there disabled next to the
+          // "No node selected" link doing the same job.
+          isDisabled={
+            runtime.busy ||
+            runtime.modePending ||
+            (runtime.ready &&
+              !runtime.connected &&
+              runtime.state !== "cleanupPending" &&
+              (runtime.profilesPending || Boolean(runtime.profilesError)))
+          }
+          onPress={primary.run}
+          accessibilityLabel={t(primary.labelKey)}
         >
-          {runtime.inProgress || runtime.profilesPending ? <Spinner size="sm" /> : null}
-          <Button.Label>
-            {t(primaryLabel)}
-          </Button.Label>
+          {runtime.inProgress || runtime.profilesPending ? (
+            <Spinner size="sm" />
+          ) : null}
+          <Button.Label>{t(primary.labelKey)}</Button.Label>
         </Button>
       </Card>
 
-      {runtime.modePending ? <Banner status="info" message={t("home.modePendingReason")} /> : null}
-      {runtime.lastError ? <View className="gap-2">
-        <ErrorNotice error={runtime.lastError.message} reason={runtime.lastError.reason}
-          message={runtime.lastError.reason === "elevationRequired" ? t("home.authorizationDeclined") : undefined}
-          retryLabel={runtime.lastError.reason === "notFound" ? t("home.chooseNode") : runtime.lastError.reason === "elevationRequired" ? t("mobile.authorizeAgain") : undefined}
-          retry={runtime.lastError.reason === "notFound" ? () => navigateToTab("profiles") : runtime.retryLastAction} />
-        <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
-      </View> : runtime.tunIssue ? <View className="gap-2">
-        {/* The banner says what is wrong in the user's language; the provider's
-            own text, which is not translated, stays behind the disclosure. */}
-        <ErrorNotice message={runtime.tunIssueMessage ?? runtime.tunIssue} error={runtime.tunProviderError ?? runtime.tunIssue} />
-        <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
-      </View> : null}
-
-      {runtime.connected ? <>
-      <Card className="gap-4 p-5">
-        <View className="flex-row flex-wrap gap-x-3 gap-y-4">
-          <Metric
-            icon={ArrowUp}
-            label={t("status.upload", { speed: "" }).trim()}
-            value={formatBytesPerSecond(statistics?.uploadBytesPerSecond ?? 0)}
-          />
-          <Metric
-            icon={ArrowDown}
-            label={t("status.download", { speed: "" }).trim()}
-            value={formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0)}
-          />
-        </View>
-        <Separator />
-        <Fact icon={Clock} label={t("home.duration")} value={connectionTime(runtime.state)} />
-        <Fact icon={Globe} label={t("home.exitIp")} value={exitIp(ipQuery, t)} selectable />
-      </Card>
-      </> : null}
-      <Button testID="home-activity" variant="secondary" onPress={() => openPage("activity")}><Button.Label>{t("tabs.connections")}</Button.Label></Button>
-
-      {runtime.profilesError ? (
-        <Banner
-          status="danger"
-          message={t("mobile.failed")}
-          action={
-            <Button className="min-h-12 h-auto py-1.5" size="sm" variant="tertiary" onPress={runtime.retryProfiles}>
-              <Button.Label>{t("actions.retry")}</Button.Label>
-            </Button>
-          }
-        />
+      {runtime.modePending ? (
+        <Banner status="info" message={t("home.modePendingReason")} />
       ) : null}
-      {runtime.hasNodes || runtime.profilesPending || runtime.profilesError ? null : (
-        <Typography className="text-base text-subtle">{t("home.emptyGuide")}</Typography>
+      {/* Both error blocks explain a connect that failed or is about to be
+          attempted, so they are gated on a node being selected: with none,
+          they would only repeat what the "Choose a node" button already says
+          — and a failure recorded against a since-deleted node would
+          outlive it on this screen. Both return the moment a node is
+          selected again. */}
+      {runtime.ready && runtime.lastError ? (
+        <Failure>
+          <ErrorNotice
+            error={runtime.lastError.message}
+            reason={runtime.lastError.reason}
+            message={
+              runtime.lastError.reason === "elevationRequired"
+                ? t("home.authorizationDeclined")
+                : undefined
+            }
+            retryLabel={
+              runtime.lastError.reason === "notFound"
+                ? t("home.chooseNode")
+                : runtime.lastError.reason === "elevationRequired"
+                  ? t("mobile.authorizeAgain")
+                  : undefined
+            }
+            retry={
+              runtime.lastError.reason === "notFound"
+                ? () => navigateToTab("profiles")
+                : runtime.retryLastAction
+            }
+          />
+        </Failure>
+      ) : runtime.ready && runtime.tunIssue ? (
+        <Failure>
+          {/* The banner says what is wrong in the user's language; the provider's
+            own text, which is not translated, stays behind the disclosure. */}
+          <ErrorNotice
+            message={runtime.tunIssueMessage ?? runtime.tunIssue}
+            error={runtime.tunProviderError ?? runtime.tunIssue}
+          />
+        </Failure>
+      ) : null}
+
+      {/* No transfer rates: a phone's host has no statistics sampler, so the
+          two figures could only ever read zero. */}
+      {runtime.connected ? (
+        <Card className="gap-4 p-5">
+          <DurationFact label={t("home.duration")} />
+          <Fact
+            icon={Globe}
+            label={t("home.exitIp")}
+            value={exitIpLabel(ipQuery, t)}
+            selectable
+          />
+        </Card>
+      ) : null}
+      <Button
+        testID="home-activity"
+        variant="secondary"
+        onPress={() => openPage("activity")}
+      >
+        <Button.Label>{t("tabs.connections")}</Button.Label>
+      </Button>
+
+      {/* The same shape as the two error blocks above (`Failure`), so every
+          failure on this screen offers its retry, its technical details and
+          the log — `mobile.failed` promises both actions. */}
+      {runtime.profilesError ? (
+        <Failure>
+          <ErrorNotice
+            error={runtime.profilesError}
+            retryLabel={t("actions.retry")}
+            retry={runtime.retryProfiles}
+          />
+        </Failure>
+      ) : null}
+      {runtime.hasNodes ||
+      runtime.profilesPending ||
+      runtime.profilesError ? null : (
+        <EmptyState
+          icons={[Server]}
+          title={t("panes.profiles.empty")}
+          description={t("home.emptyGuide")}
+        />
       )}
     </DetailScreen>
   );
@@ -185,23 +251,19 @@ const STATE_DOT = {
   disconnecting: "bg-warning",
 } satisfies Record<CoreState, string>;
 
-function MetricLabel({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+function MetricLabel({
+  icon: Icon,
+  label,
+}: {
+  icon: LucideIcon;
+  label: string;
+}) {
   const color = useToneColor("neutral");
 
   return (
     <View className="max-w-full flex-row items-center gap-1.5">
       <Icon size={14} color={color} accessible={false} />
       <Typography className="shrink text-sm text-subtle">{label}</Typography>
-    </View>
-  );
-}
-
-/** A rate, large: the two numbers worth watching while connected. */
-function Metric({ icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
-  return (
-    <View className="min-w-32 flex-1 gap-1">
-      <MetricLabel icon={icon} label={label} />
-      <Typography className="text-xl font-semibold text-foreground tabular-nums">{value}</Typography>
     </View>
   );
 }
@@ -221,40 +283,59 @@ function Fact({
   return (
     <View className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1">
       <MetricLabel icon={icon} label={label} />
-      <Typography selectable={selectable} className="max-w-full text-base font-medium text-foreground tabular-nums">
+      <Typography
+        selectable={selectable}
+        className="max-w-full text-base font-medium text-foreground tabular-nums"
+      >
         {value}
       </Typography>
     </View>
   );
 }
 
-/** The live connection time, ticking off the store's own sample. */
-function connectionTime(state: ReturnType<typeof useHomeRuntime>["state"]) {
-  const store = useRuntimeEventStore.getState();
-  const durationMs = state === "connected" ? (store.coreState?.connectedDurationMs ?? 0) : 0;
-  const seconds = Math.floor(durationMs / 1000);
+/**
+ * The connection time. Its own component so the once-a-second tick re-renders
+ * this one row and not the screen around it.
+ */
+function DurationFact({ label }: { label: string }) {
+  const elapsed = useConnectedDurationMs();
 
-  return formatClock(Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60);
+  return <Fact icon={Clock} label={label} value={formatDurationMs(elapsed ?? 0)} />;
 }
 
-function exitIp(
-  ipQuery: ReturnType<typeof useConnectionIp>["ipQuery"],
-  t: ReturnType<typeof useI18n>["t"],
-) {
-  if (ipQuery.isFetching) return t("home.checkIpChecking");
-  if (ipQuery.error) return t("home.checkIpFailed");
+/** A failure's notice with the way to the log under it. */
+function Failure({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
 
-  return ipQuery.data?.ip ?? t("home.checkIpNotChecked");
-}
-
-function groupMemberName(
-  runtime: ReturnType<typeof useHomeRuntime>,
-  t: ReturnType<typeof useI18n>["t"],
-) {
-  const groupRuntime = runtime.groupRuntime;
-  const member = groupRuntime?.members.find(
-    (entry) => entry.profileId === groupRuntime.nowProfileId,
+  return (
+    <View className="gap-2">
+      {children}
+      <Button variant="secondary" onPress={() => openPage("logs")}>
+        <Button.Label>{t("mobile.diagnostics")}</Button.Label>
+      </Button>
+    </View>
   );
-
-  return member ? profileTitle(member.remarks, t) : t("home.checkIpUnknown");
 }
+
+/**
+ * What the big button says and does, decided once: disconnect while a core is
+ * up, otherwise whatever stands between the user and a connection — adding a
+ * node, choosing one, or connecting.
+ */
+function primaryAction(runtime: ReturnType<typeof useHomeRuntime>): {
+  labelKey: TranslationKey;
+  run: () => void;
+} {
+  if (runtime.connected || runtime.state === "cleanupPending") {
+    return { labelKey: "actions.disconnect", run: runtime.handlePrimaryAction };
+  }
+  if (!runtime.hasNodes) {
+    return { labelKey: "mobile.add", run: () => openPage("import") };
+  }
+  if (!runtime.ready) {
+    return { labelKey: "home.chooseNode", run: () => navigateToTab("profiles") };
+  }
+
+  return { labelKey: "actions.connect", run: runtime.handlePrimaryAction };
+}
+

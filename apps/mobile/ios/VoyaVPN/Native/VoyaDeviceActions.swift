@@ -34,7 +34,11 @@ final class VoyaDeviceActions: NSObject, PHPickerViewControllerDelegate {
             DispatchQueue.main.async {
                 guard let self else { return }
                 guard granted else { self.finish(nil, code: "cameraDenied"); return }
-                guard let presenter = RCTPresentedViewController() else { self.finish(nil, code: "unavailable"); return }
+                // No camera — a simulator, or one switched off by a profile —
+                // is known before anything is shown; a scanner presented only
+                // to dismiss itself would flash a black screen at the user.
+                guard AVCaptureDevice.default(for: .video) != nil,
+                      let presenter = RCTPresentedViewController() else { self.finish(nil, code: "unavailable"); return }
                 let scanner = VoyaQRScanner(cancelLabel: cancelLabel) { [weak self] value, code in
                     self?.finish(value.map { [$0] }, code: code)
                 }
@@ -99,7 +103,17 @@ final class VoyaDeviceActions: NSObject, PHPickerViewControllerDelegate {
             let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
             sheet.popoverPresentationController?.sourceView = presenter.view
             sheet.popoverPresentationController?.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
-            sheet.completionWithItemsHandler = { _, _, _, error in
+            // UIKit calls this once per activity the user backs out of, with
+            // the sheet still up — cancelling a mail composer returns to the
+            // sheet. Only the call that ends the sheet settles the promise and
+            // removes the file: settling twice is a React Native error, and an
+            // activity chosen next would find its file gone. The sheet has
+            // ended when an activity completed, when it was dismissed with no
+            // activity chosen, or when it failed.
+            var settled = false
+            sheet.completionWithItemsHandler = { activityType, completed, _, error in
+                guard !settled, completed || activityType == nil || error != nil else { return }
+                settled = true
                 try? FileManager.default.removeItem(at: file)
                 if let error { reject("shareFailed", error.localizedDescription, error) } else { resolve(nil) }
             }
@@ -121,6 +135,11 @@ private final class VoyaQRScanner: UIViewController, AVCaptureMetadataOutputObje
     private let completion: (String?, String?) -> Void
     private let cancelLabel: String
     private var finished = false
+    /// Whether the presentation has finished; a dismissal asked for before
+    /// then is ignored by UIKit.
+    private var appeared = false
+    /// What the scan came to while the scanner was still animating in.
+    private var outcomeBeforeAppearing: (value: String?, code: String?)?
 
     init(cancelLabel: String, completion: @escaping (String?, String?) -> Void) {
         self.cancelLabel = cancelLabel
@@ -171,6 +190,14 @@ private final class VoyaQRScanner: UIViewController, AVCaptureMetadataOutputObje
         }
     }
     override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); preview?.frame = view.bounds }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        appeared = true
+        if let outcome = outcomeBeforeAppearing {
+            outcomeBeforeAppearing = nil
+            report(outcome.value, code: outcome.code)
+        }
+    }
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         queue.async { [session] in session.stopRunning() }
@@ -180,6 +207,13 @@ private final class VoyaQRScanner: UIViewController, AVCaptureMetadataOutputObje
         guard !finished else { return }
         finished = true
         queue.async { [session] in session.stopRunning() }
+        // The camera can fail within the presentation animation. Dismissing
+        // then does nothing, the completion would never run, and the module
+        // would answer "busy" to every scan until the app was relaunched.
+        guard appeared else { outcomeBeforeAppearing = (value, code); return }
+        report(value, code: code)
+    }
+    private func report(_ value: String?, code: String?) {
         dismiss(animated: true) { self.completion(value, code) }
     }
     func metadataOutput(_: AVCaptureMetadataOutput, didOutput objects: [AVMetadataObject], from _: AVCaptureConnection) {

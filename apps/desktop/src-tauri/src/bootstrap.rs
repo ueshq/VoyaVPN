@@ -3,7 +3,7 @@ use crate::{event_sinks::TauriSinks, logging, tray::setup_tray, AppState};
 use std::{
     error::Error,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
     time::Instant,
 };
 use tauri::Manager;
@@ -16,6 +16,7 @@ use voya_app::{
         SelfHostManager, SupervisorTunnelState, SystemLocalNetwork, DEFAULT_PROBE_BASE_URL,
     },
     services::AppServices,
+    startup::{AppOpening, OpenedApp},
     supervisor::{CoreSupervisor, SupervisorDeps},
     tun::ProviderRegistrationCache,
 };
@@ -41,29 +42,26 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // recovery paths are captured too.
     logging::install(app.handle().clone(), runtime_paths.log_dir());
     voya_app::startup::preload_tls_roots_in_background();
-    let services = timed("open database", || {
-        tauri::async_runtime::block_on(AppServices::connect(
-            &database_path(app)?,
-            runtime_paths.clone(),
-        ))
-        .map_err(Box::<dyn Error>::from)
-    })?;
-    // A fresh install starts in the platform's native VPN mode where it has one,
-    // and macOS never loads in a system proxy mode it does not offer.
     let system_locale = voya_platform::locale::system_locale();
-    let config = timed("load settings", || {
-        tauri::async_runtime::block_on(
-            services.load_config_for(TargetOs::current(), system_locale.as_deref()),
-        )
-    })?;
-    let system_proxy_manager = services.system_proxy_manager(Arc::new(StdProcessRunner::new()));
+    // The two steps that can stop a launch. The error stays a `DbError` at the
+    // top of the chain, which is what the reset offer looks for.
+    let opening = tauri::async_runtime::block_on(AppOpening::open(
+        &database_path(app)?,
+        runtime_paths.clone(),
+        TargetOs::current(),
+        system_locale.as_deref(),
+    ))?;
+    let log_level = opening.config.core.log_level.clone();
+    let system_proxy_manager = opening
+        .services
+        .system_proxy_manager(Arc::new(StdProcessRunner::new()));
     // Startup only *undoes* a proxy a crashed run left behind. The
     // persisted mode is deliberately not applied: nothing is listening
     // on the local port until the user connects, and `connect` applies
     // the mode itself once the core is up. Applying it here pointed the
     // machine at a dead port on every launch.
     match timed("restore system proxy", || {
-        system_proxy_manager.restore_dirty_proxy_if_needed(&config)
+        system_proxy_manager.restore_dirty_proxy_if_needed(&opening.config)
     }) {
         Ok(true) => {
             tracing::warn!("restored system proxy from previous dirty shutdown marker");
@@ -74,22 +72,11 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
             "failed to restore system proxy from dirty shutdown marker"
         ),
     }
-    let shared_config = Arc::new(RwLock::new(config.clone()));
-    let config_mutations = Arc::new(
-        services
-            .config_mutations(Arc::clone(&shared_config))
-            .with_target_os(TargetOs::current()),
-    );
-    // A fresh install starts with the default routing profile rather than an
-    // empty Rules page. A failure only costs the seed, never startup.
-    if let Err(error) = timed("seed default routing", || {
-        tauri::async_runtime::block_on(services.ensure_default_routing(&config_mutations))
-    }) {
-        tracing::warn!(?error, "failed to seed the default routing profile");
-    }
-    timed("sweep orphaned metrics", || {
-        tauri::async_runtime::block_on(services.initialize_profile_metrics())
-    })?;
+    let OpenedApp {
+        services,
+        shared_config,
+        config_mutations,
+    } = tauri::async_runtime::block_on(opening.finish());
     let seed_dir = core_seed_resources_dir(app.path().resource_dir()?);
     // macOS launches the seed inside the signed bundle (only the disconnected
     // speedtest does), so only Windows and Linux stage it into app data.
@@ -168,7 +155,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         core_seed_resource_dir.clone(),
         supervisor.clone(),
         Arc::clone(&shared_config),
-        config.core.log_level.clone(),
+        log_level,
     );
     drop(runtime_guard);
     let speedtest_manager = services.speedtest_manager(
@@ -176,7 +163,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         Arc::new(speedtest_runner),
         supervisor.clone(),
     );
-    log_step("start background services", background_started);
+    voya_app::startup::log_startup_step("start background services", background_started);
     app.manage(AppState {
         services,
         config_mutations,
@@ -253,16 +240,8 @@ fn spawn_self_host(
 fn timed<T>(step: &'static str, run: impl FnOnce() -> T) -> T {
     let started = Instant::now();
     let value = run();
-    log_step(step, started);
+    voya_app::startup::log_startup_step(step, started);
     value
-}
-
-fn log_step(step: &'static str, started: Instant) {
-    tracing::info!(
-        step,
-        elapsed_ms = started.elapsed().as_millis(),
-        "startup step"
-    );
 }
 
 /// Where this launch keeps its database and runtime files.

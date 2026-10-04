@@ -26,7 +26,7 @@ use thiserror::Error;
 use crate::{
     coreinfo::TargetOs,
     elevation::{sudo_launcher_arguments, SUDO_EXECUTABLE},
-    process::{ProcessRole, ProcessSpawn},
+    process::{ProcessRole, ProcessSpawn, HELPER_TIMEOUT},
 };
 
 #[cfg(any(target_os = "linux", test))]
@@ -184,9 +184,13 @@ pub fn build_install_plan(
 /// `uninstall` verb (removes the sudoers drop-in and the launcher directory).
 pub fn build_uninstall_spawn(os: TargetOs) -> Result<ProcessSpawn, PrivilegeError> {
     let launcher = elevate_launcher_path(os).ok_or(PrivilegeError::UnsupportedOs)?;
+    // Bounded like every other `sudo -n` helper: the revoke runs on the main
+    // thread at startup and at exit, where one that never answers would hang
+    // the window or the quit.
     Ok(ProcessSpawn::new(ProcessRole::SudoKill, SUDO_EXECUTABLE)
         .with_arguments(sudo_launcher_arguments(&launcher, "uninstall"))
-        .with_display_log(false))
+        .with_display_log(false)
+        .with_timeout(HELPER_TIMEOUT))
 }
 
 /// Classify the outcome of a native elevation command from its exit code.

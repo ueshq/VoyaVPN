@@ -7,6 +7,7 @@ import {
   metadataBySubscriptionId,
   remainingDays,
   remainingTrafficBytes,
+  subscriptionUsageStats,
   usageRatio,
 } from "./subscription-usage";
 
@@ -17,6 +18,9 @@ function metadata(overrides: Partial<SubscriptionMetadata> = {}): SubscriptionMe
     downloadBytes: null,
     totalBytes: null,
     expireAt: null,
+    lastAttemptAt: null,
+    lastAttemptError: null,
+    lastAttemptFailed: null,
     lastUpdateAt: null,
     profileTitle: null,
     ...overrides,
@@ -71,6 +75,47 @@ describe("expiry", () => {
     expect(remainingDays(0, nowMs)).toBeNull();
     expect(isExpired(null, nowMs)).toBe(false);
     expect(isExpired(0, nowMs)).toBe(false);
+  });
+});
+
+describe("subscriptionUsageStats", () => {
+  const t = ((key: string, options?: Record<string, unknown>) =>
+    options ? `${key} ${JSON.stringify(options)}` : key) as Parameters<typeof subscriptionUsageStats>[1];
+  const now = Date.UTC(2026, 0, 1);
+  const day = 24 * 60 * 60;
+
+  it("says what is left of the quota and the term, each only when reported", () => {
+    expect(subscriptionUsageStats(metadata(), t, now)).toEqual([]);
+    // A total of zero is "no quota", not a quota of nothing.
+    expect(subscriptionUsageStats(metadata({ totalBytes: 0, uploadBytes: 5 }), t, now)).toEqual([]);
+
+    expect(
+      subscriptionUsageStats(
+        metadata({ downloadBytes: 1024, expireAt: now / 1000 + 3 * day, totalBytes: 4096 }),
+        t,
+        now,
+      ),
+    ).toEqual([
+      {
+        destructive: false,
+        key: "traffic",
+        label: 'home.subscriptionCard.remainingTraffic {"amount":"3.0 KB"}',
+      },
+      { destructive: false, key: "days", label: 'home.subscriptionCard.remainingDays {"days":3}' },
+    ]);
+  });
+
+  it("marks a quota that ran out and a term that ended", () => {
+    expect(
+      subscriptionUsageStats(
+        metadata({ downloadBytes: 9000, expireAt: now / 1000 - day, totalBytes: 4096 }),
+        t,
+        now,
+      ).map(({ destructive, key, label }) => [key, destructive, label]),
+    ).toEqual([
+      ["traffic", true, 'home.subscriptionCard.remainingTraffic {"amount":"0 B"}'],
+      ["days", true, "home.subscriptionCard.expired"],
+    ]);
   });
 });
 

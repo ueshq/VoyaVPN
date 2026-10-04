@@ -7,6 +7,7 @@ import {
   repoRootFromScript,
   requireDarwin,
   run,
+  runCli,
 } from "../../lib/common.mjs";
 import { ensureSingBoxSource, singBoxSourceDir } from "../sing-box-source.mjs";
 
@@ -162,10 +163,5 @@ export function buildLibboxForIos() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    buildLibboxForIos();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(buildLibboxForIos);
 }

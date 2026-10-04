@@ -20,14 +20,17 @@ export function ServerTableNotices({ controller }: { controller: ServerTableCont
     setOperationMessage,
     t,
     undecodableProfiles,
+    updatingAllSubscriptions,
   } = controller;
   // A success line clears itself. An error stays until it is dismissed or
-  // replaced, because it usually names something the user still has to fix.
+  // replaced, because it usually names something the user still has to fix —
+  // and a progress line stays for as long as what it reports is still going:
+  // a slow subscription download outlasts the timer many times over.
   useEffect(() => {
-    if (!operationMessage) return undefined;
+    if (!operationMessage || updatingAllSubscriptions) return undefined;
     const timer = setTimeout(() => setOperationMessage(null), SUCCESS_NOTICE_MS);
     return () => clearTimeout(timer);
-  }, [operationMessage, setOperationMessage]);
+  }, [operationMessage, setOperationMessage, updatingAllSubscriptions]);
 
   return (
     <>

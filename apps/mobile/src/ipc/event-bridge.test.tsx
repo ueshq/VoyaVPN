@@ -4,21 +4,11 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useToastStore } from "@voya/client/toast-store";
 import type { ReactNode } from "react";
 
-import type { MockBackend } from "@voya/client/mock-backend";
-
 import { EventBridge } from "./event-bridge";
 import { registerMobileBackend, voyaTransport } from "./platform";
-import { mockTransport } from "~/test/mock-transport";
-
-/**
- * The registered transport, as the mock it is in every build today.
- *
- * `VoyaTransport` deliberately has no `emit`: only a backend publishes. The
- * mock is the backend here, so a test drives the bridge through its own.
- */
-function mockBackend(): MockBackend {
-  return voyaTransport() as MockBackend;
-}
+// `VoyaTransport` deliberately has no `emit`: only a backend publishes. The
+// mock is the backend here, so a test drives the bridge through its own.
+import { mockBackend, mockTransport } from "~/test/mock-transport";
 
 // The navigator is replaced rather than mounted: what the bridge owes is the
 // right destination, and `mockNavigate` is the name Jest's hoisting allows a
@@ -58,17 +48,17 @@ describe("EventBridge", () => {
     // The mock backend announces its own mutations, exactly as the shell does.
     await voyaTransport().commands.setActiveProfile("profile-1");
 
-    // Policy groups hang off the profiles root, which is how one invalidation
-    // reaches every slice of the node list.
+    // Policy groups hang off the profiles root, so the event's own
+    // `policyGroups` key is already covered: invalidating it as well would
+    // cancel the list fetch the root just started and send it again.
     expect(invalidate.mock.calls.map(([options]) => options?.queryKey)).toEqual([
       ["profiles"],
-      ["profiles", "policy-groups"],
       ["app-settings"],
     ]);
 
     await unmount();
     await voyaTransport().commands.setActiveProfile("profile-0");
-    expect(invalidate).toHaveBeenCalledTimes(3);
+    expect(invalidate).toHaveBeenCalledTimes(2);
   });
 
   it("routes a notice to the toast store and a deep link to the tabs", async () => {

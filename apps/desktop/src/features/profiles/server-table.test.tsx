@@ -1206,7 +1206,7 @@ describe("ProfilesScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     expect(await screen.findByText("Imported node")).toBeInTheDocument();
-    expect(screen.getByText("Imported 2 node(s).")).toBeInTheDocument();
+    expect(screen.getByText("Imported 2 nodes.")).toBeInTheDocument();
   });
 
   it("refreshes and selects a profile imported from a scanned screen QR code", async () => {
@@ -1240,7 +1240,7 @@ describe("ProfilesScreen", () => {
 
     expect(await screen.findByText("Scanned node")).toBeInTheDocument();
     expect(screen.getByTestId("server-row")).toBeInTheDocument();
-    expect(screen.getByText("Imported 1 node(s).")).toBeInTheDocument();
+    expect(screen.getByText("Imported 1 node.")).toBeInTheDocument();
   });
 
   it("imports clipboard text directly and prevents duplicate submission", async () => {
@@ -1304,7 +1304,7 @@ describe("ProfilesScreen", () => {
     expect(screen.getByTestId("server-row")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Imported 1 node(s). 1 existing node(s) refreshed. 2 duplicate(s) removed.",
+        "Imported 1 node. 1 existing node(s) refreshed. 2 duplicate(s) removed.",
       ),
     ).toBeInTheDocument();
   });
@@ -1405,7 +1405,6 @@ describe("ProfilesScreen", () => {
 
     await waitFor(() =>
       expect(ipcMocks.moveProfile).toHaveBeenCalledWith(
-        null,
         "profile-0",
         "down",
         null,

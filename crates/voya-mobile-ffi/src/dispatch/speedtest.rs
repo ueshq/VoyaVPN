@@ -6,15 +6,14 @@
 //! connected the manager measures through the provider's core instead.
 
 use serde::Deserialize;
-use serde_json::Value;
-use voya_contracts::{AppError, LogCode, LogLevel, SpeedtestTarget};
+use voya_contracts::{LogCode, LogLevel, SpeedtestTarget};
 
 use crate::{
     app::MobileState,
     events::{EventChannel, TransientStreamEvent},
 };
 
-use super::{answer, arguments};
+use super::{answer, arguments, Answer};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,7 +21,7 @@ struct RunRequest {
     request: voya_contracts::SpeedtestRequest,
 }
 
-pub(super) async fn run(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn run(state: &MobileState, args: &str) -> Answer {
     let RunRequest { request } = arguments("run_speedtest", args)?;
     let SpeedtestTarget::Profiles {
         profile_ids: index_ids,
@@ -50,7 +49,7 @@ pub(super) async fn run(state: &MobileState, args: &Value) -> Result<Value, AppE
     answer("run_speedtest", &result)
 }
 
-pub(super) fn cancel(state: &MobileState) -> Result<Value, AppError> {
+pub(super) fn cancel(state: &MobileState) -> Answer {
     if state.speedtest.cancel() {
         state.sinks.log(
             LogLevel::Info,
@@ -62,6 +61,6 @@ pub(super) fn cancel(state: &MobileState) -> Result<Value, AppError> {
     answer("cancel_speedtest", &state.speedtest.status())
 }
 
-pub(super) fn status(state: &MobileState) -> Result<Value, AppError> {
+pub(super) fn status(state: &MobileState) -> Answer {
     answer("speedtest_status", &state.speedtest.status())
 }

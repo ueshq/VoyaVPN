@@ -72,19 +72,37 @@ import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
  * try/finally had made React Compiler skip them; without it they compile,
  * and the memoization adds 2.5 KiB to the entry. Measured: index 59.5 KiB
  * (was 56.3 before the change); the entry budget moves from 58 to 61 KiB.
+ *
+ * 2026-10-02: the mobile UX audit's copy batch — plural forms for import
+ * summaries, the node editor, subscription failure badges and DNS hints —
+ * adds localized product copy to the three shared locale files. Measured
+ * locale chunks: English 52.3, zh-Hans 51.0, zh-Hant 51.7 KiB. Only the
+ * per-locale allowance moves, from 52 to 54 KiB; startup, total JavaScript,
+ * CSS and whole-dist budgets remain unchanged.
+ *
+ * 2026-10-04: the close prompt and the missing-core dialog load when first
+ * asked for instead of with the shell, and the notice keys left
+ * `@voya/client/messages` for a module of their own, so the entry no longer
+ * carries the dialog primitives, the submit helper or the log, validation and
+ * speedtest key tables. Radix's dialog and checkbox follow their only
+ * remaining importers out of the startup group into `vendor-menus`. Measured:
+ * index 50.3 KiB (was 59.8), vendor-radix 33.6 (was 59.0), vendor-menus 121.5
+ * (was 96.3), startup JavaScript 458.9 (was 500.6), total emitted JS 1251.3.
+ * The entry, Radix and startup budgets move down to those sizes; the menu
+ * chunk's moves up by what it took over.
  */
 const budgets = [
-  { label: "application entry", maxKiB: 61, prefix: "index-" },
-  { label: "English locale (startup)", maxKiB: 52, prefix: "locales-" },
-  { label: "Simplified Chinese locale", maxKiB: 52, prefix: "zh-Hans-" },
-  { label: "Traditional Chinese locale", maxKiB: 52, prefix: "zh-Hant-" },
+  { label: "application entry", maxKiB: 52, prefix: "index-" },
+  { label: "English locale (startup)", maxKiB: 54, prefix: "locales-" },
+  { label: "Simplified Chinese locale", maxKiB: 54, prefix: "zh-Hans-" },
+  { label: "Traditional Chinese locale", maxKiB: 54, prefix: "zh-Hant-" },
   { label: "profiles screen", maxKiB: 136, prefix: "server-table-" },
   { label: "settings screen", maxKiB: 72, prefix: "settings-screen-" },
   { label: "data vendor chunk", maxKiB: 84, prefix: "vendor-data-" },
   { label: "React vendor chunk", maxKiB: 196, prefix: "vendor-react-" },
-  { label: "Radix vendor chunk", maxKiB: 64, prefix: "vendor-radix-" },
+  { label: "Radix vendor chunk", maxKiB: 37, prefix: "vendor-radix-" },
   { label: "form vendor chunk", maxKiB: 72, prefix: "vendor-forms-" },
-  { label: "menu vendor chunk", maxKiB: 104, prefix: "vendor-menus-" },
+  { label: "menu vendor chunk", maxKiB: 128, prefix: "vendor-menus-" },
 ];
 
 const totalBudgetKiB = 1320;
@@ -94,7 +112,7 @@ const totalBudgetKiB = 1320;
  * this line exists to catch, and 1.3x of the whole path would let a form
  * library through unnoticed.
  */
-const startupBudgetKiB = 510;
+const startupBudgetKiB = 468;
 const cssBudgetKiB = 86;
 const distBudgetKiB = 3150;
 

@@ -1,5 +1,8 @@
 import { check as checkForTauriUpdate, getVersion, type Update as TauriUpdate } from "@/ipc/tauri-plugins";
 
+/** Progress granularity while the download size is unknown. */
+const PROGRESS_STEP_BYTES = 256 * 1024;
+
 type AppUpdateInfo = {
   currentVersion: string;
   version: string;
@@ -67,11 +70,17 @@ export async function installCheckedAppUpdate(
     const installedVersion = update.version;
     let downloaded = 0;
     let total: number | null = null;
+    let reported = 0;
     await update.downloadAndInstall((event: DownloadEvent) => {
       if (event.event === "Started") {
         total = event.data.contentLength ?? null;
       } else if (event.event === "Progress") {
         downloaded += event.data.chunkLength;
+        // One event per network chunk is thousands of them; the panel shows a
+        // whole percentage, so only a step it can show is worth a render.
+        const step = total ? total / 100 : PROGRESS_STEP_BYTES;
+        if (downloaded - reported < step && downloaded !== total) return;
+        reported = downloaded;
       }
       onProgress?.({ downloaded, finished: event.event === "Finished", total });
     });

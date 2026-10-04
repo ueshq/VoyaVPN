@@ -40,6 +40,9 @@ pub enum CoreSeedCopyStatus {
     SeedMissing,
     AlreadyInstalled,
     Copied,
+    /// An installed core was replaced by the packaged one, because the app
+    /// was updated to a build that ships a different core.
+    Refreshed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -228,8 +231,19 @@ pub fn discover_packaged_seed_executable(
     first_existing_file(executable_candidates(&search_dir, target_os))
 }
 
-/// Copies the packaged sing-box seed into app data unless an executable is
-/// already installed there.
+/// Written beside the seed by `scripts/core/sing-box-installer.mjs`, and copied
+/// into app data with it: it records which core that copy is.
+const SEED_MANIFEST_FILE_NAME: &str = "sing-box.seed.json";
+const SEED_MANIFEST_EXECUTABLE_DIGEST: &str = "executableSha256";
+
+/// Copies the packaged sing-box seed into app data, unless the core installed
+/// there is already the packaged one.
+///
+/// "Already" is decided by the two seed manifests, not by the executable
+/// merely existing: nothing in the app updates the core, so after an app update
+/// the copy in app data is the previous release's, and it would go on running
+/// configs generated for the new one. A seed without a manifest never replaces
+/// anything.
 pub fn copy_seed_core_asset(
     paths: &AppPaths,
     seed_resources_dir: impl AsRef<Path>,
@@ -261,12 +275,29 @@ pub fn copy_seed_core_asset(
     }
 
     if first_existing_file(executable_candidates(&target_dir, TargetOs::current()))?.is_some() {
+        let mut copied_files = Vec::new();
+        let mut status = CoreSeedCopyStatus::AlreadyInstalled;
+        if installed_core_is_stale(&seed_dir, &target_dir) {
+            // The installed core still works, so a refresh that fails — the
+            // executable is running and Windows will not replace it — is tried
+            // again on the next launch rather than reported as a failed start.
+            match refresh_installed_seed(&seed_dir, &target_dir, &mut copied_files) {
+                Ok(()) => status = CoreSeedCopyStatus::Refreshed,
+                Err(error) => {
+                    tracing::warn!(
+                        ?error,
+                        "failed to replace the installed core with the packaged one"
+                    );
+                    copied_files.clear();
+                }
+            }
+        }
         let chmod_paths = apply_executable_permission_plan(paths)?;
         return Ok(CoreSeedCopyOutcome {
             seed_dir,
             target_dir,
-            status: CoreSeedCopyStatus::AlreadyInstalled,
-            copied_files: Vec::new(),
+            status,
+            copied_files,
             chmod_paths,
         });
     }
@@ -277,7 +308,12 @@ pub fn copy_seed_core_asset(
     })?;
 
     let mut copied_files = Vec::new();
-    copy_seed_dir_contents(&seed_dir, &target_dir, &mut copied_files)?;
+    copy_seed_dir_contents(
+        &seed_dir,
+        &target_dir,
+        SeedCopy::MissingOnly,
+        &mut copied_files,
+    )?;
     let chmod_paths = apply_executable_permission_plan(paths)?;
 
     Ok(CoreSeedCopyOutcome {
@@ -315,9 +351,73 @@ fn apply_executable_permission_plan(paths: &AppPaths) -> Result<Vec<PathBuf>, Co
     Ok(chmod_paths)
 }
 
+/// Whether the packaged seed is a different core from the installed one.
+fn installed_core_is_stale(seed_dir: &Path, target_dir: &Path) -> bool {
+    let Some(packaged) = seed_executable_digest(seed_dir) else {
+        return false;
+    };
+
+    seed_executable_digest(target_dir).as_ref() != Some(&packaged)
+}
+
+/// The executable digest a seed manifest records; `None` when the directory
+/// has no manifest or it does not say.
+fn seed_executable_digest(dir: &Path) -> Option<String> {
+    let manifest = fs::read(dir.join(SEED_MANIFEST_FILE_NAME)).ok()?;
+    let manifest: serde_json::Value = serde_json::from_slice(&manifest).ok()?;
+
+    manifest
+        .get(SEED_MANIFEST_EXECUTABLE_DIGEST)?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// Replaces every installed seed file, the manifest last: it is what marks the
+/// refresh as done, so a copy that fails part-way is repeated.
+fn refresh_installed_seed(
+    seed_dir: &Path,
+    target_dir: &Path,
+    copied_files: &mut Vec<PathBuf>,
+) -> Result<(), CoreInfoError> {
+    copy_seed_dir_contents(seed_dir, target_dir, SeedCopy::Replace, copied_files)?;
+    let manifest = target_dir.join(SEED_MANIFEST_FILE_NAME);
+    replace_file(&seed_dir.join(SEED_MANIFEST_FILE_NAME), &manifest)?;
+    copied_files.push(manifest);
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SeedCopy {
+    /// A first install: files already there are left alone.
+    MissingOnly,
+    /// A refresh: every file but the manifest is replaced.
+    Replace,
+}
+
+/// Puts `source` at `target` through a sibling file and a rename, so a core
+/// that is being launched never sees a half-written executable.
+fn replace_file(source: &Path, target: &Path) -> Result<(), CoreInfoError> {
+    let mut staged = target.as_os_str().to_os_string();
+    staged.push(".voya-new");
+    let staged = PathBuf::from(staged);
+    let copy_error = |source_error| CoreInfoError::CopyCoreSeedAsset {
+        source_path: source.to_path_buf(),
+        target_path: target.to_path_buf(),
+        source: source_error,
+    };
+
+    fs::copy(source, &staged).map_err(copy_error)?;
+    fs::rename(&staged, target).map_err(|error| {
+        let _ = fs::remove_file(&staged);
+        copy_error(error)
+    })
+}
+
 fn copy_seed_dir_contents(
     source_dir: &Path,
     target_dir: &Path,
+    mode: SeedCopy,
     copied_files: &mut Vec<PathBuf>,
 ) -> Result<(), CoreInfoError> {
     let entries = fs::read_dir(source_dir).map_err(|source| CoreInfoError::ReadCoreSeedDir {
@@ -344,11 +444,19 @@ fn copy_seed_dir_contents(
                 path: target_path.clone(),
                 source,
             })?;
-            copy_seed_dir_contents(&source_path, &target_path, copied_files)?;
+            copy_seed_dir_contents(&source_path, &target_path, mode, copied_files)?;
             continue;
         }
 
         if !file_type.is_file() {
+            continue;
+        }
+
+        if mode == SeedCopy::Replace {
+            if entry.file_name() != SEED_MANIFEST_FILE_NAME {
+                replace_file(&source_path, &target_path)?;
+                copied_files.push(target_path);
+            }
             continue;
         }
 
@@ -518,6 +626,8 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    /// A seed that does not say which core it is — a hand-placed one, a build
+    /// from before the manifest existed — never replaces an installed core.
     #[test]
     fn coreinfo_seed_copy_does_not_overwrite_existing_core() {
         let root = unique_temp_root("seed-existing");
@@ -540,6 +650,55 @@ mod tests {
             fs::read(&app_data_exe).expect("read installed exe"),
             b"newer-installed"
         );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// What an app update looks like: the bundle carries a different core
+    /// from the one a previous release copied into app data.
+    #[test]
+    fn coreinfo_seed_copy_replaces_a_core_from_a_different_seed() {
+        let root = unique_temp_root("seed-refresh");
+        let paths = AppPaths::new(root.join("VoyaVPN"));
+        let seed_root = core_seed_resources_dir(root.join("resources"));
+        let executable_name = executable_name_for_current_os("sing-box");
+        let seed_dir = seed_root.join(CORE_DIR_NAME);
+        let installed_dir = paths.core_bin_dir(CORE_DIR_NAME);
+        let installed_exe = installed_dir.join(&executable_name);
+        fs::create_dir_all(&seed_dir).expect("create seed dir");
+        fs::create_dir_all(&installed_dir).expect("create app data dir");
+        fs::write(seed_dir.join(&executable_name), b"new-core").expect("write seed exe");
+        fs::write(
+            seed_dir.join(SEED_MANIFEST_FILE_NAME),
+            br#"{"executableSha256":"new","fetchedAt":"later"}"#,
+        )
+        .expect("write seed manifest");
+        fs::write(&installed_exe, b"old-core").expect("write installed exe");
+        fs::write(
+            installed_dir.join(SEED_MANIFEST_FILE_NAME),
+            br#"{"executableSha256":"old","fetchedAt":"earlier"}"#,
+        )
+        .expect("write installed manifest");
+
+        let outcome = copy_seed_core_asset(&paths, &seed_root).expect("refresh");
+
+        assert_eq!(outcome.status, CoreSeedCopyStatus::Refreshed);
+        assert_eq!(fs::read(&installed_exe).expect("read exe"), b"new-core");
+        assert_eq!(
+            seed_executable_digest(&installed_dir).as_deref(),
+            Some("new")
+        );
+
+        // The same seed again is the fast path, whatever else its manifest
+        // says: only the executable digest names the core.
+        fs::write(
+            seed_dir.join(SEED_MANIFEST_FILE_NAME),
+            br#"{"executableSha256":"new","fetchedAt":"rebuilt"}"#,
+        )
+        .expect("rewrite seed manifest");
+        let outcome = copy_seed_core_asset(&paths, &seed_root).expect("skip");
+        assert_eq!(outcome.status, CoreSeedCopyStatus::AlreadyInstalled);
+        assert!(outcome.copied_files.is_empty());
 
         let _ = fs::remove_dir_all(root);
     }

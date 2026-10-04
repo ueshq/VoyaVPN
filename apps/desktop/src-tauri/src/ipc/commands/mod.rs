@@ -1,33 +1,30 @@
 mod screen_qr;
-use std::collections::BTreeSet;
 
 use crate::ipc::events::Emit;
 use voya_app::autostart::AutostartManager;
 use voya_app::config_mutation::{AppConfig, CommittedMutation};
 use voya_app::contract_map::{
-    core_info_error, core_seed_install_result, dns_to_contract, profile_details_to_contract,
+    core_info_error, core_seed_install_result, dns_to_contract,
     profile_summary_listing_to_contract, runtime_status_event, runtime_status_response,
     subscription_metadata_to_contract, subscription_to_contract, system_proxy_status_to_contract,
-    traffic_mode_from_contract, traffic_mode_to_contract,
+    traffic_mode_to_contract,
 };
 use voya_app::input_safety;
 use voya_app::invalidation;
-use voya_app::profiles::ProfileManager;
 use voya_app::runtime::RuntimeManager;
 use voya_app::subscriptions::SubscriptionManager;
 use voya_app::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
-use voya_app::sysproxy::runtime_proxy_url as app_runtime_proxy_url;
-use voya_app::tun::TunManager;
+use voya_app::tun::{set_tun_enabled_use_case, TunManager};
 use voya_contracts::{
-    AppError, AppErrorSubsystem, AppNotice, AppNoticeLevel, AppSettings, AppUpdaterState,
-    AppUpdaterStatus, AppearanceSettings, CoreSeedInstallResult, CoreSeedInstallStatus,
+    AppError, AppErrorSubsystem, AppNoticeLevel, AppSettings, AppUpdaterState, AppUpdaterStatus,
+    AppearanceSettings, CoreSeedInstallResult, CoreSeedInstallStatus,
     DnsSettings as DnsSettingsContract, ExportProfilesResult,
-    ImportProfilesResult as ImportProfilesContract, InvalidationScope, LogCode,
-    MoveAction as ContractMoveAction, NoticeCode, Profile as ProfileContract, ProfileDetails,
-    ProfileSummaryListing, ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult,
-    ResourceUpdateFile, Routing as RoutingContract, RoutingRule as RoutingRuleContract,
-    RuntimeStatusResponse, SpeedtestRunResult, SpeedtestStatus,
-    Subscription as SubscriptionContract, SubscriptionMetadata as SubscriptionMetadataContract,
+    ImportProfilesResult as ImportProfilesContract, LogCode, MoveAction as ContractMoveAction,
+    NoticeCode, Profile as ProfileContract, ProfileDetails, ProfileSummaryListing,
+    ProxyConnectionsSnapshot, ProxyMonitorStatus, QrCodeImage, QrScanResult, ResourceUpdateFile,
+    Routing as RoutingContract, RoutingRule as RoutingRuleContract, RuntimeStatusResponse,
+    SpeedtestRunResult, SpeedtestStatus, Subscription as SubscriptionContract,
+    SubscriptionMetadata as SubscriptionMetadataContract,
     SubscriptionUpdateResult as SubscriptionUpdateContract, SystemProxyStatusResponse,
     TunProviderDiagnostics, TunStatus,
 };
@@ -36,16 +33,13 @@ use voya_platform::{
     sysproxy::SystemProxyStatus,
 };
 
-use super::events::next_log_line_id;
 use crate::AppState;
 use voya_contracts::{
-    AppEvent, CoreState, InvalidateEvent, LogLevel, LogLineBody, LogLineEvent, QueryInvalidation,
-    TransientStreamEvent,
+    AppEvent, CoreState, LogLevel, LogLineBody, LogLineEvent, TransientStreamEvent,
 };
 
-use voya_app::input_safety::{map_ipc_input, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS};
+use voya_app::input_safety::map_ipc_input;
 
-const IPC_QR_CONTENT_MAX_CHARS: usize = 4096;
 /// The base64 of one grey pixel per byte at the largest picture voya-app will
 /// decode. `decode_image` rejects a payload that disagrees with the width and
 /// height it was given, but only after Tauri has already materialized the
@@ -98,4 +92,6 @@ pub use updates::*;
 
 pub(crate) use post_commit::{disconnect_removed_profile, emit_invalidation};
 pub(crate) use runtime::core_flow;
-pub(crate) use support::{emit_app_log, emit_core_log, emit_or_warn, queue_log_line};
+pub(crate) use support::{
+    emit_app_log, emit_core_log, emit_or_warn, queue_log_line, runtime_manager,
+};

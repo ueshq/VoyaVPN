@@ -59,6 +59,18 @@ export const queryKeys = {
 
 export type QueryKeyRoot = (typeof queryKeys)[keyof typeof queryKeys];
 
+/**
+ * What a subscription import or delete makes stale: the subscriptions, their
+ * usage metadata and the nodes they own. The roots behind the backend's
+ * `subscription_scopes(true, _)`, for a screen that waits for the new data
+ * before it navigates.
+ */
+export const subscriptionRefreshRoots = [
+  queryKeys.subscriptions,
+  queryKeys.subscriptionMetadata,
+  queryKeys.profiles,
+] as const;
+
 /** The exit address of one connection (active node plus core process). */
 export function connectionIpQueryKey(connection: string | null) {
   return [...queryKeys.connectionIp, connection] as const;

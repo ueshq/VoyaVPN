@@ -65,16 +65,21 @@ class VoyaDeviceActions(private val context: ReactApplicationContext) : ReactCon
         }
     }
     @ReactMethod fun shareDiagnostics(text: String, promise: Promise) {
+        // Called on the native-modules thread. Writing the file — the whole
+        // log, and the sweep of yesterday's — stays here; only showing the
+        // chooser goes to the UI thread.
+        val intent = try {
+            val directory = File(context.cacheDir, "diagnostics").apply { mkdirs() }
+            directory.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86400000 }?.forEach { it.delete() }
+            val file = File(directory, "diagnostics-${UUID.randomUUID()}.txt").apply { writeText(text) }
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.diagnostics", file)
+            Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                .apply { clipData = ClipData.newRawUri("diagnostics", uri) }
+        } catch (error: Exception) { promise.reject("shareFailed", error); return }
         context.runOnUiQueueThread {
             try {
                 val activity = context.currentActivity ?: throw IllegalStateException("No activity")
-                val directory = File(context.cacheDir, "diagnostics").apply { mkdirs() }
-                directory.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86400000 }?.forEach { it.delete() }
-                val file = File(directory, "diagnostics-${UUID.randomUUID()}.txt").apply { writeText(text) }
-                val uri = FileProvider.getUriForFile(context, "${context.packageName}.diagnostics", file)
-                val intent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_STREAM, uri)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                intent.clipData = ClipData.newRawUri("diagnostics", uri)
                 activity.startActivity(Intent.createChooser(intent, null))
                 promise.resolve(null)
             } catch (error: Exception) { promise.reject("shareFailed", error) }

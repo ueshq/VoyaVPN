@@ -3,6 +3,7 @@ import { VOYA_COMMAND_WIRE } from "@voya/contracts/commands";
 
 import {
   createNativeTransport,
+  type VoyaApplicationDataResetter,
   type VoyaCommandInvoker,
   type VoyaNativeEvents,
 } from "./native-transport";
@@ -21,7 +22,8 @@ function nativeModule(answer: (call: Call) => Promise<string>) {
 
         return answer(call);
       },
-    } satisfies VoyaCommandInvoker,
+      resetApplicationData: jest.fn(async () => {}),
+    } satisfies VoyaCommandInvoker & VoyaApplicationDataResetter,
   };
 }
 

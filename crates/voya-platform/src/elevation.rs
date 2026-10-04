@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     coreinfo::TargetOs,
-    process::{ProcessRole, ProcessSpawn},
+    process::{ProcessRole, ProcessSpawn, HELPER_TIMEOUT},
 };
 
 /// Absolute path to the system `sudo` binary used for passwordless elevation.
@@ -40,6 +40,7 @@ pub fn wrap_spawn_with_unix_sudo_passwordless(base: ProcessSpawn, launcher: &Pat
         environment: base.environment,
         display_log: base.display_log,
         generated_scripts: Vec::new(),
+        timeout: base.timeout,
     }
 }
 
@@ -75,7 +76,10 @@ pub fn unix_sudo_kill_spawn_passwordless(
     Ok(ProcessSpawn::new(ProcessRole::SudoKill, SUDO_EXECUTABLE)
         .with_arguments(arguments)
         .with_working_dir(working_dir)
-        .with_display_log(true))
+        .with_display_log(true)
+        // `sudo -n` asks nothing, and the kill body gives up on its own after
+        // a few seconds. The supervisor's actor waits on this.
+        .with_timeout(HELPER_TIMEOUT))
 }
 
 /// Bash body (no shebang) that terminates an elevated core process tree.

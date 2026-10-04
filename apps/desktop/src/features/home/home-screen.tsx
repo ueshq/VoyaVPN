@@ -14,7 +14,6 @@ import { connectionShortcutLabel } from "@/components/app-shell/use-shell-shortc
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 import { entryCountry, profileMemberName, profileNameWithoutFlag } from "@voya/features/profiles/profile-display";
-import { homeMapMarker } from "@voya/features/home/map-marker";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { type RuntimeAction } from "@voya/client/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
@@ -22,7 +21,6 @@ import { useShellStore } from "@/stores/shell-store";
 import { ConnectedInfo } from "./connected-info";
 import { ExitIpMetric } from "./exit-ip-metric";
 import { HomeWorldMap } from "./home-world-map";
-import { useConnectionIp } from "@voya/features/home/use-connection-ip";
 import { useHomeRuntime } from "@voya/features/home/use-home-runtime";
 import { HomeModeSummary } from "./home-mode-summary";
 
@@ -35,7 +33,6 @@ const ACTION_FAILED_KEYS = {
 export function HomeScreen() {
   const { t } = useI18n();
   const home = useHomeRuntime();
-  const { ipQuery } = useConnectionIp();
   const navigateToNodes = () =>
     useShellStore.getState().setActiveTab("profiles", true);
   const openLogs = () => useShellStore.getState().openSettings("advanced", "logs");
@@ -46,14 +43,7 @@ export function HomeScreen() {
   const needsSelection =
     !runtimeActionAvailable && !home.nodeEntry && !group && !noNodes;
   const profile = home.nodeEntry?.profile;
-  const groupNow = group
-    ? (home.groupRuntime?.members.find(
-        (member) => member.profileId === home.groupRuntime?.nowProfileId,
-      ) ?? null)
-    : null;
-  const groupNowEntry = groupNow
-    ? (home.profiles.find((entry) => entry.profile.id === groupNow.profileId) ?? null)
-    : null;
+  const groupNow = home.groupNow;
   const groupVia = groupNow
     ? t("home.groupVia", {
         node: profileMemberName(groupNow.remarks, groupNow.profileId),
@@ -73,14 +63,7 @@ export function HomeScreen() {
     : home.nodeEntry && home.nodeEntry.metrics.delayMs > 0
       ? home.nodeEntry.metrics.delayMs
       : null;
-  const marker = homeMapMarker({
-    connected: home.connected,
-    exitCountryCode: ipQuery.data?.countryCode,
-    groupEntry: groupNowEntry,
-    hasNodes: home.hasNodes,
-    isGroup: group !== null,
-    nodeEntry: home.nodeEntry,
-  });
+  const marker = home.marker;
 
   return (
     <section
@@ -187,10 +170,7 @@ export function HomeScreen() {
                       className="home-node-address"
                       title={groupVia ?? undefined}
                     >
-                      {groupVia ??
-                        t("nodeGroups.membersCount", {
-                          count: group.members.length,
-                        })}
+                      {groupVia ?? t("nodeGroups.membersCount", { count: group.members.length })}
                     </span>
                     <span>{t(POLICY_GROUP_STRATEGY_KEYS[group.group.strategy])}</span>
                   </>

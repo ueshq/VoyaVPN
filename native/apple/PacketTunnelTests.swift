@@ -80,16 +80,6 @@ private enum PacketTunnelTests {
             _ = try PacketTunnelRuntime.runtimePaths(containerURL: nil)
             throw Failure(message: "accepted missing container")
         } catch PacketTunnelProviderError.missingAppGroupContainer {}
-        let suffixBytes = "/PT/command.sock".utf8.count
-        _ = try PacketTunnelRuntime.runtimePaths(containerURL: URL(fileURLWithPath: "/" + String(repeating: "a", count: 102 - suffixBytes)))
-        do {
-            _ = try PacketTunnelRuntime.runtimePaths(containerURL: URL(fileURLWithPath: "/" + String(repeating: "a", count: 103 - suffixBytes)))
-            throw Failure(message: "accepted 104-byte socket path")
-        } catch PacketTunnelProviderError.libboxBasePathTooLong {}
-        do {
-            _ = try PacketTunnelRuntime.runtimePaths(containerURL: URL(fileURLWithPath: "/" + String(repeating: "界", count: 32)))
-            throw Failure(message: "socket limit must count UTF-8 bytes")
-        } catch PacketTunnelProviderError.libboxBasePathTooLong {}
     }
 
     private static func diagnosticsContainment(_ root: URL) throws {

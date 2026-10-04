@@ -83,7 +83,7 @@ describe("frontend coverage policy", () => {
 
 describe("frontend bundle budgets", () => {
   const assets = [
-    { name: "index-abc.js", bytes: 43 * 1024 },
+    { name: "index-abc.js", bytes: 50 * 1024 },
     { name: "locales-abc.js", bytes: 40 * 1024 },
     { name: "zh-Hans-abc.js", bytes: 39 * 1024 },
     { name: "zh-Hant-abc.js", bytes: 40 * 1024 },
@@ -91,9 +91,9 @@ describe("frontend bundle budgets", () => {
     { name: "settings-screen-abc.js", bytes: 64 * 1024 },
     { name: "vendor-data-abc.js", bytes: 79 * 1024 },
     { name: "vendor-react-abc.js", bytes: 186 * 1024 },
-    { name: "vendor-radix-abc.js", bytes: 59 * 1024 },
+    { name: "vendor-radix-abc.js", bytes: 34 * 1024 },
     { name: "vendor-forms-abc.js", bytes: 66 * 1024 },
-    { name: "vendor-menus-abc.js", bytes: 97 * 1024 },
+    { name: "vendor-menus-abc.js", bytes: 122 * 1024 },
   ];
 
   it("accepts the sizes the budgets were ratcheted around", () => {

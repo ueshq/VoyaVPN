@@ -98,13 +98,6 @@ pub struct SelfHostEndpoint {
     pub label: String,
 }
 
-impl SelfHostSpec {
-    #[must_use]
-    pub fn has_inbound(&self) -> bool {
-        self.vless.is_some() || self.shadowsocks.is_some()
-    }
-}
-
 #[must_use]
 pub fn generate_singbox_selfhost_config(spec: &SelfHostSpec) -> SingboxConfig {
     let mut config = SingboxConfig::sample();

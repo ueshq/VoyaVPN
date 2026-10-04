@@ -32,7 +32,25 @@ type LeafPaths<T> = {
       ? `${Key}.${LeafPaths<T[Key]>}`
       : never;
 }[keyof T & string];
-export type TranslationKey = LeafPaths<typeof en>;
+type LocaleLeaf = LeafPaths<typeof en>;
+type PluralSuffix = "zero" | "one" | "two" | "few" | "many" | "other";
+/** A leaf the locale files spell once per plural form: `x_one`, `x_other`. */
+type PluralLeaf = Extract<LocaleLeaf, `${string}_${PluralSuffix}`>;
+/**
+ * A plural message, named without its form. i18next picks the form from
+ * `count`, so the form is never written at a call site: a hand-picked `x_one`
+ * is not a `TranslationKey` at all.
+ */
+type PluralTranslationKey = PluralLeaf extends `${infer Base}_${PluralSuffix}`
+  ? Base
+  : never;
+export type TranslationKey = Exclude<LocaleLeaf, PluralLeaf> | PluralTranslationKey;
+/**
+ * A plural message takes its `count` as a number — a formatted string would
+ * read as text to i18next, which then selects no form at all. That is stated
+ * rather than typed: a signature generic over the key stops every translator
+ * a test or a host builds from `i18next.t` from being one.
+ */
 export type TranslationFunction = (key: TranslationKey, options?: Record<string, unknown>) => string;
 
 /** Storage key holding the chosen locale. `changeLocale` is the only writer. */

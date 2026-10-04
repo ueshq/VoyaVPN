@@ -4,7 +4,11 @@ import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";
 import { appErrorOfKind } from "@voya/client/errors";
 import { validationFieldErrors } from "@voya/client/messages";
-import type { DnsSettings } from "@voya/contracts";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import type { AppSettings, DnsSettings } from "@voya/contracts";
+import { saveQueue } from "@voya/features/forms/save-queue";
+import { runningConnectionKey } from "@voya/features/home/use-connection-ip";
+import { useSettingsApplyStatus } from "@voya/features/settings/use-settings-apply-status";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Button } from "heroui-native/button";
 import { FieldError } from "heroui-native/field-error";
@@ -13,25 +17,41 @@ import { Label } from "heroui-native/label";
 import { ListGroup } from "heroui-native/list-group";
 import { TextField } from "heroui-native/text-field";
 import { Typography } from "heroui-native/text";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Keyboard } from "react-native";
 import { DetailScreen } from "~/components/detail-screen";
 import { Disclosure } from "~/components/disclosure";
 import { ErrorNotice } from "~/components/error-notice";
+import { PrimaryButton } from "~/components/primary-button";
+import { useBusyAction } from "~/components/use-busy-action";
 import { SwitchRow } from "~/components/switch-row";
 import { useUnsavedChanges } from "~/components/use-unsaved-changes";
+import { SaveStatus } from "~/components/save-status";
 
-const FIELDS = [{ key: "remote", labelKey: "panes.dns.remoteDns" }, { key: "direct", labelKey: "panes.dns.directDns" }, { key: "bootstrap", labelKey: "panes.dns.bootstrapDns" }] as const;
-const SWITCHES = [{ key: "fakeIp", labelKey: "panes.dns.fakeIp" }, { key: "blockBindingQuery", labelKey: "panes.dns.blockBindingQuery" }] as const;
+// The hints are the desktop DNS pane's own words, so both shells explain the
+// same setting the same way.
+const FIELDS = [
+  { key: "remote", labelKey: "panes.dns.remoteDns", hintKey: null, placeholderKey: "panes.dns.remoteDnsPlaceholder" },
+  { key: "direct", labelKey: "panes.dns.directDns", hintKey: null, placeholderKey: "panes.dns.directDnsPlaceholder" },
+  { key: "bootstrap", labelKey: "panes.dns.bootstrapDns", hintKey: "panes.dns.bootstrapHint", placeholderKey: "panes.dns.bootstrapDnsPlaceholder" },
+] as const;
+const SWITCHES = [
+  { key: "fakeIp", labelKey: "panes.dns.fakeIp", hintKey: "panes.dns.fakeIpHint" },
+  { key: "blockBindingQuery", labelKey: "panes.dns.blockBindingQuery", hintKey: "panes.dns.blockBindingQueryHint" },
+] as const;
 
 export function DnsScreen() {
   const { t } = useI18n();
   const client = useQueryClient();
   const query = useQuery(queries.dns);
-  const apply = useQuery(queries.settingsApply);
   const [patch, setPatch] = useState<Partial<DnsSettings>>({});
-  const [saving, setSaving] = useState(false);
-  const savingRef = useRef(false);
+  // One guard for saving and for applying: neither starts while the other runs.
+  const { busy: saving, run } = useBusyAction();
+  // What the running connection still owes the saved settings goes stale when
+  // a save lands or the connection changes, so it is read again then — and not
+  // while a save is running, when it would describe the settings before it.
+  const connection = useRuntimeEventStore(runningConnectionKey);
+  const apply = useSettingsApplyStatus({ refreshKey: saving ? null : (connection ?? "") });
   const [saved, setSaved] = useState(false);
   const [advanced, setAdvanced] = useState(false);
   const [error, setError] = useState<unknown>(null);
@@ -40,22 +60,27 @@ export function DnsScreen() {
   const form = query.data ? { ...query.data, ...patch } : null;
   const dirty = Object.keys(patch).length > 0;
   function edit(next: Partial<DnsSettings>) { setPatch((previous) => ({ ...previous, ...next })); setSaved(false); setError(null); setFields((previous) => Object.fromEntries(Object.entries(previous).filter(([key]) => !(key in next)))); }
-  async function save() {
-    if (!form || savingRef.current) return false;
+  const save = async () => (await run(saveEdits)) ?? false;
+  async function saveEdits() {
+    if (!form) return false;
     Keyboard.dismiss();
-    savingRef.current = true; setSaving(true); setError(null); setFields({});
+    setError(null); setFields({});
     try {
+      // The app-settings bundle carries a copy of these fields. A save of it
+      // still on its way — General saves as it is edited — read the old DNS
+      // and would write it back over this one, so this waits its turn.
+      await saveQueue(client).settled();
       const latest = await voyaCommands().loadDnsSettings();
       const result = await voyaCommands().saveDnsSettings({ ...latest, ...patch });
       client.setQueryData(queryKeys.dns, result);
-      await client.invalidateQueries({ queryKey: queryKeys.appSettings });
+      client.setQueryData<AppSettings>(queryKeys.appSettings, (current) => current ? { ...current, dns: result } : current);
       setPatch({}); setSaved(true); return true;
     } catch (failure) {
       setError(failure);
       const validation = appErrorOfKind(failure, "validation");
       if (validation) setFields(validationFieldErrors(t, validation.kind.issues));
       return false;
-    } finally { savingRef.current = false; setSaving(false); }
+    }
   }
   useUnsavedChanges(dirty, saving, save);
   async function defaults() {
@@ -70,20 +95,31 @@ export function DnsScreen() {
     {form ? <>
       {/* Unsaved edits keep the fields open: collapsing them would hide what is about to be saved. */}
       <Disclosure title={t("mobile.advanced")} isExpanded={advanced || dirty} onExpandedChange={setAdvanced}>
-        {FIELDS.map(({ key, labelKey }) => <TextField key={key} isInvalid={Boolean(fields[key])}>
+        {FIELDS.map(({ key, labelKey, hintKey, placeholderKey }) => <TextField key={key} isInvalid={Boolean(fields[key])}>
           <Label>{t(labelKey)}</Label>
-          <Input value={form[key] ?? ""} onChangeText={(value) => edit({ [key]: value })} editable={!saving} autoCapitalize="none" autoCorrect={false} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} accessibilityLabel={t(labelKey)} />
+          <Input value={form[key] ?? ""} placeholder={t(placeholderKey)} onChangeText={(value) => edit({ [key]: value })} editable={!saving} autoCapitalize="none" autoCorrect={false} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} accessibilityLabel={t(labelKey)} />
+          {hintKey ? <Typography className="text-sm text-subtle">{t(hintKey)}</Typography> : null}
           <FieldError>{fields[key]}</FieldError>
         </TextField>)}
-        <ListGroup>{SWITCHES.map(({ key, labelKey }, index) => <SwitchRow key={key} last={index === SWITCHES.length - 1} label={t(labelKey)} isDisabled={saving} value={form[key] ?? false} onChange={(value) => edit({ [key]: value })} />)}</ListGroup>
+        <ListGroup>{SWITCHES.map(({ key, labelKey, hintKey }, index) => <SwitchRow key={key} last={index === SWITCHES.length - 1} label={t(labelKey)} description={hintKey ? t(hintKey) : undefined} isDisabled={saving} value={form[key] ?? false} onChange={(value) => edit({ [key]: value })} />)}</ListGroup>
       </Disclosure>
-      {advanced || dirty ? null : <Typography className="text-base text-subtle">{FIELDS.map(({ key, labelKey }) => `${t(labelKey)}: ${form[key] ?? "—"}`).join("\n")}</Typography>}
+      {advanced || dirty ? null : (
+        // Labeled, and without the bootstrap server when it matches the
+        // direct one: the defaults repeat the address, and "119.29.29.29 ·
+        // 119.29.29.29" reads like a copy-paste slip rather than a summary.
+        <Typography className="text-base text-subtle">
+          {FIELDS.flatMap(({ key, labelKey }) => {
+            if (key === "bootstrap" && form.bootstrap && form.bootstrap === form.direct) return [];
+            return [`${t(labelKey)}: ${form[key] ?? "—"}`];
+          }).join(" · ")}
+        </Typography>
+      )}
       {/* "Saved" only after a real save in this session: a page that opens
           already saying "Saved" teaches the user to ignore the line. */}
-      <Typography accessibilityLiveRegion="polite" className="text-sm text-subtle">{saving ? t("settings.saveStatus.saving") : dirty ? t("mobile.unsaved") : saved ? t("mobile.saved") : null}</Typography>
+      <SaveStatus dirty={dirty} saved={saved} saving={saving} />
       <ErrorNotice error={error} message={t("mobile.saveFailed")} />
-      <Button isDisabled={!dirty || saving} onPress={() => void save()}><Button.Label>{t("actions.save")}</Button.Label></Button>
-      <Button variant="ghost" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.restoreDns")}</Button.Label></Button>
+      <PrimaryButton label={t("actions.save")} isDisabled={!dirty || saving} onPress={() => void save()} />
+      <Button variant="secondary" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.restoreDns")}</Button.Label></Button>
     </> : null}
     <ErrorNotice error={apply.error} retry={() => void apply.refetch()} />
     <ErrorNotice error={applyError} message={t("notices.settingsSavedRuntimeUpdateFailed")} />
@@ -91,9 +127,11 @@ export function DnsScreen() {
     {(saved || !dirty) && apply.data?.action !== undefined && apply.data.action !== "none" ? <>
       <Typography className="text-base text-subtle">{t("mobile.applyPending")}</Typography>
       <Button variant="secondary" isDisabled={saving} onPress={() => {
-        if (savingRef.current) return;
-        savingRef.current = true; setSaving(true); setApplyError(null);
-        void voyaCommands().applyPendingSettings().then(() => client.invalidateQueries({ queryKey: queryKeys.appSettings })).catch(setApplyError).finally(() => { savingRef.current = false; setSaving(false); });
+        void run(async () => {
+          setApplyError(null);
+          await voyaCommands().applyPendingSettings();
+          await client.invalidateQueries({ queryKey: queryKeys.appSettings });
+        }).catch(setApplyError);
       }}><Button.Label>{t("mobile.apply")}</Button.Label></Button>
     </> : null}
   </DetailScreen>;

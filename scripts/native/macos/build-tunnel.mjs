@@ -10,7 +10,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import {
+  captureSpawned,
+  isCliEntrypoint,
+  repoRootFromScript,
+  requireDarwin,
+  run,
+  runCli,
+  truthy,
+} from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
 import {
   appBundleIdentifier,
@@ -192,12 +200,7 @@ function findLibboxFramework() {
 
 function libboxFrameworkLinkage(frameworkPath) {
   const binary = libboxBinaryPath(frameworkPath);
-  const result = capture("file", [binary], {
-    cwd: repoRoot,
-  });
-  if (result.error) {
-    throw result.error;
-  }
+  const result = captureSpawned("file", [binary], { cwd: repoRoot });
   if (result.status !== 0) {
     throw new Error(`file ${binary} failed with status ${result.status}`);
   }
@@ -384,10 +387,5 @@ function main() {
 // Guarded so importing this module (a unit test, another script) cannot start
 // building an appex as a side effect of the import.
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

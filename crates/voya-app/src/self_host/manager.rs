@@ -10,7 +10,7 @@
 //! the meantime.
 
 use std::{
-    sync::{Arc, Mutex as StdMutex},
+    sync::{Arc, Mutex as StdMutex, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -25,7 +25,9 @@ use voya_contracts::{
 };
 use voya_core::{SelfHostClashApi, LOOPBACK};
 use voya_db::Database;
-use voya_net::clash::{ClashApiEndpoint, ClashRestClient};
+use voya_net::clash::{
+    ClashApiEndpoint, ClashHttpTransport, ClashRestClient, ReqwestClashHttpTransport,
+};
 use voya_platform::process::ProcessExit;
 
 use super::{
@@ -72,6 +74,10 @@ struct Inner {
     shutdown: watch::Sender<bool>,
     check_now: Notify,
     tasks: StdMutex<Vec<JoinHandle<()>>>,
+    /// The statistics poll asks the node's own Clash API every few seconds;
+    /// one transport keeps that connection alive instead of building an HTTP
+    /// client per poll. Built on first use, so a node never started costs none.
+    clash_transport: OnceLock<Arc<dyn ClashHttpTransport>>,
 }
 
 struct NodeState {
@@ -136,6 +142,7 @@ impl SelfHostManager {
                 shutdown,
                 check_now: Notify::new(),
                 tasks: StdMutex::new(Vec::new()),
+                clash_transport: OnceLock::new(),
             }),
         };
         // A config left by a crashed run holds the old private key.
@@ -488,11 +495,18 @@ impl SelfHostManager {
                 download_total_bytes: 0.0,
             });
         };
-        let client = ClashRestClient::new(ClashApiEndpoint {
-            host: LOOPBACK.to_string(),
-            port,
-            secret: Some(secret.into_token()),
-        });
+        let transport = self
+            .inner
+            .clash_transport
+            .get_or_init(|| Arc::new(ReqwestClashHttpTransport::new()));
+        let client = ClashRestClient::with_transport(
+            ClashApiEndpoint {
+                host: LOOPBACK.to_string(),
+                port,
+                secret: Some(secret.into_token()),
+            },
+            Arc::clone(transport),
+        );
         let connections = client.get_connections().await?;
         Ok(SelfHostStats {
             active_connections: u32::try_from(connections.connections.len()).unwrap_or(u32::MAX),

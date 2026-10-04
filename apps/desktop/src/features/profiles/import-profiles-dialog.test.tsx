@@ -37,12 +37,9 @@ function renderDialog(onImported = vi.fn(), onOpenChange = vi.fn()) {
   const queryClient = createTestQueryClient({ gcTime: 0 });
   queryClients.add(queryClient);
 
+  // The page mounts the dialog only while it is open.
   const ui = (open: boolean) => (
-    <ImportProfilesDialog
-      onImported={onImported}
-      onOpenChange={onOpenChange}
-      open={open}
-    />
+    open ? <ImportProfilesDialog onImported={onImported} onOpenChange={onOpenChange} /> : <></>
   );
   const result = renderWithQuery(ui(true), { queryClient });
   return {
@@ -96,7 +93,7 @@ describe("ImportProfilesDialog import results", () => {
     // open, the profiles banner owns it once it closes.
     expect(
       await screen.findByText(
-        "Imported 0 node(s). 1 skipped. 2 failed to parse. Target: Manual import.",
+        "Imported 0 nodes. 1 skipped. 2 failed to parse. Target: Manual import.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Line 3 was skipped: the link is not in a format VoyaVPN can read.")).toBeInTheDocument();

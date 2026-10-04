@@ -1,9 +1,9 @@
 //! Thin adapters over `voya_app::policy_groups` and the running group's Clash API.
 
-use voya_app::contract_map::policy_group_entry_to_contract;
 use voya_app::policy_groups::{
-    delete_policy_groups_use_case, running_policy_group_runtime, save_policy_group_use_case,
-    select_member_use_case, set_active_policy_group_use_case, test_running_policy_group_delay,
+    delete_policy_groups_use_case, list_policy_groups_use_case, running_policy_group_runtime,
+    save_policy_group_use_case, select_member_use_case, set_active_policy_group_use_case,
+    test_running_policy_group_delay,
 };
 use voya_contracts::{PolicyGroup, PolicyGroupListing, PolicyGroupRuntime};
 
@@ -15,19 +15,8 @@ pub async fn list_policy_groups(
     state: tauri::State<'_, AppState>,
 ) -> Result<PolicyGroupListing, AppError> {
     let config = state.config_mutations().current_config();
-    let entries = state
-        .services()
-        .policy_groups()
-        .list(&config)
-        .await
-        .map_err(AppError::from)?;
 
-    Ok(PolicyGroupListing {
-        entries: entries
-            .into_iter()
-            .map(policy_group_entry_to_contract)
-            .collect(),
-    })
+    list_policy_groups_use_case(state.services(), &config).await
 }
 
 /// Saves a group. Editing the group a running core uses restarts the core so
@@ -101,16 +90,6 @@ pub async fn select_policy_group_member<R: tauri::Runtime>(
     group_id: String,
     profile_id: String,
 ) -> Result<PolicyGroup, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&group_id, IPC_ID_MAX_CHARS),
-        "policy group id",
-        AppErrorSubsystem::PolicyGroup,
-    )?;
-    map_ipc_input(
-        input_safety::validate_required_text(&profile_id, IPC_ID_MAX_CHARS),
-        "node id",
-        AppErrorSubsystem::PolicyGroup,
-    )?;
     let (group, live_error) = select_member_use_case(
         state.config_mutations(),
         &state.supervisor(),

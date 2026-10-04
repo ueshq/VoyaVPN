@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@/test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { ModalHost } from "@/components/app-shell/modal-host";
 import { changeLocale } from "@voya/i18n";
 import type { CoreSeedInstallStatus } from "@voya/contracts";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useShellStore } from "@/stores/shell-store";
 import { installFakeCommands } from "@voya/features/test/backend";
 
 const ipcMocks = installFakeCommands({
@@ -53,6 +54,21 @@ describe("ModalHost", () => {
     expect(screen.queryByRole("tab", { name: "General" })).not.toBeInTheDocument();
   });
 
+  it("loads the close prompt when the shell first asks, and keeps it for the next time", async () => {
+    renderModalHost();
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    act(() => useShellStore.getState().setCloseRequestOpen(true));
+    expect(await screen.findByText("Keep running in tray")).toBeInTheDocument();
+
+    // Closed by the prompt itself, which stays mounted to play its way out.
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(useShellStore.getState().closeRequestOpen).toBe(false));
+    act(() => useShellStore.getState().setCloseRequestOpen(true));
+    expect(await screen.findByText("Keep running in tray")).toBeInTheDocument();
+    act(() => useShellStore.getState().setCloseRequestOpen(false));
+  });
+
   it("installs the seeded core, connects, and closes the modal", async () => {
     const user = userEvent.setup();
     openMissingCoreModal();
@@ -80,6 +96,27 @@ describe("ModalHost", () => {
     expect(screen.queryByRole("button", { name: "Repair" })).not.toBeInTheDocument();
     expect(ipcMocks.connectActiveProfile).not.toHaveBeenCalled();
     expect(useRuntimeActionStore.getState().missingCore).not.toBeNull();
+  });
+
+  it("cannot be dismissed while the install is running", async () => {
+    const user = userEvent.setup();
+    let finish: (result: ReturnType<typeof seedInstallResult>) => void = () => undefined;
+    ipcMocks.installCoreSeed.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    openMissingCoreModal();
+    renderModalHost();
+    await user.click(await screen.findByRole("button", { name: "Repair" }));
+
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    // Still there to show how the install ends.
+    expect(useRuntimeActionStore.getState().missingCore).not.toBeNull();
+    finish(seedInstallResult("seedMissing"));
+    expect(await screen.findByText(/No bundled component is available to repair with/)).toBeInTheDocument();
   });
 
   it("keeps the modal open with the failure text when the install rejects", async () => {

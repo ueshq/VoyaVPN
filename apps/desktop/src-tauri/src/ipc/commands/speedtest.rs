@@ -10,11 +10,6 @@ pub async fn run_speedtest<R: tauri::Runtime>(
     let voya_contracts::SpeedtestTarget::Profiles {
         profile_ids: index_ids,
     } = request.target;
-    map_ipc_input(
-        input_safety::validate_text_list(&index_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "node id",
-        AppErrorSubsystem::Speedtest,
-    )?;
     let config = state.config_mutations().current_config();
     let manager = state.speedtest_manager();
     let emit_app = app.clone();
@@ -27,8 +22,7 @@ pub async fn run_speedtest<R: tauri::Runtime>(
                 tracing::warn!(?error, "failed to emit speedtest results");
             }
         })
-        .await
-        .map_err(AppError::from)?;
+        .await?;
 
     emit_invalidation(
         &app,

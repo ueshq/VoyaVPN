@@ -39,19 +39,24 @@ function WindowControls() {
     let active = true;
     let unlisten: (() => void) | undefined;
 
+    // A failed read or a failed subscription leaves the icon as it was; the
+    // buttons still work, so neither is worth more than not rejecting unhandled.
     const sync = () => {
       void voyaCommands()
         .isWindowMaximized()
         .then((value) => {
-        if (active) setMaximized(value);
-      });
+          if (active) setMaximized(value);
+        })
+        .catch(() => undefined);
     };
 
     sync();
-    void onWindowResized(sync).then((fn) => {
-      if (active) unlisten = fn;
-      else fn();
-    });
+    void onWindowResized(sync)
+      .then((fn) => {
+        if (active) unlisten = fn;
+        else fn();
+      })
+      .catch(() => undefined);
 
     return () => {
       active = false;
@@ -67,7 +72,7 @@ function WindowControls() {
       <button
         aria-label={t("window.minimize")}
         className={buttonClass}
-        onClick={() => void voyaCommands().minimizeWindow()}
+        onClick={() => void voyaCommands().minimizeWindow().catch(() => undefined)}
         type="button"
       >
         <Minus className="size-4" aria-hidden="true" />
@@ -75,7 +80,7 @@ function WindowControls() {
       <button
         aria-label={maximized ? t("window.restore") : t("window.maximize")}
         className={buttonClass}
-        onClick={() => void voyaCommands().toggleMaximizeWindow()}
+        onClick={() => void voyaCommands().toggleMaximizeWindow().catch(() => undefined)}
         type="button"
       >
         {maximized ? (
@@ -87,7 +92,7 @@ function WindowControls() {
       <button
         aria-label={t("window.close")}
         className="flex h-full w-12 items-center justify-center text-foreground/70 transition-colors hover:bg-destructive hover:text-white"
-        onClick={() => void voyaCommands().closeWindow()}
+        onClick={() => void voyaCommands().closeWindow().catch(() => undefined)}
         type="button"
       >
         <X className="size-4" aria-hidden="true" />

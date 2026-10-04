@@ -1,10 +1,8 @@
-import { ChevronDown, ChevronRight } from "lucide-react-native";
 import { PressableFeedback } from "heroui-native/pressable-feedback";
 import { Typography } from "heroui-native/text";
-import type { ReactNode } from "react";
 import { View } from "react-native";
 
-import { useToneColor } from "./tone";
+import { ExpandChevron } from "./expand-chevron";
 
 /**
  * A section's heading, set outside the card it names.
@@ -18,25 +16,16 @@ export function SectionHeader({
   expanded,
   onToggle,
   title,
-  trailing,
 }: {
   /** A short fact beside the title, such as a count. */
   detail?: string;
   expanded?: boolean;
   onToggle?: () => void;
   title: string;
-  trailing?: ReactNode;
 }) {
-  const chevronColor = useToneColor("neutral");
   const heading = (
     <View className="min-w-0 flex-1 flex-row items-center gap-1.5">
-      {onToggle ? (
-        expanded ? (
-          <ChevronDown size={18} color={chevronColor} accessible={false} />
-        ) : (
-          <ChevronRight size={18} color={chevronColor} accessible={false} />
-        )
-      ) : null}
+      {onToggle ? <ExpandChevron expanded={expanded} /> : null}
       <Typography
         numberOfLines={2}
         maxFontSizeMultiplier={2}
@@ -70,7 +59,6 @@ export function SectionHeader({
           {heading}
         </View>
       )}
-      {trailing}
     </View>
   );
 }

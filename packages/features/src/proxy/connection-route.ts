@@ -1,4 +1,7 @@
 import type { ProxyConnectionItem } from "@voya/contracts";
+import type { TranslationFunction } from "@voya/i18n/core";
+
+import { outboundLabelKey } from "../routing/rule-outbound";
 
 export type ConnectionRoute =
   | { kind: "block" }
@@ -23,4 +26,11 @@ export function connectionRoute(connection: Pick<ProxyConnectionItem, "chains">)
   if (lower.includes("direct")) return { kind: "direct" };
   const node = tags.findLast((tag) => !BUILT_IN_TAGS.has(tag.toLowerCase())) ?? null;
   return { kind: "proxy", node };
+}
+
+/** Where a connection went, in words: the node's name, or the kind of outbound. */
+export function routeLabel(route: ConnectionRoute, t: TranslationFunction) {
+  if (route.kind === "proxy" && route.node) return route.node;
+  const key = outboundLabelKey(route.kind);
+  return key ? t(key) : "";
 }

@@ -89,16 +89,40 @@ export function capture(program, args, options = {}) {
   });
 }
 
-/** Capture a required command, preserving output and reporting failures safely. */
-export function checkedCapture(program, args, options = {}, captureCommand = capture) {
+/**
+ * Capture a command that has to run, whatever it exits with: a spawn failure
+ * (the program is missing, the fork was refused) throws, and the status is the
+ * caller's to read. For a command whose non-zero exit is an answer rather than
+ * a failure — `pgrep` finding nothing, `sc.exe` reporting a stopped service.
+ */
+export function captureSpawned(program, args, options = {}, captureCommand = capture) {
   const result = captureCommand(program, args, options);
   if (result.error) {
     throw result.error;
   }
+  return result;
+}
+
+/** Capture a required command, preserving output and reporting failures safely. */
+export function checkedCapture(program, args, options = {}, captureCommand = capture) {
+  const result = captureSpawned(program, args, options, captureCommand);
   if (result.status !== 0) {
     throw commandFailure(program, args, result);
   }
   return result;
+}
+
+/**
+ * Runs a script's entry point, reporting a failure as its message and a
+ * non-zero exit: a stack trace says nothing to someone running a build step.
+ */
+export function runCli(main) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
 }
 
 export function run(program, args, options = {}) {

@@ -2,6 +2,7 @@ import { ControlField } from "heroui-native/control-field";
 import { Label } from "heroui-native/label";
 import { Separator } from "heroui-native/separator";
 import { Switch } from "heroui-native/switch";
+import { Typography } from "heroui-native/text";
 import { View } from "react-native";
 
 /**
@@ -15,12 +16,15 @@ import { View } from "react-native";
  * element that is announced and tested, under its own label.
  */
 export function SwitchRow({
+  description,
   isDisabled,
   label,
   last = false,
   onChange,
   value,
 }: {
+  /** A line under the label explaining what the setting trades away. */
+  description?: string;
   isDisabled?: boolean;
   label: string;
   last?: boolean;
@@ -36,8 +40,16 @@ export function SwitchRow({
         isSelected={value}
         onSelectedChange={onChange}
       >
-        <Label className="min-w-0 flex-1">{label}</Label>
+        <View className="min-w-0 flex-1 gap-1">
+          <Label className="min-w-0 flex-1">{label}</Label>
+          {description ? (
+            <Typography className="text-sm text-subtle">{description}</Typography>
+          ) : null}
+        </View>
         <ControlField.Indicator>
+          {/* The bare label: the description below it is read as part of the
+              row's content, and appending it here would break the exact-name
+              lookups tests and VoiceOver users already use. */}
           <Switch accessibilityLabel={label} hitSlop={10} />
         </ControlField.Indicator>
       </ControlField>

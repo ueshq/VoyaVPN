@@ -12,6 +12,7 @@ import { Switch } from "heroui-native/switch";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import { Route } from "lucide-react-native";
+import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { useCallback, useMemo } from "react";
 import { FlatList, View } from "react-native";
 
@@ -50,16 +51,21 @@ export function RulesScreen() {
   const trafficMode = useTrafficMode();
   const rulesApply = trafficMode.mode !== "global";
   const rules = useMemo(() => withListPositions(routing.rules), [routing.rules]);
+  // `routing` is a fresh object every render; a renderer that depended on it
+  // would redraw every row each time. It depends on the fields a row reads,
+  // and reaches the toggle — rebuilt each render — through a ref.
+  const { groupOutbounds, nodeNames, pendingToggles } = routing;
+  const toggleRuleRef = useLatestRef(routing.toggleRule);
 
   const renderRule = useCallback(
     ({ item: { first, item, last } }: { item: { first: boolean; item: RoutingRule; last: boolean } }) => {
-      const locked = !rulesApply || routing.pendingToggles.has(item.id);
+      const locked = !rulesApply || pendingToggles.has(item.id);
       // The rules a fresh install seeds carry reserved remarks — `voya:ai-services`
       // and the like — which are an identity, not a name. The shared helper is
       // what turns them into the words the desktop shows.
       const name = ruleDisplayName(item, t);
       const target = outboundText(
-        describeOutbound(item.outbound, routing.nodeNames, routing.groupOutbounds),
+        describeOutbound(item.outbound, nodeNames, groupOutbounds),
         t,
       );
       return (
@@ -77,7 +83,7 @@ export function RulesScreen() {
             <Switch
               isSelected={item.enabled}
               isDisabled={locked}
-              onSelectedChange={(enabled) => void routing.toggleRule(item, enabled)}
+              onSelectedChange={(enabled) => void toggleRuleRef.current(item, enabled)}
               accessibilityLabel={name}
               hitSlop={10}
             />
@@ -85,7 +91,7 @@ export function RulesScreen() {
         />
       );
     },
-    [routing, rulesApply, t],
+    [groupOutbounds, nodeNames, pendingToggles, rulesApply, t, toggleRuleRef],
   );
 
   return (
@@ -118,14 +124,15 @@ export function RulesScreen() {
           {rulesApply ? null : <Banner status="warning" message={t("panes.routing.globalModeBanner")} />}
           <ErrorNotice error={routing.loadError} />
           <ErrorNotice error={routing.operationError} />
+          {rules.length > 0 ? (
+            // Above the list, not below it: as a footer the hint ended up
+            // resting under the floating tab bar whenever the rules filled
+            // the screen, readable only after scrolling.
+            <Typography className="text-sm text-subtle">
+              {t("panes.routing.ruleOrderHint")}
+            </Typography>
+          ) : null}
         </View>
-      }
-      ListFooterComponent={
-        rules.length > 0 ? (
-          <Typography className="px-page pt-3 text-sm text-subtle">
-            {t("panes.routing.ruleOrderHint")}
-          </Typography>
-        ) : undefined
       }
       ListEmptyComponent={
         <View className="px-page">

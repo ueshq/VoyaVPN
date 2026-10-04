@@ -238,14 +238,8 @@ pub(crate) async fn tray_activate_node<R: tauri::Runtime>(
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let activated = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(ProfileManager::new_in(unit_of_work)
-                .set_active_profile(config, &index_id)
-                .await?)
-        })
-        .await;
+    let activated =
+        voya_app::profiles::set_active_profile_use_case(state.config_mutations(), index_id).await;
     tray_commit(
         app,
         &state,
@@ -271,16 +265,11 @@ pub(crate) async fn tray_activate_group<R: tauri::Runtime>(
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    let activated = state
-        .config_mutations()
-        .mutate(async |unit_of_work, config| -> Result<_, AppError> {
-            Ok(
-                voya_app::policy_groups::PolicyGroupManager::new_in(unit_of_work)
-                    .set_active(config, &group_id)
-                    .await?,
-            )
-        })
-        .await;
+    let activated = voya_app::policy_groups::set_active_policy_group_use_case(
+        state.config_mutations(),
+        group_id,
+    )
+    .await;
     tray_commit(
         app,
         &state,

@@ -19,6 +19,12 @@ export type VoyaTransport = {
     name: Name,
     listener: (payload: VoyaEventPayload<Name>) => void,
   ) => () => void;
+  /**
+   * Moves a database the backend rejected aside, so the next command starts
+   * against a fresh one. Not a command: it is what is left when no command
+   * can run. A failure rejects with the typed `AppError`, like a command's.
+   */
+  resetApplicationData: () => Promise<void>;
 };
 
 /** The name the native module registers itself under, on both platforms. */
@@ -38,8 +44,8 @@ export function createTransport(): VoyaTransport {
 
 /**
  * The host publishes all three channels as one native event with the channel
- * in its payload, so there is one listener rather than three registrations to
- * keep in step.
+ * in its payload, so there is one native event to register for rather than
+ * three to keep in step.
  */
 function nativeEvents(native: VoyaNativeModule): VoyaNativeEvents {
   const emitter = new NativeEventEmitter(native);

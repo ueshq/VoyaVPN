@@ -16,9 +16,7 @@ export const GROUP_OUTBOUND_PREFIX = "group:";
 
 /** The label key for a built-in outbound tag, or `null` for any other tag. */
 export function outboundLabelKey(tag: string): TranslationKey | null {
-  return Object.hasOwn(OUTBOUND_LABEL_KEYS, tag)
-    ? OUTBOUND_LABEL_KEYS[tag as BuiltinOutbound]
-    : null;
+  return isBuiltinOutbound(tag) ? OUTBOUND_LABEL_KEYS[tag] : null;
 }
 
 /** A policy group a rule can send traffic through. */
@@ -60,11 +58,6 @@ export function nodeOutboundNames(entries: readonly ProfileSummaryEntry[]): Read
   return names;
 }
 
-/**
- * Where a rule sends matching traffic. A rule without an outbound goes through
- * the proxy. `nodeNames` and `groups` are `null` until their lists have loaded,
- * and nothing is reported missing before then.
- */
 /** Where a rule sends matching traffic, as one line of text for a list row. */
 export function outboundText(target: OutboundTarget, t: TranslationFunction): string {
   switch (target.kind) {
@@ -82,6 +75,11 @@ export function outboundText(target: OutboundTarget, t: TranslationFunction): st
   }
 }
 
+/**
+ * Where a rule sends matching traffic. A rule without an outbound goes through
+ * the proxy. `nodeNames` and `groups` are `null` until their lists have loaded,
+ * and nothing is reported missing before then.
+ */
 export function describeOutbound(
   outbound: string | null | undefined,
   nodeNames: ReadonlySet<string> | null,

@@ -10,7 +10,7 @@ import type {
 import type { TranslationFunction } from "@voya/i18n/core";
 import { getErrorMessage } from "@voya/utils/error";
 
-import { noticeText } from "./messages";
+import { noticeText } from "./notice-text";
 import { invalidationQueryKey, queryKeys } from "./query-keys";
 import { speedtestPending, useRuntimeEventStore } from "./runtime-event-store";
 import { useToastStore } from "./toast-store";
@@ -44,7 +44,7 @@ const COUNTRY_REFRESH_MS = 3000;
 export type ShellTarget =
   | { tab: "logs" }
   | { tab: "profiles" }
-  | { tab: "connections"; view: "connections" };
+  | { tab: "connections" };
 
 export type EventRouterOptions = {
   queryClient: QueryClient;
@@ -97,14 +97,22 @@ export function createEventRouter(options: EventRouterOptions): EventRouter {
         });
       }
     }
-    event.keys.forEach((item) => {
-      // `null` only for a scope this build cannot map, which `check:bindings`
-      // makes impossible; skipping beats throwing inside the event callback.
+    // `null` only for a scope this build cannot map, which `check:bindings`
+    // makes impossible; skipping beats throwing inside the event callback.
+    const invalidated = event.keys.flatMap((item) => {
       const queryKey = invalidationQueryKey(item.scope);
-      if (queryKey) {
+      return queryKey ? [queryKey] : [];
+    });
+    for (const queryKey of invalidated) {
+      // One event often names a root and something under it (`profiles` and
+      // the policy groups it contains). Invalidating both cancels the fetch the
+      // first one started and sends the same command a second time.
+      const covered = invalidated.some((root) =>
+        root.length < queryKey.length && root.every((part, index) => part === queryKey[index]));
+      if (!covered) {
         void options.queryClient.invalidateQueries({ queryKey });
       }
-    });
+    }
   }
 
   function onAppEvent(event: AppEvent) {
@@ -170,7 +178,7 @@ function toShellTarget(tab: ShellTabTarget): ShellTarget {
     case "profiles":
       return { tab: "profiles" };
     case "proxyConnections":
-      return { tab: "connections", view: "connections" };
+      return { tab: "connections" };
   }
 }
 

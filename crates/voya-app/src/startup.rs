@@ -4,12 +4,123 @@
 use std::{
     error::Error,
     path::Path,
-    time::{SystemTime, UNIX_EPOCH},
+    sync::{Arc, RwLock},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use voya_contracts::DatabaseErrorCode;
+use voya_core::AppConfig;
 use voya_db::DbError;
 pub use voya_db::{manual_database_reset_command, DatabaseBackup, DATABASE_NAME};
+use voya_platform::{coreinfo::TargetOs, paths::AppPaths};
+
+use crate::{
+    config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
+    services::AppServices,
+};
+
+/// The first half of a launch: storage is open and the settings are read.
+///
+/// Both hosts start the same way, and the two failures that can stop a launch
+/// — a database this build rejects, settings it cannot read — both happen
+/// here, as a `DbError` each host turns into its own recovery offer. What a
+/// host does with the loaded settings before anything may write (the desktop
+/// undoes a proxy a crashed run left behind) happens between this and
+/// [`AppOpening::finish`].
+#[derive(Debug)]
+pub struct AppOpening {
+    pub services: AppServices,
+    /// The settings as loaded for this platform.
+    pub config: AppConfig,
+    target_os: TargetOs,
+}
+
+/// A launch whose storage is ready for commands.
+#[derive(Debug)]
+pub struct OpenedApp {
+    pub services: AppServices,
+    pub shared_config: SharedAppConfig,
+    pub config_mutations: Arc<ConfigMutationCoordinator>,
+}
+
+impl AppOpening {
+    /// Opens the database and loads the settings for `target_os`.
+    /// `system_locale` seeds the language on a fresh install only.
+    pub async fn open(
+        database_path: &Path,
+        runtime_paths: AppPaths,
+        target_os: TargetOs,
+        system_locale: Option<&str>,
+    ) -> Result<Self, DbError> {
+        let started = Instant::now();
+        let services = AppServices::connect(database_path, runtime_paths).await?;
+        log_startup_step("open database", started);
+
+        // A fresh install starts in the platform's native VPN mode where it
+        // has one, and a platform with a single capture path never loads in a
+        // mode it does not offer.
+        let started = Instant::now();
+        let config = services.load_config_for(target_os, system_locale).await?;
+        log_startup_step("load settings", started);
+
+        Ok(Self {
+            services,
+            config,
+            target_os,
+        })
+    }
+
+    /// Builds the mutation coordinator and runs the two housekeeping steps.
+    ///
+    /// Neither can fail a launch. A fresh install starts with the default
+    /// routing profile rather than an empty Rules page, and a failure costs
+    /// only that seed. The orphaned-metrics sweep is hygiene: such rows are
+    /// invisible behind the listings' join and are swept again by the speedtest
+    /// and statistics paths, so refusing to start over one — with no reset to
+    /// offer, since it is not a rejected database — would only lock the user
+    /// out.
+    pub async fn finish(self) -> OpenedApp {
+        let Self {
+            services,
+            config,
+            target_os,
+        } = self;
+        let shared_config: SharedAppConfig = Arc::new(RwLock::new(config));
+        let config_mutations = Arc::new(
+            services
+                .config_mutations(Arc::clone(&shared_config))
+                .with_target_os(target_os),
+        );
+
+        let started = Instant::now();
+        if let Err(error) = services.ensure_default_routing(&config_mutations).await {
+            tracing::warn!(?error, "failed to seed the default routing profile");
+        }
+        log_startup_step("seed default routing", started);
+
+        let started = Instant::now();
+        if let Err(error) = services.initialize_profile_metrics().await {
+            tracing::warn!(?error, "failed to sweep orphaned node metrics");
+        }
+        log_startup_step("sweep orphaned metrics", started);
+
+        OpenedApp {
+            services,
+            shared_config,
+            config_mutations,
+        }
+    }
+}
+
+/// One `startup step` line. The desktop shell logs its own steps through this
+/// too, so a launch reads as one sequence whichever layer ran the step.
+pub fn log_startup_step(step: &'static str, started: Instant) {
+    tracing::info!(
+        step,
+        elapsed_ms = started.elapsed().as_millis(),
+        "startup step"
+    );
+}
 
 /// Reads the OS trust store every HTTPS client shares on a thread of its own.
 ///
@@ -137,12 +248,54 @@ mod tests {
         }
     }
 
+    /// The sequence both hosts launch through: a fresh directory comes up
+    /// with the default routing profile, and a second launch over the same
+    /// database adds no second one.
+    #[tokio::test]
+    async fn opening_seeds_the_default_routing_once() {
+        let app_dir =
+            std::env::temp_dir().join(format!("voyavpn-opening-test-{}", uuid::Uuid::new_v4()));
+        let database_path = app_dir.join(DATABASE_NAME);
+
+        for launch in 0..2 {
+            let opened = AppOpening::open(
+                &database_path,
+                AppPaths::new(&app_dir),
+                TargetOs::Linux,
+                Some("en-US"),
+            )
+            .await
+            .expect("the database opens")
+            .finish()
+            .await;
+
+            let routings = opened
+                .services
+                .list_routings()
+                .await
+                .expect("the routing profiles list");
+            assert_eq!(routings.len(), 1, "launch {launch}");
+            assert_eq!(
+                opened.config_mutations.current_config().active_routing_id,
+                routings[0].id,
+                "launch {launch}"
+            );
+        }
+
+        // Best effort: a pool that is still closing may hold the files open.
+        let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
     #[test]
     fn schema_and_unreadable_database_failures_offer_a_reset() {
         let schema = boxed(DbError::UnsupportedDatabaseSchema {
             path: PathBuf::from("voyavpn.sqlite"),
             found: Some(10),
             expected: 11,
+            reason: voya_db::SchemaRejectionReason::Version {
+                found: 10,
+                expected: 11,
+            },
             manual_reset_command: "rm -f -- voyavpn.sqlite".to_string(),
         });
         assert!(offers_database_reset(schema.as_ref()));

@@ -1,11 +1,13 @@
 //! Spawn, own and reap subprocesses, including bounded stop.
 use super::logging::drain_child_pipe;
 use super::{
-    hidden_command, write_generated_scripts, ProcessError, ProcessExit, ProcessExitHandler,
-    ProcessHandle, ProcessLogSink, ProcessOutput, ProcessOutputStream, ProcessRunner, ProcessSpawn,
+    hidden_command, output_with_timeout, write_generated_scripts, ProcessError, ProcessExit,
+    ProcessExitHandler, ProcessHandle, ProcessLogSink, ProcessOutput, ProcessOutputStream,
+    ProcessRunner, ProcessSpawn,
 };
 use std::{
     collections::HashMap,
+    io,
     process::{Child, Command, Stdio},
     sync::{mpsc, Arc, Mutex, MutexGuard, Weak},
     thread,
@@ -97,12 +99,28 @@ impl ProcessRunner for StdProcessRunner {
     fn run_oneshot(&self, request: ProcessSpawn) -> Result<ProcessOutput, ProcessError> {
         write_generated_scripts(&request.generated_scripts)?;
 
-        let output = build_command(&request)
-            .output()
-            .map_err(|source| ProcessError::Spawn {
-                executable: request.executable.clone(),
-                source,
-            })?;
+        let mut command = build_command(&request);
+        let spawn_failed = |source: io::Error| ProcessError::Spawn {
+            executable: request.executable.clone(),
+            source,
+        };
+        let output = match request.timeout {
+            Some(timeout) => {
+                output_with_timeout(&mut command, timeout).map_err(|source| {
+                    // The helper started and hung, which is a different thing
+                    // to chase than one that could not be started.
+                    if source.kind() == io::ErrorKind::TimedOut {
+                        ProcessError::TimedOut {
+                            executable: request.executable.clone(),
+                            timeout,
+                        }
+                    } else {
+                        spawn_failed(source)
+                    }
+                })?
+            }
+            None => command.output().map_err(spawn_failed)?,
+        };
         Ok(ProcessOutput {
             status_code: output.status.code(),
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),

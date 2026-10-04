@@ -30,12 +30,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@voya/ui/components/select";
-import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { formatTimeOfDay } from "@voya/utils/formatting";
 import { voyaCommands } from "@voya/client/transport";
-import { logLineText } from "@voya/client/messages";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { StoredLogLine } from "@voya/client/runtime-event-store";
 import type { LogLevel } from "@voya/contracts";
@@ -46,46 +44,29 @@ import { writeClipboard } from "@/lib/clipboard";
 import { firstPaintVirtualItems } from "@/lib/virtual-list";
 import { toastError, useToastStore } from "@voya/client/toast-store";
 
+import { resolveLogLine } from "@voya/features/logs/resolve-log-line";
 import { useLogStream } from "@voya/features/logs/use-log-stream";
 
 export type LogFilter = "standard" | "issues" | "all";
 const ROW_HEIGHT = 36;
 const STICK_THRESHOLD = 24;
 
-type ResolvedLogLine = StoredLogLine & { searchText: string; text: string };
-
-/**
- * Translated lines, keyed by the stored line. The store keeps each line's
- * object from frame to frame, so a line is translated once per language
- * instead of all 500 on every flush; entries leave with their lines.
- */
-const resolvedLines = new WeakMap<
-  StoredLogLine,
-  { resolved: ResolvedLogLine; t: TranslationFunction }
->();
-
-function resolveLogLine(t: TranslationFunction, line: StoredLogLine): ResolvedLogLine {
-  const cached = resolvedLines.get(line);
-  if (cached?.t === t) return cached.resolved;
-  const text = logLineText(t, line.body);
-  const resolved = { ...line, searchText: text.toLowerCase(), text };
-  resolvedLines.set(line, { resolved, t });
-  return resolved;
-}
-
 export function LogsPanel({
+  active,
   search,
   onSearchChange,
   filter,
   onFilterChange,
 }: {
+  /** `false` while the panel stays mounted behind another Settings tab. */
+  active: boolean;
   search: string;
   onSearchChange: (value: string) => void;
   filter: LogFilter;
   onFilterChange: (value: LogFilter) => void;
 }) {
   const { t } = useI18n();
-  useLogStream();
+  useLogStream(active);
   const clearLogs = useRuntimeEventStore((state) => state.clearLogs);
   const logLines = useRuntimeEventStore((state) => state.logLines);
   const [selected, setSelected] = useState<StoredLogLine | null>(null);
@@ -112,13 +93,7 @@ export function LogsPanel({
   );
   const pushToast = useToastStore((state) => state.pushToast);
   // Copy and export take what the filter and search currently show.
-  const shownText = () =>
-    filtered
-      .map(
-        (line) =>
-          `${formatTimeOfDay(line.loggedAt)} [${line.level}] ${line.text}`,
-      )
-      .join("\n");
+  const shownText = () => filtered.map((line) => line.stamped).join("\n");
 
   async function copyShown() {
     try {
@@ -361,7 +336,7 @@ export function LogsPanel({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="select-text whitespace-pre-wrap font-mono text-sm [overflow-wrap:anywhere]">
-            {selected ? logLineText(t, selected.body) : ""}
+            {selected ? resolveLogLine(t, selected).text : ""}
           </DialogBody>
         </ScrollableDialogContent>
       </Dialog>

@@ -3,7 +3,7 @@
  *
  * `false` while the window is hidden into the tray or minimized, which is when
  * live streams should stop feeding it. `useAppVisible` is the shared hook that
- * reads this; nothing subscribes to the document directly.
+ * reads this.
  */
 export function subscribeToDocumentVisible(onChange: () => void) {
   document.addEventListener("visibilitychange", onChange);

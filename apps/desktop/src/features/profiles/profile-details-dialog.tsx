@@ -1,3 +1,4 @@
+import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Zap } from "lucide-react";
@@ -45,10 +46,11 @@ export function ProfileDetailsDialog({
     (state) => state.serverStatsByProfileId[item.profile.id],
   );
   const { profile } = item;
-  const details = useQuery({
+  const detailsQuery = useQuery({
     queryFn: () => voyaCommands().getProfile(profile.id),
     queryKey: profileDetailsQueryKey(profile.id),
-  }).data;
+  });
+  const details = detailsQuery.data;
   const transport = details?.profile.transport;
   const traffic = details?.traffic;
   const bytes = (live: number | null | undefined, stored: number | null | undefined) => {
@@ -97,6 +99,12 @@ export function ProfileDetailsDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
+          {/* Without this a failed read looks like a node with no transport, TLS or traffic. */}
+          {detailsQuery.error ? (
+            <p className="mb-4 text-sm text-danger" role="alert">
+              {redactOperationalError(detailsQuery.error)}
+            </p>
+          ) : null}
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-4 text-sm [&_dt]:text-muted-foreground [&_dd]:break-all">
             {rows.map(([label, value]) => (
               <Fragment key={label}>

@@ -244,6 +244,16 @@ impl<'flow> CoreFlow<'flow> {
                     LogCode::CoreExitRestarted { attempt },
                     Some(&exit),
                 );
+                // On a task of its own, like the give-up below: a disconnect or
+                // a reconnect the user started meanwhile owns the OS proxy by
+                // the time this runs. Wait for it, and settle only if the core
+                // this event is about is still the one running — applying the
+                // proxy for it otherwise points the system at a dead port, and
+                // a newer connect has already settled itself.
+                let _flow = self.runtime.settings_application().flow_lock.lock().await;
+                if !self.is_running_core(&snapshot).await {
+                    return;
+                }
                 // The pid changed, so the UI needs the new snapshot.
                 self.settle_traffic_mode(config, &snapshot).await;
                 let _ = self
@@ -277,6 +287,14 @@ impl<'flow> CoreFlow<'flow> {
                     .log(LogLevel::Error, LogCode::CoreExitGaveUp, Some(&detail));
                 self.sink
                     .notice(AppNoticeLevel::Error, NoticeCode::CoreStopped, &detail);
+                // This runs on a task of its own, so a connect the user started
+                // meanwhile may already have a new core serving the OS proxy.
+                // Wait for that flow, then leave its core alone: restoring the
+                // proxy and reporting Disconnected would be about the old one.
+                let _flow = self.runtime.settings_application().flow_lock.lock().await;
+                if self.core_is_connected().await {
+                    return;
+                }
                 self.settle_disconnected(config, event.active_profile_id, None)
                     .await;
             }
@@ -295,7 +313,24 @@ impl<'flow> CoreFlow<'flow> {
             NoticeCode::NativeTunStopped,
             &event.message,
         );
+        // Same reasoning as a core that gave up: settle after any flow that is
+        // in progress, against the state the supervisor is in by then.
+        let _flow = self.runtime.settings_application().flow_lock.lock().await;
         self.reconcile(config, CoreFlowReason::Disconnect).await;
+    }
+
+    async fn is_running_core(&self, snapshot: &SupervisorSnapshot) -> bool {
+        self.runtime.status().await.is_ok_and(|current| {
+            current.state == SupervisorConnectionState::Connected
+                && current.main_pid == snapshot.main_pid
+        })
+    }
+
+    async fn core_is_connected(&self) -> bool {
+        self.runtime
+            .status()
+            .await
+            .is_ok_and(|snapshot| snapshot.state == SupervisorConnectionState::Connected)
     }
 
     fn announce_start(&self, config: &AppConfig, code: LogCode) {
@@ -511,13 +546,9 @@ impl<'flow> CoreFlow<'flow> {
     /// The TUN probe forks `pluginkit`/`sc.exe`/`systemextensionsctl`, so it
     /// never runs on the caller's async worker.
     async fn report_tun_status(&self, config: &AppConfig) {
-        let tun = self.tun.clone();
-        let config = config.clone();
-
-        match tokio::task::spawn_blocking(move || tun.status(&config)).await {
-            Ok(Ok(status)) => self.sink.tun_changed(&status),
-            Ok(Err(error)) => tracing::warn!(?error, "failed to read TUN status for the core flow"),
-            Err(error) => tracing::warn!(?error, "TUN status task failed"),
+        match self.tun.status_off_thread(config).await {
+            Ok(status) => self.sink.tun_changed(&status),
+            Err(error) => tracing::warn!(?error, "failed to read TUN status for the core flow"),
         }
     }
 }

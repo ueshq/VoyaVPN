@@ -4,7 +4,10 @@ use voya_core::{ConfigType, ProfileExItem, ProfileIdentity, ProfileItem};
 use super::decode_rows;
 use crate::{
     blob,
-    executor::{delete_each, repository_constructors, row_exists, run_query, RepositoryExecutor},
+    executor::{
+        delete_each, json_id_array, repository_constructors, row_exists, run_query,
+        RepositoryExecutor,
+    },
     DbError, ProfileExRepository, Result,
 };
 
@@ -52,6 +55,14 @@ const PROFILE_BY_IDS_QUERY: &str = profile_list_query!(
     "p.*",
     "WHERE p.index_id IN (SELECT value FROM json_each(?))"
 );
+
+/// The owning subscription of the first subscription-owned node among a JSON
+/// array of ids, in the array's own order.
+const FIRST_SUBSCRIPTION_OWNER_QUERY: &str = "SELECT p.subscription_id \
+     FROM json_each(?) ids \
+     JOIN profile_items p ON p.index_id = ids.value \
+     WHERE p.subscription_id IS NOT NULL \
+     ORDER BY ids.key LIMIT 1";
 
 /// A profile listing together with the rows this build had to skip.
 ///
@@ -131,10 +142,7 @@ impl<'executor> ProfileRepository<'executor> {
             .await?
             .is_some_and(|previous| !voya_core::profile_items_match(&previous, item, false))
         {
-            profile_ex.country_code = None;
-            profile_ex.delay = 0;
-            profile_ex.message = None;
-            profile_ex.ip_info = None;
+            profile_ex.clear_measurements();
         }
         self.upsert_with_checked_profile_ex(item, &profile_ex).await
     }
@@ -220,7 +228,7 @@ impl<'executor> ProfileRepository<'executor> {
         if index_ids.is_empty() {
             return Ok(Vec::new());
         }
-        let ids = serde_json::Value::from(index_ids.to_vec()).to_string();
+        let ids = json_id_array(index_ids);
         let rows = run_query!(
             self.executor,
             sqlx::query(PROFILE_BY_IDS_QUERY).bind(ids),
@@ -235,6 +243,26 @@ impl<'executor> ProfileRepository<'executor> {
             row_to_profile,
         )?;
         Ok(items)
+    }
+
+    /// The subscription that owns the first subscription-owned node among
+    /// `index_ids`, in the order they were given; `None` when every one of them
+    /// is a manual node or names nothing.
+    ///
+    /// One statement however many ids there are, and no payload is decoded: a
+    /// bulk delete asks this before its first write, and reading each node in
+    /// full to learn one column made that cost grow with the selection.
+    pub async fn first_subscription_owner(&self, index_ids: &[String]) -> Result<Option<String>> {
+        if index_ids.is_empty() {
+            return Ok(None);
+        }
+        let ids = json_id_array(index_ids);
+
+        Ok(run_query!(
+            self.executor,
+            sqlx::query_scalar(FIRST_SUBSCRIPTION_OWNER_QUERY).bind(ids),
+            fetch_optional
+        )?)
     }
 
     /// Every node's id, remarks and owning subscription, in list order, without
@@ -313,6 +341,16 @@ impl<'executor> ProfileRepository<'executor> {
             self.executor,
             "SELECT EXISTS(SELECT 1 FROM profile_items WHERE index_id = ?)",
             index_id,
+        )
+        .await
+    }
+
+    /// Whether a subscription owns any node at all; nothing is decoded.
+    pub async fn subscription_has_nodes(&self, subscription_id: &str) -> Result<bool> {
+        row_exists(
+            self.executor,
+            "SELECT EXISTS(SELECT 1 FROM profile_items WHERE subscription_id = ?)",
+            subscription_id,
         )
         .await
     }

@@ -13,31 +13,47 @@ class ProbeCore(private val context: Context) : LibboxPlatform(context) {
     private var box: CommandServer? = null
     private var directory: File? = null
 
+    @Synchronized
     fun start(configJson: String) {
         val base = File(context.cacheDir, "probe/${System.nanoTime()}").apply { mkdirs() }
         directory = base
-        Libbox.setup(SetupOptions().apply {
-            basePath = base.absolutePath
-            workingPath = basePath
-            tempPath = basePath
-            logMaxLines = 500
-        })
-        box = Libbox.newCommandServer(this, this)
         try {
+            Libbox.setup(SetupOptions().apply {
+                basePath = base.absolutePath
+                workingPath = basePath
+                tempPath = basePath
+                // Libbox's own log buffer is for a command client; nothing
+                // connects one, so it would only hold lines nobody reads.
+                logMaxLines = 0
+            })
+            box = Libbox.newCommandServer(this, this)
             box?.startOrReloadService(configJson, OverrideOptions())
         } catch (error: Throwable) {
+            // Whatever got as far as existing — the directory at least — goes.
             runCatching { stop() }
             throw error
         }
     }
 
+    /**
+     * Safe to call twice and from two threads: the host stops a probe core
+     * when its test ends, and Libbox may ask for the same through
+     * [serviceStop] on a thread of its own.
+     */
+    @Synchronized
     fun stop() {
-        box?.closeService()
-        box?.close()
-        box = null
-        closeMonitors()
-        directory?.deleteRecursively()
-        directory = null
+        try {
+            box?.closeService()
+        } finally {
+            // The host forgets a probe core whether or not it stops cleanly,
+            // so a failed stop is the last chance to let go of the server, the
+            // network callbacks and the directory.
+            runCatching { box?.close() }
+            box = null
+            closeMonitors()
+            directory?.deleteRecursively()
+            directory = null
+        }
     }
 
     override fun openTun(options: TunOptions): Int =

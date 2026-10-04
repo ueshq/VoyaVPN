@@ -35,13 +35,46 @@ impl SubscriptionManager<'_> {
         prepare_subscription_snapshot(subscriptions, subscription_id, prefer_proxy, proxy_url).await
     }
 
+    /// [`Self::prepare_subscription_update`] for one subscription the caller
+    /// has already read. The scheduler lists the table once per pass; asking
+    /// by id made it list the whole table again for every subscription due.
+    /// A row edited or deleted since is caught where the update is applied.
+    pub(crate) async fn prepare_update_of(
+        item: SubItem,
+        prefer_proxy: bool,
+        proxy_url: Option<&str>,
+    ) -> Result<PreparedSubscriptionUpdate> {
+        prepare_subscription_snapshot(vec![item], None, prefer_proxy, proxy_url).await
+    }
+
+    /// Persists the fetch failures of a prepared update that will not be
+    /// applied because nothing came back to import, so a restart does not
+    /// forget the subscription ever failed. Returns how many were written.
+    pub(crate) async fn persist_prepared_failures(
+        &self,
+        prepared: &PreparedSubscriptionUpdate,
+    ) -> Result<usize> {
+        for attempt in &prepared.failed_attempts {
+            persist_failed_attempt(self.database, attempt).await?;
+        }
+        Ok(prepared.failed_attempts.len())
+    }
+
     pub async fn apply_prepared_subscription_update(
         &self,
         config: &mut AppConfig,
         prepared: PreparedSubscriptionUpdate,
     ) -> Result<SubscriptionUpdateResult> {
-        let mut result = prepared.result;
-        for prepared_import in prepared.imports {
+        // Failures recorded while fetching (a dead URL, an empty body) have no
+        // import to carry them, so their outcome is persisted up front —
+        // otherwise a restart would forget the subscription ever failed.
+        self.persist_prepared_failures(&prepared).await?;
+        let PreparedSubscriptionUpdate {
+            imports,
+            mut result,
+            ..
+        } = prepared;
+        for prepared_import in imports {
             let current = self
                 .database
                 .subscriptions()
@@ -82,7 +115,7 @@ impl SubscriptionManager<'_> {
                         import.imported,
                         import.removed_existing,
                     );
-                    persist_subscription_metadata(self.database, &prepared_import, true).await?;
+                    persist_subscription_metadata(self.database, &prepared_import, None).await?;
                     result.updated = result.updated.saturating_add(1);
                     result.imported = result.imported.saturating_add(import.imported);
                     result.removed_existing = result
@@ -94,54 +127,33 @@ impl SubscriptionManager<'_> {
                     ));
                 }
                 Ok(_) => {
-                    record_outcome(
+                    self.skip_import(
                         &mut result,
-                        &prepared_import.item.id,
-                        SubscriptionUpdateStatus::Failed,
+                        &prepared_import,
                         SubscriptionUpdateReason::NoImportableNodes,
-                        0,
-                        0,
-                    );
-                    persist_subscription_metadata(self.database, &prepared_import, false).await?;
-                    result.skipped = result.skipped.saturating_add(1);
-                    result.messages.push(format!(
-                        "{}->no nodes were imported",
-                        prepared_import.item.remarks
-                    ));
+                        "no nodes were imported",
+                    )
+                    .await?;
                 }
                 Err(SubscriptionManagerError::NoImportableProfiles) => {
-                    record_outcome(
+                    self.skip_import(
                         &mut result,
-                        &prepared_import.item.id,
-                        SubscriptionUpdateStatus::Failed,
+                        &prepared_import,
                         SubscriptionUpdateReason::NoImportableNodes,
-                        0,
-                        0,
-                    );
-                    persist_subscription_metadata(self.database, &prepared_import, false).await?;
-                    result.skipped = result.skipped.saturating_add(1);
-                    result.messages.push(format!(
-                        "{}->no importable nodes were found",
-                        prepared_import.item.remarks
-                    ));
+                        "no importable nodes were found",
+                    )
+                    .await?;
                 }
                 // A bad filter belongs to one subscription; failing the whole
                 // batch would roll back every sibling's successful import.
                 Err(SubscriptionManagerError::InvalidFilter(reason)) => {
-                    record_outcome(
+                    self.skip_import(
                         &mut result,
-                        &prepared_import.item.id,
-                        SubscriptionUpdateStatus::Failed,
+                        &prepared_import,
                         SubscriptionUpdateReason::InvalidFilter,
-                        0,
-                        0,
-                    );
-                    persist_subscription_metadata(self.database, &prepared_import, false).await?;
-                    result.skipped = result.skipped.saturating_add(1);
-                    result.messages.push(format!(
-                        "{}->subscription filter is invalid: {reason}",
-                        prepared_import.item.remarks
-                    ));
+                        &format!("subscription filter is invalid: {reason}"),
+                    )
+                    .await?;
                 }
                 Err(error) => return Err(error),
             }
@@ -149,12 +161,48 @@ impl SubscriptionManager<'_> {
 
         Ok(result)
     }
+
+    /// Records a subscription that was fetched but left nothing to import: a
+    /// failed outcome, the stored message, and a line in the summary.
+    async fn skip_import(
+        &self,
+        result: &mut SubscriptionUpdateResult,
+        import: &PreparedSubscriptionImport,
+        reason: SubscriptionUpdateReason,
+        message: &str,
+    ) -> Result<()> {
+        record_outcome(
+            result,
+            &import.item.id,
+            SubscriptionUpdateStatus::Failed,
+            reason,
+            0,
+            0,
+        );
+        persist_subscription_metadata(self.database, import, Some(message)).await?;
+        result.skipped = result.skipped.saturating_add(1);
+        result
+            .messages
+            .push(format!("{}->{message}", import.item.remarks));
+
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
 pub struct PreparedSubscriptionUpdate {
     imports: Vec<PreparedSubscriptionImport>,
     result: SubscriptionUpdateResult,
+    failed_attempts: Vec<FailedSubscriptionAttempt>,
+}
+
+/// A subscription whose update already failed while fetching, before any
+/// import could be prepared for it.
+#[derive(Debug)]
+pub struct FailedSubscriptionAttempt {
+    pub subscription_id: String,
+    pub attempted_at_unix: i64,
+    pub error: String,
 }
 
 impl PreparedSubscriptionUpdate {
@@ -193,6 +241,7 @@ async fn prepare_subscription_snapshot(
     let client = SubscriptionClient::new();
     let mut result = SubscriptionUpdateResult::default();
     let mut imports = Vec::new();
+    let mut failed_attempts = Vec::new();
     let subscription_id = subscription_id
         .map(str::trim)
         .filter(|value| !value.is_empty());
@@ -216,6 +265,11 @@ async fn prepare_subscription_snapshot(
                 0,
                 0,
             );
+            failed_attempts.push(FailedSubscriptionAttempt {
+                subscription_id: item.id.clone(),
+                attempted_at_unix: unix_now_seconds(),
+                error: "subscription URL is empty or not an http(s) link".to_string(),
+            });
             continue;
         }
         // `enabled` only switches automatic updates, which the scheduler checks
@@ -270,6 +324,11 @@ async fn prepare_subscription_snapshot(
                     0,
                     0,
                 );
+                failed_attempts.push(FailedSubscriptionAttempt {
+                    subscription_id: item.id.clone(),
+                    attempted_at_unix: unix_now_seconds(),
+                    error: EMPTY_FETCH_MESSAGE.to_string(),
+                });
                 result.skipped = result.skipped.saturating_add(1);
                 // The warnings precede the outcome note because
                 // `unusable_update_message` reports the last message as the
@@ -297,6 +356,11 @@ async fn prepare_subscription_snapshot(
                 if let Some(outcome) = result.outcomes.last_mut() {
                     outcome.diagnostic = Some(diagnostic.clone());
                 }
+                failed_attempts.push(FailedSubscriptionAttempt {
+                    subscription_id: item.id.clone(),
+                    attempted_at_unix: unix_now_seconds(),
+                    error: diagnostic.clone(),
+                });
                 result
                     .messages
                     .push(subscription_message(&item.remarks, &diagnostic));
@@ -304,7 +368,11 @@ async fn prepare_subscription_snapshot(
         }
     }
 
-    Ok(PreparedSubscriptionUpdate { imports, result })
+    Ok(PreparedSubscriptionUpdate {
+        imports,
+        result,
+        failed_attempts,
+    })
 }
 
 fn record_outcome(
@@ -325,17 +393,17 @@ fn record_outcome(
     });
 }
 
-/// Records server-reported usage headers for a fetched subscription. The
-/// `subscription-userinfo` values replace the stored figures only when the
-/// header was present. `last_update_at` moves only when `imported` says the
-/// fetch actually produced profiles, because the auto-update scheduler treats
+/// Records server-reported usage headers for a fetched subscription, plus the
+/// outcome of this attempt. The `subscription-userinfo` values replace the
+/// stored figures only when the header was present. `last_update_at` moves
+/// only when the attempt succeeded, because the auto-update scheduler treats
 /// it as "this subscription is current" and would otherwise stop retrying a
 /// source that keeps returning junk. A server-suggested update interval is
 /// adopted only while the user has not configured one.
 async fn persist_subscription_metadata(
     database: DatabaseSession<'_>,
     prepared: &PreparedSubscriptionImport,
-    imported: bool,
+    attempt_error: Option<&str>,
 ) -> Result<()> {
     let repository = database.subscription_metadata();
     let mut metadata =
@@ -355,7 +423,10 @@ async fn persist_subscription_metadata(
     if let Some(title) = &prepared.profile_title {
         metadata.profile_title = Some(title.clone());
     }
-    if imported {
+    metadata.last_attempt_at_unix = Some(prepared.fetched_at_unix);
+    metadata.last_attempt_failed = Some(attempt_error.is_some());
+    metadata.last_attempt_error = attempt_error.map(str::to_string);
+    if attempt_error.is_none() {
         metadata.last_update_at = Some(prepared.fetched_at_unix);
     }
     repository.upsert(&metadata).await?;
@@ -367,6 +438,28 @@ async fn persist_subscription_metadata(
             database.subscriptions().upsert(&item).await?;
         }
     }
+
+    Ok(())
+}
+
+/// Records a fetch that failed before anything could be imported, so the
+/// failure survives a restart and the list can badge the subscription.
+async fn persist_failed_attempt(
+    database: DatabaseSession<'_>,
+    attempt: &FailedSubscriptionAttempt,
+) -> Result<()> {
+    let repository = database.subscription_metadata();
+    let mut metadata = repository
+        .get(&attempt.subscription_id)
+        .await?
+        .unwrap_or_else(|| SubMetadataItem {
+            subscription_id: attempt.subscription_id.clone(),
+            ..SubMetadataItem::default()
+        });
+    metadata.last_attempt_at_unix = Some(attempt.attempted_at_unix);
+    metadata.last_attempt_failed = Some(true);
+    metadata.last_attempt_error = Some(attempt.error.clone());
+    repository.upsert(&metadata).await?;
 
     Ok(())
 }

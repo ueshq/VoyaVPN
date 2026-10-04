@@ -1,10 +1,9 @@
 import { render, screen, userEvent, waitFor } from "@testing-library/react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { MockBackend } from "@voya/client/mock-backend";
 import type { SubscriptionUpdateResult } from "@voya/contracts";
 import type { RootRoutes } from "~/app/navigation";
-import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
-import { mockTransport } from "~/test/mock-transport";
+import { registerMobileBackend } from "~/ipc/platform";
+import { mockBackend, mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
 import { makeTestQueryClient, TestProviders } from "~/test/providers";
 import { SubscriptionScreen } from "./subscriptions-screen";
@@ -13,7 +12,7 @@ beforeAll(async () => { await localeReady; });
 beforeEach(() => registerMobileBackend(mockTransport()));
 
 test("subscription drafts require Save, retain input on failure and merge the latest hidden fields", async () => {
-  const backend = voyaTransport() as MockBackend;
+  const backend = mockBackend();
   const source = backend.state.subscriptions[0];
   const client = makeTestQueryClient();
   const props = {
@@ -37,8 +36,33 @@ test("subscription drafts require Save, retain input on failure and merge the la
   save.mockRestore(); await unmount(); client.clear();
 });
 
+test("a persisted failed attempt replaces the stale never-updated line", async () => {
+  const backend = mockBackend();
+  const source = backend.state.subscriptions[0];
+  backend.state.subscriptionMetadata = [
+    {
+      ...backend.state.subscriptionMetadata[0],
+      lastAttemptAt: 1_700_000_000,
+      lastAttemptError: "download failed for [redacted URL]: timed out",
+      lastAttemptFailed: true,
+    },
+  ];
+  const client = makeTestQueryClient();
+  const props = {
+    route: { key: "subscription", name: "subscription", params: { id: source.id } },
+    navigation: { goBack: jest.fn() },
+  } as unknown as NativeStackScreenProps<RootRoutes, "subscription">;
+  const { unmount } = await render(<SubscriptionScreen {...props} />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+
+  await screen.findByText(/Last update failed/);
+  expect(screen.queryByText("Not updated from this device yet")).toBeNull();
+  // The redacted reason is available behind the disclosure's title.
+  expect(screen.getByText("Technical details")).toBeOnTheScreen();
+  await unmount(); client.clear();
+});
+
 test("a refresh skipped because the subscription changed is a note, and a failed one a warning", async () => {
-  const backend = voyaTransport() as MockBackend;
+  const backend = mockBackend();
   const source = backend.state.subscriptions[0];
   const client = makeTestQueryClient();
   const props = {

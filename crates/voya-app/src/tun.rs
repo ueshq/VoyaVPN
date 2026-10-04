@@ -6,10 +6,13 @@ use std::{
 
 use thiserror::Error;
 use voya_contracts::{
-    TunBackend, TunPlatform, TunPreflight, TunPreflightState, TunProviderDiagnostics,
+    AppError, TunBackend, TunPlatform, TunPreflight, TunPreflightState, TunProviderDiagnostics,
     TunProviderState, TunStatus,
 };
 use voya_core::AppConfig;
+
+use crate::blocking::{run_blocking, BlockingTaskError};
+use crate::config_mutation::{CommittedMutation, ConfigMutationCoordinator};
 use voya_platform::{
     coreinfo::TargetOs,
     privilege::ElevationState,
@@ -151,7 +154,37 @@ impl TunManager {
         self
     }
 
-    pub fn status(&self, config: &AppConfig) -> Result<TunStatus, TunManagerError> {
+    /// The TUN status, read off the caller's async worker.
+    ///
+    /// The probe forks `pluginkit`/`sc.exe`/`systemextensionsctl`, and on a
+    /// phone asks the host app, which may wait on the system for seconds. The
+    /// blocking read stays crate-private so a host cannot call it inline.
+    pub async fn status_off_thread(
+        &self,
+        config: &AppConfig,
+    ) -> Result<TunStatus, TunManagerError> {
+        let manager = self.clone();
+        let config = config.clone();
+
+        run_blocking("TUN status", move || manager.status(&config)).await?
+    }
+
+    /// [`Self::plan_set_enabled`] off the caller's async worker.
+    pub async fn plan_set_enabled_off_thread(
+        &self,
+        config: &AppConfig,
+        enabled: bool,
+    ) -> Result<TunStatus, TunManagerError> {
+        let manager = self.clone();
+        let config = config.clone();
+
+        run_blocking("TUN preflight", move || {
+            manager.plan_set_enabled(&config, enabled)
+        })
+        .await?
+    }
+
+    pub(crate) fn status(&self, config: &AppConfig) -> Result<TunStatus, TunManagerError> {
         self.status_with_report(config, RegistrationFreshness::Cached)
             .map(|(status, _report)| status)
     }
@@ -159,12 +192,12 @@ impl TunManager {
     /// Run the enable/disable preflight without touching the configuration.
     ///
     /// The probe forks `pluginkit`/`systemextensionsctl`/`sc.exe` and loads
-    /// NetworkExtension preferences, so callers holding a config mutation guard
-    /// can run this off the async runtime against a snapshot and then apply the
-    /// decision with [`Self::apply_enabled`]. The returned status is what the
+    /// NetworkExtension preferences, so it runs off the async runtime against a
+    /// snapshot, before any config mutation guard is taken, and the decision is
+    /// applied with [`Self::apply_enabled`]. The returned status is what the
     /// config will report once applied — only `enabled` is derived from the
     /// config, everything else comes from the platform probe.
-    pub fn plan_set_enabled(
+    pub(crate) fn plan_set_enabled(
         &self,
         config: &AppConfig,
         enabled: bool,
@@ -340,6 +373,41 @@ impl TunManager {
     }
 }
 
+/// Turns TUN capture on or off: preflight first, then the one-flag commit.
+///
+/// The preflight forks OS helpers and can take seconds, so it runs against a
+/// snapshot before the mutation lock is taken; holding the lock and its open
+/// transaction across it would stall every other settings write. That is safe
+/// because nothing the plan decides depends on the configuration: it reads
+/// only the machine, and the commit applies the single flag to whatever
+/// configuration it finds under the lock rather than writing the snapshot
+/// back. The answer's `enabled` is the committed one — a platform with a single
+/// capture path keeps its flag whatever was asked.
+pub async fn set_tun_enabled_use_case(
+    mutations: &ConfigMutationCoordinator,
+    tun: &TunManager,
+    enabled: bool,
+) -> Result<CommittedMutation<TunStatus>, AppError> {
+    let planned = tun
+        .plan_set_enabled_off_thread(&mutations.current_config(), enabled)
+        .await?;
+    let committed = mutations
+        .mutate(async |_unit_of_work, config| -> Result<(), AppError> {
+            TunManager::apply_enabled(config, enabled);
+            Ok(())
+        })
+        .await?;
+
+    Ok(CommittedMutation {
+        value: TunStatus {
+            enabled: committed.config.tun.enabled,
+            ..planned
+        },
+        config: committed.config,
+        config_changed: committed.config_changed,
+    })
+}
+
 /// Whether a status read may answer from the registration memo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RegistrationFreshness {
@@ -461,6 +529,8 @@ pub enum TunManagerError {
         "macOS PacketTunnel provider path mismatch: expected {expected}, PlugInKit elected {resolved}"
     )]
     ProviderPathMismatch { expected: String, resolved: String },
+    #[error(transparent)]
+    Task(#[from] BlockingTaskError),
 }
 
 #[cfg(test)]
@@ -664,6 +734,132 @@ mod tests {
             Err(TunManagerError::VpnRequired)
         ));
         assert!(config.tun.enabled);
+    }
+
+    async fn coordinator(config: AppConfig) -> ConfigMutationCoordinator {
+        ConfigMutationCoordinator::new(
+            voya_db::Database::connect_in_memory()
+                .await
+                .expect("in-memory database"),
+            Arc::new(std::sync::RwLock::new(config)),
+        )
+    }
+
+    #[tokio::test]
+    async fn a_refused_preflight_commits_nothing() {
+        let mutations = coordinator(AppConfig::default()).await;
+        // No elevation grant: Linux refuses to enable TUN.
+        let manager = TunManager::with_target_os(Arc::new(ElevationState::new()), TargetOs::Linux);
+
+        let error = set_tun_enabled_use_case(&mutations, &manager, true)
+            .await
+            .expect_err("enabling without elevation is refused");
+
+        assert!(matches!(
+            error.kind,
+            voya_contracts::AppErrorKind::ElevationRequired
+        ));
+        assert!(!mutations.current_config().tun.enabled);
+    }
+
+    /// A native controller whose status read waits until the test lets it go.
+    struct GatedNativeTun {
+        entered: std::sync::mpsc::Sender<()>,
+        release: Mutex<std::sync::mpsc::Receiver<()>>,
+    }
+
+    impl NativeTunController for GatedNativeTun {
+        fn status(&self, backend: PlatformTunBackend) -> voya_platform::tun::NativeTunStatus {
+            let _ = self.entered.send(());
+            let _ = self.release.lock().expect("release lock").recv();
+            voya_platform::tun::NativeTunStatus {
+                backend,
+                provider_state: NativeTunProviderState::Stopped,
+                component_ready: true,
+                message: None,
+            }
+        }
+
+        fn start(
+            &self,
+            _request: voya_platform::tun::NativeTunStartRequest,
+        ) -> Result<(), voya_platform::tun::NativeTunError> {
+            Ok(())
+        }
+
+        fn stop(
+            &self,
+            _backend: PlatformTunBackend,
+        ) -> Result<(), voya_platform::tun::NativeTunError> {
+            Ok(())
+        }
+    }
+
+    /// The preflight runs before the mutation lock is taken, so a settings
+    /// write that lands while it probes is neither blocked nor overwritten:
+    /// the commit applies one flag to the configuration it finds.
+    #[tokio::test]
+    async fn a_write_that_lands_during_the_preflight_survives_the_commit() {
+        let mutations = coordinator(AppConfig::default()).await;
+        let elevation = Arc::new(ElevationState::new());
+        elevation.set_granted(true);
+        let (entered, has_entered) = std::sync::mpsc::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        let manager = TunManager::with_target_os_and_native_tun(
+            elevation,
+            TargetOs::Linux,
+            Arc::new(GatedNativeTun {
+                entered,
+                release: Mutex::new(released),
+            }),
+        );
+
+        let enabling = set_tun_enabled_use_case(&mutations, &manager, true);
+        let writing = async {
+            tokio::task::spawn_blocking(move || has_entered.recv())
+                .await
+                .expect("the wait for the probe")
+                .expect("the probe starts");
+            mutations
+                .mutate(async |_unit_of_work, config| -> Result<(), AppError> {
+                    config.system_proxy.mode = voya_core::SysProxyType::ForcedChange;
+                    Ok(())
+                })
+                .await
+                .expect("a write is not blocked by the probe");
+            release.send(()).expect("the probe is still waiting");
+        };
+        let (enabled, ()) = tokio::join!(enabling, writing);
+
+        assert!(enabled.expect("the preflight passes").value.enabled);
+        let committed = mutations.current_config();
+        assert!(committed.tun.enabled);
+        assert_eq!(
+            committed.system_proxy.mode,
+            voya_core::SysProxyType::ForcedChange
+        );
+    }
+
+    /// A phone has one capture path. Turning it off is not refused by the
+    /// preflight, but the commit keeps the flag, and the answer says so.
+    #[tokio::test]
+    async fn a_phone_answers_with_the_flag_the_commit_kept() {
+        let mut config = AppConfig::default();
+        config.tun.enabled = true;
+        config.system_proxy.mode = voya_core::SysProxyType::Unchanged;
+        let mutations = coordinator(config).await.with_target_os(TargetOs::Ios);
+        let manager = TunManager::with_target_os_and_native_tun(
+            Arc::new(ElevationState::new()),
+            TargetOs::Ios,
+            Arc::new(voya_platform::test_support::StoppedNativeTun),
+        );
+
+        let committed = set_tun_enabled_use_case(&mutations, &manager, false)
+            .await
+            .expect("the request is accepted");
+
+        assert!(committed.value.enabled);
+        assert!(mutations.current_config().tun.enabled);
     }
 
     /// The status probe forks OS helpers, so command handlers run it off the

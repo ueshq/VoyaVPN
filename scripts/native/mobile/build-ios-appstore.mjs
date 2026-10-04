@@ -3,7 +3,13 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, 
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-import { capture, checkedCapture, isCliEntrypoint, repoRootFromScript } from "../../lib/common.mjs";
+import {
+  capture,
+  checkedCapture,
+  isCliEntrypoint,
+  repoRootFromScript,
+  runCli,
+} from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
 import { resolveStoreBuildNumber } from "../../tauri/mac-app-store-config.mjs";
 import { bundleImportReport, bundlePrivilegeEscalationReport } from "../macos/macho-imports.mjs";
@@ -18,7 +24,7 @@ import {
   resolveSigningIdentity,
 } from "../macos/provisioning.mjs";
 import { findQuarantined } from "../macos/quarantine.mjs";
-import { checkIosBundleInputs, parsePlist } from "./ios-bundle-checks.mjs";
+import { checkIosBundleInputs, IOS_DEPLOYMENT_TARGET, parsePlist } from "./ios-bundle-checks.mjs";
 import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
 
 /**
@@ -41,7 +47,7 @@ export const appBundleId = "app.voyavpn.mobile";
 export const tunnelBundleId = "app.voyavpn.mobile.PacketTunnel";
 const appGroup = "group.app.voyavpn.mobile";
 const tunnelCapability = "packet-tunnel-provider";
-const minimumOsVersion = "15.1";
+const minimumOsVersion = IOS_DEPLOYMENT_TARGET;
 const distributionIdentity = /^(?:Apple|iPhone) Distribution: /u;
 
 const networkExtensionKey = "com.apple.developer.networking.networkextension";
@@ -331,8 +337,9 @@ export function main(argv = process.argv.slice(2)) {
 
   // --- 2. native artifacts ---------------------------------------------------
   if (!skipNative) {
-    runLogged("rustup-targets", "rustup", ["target", "add", "aarch64-apple-ios", "aarch64-apple-ios-sim"]);
-    runLogged("rust-host", "pnpm", ["native:mobile:rust:ios"]);
+    // An archive is a device build; the simulator slice would never be linked.
+    runLogged("rustup-targets", "rustup", ["target", "add", "aarch64-apple-ios"]);
+    runLogged("rust-host", "pnpm", ["native:mobile:rust:ios", "--slice", "device"]);
     if (!reuseLibbox || !existsSync(resolve(ios, "Frameworks/Libbox.xcframework"))) {
       runLogged("libbox", "pnpm", ["native:mobile:libbox:ios"]);
     }
@@ -431,10 +438,5 @@ export function main(argv = process.argv.slice(2)) {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

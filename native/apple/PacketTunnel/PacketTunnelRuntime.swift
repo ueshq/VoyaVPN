@@ -56,7 +56,19 @@ enum PacketTunnelRuntime {
         {
             return try JSONDecoder().decode(PacketTunnelRuntimeConfig.self, from: data)
         }
-        let data = try Data(contentsOf: configURL ?? runtimeConfigURL())
+        #if os(iOS)
+            // The iOS app hands the configuration over inline and never writes
+            // the file, so a start without options came from the system — the
+            // VPN switch in Settings, Control Center — which has no
+            // configuration to give. Say so: reading a file nobody wrote only
+            // ever produced "no such file".
+            guard let configURL else {
+                throw PacketTunnelProviderError.startedOutsideApp
+            }
+            let data = try Data(contentsOf: configURL)
+        #else
+            let data = try Data(contentsOf: configURL ?? runtimeConfigURL())
+        #endif
         return try JSONDecoder().decode(PacketTunnelRuntimeConfig.self, from: data)
     }
 
@@ -65,15 +77,11 @@ enum PacketTunnelRuntime {
             throw PacketTunnelProviderError.missingAppGroupContainer
         }
 
-        // libbox binds a unix socket at "<basePath>/command.sock"; macOS caps
-        // sockaddr_un.sun_path at 104 bytes (incl. NUL), so the base directory
-        // must stay short. The container root plus "PT" keeps it well below
-        // the limit, unlike Library/Application Support/... which exceeds it.
+        // "PT" at the container root dates from when libbox bound its command
+        // socket under the base path and the name had to fit `sun_path`. The
+        // socket is no longer opened, but installed tunnels keep their cache
+        // and working files here, so the directory stays where it is.
         let baseURL = containerURL.appendingPathComponent("PT", isDirectory: true)
-        let commandSocketPath = baseURL.path + "/command.sock"
-        guard commandSocketPath.utf8.count <= 103 else {
-            throw PacketTunnelProviderError.libboxBasePathTooLong(commandSocketPath)
-        }
 
         return PacketTunnelRuntimePaths(
             baseURL: baseURL,
@@ -115,13 +123,15 @@ enum PacketTunnelProviderError: LocalizedError {
     case emptyRuntimeConfig
     case unsupportedRuntimeConfig(Int)
     case singBoxRuntimeUnavailable
-    case libboxBasePathTooLong(String)
     case libboxSetupFailed(String)
     case libboxCommandServerFailed(String)
     case libboxServiceFailed(String)
+    case startedOutsideApp
 
     var errorDescription: String? {
         switch self {
+        case .startedOutsideApp:
+            return "Open VoyaVPN and connect from the app. The system VPN switch cannot start this connection on its own."
         case .missingAppGroupContainer:
             return "VoyaVPN App Group container is unavailable."
         case .emptyRuntimeConfig:
@@ -130,8 +140,6 @@ enum PacketTunnelProviderError: LocalizedError {
             return "VoyaVPN PacketTunnel runtime config version \(version) is not supported."
         case .singBoxRuntimeUnavailable:
             return "VoyaVPN PacketTunnel requires the sing-box Apple/libbox runtime. Build it with `pnpm native:macos:libbox` or set VOYAVPN_LIBBOX_FRAMEWORK."
-        case .libboxBasePathTooLong(let path):
-            return "VoyaVPN PacketTunnel libbox command socket path exceeds the macOS 104-byte sun_path limit: \(path)"
         case .libboxSetupFailed(let message):
             return "VoyaVPN PacketTunnel failed to set up libbox: \(message)"
         case .libboxCommandServerFailed(let message):

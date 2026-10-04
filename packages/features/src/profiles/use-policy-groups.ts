@@ -11,37 +11,44 @@ import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
 import { activateSelection } from "@voya/client/runtime-action";
 
-import { profileMemberName } from "@voya/features/profiles/profile-display";
+import { profileMemberName } from "./profile-display";
 import {
+  useActivePolicyGroup,
   useGroupDelayTest,
   usePolicyGroupMemberSwitch,
-  usePolicyGroupRuntime,
-} from "@voya/features/profiles/use-policy-group-runtime";
-import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
+} from "./use-policy-group-runtime";
+import type { NodeOperation } from "./use-node-operation";
 
 /** Marks a group switch in the shared runtime-action guard, apart from node ids. */
 const GROUP_SWITCH_PREFIX = "group:";
 
 export function usePolicyGroups(
-  operation: Pick<NodeOperation, "runOperation">,
+  operation: Pick<NodeOperation, "runOperation" | "setOperationError">,
   t: TranslationFunction,
+  /** See [`useActivePolicyGroup`]: whether the running group's state is read. */
+  { live = true }: { live?: boolean } = {},
 ) {
   const queryClient = useQueryClient();
   const coreConnected = useRuntimeEventStore(
     (state) => state.coreState?.state === "connected",
   );
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
-  const policyGroupsQuery = useQuery(queries.policyGroups);
+  const { policyGroupsQuery, runtime: policyGroupRuntimeState } = useActivePolicyGroup({ live });
   const policyGroupEntries = policyGroupsQuery.data?.entries ?? [];
-  const activeGroupId =
-    policyGroupEntries.find((entry) => entry.isActive)?.group.id ?? null;
-  const policyGroupRuntimeState = usePolicyGroupRuntime(activeGroupId);
   const memberSwitch = usePolicyGroupMemberSwitch();
   const delayTest = useGroupDelayTest(operation.runOperation);
   const subscriptionsQuery = useQuery(queries.subscriptions);
   const [editingPolicyGroup, setEditingPolicyGroup] = useState<PolicyGroup | null>(null);
   const [policyGroupEditorOpen, setPolicyGroupEditorOpen] = useState(false);
-  const [deletingPolicyGroup, setDeletingPolicyGroup] = useState<PolicyGroupEntry | null>(null);
+  const [deletingPolicyGroup, setDeletingGroup] = useState<PolicyGroupEntry | null>(null);
+
+  // The confirmation shows the page's operation error as its own. Opening it
+  // starts clean, or a failed export from a minute ago would read as the
+  // reason this group cannot be deleted.
+  function setDeletingPolicyGroup(entry: PolicyGroupEntry | null) {
+    if (entry) operation.setOperationError(null);
+    setDeletingGroup(entry);
+  }
 
   function openGroupEditor(group: PolicyGroup | null) {
     setEditingPolicyGroup(group);

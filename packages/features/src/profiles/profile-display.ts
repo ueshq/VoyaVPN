@@ -1,5 +1,5 @@
 import type { TranslationFunction } from "@voya/i18n/core";
-import type { ProfileSummaryEntry, ProfileTransport } from "@voya/contracts";
+import type { PolicyGroupRuntime, ProfileSummaryEntry, ProfileTransport } from "@voya/contracts";
 import { speedtestOutcomeText } from "@voya/client/messages";
 import { formatDelay } from "@voya/utils/formatting";
 
@@ -59,4 +59,11 @@ export function profileFlagCountryCode(name: string | null | undefined) {
 /** A measured country first; a flag in the node name is only a provisional hint. */
 export function entryCountry(entry: ProfileSummaryEntry | null | undefined) {
   return entry ? (entry.metrics.countryCode ?? profileFlagCountryCode(entry.profile.remarks)) : null;
+}
+
+/** The delays a running policy group reports, by member. */
+export function runtimeMemberDelays(
+  runtime: PolicyGroupRuntime | null | undefined,
+): ReadonlyMap<string, number | null> {
+  return new Map(runtime?.members.map((member) => [member.profileId, member.delayMs]) ?? []);
 }

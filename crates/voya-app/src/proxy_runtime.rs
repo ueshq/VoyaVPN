@@ -10,18 +10,11 @@ use voya_core::TrafficMode;
 use voya_net::clash::{
     ClashApiEndpoint, ClashConnection as NetClashConnection,
     ClashConnectionMetadata as NetClashConnectionMetadata, ClashConnections as NetClashConnections,
-    ClashError, ClashHttpTransport, ClashRestClient, ClashWebSocketClient, ClashWebSocketEvent,
-    ClashWebSocketResource, ReqwestClashHttpTransport,
+    ClashError, ClashHttpTransport, ClashRestClient, ClashWebSocketEvent, ClashWebSocketResource,
+    ReqwestClashHttpTransport,
 };
 
-use crate::{
-    backoff::{
-        sleep_or_shutdown, WebSocketReconnectBackoff, WS_CONNECT_TIMEOUT,
-        WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY,
-    },
-    statistics::available_state_port,
-    supervisor::ClashApiAccess,
-};
+use crate::{clash_follow::follow_core_ws, supervisor::ClashApiAccess};
 
 mod groups;
 mod traffic_mode;
@@ -146,49 +139,51 @@ impl ProxyMonitorController {
         Self::default()
     }
 
+    /// Starts following the running core's connection table.
+    ///
+    /// `access` is [`crate::supervisor::CoreSupervisor::subscribe_clash_api`].
+    /// The monitor reads the endpoint from it before every connect, so one
+    /// started against a core keeps working across a restart, which mints a
+    /// new token; a second `start` while it runs changes nothing.
     pub fn start(
         &self,
-        access: &ClashApiAccess,
+        access: watch::Receiver<ClashApiAccess>,
         sink: Arc<dyn ProxyRuntimeEventSink>,
     ) -> Result<ProxyMonitorStatus> {
         let mut guard = self
             .handle
             .lock()
             .map_err(|_| ProxyRuntimeError::MonitorLockPoisoned)?;
-        let Some(endpoint) = proxy_runtime_endpoint(access) else {
+        if proxy_runtime_endpoint(&access.borrow()).is_none() {
             if let Some(handle) = guard.take() {
                 handle.stop();
             }
             tracing::debug!("skipping proxy monitor because state port is unavailable");
             return Ok(ProxyMonitorStatus::stopped());
-        };
-        if guard
-            .as_ref()
-            .is_some_and(|handle| handle.endpoint == endpoint)
-        {
+        }
+        if guard.is_some() {
             return Ok(ProxyMonitorStatus::running());
         }
         let runtime =
             Handle::try_current().map_err(|_| ProxyRuntimeError::MonitorRuntimeUnavailable)?;
-        if let Some(handle) = guard.take() {
-            handle.stop();
-        }
 
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         // Only the connections stream is opened here. The statistics service
         // already holds a /traffic websocket against the same sing-box state
         // port, so a second one would decode every frame twice for numbers the
         // proxy screens do not read.
-        let connections_task = runtime.spawn(run_proxy_ws_monitor(
-            endpoint.clone(),
+        let task = runtime.spawn(follow_core_ws(
+            access,
             ClashWebSocketResource::Connections,
-            sink,
             shutdown_rx,
+            move |event| {
+                route_proxy_ws_event(sink.as_ref(), event);
+                std::future::ready(())
+            },
         ));
         *guard = Some(ProxyMonitorHandle {
-            endpoint,
             shutdown: shutdown_tx,
-            tasks: vec![connections_task],
+            task,
         });
 
         Ok(ProxyMonitorStatus::running())
@@ -208,83 +203,21 @@ impl ProxyMonitorController {
 }
 
 struct ProxyMonitorHandle {
-    endpoint: ClashApiEndpoint,
     shutdown: watch::Sender<bool>,
-    tasks: Vec<JoinHandle<()>>,
+    task: JoinHandle<()>,
 }
 
 impl ProxyMonitorHandle {
     fn stop(self) {
         let _ = self.shutdown.send(true);
-        for task in self.tasks {
-            task.abort();
-        }
-    }
-}
-
-async fn run_proxy_ws_monitor(
-    endpoint: ClashApiEndpoint,
-    resource: ClashWebSocketResource,
-    sink: Arc<dyn ProxyRuntimeEventSink>,
-    mut shutdown: watch::Receiver<bool>,
-) {
-    let mut reconnect_backoff =
-        WebSocketReconnectBackoff::new(WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY);
-
-    loop {
-        if *shutdown.borrow() {
-            break;
-        }
-
-        let client = ClashWebSocketClient::new(endpoint.clone());
-        match time::timeout(WS_CONNECT_TIMEOUT, client.connect(resource)).await {
-            Ok(Ok(mut session)) => loop {
-                tokio::select! {
-                    changed = shutdown.changed() => {
-                        if changed.is_err() || *shutdown.borrow() {
-                            return;
-                        }
-                    }
-                    event = session.next_event() => match event {
-                        Ok(event) => {
-                            reconnect_backoff.reset();
-                            route_proxy_ws_event(sink.as_ref(), event);
-                        }
-                        Err(error) => {
-                            tracing::debug!(?error, ?resource, "proxy websocket monitor read failed");
-                            break;
-                        }
-                    }
-                }
-            },
-            Ok(Err(error)) => {
-                tracing::debug!(
-                    ?error,
-                    ?resource,
-                    "failed to connect proxy websocket monitor"
-                );
-            }
-            Err(error) => {
-                tracing::debug!(
-                    ?error,
-                    ?resource,
-                    "timed out connecting proxy websocket monitor"
-                );
-            }
-        }
-
-        if sleep_or_shutdown(reconnect_backoff.next_delay(), &mut shutdown).await {
-            break;
-        }
+        self.task.abort();
     }
 }
 
 fn route_proxy_ws_event(sink: &dyn ProxyRuntimeEventSink, event: ClashWebSocketEvent) {
     match event {
-        // The monitor subscribes to /connections only — the statistics service
-        // owns the /traffic stream against the same port — so a traffic frame
-        // is unreachable here, and the proxy screens read their byte totals off
-        // the connections snapshot anyway. Dropped rather than forwarded.
+        // The monitor subscribes to /connections only, and the proxy screens
+        // read their byte totals off the connections snapshot anyway.
         ClashWebSocketEvent::Traffic(_) => {}
         ClashWebSocketEvent::Connections(event) => {
             sink.emit_connections(connections_snapshot(event))
@@ -303,8 +236,10 @@ fn route_proxy_ws_event(sink: &dyn ProxyRuntimeEventSink, event: ClashWebSocketE
 /// the token exists only in the config that launch generated. `None` means no
 /// core is running, so there is no Clash API to talk to.
 #[must_use]
-pub fn proxy_runtime_endpoint(access: &ClashApiAccess) -> Option<ClashApiEndpoint> {
-    let port = available_state_port(access.port?)?;
+pub(crate) fn proxy_runtime_endpoint(access: &ClashApiAccess) -> Option<ClashApiEndpoint> {
+    // A generated config with no Clash API reports port 0; dialling
+    // 127.0.0.1:0 would connect to an arbitrary local listener.
+    let port = access.port.filter(|port| *port != 0)?;
 
     Some(ClashApiEndpoint {
         secret: access
@@ -313,6 +248,20 @@ pub fn proxy_runtime_endpoint(access: &ClashApiAccess) -> Option<ClashApiEndpoin
             .map(|secret| secret.as_str().to_string()),
         ..ClashApiEndpoint::loopback(port)
     })
+}
+
+/// Starts `controller` following whichever core `supervisor` is running.
+pub async fn start_monitor_use_case(
+    controller: &ProxyMonitorController,
+    supervisor: &crate::supervisor::CoreSupervisor,
+    sink: Arc<dyn ProxyRuntimeEventSink>,
+) -> Result<ProxyMonitorStatus> {
+    // The watch is republished at the end of the actor turn that changed it,
+    // after that command's reply. One round trip through the actor therefore
+    // guarantees the value read below is the core the caller just connected.
+    let _ = supervisor.status().await;
+
+    controller.start(supervisor.subscribe_clash_api(), sink)
 }
 
 /// Announces where the monitor ended up, a failure included, and returns it.
@@ -409,6 +358,28 @@ fn endpoint_label(address: Option<&str>, port: Option<&str>) -> String {
         (None, None) => String::new(),
     }
 }
+/// Closes one connection through the running core — every connection when
+/// none is named — and answers with what is left.
+pub async fn close_connection_use_case(
+    proxy_runtime: &ProxyRuntimeManager,
+    supervisor: &crate::supervisor::CoreSupervisor,
+    connection_id: Option<String>,
+) -> std::result::Result<ProxyConnectionsSnapshot, voya_contracts::AppError> {
+    crate::input_safety::map_ipc_input(
+        crate::input_safety::validate_present_text(
+            connection_id.as_deref(),
+            crate::input_safety::IPC_ID_MAX_CHARS,
+        ),
+        "proxy connection id",
+        voya_contracts::AppErrorSubsystem::ProxyRuntime,
+    )?;
+    let access = supervisor.clash_api_access().await;
+
+    Ok(proxy_runtime
+        .close_connection(&access, connection_id.as_deref())
+        .await?)
+}
+
 #[cfg(test)]
 mod tests {
     use voya_contracts::ProxyMonitorState;
@@ -498,21 +469,25 @@ mod tests {
     /// offset the generated `experimental.clash_api` uses.
     const RUNTIME_PORT: u16 = (DEFAULT_LOCAL_PORT + 5) as u16;
 
-    fn monitor_handle_snapshot(
-        controller: &ProxyMonitorController,
-    ) -> (ClashApiEndpoint, watch::Sender<bool>) {
+    /// What `CoreSupervisor::subscribe_clash_api` hands out while a core is
+    /// reachable on `port`. The sender is returned so a test can replace the
+    /// core; dropping it is the supervisor going away.
+    fn running_core(
+        port: u16,
+    ) -> (
+        watch::Sender<ClashApiAccess>,
+        watch::Receiver<ClashApiAccess>,
+    ) {
+        watch::channel(access(port))
+    }
+
+    fn monitor_shutdown(controller: &ProxyMonitorController) -> watch::Sender<bool> {
         let guard = controller.handle.lock().expect("monitor lock");
-        let handle = guard.as_ref().expect("monitor handle");
-        (handle.endpoint.clone(), handle.shutdown.clone())
+        guard.as_ref().expect("monitor handle").shutdown.clone()
     }
 
     fn monitor_handle_is_none(controller: &ProxyMonitorController) -> bool {
         controller.handle.lock().expect("monitor lock").is_none()
-    }
-
-    fn monitor_task_count(controller: &ProxyMonitorController) -> usize {
-        let guard = controller.handle.lock().expect("monitor lock");
-        guard.as_ref().map_or(0, |handle| handle.tasks.len())
     }
 
     fn shutdown_requested(shutdown: &watch::Sender<bool>) -> bool {
@@ -601,8 +576,10 @@ mod tests {
     fn proxy_monitor_start_without_tokio_runtime_returns_error() {
         let controller = ProxyMonitorController::new();
 
+        let (_core, core) = running_core(RUNTIME_PORT);
+
         let error = controller
-            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+            .start(core, Arc::new(NoopProxyRuntimeEventSink))
             .expect_err("monitor start should require a runtime");
 
         assert!(matches!(
@@ -660,31 +637,13 @@ mod tests {
     #[tokio::test]
     async fn proxy_monitor_starts_inside_tokio_runtime() {
         let controller = ProxyMonitorController::new();
+        let (_core, core) = running_core(RUNTIME_PORT);
 
         let status = controller
-            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+            .start(core, Arc::new(NoopProxyRuntimeEventSink))
             .expect("monitor start");
 
         assert_eq!(status, ProxyMonitorStatus::running());
-        assert_eq!(
-            controller.stop().expect("monitor stop"),
-            ProxyMonitorStatus::stopped()
-        );
-    }
-
-    #[tokio::test]
-    async fn proxy_monitor_opens_only_the_connections_websocket() {
-        let controller = ProxyMonitorController::new();
-
-        controller
-            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
-            .expect("monitor start");
-
-        assert_eq!(
-            monitor_task_count(&controller),
-            1,
-            "the statistics service already streams /traffic from the same port"
-        );
         assert_eq!(
             controller.stop().expect("monitor stop"),
             ProxyMonitorStatus::stopped()
@@ -748,21 +707,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn proxy_monitor_zero_state_port_stops_without_endpoint() {
+    async fn proxy_monitor_stops_when_no_core_is_running() {
         let controller = ProxyMonitorController::new();
+        let (core_tx, core) = running_core(RUNTIME_PORT);
 
         controller
-            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+            .start(core.clone(), Arc::new(NoopProxyRuntimeEventSink))
             .expect("initial monitor start");
-        let (_, first_shutdown) = monitor_handle_snapshot(&controller);
+        let first_shutdown = monitor_shutdown(&controller);
 
+        core_tx.send_replace(ClashApiAccess::default());
         assert_eq!(
             controller
-                .start(
-                    &ClashApiAccess::default(),
-                    Arc::new(NoopProxyRuntimeEventSink)
-                )
-                .expect("zero port monitor start"),
+                .start(core, Arc::new(NoopProxyRuntimeEventSink))
+                .expect("monitor start with nothing to follow"),
             ProxyMonitorStatus::stopped()
         );
 
@@ -770,28 +728,41 @@ mod tests {
         assert!(monitor_handle_is_none(&controller));
     }
 
+    /// A restart mints a new token and may move the port. The monitor reads
+    /// both from the watch before every connect, so a second `start` — for the
+    /// same core or for the one that replaced it — must leave the running
+    /// monitor alone instead of tearing it down and losing its backoff state.
     #[tokio::test]
-    async fn proxy_monitor_start_is_idempotent_for_same_endpoint() {
+    async fn proxy_monitor_start_keeps_the_running_monitor_across_a_core_restart() {
         let controller = ProxyMonitorController::new();
+        let (core_tx, core) = running_core(RUNTIME_PORT);
 
         assert_eq!(
             controller
-                .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+                .start(core.clone(), Arc::new(NoopProxyRuntimeEventSink))
                 .expect("first monitor start"),
             ProxyMonitorStatus::running()
         );
-        let (first_endpoint, first_shutdown) = monitor_handle_snapshot(&controller);
+        let first_shutdown = monitor_shutdown(&controller);
 
         assert_eq!(
             controller
-                .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+                .start(core.clone(), Arc::new(NoopProxyRuntimeEventSink))
                 .expect("second monitor start"),
             ProxyMonitorStatus::running()
         );
-        let (second_endpoint, second_shutdown) = monitor_handle_snapshot(&controller);
+        core_tx.send_replace(ClashApiAccess::new(
+            Some(RUNTIME_PORT + 100),
+            Some(ClashApiSecret::generate()),
+        ));
+        assert_eq!(
+            controller
+                .start(core, Arc::new(NoopProxyRuntimeEventSink))
+                .expect("monitor start after a restart"),
+            ProxyMonitorStatus::running()
+        );
 
-        assert_eq!(first_endpoint, second_endpoint);
-        assert!(first_shutdown.same_channel(&second_shutdown));
+        assert!(first_shutdown.same_channel(&monitor_shutdown(&controller)));
         assert!(!shutdown_requested(&first_shutdown));
         assert_eq!(
             controller.stop().expect("monitor stop"),
@@ -802,11 +773,12 @@ mod tests {
     #[tokio::test]
     async fn proxy_monitor_start_after_stop_creates_fresh_handle() {
         let controller = ProxyMonitorController::new();
+        let (_core, core) = running_core(RUNTIME_PORT);
 
         controller
-            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+            .start(core.clone(), Arc::new(NoopProxyRuntimeEventSink))
             .expect("first monitor start");
-        let (first_endpoint, first_shutdown) = monitor_handle_snapshot(&controller);
+        let first_shutdown = monitor_shutdown(&controller);
         assert_eq!(
             controller.stop().expect("monitor stop"),
             ProxyMonitorStatus::stopped()
@@ -816,57 +788,14 @@ mod tests {
 
         assert_eq!(
             controller
-                .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+                .start(core, Arc::new(NoopProxyRuntimeEventSink))
                 .expect("restart after stop"),
             ProxyMonitorStatus::running()
         );
-        let (restarted_endpoint, restarted_shutdown) = monitor_handle_snapshot(&controller);
+        let restarted_shutdown = monitor_shutdown(&controller);
 
-        assert_eq!(first_endpoint, restarted_endpoint);
         assert!(!first_shutdown.same_channel(&restarted_shutdown));
         assert!(!shutdown_requested(&restarted_shutdown));
-        assert_eq!(
-            controller.stop().expect("monitor stop"),
-            ProxyMonitorStatus::stopped()
-        );
-    }
-
-    #[tokio::test]
-    async fn proxy_monitor_different_endpoint_replaces_previous_handle() {
-        let controller = ProxyMonitorController::new();
-        let replacement_port = RUNTIME_PORT + 100;
-
-        assert_eq!(
-            controller
-                .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
-                .expect("initial monitor start"),
-            ProxyMonitorStatus::running()
-        );
-        let (initial_endpoint, initial_shutdown) = monitor_handle_snapshot(&controller);
-
-        assert_eq!(
-            controller
-                .start(
-                    &access(replacement_port),
-                    Arc::new(NoopProxyRuntimeEventSink)
-                )
-                .expect("replacement monitor start"),
-            ProxyMonitorStatus::running()
-        );
-        let (replacement_endpoint, replacement_shutdown) = monitor_handle_snapshot(&controller);
-
-        assert_eq!(
-            proxy_runtime_endpoint(&access(RUNTIME_PORT)).as_ref(),
-            Some(&initial_endpoint)
-        );
-        assert_eq!(
-            proxy_runtime_endpoint(&access(replacement_port)).as_ref(),
-            Some(&replacement_endpoint)
-        );
-        assert_ne!(initial_endpoint, replacement_endpoint);
-        assert!(shutdown_requested(&initial_shutdown));
-        assert!(!initial_shutdown.same_channel(&replacement_shutdown));
-        assert!(!shutdown_requested(&replacement_shutdown));
         assert_eq!(
             controller.stop().expect("monitor stop"),
             ProxyMonitorStatus::stopped()
@@ -877,9 +806,10 @@ mod tests {
     async fn proxy_monitor_clones_share_handle_state() {
         let controller = ProxyMonitorController::new();
         let clone = controller.clone();
+        let (_core, core) = running_core(RUNTIME_PORT);
 
         clone
-            .start(&access(RUNTIME_PORT), Arc::new(NoopProxyRuntimeEventSink))
+            .start(core, Arc::new(NoopProxyRuntimeEventSink))
             .expect("monitor start through clone");
         assert!(!monitor_handle_is_none(&controller));
 

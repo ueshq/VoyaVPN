@@ -54,6 +54,13 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   }
 
   retry() {
+    // `lazy` remembers a failed import for good, so rendering again would
+    // only throw the same error; a screen whose chunk never arrived comes back
+    // with the page.
+    if (isChunkLoadError(this.state.error)) {
+      window.location.reload();
+      return;
+    }
     this.setState({ error: null });
   }
 
@@ -64,6 +71,16 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
 
     return this.props.children;
   }
+}
+
+/** A dynamic `import()` that failed, as each engine words it. */
+function isChunkLoadError(error: Error | null) {
+  return (
+    error !== null &&
+    /dynamically imported module|Importing a module script failed|error loading dynamically imported/i.test(
+      error.message,
+    )
+  );
 }
 
 function AppErrorFallback({ onRetry }: { onRetry: () => void }) {

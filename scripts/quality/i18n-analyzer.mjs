@@ -209,13 +209,28 @@ export const EXTERNAL_KEY_NAMESPACES = [
 /**
  * Locale keys that no production source names. A key counts as used when some
  * string literal equals it — `t("a.b")` or a label map entry `"a.b"` alike,
- * since dynamic keys are already rejected — or when its namespace is read
- * outside the frontend.
+ * since dynamic keys are already rejected — or, for a plural form, equals its
+ * base, or when its namespace is read outside the frontend.
  */
 export function unusedTranslationKeys({ keys, literals, externalPrefixes = [] }) {
   return keys.filter(
-    (key) => !literals.has(key) && !externalPrefixes.some((prefix) => key.startsWith(prefix)),
+    (key) =>
+      !literals.has(pluralBaseKey(key) ?? key) &&
+      !externalPrefixes.some((prefix) => key.startsWith(prefix)),
   );
+}
+
+/**
+ * The name a plural message is called by: `x` for the locale leaves `x_one`
+ * and `x_other`. `null` for a leaf that is not a plural form.
+ *
+ * A call site names the base and passes `count`; i18next picks the form. So
+ * the base is what source may reference, and the forms are what the locale
+ * files spell.
+ */
+export function pluralBaseKey(key) {
+  const match = /^(.+)_(?:zero|one|two|few|many|other)$/u.exec(key);
+  return match ? match[1] : null;
 }
 
 export function isUserVisibleText(value) {

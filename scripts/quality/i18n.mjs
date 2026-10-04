@@ -5,6 +5,7 @@ import { readJson } from "../lib/fs.mjs";
 import {
   EXTERNAL_KEY_NAMESPACES,
   inspectI18nSource,
+  pluralBaseKey,
   unusedTranslationKeys,
 } from "./i18n-analyzer.mjs";
 
@@ -28,7 +29,10 @@ const localeCodes = ["en", "zh-Hans", "zh-Hant"];
 
 const resources = Object.fromEntries(localeCodes.map((code) => [code, readLocale(code)]));
 const englishKeys = flattenResourceKeys(resources.en).sort();
-const knownKeys = new Set(englishKeys);
+// What source may name: a plain leaf, or a plural message by its base. A form
+// (`x_one`) is not on the list, so picking one by hand is an undefined key —
+// the choice belongs to i18next and the `count` it is given.
+const knownKeys = new Set(englishKeys.map((key) => pluralBaseKey(key) ?? key));
 
 for (const code of localeCodes) {
   const keys = flattenResourceKeys(resources[code]).sort();
@@ -39,6 +43,27 @@ for (const code of localeCodes) {
       `Locale ${code} is not aligned with en (missing: ${missing.join(", ") || "none"}; extra: ${extra.join(", ") || "none"}).`,
     );
   }
+}
+
+const pluralProblems = [];
+for (const base of new Set(englishKeys.map(pluralBaseKey).filter(Boolean))) {
+  // Every language has the catch-all form, whatever others it adds.
+  if (!englishKeys.includes(`${base}_other`)) {
+    pluralProblems.push(`${base} has no _other form`);
+  }
+  // Chinese has one plural form. Its `_one` exists because a runtime without
+  // `Intl.PluralRules` falls back to an English-like rule and asks for it at a
+  // count of one; it must read the same as `_other`, or that runtime shows a
+  // different sentence than every other.
+  for (const code of localeCodes.filter((locale) => locale.startsWith("zh"))) {
+    const one = lookup(resources[code], `${base}_one`);
+    if (one !== undefined && one !== lookup(resources[code], `${base}_other`)) {
+      pluralProblems.push(`${code}: ${base}_one differs from ${base}_other`);
+    }
+  }
+}
+if (pluralProblems.length > 0) {
+  throw new Error(`Plural messages are inconsistent:\n${formatList(pluralProblems)}`);
 }
 
 if (englishKeys.some((key) => key.startsWith("resx."))) {
@@ -120,6 +145,10 @@ function flattenResourceKeys(resource, prefix = "") {
     }
     return [path];
   });
+}
+
+function lookup(resource, key) {
+  return key.split(".").reduce((node, part) => (isPlainObject(node) ? node[part] : undefined), resource);
 }
 
 function location(path, item) {

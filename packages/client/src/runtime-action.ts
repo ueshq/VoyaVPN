@@ -5,6 +5,7 @@ import type { TranslationFunction } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { IpcCommandError, appErrorOfKind } from "./errors";
 import { requestElevation } from "./platform";
+import { refreshQueries } from "./queries";
 import { queryKeys } from "./query-keys";
 import {
   runtimeActionPending,
@@ -130,7 +131,8 @@ export async function selectProfile(id: string, t: TranslationFunction, queryCli
   store.startSwitch(id);
   try {
     await voyaCommands().setActiveProfile(id);
-    await queryClient.invalidateQueries();
+    // The node list carries the active marker; nothing else changed.
+    await refreshQueries(queryClient, queryKeys.profiles);
     return true;
   } finally {
     store.finishSwitch();

@@ -5,7 +5,7 @@
 
 use std::{path::Path, path::PathBuf, sync::Arc};
 
-use voya_contracts::{SpeedtestResult, SpeedtestRunResult};
+use voya_contracts::{AppError, SpeedtestResult, SpeedtestRunResult};
 use voya_core::AppConfig;
 use voya_db::{Database, DbError, ProfileNamesHead};
 use voya_platform::{
@@ -16,7 +16,9 @@ use voya_platform::{
 use crate::{
     config_mutation::{ConfigMutationCoordinator, SharedAppConfig},
     connection_mode::{enforce_platform_connection_mode, seed_platform_connection_defaults},
-    contract_map::app_config_from_settings,
+    contract_map::{
+        app_config_from_settings, traffic_mode_from_contract, traffic_mode_to_contract,
+    },
     profiles::ProfileManager,
     routing::RoutingManager,
     runtime::RuntimeManager,
@@ -31,6 +33,16 @@ use crate::{
     tun::{ProviderRegistrationCache, TunManager},
     updates::UpdateManager,
 };
+
+/// A traffic-mode change after its commit.
+#[derive(Debug)]
+pub struct CommittedTrafficMode {
+    /// Whether the saved preference changed, and so whether the settings
+    /// bundle projected from it is stale.
+    pub config_changed: bool,
+    /// The mode in effect, or why the running core could not be switched.
+    pub applied: Result<voya_contracts::TrafficModeResponse, AppError>,
+}
 
 #[derive(Debug, Clone)]
 pub struct AppServices {
@@ -130,8 +142,14 @@ impl AppServices {
         &self,
         config: &AppConfig,
         index_ids: &[String],
-    ) -> crate::exports::Result<voya_contracts::ExportProfilesResult> {
-        crate::exports::export_profiles(&self.database, config, index_ids).await
+    ) -> Result<voya_contracts::ExportProfilesResult, AppError> {
+        crate::input_safety::require_ids(
+            index_ids,
+            "node id",
+            voya_contracts::AppErrorSubsystem::Export,
+        )?;
+
+        Ok(crate::exports::export_profiles(&self.database, config, index_ids).await?)
     }
 
     #[must_use]
@@ -149,18 +167,13 @@ impl AppServices {
         SubscriptionManager::new(&self.database)
     }
 
-    #[must_use]
-    pub fn routings(&self) -> RoutingManager<'_> {
-        RoutingManager::new(&self.database)
-    }
-
     /// Seeds the default routing profile on a database that has none, then
     /// unions every managed rule's matchers with the current seed. Returns
     /// whether a profile was created.
     pub async fn ensure_default_routing(
         &self,
         coordinator: &ConfigMutationCoordinator,
-    ) -> Result<bool, voya_contracts::AppError> {
+    ) -> Result<bool, AppError> {
         let committed = coordinator
             .mutate(async |unit_of_work, config| {
                 let language = config.appearance.language.clone();
@@ -170,14 +183,14 @@ impl AppServices {
                 if refreshed > 0 {
                     tracing::info!("managed routing rules refreshed in {refreshed} profile(s)");
                 }
-                Ok::<bool, voya_contracts::AppError>(seeded.is_some())
+                Ok::<bool, AppError>(seeded.is_some())
             })
             .await?;
         Ok(committed.value)
     }
 
     #[must_use]
-    pub fn updates(&self) -> UpdateManager<'_> {
+    fn updates(&self) -> UpdateManager<'_> {
         UpdateManager::new(&self.database, self.runtime_paths.clone())
     }
 
@@ -224,9 +237,57 @@ impl AppServices {
         SystemProxyManager::new(SystemProxyService::new(runner), self.runtime_paths.clone())
     }
 
+    /// Saves the traffic mode and, while a core is connected, switches it live.
+    ///
+    /// The preference is committed before the running core is touched, so a
+    /// live step that fails still leaves `config_changed` to announce: a host
+    /// invalidates on it first and only then answers with `applied`.
+    pub async fn change_traffic_mode(
+        &self,
+        mutations: &ConfigMutationCoordinator,
+        supervisor: &CoreSupervisor,
+        proxy_runtime: &crate::proxy_runtime::ProxyRuntimeManager,
+        mode: voya_contracts::TrafficMode,
+    ) -> Result<CommittedTrafficMode, AppError> {
+        let snapshot = supervisor.status().await?;
+        let outcome = proxy_runtime
+            .change_traffic_mode(mutations, &snapshot, traffic_mode_from_contract(mode))
+            .await?;
+        self.acknowledge_traffic_mode(&snapshot, &outcome);
+
+        Ok(CommittedTrafficMode {
+            config_changed: outcome.config_changed,
+            applied: outcome
+                .runtime_result
+                .map(|()| voya_contracts::TrafficModeResponse {
+                    mode: traffic_mode_to_contract(outcome.mode),
+                })
+                .map_err(AppError::from),
+        })
+    }
+
+    /// Downloads the rule sets the saved routing profiles name.
+    ///
+    /// Rule sets are exactly what a user on a censored network cannot reach
+    /// directly, so the download prefers the running core's local proxy. Under
+    /// a native tunnel there is no such port, and the request goes through the
+    /// tunnel anyway — the same effect.
+    pub async fn update_rule_sets(
+        &self,
+        config: &AppConfig,
+        target_os: TargetOs,
+    ) -> Result<Vec<voya_contracts::ResourceUpdateFile>, AppError> {
+        Ok(self
+            .updates()
+            .update_srs_assets(crate::sysproxy::runtime_default_proxy_url(
+                config, target_os,
+            ))
+            .await?)
+    }
+
     /// An explicit live mode switch acknowledges that field alone. Other
     /// settings saved since the last connection remain pending.
-    pub fn acknowledge_traffic_mode(
+    fn acknowledge_traffic_mode(
         &self,
         snapshot: &crate::supervisor::SupervisorSnapshot,
         outcome: &crate::proxy_runtime::TrafficModeChangeOutcome,
@@ -288,18 +349,24 @@ impl AppServices {
         config: &AppConfig,
         profile_ids: Vec<String>,
         on_results: F,
-    ) -> crate::speedtest::Result<SpeedtestRunResult>
+    ) -> Result<SpeedtestRunResult, AppError>
     where
         F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
+        crate::input_safety::require_ids(
+            &profile_ids,
+            "node id",
+            voya_contracts::AppErrorSubsystem::Speedtest,
+        )?;
         // The manager reads an empty list as every stored node. The app only
         // tests explicit selections, so an empty one is rejected here.
         if profile_ids.is_empty() {
-            return Err(crate::speedtest::SpeedtestError::EmptySelection);
+            return Err(crate::speedtest::SpeedtestError::EmptySelection.into());
         }
-        manager
+
+        Ok(manager
             .run_with_callback(&self.database, config, profile_ids, on_results)
-            .await
+            .await?)
     }
 
     #[must_use]
@@ -400,6 +467,52 @@ mod tests {
         assert_eq!(persisted.system_proxy.mode, SysProxyType::ForcedChange);
         reopened.database.close().await;
 
+        std::fs::remove_dir_all(&app_dir).expect("test database directory should be removable");
+    }
+
+    /// The preference is saved whether or not a core is there to switch: with
+    /// nothing connected the change is only the commit, and it answers with
+    /// the mode it saved.
+    #[tokio::test]
+    async fn a_traffic_mode_change_while_disconnected_commits_and_answers_with_the_mode() {
+        let app_dir = std::env::temp_dir().join(format!(
+            "voyavpn-traffic-mode-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let services = AppServices::connect(
+            &app_dir.join(voya_db::DATABASE_NAME),
+            AppPaths::new(&app_dir),
+        )
+        .await
+        .expect("test database");
+        let mutations =
+            services.config_mutations(Arc::new(std::sync::RwLock::new(AppConfig::default())));
+        let supervisor = CoreSupervisor::spawn(crate::supervisor::SupervisorDeps::new(
+            Arc::new(voya_platform::test_support::RecordingRunner::default()),
+            Arc::new(ElevationState::new()),
+        ));
+
+        let change = services
+            .change_traffic_mode(
+                &mutations,
+                &supervisor,
+                &crate::proxy_runtime::ProxyRuntimeManager::new(),
+                voya_contracts::TrafficMode::Global,
+            )
+            .await
+            .expect("the preference commits");
+
+        assert!(change.config_changed);
+        assert_eq!(
+            change.applied.expect("nothing to switch live").mode,
+            voya_contracts::TrafficMode::Global
+        );
+        assert_eq!(
+            mutations.current_config().proxy.traffic_mode,
+            voya_core::TrafficMode::Global
+        );
+
+        services.database.close().await;
         std::fs::remove_dir_all(&app_dir).expect("test database directory should be removable");
     }
 
@@ -512,6 +625,11 @@ mod tests {
                 expected.network.system_proxy.mode = mode;
                 expected.network.tun.enabled = tun_enabled;
                 expected.network.system_proxy.exceptions = "localhost,example.test".to_string();
+                // Settings now state DNS the way the DNS read does — blank
+                // fields resolve to the defaults — so the round-trip
+                // expectation is the normalized form. What must survive
+                // untouched is everything else, which is this test's point.
+                expected.dns = crate::contract_map::default_dns_settings();
                 services
                     .database
                     .settings()

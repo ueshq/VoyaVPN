@@ -25,6 +25,11 @@ impl SnapshotCoreGenEnv {
         &self.profiles
     }
 
+    /// The same nodes, given up by a snapshot nothing reads any more.
+    pub(crate) fn into_profiles(self) -> Vec<ProfileItem> {
+        self.profiles
+    }
+
     pub(crate) fn new(
         config: &AppConfig,
         platform: CoreGenPlatform,

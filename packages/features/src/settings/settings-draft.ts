@@ -1,8 +1,6 @@
-export type SettingsChange = { path: string; value: unknown };
+import { isRecord } from "@voya/utils/guards";
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
+export type SettingsChange = { path: string; value: unknown };
 
 export function changedFields(
   before: unknown,
@@ -10,7 +8,7 @@ export function changedFields(
   path = "",
 ): SettingsChange[] {
   if (JSON.stringify(before) === JSON.stringify(after)) return [];
-  if (isObject(before) && isObject(after)) {
+  if (isRecord(before) && isRecord(after)) {
     return Object.keys(after).flatMap((key) =>
       changedFields(before[key], after[key], path ? `${path}.${key}` : key),
     );
@@ -41,11 +39,11 @@ export function applyChanges<T>(original: T, changes: SettingsChange[]): T {
     const keys = path.split(".");
     let target: unknown = result;
     for (const key of keys.slice(0, -1)) {
-      if (!isObject(target)) break;
+      if (!isRecord(target)) break;
       target = target[key];
     }
     const key = keys.at(-1);
-    if (isObject(target) && key) target[key] = value;
+    if (isRecord(target) && key) target[key] = value;
   }
   return result;
 }

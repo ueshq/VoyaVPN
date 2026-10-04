@@ -8,6 +8,8 @@ use std::{
 
 use thiserror::Error;
 use tokio::{net::TcpStream, time};
+
+use crate::download::read_response_text_limited;
 use voya_core::LOOPBACK;
 
 mod country;
@@ -20,6 +22,9 @@ pub use reachability::{
 };
 
 pub type CancellationFlag = Arc<AtomicBool>;
+
+/// The most a probe's text answer may weigh.
+const PROBE_TEXT_LIMIT: usize = 64 * 1024;
 pub type Result<T> = std::result::Result<T, NetworkProbeError>;
 
 #[derive(Debug, Error)]
@@ -80,15 +85,18 @@ impl SocksHttpProbe {
     }
 
     async fn optional_text(&self, url: &str, timeout: Duration) -> Option<String> {
-        self.client
+        let response = self
+            .client
             .get(url)
             .timeout(timeout)
             .send()
             .await
             .ok()?
             .error_for_status()
-            .ok()?
-            .text()
+            .ok()?;
+        // The answer is an address or a short trace, read through the user's
+        // node: the timeout bounds how long it takes, this bounds how much.
+        read_response_text_limited(response, PROBE_TEXT_LIMIT)
             .await
             .ok()
             .filter(|value| !value.trim().is_empty())

@@ -96,6 +96,10 @@ fn database_failures_keep_their_code_and_reset_hint() {
         path: PathBuf::from("/tmp/voyavpn.sqlite"),
         found: Some(2),
         expected: 1,
+        reason: voya_db::SchemaRejectionReason::Version {
+            found: 2,
+            expected: 1,
+        },
         manual_reset_command: "rm /tmp/voyavpn.sqlite".to_string(),
     };
 
@@ -438,15 +442,6 @@ fn runtime_failures_are_classified() {
             AppErrorSubsystem::Runtime,
         ),
         (
-            "config dir",
-            RuntimeError::CreateConfigDir {
-                path: PathBuf::from("/tmp/configs"),
-                source: io_error(),
-            },
-            "io",
-            AppErrorSubsystem::Runtime,
-        ),
-        (
             "config remove",
             RuntimeError::RemoveConfig {
                 path: PathBuf::from("/tmp/config.json"),
@@ -521,6 +516,15 @@ fn tun_and_system_proxy_failures_are_classified() {
                 expected: "/Applications/VoyaVPN.app".to_string(),
                 resolved: "/tmp/VoyaVPN.app".to_string(),
             },
+            "internal",
+            AppErrorSubsystem::Tun,
+        ),
+        (
+            "probe task",
+            TunManagerError::Task(crate::blocking::BlockingTaskError {
+                context: "TUN status",
+                message: "task 7 panicked".to_string(),
+            }),
             "internal",
             AppErrorSubsystem::Tun,
         ),
@@ -697,7 +701,6 @@ mod guards {
             | SpeedtestError::Process(_)
             | SpeedtestError::SingboxConfig(_)
             | SpeedtestError::Cancelled
-            | SpeedtestError::CreateConfigDir { .. }
             | SpeedtestError::WriteConfig { .. }
             | SpeedtestError::NoAvailablePort(_)
             | SpeedtestError::InvalidSocksPort(_)
@@ -724,7 +727,8 @@ mod guards {
             | RuntimeError::ActiveProfileNotFound(_)
             | RuntimeError::ActivePolicyGroupNotFound(_)
             | RuntimeError::Validation { .. }
-            | RuntimeError::CreateConfigDir { .. }
+            | RuntimeError::ReadConfig { .. }
+            | RuntimeError::Task(_)
             | RuntimeError::WriteConfig { .. }
             | RuntimeError::RemoveConfig { .. }
             | RuntimeError::SingboxConfig(_)
@@ -768,7 +772,8 @@ mod guards {
             TunManagerError::ElevationRequired
             | TunManagerError::VpnRequired
             | TunManagerError::UnsupportedPlatform
-            | TunManagerError::ProviderPathMismatch { .. } => (),
+            | TunManagerError::ProviderPathMismatch { .. }
+            | TunManagerError::Task(_) => (),
         }
     }
 
@@ -789,7 +794,7 @@ mod guards {
             | ConnectionModeError::Commit(_)
             | ConnectionModeError::SystemProxyRolledBack { .. }
             | ConnectionModeError::SystemProxyRollbackFailed { .. }
-            | ConnectionModeError::Task { .. } => (),
+            | ConnectionModeError::Task(_) => (),
         }
     }
 

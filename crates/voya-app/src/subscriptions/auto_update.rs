@@ -335,8 +335,8 @@ async fn run_single_update(
             outcome.error = Some(SHUTDOWN_MESSAGE.to_string());
             return outcome;
         }
-        fetched = manager.prepare_subscription_update(
-            Some(&item.id),
+        fetched = SubscriptionManager::prepare_update_of(
+            item.clone(),
             connected,
             proxy_url.as_deref(),
         ) => fetched,
@@ -349,6 +349,13 @@ async fn run_single_update(
         }
     };
     if !prepared.has_imports() {
+        // Nothing importable came back, so no mutation follows — the fetch
+        // failures are persisted directly through the pool so the metadata
+        // table remembers the attempt instead of claiming "never updated".
+        if let Err(error) = manager.persist_prepared_failures(&prepared).await {
+            outcome.error = Some(redact_urls(&error.to_string()));
+            return outcome;
+        }
         let result = prepared.into_result();
         outcome.error =
             Some(
@@ -548,6 +555,45 @@ mod tests {
                 .and_then(|metadata| metadata.last_update_at),
             None,
             "a junk response must not mark the subscription current"
+        );
+    }
+
+    /// A fetch that fails before anything is importable takes the no-imports
+    /// early return; without persisting there, the metadata table would keep
+    /// claiming the subscription was never updated after a scheduler run.
+    #[tokio::test]
+    async fn a_fetch_failure_without_imports_is_persisted() {
+        let database = scheduler_database("ftp://not-an-http-source".to_string()).await;
+        let coordinator = ConfigMutationCoordinator::new(
+            database.clone(),
+            Arc::new(RwLock::new(AppConfig::default())),
+        );
+        let sink = RecordingSink::default();
+        let mut attempts = BTreeMap::new();
+        let (_shutdown, mut shutdown_rx) = watch::channel(false);
+
+        run_due_updates(
+            &database,
+            &coordinator,
+            &scheduler_supervisor(),
+            TargetOs::Linux,
+            &sink,
+            &mut attempts,
+            &mut shutdown_rx,
+        )
+        .await;
+
+        let metadata = database
+            .subscription_metadata()
+            .get("junk")
+            .await
+            .expect("auto-update test operation should succeed")
+            .expect("the failed attempt should have been persisted");
+        assert_eq!(metadata.last_attempt_failed, Some(true));
+        let diagnostic = metadata.last_attempt_error.clone();
+        assert!(
+            diagnostic.is_some_and(|error| !error.trim().is_empty()),
+            "the redacted diagnostic should still say something: {metadata:?}"
         );
     }
 

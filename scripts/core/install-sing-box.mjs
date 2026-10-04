@@ -1,6 +1,6 @@
 import { isCliEntrypoint, truthy } from "../lib/common.mjs";
-import { runSeedInstall } from "./install-entry.mjs";
-import { installSingBoxCore, parseInstallArgs } from "./sing-box-installer.mjs";
+import { parseInstallArgs, runSeedInstall } from "./install-entry.mjs";
+import { installSingBoxCore } from "./sing-box-installer.mjs";
 
 if (isCliEntrypoint(import.meta.url)) {
   await runSeedInstall({

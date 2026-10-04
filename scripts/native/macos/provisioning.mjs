@@ -18,21 +18,18 @@ export const defaultProvisioningProfileDir = resolve(repoRoot, "..", "docs", "ce
  */
 export const installedProvisioningProfileDir = resolve(homedir(), "Library", "MobileDevice", "Provisioning Profiles");
 
+/** One value out of a plist, as PlistBuddy prints it; `""` for a key that is optional and absent. */
 export function plistBuddy(plistPath, keyPath, optional = false) {
-  const result = capture("/usr/libexec/PlistBuddy", ["-c", `Print ${keyPath}`, plistPath], {
-    cwd: repoRoot,
-  });
-  if (result.status !== 0) {
-    if (optional) {
-      return "";
-    }
-    throw new Error(`Unable to read ${keyPath} from ${plistPath}: ${result.stderr || result.stdout}`);
-  }
-  return result.stdout.trim();
+  return printPlistValue(plistPath, keyPath, optional, []);
 }
 
+/** The same value as XML, which is the only form that keeps `<data>` and nested arrays intact. */
 function plistBuddyXml(plistPath, keyPath, optional = false) {
-  const result = capture("/usr/libexec/PlistBuddy", ["-x", "-c", `Print ${keyPath}`, plistPath], {
+  return printPlistValue(plistPath, keyPath, optional, ["-x"]);
+}
+
+function printPlistValue(plistPath, keyPath, optional, format) {
+  const result = capture("/usr/libexec/PlistBuddy", [...format, "-c", `Print ${keyPath}`, plistPath], {
     cwd: repoRoot,
   });
   if (result.status !== 0) {

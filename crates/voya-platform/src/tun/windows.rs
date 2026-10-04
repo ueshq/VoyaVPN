@@ -16,10 +16,10 @@ use std::time::Instant;
 
 #[cfg(windows)]
 pub(super) fn windows_service_status() -> NativeTunStatus {
-    let output = match hidden_command(r"C:\Windows\System32\sc.exe")
-        .args(["query", WINDOWS_TUN_SERVICE_NAME])
-        .output()
-    {
+    let output = match output_with_timeout(
+        hidden_command(r"C:\Windows\System32\sc.exe").args(["query", WINDOWS_TUN_SERVICE_NAME]),
+        HELPER_TIMEOUT,
+    ) {
         Ok(output) => output,
         Err(error) => {
             return NativeTunStatus {
@@ -103,15 +103,17 @@ pub(super) fn start_windows_tun_service(
     // the start, so settle the previous transition first.
     settle_windows_service_transition("start Windows tunnel service")?;
 
-    let output = hidden_command(r"C:\Windows\System32\sc.exe")
-        .arg("start")
-        .arg(WINDOWS_TUN_SERVICE_NAME)
-        .arg(request.main_config_path.to_string_lossy().as_ref())
-        .output()
-        .map_err(|source| NativeTunError::Command {
-            action: "start Windows tunnel service",
-            source,
-        })?;
+    let output = output_with_timeout(
+        hidden_command(r"C:\Windows\System32\sc.exe")
+            .arg("start")
+            .arg(WINDOWS_TUN_SERVICE_NAME)
+            .arg(request.main_config_path.to_string_lossy().as_ref()),
+        HELPER_TIMEOUT,
+    )
+    .map_err(|source| NativeTunError::Command {
+        action: "start Windows tunnel service",
+        source,
+    })?;
 
     // 1056 is ERROR_SERVICE_ALREADY_RUNNING; the caller wanted a running
     // tunnel, which is what the wait below confirms.
@@ -137,13 +139,14 @@ pub(super) fn start_windows_tun_service(
 
 #[cfg(windows)]
 pub(super) fn stop_windows_tun_service() -> Result<(), NativeTunError> {
-    let output = hidden_command(r"C:\Windows\System32\sc.exe")
-        .args(["stop", WINDOWS_TUN_SERVICE_NAME])
-        .output()
-        .map_err(|source| NativeTunError::Command {
-            action: "stop Windows tunnel service",
-            source,
-        })?;
+    let output = output_with_timeout(
+        hidden_command(r"C:\Windows\System32\sc.exe").args(["stop", WINDOWS_TUN_SERVICE_NAME]),
+        HELPER_TIMEOUT,
+    )
+    .map_err(|source| NativeTunError::Command {
+        action: "stop Windows tunnel service",
+        source,
+    })?;
 
     // 1062 is ERROR_SERVICE_NOT_ACTIVE: the tunnel is already down, which is
     // the state the caller asked for.

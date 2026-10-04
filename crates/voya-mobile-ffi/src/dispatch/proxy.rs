@@ -4,21 +4,15 @@
 use std::sync::Arc;
 
 use serde::Deserialize;
-use serde_json::Value;
-use voya_app::{
-    contract_map::{traffic_mode_from_contract, traffic_mode_to_contract},
-    invalidation,
-    proxy_runtime::report_monitor_result,
-    supervisor::{ClashApiAccess, SupervisorSnapshot},
-};
-use voya_contracts::{AppError, TrafficMode, TrafficModeResponse};
+use voya_app::{invalidation, proxy_runtime::report_monitor_result};
+use voya_contracts::TrafficMode;
 
 use crate::app::MobileState;
 
-use super::{answer, arguments};
+use super::{answer, arguments, Answer};
 
-pub(super) async fn list_connections(state: &MobileState) -> Result<Value, AppError> {
-    let access = clash_api_access(state).await;
+pub(super) async fn list_connections(state: &MobileState) -> Answer {
+    let access = state.supervisor.clash_api_access().await;
 
     answer(
         "proxy_list_connections",
@@ -32,13 +26,14 @@ struct CloseConnection {
     connection_id: Option<String>,
 }
 
-pub(super) async fn close_connection(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn close_connection(state: &MobileState, args: &str) -> Answer {
     let CloseConnection { connection_id } = arguments("proxy_close_connection", args)?;
-    let access = clash_api_access(state).await;
-    let snapshot = state
-        .proxy_runtime
-        .close_connection(&access, connection_id.as_deref())
-        .await?;
+    let snapshot = voya_app::proxy_runtime::close_connection_use_case(
+        &state.proxy_runtime,
+        &state.supervisor,
+        connection_id,
+    )
+    .await?;
     state.sinks.invalidate(
         "proxy-connection-closed",
         invalidation::proxy_runtime_scopes(false),
@@ -53,38 +48,33 @@ struct SetTrafficMode {
     mode: TrafficMode,
 }
 
-pub(super) async fn set_traffic_mode(state: &MobileState, args: &Value) -> Result<Value, AppError> {
+pub(super) async fn set_traffic_mode(state: &MobileState, args: &str) -> Answer {
     let SetTrafficMode { mode } = arguments("proxy_set_traffic_mode", args)?;
-    let snapshot = state.supervisor.status().await?;
-    let outcome = state
-        .proxy_runtime
+    let change = state
+        .services
         .change_traffic_mode(
             &state.config_mutations,
-            &snapshot,
-            traffic_mode_from_contract(mode),
+            &state.supervisor,
+            &state.proxy_runtime,
+            mode,
         )
         .await?;
     // The preference is already committed, including when a live step fails.
-    state.services.acknowledge_traffic_mode(&snapshot, &outcome);
     state.sinks.invalidate(
         "proxy-traffic-mode-changed",
-        invalidation::proxy_runtime_scopes(outcome.config_changed),
+        invalidation::proxy_runtime_scopes(change.config_changed),
     );
-    outcome.runtime_result?;
 
-    answer(
-        "proxy_set_traffic_mode",
-        &TrafficModeResponse {
-            mode: traffic_mode_to_contract(outcome.mode),
-        },
-    )
+    answer("proxy_set_traffic_mode", &change.applied?)
 }
 
-pub(super) async fn start_monitor(state: &MobileState) -> Result<Value, AppError> {
-    let access = clash_api_access(state).await;
-    let result = state
-        .proxy_monitor
-        .start(&access, Arc::clone(&state.sinks) as Arc<_>);
+pub(super) async fn start_monitor(state: &MobileState) -> Answer {
+    let result = voya_app::proxy_runtime::start_monitor_use_case(
+        &state.proxy_monitor,
+        &state.supervisor,
+        Arc::clone(&state.sinks) as Arc<_>,
+    )
+    .await;
 
     answer(
         "proxy_start_monitor",
@@ -97,7 +87,7 @@ pub(super) async fn start_monitor(state: &MobileState) -> Result<Value, AppError
     )
 }
 
-pub(super) async fn stop_monitor(state: &MobileState) -> Result<Value, AppError> {
+pub(super) async fn stop_monitor(state: &MobileState) -> Answer {
     let result = state.proxy_monitor.stop();
 
     answer(
@@ -109,21 +99,4 @@ pub(super) async fn stop_monitor(state: &MobileState) -> Result<Value, AppError>
             );
         })?,
     )
-}
-
-/// How to reach the Clash API of the core that is actually running, if any.
-///
-/// The generated config decides both the port and the token it demands, so the
-/// supervisor snapshot is the only authority for either. On a phone that API
-/// lives inside the tunnel provider; loopback there is per device, not per
-/// process, so the app reaches it exactly as macOS does.
-async fn clash_api_access(state: &MobileState) -> ClashApiAccess {
-    state
-        .supervisor
-        .status()
-        .await
-        .ok()
-        .as_ref()
-        .map(SupervisorSnapshot::clash_api_access)
-        .unwrap_or_default()
 }

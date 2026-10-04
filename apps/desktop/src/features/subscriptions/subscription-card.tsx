@@ -1,14 +1,11 @@
 import type { SubscriptionMetadata } from "@voya/contracts";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { formatBytes } from "@voya/utils/formatting";
 import { cn } from "@voya/ui/lib/utils";
 import {
-  isExpired,
   isTrafficExhausted,
   usageRatio,
   relativeTimeFrom,
-  remainingDays,
-  remainingTrafficBytes,
+  subscriptionUsageStats,
 } from "@voya/features/subscriptions/subscription-usage";
 
 type TranslateFn = ReturnType<typeof useI18n>["t"];
@@ -25,32 +22,8 @@ export function SubscriptionMetaLine({
   metadata: SubscriptionMetadata | null | undefined;
   t: TranslateFn;
 }) {
-  const stats: { destructive?: boolean; key: string; label: string }[] = [];
-  const remaining = remainingTrafficBytes(metadata);
-  if (remaining != null) {
-    stats.push({
-      destructive: remaining === 0,
-      key: "traffic",
-      label: t("home.subscriptionCard.remainingTraffic", {
-        amount: formatBytes(remaining),
-      }),
-    });
-  }
-  const days = remainingDays(metadata?.expireAt);
-  if (days != null) {
-    stats.push(
-      isExpired(metadata?.expireAt)
-        ? {
-            destructive: true,
-            key: "days",
-            label: t("home.subscriptionCard.expired"),
-          }
-        : {
-            key: "days",
-            label: t("home.subscriptionCard.remainingDays", { days }),
-          },
-    );
-  }
+  const stats: { destructive?: boolean; key: string; label: string }[] =
+    subscriptionUsageStats(metadata, t);
   if (metadata?.lastUpdateAt != null) {
     const { unit, value } = relativeTimeFrom(metadata.lastUpdateAt);
     const formatted = new Intl.RelativeTimeFormat(language, {

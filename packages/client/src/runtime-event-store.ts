@@ -46,6 +46,14 @@ export type RuntimeEventState = {
   coreState: RuntimeStatusResponse | null;
   coreStateReceivedAt: number | null;
   /**
+   * Counts the connections this session has seen: it moves each time the core
+   * goes from anything else to connected. What belongs to one connection — its
+   * exit address, what it still owes the saved settings — is keyed by it. The
+   * process id cannot do that job: a core that runs inside the system's tunnel
+   * provider has none, so two connections to one node looked like one.
+   */
+  connectionEpoch: number;
+  /**
    * Filled only while the Logs panel streams (`useLogStream`); the backend
    * holds lines back otherwise, so another reader would see nothing.
    */
@@ -55,6 +63,12 @@ export type RuntimeEventState = {
   serverStatsByProfileId: Record<string, ServerStatItem>;
   speedtestResultsByProfileId: Record<string, SpeedtestResult>;
   speedtestRunning: boolean;
+  /**
+   * Forgets the connection table, including a push still waiting for its
+   * frame — which would otherwise put the table back a moment after a screen
+   * that is leaving had cleared it.
+   */
+  clearProxyConnections: () => void;
   setProxyConnections: (snapshot: ProxyConnectionsSnapshot) => void;
   setProxyMonitorFailed: (message?: string | null) => void;
   setProxyMonitorStarting: (message?: string | null) => void;
@@ -68,12 +82,12 @@ export type RuntimeEventState = {
   tun: TunStatus | null;
 };
 
-/** The core's state; `disconnected` until the first status arrives. */
 /** Whether a speedtest result is still waiting or running for its node. */
 export function speedtestPending(result: Pick<SpeedtestResult, "outcome">) {
   return result.outcome === "waiting" || result.outcome === "testing";
 }
 
+/** The core's state; `disconnected` until the first status arrives. */
 export function coreStateOf(coreState: RuntimeStatusResponse | null) {
   return coreState?.state ?? "disconnected";
 }
@@ -89,15 +103,111 @@ type CancelFrame = () => void;
 const MAX_LOG_LINES = 500;
 const MAX_PROXY_CONNECTIONS = 10_000;
 
-let pendingProxyConnections: ProxyConnectionsSnapshot | null = null;
-let pendingProxyConnectionsFrame: CancelFrame | null = null;
-let pendingLogLines: StoredLogLine[] = [];
-let pendingLogLinesFrame: CancelFrame | null = null;
-let pendingSpeedtestResults: Record<string, SpeedtestResult> = {};
-let pendingSpeedtestResultsFrame: CancelFrame | null = null;
-let pendingStatistics: StatisticsSnapshot | null = null;
-let pendingServerStats: Record<string, ServerStatItem> = {};
-let pendingStatisticsFrame: CancelFrame | null = null;
+/**
+ * A value that accumulates between frames and is applied once per frame.
+ *
+ * Every stream the shell pushes faster than the screen repaints goes through
+ * one of these: `push` folds an event into the pending value and schedules a
+ * single flush, so a burst costs one store write and one round of subscriber
+ * notifications. While the window is hidden no frame runs, and the value just
+ * keeps folding — only its latest state is ever rendered.
+ */
+type FrameBuffer<T> = {
+  /** Folds an event into the pending value and schedules the flush. */
+  push: (fold: (pending: T) => T) => void;
+  /** Drops the pending value and the flush queued for it. */
+  clear: () => void;
+};
+
+function createFrameBuffer<T>(empty: () => T, flush: (pending: T) => void): FrameBuffer<T> {
+  let pending = empty();
+  let cancelFrame: CancelFrame | null = null;
+
+  return {
+    clear: () => {
+      cancelFrame?.();
+      cancelFrame = null;
+      pending = empty();
+    },
+    push: (fold) => {
+      pending = fold(pending);
+      cancelFrame ??= scheduleFrame(() => {
+        const batch = pending;
+        pending = empty();
+        cancelFrame = null;
+        flush(batch);
+      });
+    },
+  };
+}
+
+const proxyConnectionsBuffer = createFrameBuffer<ProxyConnectionsSnapshot | null>(
+  () => null,
+  (snapshot) => {
+    if (!snapshot) {
+      return;
+    }
+
+    // Fresh data clears staleness only; the monitor state itself waits for a
+    // lifecycle event. Kept by identity once fresh, so its subscribers are not
+    // notified on every snapshot.
+    useRuntimeEventStore.setState((state) => ({
+      proxyConnections: snapshot,
+      proxyMonitorStatus: state.proxyMonitorStatus.stale
+        ? { ...state.proxyMonitorStatus, stale: false }
+        : state.proxyMonitorStatus,
+    }));
+  },
+);
+
+const logLinesBuffer = createFrameBuffer<StoredLogLine[]>(
+  () => [],
+  (batch) => {
+    if (batch.length === 0) {
+      return;
+    }
+
+    useRuntimeEventStore.setState((state) => ({
+      logLines: [...state.logLines, ...batch].slice(-MAX_LOG_LINES),
+    }));
+  },
+);
+
+const speedtestResultsBuffer = createFrameBuffer<Record<string, SpeedtestResult>>(
+  () => ({}),
+  (batch) => {
+    if (Object.keys(batch).length === 0) {
+      return;
+    }
+
+    useRuntimeEventStore.setState((state) => ({
+      speedtestResultsByProfileId: { ...state.speedtestResultsByProfileId, ...batch },
+    }));
+  },
+);
+
+type PendingStatistics = {
+  serverStats: Record<string, ServerStatItem>;
+  statistics: StatisticsSnapshot | null;
+};
+
+const statisticsBuffer = createFrameBuffer<PendingStatistics>(
+  () => ({ serverStats: {}, statistics: null }),
+  ({ serverStats, statistics }) => {
+    if (!statistics) {
+      return;
+    }
+
+    useRuntimeEventStore.setState((state) =>
+      Object.keys(serverStats).length === 0
+        ? { statistics }
+        : {
+            serverStatsByProfileId: { ...state.serverStatsByProfileId, ...serverStats },
+            statistics,
+          },
+    );
+  },
+);
 
 const MAX_PAYLOAD_STRING_LENGTH = 4096;
 
@@ -120,15 +230,14 @@ const initialProxyMonitorStatus: RuntimeProxyMonitorStatus = {
 
 export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
   clearLogs: () => {
-    pendingLogLinesFrame?.();
-    pendingLogLinesFrame = null;
-    pendingLogLines = [];
+    logLinesBuffer.clear();
     set({ logLines: [] });
   },
   proxyConnections: null,
   proxyMonitorStatus: initialProxyMonitorStatus,
   coreState: null,
   coreStateReceivedAt: null,
+  connectionEpoch: 0,
   logLines: [],
   pushTransientEvent: (event) => {
     if (event.kind === "proxyConnections") {
@@ -137,25 +246,7 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
         return;
       }
 
-      pendingProxyConnections = payload;
-      if (pendingProxyConnectionsFrame === null) {
-        pendingProxyConnectionsFrame = scheduleFrame(() => {
-          const snapshot = pendingProxyConnections;
-          pendingProxyConnections = null;
-          pendingProxyConnectionsFrame = null;
-          if (snapshot) {
-            // Fresh data clears staleness only; the monitor state itself waits
-            // for a lifecycle event. Kept by identity once fresh, so its
-            // subscribers are not notified on every snapshot.
-            set((state) => ({
-              proxyConnections: snapshot,
-              proxyMonitorStatus: state.proxyMonitorStatus.stale
-                ? { ...state.proxyMonitorStatus, stale: false }
-                : state.proxyMonitorStatus,
-            }));
-          }
-        });
-      }
+      proxyConnectionsBuffer.push(() => payload);
       return;
     }
 
@@ -165,26 +256,12 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     // capped array and notifying every subscriber per event.
     if (event.kind === "logLines") {
       const receivedAt = Date.now();
-      for (const { loggedAtMs, ...line } of event.payload) {
-        pendingLogLines.push({ ...line, loggedAt: loggedAtMs ?? receivedAt });
-      }
-      if (pendingLogLines.length > MAX_LOG_LINES) {
-        pendingLogLines = pendingLogLines.slice(-MAX_LOG_LINES);
-      }
-      if (pendingLogLinesFrame === null) {
-        pendingLogLinesFrame = scheduleFrame(() => {
-          const batch = pendingLogLines;
-          pendingLogLines = [];
-          pendingLogLinesFrame = null;
-          if (batch.length === 0) {
-            return;
-          }
-
-          set((state) => ({
-            logLines: [...state.logLines, ...batch].slice(-MAX_LOG_LINES),
-          }));
-        });
-      }
+      logLinesBuffer.push((pending) => {
+        for (const { loggedAtMs, ...line } of event.payload) {
+          pending.push({ ...line, loggedAt: loggedAtMs ?? receivedAt });
+        }
+        return pending.length > MAX_LOG_LINES ? pending.slice(-MAX_LOG_LINES) : pending;
+      });
       return;
     }
 
@@ -194,23 +271,12 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     // them and apply one `set` per frame (the log-line treatment) so a burst of
     // results costs one rebuild.
     if (event.kind === "speedtestResults") {
-      for (const result of event.payload) {
-        pendingSpeedtestResults[result.indexId] = result;
-      }
-      if (pendingSpeedtestResultsFrame === null) {
-        pendingSpeedtestResultsFrame = scheduleFrame(() => {
-          const batch = pendingSpeedtestResults;
-          pendingSpeedtestResults = {};
-          pendingSpeedtestResultsFrame = null;
-          if (Object.keys(batch).length === 0) {
-            return;
-          }
-
-          set((state) => ({
-            speedtestResultsByProfileId: { ...state.speedtestResultsByProfileId, ...batch },
-          }));
-        });
-      }
+      speedtestResultsBuffer.push((pending) => {
+        for (const result of event.payload) {
+          pending[result.indexId] = result;
+        }
+        return pending;
+      });
       return;
     }
 
@@ -225,36 +291,18 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
         return;
       }
 
-      pendingStatistics = payload;
-      if (payload.serverStat?.indexId) {
-        pendingServerStats[payload.serverStat.indexId] = payload.serverStat;
-      }
-      if (pendingStatisticsFrame === null) {
-        pendingStatisticsFrame = scheduleFrame(() => {
-          const statistics = pendingStatistics;
-          const serverStats = pendingServerStats;
-          pendingStatistics = null;
-          pendingServerStats = {};
-          pendingStatisticsFrame = null;
-          if (!statistics) {
-            return;
-          }
-
-          set((state) =>
-            Object.keys(serverStats).length === 0
-              ? { statistics }
-              : {
-                  serverStatsByProfileId: { ...state.serverStatsByProfileId, ...serverStats },
-                  statistics,
-                },
-          );
-        });
-      }
+      statisticsBuffer.push((pending) => {
+        pending.statistics = payload;
+        if (payload.serverStat?.indexId) {
+          pending.serverStats[payload.serverStat.indexId] = payload.serverStat;
+        }
+        return pending;
+      });
       return;
     }
 
     if (event.kind === "coreState") {
-      set(coreStateUpdate(event.payload));
+      set((state) => coreStateUpdate(state, event.payload));
       return;
     }
 
@@ -275,6 +323,10 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
     const status = await voyaCommands().speedtestStatus();
     set({ speedtestRunning: status.running });
   },
+  clearProxyConnections: () => {
+    proxyConnectionsBuffer.clear();
+    set({ proxyConnections: null });
+  },
   setProxyConnections: (proxyConnections) => {
     const payload = parseProxyConnectionsSnapshot(proxyConnections);
     if (payload) {
@@ -293,14 +345,12 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
       },
     })),
   setProxyMonitorStatus: (proxyMonitorStatus) => set({ proxyMonitorStatus }),
-  setCoreState: (coreState) => set(coreStateUpdate(coreState)),
+  setCoreState: (coreState) => set((state) => coreStateUpdate(state, coreState)),
   setSpeedtestRunning: (speedtestRunning) => set({ speedtestRunning }),
   clearSpeedtestResults: () => {
     // Drop the pending buffer too: the invalidation that triggers this must
     // not be followed by a scheduled frame resurrecting the cleared results.
-    pendingSpeedtestResultsFrame?.();
-    pendingSpeedtestResultsFrame = null;
-    pendingSpeedtestResults = {};
+    speedtestResultsBuffer.clear();
     set({ speedtestResultsByProfileId: {} });
   },
   setSysProxy: (sysProxy) => {
@@ -327,16 +377,19 @@ export const useRuntimeEventStore = create<RuntimeEventState>((set) => ({
  * queued for it, so the next connection starts from an empty table instead of
  * showing the previous session's rows until its first push.
  */
-function coreStateUpdate(coreState: RuntimeStatusResponse): Partial<RuntimeEventState> {
+function coreStateUpdate(
+  previous: Pick<RuntimeEventState, "connectionEpoch" | "coreState">,
+  coreState: RuntimeStatusResponse,
+): Partial<RuntimeEventState> {
   markRuntimeUpdate("coreState");
   const update = { coreState, coreStateReceivedAt: performance.now() };
   if (coreState.state === "connected") {
-    return update;
+    return previous.coreState?.state === "connected"
+      ? update
+      : { ...update, connectionEpoch: previous.connectionEpoch + 1 };
   }
 
-  pendingProxyConnectionsFrame?.();
-  pendingProxyConnectionsFrame = null;
-  pendingProxyConnections = null;
+  proxyConnectionsBuffer.clear();
   return { ...update, proxyConnections: null };
 }
 

@@ -1,14 +1,13 @@
 import { act } from "@testing-library/react-native";
 import { Alert, View, type MeasureOnSuccessCallback } from "react-native";
 import { fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
-import type { MockBackend } from "@voya/client/mock-backend";
 import { makePolicyGroupEntry } from "@voya/client/mock-seed";
 import { useNodeListStore } from "@voya/client/node-list-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { setClipboard } from "@voya/client/platform";
 
-import { registerMobileBackend, voyaTransport } from "~/ipc/platform";
+import { registerMobileBackend } from "~/ipc/platform";
 import { mockBackend, mockTransport } from "~/test/mock-transport";
 import { localeReady } from "~/native/platform-boot";
 import { renderScreen } from "~/test/providers";
@@ -49,7 +48,7 @@ describe("NodesScreen", () => {
     expect(screen.getByText("Local nodes")).toBeOnTheScreen();
     expect(screen.getByText("🇯🇵 Tokyo")).toBeOnTheScreen();
     expect(screen.getByText("🇺🇸 Los Angeles")).toBeOnTheScreen();
-    expect(screen.getAllByText("1 nodes").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("1 node").length).toBeGreaterThan(0);
   });
 
   it("marks the node in use and switches to another on tap", async () => {
@@ -60,9 +59,24 @@ describe("NodesScreen", () => {
 
     await user.press(screen.getByText("🇸🇬 Singapore"));
 
-    const backend = voyaTransport() as MockBackend;
+    const backend = mockBackend();
     expect(backend.state.calls.map((call) => call.command)).toContain("setActiveProfile");
     expect(backend.state.profiles.find((entry) => entry.isActive)?.profile.id).toBe("profile-1");
+  });
+
+  it("opens the actions sheet when the selected row is tapped again", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+
+    expect(await screen.findByText("Selected")).toBeOnTheScreen();
+
+    // Tapping the already-active row would re-select the same node and change
+    // nothing on screen; the sheet is the answer the tap owes the user.
+    await user.press(screen.getByText("🇯🇵 Tokyo"));
+
+    expect(await screen.findByText("Copy link")).toBeOnTheScreen();
+    const backend = mockBackend();
+    expect(backend.state.calls.filter((call) => call.command === "setActiveProfile")).toHaveLength(0);
   });
 
   it("does not read the clipboard merely by opening the list", async () => {
@@ -79,14 +93,50 @@ describe("NodesScreen", () => {
 
     await user.press(screen.getByText("Test all"));
 
-    const backend = voyaTransport() as MockBackend;
+    const backend = mockBackend();
     const run = backend.state.calls.find((call) => call.command === "runSpeedtest");
     const target = (run?.args[0] as { target: { profileIds: string[]; scope: string } }).target;
     expect(target.scope).toBe("profiles");
     expect([...target.profileIds].sort()).toEqual(["profile-0", "profile-1", "profile-2"]);
-    // The measurement lands on the row it belongs to, off the streamed results
-    // rather than a refetch.
+    // The measurement lands on the row it belongs to.
     expect(await screen.findByText("40 ms")).toBeOnTheScreen();
+  });
+
+  it("shows a node's result as it streams in, before the listing is read again", async () => {
+    await renderNodes();
+    await screen.findByText("🇯🇵 Tokyo");
+
+    // A result on the stream and nothing else: no listing was rewritten and no
+    // cache invalidated, which is what a run looks like until it ends.
+    await act(async () => {
+      useRuntimeEventStore.getState().pushTransientEvent({
+        kind: "speedtestResults",
+        payload: [
+          { countryCode: null, delay: 123, detail: null, indexId: "profile-0", ipInfo: null, outcome: "completed" },
+        ],
+      });
+    });
+
+    expect(await screen.findByText("123 ms")).toBeOnTheScreen();
+    expect(mockBackend().state.calls.filter((call) => call.command === "listProfileSummaries")).toHaveLength(1);
+  });
+
+  it("still measures every node with its group collapsed", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+    await screen.findByText("🇯🇵 Tokyo");
+
+    // Collapsing hides the rows; it must not disable the run or shrink it.
+    await user.press(screen.getByText("Local nodes"));
+    expect(screen.queryByText("🇯🇵 Tokyo")).toBeNull();
+    const testAll = screen.getByText("Test all");
+    expect(testAll).not.toBeDisabled();
+    await user.press(testAll);
+
+    const backend = mockBackend();
+    const run = backend.state.calls.find((call) => call.command === "runSpeedtest");
+    const target = (run?.args[0] as { target: { profileIds: string[]; scope: string } }).target;
+    expect([...target.profileIds].sort()).toEqual(["profile-0", "profile-1", "profile-2"]);
   });
 
   it("orders nodes by latency from the sort menu", async () => {
@@ -144,6 +194,12 @@ describe("NodesScreen", () => {
 
     await user.longPress(await screen.findByText("🇯🇵 Tokyo"));
 
+    // Every sheet action reaches iOS as a button carrying its own name —
+    // the review found them reading as checkboxes or nothing at all.
+    for (const name of ["Edit node", "Copy link", "Share…", "Test latency", "Show QR", "Delete"]) {
+      expect(await screen.findByRole("button", { name })).toBeOnTheScreen();
+    }
+
     await user.press(await screen.findByText("Copy link"));
 
     // The link the backend exported, handed straight to the system clipboard.
@@ -158,6 +214,8 @@ describe("NodesScreen", () => {
     await user.press(await screen.findByText("Show QR"));
 
     expect(await screen.findByLabelText("Generated QR code")).toBeOnTheScreen();
+    // The caption under the node name matches the list's label, not the raw enum.
+    expect(screen.getByText("VMess · node-0.example.test")).toBeOnTheScreen();
     expect(mockBackend().state.calls.map((call) => call.command)).toContain("generateQrCode");
   });
 
@@ -192,4 +250,21 @@ describe("NodesScreen", () => {
     );
   });
 
+  it("says in the sheet itself why a delete failed", async () => {
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    await renderNodes();
+    const user = userEvent.setup();
+    mockBackend().commands.deleteProfiles = () => Promise.reject(new Error("database is locked"));
+
+    await user.longPress(await screen.findByText("🇸🇬 Singapore"));
+    await user.press(await screen.findByText("Delete"));
+    const confirm = alert.mock.calls.at(-1)?.[2]?.find((button) => button.style === "destructive");
+    await act(() => confirm?.onPress?.());
+    alert.mockRestore();
+
+    // The sheet is still open, and the reason is on it rather than on the
+    // list's banner behind the modal.
+    expect(await screen.findByText("database is locked")).toBeOnTheScreen();
+    expect(screen.getByText("Delete")).toBeOnTheScreen();
+  });
 });

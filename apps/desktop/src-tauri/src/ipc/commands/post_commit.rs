@@ -7,14 +7,10 @@ use super::{support::*, *};
 
 /// Broadcasts one invalidation bundle and reports a failed emit as a notice.
 ///
-/// The seven `emit_*_invalidation` wrappers used to differ only in the notice
-/// title and the key list; both now come from `voya_app::invalidation`, which
-/// returns the pair together. Emitting is best-effort by design: the change is
+/// Which scopes a change touches, and the event they travel in, come from
+/// `voya_app::invalidation`. Emitting is best-effort by design: the change is
 /// already committed when this runs, so a dead event channel becomes a warning
 /// notice and never changes the command's result.
-///
-/// `scopes` is deduplicated and ordered so the payload is deterministic
-/// regardless of how a caller assembled its list.
 pub(crate) fn emit_invalidation<R>(
     app: &tauri::AppHandle<R>,
     reason: &str,
@@ -22,23 +18,12 @@ pub(crate) fn emit_invalidation<R>(
 ) where
     R: tauri::Runtime,
 {
-    let scopes: BTreeSet<InvalidationScope> = scopes.into_iter().collect();
-    // Nodes, the active node and the traffic mode all sit behind these scopes,
-    // and the tray shows each of them.
-    if let Err(error) = crate::refresh_tray_menu(app) {
-        tracing::warn!(?error, "failed to queue a tray menu refresh");
+    if invalidation::shows_in_tray(&scopes) {
+        if let Err(error) = crate::refresh_tray_menu(app) {
+            tracing::warn!(?error, "failed to queue a tray menu refresh");
+        }
     }
-    if let Err(error) = (InvalidateEvent {
-        keys: scopes
-            .into_iter()
-            .map(|scope| QueryInvalidation {
-                scope,
-                reason: reason.to_string(),
-            })
-            .collect(),
-    })
-    .emit(app)
-    {
+    if let Err(error) = invalidation::invalidate_event(reason, scopes).emit(app) {
         report_post_commit_error(
             app,
             failure_code,
@@ -69,33 +54,11 @@ where
     emit_event(app, TransientStreamEvent::TunChanged(status.clone()))
 }
 
-/// The tail every committed configuration change shares.
+/// The restart a committed change may owe a connected core, for callers that
+/// already announced their caches.
 ///
-/// The choreography itself is `voya_app::post_commit::finish_config_change`,
-/// shared with the mobile host; this supplies the Tauri sinks. `scopes` empty
-/// means the caller already announced them and this call owes only the restart.
-pub(super) async fn finish_config_change<R>(
-    app: &tauri::AppHandle<R>,
-    state: &AppState,
-    reason: &str,
-    scopes: &[InvalidationScope],
-    config: &AppConfig,
-    change: ConfigChange,
-) where
-    R: tauri::Runtime,
-{
-    post_commit::finish_config_change(
-        &TauriPostCommitSink { app: app.clone() },
-        &core_flow(app, state),
-        reason,
-        scopes,
-        config,
-        change,
-    )
-    .await;
-}
-
-/// The restart-only tail, for callers that already announced their caches.
+/// The choreography is `voya_app::post_commit::finish_config_change`, shared
+/// with the mobile host; this supplies the Tauri sinks.
 pub(super) async fn restart_after_config_change<R>(
     app: &tauri::AppHandle<R>,
     state: &AppState,
@@ -104,7 +67,15 @@ pub(super) async fn restart_after_config_change<R>(
 ) where
     R: tauri::Runtime,
 {
-    finish_config_change(app, state, "", &[], config, change).await;
+    post_commit::finish_config_change(
+        &TauriPostCommitSink { app: app.clone() },
+        &core_flow(app, state),
+        "",
+        None,
+        config,
+        change,
+    )
+    .await;
 }
 
 /// The tail every routing mutation shares: refresh the routing caches, then
@@ -119,11 +90,11 @@ pub(super) async fn finish_routing_change<R, T>(
 ) where
     R: tauri::Runtime,
 {
-    finish_config_change(
-        app,
-        state,
+    post_commit::finish_config_change(
+        &TauriPostCommitSink { app: app.clone() },
+        &core_flow(app, state),
         reason,
-        &invalidation::routing_scopes(committed.config_changed).1,
+        Some(invalidation::routing_scopes(committed.config_changed)),
         &committed.config,
         change,
     )
@@ -138,13 +109,8 @@ impl<R> PostCommitSink for TauriPostCommitSink<R>
 where
     R: tauri::Runtime,
 {
-    fn invalidate(
-        &self,
-        reason: &str,
-        scopes: &[InvalidationScope],
-        refresh_failed_code: NoticeCode,
-    ) {
-        emit_invalidation(&self.app, reason, (refresh_failed_code, scopes.to_vec()));
+    fn invalidate(&self, reason: &str, bundle: invalidation::InvalidationBundle) {
+        emit_invalidation(&self.app, reason, bundle);
     }
 
     fn notice(&self, level: AppNoticeLevel, code: NoticeCode, detail: &str) {

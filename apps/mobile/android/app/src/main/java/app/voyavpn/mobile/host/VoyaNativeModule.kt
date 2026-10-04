@@ -9,17 +9,22 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import uniffi.voya_mobile_ffi.CommandException
 import uniffi.voya_mobile_ffi.EventListener
 import uniffi.voya_mobile_ffi.ProbeCoreException
 import uniffi.voya_mobile_ffi.ProbeCoreHost
+import uniffi.voya_mobile_ffi.ResetException
+import uniffi.voya_mobile_ffi.StartupException
 import uniffi.voya_mobile_ffi.TunnelException
 import uniffi.voya_mobile_ffi.TunnelHost
 import uniffi.voya_mobile_ffi.VoyaApp
+import uniffi.voya_mobile_ffi.resetApplicationData as resetDatabase
 
 /**
  * The React Native module the JS `native-transport.ts` reaches.
@@ -38,7 +43,11 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
     ReactContextBaseJavaModule(context) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    // Both guarded by this module's monitor: commands arrive on IO threads,
+    // and React Native invalidates the module from a thread of its own.
     private var app: VoyaApp? = null
+    private var invalidated = false
 
     override fun getName(): String = NAME
 
@@ -54,25 +63,87 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
         scope.launch {
             try {
                 promise.resolve(host().invoke(command, argsJson))
+            } catch (error: CancellationException) {
+                // The module is going away; nobody is waiting for an answer.
+                throw error
             } catch (error: CommandException.Rejected) {
                 // The serialized AppError is the message, which is what
                 // `native-transport.ts` parses back into a typed `kind`.
                 promise.reject("VoyaCommandRejected", error.appErrorJson, error)
+            } catch (error: StartupException) {
+                // A startup failure carries the same serialized AppError, so
+                // the frontend can branch on the typed kind: a rejected
+                // database keeps its code and is the one failure the reset
+                // below recovers from. Without this it reached JS as an
+                // opaque message, and the reset screen never appeared.
+                val appErrorJson = when (error) {
+                    is StartupException.Paths -> error.appErrorJson
+                    is StartupException.Database -> error.appErrorJson
+                    is StartupException.Runtime -> error.appErrorJson
+                }
+                promise.reject("VoyaStartupFailed", appErrorJson, error)
             } catch (error: Throwable) {
                 promise.reject("VoyaHostUnavailable", error.message ?: error.toString(), error)
             }
         }
     }
 
+    /**
+     * Moves the application's database aside and forgets the host, so the
+     * next command reconnects against a fresh one.
+     *
+     * Called by the startup-failure screen the JS side renders when the
+     * database was rejected; on a phone there is no shell to run a manual
+     * recovery command in, so this is the only path back to a working app.
+     * The iOS module does the same in `VoyaNative.swift`.
+     */
+    @ReactMethod
+    fun resetApplicationData(promise: Promise) {
+        scope.launch {
+            try {
+                resetWithoutHost()
+                promise.resolve(null)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: ResetException.Failed) {
+                promise.reject("VoyaResetFailed", error.appErrorJson, error)
+            } catch (error: Throwable) {
+                promise.reject("VoyaResetFailed", error.message ?: error.toString(), error)
+            }
+        }
+    }
+
     override fun invalidate() {
-        app?.shutdown()
-        app = null
+        val running = synchronized(this) {
+            invalidated = true
+            app.also { app = null }
+        }
+        // Commands still queued must not outlive the module, and none may
+        // build a second host: two of them racing one database is what
+        // "database is locked" means.
+        scope.cancel()
+        running?.shutdown()
         super.invalidate()
+    }
+
+    /**
+     * Closes the host, then moves the database aside, under the lock a host is
+     * started with — so no command opens one in between.
+     *
+     * The usual caller has no host: it failed to start. But a database found
+     * corrupt after a good start still has connections open on the file, and
+     * moving it under them leaves them writing to the old one.
+     */
+    @Synchronized
+    private fun resetWithoutHost() {
+        app.also { app = null }?.shutdown()
+        resetDatabase(context.filesDir.absolutePath)
     }
 
     /** Starts the host on first use, so a JS reload does not reopen the database. */
     @Synchronized
     private fun host(): VoyaApp {
+        check(!invalidated) { "the native module has been invalidated" }
         app?.let { return it }
         val started = VoyaApp(
             dataDir = context.filesDir.absolutePath,
@@ -194,9 +265,12 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
 
         @Synchronized
         override fun stop(coreId: String) {
+            // Forgotten whether or not it stops cleanly: nothing asks for a
+            // probe core a second time, so one kept here after a failed stop
+            // would be held for the life of the process.
+            val core = cores.remove(coreId) ?: return
             try {
-                cores[coreId]?.stop()
-                cores.remove(coreId)
+                core.stop()
             } catch (error: Throwable) {
                 throw ProbeCoreException.Failed(error.message ?: "the probe core did not stop")
             }

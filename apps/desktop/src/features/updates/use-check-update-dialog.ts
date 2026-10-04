@@ -16,7 +16,6 @@ import type { AppUpdaterStatus } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { relaunch } from "@/ipc/tauri-plugins";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { useMountedRef } from "@voya/utils/use-mounted-ref";
 
 type UpdateWorkingState = "app-check" | "app-install" | "app-restart";
 
@@ -31,15 +30,12 @@ export function useCheckUpdateDialog() {
   // package; the self-update around it is desktop-only.
   const ruleLibrary = useRuleLibraryUpdate();
   const [working, setWorking] = useState<UpdateWorkingState | null>(null);
-  const mountedRef = useMountedRef();
 
-  // One fetch per dialog open, like the effect this replaced: no retries, no
-  // background refetch, so a status failure shows exactly when it happens.
+  // The app-wide defaults already rule out retries and focus refetching, so a
+  // status failure shows exactly when it happens.
   const statusQuery = useQuery({
     queryFn: () => voyaCommands().appUpdateStatus(),
     queryKey: queryKeys.appUpdaterStatus,
-    refetchOnWindowFocus: false,
-    retry: false,
   });
   const appUpdaterError =
     appActionError ??
@@ -80,9 +76,7 @@ export function useCheckUpdateDialog() {
         setInstallProgress(null);
         await queue.settled();
         setAppInstallResult(
-          await installCheckedAppUpdate((progress) => {
-            if (mountedRef.current) setInstallProgress(progress);
-          }),
+          await installCheckedAppUpdate(setInstallProgress),
         );
       },
       () => setInstallProgress(null),

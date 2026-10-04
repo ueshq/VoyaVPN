@@ -62,8 +62,6 @@ pub enum SpeedtestError {
     SingboxConfig(#[from] voya_core::SingboxConfigError),
     #[error("speedtest was cancelled")]
     Cancelled,
-    #[error("failed to create speedtest config directory {path}: {source}")]
-    CreateConfigDir { path: PathBuf, source: io::Error },
     #[error("failed to write speedtest config {path}: {source}")]
     WriteConfig { path: PathBuf, source: io::Error },
     #[error("no available speedtest port at or after {0}")]
@@ -235,12 +233,13 @@ fn lock_ignoring_poison<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 mod capabilities;
 mod core_backend;
 mod manager;
+mod persist;
 mod running_core;
 
 pub use capabilities::ProbeCoreCapabilities;
 pub use core_backend::ProcessProbeCoreLauncher;
 pub use manager::{start_probe_core_page, ProbeCoreSession, SpeedtestManager};
-pub use running_core::{RunningCoreProbe, SupervisorRunningCoreProbe};
+pub use running_core::{RunningCoreDelay, RunningCoreProbe, SupervisorRunningCoreProbe};
 
 async fn select_test_items(
     database: &Database,
@@ -306,8 +305,8 @@ fn speedtest_delay_interval(config: &AppConfig) -> Duration {
 ///
 /// Exhaustive on purpose. The previous version ended in `_ => raw`, which put
 /// the error's own `Display` in front of the user and into `profile_ex` — and
-/// for `WriteConfig`/`CreateConfigDir` that text embeds the
-/// app-data path, which embeds the OS user name.
+/// for `WriteConfig` that text embeds the app-data path, which embeds the OS
+/// user name.
 fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
     match error {
         SpeedtestError::Cancelled => SpeedtestOutcome::Cancelled,
@@ -320,7 +319,6 @@ fn speedtest_outcome(error: &SpeedtestError) -> SpeedtestOutcome {
         | SpeedtestError::Path(_)
         | SpeedtestError::Process(_)
         | SpeedtestError::ProbeCoreHost(_)
-        | SpeedtestError::CreateConfigDir { .. }
         | SpeedtestError::WriteConfig { .. } => SpeedtestOutcome::CoreUnavailable,
         SpeedtestError::NoAvailablePort(_) | SpeedtestError::InvalidSocksPort(_) => {
             SpeedtestOutcome::NoAvailablePort
@@ -392,19 +390,25 @@ async fn clear_previous_results<F>(
 where
     F: Fn(Vec<SpeedtestResult>) + Send + Sync,
 {
-    let unit_of_work = database.begin().await?;
-    let mut pending = Vec::new();
-    for item in selected {
-        let result = make_pending_result(item.index_id.clone());
-        if unit_of_work
-            .profile_exs()
-            .set_probe_result(&item.profile, &result)
-            .await?
-        {
-            pending.push(result);
+    // Retried like every later write of the run: a contended database here
+    // would otherwise fail the run before its first probe.
+    let pending = persist::retry_contended_write("pending markers", || async move {
+        let unit_of_work = database.begin().await?;
+        let mut pending = Vec::new();
+        for item in selected {
+            let result = make_pending_result(item.index_id.clone());
+            if unit_of_work
+                .profile_exs()
+                .set_probe_result(&item.profile, &result)
+                .await?
+            {
+                pending.push(result);
+            }
         }
-    }
-    unit_of_work.commit().await?;
+        unit_of_work.commit().await?;
+        Ok(pending)
+    })
+    .await?;
     if !pending.is_empty() {
         on_results(pending);
     }

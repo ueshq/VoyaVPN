@@ -264,6 +264,71 @@ mod tests {
         assert!(config.active_profile_id.is_empty());
     }
 
+    /// An import whose every node the filter drops writes nothing: the nodes
+    /// the subscription already holds stay, and the counters say why.
+    #[tokio::test]
+    async fn an_import_that_selects_no_node_reports_its_counters_and_keeps_stored_nodes() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        let sub = manager
+            .save_subscription(SubItem {
+                id: "sub-us".to_string(),
+                remarks: "US sub".to_string(),
+                url: "https://example.test/sub".to_string(),
+                filter: Some("US".to_string()),
+                ..SubItem::default()
+            })
+            .await
+            .expect("subscription manager test operation should succeed");
+        let mut stored = sample_profile("stored", "US stored");
+        stored.subscription_id = Some(sub.id.clone());
+        database
+            .profiles()
+            .upsert(&stored)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let text = "trojan://secret@example.test:443#JP%20node";
+        let result = manager
+            .import_subscription_content(&mut config, text, Some(&sub.id))
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        assert_eq!(
+            (
+                result.parsed,
+                result.filtered,
+                result.deduped,
+                result.failed
+            ),
+            (1, 1, 0, 0)
+        );
+        assert_eq!(result.skipped, 1);
+        assert_eq!(
+            (
+                result.imported,
+                result.updated,
+                result.removed_existing,
+                result.removed_duplicates
+            ),
+            (0, 0, 0, 0)
+        );
+        assert!(result.imported_profile_ids.is_empty());
+        assert_eq!(result.subscription_id.as_deref(), Some(sub.id.as_str()));
+        assert_eq!(
+            database
+                .profiles()
+                .list_by_subscription_id(Some(&sub.id))
+                .await
+                .expect("subscription manager test operation should succeed")
+                .len(),
+            1
+        );
+    }
+
     #[tokio::test]
     async fn subscription_update_downloads_base64_and_more_url() {
         let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
@@ -596,6 +661,81 @@ mod tests {
                 "a fetch that imported nothing must stay due for the scheduler: {id}"
             );
         }
+    }
+
+    /// A failed update must outlive the session: the list badges the
+    /// subscription from the persisted attempt, not from the command result.
+    /// A later success clears the failure.
+    #[tokio::test]
+    async fn a_failed_update_is_persisted_and_cleared_by_a_success() {
+        let seen_user_agents = Arc::new(Mutex::new(Vec::new()));
+        let content = STANDARD.encode("vless://uuid-a@example.test:443#US%20A");
+        let base = spawn_http_fixture(
+            HashMap::from([("/main".to_string(), content)]),
+            2,
+            Arc::clone(&seen_user_agents),
+        )
+        .await;
+        let database = Database::connect_in_memory()
+            .await
+            .expect("subscription manager test operation should succeed");
+        let manager = SubscriptionManager::new(&database);
+        let mut config = AppConfig::default();
+        let sub = manager
+            .save_subscription(SubItem {
+                id: "sub-flaky".to_string(),
+                remarks: "Flaky".to_string(),
+                url: format!("{base}/missing"),
+                ..SubItem::default()
+            })
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let failed = update_subscriptions(&manager, &mut config, None, false, None)
+            .await
+            .expect("a failing fetch must not fail the whole update");
+        assert_eq!(failed.updated, 0);
+        let metadata = database
+            .subscription_metadata()
+            .get(&sub.id)
+            .await
+            .expect("metadata should load")
+            .expect("the failed attempt should be persisted");
+        assert_eq!(metadata.last_attempt_failed, Some(true));
+        assert!(metadata.last_attempt_at_unix.is_some_and(|at| at > 0));
+        assert!(metadata
+            .last_attempt_error
+            .as_deref()
+            .is_some_and(|error| !error.is_empty()));
+        assert_eq!(
+            metadata.last_update_at, None,
+            "a failed fetch must stay due for the scheduler"
+        );
+
+        let mut healed = database
+            .subscriptions()
+            .get(&sub.id)
+            .await
+            .expect("subscription should load")
+            .expect("subscription should exist");
+        healed.url = format!("{base}/main");
+        manager
+            .save_subscription(healed)
+            .await
+            .expect("subscription manager test operation should succeed");
+        update_subscriptions(&manager, &mut config, None, false, None)
+            .await
+            .expect("subscription manager test operation should succeed");
+
+        let metadata = database
+            .subscription_metadata()
+            .get(&sub.id)
+            .await
+            .expect("metadata should load")
+            .expect("metadata should exist");
+        assert_eq!(metadata.last_attempt_failed, Some(false));
+        assert_eq!(metadata.last_attempt_error, None);
+        assert!(metadata.last_update_at.is_some());
     }
 
     #[tokio::test]

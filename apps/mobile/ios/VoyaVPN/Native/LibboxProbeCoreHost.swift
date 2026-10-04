@@ -104,9 +104,13 @@ import Network
         }
 
         func stop(coreId: String) throws {
+            // The lock guards the table, not the core: once the instance is
+            // out of it nobody else can reach it, and closing a core blocks
+            // on Libbox for as long as its connections take to end.
             lock.lock()
-            defer { lock.unlock() }
-            guard let instance = instances.removeValue(forKey: coreId) else { return }
+            let removed = instances.removeValue(forKey: coreId)
+            lock.unlock()
+            guard let instance = removed else { return }
 
             // Closing the service first stops the inbounds; closing the server
             // releases the instance behind them.
@@ -178,7 +182,6 @@ import Network
 
         func useProcFS() -> Bool { false }
 
-        func writeLog(_: String?) {}
 
         func startDefaultInterfaceMonitor(_ listener: LibboxInterfaceUpdateListenerProtocol?) throws {
             defaultInterfaceMonitor.start(listener)

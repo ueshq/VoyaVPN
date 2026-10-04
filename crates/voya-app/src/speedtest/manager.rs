@@ -1,19 +1,20 @@
 use futures_util::{stream, FutureExt, Stream, StreamExt};
 use tokio::task;
-use voya_contracts::DatabaseErrorCode;
 use voya_core::PreparedContextBuilder;
 
 use super::core_backend::{
     background_task_failed, reserve_speedtest_ports, wait_for_speedtest_ports,
 };
 
+use super::persist::persist_speedtest_results_with_retry;
 use super::*;
 
 /// A started probe core held for one page's measurements.
 ///
 /// Tears down off the Tokio workers; stopping a child blocks until the reaper
-/// thread has killed and waited it. `Drop` stays as a best-effort fallback for
-/// panics and early returns.
+/// thread has killed and waited it. `Drop` covers panics and early returns —
+/// a cancelled run among them, which is an ordinary path — and it hands the
+/// stop to the blocking pool too whenever a runtime is there to take it.
 pub struct ProbeCoreSession {
     core: Option<Box<dyn ProbeCore>>,
 }
@@ -31,8 +32,14 @@ impl ProbeCoreSession {
 
 impl Drop for ProbeCoreSession {
     fn drop(&mut self) {
-        if let Some(core) = self.core.take() {
-            core.stop();
+        let Some(core) = self.core.take() else {
+            return;
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(runtime) => {
+                runtime.spawn_blocking(move || core.stop());
+            }
+            Err(_) => core.stop(),
         }
     }
 }
@@ -51,12 +58,23 @@ pub async fn start_probe_core_page(
     let core = task::spawn_blocking(move || launcher.start(config_json))
         .await
         .map_err(background_task_failed)??;
-    // Bind the session before waiting so an unready core is still torn
-    // down by the `?` below.
+    // Bound before the wait, so a core that never becomes ready — or a run
+    // cancelled while waiting, which is the ordinary way out — is torn down.
     let session = ProbeCoreSession { core: Some(core) };
-    wait_for_speedtest_ports(&ports, cancel).await?;
+    if let Err(error) = wait_for_speedtest_ports(&ports, cancel).await {
+        session.close().await;
+        return Err(error);
+    }
 
     Ok(session)
+}
+
+/// A run's results as they are recorded: reported through the caller's
+/// callback, and kept by the run itself so that one failing part-way still
+/// knows which nodes it reached.
+pub(super) struct Recorded<'a, F> {
+    pub(super) on_results: &'a F,
+    pub(super) results: Vec<SpeedtestResult>,
 }
 
 /// Measures nodes with a throwaway sing-box per page, probed over SOCKS.
@@ -80,25 +98,8 @@ pub struct SpeedtestManager {
 }
 
 impl SpeedtestManager {
-    /// The desktop's manager: every probe core is a child process.
-    #[must_use]
-    pub fn new(
-        paths: AppPaths,
-        core_seed_resource_dir: Option<PathBuf>,
-        runner: Arc<dyn ProcessRunner>,
-    ) -> Self {
-        Self::with_launcher(
-            paths.clone(),
-            Arc::new(ProcessProbeCoreLauncher::new(
-                paths,
-                core_seed_resource_dir,
-                runner,
-            )),
-        )
-    }
-
-    /// A manager over a host-supplied launcher, for a platform that spawns
-    /// nothing: the phones run their probe core inside the app process.
+    /// A manager over the host's launcher: the desktop's starts each probe
+    /// core as a child process, the phones run theirs inside the app process.
     #[must_use]
     pub fn with_launcher(paths: AppPaths, launcher: Arc<dyn ProbeCoreLauncher>) -> Self {
         Self::with_probe_and_launcher(paths, Arc::new(ReqwestSpeedtestProbe), launcher)
@@ -126,12 +127,6 @@ impl SpeedtestManager {
     #[must_use]
     pub fn with_running_core(mut self, running_core: Arc<dyn RunningCoreProbe>) -> Self {
         self.running_core = Some(running_core);
-        self
-    }
-
-    #[must_use]
-    pub fn with_target_os(mut self, target_os: TargetOs) -> Self {
-        self.target_os = target_os;
         self
     }
 
@@ -183,39 +178,57 @@ impl SpeedtestManager {
         let selected = select_test_items(database, config, &index_ids).await?;
         clear_previous_results(database, &selected, &on_results).await?;
 
+        // Owned here rather than by the two paths below: when one of them
+        // fails part-way, what it had already recorded is still known, and
+        // the rest of the selection can be taken off `Testing`.
+        let mut recorded = Recorded {
+            on_results: &on_results,
+            results: Vec::new(),
+        };
         let connected = match &self.running_core {
             Some(running_core) => running_core.connect().await,
             None => None,
         };
-        let mut results = if let Some(core) = connected {
+        let ran = if let Some(core) = connected {
             self.run_through_running_core(
                 core,
                 database,
                 config,
                 &selected,
                 Arc::clone(&cancel),
-                &on_results,
+                &mut recorded,
             )
-            .await?
+            .await
         } else {
             self.run_batch_items(
                 database,
                 config,
                 &selected,
                 Arc::clone(&cancel),
-                &on_results,
+                &mut recorded,
             )
-            .await?
+            .await
         };
+        let mut results = recorded.results;
         let completed_count = u32::try_from(results.len()).unwrap_or(u32::MAX);
 
         let cancelled = is_cancelled(&cancel);
         // Every profile got a `Testing` marker before the first probe, so
         // anything the run never reached has to be written back to a terminal
-        // state or it stays pending forever, including across restarts.
-        let pending =
-            finalize_pending_results(database, &selected, &results, cancelled, &on_results).await?;
-        results.extend(pending);
+        // state or it stays pending forever, including across restarts. That
+        // holds for a run that failed too, whose error is the one reported.
+        let finalized =
+            finalize_pending_results(database, &selected, &results, cancelled, &on_results).await;
+        if let Err(error) = ran {
+            if let Err(finalize_error) = finalized {
+                tracing::warn!(
+                    error = ?finalize_error,
+                    "failed to clear the pending markers of a failed speedtest run"
+                );
+            }
+            return Err(error);
+        }
+        results.extend(finalized?);
 
         Ok(SpeedtestRunResult {
             cancelled,
@@ -259,8 +272,8 @@ impl SpeedtestManager {
         config: &AppConfig,
         items: &[ServerTestItem],
         cancel: CancellationFlag,
-        on_results: &F,
-    ) -> Result<Vec<SpeedtestResult>>
+        recorded: &mut Recorded<'_, F>,
+    ) -> Result<()>
     where
         F: Fn(Vec<SpeedtestResult>) + Send + Sync,
     {
@@ -269,7 +282,6 @@ impl SpeedtestManager {
         let capabilities = self.launcher.capabilities();
         let page_size = speedtest_page_size(config, items.len());
         let mut remaining = items.iter().peekable();
-        let mut results = Vec::new();
         while remaining.peek().is_some() {
             if is_cancelled(&cancel) {
                 break;
@@ -280,12 +292,16 @@ impl SpeedtestManager {
             // that cannot be tested is therefore reported when its page comes
             // up, and one a cancel never reaches finishes `Cancelled`.
             let (page, invalid) = prepare_page(&contexts, &capabilities, &mut remaining, page_size);
-            results.extend(record_item_failures(database, invalid, items, on_results).await?);
+            recorded
+                .results
+                .extend(record_item_failures(database, invalid, items, recorded.on_results).await?);
             // Reserved per page, right before its core binds them: reserved
             // for the whole selection up front, a later page's ports sat free
             // for as long as the earlier pages ran, for anything to take.
             let (page, failures) = reserve_page_ports(page).await?;
-            results.extend(record_item_failures(database, failures, items, on_results).await?);
+            recorded.results.extend(
+                record_item_failures(database, failures, items, recorded.on_results).await?,
+            );
             if page.is_empty() {
                 continue;
             }
@@ -309,8 +325,10 @@ impl SpeedtestManager {
                             SpeedtestItemFailure::from_error(prepared.item.index_id.clone(), &error)
                         })
                         .collect::<Vec<_>>();
-                    results
-                        .extend(record_item_failures(database, failures, items, on_results).await?);
+                    recorded.results.extend(
+                        record_item_failures(database, failures, items, recorded.on_results)
+                            .await?,
+                    );
                     continue;
                 }
             };
@@ -352,7 +370,9 @@ impl SpeedtestManager {
                         Some((&prepared.item.profile, result))
                     })
                     .collect();
-                results.extend(persist_and_report(database, writes, on_results).await?);
+                recorded
+                    .results
+                    .extend(persist_and_report(database, writes, recorded.on_results).await?);
             }
             drop(pending);
             session.close().await;
@@ -361,7 +381,7 @@ impl SpeedtestManager {
             }
         }
 
-        Ok(results)
+        Ok(())
     }
 
     fn begin_job(&self) -> CancellationFlag {
@@ -639,193 +659,4 @@ where
         .collect::<Vec<_>>();
 
     record_item_failures(database, untested, selected, on_results).await
-}
-
-/// Longest a contended write is retried before the result is given up on.
-const PERSIST_RETRY_MAX_ATTEMPTS: u32 = 5;
-/// First backoff step; doubles per attempt, so the total wait stays under a
-/// second even in the worst case.
-const PERSIST_RETRY_INITIAL_DELAY: Duration = Duration::from_millis(20);
-/// Cap of the backoff schedule; reached on the last retry.
-const PERSIST_RETRY_MAX_DELAY: Duration = Duration::from_millis(160);
-
-/// Persists several results in one transaction, riding out a contended SQLite
-/// write; a contended attempt rolls back and is retried whole. Returns the
-/// results whose rows were written, in order.
-///
-/// The database runs in WAL with a busy timeout, so `SQLITE_BUSY` should be
-/// rare — but it is still reachable (a checkpoint, or a write that started
-/// before the busy handler could be armed). Propagating it aborted the whole
-/// run and threw away every probe that had already completed, which is a far
-/// worse outcome than waiting a few tens of milliseconds for a few rows.
-async fn persist_speedtest_results_with_retry(
-    database: &Database,
-    writes: Vec<(&ProfileItem, SpeedtestResult)>,
-) -> Result<Vec<SpeedtestResult>> {
-    let pending = &writes;
-    let written = retry_contended_write("batch", || async move {
-        let unit_of_work = database.begin().await?;
-        let mut written = Vec::with_capacity(pending.len());
-        for (profile, result) in pending {
-            written.push(
-                unit_of_work
-                    .profile_exs()
-                    .set_probe_result(profile, result)
-                    .await?,
-            );
-        }
-        unit_of_work.commit().await?;
-        Ok(written)
-    })
-    .await?;
-
-    Ok(writes
-        .into_iter()
-        .zip(written)
-        .filter_map(|((_, result), written)| written.then_some(result))
-        .collect())
-}
-
-async fn retry_contended_write<T, W, Fut>(what: &str, mut write: W) -> Result<T>
-where
-    W: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T>>,
-{
-    for attempt in 1..PERSIST_RETRY_MAX_ATTEMPTS {
-        match write().await {
-            Err(error) if is_database_contention(&error) => {
-                tracing::debug!(
-                    write = %what,
-                    attempt,
-                    "speedtest result write contended; retrying"
-                );
-                time::sleep(persist_retry_delay(attempt)).await;
-            }
-            outcome => return outcome,
-        }
-    }
-
-    write().await
-}
-
-/// The pause after failed attempt `attempt` (1-based).
-fn persist_retry_delay(attempt: u32) -> Duration {
-    exponential_delay(
-        attempt.saturating_sub(1),
-        PERSIST_RETRY_INITIAL_DELAY,
-        PERSIST_RETRY_MAX_DELAY,
-    )
-}
-
-/// Whether a persistence failure is SQLite telling us to come back later.
-///
-/// Decided by `voya-db` from the driver's result code (`SQLITE_BUSY`,
-/// `SQLITE_LOCKED` and their extended variants, or an exhausted pool), not by
-/// the message text, which a sqlx or SQLite upgrade is free to reword.
-fn is_database_contention(error: &SpeedtestError) -> bool {
-    matches!(error, SpeedtestError::Database(error) if error.code() == DatabaseErrorCode::Locked)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Without this the retry loop can silently become a no-op: if `code()`
-    /// ever stops classifying contention, `is_database_contention` returns
-    /// `false` forever and one contended write aborts a whole speedtest run.
-    #[test]
-    fn speedtest_persist_retry_recognizes_a_contended_write() {
-        // The driver's own "come back later": `voya_db::DbError::code` maps an
-        // exhausted pool, `SQLITE_BUSY` and `SQLITE_LOCKED` to the same code.
-        let contended = SpeedtestError::Database(DbError::Sqlx(sqlx::Error::PoolTimedOut));
-
-        assert!(
-            is_database_contention(&contended),
-            "a contended write must be retried, not turned into a lost speedtest run"
-        );
-    }
-
-    #[test]
-    fn speedtest_persist_retry_ignores_unrelated_failures() {
-        let cancelled = SpeedtestError::Cancelled;
-        let missing = SpeedtestError::EmptySelection;
-        // The wording alone proves nothing: contention is read from SQLite's
-        // result code (see `voya_db::DbError::code`).
-        let worded_like_busy = SpeedtestError::Database(DbError::Io {
-            path: PathBuf::from("voya.db"),
-            source: io::Error::other("database is locked"),
-        });
-
-        assert!(!is_database_contention(&cancelled));
-        assert!(!is_database_contention(&missing));
-        assert!(!is_database_contention(&worded_like_busy));
-    }
-
-    #[tokio::test]
-    async fn speedtest_persist_retry_writes_the_result_through() {
-        let database = Database::connect_in_memory()
-            .await
-            .expect("speedtest test operation should succeed");
-        database
-            .profiles()
-            .upsert(&ProfileItem {
-                index_id: "active".to_string(),
-                remarks: "Active".to_string(),
-                ..ProfileItem::default()
-            })
-            .await
-            .expect("speedtest test operation should succeed");
-
-        let profile = database
-            .profiles()
-            .get("active")
-            .await
-            .expect("load profile")
-            .expect("profile exists");
-        let written = persist_speedtest_results_with_retry(
-            &database,
-            vec![(
-                &profile,
-                SpeedtestResult {
-                    index_id: "active".to_string(),
-                    delay: Some(42),
-                    outcome: SpeedtestOutcome::Completed,
-                    detail: None,
-                    ip_info: None,
-                    country_code: None,
-                },
-            )],
-        )
-        .await
-        .expect("speedtest test operation should succeed");
-
-        assert_eq!(written.len(), 1);
-
-        assert_eq!(
-            database
-                .profile_exs()
-                .get("active")
-                .await
-                .expect("speedtest test operation should succeed")
-                .expect("the probe result is persisted")
-                .delay,
-            42
-        );
-    }
-
-    /// The backoff has to stay short enough that a contended write never looks
-    /// like a hung run to the user.
-    #[test]
-    fn speedtest_persist_retry_backoff_is_bounded() {
-        // Exactly the pauses `retry_contended_write` takes: one after every
-        // attempt but the last.
-        let delays = (1..PERSIST_RETRY_MAX_ATTEMPTS)
-            .map(persist_retry_delay)
-            .collect::<Vec<_>>();
-        let total = delays.iter().sum::<Duration>();
-
-        assert_eq!(delays.first(), Some(&PERSIST_RETRY_INITIAL_DELAY));
-        assert_eq!(delays.last(), Some(&PERSIST_RETRY_MAX_DELAY));
-        assert!(total < Duration::from_secs(1), "{total:?}");
-    }
 }

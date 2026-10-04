@@ -22,10 +22,11 @@ const { module } = await runnerImport(resolve(root, "src/render.tsx"), {
   logLevel: "warn",
 });
 
-for (const { file, contents } of module.renderSite(css)) {
+const pages = module.renderSite(css);
+for (const { file, contents } of pages) {
   const path = resolve(dist, file);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, contents);
 }
 
-console.log(`built ${module.renderSite(css).length} files and ${css} into dist/`);
+console.log(`built ${pages.length} files and ${css} into dist/`);

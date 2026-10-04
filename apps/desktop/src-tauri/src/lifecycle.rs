@@ -1,7 +1,17 @@
 //! Ordered, once-only shutdown of background work and OS resources.
+use std::time::Duration;
+
 use crate::AppState;
 use tauri::Manager;
-use voya_app::lifecycle::ShutdownLatch;
+use voya_app::lifecycle::{exit_step, ShutdownLatch};
+
+/// How long each waiting step of the teardown may take. Each sits above the
+/// step's own worst case, so it only ends a wait that would never have ended:
+/// stopping an elevated core alone may take the privileged kill's 30 seconds.
+const AUTO_UPDATE_EXIT_LIMIT: Duration = Duration::from_secs(10);
+const SELF_HOST_EXIT_LIMIT: Duration = Duration::from_secs(20);
+const DISCONNECT_EXIT_LIMIT: Duration = Duration::from_secs(35);
+const STATISTICS_EXIT_LIMIT: Duration = Duration::from_secs(5);
 
 /// Latches the exit teardown so it runs once per process.
 static SHUTDOWN_LATCH: ShutdownLatch = ShutdownLatch::new();
@@ -20,14 +30,22 @@ pub(super) fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     // process with `std::process::exit`, so a commit that had already begun
     // would otherwise be raced by the exit and redone next launch.
     if let Some(state) = app.try_state::<AppState>() {
-        tauri::async_runtime::block_on(state.subscription_auto_update().shutdown());
+        tauri::async_runtime::block_on(exit_step(
+            "subscription auto-update",
+            AUTO_UPDATE_EXIT_LIMIT,
+            state.subscription_auto_update().shutdown(),
+        ));
         // Tauri exits the process directly, so nothing here is ever dropped:
         // a speedtest still in flight would leave its temporary sing-box probe
         // cores running with open outbound tunnels after the app is gone.
         state.speedtest_manager().shutdown();
         // The self-hosted core, its router forwards and its watch loop go down
         // before the connection core, whose tunnel may carry the unmap calls.
-        tauri::async_runtime::block_on(state.self_host().shutdown());
+        tauri::async_runtime::block_on(exit_step(
+            "self-hosted node",
+            SELF_HOST_EXIT_LIMIT,
+            state.self_host().shutdown(),
+        ));
     }
     // The root launcher is the only passwordless way to kill an elevated core,
     // so it is only removed once the core is confirmed stopped. Removing it
@@ -61,18 +79,20 @@ fn disconnect_runtime_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> 
         // Startup never got far enough to spawn anything through the launcher.
         return true;
     };
-    let runtime = state.services().runtime(
-        state.supervisor(),
-        state
-            .core_seed_resource_dir()
-            .map(std::path::Path::to_path_buf),
-    );
-    match tauri::async_runtime::block_on(runtime.disconnect()) {
-        Ok(_) => true,
-        Err(error) => {
+    let runtime = crate::ipc::commands::runtime_manager(&state);
+    match tauri::async_runtime::block_on(exit_step(
+        "core disconnect",
+        DISCONNECT_EXIT_LIMIT,
+        runtime.disconnect(),
+    )) {
+        Some(Ok(_)) => true,
+        Some(Err(error)) => {
             tracing::warn!(?error, "failed to disconnect runtime on exit");
             false
         }
+        // Not known to be gone, which is the case the caller keeps the
+        // elevation launcher for.
+        None => false,
     }
 }
 
@@ -93,7 +113,11 @@ fn stop_monitoring_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     };
     // Waits for the statistics loop's final flush: nothing is dropped on the
     // way out, so buffered traffic would otherwise be lost.
-    tauri::async_runtime::block_on(state.statistics_manager().shutdown());
+    tauri::async_runtime::block_on(exit_step(
+        "statistics flush",
+        STATISTICS_EXIT_LIMIT,
+        state.statistics_manager().shutdown(),
+    ));
     if let Err(error) = state.proxy_monitor_controller().stop() {
         tracing::warn!(?error, "failed to stop proxy monitor on exit");
     }

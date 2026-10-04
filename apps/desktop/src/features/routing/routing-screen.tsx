@@ -137,7 +137,7 @@ export function RoutingScreen() {
         submitError={controller.ruleSaveFailure}
       />
       <PendingConfirmDialog controller={controller} />
-      {perAppOpen && processRulesSupported ? <PerAppProxyDialog onOpenChange={controller.setPerAppOpen} open /> : null}
+      {perAppOpen && processRulesSupported ? <PerAppProxyDialog onOpenChange={controller.setPerAppOpen} /> : null}
     </PageSection>
   );
 }

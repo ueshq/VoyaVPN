@@ -7,7 +7,10 @@ import type { VoyaCommands } from "@voya/contracts";
  * backend through the `VoyaCommands` registered here. The desktop shell
  * registers its Tauri binding from `apps/desktop/src/ipc`; a React Native app
  * registers a native-module binding. Neither implementation leaks into shared
- * code, and `satisfies VoyaCommands` makes a missing command a compile error.
+ * code. The desktop binding is checked against `VoyaCommands` at compile time
+ * (`satisfies`, in `apps/desktop/src/ipc/commands.ts`); a table-driven
+ * transport is built from `VOYA_COMMAND_WIRE`, which is generated from the
+ * same command list.
  */
 let registered: VoyaCommands | null = null;
 

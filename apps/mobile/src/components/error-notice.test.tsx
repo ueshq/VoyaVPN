@@ -23,3 +23,10 @@ it("preserves field-specific save guidance over a general reason", async () => {
   expect(screen.getByText("The previous settings remain in use.")).toBeOnTheScreen();
   expect(screen.queryByText("database diagnostic")).toBeNull();
 });
+
+it("drops the raw-message disclosure when the banner already shows it verbatim", async () => {
+  await render(<ErrorNotice error={new Error("the tunnel did not come up")} message="the tunnel did not come up" />, { wrapper });
+  expect(screen.getByText("the tunnel did not come up")).toBeOnTheScreen();
+  // Repeating the same line under "Raw error message (English):" adds nothing.
+  expect(screen.queryByText("Technical details")).toBeNull();
+});

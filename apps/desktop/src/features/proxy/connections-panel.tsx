@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Activity, ArrowDown, ArrowUp, Inbox, LoaderCircle, RefreshCw, Unplug } from "lucide-react";
 
@@ -16,30 +15,28 @@ import { MenubarItem } from "@voya/ui/components/menubar";
 import { MoreMenu } from "@voya/ui/components/row-menus";
 import { Badge } from "@voya/ui/components/badge";
 import { Skeleton } from "@voya/ui/components/skeleton";
-import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { voyaCommands } from "@voya/client/transport";
-import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import type { ProxyConnectionItem, ProxyConnectionsSnapshot } from "@voya/contracts";
 import { firstPaintVirtualItems } from "@/lib/virtual-list";
-import { queryKeys } from "@voya/client/query-keys";
 import { restoreFocus } from "@voya/ui/lib/focus";
 import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
+import { CORE_STATE_TRANSLATION_KEYS } from "@/components/app-shell/core-state-labels";
 import { PageHeader } from "@/components/app-shell/page-section";
 import { ConnectionDetails } from "./connection-details";
-import { arrangeConnections, connectionBytes, connectionKey, connectionSearchHay } from "@voya/features/proxy/connection-display";
+import { useConnectionsTable } from "./use-connections-table";
+import { connectionBytes, connectionKey } from "@voya/features/proxy/connection-display";
 import type { ConnectionSort } from "@voya/features/proxy/connection-display";
-import { outboundLabelKey } from "@voya/features/routing/rule-outbound";
-import { connectionRoute, type ConnectionRoute } from "@voya/features/proxy/connection-route";
+import {
+  connectionRoute,
+  routeLabel,
+  type ConnectionRoute,
+} from "@voya/features/proxy/connection-route";
 
 type SortColumn = ConnectionSort["column"];
-type Selection = { connection: ProxyConnectionItem; ended: boolean };
 const GRID = "grid grid-cols-[minmax(0,1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)_7rem] gap-4";
 // Room at the end of every row for its own disconnect button.
 const ACTION_SLOT = "w-8 shrink-0";
 const ROW_HEIGHT = 56;
-const emptySnapshot: ProxyConnectionsSnapshot = { connections: [], downloadTotal: null, uploadTotal: null };
 
 // Where a connection went is the question this page answers, so it is colored:
 // blue through the proxy, neutral straight out, red when blocked.
@@ -49,12 +46,6 @@ const ROUTE_CHIP_CLASSES: Record<Exclude<ConnectionRoute["kind"], "unknown">, st
   proxy: "bg-accent-blue-light text-brand",
 };
 
-function routeLabel(route: ConnectionRoute, t: TranslationFunction) {
-  if (route.kind === "proxy" && route.node) return route.node;
-  const key = outboundLabelKey(route.kind);
-  return key ? t(key) : "";
-}
-
 export function ConnectionsPanel({
   filter,
   onFilterChange,
@@ -62,113 +53,29 @@ export function ConnectionsPanel({
   filter: string;
   onFilterChange: (value: string) => void;
 }) {
-  const queryClient = useQueryClient();
   const { t } = useI18n();
-  const coreState = useRuntimeEventStore((state) => state.coreState);
-  const monitor = useRuntimeEventStore((state) => state.proxyMonitorStatus);
-  const storeSnapshot = useRuntimeEventStore((state) => state.proxyConnections);
-  const setProxyConnections = useRuntimeEventStore((state) => state.setProxyConnections);
-  const [selection, setSelection] = useState<Selection | null>(null);
-  const [sort, setSort] = useState<ConnectionSort | null>(null);
+  const {
+    closeMutation,
+    connected,
+    coreState,
+    disconnectSelected,
+    hasSnapshot,
+    monitorBadge,
+    refresh,
+    refreshing,
+    rows,
+    selection,
+    setSelection,
+    setSort,
+    snapshot,
+    sort,
+    stale,
+    updateFailed,
+  } = useConnectionsTable(filter, t);
   const [confirmingDisconnectAll, setConfirmingDisconnectAll] = useState(false);
   const returnFocusRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const connected = coreState?.state === "connected";
-  const connectionsQuery = useQuery({
-    enabled: connected,
-    // A table read on an earlier visit is never worth showing on the next one:
-    // the store keeps the session's latest snapshot, and a cached copy that
-    // outlived a disconnect would show the previous core's rows.
-    gcTime: 0,
-    queryFn: async () => {
-      const before = useRuntimeEventStore.getState().proxyConnections;
-      const next = await voyaCommands().proxyListConnections();
-      // Seed the initial query as well as manual refreshes, but never replace a
-      // newer stream event with a request that was already in flight.
-      if (useRuntimeEventStore.getState().proxyConnections === before) {
-        setProxyConnections(next);
-      }
-      return next;
-    },
-    queryKey: queryKeys.proxyConnections,
-    staleTime: 3_000,
-  });
-  // The store drops its snapshot when the core disconnects. While the panel
-  // stays mounted the cached read survives `gcTime`, so it is dropped here too,
-  // or a reconnect would fall back to the old session's rows.
-  useEffect(() => {
-    if (!connected) {
-      void queryClient.resetQueries({ exact: true, queryKey: queryKeys.proxyConnections });
-    }
-  }, [connected, queryClient]);
-  const snapshot = storeSnapshot ?? connectionsQuery.data ?? emptySnapshot;
-  const hasSnapshot = Boolean(storeSnapshot ?? connectionsQuery.data);
-  const updateFailed =
-    connectionsQuery.isError || monitor.state === "failed" || (hasSnapshot && monitor.state === "stopped");
-  const stale = hasSnapshot && (monitor.stale || updateFailed);
-  const needle = filter.trim().toLowerCase();
-  const searching = needle.length > 0;
-  const sortingByRoute = sort?.column === "route";
-  // Search text and route labels are per-snapshot costs: compute them once per
-  // push so keystrokes only re-run the filter and the route sort reads strings
-  // instead of re-deriving the outbound chain per comparison.
-  const searchHays = useMemo(
-    () => (searching ? snapshot.connections.map(connectionSearchHay) : null),
-    [snapshot.connections, searching],
-  );
-  const routeTexts = useMemo(
-    () => (sortingByRoute ? snapshot.connections.map((connection) => routeLabel(connectionRoute(connection), t)) : null),
-    [snapshot.connections, sortingByRoute, t],
-  );
-  const rows = useMemo(
-    () =>
-      arrangeConnections(snapshot.connections, {
-        routeTexts,
-        search: searchHays ? { hays: searchHays, needle } : null,
-        sort,
-      }),
-    [snapshot.connections, searchHays, needle, routeTexts, sort],
-  );
-
-  // Keep the last received details when a connection ends. Search results do
-  // not determine liveness, and a missing ID still supports read-only details.
-  // Looked up once per push, not per render: an ID-less row's key is a JSON
-  // string built for every item scanned.
-  const selectedKey = selection ? connectionKey(selection.connection) : null;
-  const current = useMemo(
-    () =>
-      selectedKey === null
-        ? undefined
-        : snapshot.connections.find((item) => connectionKey(item) === selectedKey),
-    [snapshot.connections, selectedKey],
-  );
-  if (selection && !selection.ended) {
-    if (coreState?.state === "disconnected" || (hasSnapshot && !current)) {
-      setSelection({ ...selection, ended: true });
-    } else if (current && current !== selection.connection) {
-      setSelection({ connection: current, ended: false });
-    }
-  }
-
-  function syncSnapshot(next: ProxyConnectionsSnapshot) {
-    setProxyConnections(next);
-    queryClient.setQueryData(queryKeys.proxyConnections, next);
-  }
-  const closeMutation = useMutation({
-    meta: { errorTitle: t("proxy.closeConnectionFailed") },
-    mutationFn: (id: string | null) => voyaCommands().proxyCloseConnection(id),
-    onSuccess: syncSnapshot,
-  });
-  async function refresh() {
-    if (!connected) return;
-    await connectionsQuery.refetch();
-  }
-  function disconnectSelected() {
-    if (connected && selection?.connection.id && !selection.ended && !closeMutation.isPending) {
-      closeMutation.mutate(selection.connection.id);
-    }
-  }
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual exposes scroll helpers that React Compiler cannot memoize safely.
   const virtualizer = useVirtualizer({
@@ -191,25 +98,11 @@ export function ConnectionsPanel({
     { column: "traffic", label: t("activity.traffic") },
   ];
   const moreLabel = t("proxy.moreActions");
-  // Whether the table is live: the stream can stop or fall behind while connected.
-  const monitorBadge: { key: TranslationKey; live: boolean } =
-    monitor.state === "running" && !stale
-      ? { key: "proxy.monitorLive", live: true }
-      : monitor.state === "starting"
-        ? { key: "proxy.monitorStarting", live: false }
-        : monitor.state === "failed"
-          ? { key: "proxy.monitorFailed", live: false }
-          : stale
-            ? { key: "proxy.monitorStale", live: false }
-            : { key: "proxy.monitorStopped", live: false };
   const disconnected = coreState?.state === "disconnected";
-  const waitingLabel = !coreState
-    ? t("activity.statusLoading")
-    : coreState.state === "connecting"
-      ? t("status.connecting")
-      : coreState.state === "cleanupPending"
-        ? t("home.cleanupPending")
-        : t("status.disconnecting");
+  // The same wording the sidebar and Home use for a state in transition.
+  const waitingLabel = coreState
+    ? t(CORE_STATE_TRANSLATION_KEYS[coreState.state])
+    : t("activity.statusLoading");
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col outline-none" ref={panelRef} tabIndex={-1}>
@@ -243,7 +136,7 @@ export function ConnectionsPanel({
             </Badge>
             <Button
               aria-label={t("activity.refreshNow")}
-              disabled={connectionsQuery.isFetching}
+              disabled={refreshing}
               onClick={() => {
                 void refresh();
               }}
@@ -254,7 +147,7 @@ export function ConnectionsPanel({
             >
               <RefreshCw
                 aria-hidden="true"
-                className={cn("size-4", connectionsQuery.isFetching && "animate-spin")}
+                className={cn("size-4", refreshing && "animate-spin")}
               />
             </Button>
             <MoreMenu label={moreLabel} title={moreLabel}>
@@ -277,7 +170,7 @@ export function ConnectionsPanel({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={connectionsQuery.isFetching}
+                disabled={refreshing}
                 onClick={() => {
                   void refresh();
                 }}

@@ -32,6 +32,9 @@ pub fn subscription_metadata_to_contract(item: SubMetadataItem) -> SubscriptionM
         total_bytes: item.total_bytes,
         expire_at: item.expire_at,
         last_update_at: item.last_update_at,
+        last_attempt_at: item.last_attempt_at_unix,
+        last_attempt_failed: item.last_attempt_failed,
+        last_attempt_error: item.last_attempt_error,
         profile_title: item.profile_title,
     }
 }

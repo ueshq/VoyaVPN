@@ -522,7 +522,11 @@ describe("App", () => {
     expect(ipc.proxyListConnections).not.toHaveBeenCalled();
   });
 
-  it("keeps the proxy monitor running while viewing the policy group sub-tab", async () => {
+  // The group sub-view polls for itself and reads nothing from the monitor, so
+  // leaving the table running would have the backend serialize the whole
+  // connection table every second for nobody. The stop grace still absorbs a
+  // quick look at the other sub-view and back.
+  it("stops the proxy monitor once the policy group sub-tab has replaced the table", async () => {
     vi.useFakeTimers();
     (
       window as typeof window & { __TAURI_INTERNALS__?: unknown }
@@ -547,9 +551,13 @@ describe("App", () => {
 
     expect(groupsTab).toHaveAttribute("data-state", "active");
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(1_000);
     });
     expect(ipc.proxyStopMonitor).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(ipc.proxyStopMonitor).toHaveBeenCalledTimes(1);
   });
 
   it("marks cached proxy monitor data failed and shows a toast when start fails", async () => {

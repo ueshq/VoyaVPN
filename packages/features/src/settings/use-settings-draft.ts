@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import { appErrorOfKind } from "@voya/client/errors";
 import { validationFieldErrors } from "@voya/client/messages";
-import { translateFieldErrors, zodIssuesToErrorMap } from "@voya/features/forms/zod-errors";
+import { translateFieldErrors, zodIssuesToErrorMap } from "../forms/zod-errors";
 import { i18next, type TranslationFunction } from "@voya/i18n/core";
 import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
@@ -19,7 +19,7 @@ import {
   SettingsDraft,
   type SettingsChange,
 } from "./settings-draft";
-import { saveQueue } from "@voya/features/forms/save-queue";
+import { saveQueue } from "../forms/save-queue";
 
 // Async failures use the current locale even after the originating pane unmounts.
 const draftsByClient = new WeakMap<QueryClient, Map<string, unknown>>();

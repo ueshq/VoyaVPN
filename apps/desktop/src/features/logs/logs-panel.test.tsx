@@ -214,5 +214,5 @@ describe("LogsPanel", () => {
 function Harness() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<LogFilter>("standard");
-  return <LogsPanel search={search} onSearchChange={setSearch} filter={filter} onFilterChange={setFilter} />;
+  return <LogsPanel active search={search} onSearchChange={setSearch} filter={filter} onFilterChange={setFilter} />;
 }

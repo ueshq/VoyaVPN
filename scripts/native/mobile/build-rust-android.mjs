@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { isCliEntrypoint, repoRootFromScript, run } from "../../lib/common.mjs";
+import { generateUniffiBindings } from "./uniffi-bindings.mjs";
 
 /**
  * Builds `voya-mobile-ffi` for Android and drops the `.so` files where Gradle
@@ -68,40 +69,14 @@ function buildLibraries() {
   );
 }
 
-/**
- * The Kotlin bindings, generated from the built library so they describe the
- * symbols it actually exports.
- */
+/** The Kotlin bindings, written into the app's source tree. */
 function generateBindings() {
-  const library = resolve(
+  generateUniffiBindings({
+    language: "kotlin",
+    library: resolve(repoRoot, "target", ANDROID_ABIS[0].triple, profile, "libvoya_mobile_ffi.so"),
+    outDir: bindingsRoot,
     repoRoot,
-    "target",
-    ANDROID_ABIS[0].triple,
-    profile,
-    "libvoya_mobile_ffi.so",
-  );
-
-  run(
-    "cargo",
-    [
-      "run",
-      "-p",
-      "voya-mobile-ffi",
-      "--features",
-      "bindgen",
-      "--bin",
-      "uniffi-bindgen",
-      "--",
-      "generate",
-      "--library",
-      library,
-      "--language",
-      "kotlin",
-      "--out-dir",
-      bindingsRoot,
-    ],
-    { cwd: repoRoot },
-  );
+  });
 }
 
 export function buildRustForAndroid() {

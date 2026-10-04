@@ -1,4 +1,6 @@
+import { focusManager } from "@tanstack/react-query";
 import { setAppVisibility, setClientStorage } from "@voya/client/platform";
+import { setRuntimeChannels } from "@voya/client/runtime-status";
 import { createNativeI18n } from "@voya/i18n/native";
 import { AppState } from "react-native";
 
@@ -26,13 +28,48 @@ setClientStorage(clientStorageAdapter);
  * later — and `currentState` is undefined until the first native report, which
  * must not read as "hidden" either.
  */
+const appIsVisible = () => AppState.currentState !== "background";
+
 setAppVisibility({
-  isVisible: () => AppState.currentState !== "background",
+  isVisible: appIsVisible,
+  // Subscribers are told when visibility changes, not when the app state
+  // does: active and inactive are both "visible", and passing the blink
+  // between them on re-read the whole runtime status twice for every pull
+  // of the notification shade.
   subscribe: (onChange) => {
-    const subscription = AppState.addEventListener("change", onChange);
+    let visible = appIsVisible();
+    const subscription = AppState.addEventListener("change", () => {
+      if (appIsVisible() === visible) return;
+      visible = !visible;
+      onChange();
+    });
     return () => subscription.remove();
   },
 });
+
+/**
+ * TanStack Query's idea of "focused", which a phone has to be told about.
+ *
+ * Left alone it reads every React Native app as focused forever, so a polled
+ * query — the running policy group, every three seconds — kept polling behind
+ * the lock screen, for as long as Android's VPN service kept the process
+ * alive. Polling pauses while unfocused; refetch-on-focus is off app-wide, so
+ * coming back causes no burst. The same rule as the visibility above: only
+ * `background` counts.
+ */
+focusManager.setEventListener((setFocused) => {
+  const subscription = AppState.addEventListener("change", (state) => {
+    setFocused(state !== "background");
+  });
+  return () => subscription.remove();
+});
+
+/**
+ * A phone has no system proxy to read and no tunnel status apart from the
+ * core's: the provider is the core. Asking for either after a connect would
+ * raise an "unsupported" failure every time.
+ */
+setRuntimeChannels(["coreState"]);
 
 // MMKV's `getString`/`set` are already the shape the i18n host asks for.
 const i18n = createNativeI18n({ storage, deviceLanguages });

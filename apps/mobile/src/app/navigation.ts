@@ -9,6 +9,7 @@ export type RootRoutes = {
   import: undefined;
   subscriptions: undefined;
   subscription: { id: string };
+  editProfile: { id: string };
   general: undefined;
   dns: undefined;
   maintenance: undefined;

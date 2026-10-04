@@ -1,7 +1,10 @@
 import { deleteSafely } from "./delete-safely";
 import { openPage } from "~/app/navigation";
+import { refreshQueries } from "@voya/client/queries";
+import { profileShareQrQueryKey, queryKeys } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import { profileTitle } from "@voya/features/profiles/profile-display";
+import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
 import type { useNodeExport } from "@voya/features/profiles/use-node-export";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -12,11 +15,12 @@ import { Button } from "heroui-native/button";
 import { ListGroup } from "heroui-native/list-group";
 import { Typography } from "heroui-native/text";
 import { AccessibilityInfo, Alert, Modal, Pressable, ScrollView, Share, findNodeHandle, View, useWindowDimensions, type Text } from "react-native";
-import { QrCode, Copy, Gauge, Share2, Trash2, type LucideIcon } from "lucide-react-native";
-import { useRef } from "react";
+import { Pencil, QrCode, Copy, Gauge, Share2, Trash2, type LucideIcon } from "lucide-react-native";
+import { useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SvgXml } from "react-native-svg";
 
+import { Banner } from "~/components/banner";
 import { useContentColumn } from "~/components/content-column";
 import { ListRow } from "~/components/list-row";
 import { useToneColor } from "~/components/tone";
@@ -47,6 +51,13 @@ export function NodeActionsSheet({
   // On an iPad the sheet is a centred panel rather than the full width.
   const column = useContentColumn(480);
   const titleRef = useRef<Text>(null);
+  // A failure is shown here, in the sheet: the list's own banner is behind
+  // the modal, hidden from sight and from the screen reader alike.
+  const [failure, setFailure] = useState<string | null>(null);
+  // Which of the sheet's two views the screen reader was last sent to. Focus
+  // moves when a view appears — not each time its title is laid out again, or
+  // rotating the phone would drag the reader back to the top.
+  const focusedView = useRef<"actions" | "qr" | null>(null);
   // Resolve semantic colors once for every action in this modal.
   const actionColor = useToneColor("brand");
   const dangerColor = useToneColor("danger");
@@ -56,7 +67,7 @@ export function NodeActionsSheet({
   const qrQuery = useQuery({
     enabled: share !== null,
     queryFn: () => voyaCommands().generateQrCode(share ?? ""),
-    queryKey: ["mobile", "share-qr", share],
+    queryKey: profileShareQrQueryKey(share ?? ""),
   });
 
   function focusTitle() {
@@ -64,8 +75,17 @@ export function NodeActionsSheet({
     if (target != null) AccessibilityInfo.setAccessibilityFocus(target);
   }
 
+  function focusTitleOnce() {
+    const view = share ? "qr" : "actions";
+    if (focusedView.current === view) return;
+    focusedView.current = view;
+    focusTitle();
+  }
+
   function close() {
     exports.setShareQrContent(null);
+    setFailure(null);
+    focusedView.current = null;
     onClose();
     // Restore after React has made the background accessible again. iOS also
     // restores onDismiss after the native presentation has fully disappeared.
@@ -73,10 +93,11 @@ export function NodeActionsSheet({
   }
 
   async function remove(indexId: string) {
+    setFailure(null);
     const removed = await operation.runOperation(async () => {
       await deleteSafely([indexId], () => voyaCommands().deleteProfiles([indexId]));
-      await queryClient.invalidateQueries();
-    });
+      await refreshQueries(queryClient, queryKeys.profiles);
+    }, setFailure);
     if (removed) close();
   }
 
@@ -100,9 +121,9 @@ export function NodeActionsSheet({
           <ScrollView key={share ? "qr" : "actions"} style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 16 }}>
               {share ? (
                 <View className="items-center gap-4">
-                  <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground">{qrTitle}</Typography>
+                  <Typography ref={titleRef} onLayout={focusTitleOnce} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground">{qrTitle}</Typography>
                   <Typography className="text-base text-foreground">{title}</Typography>
-                  <Typography className="text-sm text-subtle">{entry?.profile.kind} · {entry?.profile.address}</Typography>
+                  <Typography className="text-sm text-subtle">{getProtocolLabel(entry?.profile.kind)} · {entry?.profile.address}</Typography>
                   {qrQuery.data ? (
                     <View
                       // `accessible` is what turns the label into something a
@@ -125,12 +146,25 @@ export function NodeActionsSheet({
               ) : entry ? (
                 <>
                   <View className="gap-1 px-1">
-                    <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground" numberOfLines={2}>
+                    <Typography ref={titleRef} onLayout={focusTitleOnce} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground" numberOfLines={2}>
                       {title}
                     </Typography>
                     <Typography className="text-sm text-subtle" numberOfLines={1}>{entry.profile.address}</Typography>
                   </View>
+                  {failure ? <Banner status="danger" message={failure} liveRegion /> : null}
                   <ListGroup>
+                    {entry.profile.subscriptionId === null ? (
+                      <SheetAction
+                        icon={Pencil}
+                        color={actionColor}
+                        label={t("mobile.editNode")}
+                        onPress={() => {
+                          const id = entry.profile.id;
+                          close();
+                          openPage("editProfile", { id });
+                        }}
+                      />
+                    ) : null}
                     <SheetAction
                       icon={Copy}
                       color={actionColor}
@@ -141,10 +175,11 @@ export function NodeActionsSheet({
                       }}
                     />
                     <SheetAction icon={Share2} color={actionColor} label={t("mobile.share")} onPress={() => {
+                      setFailure(null);
                       void operation.runOperation(async () => {
                         const result = await voyaCommands().exportProfileShareLinks([entry.profile.id]);
                         await Share.share({ message: result.text });
-                      });
+                      }, setFailure);
                     }} />
                     <SheetAction icon={Gauge} color={actionColor} label={t("mobile.testNode")} onPress={() => { onTest(entry.profile.id); close(); }} />
                     <SheetAction
@@ -161,7 +196,7 @@ export function NodeActionsSheet({
                         color={dangerColor}
                         label={deleteLabel}
                         last
-                        onPress={() => Alert.alert(t("mobile.deleteConfirm"), t("mobile.deleteHint"), [
+                        onPress={() => Alert.alert(t("mobile.deleteConfirm"), t("mobile.deleteNodeHint"), [
                           { text: t("actions.cancel"), style: "cancel" },
                           { text: deleteLabel, style: "destructive", onPress: () => void remove(entry.profile.id) },
                         ])}
@@ -212,6 +247,11 @@ function SheetAction({
 }) {
   return (
     <ListRow
+      accessibilityLabel={label}
+      // Pinned here rather than left to ListRow's default: these rows are the
+      // sheet's menu, and their role reaching iOS as "button" is a contract
+      // the sheet's tests assert, not an accident of the animated Pressable.
+      accessibilityRole="button"
       last={last}
       title={label}
       titleClassName={destructive ? "text-danger" : undefined}

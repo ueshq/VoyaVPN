@@ -32,6 +32,13 @@ with it, which is the point — a phone measuring a node against one sing-box
 version while the desktop runs another would produce results neither of them
 could reproduce.
 
+The helper also holds the commit the ref resolved to against
+`SING_BOX_SOURCE_COMMITS`, the same table the source-built seed uses. A pinned
+tag that resolves to some other commit — one moved upstream, say — fails the
+build, for all three artifacts. A ref with no pinned commit, which is what
+overriding it with `VOYAVPN_SING_BOX_REF` or `SING_BOX_VERSION` usually means,
+is built only with `VOYAVPN_ALLOW_UNPINNED_SING_BOX=1`, and the build says so.
+
 The checkout itself lives at `target/native/sing-box` and is refused when it
 has local changes: the artifact would then be whatever is in the working tree
 rather than the pinned tag, and nothing downstream could tell. Override with

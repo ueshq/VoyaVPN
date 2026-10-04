@@ -1,6 +1,7 @@
 import { createMockBackend, type MockBackend } from "@voya/client/mock-backend";
 
 import { voyaTransport } from "~/ipc/platform";
+import type { VoyaTransport } from "~/ipc/transport";
 import {
   makeConnection,
   makeProfileEntry,
@@ -10,9 +11,13 @@ import {
   makeSubscriptionMetadata,
 } from "@voya/client/mock-seed";
 
-/** The in-memory backend screen tests register in place of the native module. */
-export function mockTransport() {
-  return createMockBackend({
+/**
+ * The in-memory backend screen tests register in place of the native module.
+ * Its reset succeeds and changes nothing; a test that needs it to mean
+ * something replaces it, as it would a command.
+ */
+export function mockTransport(): MockBackend & Pick<VoyaTransport, "resetApplicationData"> {
+  const backend = createMockBackend({
     // Live connections only show while connected, so a test that connects
     // has an Activity list to read.
     connections: {
@@ -39,9 +44,11 @@ export function mockTransport() {
     subscriptionMetadata: [makeSubscriptionMetadata("subscription-0")],
     subscriptions: [makeSubscription(0, { remarks: "Example provider" })],
   });
+
+  return Object.assign(backend, { resetApplicationData: async () => {} });
 }
 
 /** The registered backend, as the mock a test registered. */
 export function mockBackend() {
-  return voyaTransport() as MockBackend;
+  return voyaTransport() as ReturnType<typeof mockTransport>;
 }

@@ -7,6 +7,7 @@ import {
   repoRootFromScript,
   requireDarwin,
   run,
+  runCli,
   truthy,
 } from "../../lib/common.mjs";
 import { readJson, walkFilesSync } from "../../lib/fs.mjs";
@@ -411,10 +412,5 @@ function main() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

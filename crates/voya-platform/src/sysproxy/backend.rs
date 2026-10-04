@@ -31,7 +31,8 @@ pub(super) fn run_script(
     script: &ScriptInvocation,
 ) -> Result<(), SystemProxyError> {
     let mut spawn = ProcessSpawn::new(ProcessRole::SysProxy, &script.executable)
-        .with_arguments(script.arguments.clone());
+        .with_arguments(script.arguments.clone())
+        .with_timeout(HELPER_TIMEOUT);
     if let Some(generated_script) = script.generated_script.clone() {
         spawn = spawn.with_generated_script(generated_script);
     }
@@ -89,12 +90,14 @@ fn registry_set_string(name: &str, value: &str) -> ProcessSpawn {
 }
 
 fn registry_set(name: &str, value_type: &str, value: &str) -> ProcessSpawn {
-    ProcessSpawn::new(ProcessRole::SysProxy, "reg").with_arguments(reg_add_arguments(
-        WINDOWS_INTERNET_SETTINGS_REG_PATH,
-        name,
-        value_type,
-        value,
-    ))
+    ProcessSpawn::new(ProcessRole::SysProxy, "reg")
+        .with_arguments(reg_add_arguments(
+            WINDOWS_INTERNET_SETTINGS_REG_PATH,
+            name,
+            value_type,
+            value,
+        ))
+        .with_timeout(HELPER_TIMEOUT)
 }
 
 #[cfg(windows)]

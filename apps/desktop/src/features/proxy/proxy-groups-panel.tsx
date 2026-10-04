@@ -1,5 +1,3 @@
-import { queries } from "@voya/client/queries";
-import { useQuery } from "@tanstack/react-query";
 import { Layers, Zap } from "lucide-react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -7,16 +5,15 @@ import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Spinner } from "@voya/ui/components/spinner";
-import { formatDelay } from "@voya/utils/formatting";
 import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
-import { PolicyGroupMemberChip } from "@/features/profiles/policy-group-member-chip";
-import { profileMemberName } from "@voya/features/profiles/profile-display";
+import { PolicyGroupMemberChips } from "@/features/profiles/policy-group-member-chip";
+import { runtimeMemberDelays } from "@voya/features/profiles/profile-display";
 import {
+  useActivePolicyGroup,
   useGroupDelayTest,
   usePolicyGroupMemberSwitch,
-  usePolicyGroupRuntime,
 } from "@voya/features/profiles/use-policy-group-runtime";
 import { useShellStore } from "@/stores/shell-store";
 import { toastError } from "@voya/client/toast-store";
@@ -32,9 +29,7 @@ export function ProxyGroupsPanel() {
     (state) => state.coreState?.state === "connected",
   );
   const setActiveTab = useShellStore((state) => state.setActiveTab);
-  const groupsQuery = useQuery(queries.policyGroups);
-  const active = groupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
-  const runtime = usePolicyGroupRuntime(active?.group.id ?? null);
+  const { activeGroup: active, runtime } = useActivePolicyGroup();
   const memberSwitch = usePolicyGroupMemberSwitch();
 
   /** Run a member action, reporting a failure as a toast. */
@@ -50,9 +45,7 @@ export function ProxyGroupsPanel() {
 
   const delayTest = useGroupDelayTest(runWithToast);
   const testing = delayTest.testing;
-  const delays = new Map(
-    runtime?.members.map((member) => [member.profileId, member.delayMs]) ?? [],
-  );
+  const delays = runtimeMemberDelays(runtime);
 
   if (!connected || !active) {
     // The same empty state as the live connections tab beside it.
@@ -123,23 +116,17 @@ export function ProxyGroupsPanel() {
         <p className="text-xs text-muted-foreground">{t("proxy.groups.autoMemberHint")}</p>
       )}
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-        {active.members.map((member) => (
-          <PolicyGroupMemberChip
-            current={member.profileId === runtime?.nowProfileId}
-            delay={formatDelay(delays.get(member.profileId))}
-            delayPlaceholder="—"
-            key={member.profileId}
-            name={profileMemberName(member.remarks, member.profileId)}
-            onChoose={
-              group.strategy === "selector"
-                ? (profileId) => void choose(profileId)
-                : undefined
-            }
-            profileId={member.profileId}
-            stretch
-            testId="proxy-group-member"
-          />
-        ))}
+        <PolicyGroupMemberChips
+          currentId={runtime?.nowProfileId}
+          delayPlaceholder="—"
+          delays={delays}
+          members={active.members}
+          onChoose={
+            group.strategy === "selector" ? (profileId) => void choose(profileId) : undefined
+          }
+          stretch
+          testId="proxy-group-member"
+        />
       </div>
     </section>
   );

@@ -107,6 +107,8 @@ describe("ProxyGroupsPanel", () => {
     const tokyo = await screen.findByRole("button", { name: /Tokyo/ });
     await waitFor(() => expect(tokyo).toHaveAttribute("aria-pressed", "true"));
     expect(screen.getByText("120 ms")).toBeInTheDocument();
+    // A member the core has not measured still fills the delay column.
+    expect(screen.getByRole("button", { name: /Osaka/ })).toHaveTextContent("—");
 
     await user.click(screen.getByRole("button", { name: /Osaka/ }));
     expect(ipc.selectPolicyGroupMember).toHaveBeenCalledWith("g1", "b");

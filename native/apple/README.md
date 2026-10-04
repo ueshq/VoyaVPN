@@ -29,9 +29,10 @@ reaching into another app's group.
 - `PacketTunnel/PacketTunnelProvider.swift` — the provider itself: start, stop,
   and the tunnel settings it installs.
 - `PacketTunnel/PacketTunnelRuntime.swift` — the host handshake payload, its
-  validation, and the short libbox working paths. libbox binds
-  `<base>/command.sock` and the OS caps `sun_path` at 104 bytes, which is why
-  the base is `PT/` at the container root rather than somewhere descriptive.
+  validation, and the libbox working paths. The base is `PT/` at the container
+  root: short because libbox once bound a command socket under it, and kept
+  there because installed tunnels already have their files in it. The provider
+  does not open that socket — the app reads the core through its Clash API.
 - `PacketTunnel/PacketTunnelDiagnostics.swift` — the provider's status file and
   rotating log, both confined to the container.
 - `PacketTunnel/PacketTunnelPlatform.swift` — the libbox `PlatformInterface`.

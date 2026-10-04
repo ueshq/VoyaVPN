@@ -52,14 +52,11 @@ pub async fn update_srs_assets(
     state: tauri::State<'_, AppState>,
 ) -> Result<Vec<ResourceUpdateFile>, AppError> {
     let config = state.config_mutations().current_config();
-    let proxy_url = app_runtime_proxy_url(true, None, &config, TargetOs::current());
 
     state
         .services()
-        .updates()
-        .update_srs_assets(proxy_url)
+        .update_rule_sets(&config, TargetOs::current())
         .await
-        .map_err(AppError::from)
 }
 
 /// Re-install a core binary from the packaged seed (`{resource_dir}/core-seeds/<core>/`)

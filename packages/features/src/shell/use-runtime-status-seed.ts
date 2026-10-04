@@ -2,7 +2,6 @@ import { useEffect } from "react";
 
 import { appVisibilityAdapter } from "@voya/client/platform";
 import { refreshRuntimeStatusAndReport } from "@voya/client/runtime-status";
-import type { RuntimeChannel } from "@voya/client/runtime-state-version";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 
@@ -16,20 +15,15 @@ import { useLatestRef } from "@voya/utils/use-latest-ref";
  * settle", because it gates on the state being either connected or
  * disconnected.
  *
- * The channel list is a host delta: the desktop samples `coreState`,
- * `sysProxy` and `tun` (the OS may have changed the proxy or the tunnel while
- * the window was away). Mobile samples only `coreState` — `system_proxy_status`
- * is on `UNSUPPORTED_ON_MOBILE` and would toast a failure every launch, and
- * nothing on a phone reads the tun channel: here the tunnel provider *is* the
- * core.
+ * Which channels are sampled is the host's `setRuntimeChannels` registration,
+ * the same list every runtime action reads back afterwards.
  *
  * Visibility goes through `appVisibilityAdapter`, so this module stays free of
  * `document`/`window` and works on both hosts.
  */
-export function useRuntimeStatusSeed(channels: readonly RuntimeChannel[]) {
+export function useRuntimeStatusSeed() {
   const { t } = useI18n();
   const translateRef = useLatestRef(t);
-  const channelsRef = useLatestRef(channels);
 
   useEffect(() => {
     let mounted = true;
@@ -38,11 +32,7 @@ export function useRuntimeStatusSeed(channels: readonly RuntimeChannel[]) {
       if (reading || !mounted) return;
       reading = true;
       try {
-        await refreshRuntimeStatusAndReport(
-          translateRef.current,
-          channelsRef.current,
-          () => mounted,
-        );
+        await refreshRuntimeStatusAndReport(translateRef.current, undefined, () => mounted);
       } finally {
         reading = false;
       }
@@ -58,5 +48,5 @@ export function useRuntimeStatusSeed(channels: readonly RuntimeChannel[]) {
       mounted = false;
       unsubscribe();
     };
-  }, [channelsRef, translateRef]);
+  }, [translateRef]);
 }

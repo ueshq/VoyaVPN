@@ -25,7 +25,8 @@ export type VoyaCommandInvoker = {
 };
 
 export type VoyaNativeModule = TurboModule &
-  VoyaCommandInvoker & {
+  VoyaCommandInvoker &
+  VoyaApplicationDataResetter & {
     /**
      * The two methods React Native requires of any module it emits events
      * from. They are the module's own bookkeeping; nothing here calls them.
@@ -33,6 +34,32 @@ export type VoyaNativeModule = TurboModule &
     addListener: (eventName: string) => void;
     removeListeners: (count: number) => void;
   };
+
+/**
+ * The recovery path for a startup the database rejected.
+ *
+ * The host moves the database aside and drops its cached `VoyaApp`, so the
+ * next command reconnects against a fresh one. On a phone there is no shell
+ * to run a manual recovery command in — this is the only one a rejected
+ * database has.
+ */
+export type VoyaApplicationDataResetter = {
+  resetApplicationData: () => Promise<void>;
+};
+
+/**
+ * Resets the application data through the native module and reports a failure
+ * as the typed `AppError` the reset rejects with, like every command.
+ */
+async function resetBackendApplicationData(
+  resetter: VoyaApplicationDataResetter,
+): Promise<void> {
+  try {
+    await resetter.resetApplicationData();
+  } catch (error) {
+    throw new IpcCommandError(appErrorFrom(error, "resetApplicationData"));
+  }
+}
 
 /** The three channels, as React Native delivers them. */
 export type VoyaNativeEvents = {
@@ -159,11 +186,12 @@ function isAppError(value: unknown): value is AppError {
  * makes the mock build a real rehearsal rather than a separate app.
  */
 export function createNativeTransport(
-  native: VoyaCommandInvoker,
+  native: VoyaCommandInvoker & VoyaApplicationDataResetter,
   events: VoyaNativeEvents,
 ): VoyaTransport {
   return {
     commands: nativeCommands(native),
+    resetApplicationData: () => resetBackendApplicationData(native),
     on: <Name extends VoyaEventName>(
       name: Name,
       listener: (payload: VoyaEventPayload<Name>) => void,

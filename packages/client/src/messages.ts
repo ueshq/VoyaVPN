@@ -4,7 +4,6 @@ import type {
   ImportLineIssue,
   LogCode,
   LogLineBody,
-  NoticeCode,
   SpeedtestOutcome,
   ValidationCode,
   ValidationIssue,
@@ -29,51 +28,10 @@ import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
  * friends are internally tagged, so `{ code: "unsupportedNetwork", network:
  * "kcp" }` already *is* the bag i18next reads `{{network}}` out of; there is no
  * second parameter list to keep in step.
+ *
+ * Notices are the one registry the shell needs before any screen has loaded,
+ * so they sit in `notice-text.ts` and the startup bundle carries only them.
  */
-export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
-  activeProfileRestartFailed: "notices.activeProfileRestartFailed",
-  policyGroupRefreshFailed: "notices.policyGroupRefreshFailed",
-  policyGroupSavedRestartFailed: "notices.policyGroupSavedRestartFailed",
-  policyGroupSelectionRuntimeUpdateFailed: "notices.policyGroupSelectionRuntimeUpdateFailed",
-  connectionModeRefreshFailed: "notices.connectionModeRefreshFailed",
-  connectionModeSavedRestartFailed: "notices.connectionModeSavedRestartFailed",
-  coreStartedSystemProxyFailed: "notices.coreStartedSystemProxyFailed",
-  activeSelectionRemoved: "notices.activeSelectionRemoved",
-  coreStopped: "notices.coreStopped",
-  dnsRefreshFailed: "notices.dnsRefreshFailed",
-  dnsSavedRestartFailed: "notices.dnsSavedRestartFailed",
-  nativeTunStopped: "notices.nativeTunStopped",
-  nodeIpv6Restored: "notices.nodeIpv6Restored",
-  nodeIpv6Unsupported: "notices.nodeIpv6Unsupported",
-  profileRefreshFailed: "notices.profileRefreshFailed",
-  proxyModeSavedRuntimeUpdateFailed:
-    "notices.proxyModeSavedRuntimeUpdateFailed",
-  proxyViewRefreshFailed: "notices.proxyViewRefreshFailed",
-  routingDeletedRestartFailed: "notices.routingDeletedRestartFailed",
-  routingRefreshFailed: "notices.routingRefreshFailed",
-  routingRuleMovedRestartFailed: "notices.routingRuleMovedRestartFailed",
-  routingRuleSavedRestartFailed: "notices.routingRuleSavedRestartFailed",
-  routingRulesDeletedRestartFailed: "notices.routingRulesDeletedRestartFailed",
-  routingRulesResetRestartFailed: "notices.routingRulesResetRestartFailed",
-  routingSavedRestartFailed: "notices.routingSavedRestartFailed",
-  routingSelectedRestartFailed: "notices.routingSelectedRestartFailed",
-  selfHostAddressChanged: "notices.selfHostAddressChanged",
-  selfHostGaveUp: "notices.selfHostGaveUp",
-  selfHostRefreshFailed: "notices.selfHostRefreshFailed",
-  settingsRefreshFailed: "notices.settingsRefreshFailed",
-  settingsSavedRuntimeUpdateFailed: "notices.settingsSavedRuntimeUpdateFailed",
-  settingsSavedSystemProxyUpdateFailed:
-    "notices.settingsSavedSystemProxyUpdateFailed",
-  subscriptionAutoUpdateFailed: "notices.subscriptionAutoUpdateFailed",
-  subscriptionRefreshFailed: "notices.subscriptionRefreshFailed",
-  systemProxyRestoreFailed: "notices.systemProxyRestoreFailed",
-  systemProxyStatusRefreshFailed: "notices.systemProxyStatusRefreshFailed",
-  trayActionFailed: "notices.trayActionFailed",
-  trayRefreshFailed: "notices.trayRefreshFailed",
-  tunSavedRestartFailed: "notices.tunSavedRestartFailed",
-  tunStatusRefreshFailed: "notices.tunStatusRefreshFailed",
-};
-
 export const LOG_KEYS: Record<LogCode["code"], TranslationKey> = {
   connected: "logCodes.connected",
   connecting: "logCodes.connecting",
@@ -193,10 +151,6 @@ export const IMPORT_LINE_KEYS: Record<ImportLineCode["code"], TranslationKey> = 
   unsupportedProtocol: "panes.profiles.import.line.unsupportedProtocol",
   unsupportedTransport: "panes.profiles.import.line.unsupportedTransport",
 };
-
-export function noticeText(t: TranslationFunction, code: NoticeCode) {
-  return t(NOTICE_KEYS[code.code], code);
-}
 
 /**
  * One log line as the panel shows it.

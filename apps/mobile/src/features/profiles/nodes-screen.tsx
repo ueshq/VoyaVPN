@@ -5,13 +5,16 @@ import { useProfileActivation } from "@voya/client/runtime-action";
 import type { NodeListRow } from "@voya/features/profiles/node-list-rows";
 import type { ProfileSummaryEntry } from "@voya/contracts";
 import { profileLatency, profileLatencyTone, profileTitle } from "@voya/features/profiles/profile-display";
-import { useNodeListData } from "@voya/features/profiles/use-node-list-data";
+import { overlaySpeedtestResult, useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
 import { useNodeExport } from "@voya/features/profiles/use-node-export";
 import { POLICY_GROUP_STRATEGY_HINT_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { usePolicyGroups } from "@voya/features/profiles/use-policy-groups";
+import type { TranslationFunction } from "@voya/i18n/core";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 import { Button } from "heroui-native/button";
 import { Chip } from "heroui-native/chip";
 import { ListGroup } from "heroui-native/list-group";
@@ -19,9 +22,9 @@ import { Menu } from "heroui-native/menu";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import { Circle, CircleCheck, ClipboardPaste, Gauge, LayoutArrowDown, Server } from "lucide-react-native";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useLatestRef } from "@voya/utils/use-latest-ref";
+import { type RefObject, memo, useCallback, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, findNodeHandle, FlatList, View, useWindowDimensions } from "react-native";
-import { useResolveClassNames } from "uniwind";
 
 import { Banner } from "~/components/banner";
 import { Disclosure } from "~/components/disclosure";
@@ -29,7 +32,7 @@ import { EmptyState } from "~/components/empty-state";
 import { ListRow } from "~/components/list-row";
 import { PageHeader } from "~/components/page-header";
 import { SectionHeader } from "~/components/section-header";
-import { useToneColor } from "~/components/tone";
+import { useClassColor, useToneColor } from "~/components/tone";
 import { useScreenInsets } from "~/components/use-screen-insets";
 
 import { NodeActionsSheet } from "./node-actions-sheet";
@@ -48,25 +51,35 @@ export function NodesScreen() {
   const { t } = useI18n();
   const insets = useScreenInsets();
   const accentForeground = useToneColor("brand");
-  const { color: onAccent } = useResolveClassNames("text-accent-foreground");
+  const onAccent = useClassColor("text-accent-foreground");
   const selection = useNodeSelection();
   const data = useNodeListData(selection, t);
   const operation = useNodeOperation();
   const speedtest = useNodeSpeedtest(operation);
   const activation = useProfileActivation(t);
-  const select = useCallback(
-    (id: string) => operation.runOperation(() => activation.selectProfile(id)),
-    [activation, operation],
+  // The hooks above hand back a fresh object every render. A row renderer
+  // that depended on them would be rebuilt every render too, and with it
+  // every visible row — on each store push, for a list that can hold
+  // thousands. So it depends on the fields it reads, and reaches the one
+  // callback that is rebuilt each render through a ref.
+  const { busy: switching, runningId } = activation;
+  const { toggleGroup } = selection;
+  const selectRef = useLatestRef((id: string) =>
+    operation.runOperation(() => activation.selectProfile(id)),
   );
 
-  // Groups are headers, not nodes; a run tests what the list is showing.
+  // A run tests every node the list holds. Collapsing a group only hides its
+  // rows — it must not take the nodes out of a "Test all" — and a search that
+  // narrows the view is no reason to test less than everything either.
   const testableIds = useMemo(
-    () => data.rows.flatMap((row) => (row.kind === "group" ? [] : [row.item.profile.id])),
-    [data.rows],
+    () => data.profiles.map((entry) => entry.profile.id),
+    [data.profiles],
   );
 
   const selected = data.profiles.find((entry) => entry.isActive);
-  const groups = usePolicyGroups(operation, t);
+  // The phone lists the groups without their running member or its delays,
+  // so the every-three-seconds read behind those is left off.
+  const groups = usePolicyGroups(operation, t, { live: false });
   const exports = useNodeExport(operation, t);
   const [actionsFor, setActionsFor] = useState<ProfileSummaryEntry | null>(null);
 
@@ -95,67 +108,25 @@ export function NodesScreen() {
             title={item.name}
             detail={t("nodeGroups.membersCount", { count: item.allMembers.length })}
             expanded={item.expanded}
-            onToggle={() => selection.toggleGroup(item.groupKey)}
+            onToggle={() => toggleGroup(item.groupKey)}
           />
         </View>
       ) : (
-        <ListRow
-          ref={(node) => {
-            if (node) nodeRefs.current.set(item.item.profile.id, node);
-            else nodeRefs.current.delete(item.item.profile.id);
-          }}
-          inset
+        <NodeRow
+          stored={item.item}
           first={first}
           last={item.last}
-          stacked={stackedActions}
-          title={profileTitle(item.item.profile.remarks, t)}
-          titleLines={stackedActions ? 0 : 2}
-          description={item.item.profile.address}
-          leading={
-            <SelectionMark
-              state={activation.runningId === item.item.profile.id ? "inUse" : item.item.isActive ? "selected" : "none"}
-            />
-          }
-          trailingInteractive
-          accessibilityLabel={`${profileTitle(item.item.profile.remarks, t)}, ${item.item.profile.address}, ${profileLatency(item.item, t)}`}
-          trailing={
-            <View className={`gap-1 ${stackedActions ? "flex-row items-center" : "items-end"}`}>
-              <Button isIconOnly className="h-12 w-12" variant="ghost" accessibilityLabel={actionsLabel(item.item, t)} onPress={() => openActions(item.item)}>
-                <MoreHorizontal size={20} color={accentForeground} />
-              </Button>
-              {(!item.item.metrics.outcome || item.item.metrics.outcome === "completed") ? (
-                <Chip size="sm" variant="soft" color={LATENCY_COLOR[profileLatencyTone(item.item)]}>
-                  <Chip.Label className="tabular-nums">{profileLatency(item.item, t)}</Chip.Label>
-                </Chip>
-              ) : null}
-              {activation.runningId === item.item.profile.id ? (
-                <Typography className="text-sm font-medium text-connected">
-                  {t("panes.profiles.card.using")}
-                </Typography>
-              ) : item.item.isActive ? (
-                <Typography className="text-sm font-medium text-brand">
-                  {t("panes.profiles.card.default")}
-                </Typography>
-              ) : null}
-            </View>
-          }
-          accessibilityState={{ selected: item.item.isActive, busy: activation.busy }}
-          isDisabled={activation.busy}
-          onPress={() => void select(item.item.profile.id)}
-          // A phone has no right-click, so the desktop's row menu is a long
-          // press; the sheet says what it offers.
-          onLongPress={() => openActions(item.item)}
-          onAccessibilityAction={(event) => {
-            if (event.nativeEvent.actionName === "longpress") openActions(item.item);
-          }}
-          accessibilityActions={[{ label: actionsLabel(item.item, t), name: "longpress" }]}
-        >
-          {item.item.metrics.outcome && item.item.metrics.outcome !== "completed" ? (
-            <Typography className="text-sm text-danger" numberOfLines={2}>{profileLatency(item.item, t)}</Typography>
-          ) : null}
-        </ListRow>
+          runningId={runningId}
+          switching={switching}
+          stackedActions={stackedActions}
+          t={t}
+          accentForeground={accentForeground}
+          selectRef={selectRef}
+          openActions={openActions}
+          nodeRefs={nodeRefs}
+        />
       ),
-    [activation, selection, stackedActions, t, accentForeground, select, openActions],
+    [runningId, switching, toggleGroup, stackedActions, t, accentForeground, selectRef, openActions],
   );
 
   const testAllLabel = speedtest.speedtestRunning
@@ -189,7 +160,7 @@ export function NodesScreen() {
                   {/* One button, two jobs: while a run is in flight it is the way
                       to stop it, and it counts the nodes that have answered. */}
                   <Button
-                    className="min-h-12 h-auto bg-accent-soft py-2"
+                    className="min-h-12 h-auto py-2"
                     size="sm"
                     variant="secondary"
                     isDisabled={testableIds.length === 0}
@@ -217,7 +188,7 @@ export function NodesScreen() {
               accessibilityLabel={t("mobile.add")}
               onPress={() => openPage("import")}
             >
-              <ClipboardPaste size={18} color={typeof onAccent === "string" ? onAccent : undefined} />
+              <ClipboardPaste size={18} color={onAccent} />
               <Button.Label>{t("mobile.add")}</Button.Label>
             </Button>
             {operation.operationMessage ? (
@@ -369,3 +340,109 @@ function NodeSortMenu({
     </Menu>
   );
 }
+
+/**
+ * One node's row.
+ *
+ * A component rather than part of the list's renderer so that it can read its
+ * own speedtest result: the list is laid out from the stored listing, which
+ * only changes when a run's results are read back, and a row that waited for
+ * that showed neither "testing" nor a delay until seconds after it was known.
+ * Reading its one entry of the store, a row redraws when its node's result
+ * arrives and at no other row's.
+ */
+const NodeRow = memo(function NodeRow({
+  stored,
+  first,
+  last,
+  runningId,
+  switching,
+  stackedActions,
+  t,
+  accentForeground,
+  selectRef,
+  openActions,
+  nodeRefs,
+}: {
+  stored: ProfileSummaryEntry;
+  first: boolean;
+  last: boolean;
+  runningId: string | null;
+  switching: boolean;
+  stackedActions: boolean;
+  t: TranslationFunction;
+  accentForeground: string | undefined;
+  selectRef: RefObject<(id: string) => unknown>;
+  openActions: (entry: ProfileSummaryEntry) => void;
+  nodeRefs: RefObject<Map<string, View>>;
+}) {
+  const result = useRuntimeEventStore(
+    (state) => state.speedtestResultsByProfileId[stored.profile.id],
+  );
+  const entry = overlaySpeedtestResult(stored, result);
+
+  return (
+    <ListRow
+      ref={(node) => {
+        if (node) nodeRefs.current.set(entry.profile.id, node);
+        else nodeRefs.current.delete(entry.profile.id);
+      }}
+      inset
+      first={first}
+      last={last}
+      stacked={stackedActions}
+      title={profileTitle(entry.profile.remarks, t)}
+      titleLines={stackedActions ? 0 : 2}
+      description={`${getProtocolLabel(entry.profile.kind)} · ${entry.profile.address}`}
+      leading={
+        <SelectionMark
+          state={runningId === entry.profile.id ? "inUse" : entry.isActive ? "selected" : "none"}
+        />
+      }
+      trailingInteractive
+      accessibilityLabel={`${profileTitle(entry.profile.remarks, t)}, ${getProtocolLabel(entry.profile.kind)}, ${entry.profile.address}, ${profileLatency(entry, t)}`}
+      trailing={
+        <View className={`gap-1 ${stackedActions ? "flex-row items-center" : "items-end"}`}>
+          <Button isIconOnly className="h-12 w-12" variant="ghost" accessibilityLabel={actionsLabel(entry, t)} onPress={() => openActions(entry)}>
+            <MoreHorizontal size={20} color={accentForeground} />
+          </Button>
+          {(!entry.metrics.outcome || entry.metrics.outcome === "completed") ? (
+            <Chip size="sm" variant="soft" color={LATENCY_COLOR[profileLatencyTone(entry)]}>
+              <Chip.Label className="tabular-nums">{profileLatency(entry, t)}</Chip.Label>
+            </Chip>
+          ) : null}
+          {runningId === entry.profile.id ? (
+            <Typography className="text-sm font-medium text-connected">
+              {t("panes.profiles.card.using")}
+            </Typography>
+          ) : entry.isActive ? (
+            <Typography className="text-sm font-medium text-brand">
+              {t("panes.profiles.card.default")}
+            </Typography>
+          ) : null}
+        </View>
+      }
+      accessibilityState={{ selected: entry.isActive, busy: switching }}
+      isDisabled={switching}
+      // Tapping the already-active row selects nothing new — it opens the
+      // actions sheet instead, the same thing the header's
+      // current-selection row does, so the tap always answers.
+      onPress={() =>
+        entry.isActive
+          ? openActions(entry)
+          : void selectRef.current(entry.profile.id)
+      }
+      // A phone has no right-click, so the desktop's row menu is a long
+      // press; the sheet says what it offers.
+      onLongPress={() => openActions(entry)}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === "longpress") openActions(entry);
+      }}
+      accessibilityActions={[{ label: actionsLabel(entry, t), name: "longpress" }]}
+    >
+      {entry.metrics.outcome && entry.metrics.outcome !== "completed" ? (
+        <Typography className="text-sm text-danger" numberOfLines={2}>{profileLatency(entry, t)}</Typography>
+      ) : null}
+    </ListRow>
+  );
+});

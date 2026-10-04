@@ -1,5 +1,5 @@
 import { relative } from "node:path";
-import { capture, repoRootFromScript } from "../../lib/common.mjs";
+import { captureSpawned, repoRootFromScript } from "../../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 
@@ -33,10 +33,7 @@ export function quarantinedPaths(xattrListing, root) {
 
 /** Every quarantined path under `root`, relative to it. */
 export function findQuarantined(root) {
-  const listing = capture("xattr", ["-r", root], { cwd: repoRoot });
-  if (listing.error) {
-    throw listing.error;
-  }
+  const listing = captureSpawned("xattr", ["-r", root], { cwd: repoRoot });
   if (listing.status !== 0) {
     throw new Error(`Unable to list extended attributes under ${root}: ${listing.stderr || listing.stdout}`);
   }

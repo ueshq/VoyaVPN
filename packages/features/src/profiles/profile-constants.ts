@@ -62,3 +62,13 @@ export function isTlsModeOption(value: unknown): value is TlsMode | "none" {
 export function getProtocolLabel(kind: ProfileKind | null | undefined) {
   return kind == null ? "" : PROFILE_PROTOCOL_LABELS[kind];
 }
+
+/**
+ * The label when the string is a known protocol kind, the string itself when
+ * it is not — for display-only values that come from outside the typed enum,
+ * such as the import preview's free-form `protocol` the backend parsed out of
+ * a link. An unknown value stays visible rather than being blanked.
+ */
+export function getProtocolLabelLoose(value: string) {
+  return isProfileKind(value) ? PROFILE_PROTOCOL_LABELS[value] : value;
+}

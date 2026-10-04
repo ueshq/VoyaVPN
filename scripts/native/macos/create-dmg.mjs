@@ -1,6 +1,13 @@
 import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import {
+  isCliEntrypoint,
+  repoRootFromScript,
+  requireDarwin,
+  run,
+  runCli,
+  truthy,
+} from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
 import { inferDistribution } from "./provisioning.mjs";
 import { initializeTunnelLayout, packetTunnelLayout, requirePath, resolveDmgPath } from "./tunnel-layout.mjs";
@@ -175,10 +182,5 @@ function main() {
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

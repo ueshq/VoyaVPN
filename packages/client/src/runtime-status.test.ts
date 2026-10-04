@@ -9,7 +9,7 @@ import type {
 import { useRuntimeEventStore } from "./runtime-event-store";
 import { useToastStore } from "./toast-store";
 import { setVoyaCommands } from "./transport";
-import { refreshRuntimeStatus, refreshRuntimeStatusAndReport } from "./runtime-status";
+import { refreshRuntimeStatus, refreshRuntimeStatusAndReport, setRuntimeChannels } from "./runtime-status";
 
 // The three status reads, behind the same seam every app registers at startup.
 const commands = { runtimeStatus: vi.fn(), systemProxyStatus: vi.fn(), tunStatus: vi.fn() };
@@ -92,6 +92,22 @@ describe("runtime status reconciliation", () => {
     expect(useRuntimeEventStore.getState().coreState).toEqual(core);
     await refreshRuntimeStatus(undefined, () => false);
     expect(useRuntimeEventStore.getState().sysProxy).toBeNull();
+  });
+
+  // A phone has no `system_proxy_status` command: asking after every connect
+  // came back "unsupported", and the notice host showed it as an alert.
+  it("reads only the channels the host registered when none are named", async () => {
+    setRuntimeChannels(["coreState"]);
+    try {
+      commands.systemProxyStatus.mockRejectedValue(new Error("unsupported"));
+      await refreshRuntimeStatusAndReport(i18next.t);
+      expect(commands.runtimeStatus).toHaveBeenCalledOnce();
+      expect(commands.systemProxyStatus).not.toHaveBeenCalled();
+      expect(commands.tunStatus).not.toHaveBeenCalled();
+      expect(useToastStore.getState().toasts).toEqual([]);
+    } finally {
+      setRuntimeChannels(["coreState", "sysProxy", "tun"]);
+    }
   });
 
   it("returns only current failures while other channels still settle", async () => {

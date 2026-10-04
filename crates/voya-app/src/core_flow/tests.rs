@@ -250,10 +250,13 @@ async fn saved_mode_is_applied_before_connect_restart_and_recovery_are_announced
     let mut config = active_config();
     config.proxy.traffic_mode = voya_core::TrafficMode::Global;
     let first = flow.connect(&config).await.expect("connect");
-    let restarted = flow.restart(&config).await.expect("restart");
+    flow.restart(&config).await.expect("restart");
     flow.restart_if_connected(&config, CoreFlowReason::Connect)
         .await
         .expect("config restart");
+    // The supervisor reports a crash restart with the core it brought up,
+    // which is the one running by the time the event is handled.
+    let running = harness.supervisor.status().await.expect("status");
     flow.handle_core_exit(
         &config,
         CoreExitEvent {
@@ -262,7 +265,7 @@ async fn saved_mode_is_applied_before_connect_restart_and_recovery_are_announced
             exit_code: Some(2),
             outcome: CoreExitOutcome::Restarted {
                 attempt: 1,
-                snapshot: restarted.clone(),
+                snapshot: running,
             },
         },
     )
@@ -560,40 +563,63 @@ async fn giving_up_on_a_crashed_core_disconnects_and_restores_the_system_proxy()
 async fn a_restarted_core_refreshes_proxy_state_before_the_snapshot() {
     let harness = Harness::new().await;
     let config = active_config();
+    let flow = harness.flow();
+    let snapshot = flow.connect(&config).await.expect("connect");
+    let settled = harness.sink.events().len();
 
-    harness
-        .flow()
-        .handle_core_exit(
-            &config,
-            CoreExitEvent {
-                active_profile_id: Some("active".to_string()),
-                process_id: 11,
-                exit_code: Some(2),
-                outcome: CoreExitOutcome::Restarted {
-                    attempt: 1,
-                    snapshot: SupervisorSnapshot {
-                        connected_duration_ms: Some(0),
-                        state: SupervisorConnectionState::Connected,
-                        active_tun_backend: None,
-                        active_profile_id: Some("active".to_string()),
-                        active_group_id: None,
-                        main_pid: Some(12),
-                        pre_pid: None,
-                        clash_api_port: None,
-                        clash_api_secret: None,
-                    },
-                },
+    flow.handle_core_exit(
+        &config,
+        CoreExitEvent {
+            active_profile_id: Some("active".to_string()),
+            process_id: 11,
+            exit_code: Some(2),
+            outcome: CoreExitOutcome::Restarted {
+                attempt: 1,
+                snapshot: snapshot.clone(),
             },
-        )
-        .await;
+        },
+    )
+    .await;
 
     assert_eq!(
-        harness.sink.events(),
+        harness.sink.events()[settled..],
         [
             "log:Warn:coreExitRestarted(attempt=1):Core process 11 exited with code 2".to_string(),
             "sysproxy".to_string(),
-            "state:Connected:profile=active:pid=Some(12)".to_string(),
+            format!("state:Connected:profile=active:pid={:?}", snapshot.main_pid),
         ]
+    );
+}
+
+/// The event is handled on a task of its own, so the user can have
+/// disconnected by the time it runs. Applying the system proxy for that core
+/// would point the system at a port nothing listens on any more.
+#[tokio::test]
+async fn a_restarted_core_that_is_no_longer_running_is_not_settled() {
+    let harness = Harness::new().await;
+    let config = active_config();
+    let flow = harness.flow();
+    let snapshot = flow.connect(&config).await.expect("connect");
+    flow.disconnect(&config).await.expect("disconnect");
+    let settled = harness.sink.events().len();
+
+    flow.handle_core_exit(
+        &config,
+        CoreExitEvent {
+            active_profile_id: Some("active".to_string()),
+            process_id: 11,
+            exit_code: Some(2),
+            outcome: CoreExitOutcome::Restarted {
+                attempt: 1,
+                snapshot,
+            },
+        },
+    )
+    .await;
+
+    assert_eq!(
+        harness.sink.events()[settled..],
+        ["log:Warn:coreExitRestarted(attempt=1):Core process 11 exited with code 2".to_string()]
     );
 }
 

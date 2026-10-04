@@ -55,8 +55,8 @@ export function SettingsScreen() {
       document.activeElement instanceof HTMLTextAreaElement
     )
       document.activeElement.blur();
+    // The render above marks the tab visited once the store reports it.
     useShellStore.getState().setSettingsTab(next);
-    setVisited((current) => new Set(current).add(next));
   }
 
   return (

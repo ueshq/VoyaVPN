@@ -38,8 +38,14 @@ class SaveQueue {
         if (!next) break;
         const [key, job] = next;
         this.jobs.delete(key);
-        // Jobs own their error reporting; failures never poison the writer.
-        await job();
+        // Jobs own their error reporting. One that rejects anyway must not
+        // strand the jobs queued behind it, nor leave this drain's promise
+        // rejected with nobody to handle it.
+        try {
+          await job();
+        } catch (error) {
+          console.error("[save-queue] a save job rejected", error);
+        }
       }
     } finally {
       this.running = false;

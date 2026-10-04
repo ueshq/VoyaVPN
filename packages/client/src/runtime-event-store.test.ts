@@ -301,6 +301,24 @@ describe("runtime event store", () => {
     expect(useRuntimeEventStore.getState().proxyConnections?.connections[0]?.id).toBe("connection-3");
   });
 
+  it("counts a connection each time the core becomes connected, not per sample", () => {
+    const { setCoreState } = useRuntimeEventStore.getState();
+    const epoch = () => useRuntimeEventStore.getState().connectionEpoch;
+    const start = epoch();
+
+    setCoreState(coreStatus("connecting"));
+    expect(epoch()).toBe(start);
+    setCoreState(coreStatus("connected"));
+    setCoreState({ ...coreStatus("connected"), connectedDurationMs: 5_000 });
+    expect(epoch()).toBe(start + 1);
+
+    // The same node again, and under the system's tunnel provider the same
+    // (absent) process id: only the count tells the two connections apart.
+    setCoreState(coreStatus("disconnected"));
+    setCoreState(coreStatus("connected"));
+    expect(epoch()).toBe(start + 2);
+  });
+
   it("keeps the connection table while the core stays connected", () => {
     useRuntimeEventStore.getState().setCoreState(coreStatus("connected"));
     useRuntimeEventStore.getState().setProxyConnections(cachedConnections);
@@ -342,6 +360,21 @@ describe("runtime event store", () => {
       stale: false,
       state: "failed",
     });
+  });
+
+  it("drops a push still waiting for its frame when the connection table is cleared", async () => {
+    vi.useFakeTimers();
+
+    useRuntimeEventStore.getState().pushTransientEvent({
+      kind: "proxyConnections",
+      payload: makeConnectionsSnapshot("connection-1", "example.com:443", 200, 100),
+    });
+    useRuntimeEventStore.getState().clearProxyConnections();
+    await vi.advanceTimersByTimeAsync(20);
+
+    // A screen that is leaving clears the table; the queued push must not
+    // bring it back for the next visit to start from.
+    expect(useRuntimeEventStore.getState().proxyConnections).toBeNull();
   });
 
   it("coalesces log batches into one frame and keeps when each line was logged", async () => {

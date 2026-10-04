@@ -58,6 +58,33 @@ describe("ActivityScreen", () => {
     await waitFor(() => expect(mockBackend().state.proxyMonitorRunning).toBe(false));
   });
 
+  it("never lets a stop overtake the start it follows", async () => {
+    connect();
+    const backend = mockBackend();
+    const start = backend.commands.proxyStartMonitor;
+    let release = () => {};
+    // A start that is still waiting on the core when the screen goes away.
+    backend.commands.proxyStartMonitor = () =>
+      new Promise((resolve, reject) => {
+        release = () => void start().then(resolve, reject);
+      });
+    const { unmount } = await renderActivity();
+    await unmount();
+
+    // The stop is queued behind the start, not sent beside it.
+    expect(backend.state.calls.map((call) => call.command)).not.toContain("proxyStopMonitor");
+
+    await act(async () => release());
+    await waitFor(() =>
+      expect(
+        backend.state.calls
+          .map((call) => call.command)
+          .filter((command) => command.startsWith("proxyS")),
+      ).toEqual(["proxyStartMonitor", "proxyStopMonitor"]),
+    );
+    expect(backend.state.proxyMonitorRunning).toBe(false);
+  });
+
   it("lists what is live, with the exit node and the traffic each one moved", async () => {
     mockBackend().state.connections = {
       connections: [makeConnection(0, { host: "news.example" })],

@@ -115,7 +115,7 @@ pub(super) fn gen_routing(config: &mut SingboxConfig, context: &CoreConfigContex
         ..SingboxRule::default()
     });
 
-    if let Some(routing) = context.routing_item.clone() {
+    if let Some(routing) = &context.routing_item {
         for item in routing
             .rule_set
             .iter()

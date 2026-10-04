@@ -47,7 +47,10 @@ pub const fn settings_runtime_action(
 
 /// The one OS side effect a settings save has: the login entry. A trait so the
 /// save transaction's rollback paths can be tested without touching the machine.
-pub trait ApplyAutostart: Sync {
+///
+/// `Clone + Send + 'static` because the call forks an OS helper, so the save
+/// runs it on a blocking thread rather than on the async worker.
+pub trait ApplyAutostart: Clone + Send + Sync + 'static {
     fn apply_autostart(&self, config: &AppConfig) -> Result<(), contracts::AppError>;
 }
 
@@ -63,6 +66,7 @@ impl ApplyAutostart for crate::autostart::AutostartManager {
 
 /// A host without a login entry. A phone's always-on VPN is a system setting
 /// the user turns on, not something an app arranges for itself.
+#[derive(Clone)]
 pub struct NoAutostart;
 
 impl ApplyAutostart for NoAutostart {

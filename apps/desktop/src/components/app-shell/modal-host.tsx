@@ -1,94 +1,32 @@
-import { useDialogSubmit } from "@/lib/use-dialog-submit";
-import { useState } from "react";
-import { Cpu } from "lucide-react";
+import { Suspense, lazy, useState } from "react";
 
-import { Button } from "@voya/ui/components/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  ScrollableDialogContent,
-} from "@voya/ui/components/dialog";
-import { useI18n } from "@voya/i18n/use-i18n";
-import { voyaCommands } from "@voya/client/transport";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
+import { useShellStore } from "@/stores/shell-store";
+
+// The shell's two dialogs are the only startup code that needs the dialog
+// primitives, the checkbox and the submit helper, and neither shows at
+// startup — so both load when they are first asked for.
+const MissingCoreDialog = lazy(() =>
+  import("./missing-core-dialog").then(({ MissingCoreDialog }) => ({ default: MissingCoreDialog })),
+);
+const CloseRequestDialog = lazy(() =>
+  import("./close-request-dialog").then(({ CloseRequestDialog }) => ({
+    default: CloseRequestDialog,
+  })),
+);
 
 export function ModalHost() {
-  const closeMissingCore = useRuntimeActionStore((state) => state.closeMissingCore);
   const missingCore = useRuntimeActionStore((state) => state.missingCore);
+  const closeRequested = useShellStore((state) => state.closeRequestOpen);
+  // Once asked for, the close prompt stays mounted and opens and closes
+  // itself, so it keeps its closing transition.
+  const [closePromptLoaded, setClosePromptLoaded] = useState(closeRequested);
+  if (closeRequested && !closePromptLoaded) setClosePromptLoaded(true);
 
   return (
-    <Dialog
-      open={missingCore !== null}
-      onOpenChange={(open) => !open && closeMissingCore()}
-    >
+    <Suspense fallback={null}>
       {missingCore ? <MissingCoreDialog /> : null}
-    </Dialog>
-  );
-}
-
-function MissingCoreDialog() {
-  const { t } = useI18n();
-  const closeMissingCore = useRuntimeActionStore((state) => state.closeMissingCore);
-  const { error, pending: busy, submit } = useDialogSubmit();
-  const [seedMissing, setSeedMissing] = useState(false);
-
-  function installAndConnect() {
-    return submit(async () => {
-      const result = await voyaCommands().installCoreSeed();
-      if (result.status === "seedMissing") {
-        setSeedMissing(true);
-        return;
-      }
-
-      await voyaCommands().connectActiveProfile();
-      closeMissingCore();
-    });
-  }
-
-  return (
-    <ScrollableDialogContent
-      height="viewport"
-      width="lg"
-      closeLabel={t("actions.close")}
-    >
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Cpu className="size-4" aria-hidden="true" />
-          {t("missingCore.title")}
-        </DialogTitle>
-        <DialogDescription>
-          {t("missingCore.description", { core: "sing-box" })}
-        </DialogDescription>
-      </DialogHeader>
-      <DialogBody>
-        <div className="grid gap-2 text-sm">
-          {seedMissing ? (
-            <p className="text-muted-foreground">
-              {t("missingCore.seedMissingHint")}
-            </p>
-          ) : null}
-          {error ? <p className="text-danger">{error}</p> : null}
-        </div>
-      </DialogBody>
-      <DialogFooter>
-        {seedMissing ? (
-          <Button onClick={closeMissingCore} type="button" variant="outline">
-            {t("actions.close")}
-          </Button>
-        ) : (
-          <Button
-            disabled={busy}
-            onClick={() => void installAndConnect()}
-            type="button"
-          >
-            {busy ? t("missingCore.installing") : t("missingCore.install")}
-          </Button>
-        )}
-      </DialogFooter>
-    </ScrollableDialogContent>
+      {closePromptLoaded ? <CloseRequestDialog /> : null}
+    </Suspense>
   );
 }

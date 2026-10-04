@@ -1,6 +1,7 @@
 {
   "actions": {
     "add": "添加",
+    "back": "返回",
     "cancel": "取消",
     "clear": "清除",
     "close": "关闭",
@@ -203,8 +204,10 @@
     "dns": {
       "blockBindingQuery": "屏蔽 HTTPS/SVCB 查询",
       "bootstrapDns": "引导 DNS",
+      "bootstrapDnsPlaceholder": "例如 119.29.29.29",
       "commonHosts": "常用 Hosts",
       "directDns": "直连 DNS",
+      "directDnsPlaceholder": "例如 119.29.29.29",
       "directStrategy": "直连解析策略",
       "errorCount": "{{count}} 项错误",
       "expectedIps": "预期 IP 范围",
@@ -214,6 +217,7 @@
       "loading": "正在加载 DNS 设置",
       "proxyStrategy": "代理解析策略",
       "remoteDns": "远程 DNS",
+      "remoteDnsPlaceholder": "例如 https://cloudflare-dns.com/dns-query",
       "title": "DNS",
       "strategyHint": "解析域名时优先使用 IPv4 或 IPv6。",
       "strategyIpv6Off": "需在设置中开启 IPv6 后才生效；IPv6 关闭时所有查询仅使用 IPv4。",
@@ -331,27 +335,29 @@
         "clipboard": "从剪贴板导入",
         "clipboardEmpty": "剪贴板为空。",
         "clipboardUnavailable": "无法读取剪贴板文本。",
-        "discardedNodeOverrides": "已丢弃 {{count}} 个节点级覆盖项，将使用全局设置。",
         "summary": {
           "deduped": "已跳过内容中的 {{count}} 个重复项。",
           "failed": "{{count}} 个解析失败。",
           "filtered": "已过滤 {{count}} 个。",
-          "imported": "已导入 {{count}} 个节点。",
           "removedDuplicates": "已移除 {{count}} 个重复项。",
           "skipped": "已跳过 {{count}} 个。",
           "target": "目标：{{target}}。",
           "updated": "其中 {{count}} 个为已有节点，已刷新。",
-          "removedExisting": "已移除 {{count}} 个已下架节点。"
+          "removedExisting": "已移除 {{count}} 个已下架节点。",
+          "imported_one": "已导入 {{count, number}} 个节点。",
+          "imported_other": "已导入 {{count, number}} 个节点。"
         },
         "importing": "正在导入节点…",
         "line": {
-          "subscriptionSourceAdded": "第 {{line}} 行已添加为订阅，正在更新以导入节点。",
+          "subscriptionSourceAdded": "第 {{line}} 行将作为订阅添加，确认后更新并导入其节点。",
           "unsupportedTransport": "第 {{line}} 行已跳过：不支持 {{transport}} 传输方式，请向服务商换用 WebSocket、gRPC 等传输的节点。",
           "parseFailed": "第 {{line}} 行已跳过：链接格式无法识别。",
           "unsupportedProtocol": "第 {{line}} 行已跳过：不支持这种链接类型。",
           "missingField": "第 {{line}} 行已跳过：{{protocol}} 链接缺少 {{field}}。",
           "invalidPort": "第 {{line}} 行已跳过：{{protocol}} 链接的端口 {{port}} 无效。"
-        }
+        },
+        "discardedNodeOverrides_one": "已忽略链接中的 {{count, number}} 个节点级设置（如 TLS 指纹、多路复用、限速），将使用全局设置。",
+        "discardedNodeOverrides_other": "已忽略链接中的 {{count, number}} 个节点级设置（如 TLS 指纹、多路复用、限速），将使用全局设置。"
       },
       "importMethods": {
         "qrScreen": "扫描屏幕二维码",
@@ -899,9 +905,9 @@
       "vpnOnly": "仅在 VPN 模式下生效，可在“连接 → 网络接管方式”中切换。"
     },
     "logs": {
-      "coreLogOff": "详细连接日志未开启，这里只显示 VoyaVPN 自身的记录。开启上方“记录详细连接日志”可查看连接细节。",
+      "coreLogOff": "详细连接日志未开启，这里只显示 VoyaVPN 自身的记录。开启“设置 → 通用”中的“记录详细连接日志”可查看连接细节。",
       "coreLogWaiting": "详细连接日志已开启，暂未收到核心日志。",
-      "coreLogReceived": "详细连接日志已开启，已收到核心日志。"
+      "coreLogOn": "详细连接日志已开启。"
     }
   },
   "speedtest": {
@@ -1104,13 +1110,14 @@
   },
   "nodeGroups": {
     "local": "本地节点",
-    "membersCount": "{{count}} 个节点",
     "test": "测试本组",
     "empty": "此分组暂无节点。",
     "moreFor": "“{{name}}”的更多操作",
     "autoUpdateOff": "自动更新已关闭",
     "showAllMembers": "显示全部 {{count}} 个",
-    "showFewerMembers": "收起"
+    "showFewerMembers": "收起",
+    "membersCount_one": "{{count}} 个节点",
+    "membersCount_other": "{{count}} 个节点"
   },
   "common": {
     "advanced": "更多参数",
@@ -1208,6 +1215,8 @@
   "mobile": {
     "add": "添加节点或订阅",
     "connection": "连接与 DNS",
+    "trafficModeRule": "按规则分流",
+    "trafficModeGlobal": "全局代理",
     "maintenance": "维护与诊断",
     "about": "关于与帮助",
     "subscriptions": "管理订阅",
@@ -1221,10 +1230,11 @@
     "keepEditing": "继续编辑",
     "failed": "操作未完成，请重试或查看诊断。",
     "saveFailed": "设置未保存，请修正标红字段；当前继续使用原设置。",
+    "screenErrorDescription": "此页面意外中断。请重试，若仍未恢复请重新打开应用。",
     "diagnostics": "查看诊断",
     "details": "技术详情",
+    "rawError": "原始错误信息（英文）：",
     "deleteConfirm": "确认删除？",
-    "deleteHint": "将删除所选节点或订阅及其关联节点。若正在使用，将先断开连接；断开失败时保留数据。",
     "copy": "复制链接",
     "share": "分享…",
     "scan": "扫描二维码",
@@ -1233,7 +1243,6 @@
     "importHelp": "粘贴服务商提供的订阅地址或节点链接，也可以扫描二维码。确认前不会添加数据。",
     "preview": "预览",
     "confirmImport": "确认导入",
-    "previewCount": "识别到 {{nodes}} 个节点、{{sources}} 个订阅，{{failed}} 项无效。",
     "importInvalid": "没有可导入内容，请检查链接是否完整。",
     "cameraDenied": "相机权限未开启，请在系统设置中允许访问，或选择图片识码。",
     "noQr": "没有识别到二维码，请更换清晰的图片。",
@@ -1256,8 +1265,10 @@
     "allLogs": "全部日志",
     "appLogs": "应用日志",
     "coreLogs": "核心日志",
-    "copyDiagnostics": "复制脱敏诊断",
+    "copyDiagnostics": "复制诊断",
+    "copyFailed": "复制失败",
     "copyJson": "复制 JSON",
+    "copied": "已复制",
     "ruleDetails": "规则详情",
     "ruleEffect": "匹配此规则的流量将使用：{{target}}",
     "quicHint": "阻止 QUIC 可使支持回退的应用改用 TCP；无法回退的应用可能连接失败。",
@@ -1272,7 +1283,7 @@
     "support": "支持",
     "privacyContinue": "继续",
     "help": "使用帮助",
-    "helpText": "首次使用：添加配置 → 预览并导入 → 选择节点 → 返回主页连接。连接失败时先确认订阅有效、节点可达及 VPN 授权，再打开诊断查看记录。订阅地址失效可在“节点 → 管理订阅”修改。",
+    "helpText": "首次使用：添加配置 → 预览并导入 → 选择节点 → 返回主页连接。连接失败时先确认订阅有效、节点可达及 VPN 授权，再打开诊断查看记录。订阅地址失效可在“设置 → 管理订阅”修改。",
     "licenses": "开源许可",
     "updateFailed": "订阅更新失败，请检查地址或网络后重试。",
     "updateEmpty": "订阅未提供可用节点，已保留原节点。",
@@ -1283,13 +1294,35 @@
     "currentSelection": "当前节点",
     "authorizeAgain": "重新授权",
     "sourceMissing": "此订阅已不存在，请返回订阅列表。",
-    "deleteCount": "将移除此订阅及其关联的 {{count}} 个节点。",
     "invalidFields": "部分内容无效，请检查标红字段或导入的链接。",
     "missingItem": "此项目已不存在，请刷新列表后重新选择。",
     "networkFailed": "网络请求失败，请检查网络连接和来源地址后重试。",
     "unsupportedAction": "此设备暂不支持该操作，可查看诊断了解详情。",
     "expandPreview": "查看全部 {{count}} 个节点",
     "collapsePreview": "收起预览",
-    "androidScannerPrivacy": "Android 的二维码图片和识别结果由 ML Kit 在设备本地处理。Google 会接收 SDK 的性能和使用指标；SDK 也可能访问 Google 获取更新与兼容性信息。"
+    "androidScannerPrivacy": "Android 的二维码图片和识别结果由 ML Kit 在设备本地处理。Google 会接收 SDK 的性能和使用指标；SDK 也可能访问 Google 获取更新与兼容性信息。",
+    "updateFailedAt": "上次更新失败于 {{time}}",
+    "subsEmptyTitle": "暂无订阅",
+    "subsEmptyDescription": "添加订阅地址，节点将自动导入。",
+    "previewSummary": "识别到 {{nodes}}、{{subscriptions}}，{{invalid}}。",
+    "previewNodes_one": "{{count}} 个节点",
+    "previewNodes_other": "{{count}} 个节点",
+    "previewSubscriptions_one": "{{count}} 个订阅",
+    "previewSubscriptions_other": "{{count}} 个订阅",
+    "previewInvalid_one": "{{count}} 项无效",
+    "previewInvalid_other": "{{count}} 项无效",
+    "deleteDescription_one": "将移除此订阅及其关联的 {{count}} 个节点。若正在使用，将先断开连接；断开失败时保留数据。",
+    "deleteDescription_other": "将移除此订阅及其关联的 {{count}} 个节点。若正在使用，将先断开连接；断开失败时保留数据。",
+    "deleteNodeHint": "将移除此节点。若正在使用，将先断开连接；断开失败时保留数据。",
+    "editNode": "编辑节点",
+    "address": "地址",
+    "port": "端口",
+    "editorFieldsHint": "可编辑名称、地址与端口；协议、传输与安全设置保持不变。",
+    "editorSummary": "保持不变的设置",
+    "editorProtocol": "协议",
+    "editorTransport": "传输",
+    "editorTls": "安全",
+    "editorTransportNone": "无",
+    "openLogs": "打开日志"
   }
 }

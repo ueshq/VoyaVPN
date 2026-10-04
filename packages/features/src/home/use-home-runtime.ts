@@ -6,7 +6,9 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { coreStateOf, runningProfileId, useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { TunStatus } from "@voya/contracts";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
-import { usePolicyGroupRuntime } from "../profiles/use-policy-group-runtime";
+import { useActivePolicyGroup } from "../profiles/use-policy-group-runtime";
+import { homeMapMarker } from "./map-marker";
+import { useConnectionIp } from "./use-connection-ip";
 
 import {
   isRuntimeTransitioning,
@@ -43,7 +45,6 @@ export function useHomeRuntime() {
   // Connection details follow the running node rather than the saved selection.
   const runningId = runningProfileId(coreState);
   const tunEnabled = tun?.enabled ?? false;
-  const tunProviderSummary = tun ? tunProviderLabel(tun, t) : null;
 
   const runningEntry = runningId
     ? (profilesQuery.data?.entries.find(
@@ -52,10 +53,19 @@ export function useHomeRuntime() {
     : null;
   const nodeEntry = connected ? runningEntry : activeProfile;
   // Shares the node page's query, so activating a group there shows up here.
-  const policyGroupsQuery = useQuery(queries.policyGroups);
-  const activeGroup =
-    policyGroupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
-  const groupRuntime = usePolicyGroupRuntime(activeGroup?.group.id ?? null);
+  const { activeGroup, policyGroupsQuery, runtime: groupRuntime } = useActivePolicyGroup();
+  // The member the running group sends traffic through, and its node.
+  const groupNow = activeGroup
+    ? (groupRuntime?.members.find(
+        (member) => member.profileId === groupRuntime.nowProfileId,
+      ) ?? null)
+    : null;
+  const groupNowEntry = groupNow
+    ? (profilesQuery.data?.entries.find(
+        (entry) => entry.profile.id === groupNow.profileId,
+      ) ?? null)
+    : null;
+  const { ipQuery: exitIp } = useConnectionIp();
 
   const ready = profilesQuery.isSuccess && policyGroupsQuery.isSuccess && (activeProfile !== null || activeGroup !== null);
 
@@ -92,7 +102,17 @@ export function useHomeRuntime() {
     activeGroup,
     ready,
     hasNodes,
-    groupRuntime,
+    groupNow,
+    exitIp,
+    // Where the world map puts its one marker; both shells draw the same one.
+    marker: homeMapMarker({
+      connected,
+      exitCountryCode: exitIp.data?.countryCode,
+      groupEntry: groupNowEntry,
+      hasNodes,
+      isGroup: activeGroup !== null,
+      nodeEntry,
+    }),
     nodeEntry,
     busy,
     connected,
@@ -100,9 +120,7 @@ export function useHomeRuntime() {
     handlePrimaryAction,
     inProgress,
     lastError,
-    mainPid: coreState?.mainPid ?? null,
     modePending,
-    profiles: profilesQuery.data?.entries ?? [],
     profilesPending: profilesQuery.isPending || policyGroupsQuery.isPending,
     profilesError: profilesQuery.error ?? policyGroupsQuery.error,
     restart,
@@ -110,12 +128,11 @@ export function useHomeRuntime() {
     retryProfiles: () => { void profilesQuery.refetch(); void policyGroupsQuery.refetch(); },
     runningId,
     state,
-    tunProviderSummary,
-    tunIssue: homeTunIssue(tun, t),
+    tunIssue: homeTunIssue(tun, t, { ready }),
     // The same line without the provider's own untranslated text, and that
     // text on its own: a view that tucks diagnostics away shows the first and
     // discloses the second.
-    tunIssueMessage: homeTunIssue(tun, t, { includeProviderError: false }),
+    tunIssueMessage: homeTunIssue(tun, t, { includeProviderError: false, ready }),
     tunProviderError: tun?.lastProviderError ?? null,
   };
 }
@@ -131,10 +148,18 @@ const VPN_PERMISSION_HINT_KEYS = {
 export function homeTunIssue(
   tun: TunStatus | null,
   t: TranslationFunction,
-  options?: { includeProviderError?: boolean },
+  options?: { includeProviderError?: boolean; ready?: boolean },
 ) {
   if (!tun) return null;
+  // An installation-level problem stays stated whatever else changed: it is
+  // about this machine, not about the next connection.
   if (tun.providerPathMismatch) return tunProviderPathMismatchDescription(tun, t);
+  // Everything below explains a connection that failed or is about to be
+  // attempted. With nothing selected to connect to, the line would only
+  // repeat what the "Choose a node" state already says — and a stale
+  // authorization failure would outlive the node whose connect produced it.
+  // It comes back the moment a node is selected again.
+  if (options?.ready === false) return null;
   // The first connection asks to add a VPN configuration; say what to choose.
   if (tun.providerState === "permissionRequired" && Object.hasOwn(VPN_PERMISSION_HINT_KEYS, tun.backend)) {
     return t(VPN_PERMISSION_HINT_KEYS[tun.backend as keyof typeof VPN_PERMISSION_HINT_KEYS]);

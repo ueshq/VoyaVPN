@@ -25,7 +25,6 @@ import { cn } from "@voya/ui/lib/utils";
 import { useShellStore } from "@/stores/shell-store";
 
 import { IMPORT_METHODS } from "@/features/profiles/import-methods";
-import { IMPORT_METHOD_ICONS } from "./import-method-icons";
 import { SpeedtestButton } from "./server-table-menus";
 import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
 import type { ServerTableController } from "./use-server-table";
@@ -179,8 +178,7 @@ export function ServerTableToolbar({
               }
             }}
           >
-            {IMPORT_METHODS.map(({ method, labelKey }, index) => {
-              const Icon = IMPORT_METHOD_ICONS[method];
+            {IMPORT_METHODS.map(({ method, labelKey, icon: Icon }, index) => {
               return (
               <MenubarItem
                 key={method}

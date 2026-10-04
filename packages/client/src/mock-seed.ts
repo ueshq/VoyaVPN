@@ -86,6 +86,9 @@ export function makeSubscriptionMetadata(
   return {
     downloadBytes: 40 * 1024 ** 3,
     expireAt: null,
+    lastAttemptAt: null,
+    lastAttemptError: null,
+    lastAttemptFailed: null,
     lastUpdateAt: null,
     profileTitle: null,
     subscriptionId,

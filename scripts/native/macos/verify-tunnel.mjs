@@ -1,6 +1,14 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, truthy } from "../../lib/common.mjs";
+import {
+  capture,
+  isCliEntrypoint,
+  repoRootFromScript,
+  requireDarwin,
+  run,
+  runCli,
+  truthy,
+} from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
   codesignEntitlements,
@@ -231,10 +239,5 @@ function main() {
 // Guarded so importing this module (a unit test, another script) cannot start
 // shelling out to codesign/pluginkit as a side effect of the import.
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

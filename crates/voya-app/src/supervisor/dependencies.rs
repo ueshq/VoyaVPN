@@ -7,10 +7,7 @@ use std::{sync::Arc, time::Duration};
 use voya_platform::{
     coreinfo::TargetOs,
     privilege::ElevationState,
-    process::{
-        NoopProcessJobFactory, PlatformProcessJobFactory, ProcessJobFactory, ProcessRunner,
-        StdProcessRunner,
-    },
+    process::{NoopProcessJobFactory, PlatformProcessJobFactory, ProcessJobFactory, ProcessRunner},
     tun::{NativeTunController, NoopNativeTunController, PlatformNativeTunController},
 };
 
@@ -43,29 +40,16 @@ impl SupervisorDeps {
         }
     }
 
-    #[must_use]
-    pub fn platform() -> Self {
-        Self::platform_with_runner(
-            Arc::new(StdProcessRunner::new()),
-            Arc::new(ElevationState::new()),
-        )
-    }
-
+    /// [`Self::new`] with the job objects and the native tunnel this OS has.
     #[must_use]
     pub fn platform_with_runner(
         runner: Arc<dyn ProcessRunner>,
         elevation: Arc<ElevationState>,
     ) -> Self {
         Self {
-            runner,
-            elevation,
             job_factory: Arc::new(PlatformProcessJobFactory),
             native_tun_controller: Arc::new(PlatformNativeTunController),
-            native_tun_health_interval: Duration::from_secs(3),
-            event_sink: Arc::new(NoopSupervisorEventSink),
-            clock: Arc::new(SystemSupervisorClock),
-            crash_restart_policy: CrashRestartPolicy::default(),
-            target_os: TargetOs::current(),
+            ..Self::new(runner, elevation)
         }
     }
 

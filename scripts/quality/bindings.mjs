@@ -62,25 +62,25 @@ for (const path of [bindingsPath, ...derived.map((entry) => entry.path)]) {
 const tempDir = mkdtempSync(join(tmpdir(), "voyavpn-bindings-"));
 const tempPath = join(tempDir, "bindings.ts");
 
+// The exit status is set rather than the process ended inside the `try`:
+// `process.exit()` skips `finally`, which left a temp directory behind on
+// every failing run — the runs this check exists for.
 try {
   runExport(tempPath);
 
-  if (readFileSync(bindingsPath, "utf8") !== readFileSync(tempPath, "utf8")) {
-    console.error("Generated IPC bindings are out of date. Run `pnpm generate:bindings`.");
-    process.exit(1);
-  }
-
   const bindings = readFileSync(tempPath, "utf8");
-  for (const { path, render } of derived) {
-    if (readFileSync(path, "utf8") !== render(bindings)) {
-      console.error(
-        `Generated ${relative(repoRoot, path)} is out of date. Run \`pnpm generate:bindings\`.`,
-      );
-      process.exit(1);
-    }
+  const stale = [
+    ...(readFileSync(bindingsPath, "utf8") === bindings ? [] : ["IPC bindings"]),
+    ...derived
+      .filter(({ path, render }) => readFileSync(path, "utf8") !== render(bindings))
+      .map(({ path }) => relative(repoRoot, path)),
+  ];
+  if (stale.length) {
+    console.error(`Out of date: ${stale.join(", ")}. Run \`pnpm generate:bindings\`.`);
+    process.exitCode = 1;
+  } else {
+    console.log("Generated IPC bindings and @voya/contracts are up to date.");
   }
-
-  console.log("Generated IPC bindings and @voya/contracts are up to date.");
 } finally {
   rmSync(tempDir, { force: true, recursive: true });
 }

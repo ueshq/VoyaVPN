@@ -1,7 +1,6 @@
 import { isCliEntrypoint, truthy } from "../lib/common.mjs";
-import { runSeedInstall } from "./install-entry.mjs";
+import { parseInstallArgs, runSeedInstall } from "./install-entry.mjs";
 import { installRuleSetSeeds } from "./rule-sets-installer.mjs";
-import { parseInstallArgs } from "./sing-box-installer.mjs";
 
 if (isCliEntrypoint(import.meta.url)) {
   await runSeedInstall({

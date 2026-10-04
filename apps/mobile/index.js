@@ -2,8 +2,8 @@
  * @format
  */
 
-// Side-effect first: registers storage, the system colour scheme and the i18n
-// host behind @voya/client and @voya/i18n, before any store module loads.
+// Side-effect first: registers storage, app visibility and the i18n host
+// behind @voya/client and @voya/i18n, before any store module loads.
 import './src/native/platform-boot';
 
 // Uniwind compiles this sheet at build time and registers every class the app

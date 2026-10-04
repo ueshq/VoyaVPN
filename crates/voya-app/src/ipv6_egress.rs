@@ -17,6 +17,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     io,
     path::PathBuf,
+    sync::{Mutex, PoisonError},
 };
 
 use serde::{Deserialize, Serialize};
@@ -144,6 +145,11 @@ impl Ipv6EgressStore {
 
     /// Records `egress` for `node`, replacing an earlier answer.
     pub fn record(&self, node: &ProfileItem, egress: Ipv6Egress) -> io::Result<()> {
+        // The file is read, changed and written whole, and every caller makes
+        // a store of its own: two checks finishing together would each write
+        // back the other's node as it was before.
+        static WRITING: Mutex<()> = Mutex::new(());
+        let _writing = WRITING.lock().unwrap_or_else(PoisonError::into_inner);
         let mut records = self.load();
         records.nodes.insert(
             node.index_id.clone(),

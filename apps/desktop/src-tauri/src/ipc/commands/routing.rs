@@ -43,11 +43,6 @@ pub async fn delete_routings<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     ids: Vec<String>,
 ) -> Result<u32, AppError> {
-    map_ipc_input(
-        input_safety::validate_text_list(&ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "routing id",
-        AppErrorSubsystem::Routing,
-    )?;
     let deleted = delete_routings_use_case(state.config_mutations(), ids).await?;
     finish_routing_change(
         &app,
@@ -68,11 +63,6 @@ pub async fn set_active_routing<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     id: String,
 ) -> Result<RoutingContract, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&id, IPC_ID_MAX_CHARS),
-        "routing id",
-        AppErrorSubsystem::Routing,
-    )?;
     let active = set_active_routing_use_case(state.config_mutations(), id).await?;
     finish_routing_change(
         &app,
@@ -94,11 +84,6 @@ pub async fn save_routing_rule<R: tauri::Runtime>(
     routing_id: String,
     rule: RoutingRuleContract,
 ) -> Result<RoutingContract, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&routing_id, IPC_ID_MAX_CHARS),
-        "routing id",
-        AppErrorSubsystem::Routing,
-    )?;
     let saved = save_routing_rule_use_case(state.config_mutations(), routing_id, rule).await?;
 
     finish_routing_change(
@@ -121,16 +106,6 @@ pub async fn delete_routing_rules<R: tauri::Runtime>(
     routing_id: String,
     rule_ids: Vec<String>,
 ) -> Result<RoutingContract, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&routing_id, IPC_ID_MAX_CHARS),
-        "routing id",
-        AppErrorSubsystem::Routing,
-    )?;
-    map_ipc_input(
-        input_safety::validate_text_list(&rule_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "routing rule id",
-        AppErrorSubsystem::Routing,
-    )?;
     let saved =
         delete_routing_rules_use_case(state.config_mutations(), routing_id, rule_ids).await?;
 
@@ -156,16 +131,6 @@ pub async fn move_routing_rule<R: tauri::Runtime>(
     action: ContractMoveAction,
     position: Option<i32>,
 ) -> Result<RoutingContract, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&routing_id, IPC_ID_MAX_CHARS),
-        "routing id",
-        AppErrorSubsystem::Routing,
-    )?;
-    map_ipc_input(
-        input_safety::validate_required_text(&rule_id, IPC_ID_MAX_CHARS),
-        "routing rule id",
-        AppErrorSubsystem::Routing,
-    )?;
     let saved = move_routing_rule_use_case(
         state.config_mutations(),
         routing_id,
@@ -196,11 +161,6 @@ pub async fn reset_routing_rules<R: tauri::Runtime>(
     state: tauri::State<'_, AppState>,
     routing_id: String,
 ) -> Result<RoutingContract, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&routing_id, IPC_ID_MAX_CHARS),
-        "routing id",
-        AppErrorSubsystem::Routing,
-    )?;
     let saved = reset_routing_rules_use_case(state.config_mutations(), routing_id).await?;
 
     finish_routing_change(

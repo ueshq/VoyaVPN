@@ -125,7 +125,6 @@ fn selfhost_config_without_protocols_has_no_inbounds() {
         clash_api: None,
         ..test_spec()
     };
-    assert!(!spec.has_inbound());
     let config = generate_singbox_selfhost_config(&spec);
     assert!(config.inbounds.is_empty());
     assert!(config.experimental.is_none());

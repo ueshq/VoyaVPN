@@ -9,7 +9,9 @@ import NetworkExtension
  * handshake therefore travels inline in `startVPNTunnel(options:)` rather than
  * through a file: the provider cannot read the app's own container, and the
  * App Group container is for rule sets and status, not for the config the
- * tunnel is being started with.
+ * tunnel is being started with. The provider therefore refuses a start that
+ * arrives without it — the VPN switch in Settings — with an error that says to
+ * connect from the app, instead of leaving node credentials on disk for it.
  *
  * Every call blocks until the session has settled, because `NativeTunController`
  * is a synchronous trait: the Rust side runs it on a blocking thread.
@@ -24,6 +26,41 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
     private static let pollInterval: TimeInterval = 0.1
     /// How long one NetworkExtension call may take before it counts as hung.
     private static let callTimeout: TimeInterval = 30
+    /// How long a stop that never saw the session active waits for it to stay
+    /// down. Long enough for a start still queued in `nesessionmanager` to
+    /// show itself, and far short of `stopTimeout`: the usual case is a
+    /// provider that already exited, with the supervisor's thread — and the
+    /// user's next Connect behind it — waiting on this call.
+    private static let idleStopQuietPeriod: TimeInterval = 3
+
+    /// The installed configuration, kept between calls. The Rust side asks for
+    /// `status()` every few seconds; reading the preferences each time was a
+    /// round trip to `nesessionmanager` per poll, and a single one that failed
+    /// or timed out reported `error`, which takes a healthy tunnel down.
+    private let managerLock = NSLock()
+    private var manager: NETunnelProviderManager?
+    /// `true` once `manager` holds what the preferences said, `nil` included.
+    private var managerLoaded = false
+    /// Bumped by every configuration change, so a load that was in flight
+    /// when one arrived does not store what it read before it.
+    private var managerGeneration = 0
+    private var configurationObserver: NSObjectProtocol?
+
+    init() {
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .NEVPNConfigurationChange,
+            object: nil,
+            queue: nil,
+        ) { [weak self] _ in
+            self?.configurationChanged()
+        }
+    }
+
+    deinit {
+        if let configurationObserver {
+            NotificationCenter.default.removeObserver(configurationObserver)
+        }
+    }
 
     func start(handoffJson: String, includeAllNetworks: Bool) throws {
         let manager = try loadOrCreateManager(includeAllNetworks: includeAllNetworks)
@@ -73,7 +110,12 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         do {
             found = try currentManager()
         } catch {
-            return "error"
+            // A configuration read before still answers for its connection.
+            // Only with nothing to ask is a failed read an error: reporting
+            // one tears the tunnel down, and a preferences read that timed
+            // out says nothing about the tunnel.
+            guard let known = lastKnownManager() else { return "error" }
+            found = known
         }
         // No configuration is installed until the first connect saves one and
         // raises the system prompt. That is a tunnel not yet started, not a
@@ -98,8 +140,30 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
     // MARK: - Configuration
 
     private func loadOrCreateManager(includeAllNetworks: Bool) throws -> NETunnelProviderManager {
-        let manager = (try? currentManager()).flatMap { $0 } ?? NETunnelProviderManager()
-        let proto = (manager.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
+        // "No configuration yet" and "the configurations could not be read"
+        // are different answers, as `status()` already treats them: creating
+        // one on a failed read would save a second VPN profile beside the one
+        // that is really there.
+        // A start always reads the preferences afresh: creating a configuration
+        // because a remembered answer said there was none is the duplicate
+        // this function exists to avoid.
+        configurationChanged()
+        let stored = try currentManager()
+        let manager = stored ?? NETunnelProviderManager()
+        let storedProto = manager.protocolConfiguration as? NETunnelProviderProtocol
+        // Already what this start would save: a save and the reload it needs
+        // are two round trips to the system on every connect, and each save
+        // announces a configuration change to everything that listens for one.
+        if stored != nil,
+           manager.isEnabled,
+           manager.localizedDescription == Self.configurationName,
+           storedProto?.providerBundleIdentifier == Self.providerBundleIdentifier,
+           storedProto?.serverAddress == Self.configurationName,
+           storedProto?.includeAllNetworks == includeAllNetworks
+        {
+            return manager
+        }
+        let proto = storedProto ?? NETunnelProviderProtocol()
         proto.providerBundleIdentifier = Self.providerBundleIdentifier
         // Required and otherwise unused: the provider is chosen by bundle id.
         proto.serverAddress = Self.configurationName
@@ -117,11 +181,56 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         try blocking { done in
             manager.loadFromPreferences { error in done(error) }
         }
+        remember(manager)
 
         return manager
     }
 
     private func currentManager() throws -> NETunnelProviderManager? {
+        managerLock.lock()
+        if managerLoaded {
+            defer { managerLock.unlock() }
+            return manager
+        }
+        let generation = managerGeneration
+        managerLock.unlock()
+
+        let found = try loadManager()
+
+        managerLock.lock()
+        defer { managerLock.unlock() }
+        if generation == managerGeneration {
+            manager = found
+            managerLoaded = true
+        }
+        return found
+    }
+
+    /// The configuration last read, whether or not it is still current.
+    private func lastKnownManager() -> NETunnelProviderManager? {
+        managerLock.lock()
+        defer { managerLock.unlock() }
+        return manager
+    }
+
+    private func remember(_ saved: NETunnelProviderManager) {
+        managerLock.lock()
+        defer { managerLock.unlock() }
+        manager = saved
+        managerLoaded = true
+    }
+
+    /// The user removed or edited the configuration in Settings, or this app
+    /// saved it. The object is kept — it still answers for its connection if
+    /// the next read fails — but the next call reads the preferences again.
+    private func configurationChanged() {
+        managerLock.lock()
+        defer { managerLock.unlock() }
+        managerLoaded = false
+        managerGeneration += 1
+    }
+
+    private func loadManager() throws -> NETunnelProviderManager? {
         var found: NETunnelProviderManager?
         try blocking { done in
             NETunnelProviderManager.loadAllFromPreferences { managers, error in
@@ -178,7 +287,8 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
      * runs on macOS, and for the same reasons: a start that never reaches
      * `connecting` is a permission failure rather than a slow one, and a stop
      * can race a start still queued in `nesessionmanager`, so a disconnected
-     * session only counts after it has stayed that way.
+     * session only counts after it has stayed that way — for a second once it
+     * was seen active, and for `idleStopQuietPeriod` when it never was.
      */
     private func waitForSettled(starting: Bool, timeout: TimeInterval, connection: NEVPNConnection) -> WaitResult {
         let deadline = Date().addingTimeInterval(timeout)
@@ -196,7 +306,8 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
             } else if current == .disconnected || current == .invalid {
                 let since = disconnectedSince ?? Date()
                 disconnectedSince = since
-                if observedActive && Date().timeIntervalSince(since) >= 1 { return .disconnected }
+                let quietPeriod = observedActive ? 1 : Self.idleStopQuietPeriod
+                if Date().timeIntervalSince(since) >= quietPeriod { return .disconnected }
             } else {
                 observedActive = true
                 disconnectedSince = nil

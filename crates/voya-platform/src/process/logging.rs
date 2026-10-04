@@ -85,8 +85,7 @@ pub(super) fn drain_child_pipe<T>(
     };
 
     thread::spawn(move || {
-        let reader = io::BufReader::new(pipe);
-        for line in reader.lines().map_while(Result::ok) {
+        for_each_output_line(pipe, |line| {
             let level = classify_core_log_line(&line);
             match level {
                 ProcessLogLevel::Trace | ProcessLogLevel::Debug => {
@@ -105,6 +104,48 @@ pub(super) fn drain_child_pipe<T>(
             if let Some(log_sink) = &log_sink {
                 log_sink.line(role, stream, level, line);
             }
-        }
+        });
     });
+}
+
+/// Hands `pipe` to `on_line` one line at a time until it reaches end of file.
+///
+/// The pipe has to be read to the end whatever is in it. A line that is not
+/// UTF-8 — a sniffed host name, a node remark — is decoded lossily rather than
+/// treated as the end of the stream: giving up there would drop the pipe, and
+/// the child's next write to it is then a `SIGPIPE` that takes the core down.
+fn for_each_output_line(pipe: impl io::Read, mut on_line: impl FnMut(String)) {
+    let mut reader = io::BufReader::new(pipe);
+    let mut buffer = Vec::new();
+    loop {
+        buffer.clear();
+        match reader.read_until(b'\n', &mut buffer) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        }
+        if buffer.last() == Some(&b'\n') {
+            buffer.pop();
+            if buffer.last() == Some(&b'\r') {
+                buffer.pop();
+            }
+        }
+        on_line(String::from_utf8_lossy(&buffer).into_owned());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::for_each_output_line;
+
+    #[test]
+    fn output_is_read_to_the_end_past_a_line_that_is_not_utf8() {
+        let output: &[u8] = b"first\r\n\xff\xfe broken\nlast";
+        let mut lines = Vec::new();
+
+        for_each_output_line(output, |line| lines.push(line));
+
+        assert_eq!(lines, ["first", "\u{fffd}\u{fffd} broken", "last"]);
+    }
 }

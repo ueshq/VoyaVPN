@@ -9,13 +9,14 @@ import { resolve, win32 } from "node:path";
 
 import {
   capture,
-  environmentValue,
+  captureSpawned,
   commandFailure,
-  validateTiming,
+  environmentValue,
   isCliEntrypoint,
   repoRootFromScript,
   run,
   sleepSync,
+  validateTiming,
 } from "../../lib/common.mjs";
 import { sha256FileSync } from "../../lib/fs.mjs";
 import { singBoxExecutableName, singBoxSeedDir } from "../../core/sing-box-installer.mjs";
@@ -61,11 +62,7 @@ function stoppingService(result) {
 }
 
 function captureSc(captureCommand, args, cwd) {
-  const result = captureCommand("sc.exe", args, { cwd, encoding: "utf8" });
-  if (result.error) {
-    throw result.error;
-  }
-  return result;
+  return captureSpawned("sc.exe", args, { cwd, encoding: "utf8" }, captureCommand);
 }
 
 function runSc(runCommand, args, cwd) {

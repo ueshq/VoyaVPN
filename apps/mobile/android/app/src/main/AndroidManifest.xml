@@ -47,6 +47,13 @@
         <intent-filter>
           <action android:name="android.net.VpnService" />
         </intent-filter>
+        <!-- Always-on would have the system start this service by itself, with
+             no configuration: the app hands one over on every connect and
+             keeps none on disk. Offering it would be offering a VPN that never
+             comes up, and with "block connections without VPN" no network. -->
+        <meta-data
+          android:name="android.net.VpnService.SUPPORTS_ALWAYS_ON"
+          android:value="false" />
       </service>
     </application>
 </manifest>

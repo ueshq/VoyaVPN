@@ -1,7 +1,12 @@
 import { useEffect } from "react";
 
+import { createCommandQueue } from "@voya/client/command-queue";
 import { voyaCommands } from "@voya/client/transport";
 import { useAppVisible } from "@voya/client/use-app-visible";
+
+// One queue for on and off: a quick flip of focus or visibility always ends
+// in the state asked for last.
+const setStreaming = createCommandQueue();
 
 /**
  * Has the backend deliver log lines while the calling screen is mounted and the
@@ -19,9 +24,9 @@ export function useLogStream(enabled = true) {
     }
 
     // Cannot fail in the backend; a lost call only delays or repeats lines.
-    void voyaCommands().setLogStreaming(true).catch(() => undefined);
+    void setStreaming(() => voyaCommands().setLogStreaming(true)).catch(() => undefined);
     return () => {
-      void voyaCommands().setLogStreaming(false).catch(() => undefined);
+      void setStreaming(() => voyaCommands().setLogStreaming(false)).catch(() => undefined);
     };
   }, [visible, enabled]);
 }

@@ -1,5 +1,45 @@
+import type { PolicyGroupEntry } from "@voya/contracts";
+import { profileMemberName } from "@voya/features/profiles/profile-display";
 import { Button } from "@voya/ui/components/button";
 import { cn } from "@voya/ui/lib/utils";
+import { formatDelay } from "@voya/utils/formatting";
+
+/**
+ * A group's members as chips, the one loop the Nodes cards and the Proxy page
+ * share. Each caller keeps its own container — a wrapping row with a "show
+ * all" control, a grid — and passes `onChoose` only under a selector strategy.
+ */
+export function PolicyGroupMemberChips({
+  currentId,
+  delayPlaceholder,
+  delays,
+  members,
+  onChoose,
+  stretch,
+  testId,
+}: {
+  currentId: string | null | undefined;
+  delayPlaceholder?: string;
+  delays: ReadonlyMap<string, number | null>;
+  members: PolicyGroupEntry["members"];
+  onChoose?: (profileId: string) => void;
+  stretch?: boolean;
+  testId?: string;
+}) {
+  return members.map((member) => (
+    <PolicyGroupMemberChip
+      current={member.profileId === currentId}
+      delay={formatDelay(delays.get(member.profileId))}
+      delayPlaceholder={delayPlaceholder}
+      key={member.profileId}
+      name={profileMemberName(member.remarks, member.profileId)}
+      onChoose={onChoose}
+      profileId={member.profileId}
+      stretch={stretch}
+      testId={testId}
+    />
+  ));
+}
 
 /**
  * One member of a policy group, as both the Nodes cards and the Proxy page
@@ -10,7 +50,7 @@ import { cn } from "@voya/ui/lib/utils";
  * stretches the name and pushes the delay to the end, the Nodes cards keep
  * the chip at its content width.
  */
-export function PolicyGroupMemberChip({
+function PolicyGroupMemberChip({
   current,
   delay,
   delayPlaceholder,
@@ -31,7 +71,8 @@ export function PolicyGroupMemberChip({
   stretch?: boolean;
   testId?: string;
 }) {
-  const fallback = delay ?? delayPlaceholder;
+  // `||`, not `??`: a member with no measurement formats to an empty string.
+  const fallback = delay || delayPlaceholder;
   const content = (
     <>
       <span className={stretch ? "min-w-0 flex-1 truncate text-start" : "max-w-48 truncate"}>

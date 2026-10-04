@@ -24,15 +24,12 @@ pub(super) fn parse_import_text(text: &str, subscription_id: &str) -> Result<Par
     let mut discarded_node_overrides = 0_usize;
     let mut line_issues = Vec::new();
     let allow_subscription_import = subscription_id.trim().is_empty();
-    let mut contents = Vec::new();
-    if let Some(decoded) = decode_base64_payload(text) {
-        contents.push(decoded);
-    }
-    contents.push(text.to_string());
+    // The decoded payload first, then the text as given; neither is copied.
+    let decoded = decode_base64_payload(text);
 
-    for content in contents {
+    for content in decoded.as_deref().into_iter().chain([text]) {
         discarded_node_overrides =
-            discarded_node_overrides.saturating_add(count_discarded_node_overrides(&content));
+            discarded_node_overrides.saturating_add(count_discarded_node_overrides(content));
         let mut lines_seen = BTreeSet::new();
         for (line_index, line) in content
             .lines()
@@ -40,7 +37,7 @@ pub(super) fn parse_import_text(text: &str, subscription_id: &str) -> Result<Par
             .filter(|line| !line.is_empty())
             .enumerate()
         {
-            if !subscription_id.is_empty() && !lines_seen.insert(line.to_string()) {
+            if !subscription_id.is_empty() && !lines_seen.insert(line) {
                 continue;
             }
             let line_number = u32::try_from(line_index.saturating_add(1)).unwrap_or(u32::MAX);
@@ -65,10 +62,10 @@ pub(super) fn parse_import_text(text: &str, subscription_id: &str) -> Result<Par
             }
         }
 
-        if let Ok(mut ss) = parse_ss_sip008(&content) {
+        if let Ok(mut ss) = parse_ss_sip008(content) {
             profiles.append(&mut ss);
         }
-        if let Ok(mut wireguard) = parse_wireguard_config(&content) {
+        if let Ok(mut wireguard) = parse_wireguard_config(content) {
             profiles.append(&mut wireguard);
         }
     }

@@ -23,7 +23,7 @@
     "check:desktop:smoke": "pnpm tauri:build --debug --no-bundle && node apps/desktop/e2e/desktop-smoke.mjs",
     "generate:bindings": "node scripts/quality/bindings.mjs",
     "check:bindings": "node scripts/quality/bindings.mjs --check",
-    "check:i18n": "node scripts/quality/i18n.mjs --check",
+    "check:i18n": "node scripts/quality/i18n.mjs",
     "check:architecture": "node scripts/quality/architecture.mjs",
     "check:lockfile": "node scripts/quality/lockfile-duplicates.mjs",
     "check:rust:fmt": "cargo fmt --all --check",

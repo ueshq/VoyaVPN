@@ -11,7 +11,6 @@
 //! fails when a new one reaches neither.
 
 use serde::Deserialize;
-use serde_json::Value;
 use voya_contracts::{AppError, AppErrorKind, AppErrorSubsystem};
 
 use crate::app::MobileState;
@@ -26,6 +25,8 @@ mod runtime;
 mod settings;
 mod speedtest;
 mod subscriptions;
+
+pub(crate) use runtime::SupervisorRecoverySink;
 
 /// Commands this platform will never answer.
 ///
@@ -78,35 +79,23 @@ pub const UNSUPPORTED_ON_MOBILE: &[&str] = &[
     "install_core_seed",
 ];
 
+/// What a command answers with: its return value as JSON text.
+pub(crate) type Answer = Result<String, AppError>;
+
 /// Runs one command.
-pub async fn invoke(
-    state: &MobileState,
-    command: &str,
-    args_json: &str,
-) -> Result<String, AppError> {
-    let args: Value = if args_json.trim().is_empty() {
-        Value::Object(serde_json::Map::new())
-    } else {
-        serde_json::from_str(args_json).map_err(|error| malformed_arguments(command, &error))?
-    };
-
-    let value = route(state, command, &args).await?;
-
-    serde_json::to_string(&value).map_err(|error| AppError {
-        kind: AppErrorKind::Internal,
-        subsystem: AppErrorSubsystem::App,
-        message: format!("could not encode the answer to {command}: {error}"),
-    })
-}
-
-async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value, AppError> {
+///
+/// The arguments stay text until the one dispatcher that wants them decodes
+/// them into its own struct, and an answer is encoded once: neither passes
+/// through a `serde_json::Value` tree, which for an import or a node listing
+/// was a second copy of megabytes.
+pub async fn invoke(state: &MobileState, command: &str, args: &str) -> Answer {
     match command {
         "load_ui_preferences" => settings::load_ui_preferences(state).await,
         "load_app_settings" => settings::load_app_settings(state).await,
         "save_app_settings" => settings::save_app_settings(state, args).await,
         "get_settings_apply_status" => settings::settings_apply_status(state).await,
         "apply_pending_settings" => settings::apply_pending_settings(state).await,
-        "set_log_streaming" => settings::set_log_streaming(),
+        "set_log_streaming" => settings::set_log_streaming(args),
 
         "get_default_dns_settings" => answer(
             "get_default_dns_settings",
@@ -126,8 +115,8 @@ async fn route(state: &MobileState, command: &str, args: &Value) -> Result<Value
         "export_profile_share_links" => profiles::export_share_links(state, args).await,
         "generate_qr_code" => profiles::generate_qr_code(args),
 
-        "list_policy_groups" => profiles::list_policy_groups(state).await,
-        "policy_group_runtime" => profiles::policy_group_runtime(state).await,
+        "list_policy_groups" => policy_groups::list(state).await,
+        "policy_group_runtime" => policy_groups::runtime(state).await,
         "save_policy_group" => policy_groups::save(state, args).await,
         "delete_policy_groups" => policy_groups::delete(state, args).await,
         "set_active_policy_group" => policy_groups::set_active(state, args).await,
@@ -184,20 +173,15 @@ fn unsupported(command: &str) -> AppError {
     }
 }
 
-fn malformed_arguments(command: &str, error: &serde_json::Error) -> AppError {
-    AppError {
-        kind: AppErrorKind::Internal,
-        subsystem: AppErrorSubsystem::App,
-        message: format!("the arguments for {command} are not a JSON object: {error}"),
-    }
-}
-
-/// Reads one command's named arguments, the way Tauri would.
-pub(crate) fn arguments<T: for<'de> Deserialize<'de>>(
+/// Reads one command's named arguments, the way Tauri would. A blank payload
+/// is the empty object, which is what a command without arguments is sent.
+pub(crate) fn arguments<'de, T: Deserialize<'de>>(
     command: &str,
-    args: &Value,
+    args: &'de str,
 ) -> Result<T, AppError> {
-    serde_json::from_value(args.clone()).map_err(|error| AppError {
+    let args = if args.trim().is_empty() { "{}" } else { args };
+
+    serde_json::from_str(args).map_err(|error| AppError {
         kind: AppErrorKind::Internal,
         subsystem: AppErrorSubsystem::App,
         message: format!("the arguments for {command} do not match its signature: {error}"),
@@ -205,8 +189,8 @@ pub(crate) fn arguments<T: for<'de> Deserialize<'de>>(
 }
 
 /// Turns a command's return value into JSON.
-pub(crate) fn answer<T: serde::Serialize>(command: &str, value: &T) -> Result<Value, AppError> {
-    serde_json::to_value(value).map_err(|error| AppError {
+pub(crate) fn answer<T: serde::Serialize + ?Sized>(command: &str, value: &T) -> Answer {
+    serde_json::to_string(value).map_err(|error| AppError {
         kind: AppErrorKind::Internal,
         subsystem: AppErrorSubsystem::App,
         message: format!("could not encode the answer to {command}: {error}"),

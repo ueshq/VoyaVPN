@@ -12,7 +12,6 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import { parseArgs } from "../lib/args.mjs";
 import { truthy } from "../lib/common.mjs";
 import { readJson, sha256FileSync, sha256Text, writeJson } from "../lib/fs.mjs";
 import { requestedMacAppStoreBuild } from "../tauri/mac-app-store-config.mjs";
@@ -835,15 +834,4 @@ export async function ensureSingBoxSeedForBuild({
   const stage = await seedStager({ buildSeed, origin: resolvedOrigin, stageSeed });
   const result = await stage({ arch, env, logger, platform, repoRoot, spawn, version: resolvedVersion });
   return { ...result, origin: resolvedOrigin, status: "staged" };
-}
-
-export function parseInstallArgs(argv) {
-  return parseArgs(
-    argv,
-    {
-      "--force": { key: "forceInstall", value: true },
-      "--force-fetch": { key: "forceFetch", value: true },
-    },
-    { forceFetch: false, forceInstall: false },
-  );
 }

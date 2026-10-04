@@ -12,17 +12,20 @@
 
 use std::{
     path::{Path, PathBuf},
-    sync::{Arc, OnceLock, RwLock, Weak},
+    sync::{Arc, Weak},
 };
 
 use voya_app::{
     config_mutation::ConfigMutationCoordinator,
+    contract_map::errors::database_error,
     proxy_runtime::{ProxyMonitorController, ProxyRuntimeManager},
     services::AppServices,
     speedtest::SpeedtestManager,
+    startup::{AppOpening, OpenedApp},
     supervisor::{CoreSupervisor, SupervisorDeps},
     sysproxy::SystemProxyManager,
 };
+use voya_contracts::{AppError, AppErrorKind, AppErrorSubsystem};
 use voya_platform::{
     coreinfo::TargetOs,
     paths::AppPaths,
@@ -32,7 +35,7 @@ use voya_platform::{
 };
 
 use crate::{
-    dispatch,
+    dispatch::{self, SupervisorRecoverySink},
     probe::{HostProbeCoreLauncher, ProbeCoreHost},
     sinks::{EventListener, HostSinks},
     tunnel::{HostTunController, TunnelHost},
@@ -51,18 +54,50 @@ pub enum CommandError {
     Rejected { app_error_json: String },
 }
 
+/// What the app's runtime names its worker threads.
+const RUNTIME_THREAD_NAME: &str = "voya-mobile";
+
 /// The one failure that cannot be reported as itself.
 const UNENCODABLE_FAILURE: &str = r#"{"kind":{"type":"internal"},"subsystem":"app","message":"the failure could not be encoded"}"#;
 
 /// A startup that never produced an app.
+///
+/// Every variant carries a serialized `AppError` — the same envelope
+/// [`CommandError`] rejects with — so the frontend branches on the typed
+/// `kind`: a `database` startup failure keeps its code (`schemaUnsupported`,
+/// `corrupt`) and is the one failure the app can recover from on its own.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum StartupError {
-    #[error("could not prepare the application directories: {detail}")]
-    Paths { detail: String },
-    #[error("could not open the database: {detail}")]
-    Database { detail: String },
-    #[error("could not start the runtime: {detail}")]
-    Runtime { detail: String },
+    #[error("{app_error_json}")]
+    Paths { app_error_json: String },
+    #[error("{app_error_json}")]
+    Database { app_error_json: String },
+    #[error("{app_error_json}")]
+    Runtime { app_error_json: String },
+}
+
+/// An application-data reset the host could not perform.
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum ResetError {
+    #[error("{app_error_json}")]
+    Failed { app_error_json: String },
+}
+
+/// Moves the app's database aside so the next `VoyaApp` construction starts
+/// fresh, and nothing else: settings live in the same file, and a phone has
+/// no rule-set cache worth keeping across a reset.
+///
+/// The user-facing counterpart of the desktop's reset dialog — on a phone
+/// there is no shell to run the manual recovery command in, so this is the
+/// only recovery a rejected database has.
+#[uniffi::export]
+pub fn reset_application_data(data_dir: String) -> Result<(), ResetError> {
+    let database_path = PathBuf::from(&data_dir).join(voya_app::startup::DATABASE_NAME);
+    voya_app::startup::reset_database(&database_path)
+        .map(|_| ())
+        .map_err(|error| ResetError::Failed {
+            app_error_json: encode_app_error(&database_error(&error, AppErrorSubsystem::App)),
+        })
 }
 
 /// Everything a dispatcher needs, behind one handle.
@@ -88,22 +123,27 @@ pub struct MobileState {
     /// phones, so every path through `core_flow` skips the proxy before it
     /// reaches this.
     pub(crate) system_proxy_manager: SystemProxyManager,
-    /// This state itself, for work a command starts but must not wait for
-    /// (the IPv6 egress check after a connect). Set once, right after the
-    /// state is shared; weak so the state does not keep itself alive.
-    pub(crate) this: OnceLock<Weak<MobileState>>,
+    /// This state itself, for work that outlives the call that started it:
+    /// the IPv6 egress check after a connect, and the recovery the supervisor
+    /// asks for when the provider goes down. Weak so the state does not keep
+    /// itself alive.
+    pub(crate) this: Weak<MobileState>,
+    /// The app's runtime, for that same work: the supervisor's callbacks
+    /// arrive on its own actor, which must stay free while recovery runs.
+    pub(crate) runtime: tokio::runtime::Handle,
 }
 
 #[derive(uniffi::Object)]
 pub struct VoyaApp {
     /// Owned rather than borrowed from the host: iOS and Android both call in
     /// from threads that have no runtime of their own, and the managers spawn
-    /// tasks that must outlive any one call.
+    /// tasks that must outlive any one call. Every command runs here — see
+    /// [`VoyaApp::invoke`].
     runtime: tokio::runtime::Runtime,
     state: Arc<MobileState>,
 }
 
-#[uniffi::export(async_runtime = "tokio")]
+#[uniffi::export]
 impl VoyaApp {
     /// Opens the app's storage and brings the managers up.
     ///
@@ -119,15 +159,27 @@ impl VoyaApp {
         probe_core: Arc<dyn ProbeCoreHost>,
     ) -> Result<Arc<Self>, StartupError> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
+            .thread_name(RUNTIME_THREAD_NAME)
             .enable_all()
             .build()
             .map_err(|error| StartupError::Runtime {
-                detail: error.to_string(),
+                app_error_json: encode_app_error(&AppError::internal(
+                    AppErrorSubsystem::App,
+                    error.to_string(),
+                )),
             })?;
+        // Before the first `warn!` of the startup sequence, so early failures
+        // (a failed rule-set seed, a rejected database sweep) reach the Logs
+        // page instead of vanishing.
+        crate::logging::install_subscriber();
         let data_dir = PathBuf::from(data_dir);
         let paths = AppPaths::new(&data_dir);
         paths.ensure_dirs().map_err(|error| StartupError::Paths {
-            detail: error.to_string(),
+            app_error_json: encode_app_error(&AppError::new(
+                AppErrorSubsystem::App,
+                AppErrorKind::Io,
+                error.to_string(),
+            )),
         })?;
 
         let state = runtime.block_on(connect(
@@ -139,9 +191,10 @@ impl VoyaApp {
             probe_core,
         ))?;
 
-        let state = Arc::new(state);
-        // Only this constructor sets it, once.
-        let _ = state.this.set(Arc::downgrade(&state));
+        // The queued lines this app produced so far now have a listener to
+        // reach, once a Logs screen asks for them.
+        crate::logging::attach(runtime.handle(), Arc::clone(&state.sinks));
+
         Ok(Arc::new(Self { runtime, state }))
     }
 
@@ -151,16 +204,29 @@ impl VoyaApp {
     /// answer is the command's return value as JSON. A failure comes back as a
     /// serialized `AppError`, so the frontend branches on the same typed `kind`
     /// it does on the desktop rather than on a message.
+    ///
+    /// The platform polls this future on a thread of its own, which has no
+    /// runtime: left there, the command would run on that thread and whatever
+    /// it spawned would have nowhere to go. So the command is handed to the
+    /// app's runtime and only its result is awaited here — which also means a
+    /// call the platform abandons still runs to completion, as a Tauri command
+    /// does.
     pub async fn invoke(&self, command: String, args_json: String) -> Result<String, CommandError> {
-        dispatch::invoke(&self.state, &command, &args_json)
-            .await
+        let state = Arc::clone(&self.state);
+        let name = command.clone();
+        let task = self
+            .runtime
+            .spawn(async move { dispatch::invoke(&state, &command, &args_json).await });
+
+        task.await
+            .unwrap_or_else(|error| {
+                Err(AppError::internal(
+                    AppErrorSubsystem::App,
+                    format!("{name} did not finish: {error}"),
+                ))
+            })
             .map_err(|error| CommandError::Rejected {
-                app_error_json: serde_json::to_string(&error).unwrap_or_else(|_| {
-                    // An AppError that will not serialize is a bug in the
-                    // contract, not a reason to drop the failure.
-                    tracing::error!(?error, "an AppError could not be serialized");
-                    UNENCODABLE_FAILURE.to_string()
-                }),
+                app_error_json: encode_app_error(&error),
             })
     }
 
@@ -185,62 +251,65 @@ async fn connect(
     events: Arc<dyn EventListener>,
     tunnel: Arc<dyn TunnelHost>,
     probe_core: Arc<dyn ProbeCoreHost>,
-) -> Result<MobileState, StartupError> {
+) -> Result<Arc<MobileState>, StartupError> {
     let database_path = data_dir.join(voya_app::startup::DATABASE_NAME);
-    let services = AppServices::connect(&database_path, paths)
+    // The error arrives by inference rather than by name: spelling out the
+    // persistence crate's error type here would reach past the `voya-app`
+    // facade the architecture gate exists to protect.
+    let opening = AppOpening::open(&database_path, paths, TargetOs::current(), locale)
         .await
-        .map_err(database_failure)?;
-    let config = services
-        .load_config_for(TargetOs::current(), locale)
-        .await
-        .map_err(database_failure)?;
-    let config_mutations = Arc::new(
-        services
-            .config_mutations(Arc::new(RwLock::new(config)))
-            .with_target_os(TargetOs::current()),
-    );
-    // A fresh install starts with the default routing profile rather than an
-    // empty Rules screen. A failure costs only the seed, never startup — the
-    // same choice `apps/desktop/src-tauri/src/bootstrap.rs` makes.
-    if let Err(error) = services.ensure_default_routing(&config_mutations).await {
-        tracing::warn!(?error, "failed to seed the default routing profile");
-    }
-    if let Err(error) = services.initialize_profile_metrics().await {
-        tracing::warn!(?error, "failed to sweep orphaned node metrics");
-    }
+        .map_err(|error| StartupError::Database {
+            app_error_json: encode_app_error(&database_error(&error, AppErrorSubsystem::App)),
+        })?;
+    // The same sequence `apps/desktop/src-tauri/src/bootstrap.rs` runs; a phone
+    // has no system proxy to undo between its two halves.
+    let OpenedApp {
+        services,
+        config_mutations,
+        ..
+    } = opening.finish().await;
 
     let sinks = Arc::new(HostSinks::new(events));
     let elevation = Arc::new(ElevationState::new());
     let native_tun: Arc<dyn NativeTunController> =
         Arc::new(HostTunController::new(tunnel, data_dir.to_path_buf()));
-    let supervisor = CoreSupervisor::spawn(
-        SupervisorDeps::new(Arc::new(NoProcessRunner), Arc::clone(&elevation))
-            .with_native_tun_controller(Arc::clone(&native_tun))
-            .with_event_sink(Arc::clone(&sinks) as Arc<_>),
-    );
+    let system_proxy_manager = services.system_proxy_manager(Arc::new(NoProcessRunner));
+    let runtime = tokio::runtime::Handle::current();
 
-    // While connected the test goes through the provider's own core, so this
-    // launcher only ever starts the in-app instance a disconnected run needs.
-    let speedtest = services.speedtest_manager_with_launcher(
-        Arc::new(HostProbeCoreLauncher::new(probe_core)),
-        supervisor.clone(),
-    );
+    // Cyclic because the supervisor is told, as it starts, whom to ask for
+    // recovery when the provider dies — and that is this very state.
+    Ok(Arc::new_cyclic(|this: &Weak<MobileState>| {
+        let supervisor = CoreSupervisor::spawn(
+            SupervisorDeps::new(Arc::new(NoProcessRunner), Arc::clone(&elevation))
+                .with_native_tun_controller(Arc::clone(&native_tun))
+                .with_event_sink(Arc::new(SupervisorRecoverySink::new(
+                    Weak::clone(this),
+                    runtime.clone(),
+                ))),
+        );
+        // While connected the test goes through the provider's own core, so
+        // this launcher only ever starts the in-app instance a disconnected
+        // run needs.
+        let speedtest = services.speedtest_manager_with_launcher(
+            Arc::new(HostProbeCoreLauncher::new(probe_core)),
+            supervisor.clone(),
+        );
 
-    let system_proxy_manager = services.system_proxy_manager(no_process_runner());
-
-    Ok(MobileState {
-        config_mutations,
-        elevation,
-        native_tun,
-        proxy_monitor: ProxyMonitorController::new(),
-        proxy_runtime: ProxyRuntimeManager::new(),
-        services,
-        sinks,
-        speedtest,
-        supervisor,
-        system_proxy_manager,
-        this: OnceLock::new(),
-    })
+        MobileState {
+            config_mutations,
+            elevation,
+            native_tun,
+            proxy_monitor: ProxyMonitorController::new(),
+            proxy_runtime: ProxyRuntimeManager::new(),
+            runtime,
+            services,
+            sinks,
+            speedtest,
+            supervisor,
+            system_proxy_manager,
+            this: Weak::clone(this),
+        }
+    }))
 }
 
 /// A runner that refuses.
@@ -250,12 +319,7 @@ async fn connect(
 /// it reaches a runner at all. Installing a rejecting one rather than a no-op
 /// means a path that *would* have spawned fails loudly here instead of
 /// silently doing nothing.
-pub(crate) struct NoProcessRunner;
-
-/// A runner for the desktop-shaped constructors that still take one.
-pub(crate) fn no_process_runner() -> Arc<dyn ProcessRunner> {
-    Arc::new(NoProcessRunner)
-}
+struct NoProcessRunner;
 
 const NO_CHILD_PROCESSES: &str =
     "this platform runs the core inside its tunnel provider and spawns no child processes";
@@ -274,10 +338,13 @@ impl ProcessRunner for NoProcessRunner {
     }
 }
 
-fn database_failure(error: impl std::fmt::Display) -> StartupError {
-    StartupError::Database {
-        detail: error.to_string(),
-    }
+/// An `AppError` that will not serialize is a bug in the contract, not a
+/// reason to drop the failure.
+fn encode_app_error(error: &AppError) -> String {
+    serde_json::to_string(error).unwrap_or_else(|_| {
+        tracing::error!(?error, "an AppError could not be serialized");
+        UNENCODABLE_FAILURE.to_string()
+    })
 }
 
 fn refused(request: &ProcessSpawn) -> ProcessError {

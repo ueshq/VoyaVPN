@@ -13,6 +13,7 @@ import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
+import { formatDateTime } from "@voya/utils/format-date-time";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
 
 import { DisabledReason } from "@/components/disabled-reason";
@@ -295,7 +296,7 @@ function RuleLibraryPanel({
             {updatedAt === null
               ? t("updates.neverUpdated")
               : t("updates.lastUpdated", {
-                  time: new Date(updatedAt).toLocaleString(language),
+                  time: formatDateTime(updatedAt, language),
                 })}
           </p>
           {files?.length ? (

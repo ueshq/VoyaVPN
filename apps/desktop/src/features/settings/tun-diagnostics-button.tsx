@@ -7,7 +7,6 @@ import { useI18n } from "@voya/i18n/use-i18n";
 import { voyaCommands } from "@voya/client/transport";
 import type { TunProviderDiagnostics } from "@voya/contracts";
 import { writeClipboard } from "@/lib/clipboard";
-import { useMountedRef } from "@voya/utils/use-mounted-ref";
 import { toastError, useToastStore } from "@voya/client/toast-store";
 
 /**
@@ -18,15 +17,10 @@ import { toastError, useToastStore } from "@voya/client/toast-store";
 export function TunDiagnosticsButton() {
   const { t } = useI18n();
   const pushToast = useToastStore((state) => state.pushToast);
-  const mountedRef = useMountedRef();
   const [copying, setCopying] = useState(false);
   const label = t("status.copyTunDiagnostics");
 
   async function copyTunDiagnostics() {
-    if (copying) {
-      return;
-    }
-
     setCopying(true);
     try {
       const diagnostics = await voyaCommands().tunProviderDiagnostics();
@@ -39,9 +33,7 @@ export function TunDiagnosticsButton() {
     } catch (error) {
       toastError(t("status.copyTunDiagnosticsFailed"), error);
     } finally {
-      if (mountedRef.current) {
-        setCopying(false);
-      }
+      setCopying(false);
     }
   }
 

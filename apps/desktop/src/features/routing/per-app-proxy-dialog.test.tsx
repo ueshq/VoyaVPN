@@ -25,7 +25,7 @@ function renderDialog(onOpenChange: (open: boolean) => void = vi.fn()) {
   const queryClient = createTestQueryClient({ gcTime: 0 });
   queryClients.add(queryClient);
 
-  return renderWithQuery(<PerAppProxyDialog onOpenChange={onOpenChange} open />, { queryClient });
+  return renderWithQuery(<PerAppProxyDialog onOpenChange={onOpenChange} />, { queryClient });
 }
 
 function routing(rules: RoutingRule[] = [], isActive = true): Routing_Serialize {

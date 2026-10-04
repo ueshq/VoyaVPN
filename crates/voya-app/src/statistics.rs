@@ -12,18 +12,11 @@ use tokio::{
 use voya_contracts::StatisticsSnapshot;
 use voya_core::{text::nonempty_string, AppConfig, ServerStatItem};
 use voya_db::{Database, DbError};
-use voya_net::clash::{
-    ClashTraffic, ClashWebSocketClient, ClashWebSocketEvent, ClashWebSocketResource,
-};
+use voya_net::clash::{ClashTraffic, ClashWebSocketEvent, ClashWebSocketResource};
 
 use crate::{
-    backoff::{
-        sleep_or_shutdown, WebSocketReconnectBackoff, WS_CONNECT_TIMEOUT,
-        WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY,
-    },
-    config_mutation::SharedAppConfig,
-    proxy_runtime::proxy_runtime_endpoint,
-    supervisor::{CoreSupervisor, SupervisorSnapshot},
+    backoff::sleep_or_shutdown, clash_follow::follow_core_ws, config_mutation::SharedAppConfig,
+    supervisor::CoreSupervisor,
 };
 
 const STATISTICS_CHANNEL_SIZE: usize = 64;
@@ -94,32 +87,19 @@ pub fn zero_statistics_snapshot() -> StatisticsSnapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StatisticsConfigSnapshot {
-    pub active_profile_id: Option<String>,
-}
-
-impl StatisticsConfigSnapshot {
-    #[must_use]
-    fn from_app_config(config: &AppConfig) -> Self {
-        Self {
-            active_profile_id: nonempty_string(Some(config.active_profile_id.as_str())),
-        }
-    }
-}
-
 pub trait StatisticsEventSink: Send + Sync {
     fn emit_statistics(&self, snapshot: StatisticsSnapshot);
 }
 
-/// The statistics toggles, read from the live configuration on every tick.
+/// The node traffic is counted against, read from the live configuration on
+/// every tick so a switch needs no restart of the loop.
 ///
-/// A poisoned lock reads as the defaults rather than stopping the loop.
-fn statistics_config(config: &RwLock<AppConfig>) -> StatisticsConfigSnapshot {
+/// A poisoned lock reads as no node rather than stopping the loop.
+fn active_profile_id(config: &RwLock<AppConfig>) -> Option<String> {
     config
         .read()
-        .map(|config| StatisticsConfigSnapshot::from_app_config(&config))
-        .unwrap_or_else(|_| StatisticsConfigSnapshot::from_app_config(&AppConfig::default()))
+        .ok()
+        .and_then(|config| nonempty_string(Some(config.active_profile_id.as_str())))
 }
 
 pub struct StatisticsManager {
@@ -237,6 +217,10 @@ struct TrafficWriteBuffer {
     target: Option<(String, i64)>,
     buffered: ServerSpeedSample,
     baseline: Option<ServerStatItem>,
+    /// The immediate write that fetches `baseline` failed. Until a scheduled
+    /// flush succeeds the buffer keeps to the flush cadence, so a database
+    /// that refuses writes is asked every flush window and not every tick.
+    baseline_write_failed: bool,
 }
 
 impl TrafficWriteBuffer {
@@ -299,31 +283,42 @@ async fn flush_traffic_buffer(database: &Database, buffer: &mut TrafficWriteBuff
 /// content — the only difference is that most ticks no longer touch SQLite.
 async fn record_statistics_tick(
     database: &Database,
-    config: &StatisticsConfigSnapshot,
+    active_profile_id: Option<&str>,
     buffer: &mut TrafficWriteBuffer,
     sample: ServerSpeedSample,
     date_now: i64,
     flush_due: bool,
 ) -> Result<StatisticsSnapshot> {
-    let Some(index_id) = config.active_profile_id.clone() else {
+    let Some(index_id) = active_profile_id else {
         flush_traffic_buffer(database, buffer).await?;
-        return Ok(snapshot_from_sample(config, sample, None));
+        return Ok(snapshot_from_sample(None, sample, None));
     };
-    if !buffer.targets(&index_id, date_now) {
-        flush_traffic_buffer(database, buffer).await?;
+    if !buffer.targets(index_id, date_now) {
+        // The buffer moves on to the new row whether or not the old one could
+        // be written: holding on to it would pin every later tick to a profile
+        // or a day that is no longer current.
+        if let Err(error) = flush_traffic_buffer(database, buffer).await {
+            tracing::warn!(?error, "failed to flush statistics for the previous target");
+        }
         *buffer = TrafficWriteBuffer::default();
     }
     if sample.has_traffic() {
-        buffer.push(&index_id, date_now, sample);
+        buffer.push(index_id, date_now, sample);
     }
     // The first write after a switch goes straight through: without a baseline
     // row there is nothing to project the running totals from, and the panel
     // would show no lifetime figure for the whole first flush window.
-    if flush_due || buffer.baseline.is_none() {
-        flush_traffic_buffer(database, buffer).await?;
+    if flush_due || (buffer.baseline.is_none() && !buffer.baseline_write_failed) {
+        let flushed = flush_traffic_buffer(database, buffer).await;
+        buffer.baseline_write_failed = flushed.is_err();
+        flushed?;
     }
 
-    Ok(snapshot_from_sample(config, sample, buffer.projected()))
+    Ok(snapshot_from_sample(
+        active_profile_id,
+        sample,
+        buffer.projected(),
+    ))
 }
 
 impl From<ClashTraffic> for ServerSpeedSample {
@@ -381,7 +376,7 @@ async fn run_statistics_aggregator(
             _ = interval.tick() => {
                 let sample = pending;
                 pending = ServerSpeedSample::default();
-                let config_snapshot = statistics_config(&config);
+                let active_profile_id = active_profile_id(&config);
                 let current_day = current_day_marker();
                 if current_day != day_marker {
                     // Buffered bytes were measured yesterday, and the rollover
@@ -398,7 +393,7 @@ async fn run_statistics_aggregator(
                 }
                 match record_statistics_tick(
                     &database,
-                    &config_snapshot,
+                    active_profile_id.as_deref(),
                     &mut buffer,
                     sample,
                     day_marker,
@@ -431,113 +426,31 @@ async fn run_singbox_statistics_service(
     sample_tx: mpsc::Sender<ServerSpeedSample>,
     mut shutdown: watch::Receiver<bool>,
 ) {
-    let mut initial_delay = Box::pin(time::sleep(SINGBOX_INITIAL_DELAY));
-    tokio::select! {
-        changed = shutdown.changed() => {
-            if changed.is_err() || *shutdown.borrow() {
-                return;
-            }
-        }
-        _ = &mut initial_delay => {}
+    if sleep_or_shutdown(SINGBOX_INITIAL_DELAY, &mut shutdown).await {
+        return;
     }
 
-    let mut reconnect_backoff =
-        WebSocketReconnectBackoff::new(WS_RECONNECT_INITIAL_DELAY, WS_RECONNECT_MAX_DELAY);
-    let mut active_identity = None;
-    let mut changes = supervisor.subscribe_changes();
-
-    loop {
-        if *shutdown.borrow() {
-            break;
-        }
-
-        changes.borrow_and_update();
-        let snapshot = supervisor.status().await.ok();
-        // The supervisor reports the port the running main config actually
-        // listens on, and the bearer token that config demands. Recomputing the
-        // port from the TUN setting is wrong on a pre-socks topology, where the
-        // main process keeps the base Clash API port and the pre-socks one takes
-        // that port + 1: statistics would then be read from the pre-socks
-        // process, which has no per-node counters at all. The token exists only in the config that
-        // launch generated, so it can only come from here.
-        let access = snapshot
-            .as_ref()
-            .map(SupervisorSnapshot::clash_api_access)
-            .unwrap_or_default();
-        let Some(identity) = snapshot.and_then(core_process_identity) else {
-            active_identity = None;
-            reconnect_backoff.reset();
-            if wait_for_core_change(&mut changes, &mut shutdown).await {
-                break;
-            }
-            continue;
-        };
-        if update_active_identity(&mut active_identity, identity) {
-            reconnect_backoff.reset();
-        }
-        let Some(endpoint) = proxy_runtime_endpoint(&access) else {
-            active_identity = None;
-            reconnect_backoff.reset();
-            tracing::debug!("skipping sing-box statistics because state port is unavailable");
-            if wait_for_core_change(&mut changes, &mut shutdown).await {
-                break;
-            }
-            continue;
-        };
-
-        let client = ClashWebSocketClient::new(endpoint);
-        match time::timeout(
-            WS_CONNECT_TIMEOUT,
-            client.connect(ClashWebSocketResource::Traffic),
-        )
-        .await
-        {
-            Ok(Ok(mut session)) => loop {
-                tokio::select! {
-                    changed = shutdown.changed() => {
-                        if changed.is_err() || *shutdown.borrow() {
-                            return;
-                        }
-                    }
-                    // Keep reading only while the core is the one this socket
-                    // was opened against; a restart reuses the port.
-                    changed = changes.changed() => {
-                        if changed.is_err() {
-                            break;
-                        }
-                        match singbox_process_identity(&supervisor).await {
-                            Some(current_identity) if current_identity == identity => {}
-                            Some(_) | None => break,
-                        }
-                    }
-                    message = time::timeout(COALESCE_INTERVAL, session.next_event()) => {
-                        match message {
-                            Ok(Ok(ClashWebSocketEvent::Traffic(traffic))) => {
-                                reconnect_backoff.reset();
-                                let sample = ServerSpeedSample::from(traffic);
-                                let _ = sample_tx.send(sample).await;
-                            }
-                            Ok(Ok(ClashWebSocketEvent::Connections(_))) | Err(_) => {}
-                            Ok(Err(error)) => {
-                                tracing::debug!(?error, "sing-box statistics websocket read failed");
-                                break;
-                            }
-                        }
-                    }
+    // The supervisor reports the port the running main config actually listens
+    // on, and the bearer token that config demands. Recomputing the port from
+    // the TUN setting is wrong on a pre-socks topology, where the main process
+    // keeps the base Clash API port and the pre-socks one takes that port + 1:
+    // statistics would then be read from the pre-socks process, which has no
+    // per-node counters at all. The token exists only in the config that launch
+    // generated, so it can only come from here.
+    follow_core_ws(
+        supervisor.subscribe_clash_api(),
+        ClashWebSocketResource::Traffic,
+        shutdown,
+        |event| {
+            let sample_tx = sample_tx.clone();
+            async move {
+                if let ClashWebSocketEvent::Traffic(traffic) = event {
+                    let _ = sample_tx.send(ServerSpeedSample::from(traffic)).await;
                 }
-            },
-            Ok(Err(error)) => {
-                tracing::debug!(?error, "failed to connect sing-box statistics websocket");
             }
-            Err(error) => {
-                tracing::debug!(?error, "timed out connecting sing-box statistics websocket");
-            }
-        }
-
-        if sleep_or_shutdown(reconnect_backoff.next_delay(), &mut shutdown).await {
-            break;
-        }
-    }
+        },
+    )
+    .await;
 }
 
 /// Rolls every stored profile over when the calendar day changes.
@@ -558,34 +471,6 @@ async fn roll_over_statistics_day(database: &Database, previous: i64, current: i
     current
 }
 
-/// Waits for the supervisor to start or stop something; `true` when shutdown
-/// was requested instead. Every state change passes through the supervisor's
-/// actor, so nothing is polled once a second while the core is stopped; the
-/// long fallback is a safety net, and the only wake left once the supervisor
-/// itself is gone.
-async fn wait_for_core_change(
-    changes: &mut watch::Receiver<u64>,
-    shutdown: &mut watch::Receiver<bool>,
-) -> bool {
-    tokio::select! {
-        changed = changes.changed() => {
-            if changed.is_err() {
-                return sleep_or_shutdown(WS_RECONNECT_MAX_DELAY, shutdown).await;
-            }
-            *shutdown.borrow()
-        }
-        stopped = sleep_or_shutdown(WS_RECONNECT_MAX_DELAY, shutdown) => stopped,
-    }
-}
-
-async fn singbox_process_identity(supervisor: &CoreSupervisor) -> Option<CoreProcessIdentity> {
-    supervisor
-        .status()
-        .await
-        .ok()
-        .and_then(core_process_identity)
-}
-
 /// Emits while traffic flows and once more when it stops, so the speed display
 /// returns to 0 B/s instead of freezing on the last non-zero rate, without
 /// pushing an event every second while the core sits idle.
@@ -594,12 +479,12 @@ const fn should_emit_statistics(has_traffic: bool, emitted_traffic: bool) -> boo
 }
 
 fn snapshot_from_sample(
-    config: &StatisticsConfigSnapshot,
+    active_profile_id: Option<&str>,
     sample: ServerSpeedSample,
     server_stat: Option<ServerStatItem>,
 ) -> StatisticsSnapshot {
     StatisticsSnapshot {
-        active_profile_id: config.active_profile_id.clone(),
+        active_profile_id: active_profile_id.map(str::to_string),
         proxy_upload_bytes_per_second: sample.proxy_up_bytes.max(0) as f64,
         proxy_download_bytes_per_second: sample.proxy_down_bytes.max(0) as f64,
         direct_upload_bytes_per_second: sample.direct_up_bytes.max(0) as f64,
@@ -612,43 +497,9 @@ fn snapshot_from_sample(
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct CoreProcessIdentity {
-    main_pid: u32,
-    pre_pid: Option<u32>,
-}
-
-fn core_process_identity(snapshot: SupervisorSnapshot) -> Option<CoreProcessIdentity> {
-    let main_pid = snapshot.main_pid?;
-    Some(CoreProcessIdentity {
-        main_pid,
-        pre_pid: snapshot.pre_pid,
-    })
-}
-
-fn update_active_identity(
-    active_identity: &mut Option<CoreProcessIdentity>,
-    identity: CoreProcessIdentity,
-) -> bool {
-    if active_identity.as_ref() == Some(&identity) {
-        return false;
-    }
-
-    *active_identity = Some(identity);
-    true
-}
-
-/// A zero state port means the generated config exposes no Clash API, so both
-/// the statistics service and the proxy monitor skip connecting instead of
-/// dialling 127.0.0.1:0.
-pub(crate) fn available_state_port(port: u16) -> Option<u16> {
-    (port != 0).then_some(port)
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::supervisor::SupervisorConnectionState;
-    use voya_core::{InboundConfig, ProfileItem, ProfileProtocol, ServerEndpoint, TunConfig};
+    use voya_core::{ProfileItem, ProfileProtocol, ServerEndpoint};
 
     use super::*;
 
@@ -674,126 +525,6 @@ mod tests {
         assert_eq!(overflow.proxy_down_bytes, i64::MAX);
     }
 
-    #[test]
-    fn statistics_config_snapshot_does_not_carry_a_state_port() {
-        // The port used to be recomputed here from `tun.enabled`,
-        // which disagreed with the generated config on a pre-socks topology.
-        // It now travels on the supervisor snapshot, so a config change no
-        // longer has to restart the statistics loop to pick it up.
-        let base = AppConfig {
-            inbounds: vec![InboundConfig {
-                local_port: 12000,
-                ..InboundConfig::default()
-            }],
-            tun: TunConfig {
-                enabled: true,
-                ..TunConfig::default()
-            },
-            ..AppConfig::default()
-        };
-        let mut without_tun = base.clone();
-        without_tun.tun.enabled = false;
-
-        assert_eq!(
-            StatisticsConfigSnapshot::from_app_config(&base),
-            StatisticsConfigSnapshot::from_app_config(&without_tun)
-        );
-    }
-
-    #[test]
-    fn statistics_core_process_identity_tracks_pid_changes() {
-        let first = SupervisorSnapshot {
-            connected_duration_ms: None,
-            active_tun_backend: None,
-            state: SupervisorConnectionState::Connected,
-            active_profile_id: Some("profile-a".to_string()),
-            active_group_id: None,
-            main_pid: Some(100),
-            pre_pid: None,
-            clash_api_port: None,
-            clash_api_secret: None,
-        };
-        let restarted = SupervisorSnapshot {
-            main_pid: Some(101),
-            ..first.clone()
-        };
-        let disconnected = SupervisorSnapshot {
-            main_pid: None,
-            ..first.clone()
-        };
-
-        assert_ne!(
-            core_process_identity(first),
-            core_process_identity(restarted)
-        );
-        assert_eq!(core_process_identity(disconnected), None);
-    }
-
-    /// The statistics loop parks here whenever no core is running. Waking on
-    /// the supervisor's change tick is what replaced a once-a-second
-    /// `status()` poll, so the wake has to be prompt and the fallback has to
-    /// stay a fallback.
-    #[tokio::test(start_paused = true)]
-    async fn statistics_core_wait_wakes_on_a_supervisor_change() {
-        let (changes_tx, mut changes) = watch::channel(0_u64);
-        let (_shutdown_tx, mut shutdown) = watch::channel(false);
-
-        // What the supervisor's actor does after it starts or stops a core.
-        changes_tx.send_modify(|tick| *tick += 1);
-
-        let started = time::Instant::now();
-        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
-
-        assert!(!stopped, "a core change is not a shutdown");
-        assert_eq!(
-            started.elapsed(),
-            Duration::ZERO,
-            "the change must wake the loop, not the fallback timer"
-        );
-    }
-
-    #[tokio::test(start_paused = true)]
-    async fn statistics_core_wait_returns_promptly_on_shutdown() {
-        let (_changes_tx, mut changes) = watch::channel(0_u64);
-        let (shutdown_tx, mut shutdown) = watch::channel(false);
-
-        shutdown_tx.send_replace(true);
-
-        let started = time::Instant::now();
-        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
-
-        assert!(stopped, "shutdown must break the loop");
-        assert_eq!(started.elapsed(), Duration::ZERO);
-    }
-
-    /// Once the supervisor is gone the tick can never arrive again, so the
-    /// only thing left to do is wait — not spin on a closed channel.
-    #[tokio::test(start_paused = true)]
-    async fn statistics_core_wait_falls_back_when_the_supervisor_is_gone() {
-        let (changes_tx, mut changes) = watch::channel(0_u64);
-        let (_shutdown_tx, mut shutdown) = watch::channel(false);
-
-        drop(changes_tx);
-
-        let started = time::Instant::now();
-        let stopped = wait_for_core_change(&mut changes, &mut shutdown).await;
-
-        assert!(!stopped);
-        assert!(
-            started.elapsed() >= WS_RECONNECT_MAX_DELAY,
-            "a closed change channel must wait, not busy-loop: {:?}",
-            started.elapsed()
-        );
-    }
-
-    #[test]
-    fn statistics_state_port_zero_is_unavailable() {
-        // A generated config with no Clash API reports port 0; dialling
-        // 127.0.0.1:0 would connect to an arbitrary local listener.
-        assert_eq!(available_state_port(0), None);
-        assert_eq!(available_state_port(1), Some(1));
-    }
-
     #[tokio::test]
     async fn statistics_record_tick_keys_persistence_to_active_server_and_sums_display() {
         let database = Database::connect_in_memory()
@@ -809,13 +540,11 @@ mod tests {
             .upsert(&sample_profile("inactive"))
             .await
             .expect("statistics test operation should succeed");
-        let config = StatisticsConfigSnapshot {
-            active_profile_id: Some("active".to_string()),
-        };
+        let config = Some("active");
 
         let snapshot = record_statistics_tick(
             &database,
-            &config,
+            config,
             &mut TrafficWriteBuffer::default(),
             ServerSpeedSample {
                 proxy_up_bytes: 1000,
@@ -873,14 +602,12 @@ mod tests {
             .upsert(&sample_profile("active"))
             .await
             .expect("statistics test operation should succeed");
-        let config = StatisticsConfigSnapshot {
-            active_profile_id: Some("active".to_string()),
-        };
+        let config = Some("active");
 
         let idle = ServerSpeedSample::default();
         let snapshot = record_statistics_tick(
             &database,
-            &config,
+            config,
             &mut TrafficWriteBuffer::default(),
             idle,
             10,
@@ -940,13 +667,11 @@ mod tests {
             })
             .await
             .expect("statistics test operation should succeed");
-        let config = StatisticsConfigSnapshot {
-            active_profile_id: Some("active".to_string()),
-        };
+        let config = Some("active");
 
         let snapshot = record_statistics_tick(
             &database,
-            &config,
+            config,
             &mut TrafficWriteBuffer::default(),
             ServerSpeedSample {
                 proxy_up_bytes: 5,
@@ -1025,7 +750,7 @@ mod tests {
             .upsert(&sample_profile("active"))
             .await
             .expect("statistics test operation should succeed");
-        let config = enabled_config("active");
+        let config = Some("active");
         let mut buffer = TrafficWriteBuffer::default();
         let sample = ServerSpeedSample {
             proxy_up_bytes: 10,
@@ -1034,12 +759,12 @@ mod tests {
         };
 
         // Tick 1 writes through to establish a baseline the UI can project from.
-        let first = tick(&database, &config, &mut buffer, sample, false).await;
+        let first = tick(&database, config, &mut buffer, sample, false).await;
         assert_eq!(stat_row(&database, "active").await.total_up, 10);
 
         // Ticks 2..=4 stay in memory, but the UI keeps counting.
         for expected_total in [20, 30, 40] {
-            let snapshot = tick(&database, &config, &mut buffer, sample, false).await;
+            let snapshot = tick(&database, config, &mut buffer, sample, false).await;
             assert_eq!(
                 snapshot
                     .server_stat
@@ -1063,7 +788,7 @@ mod tests {
             10
         );
 
-        tick(&database, &config, &mut buffer, sample, true).await;
+        tick(&database, config, &mut buffer, sample, true).await;
 
         assert_eq!(stat_row(&database, "active").await.total_up, 50);
         assert_eq!(stat_row(&database, "active").await.total_down, 100);
@@ -1081,7 +806,7 @@ mod tests {
             .upsert(&sample_profile("active"))
             .await
             .expect("statistics test operation should succeed");
-        let config = enabled_config("active");
+        let config = Some("active");
         let mut buffer = TrafficWriteBuffer::default();
         let sample = ServerSpeedSample {
             proxy_up_bytes: 7,
@@ -1089,8 +814,8 @@ mod tests {
             ..ServerSpeedSample::default()
         };
 
-        tick(&database, &config, &mut buffer, sample, false).await;
-        tick(&database, &config, &mut buffer, sample, false).await;
+        tick(&database, config, &mut buffer, sample, false).await;
+        tick(&database, config, &mut buffer, sample, false).await;
         assert_eq!(stat_row(&database, "active").await.total_up, 7);
 
         flush_traffic_buffer(&database, &mut buffer)
@@ -1121,12 +846,12 @@ mod tests {
             ..ServerSpeedSample::default()
         };
 
-        let first = enabled_config("first");
-        tick(&database, &first, &mut buffer, sample, false).await;
-        tick(&database, &first, &mut buffer, sample, false).await;
+        let first = Some("first");
+        tick(&database, first, &mut buffer, sample, false).await;
+        tick(&database, first, &mut buffer, sample, false).await;
 
-        let second = enabled_config("second");
-        tick(&database, &second, &mut buffer, sample, false).await;
+        let second = Some("second");
+        tick(&database, second, &mut buffer, sample, false).await;
 
         assert_eq!(stat_row(&database, "first").await.total_up, 10);
         assert_eq!(stat_row(&database, "second").await.total_up, 5);
@@ -1137,20 +862,14 @@ mod tests {
         assert_eq!(TRAFFIC_FLUSH_TICKS, 10);
     }
 
-    fn enabled_config(active_profile_id: &str) -> StatisticsConfigSnapshot {
-        StatisticsConfigSnapshot {
-            active_profile_id: Some(active_profile_id.to_string()),
-        }
-    }
-
     async fn tick(
         database: &Database,
-        config: &StatisticsConfigSnapshot,
+        active_profile_id: Option<&str>,
         buffer: &mut TrafficWriteBuffer,
         sample: ServerSpeedSample,
         flush_due: bool,
     ) -> StatisticsSnapshot {
-        record_statistics_tick(database, config, buffer, sample, 10, flush_due)
+        record_statistics_tick(database, active_profile_id, buffer, sample, 10, flush_due)
             .await
             .expect("statistics test operation should succeed")
     }

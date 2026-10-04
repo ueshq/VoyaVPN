@@ -27,7 +27,7 @@ const MACOS_PROVIDER_LOG_RELATIVE_PATH: &str = "Library/Application Support/Voya
 const PROVIDER_LOG_TAIL_LINES: usize = 200;
 
 #[cfg(any(target_os = "macos", windows))]
-use crate::process::command_output_text;
+use crate::process::{command_output_text, output_with_timeout, HELPER_TIMEOUT};
 
 pub const WINDOWS_TUN_DEVICES: &[WindowsTunDevice] = &[WindowsTunDevice {
     name: "wintunsingbox_tun",

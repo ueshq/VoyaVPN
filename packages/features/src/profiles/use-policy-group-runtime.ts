@@ -2,9 +2,12 @@ import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { PolicyGroupListing, PolicyGroupRuntime } from "@voya/contracts";
+import { queries } from "@voya/client/queries";
 import { voyaCommands } from "@voya/client/transport";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
+
+import { useScreenActive } from "../shell/screen-active";
 
 /** How often a running group's live member and delays are read again; the same everywhere a group shows. */
 const RUNTIME_REFRESH_MS = 3_000;
@@ -14,17 +17,16 @@ const RUNTIME_REFRESH_MS = 3_000;
  * through right now and each member's last measured delay. Polled only while
  * a group is active and the core is connected; a read for a group that is no
  * longer the active one never shows.
- *
- * Shared by the nodes page, the proxy groups tab and the home screen — all
- * three ride the same query key, so one fetch serves them all.
  */
-export function usePolicyGroupRuntime(activeGroupId: string | null) {
+function usePolicyGroupRuntime(activeGroupId: string | null) {
   const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
+  // Read again only for a screen that is showing it; the last answer stays.
+  const screenActive = useScreenActive();
   const runtimeQuery = useQuery({
     enabled: connected && activeGroupId !== null,
     queryFn: () => voyaCommands().policyGroupRuntime(),
     queryKey: queryKeys.policyGroupRuntime,
-    refetchInterval: RUNTIME_REFRESH_MS,
+    refetchInterval: screenActive ? RUNTIME_REFRESH_MS : false,
   });
 
   const runtime = runtimeQuery.data ?? null;
@@ -33,6 +35,24 @@ export function usePolicyGroupRuntime(activeGroupId: string | null) {
     runtime?.groupId === activeGroupId
     ? runtime
     : null;
+}
+
+/**
+ * The policy group connecting uses, if one is active, with its live state.
+ *
+ * Every screen that shows the active group — the nodes page, the proxy groups
+ * tab, Home — asks the same two questions in the same order, so they are
+ * asked here once.
+ *
+ * `live: false` is for a screen that lists the groups without showing the
+ * running member or its delays: it skips the poll, and `runtime` stays `null`.
+ */
+export function useActivePolicyGroup({ live = true }: { live?: boolean } = {}) {
+  const policyGroupsQuery = useQuery(queries.policyGroups);
+  const activeGroup = policyGroupsQuery.data?.entries.find((entry) => entry.isActive) ?? null;
+  const runtime = usePolicyGroupRuntime(live ? (activeGroup?.group.id ?? null) : null);
+
+  return { activeGroup, policyGroupsQuery, runtime };
 }
 
 /**

@@ -8,16 +8,15 @@ import {
   CORE_FLOW_REASON_KEYS,
   IMPORT_LINE_KEYS,
   LOG_KEYS,
-  NOTICE_KEYS,
   SPEEDTEST_OUTCOME_KEYS,
   VALIDATION_KEYS,
   VALIDATION_SCOPE_KEYS,
   importLineText,
   logLineText,
-  noticeText,
   speedtestOutcomeText,
   validationText,
 } from "./messages";
+import { NOTICE_KEYS, noticeText } from "./notice-text";
 
 /**
  * The backend hands the frontend codes, not sentences. These tests are the
@@ -77,7 +76,7 @@ describe("backend message codes", () => {
       { line: 7, code: { code: "invalidPort", protocol: "trojan", port: "99999" } },
     ];
     expect(issues.map((issue) => importLineText(en, issue))).toEqual([
-      "Line 2 was added as a subscription; it is being updated to import its nodes.",
+      "Line 2 will be added as a subscription and updated to import its nodes once you confirm.",
       "Line 3 was skipped: the xhttp transport is not supported. Ask your provider for a WebSocket or gRPC node.",
       "Line 4 was skipped: the link is not in a format VoyaVPN can read.",
       "Line 5 was skipped: this kind of link is not supported.",

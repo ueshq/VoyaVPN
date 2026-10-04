@@ -93,13 +93,17 @@ fn collect_platform_candidates() -> Vec<ProcessCandidate> {
 #[cfg(target_os = "macos")]
 mod macos {
     use super::{candidate_from_executable_path, ProcessCandidate, ProcessCandidateSource};
+    use crate::process::{output_with_timeout, HELPER_TIMEOUT};
     use std::process::Command;
 
     const NOISE_PATH_PREFIXES: [&str; 4] =
         ["/System/", "/usr/libexec/", "/usr/sbin/", "/Library/Apple/"];
 
     pub(super) fn running_processes() -> Vec<ProcessCandidate> {
-        let Ok(output) = Command::new("/bin/ps").args(["-axo", "comm="]).output() else {
+        let Ok(output) = output_with_timeout(
+            Command::new("/bin/ps").args(["-axo", "comm="]),
+            HELPER_TIMEOUT,
+        ) else {
             return Vec::new();
         };
         if !output.status.success() {
@@ -164,11 +168,13 @@ mod macos {
     /// Authoritative `CFBundleExecutable` lookup for binary `Info.plist` files,
     /// which the cheap XML scan cannot read.
     fn plutil_bundle_executable(info_plist: &std::path::Path) -> Option<String> {
-        let output = Command::new("/usr/bin/plutil")
-            .args(["-extract", "CFBundleExecutable", "raw", "-o", "-"])
-            .arg(info_plist)
-            .output()
-            .ok()?;
+        let output = output_with_timeout(
+            Command::new("/usr/bin/plutil")
+                .args(["-extract", "CFBundleExecutable", "raw", "-o", "-"])
+                .arg(info_plist),
+            HELPER_TIMEOUT,
+        )
+        .ok()?;
         if !output.status.success() {
             return None;
         }
@@ -234,7 +240,7 @@ fn collect_platform_candidates() -> Vec<ProcessCandidate> {
 #[cfg(windows)]
 mod windows {
     use super::{parse_tasklist_csv_image_name, ProcessCandidate, ProcessCandidateSource};
-    use crate::process::hidden_command;
+    use crate::process::{hidden_command, output_with_timeout, HELPER_TIMEOUT};
 
     const NOISE_IMAGES: [&str; 8] = [
         "system",
@@ -248,10 +254,10 @@ mod windows {
     ];
 
     pub(super) fn running_processes() -> Vec<ProcessCandidate> {
-        let Ok(output) = hidden_command(r"C:\Windows\System32\tasklist.exe")
-            .args(["/fo", "csv", "/nh"])
-            .output()
-        else {
+        let Ok(output) = output_with_timeout(
+            hidden_command(r"C:\Windows\System32\tasklist.exe").args(["/fo", "csv", "/nh"]),
+            HELPER_TIMEOUT,
+        ) else {
             return Vec::new();
         };
         if !output.status.success() {

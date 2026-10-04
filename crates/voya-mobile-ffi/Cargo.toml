@@ -24,13 +24,16 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tracing.workspace = true
-uniffi = { version = "0.32", features = ["tokio"] }
+tracing-subscriber.workspace = true
+uniffi = "0.32"
 voya-app.workspace = true
 voya-contracts.workspace = true
 voya-platform.workspace = true
 
 [dev-dependencies]
+sqlx.workspace = true
 tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }
 
 [[bin]]
 name = "uniffi-bindgen"

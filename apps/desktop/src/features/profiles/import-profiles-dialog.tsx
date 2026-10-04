@@ -29,7 +29,6 @@ type ImportProfilesDialogProps = {
   onCloseFocus?: () => void;
   onImported: (result: ImportProfilesResult) => Promise<void> | void;
   onOpenChange: (open: boolean) => void;
-  open: boolean;
 };
 
 type ResultMessage = {
@@ -37,16 +36,14 @@ type ResultMessage = {
   text: string;
 };
 
-export function ImportProfilesDialog(props: ImportProfilesDialogProps) {
-  // A new opening owns its own draft and async reads.
-  return <ImportProfilesDialogSession key={String(props.open)} {...props} />;
-}
-
-function ImportProfilesDialogSession({
+/**
+ * Mounted while it is open — the Nodes page renders it only then — so each
+ * opening is a fresh instance with its own draft and its own async reads.
+ */
+export function ImportProfilesDialog({
   onCloseFocus,
   onImported,
   onOpenChange,
-  open,
 }: ImportProfilesDialogProps) {
   const { t } = useI18n();
   const qrFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -55,13 +52,15 @@ function ImportProfilesDialogSession({
   const [resultText, setResultText] = useState<string | null>(null);
   const [pending, setPending] = useState<"read" | "import" | null>(null);
   const pendingRef = useRef<"read" | "import" | null>(null);
-  const activeRef = useRef(open);
+  // False once this opening is over, so a read or an import that answers
+  // late does not write into a dialog that has gone.
+  const activeRef = useRef(true);
   useEffect(() => {
-    activeRef.current = open;
+    activeRef.current = true;
     return () => {
       activeRef.current = false;
     };
-  }, [open]);
+  }, []);
   const busy = pending !== null;
   const [text, setText] = useState("");
   const nextResultMessageIdRef = useRef(0);
@@ -171,7 +170,7 @@ function ImportProfilesDialogSession({
   }
 
   return (
-    <Dialog open={open} onOpenChange={changeOpen}>
+    <Dialog open onOpenChange={changeOpen}>
       <ScrollableDialogContent
         aria-busy={busy}
         height="viewport"

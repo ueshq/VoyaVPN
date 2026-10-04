@@ -29,20 +29,9 @@ pub async fn get_profile(
     state: tauri::State<'_, AppState>,
     index_id: String,
 ) -> Result<ProfileDetails, AppError> {
-    map_ipc_input(
-        input_safety::validate_required_text(&index_id, IPC_ID_MAX_CHARS),
-        "node id",
-        AppErrorSubsystem::Profile,
-    )?;
     let config = state.config_mutations().current_config();
 
-    state
-        .services()
-        .profiles()
-        .get_profile(&config, &index_id)
-        .await
-        .map(profile_details_to_contract)
-        .map_err(AppError::from)
+    voya_app::profiles::get_profile_use_case(state.services(), &config, &index_id).await
 }
 
 #[tauri::command]
@@ -88,18 +77,9 @@ pub async fn export_profile_share_links(
     state: tauri::State<'_, AppState>,
     index_ids: Vec<String>,
 ) -> Result<ExportProfilesResult, AppError> {
-    map_ipc_input(
-        input_safety::validate_text_list(&index_ids, IPC_ID_MAX_CHARS, IPC_LIST_MAX_ITEMS),
-        "node id",
-        AppErrorSubsystem::Export,
-    )?;
     let config = state.config_mutations().current_config();
 
-    state
-        .services()
-        .export_profiles(&config, &index_ids)
-        .await
-        .map_err(AppError::from)
+    state.services().export_profiles(&config, &index_ids).await
 }
 
 #[tauri::command]
@@ -126,19 +106,11 @@ pub async fn set_active_profile<R: tauri::Runtime>(
 pub async fn move_profile<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: tauri::State<'_, AppState>,
-    subscription_id: Option<String>,
     index_id: String,
     action: ContractMoveAction,
     position: Option<i32>,
 ) -> Result<(), AppError> {
-    move_profile_use_case(
-        state.config_mutations(),
-        subscription_id,
-        index_id,
-        action,
-        position,
-    )
-    .await?;
+    move_profile_use_case(state.config_mutations(), index_id, action, position).await?;
     emit_invalidation(&app, "profile-moved", invalidation::profile_scopes(false));
 
     Ok(())

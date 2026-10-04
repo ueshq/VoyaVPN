@@ -425,18 +425,18 @@ async fn supervisor_stop_teardown_order_is_sudo_kill_main_pre() {
     );
 }
 
-/// Statistics waits on this tick instead of polling `status` every second
-/// while the core is stopped, so a start and a stop must move it and a status
-/// read must not.
+/// Statistics and the connection monitor wait on this instead of polling
+/// `status` every second while the core is stopped, so a start and a stop must
+/// move it and a status read must not.
 #[tokio::test]
-async fn supervisor_change_tick_moves_on_start_and_stop_but_not_on_status() {
+async fn supervisor_clash_api_watch_moves_on_start_and_stop_but_not_on_status() {
     let events = SharedEvents::default();
     let supervisor = supervisor_with(&events, TargetOs::Linux, Arc::new(ElevationState::new()));
-    let mut changes = supervisor.subscribe_changes();
+    let mut changes = supervisor.subscribe_clash_api();
     changes.borrow_and_update();
 
-    // The tick moves after a command's reply, so the second read proves the
-    // first one's turn of the actor loop has finished.
+    // The value is published after a command's reply, so the second read
+    // proves the first one's turn of the actor loop has finished.
     supervisor.status().await.expect("status");
     supervisor.status().await.expect("status");
     assert!(!changes.has_changed().expect("the supervisor is running"));
@@ -451,21 +451,26 @@ async fn supervisor_change_tick_moves_on_start_and_stop_but_not_on_status() {
             kill_switch: false,
             sudo_script_dir: "/tmp/voya/scripts".into(),
             restart_on_crash: false,
-            clash_api_port: 0,
+            clash_api_port: 9090,
             clash_api_secret: None,
         })
         .await
         .expect("start");
     tokio::time::timeout(Duration::from_secs(5), changes.changed())
         .await
-        .expect("a start moves the tick")
+        .expect("a start publishes the new core")
         .expect("the supervisor is running");
+    assert_eq!(
+        *changes.borrow_and_update(),
+        ClashApiAccess::unauthenticated(9090)
+    );
 
     supervisor.stop().await.expect("stop");
     tokio::time::timeout(Duration::from_secs(5), changes.changed())
         .await
-        .expect("a stop moves the tick")
+        .expect("a stop publishes that nothing is running")
         .expect("the supervisor is running");
+    assert_eq!(*changes.borrow_and_update(), ClashApiAccess::default());
 }
 
 #[tokio::test]

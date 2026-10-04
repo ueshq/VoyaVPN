@@ -188,15 +188,10 @@ export async function buildAndStageSingBoxSeed({
   const goVersion = requireGoToolchain({ env });
   const sourceDir = singBoxSourceDir(repoRoot, env);
   logger.log(`- sing-box: building ${resolvedVersion} from source (${goVersion}) in ${relative(repoRoot, sourceDir)}`);
-  ensureSingBoxSource({ repoRoot, ref: resolvedVersion, sourceDir });
-
+  // Also holds the checkout against the pinned commit.
+  ensureSingBoxSource({ env, logger, repoRoot, ref: resolvedVersion, sourceDir });
+  // Recorded in the seed manifest, pinned or not.
   const commit = checkedCapture("git", ["rev-parse", "HEAD"], { cwd: sourceDir }).stdout.trim().toLowerCase();
-  if (pin.pinned && commit !== pin.expected) {
-    throw new Error(`sing-box ${resolvedVersion} resolved to ${commit}, not the pinned ${pin.expected}`);
-  }
-  if (!pin.pinned) {
-    logger.warn?.(`  ! unpinned source build: ${resolvedVersion} at ${commit}`);
-  }
 
   const tags = sourceBuildTags(readFileSync(join(sourceDir, "release", "DEFAULT_BUILD_TAGS_OTHERS"), "utf8"));
   const ldflagsShared = readFileSync(join(sourceDir, "release", "LDFLAGS"), "utf8").trim();

@@ -49,11 +49,16 @@ export function useAppSettings() {
 
   useEffect(() => () => {
     const previewed = endUiPreferencesPreview(previewOwner);
+    // Nothing was being previewed, so the theme and language on screen are
+    // already the saved ones. Most users of this hook never touch appearance —
+    // the speed-test settings dialog, the log screen — and re-applying both on
+    // every close of theirs was work with no visible result.
+    if (!previewed) return;
     const saved = client.getQueryData<AppSettings>(queryKeys.appSettings);
     if (!saved) return;
     // Leaving drops a preview whose save failed; say so instead of silently
     // switching the theme or language back.
-    if (failed.current && previewed && changedFields(saved.appearance, previewed).length) {
+    if (failed.current && changedFields(saved.appearance, previewed).length) {
       reportUiPreferencesReverted();
     }
     void applyUiPreferences(saved.appearance).catch(reportUiPreferencesError);

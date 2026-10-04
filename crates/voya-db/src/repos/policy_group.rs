@@ -5,7 +5,8 @@ use voya_core::{GroupStrategy, PolicyGroupItem};
 
 use crate::{
     executor::{
-        delete_each, max_sort, repository_constructors, row_exists, run_query, RepositoryExecutor,
+        delete_each, json_id_array, max_sort, repository_constructors, row_exists, run_query,
+        RepositoryExecutor,
     },
     Result,
 };
@@ -115,18 +116,18 @@ impl<'executor> PolicyGroupRepository<'executor> {
             sqlx::query("DELETE FROM policy_group_members WHERE group_id = ?").bind(&group.id),
             execute
         )?;
-        for (position, profile_id) in group.member_ids.iter().enumerate() {
-            run_query!(
-                self.executor,
-                sqlx::query(
-                    "INSERT INTO policy_group_members (group_id, profile_id, position) VALUES (?, ?, ?)",
-                )
-                .bind(&group.id)
-                .bind(profile_id)
-                .bind(i64::try_from(position).unwrap_or(i64::MAX)),
-                execute
-            )?;
-        }
+        // One statement however many members there are: the ids travel as a
+        // JSON array, and `json_each` hands each back with its index.
+        run_query!(
+            self.executor,
+            sqlx::query(
+                "INSERT INTO policy_group_members (group_id, profile_id, position) \
+                 SELECT ?, value, key FROM json_each(?)",
+            )
+            .bind(&group.id)
+            .bind(json_id_array(&group.member_ids)),
+            execute
+        )?;
 
         Ok(())
     }

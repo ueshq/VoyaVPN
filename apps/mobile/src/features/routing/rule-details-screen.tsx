@@ -2,22 +2,82 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { clipboard } from "@voya/client/platform";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { ruleDisplayName, SENTINEL_BLOCK_QUIC } from "@voya/features/routing/sentinel-rules";
+import type { RoutingRule } from "@voya/contracts";
 import { Button } from "heroui-native/button";
 import { Typography } from "heroui-native/text";
+import { View, ScrollView } from "react-native";
 import type { RootRoutes } from "~/app/navigation";
 import { DetailScreen } from "~/components/detail-screen";
+import { EdgeFade } from "~/components/edge-fade";
+import { MONO_FONT } from "~/components/mono-font";
+import { useCopiedLabel } from "~/components/use-copied-label";
+
+/** How far a long line dissolves into the card's right edge. */
+const FADE_WIDTH = 16;
+
+/**
+ * Fields the editor has no control over: the rule's database identity and the
+ * two passthrough lists the desktop's `routing-form-values` documents as
+ * "the editor has no fields for these". They explain storage, not behaviour,
+ * so the page leaves them out of what it shows and what it copies.
+ */
+const INTERNAL_FIELDS = new Set(["id", "inboundTags", "kind"]);
+
+/** The JSON the page shows and copies: what the rule does, nothing else. */
+function displayRuleJson(rule: RoutingRule): string {
+  const shown = Object.fromEntries(
+    Object.entries(rule).filter(
+      ([key, value]) => value !== null && value !== undefined && !INTERNAL_FIELDS.has(key),
+    ),
+  );
+  return JSON.stringify(shown, null, 2);
+}
 
 export function RuleDetailsScreen({ route }: NativeStackScreenProps<RootRoutes, "ruleDetails">) {
   const { t } = useI18n();
   const { rule, target } = route.params;
+  const json = displayRuleJson(rule);
+  const { copied, failed, markCopied, markFailed } = useCopiedLabel();
+  // Nested ternary kept out of the `t()` call: the i18n check reads one
+  // conditional level, not two.
+  const copyLabelKey = copied
+    ? "mobile.copied"
+    : failed
+      ? "mobile.copyFailed"
+      : "mobile.copyJson";
   return <DetailScreen>
     <Typography className="text-xl font-semibold text-foreground">{ruleDisplayName(rule, t)}</Typography>
     <Typography className="text-base text-subtle">{t("mobile.ruleEffect", { target })}</Typography>
     {rule.remarks === SENTINEL_BLOCK_QUIC ? <Typography className="text-sm text-subtle">{t("mobile.quicHint")}</Typography> : null}
-    <Typography selectable className="text-base text-foreground">{JSON.stringify(rule, null, 2)}</Typography>
-    {/* Like the log page's copy action: no toast, the clipboard just has it. */}
-    <Button variant="secondary" onPress={() => void clipboard().writeText(JSON.stringify(rule, null, 2)).catch(() => {})}>
-      <Button.Label>{t("mobile.copyJson")}</Button.Label>
+    {/* Raw JSON on a card in a mono face, so structure reads as code rather
+        than as prose that happens to have braces in it. One Text per line,
+        each refusing to wrap, inside a horizontal panner: a wrapping Text
+        breaks a long id or domain flush to the margin and the indentation it
+        belonged to is gone, while the panner keeps every line intact and
+        scrolls to what overflows — the code-view convention. The fade says
+        so: a clipped edge reads broken, a dissolving one reads "more". */}
+    <View>
+      <ScrollView horizontal className="rounded-2xl bg-surface" contentContainerClassName="p-4">
+        <View>
+          {json.split("\n").map((line, index) => (
+            <Typography selectable key={index} style={{ fontFamily: MONO_FONT }} className="text-sm text-foreground" numberOfLines={1}>{line || " "}</Typography>
+          ))}
+        </View>
+      </ScrollView>
+      {/* The card's right edge dissolving into itself, signalling the scroll. */}
+      <EdgeFade
+        edge="right"
+        size={FADE_WIDTH}
+        colorClassName="bg-surface"
+        className="absolute inset-y-0 right-0 w-4 overflow-hidden rounded-r-2xl"
+      />
+    </View>
+    {/* The label itself is the confirmation: it says "Copied" for a beat,
+        then goes back to inviting the next tap — and "Copy failed" for the
+        same beat when the clipboard refused, so the tap is never lost
+        silently. */}
+    <Button variant="secondary" onPress={() => void clipboard().writeText(json).then(markCopied).catch(markFailed)}>
+      <Button.Label>{t(copyLabelKey)}</Button.Label>
     </Button>
   </DetailScreen>;
 }

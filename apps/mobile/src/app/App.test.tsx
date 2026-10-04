@@ -1,6 +1,7 @@
-import { render, userEvent } from "@testing-library/react-native";
+import { act, render, userEvent, waitFor } from "@testing-library/react-native";
 import { usePreferencesStore } from "@voya/client/preferences-store";
-import { Linking } from "react-native";
+import { IpcCommandError } from "@voya/client/errors";
+import { Alert, Linking } from "react-native";
 
 import {
   PRIVACY_NOTICE_VERSION,
@@ -72,6 +73,23 @@ describe("App", () => {
 
     expect(await view.findByText("Update all subscriptions")).toBeOnTheScreen();
   });
+
+  it("labels the pushed page's back button for VoiceOver and goes back on tap", async () => {
+    await localeReady;
+    const view = await render(<App />);
+    const user = userEvent.setup();
+
+    await user.press(view.getByTestId("tab-settings"));
+    await user.press(view.getByTestId("settings-subscriptions"));
+    await view.findByText("Update all subscriptions");
+
+    // The chevron is drawn by the shell, not the native bar, so it carries an
+    // accessibility label the native UIKit button could not be given.
+    await user.press(await view.findByLabelText("Back"));
+
+    await waitFor(() => expect(view.queryByText("Update all subscriptions")).toBeNull());
+    expect(view.getByTestId("tab-home")).toBeOnTheScreen();
+  });
 });
 
 describe("first-run data notice", () => {
@@ -104,9 +122,124 @@ describe("first-run data notice", () => {
     await user.press(view.getByTestId("support-link"));
 
     expect(openURL.mock.calls).toEqual([[PRIVACY_POLICY_URL], [SUPPORT_URL]]);
-    // The addresses are also on screen, to read or copy.
-    expect(view.getByText(PRIVACY_POLICY_URL)).toBeOnTheScreen();
+    // The address rides in the link's accessibility label instead of being
+    // printed again below it.
+    expect(view.getByTestId("privacy-policy-link")).toHaveProp(
+      "accessibilityLabel",
+      `Privacy policy: ${PRIVACY_POLICY_URL}`,
+    );
     openURL.mockRestore();
+  });
+
+  it("takes over with the reset flow when the database is rejected", async () => {
+    await localeReady;
+    const backend = mockTransport();
+    const rejectedDatabase = {
+      kind: { type: "database", code: "schemaUnsupported", resetCommand: "rm -f x" },
+      message: "unsupported Voya database schema",
+      subsystem: "app",
+    } as const;
+    backend.commands.loadAppSettings = async () => {
+      throw new IpcCommandError(rejectedDatabase);
+    };
+    registerMobileBackend(backend);
+
+    const view = await render(<App />);
+    const user = userEvent.setup();
+
+    // Nothing else can run: navigation is replaced, not covered.
+    expect(view.queryByTestId("tab-home")).toBeNull();
+    expect(view.getByText("VoyaVPN could not start")).toBeOnTheScreen();
+
+    // Two steps before the destructive action.
+    await user.press(view.getByTestId("startup-reset"));
+    expect(view.getByText("Reset the database?")).toBeOnTheScreen();
+    await user.press(view.getByTestId("startup-reset-cancel"));
+    expect(view.queryByText("Reset the database?")).toBeNull();
+  });
+
+  it("comes back up on the fresh database once the reset is confirmed", async () => {
+    await localeReady;
+    const backend = mockTransport();
+    const loadAppSettings = backend.commands.loadAppSettings;
+    let rejected = true;
+    let loads = 0;
+    backend.commands.loadAppSettings = async () => {
+      loads += 1;
+      if (rejected) {
+        throw new IpcCommandError({
+          kind: { type: "database", code: "corrupt", resetCommand: "rm -f x" },
+          message: "the database is not a database",
+          subsystem: "app",
+        });
+      }
+      return loadAppSettings();
+    };
+    // The host moves the database aside; the next command opens a new one.
+    backend.resetApplicationData = async () => {
+      rejected = false;
+    };
+    registerMobileBackend(backend);
+    // A returning user, so what follows the reset is the app itself.
+    usePreferencesStore.setState({ privacyNoticeVersion: PRIVACY_NOTICE_VERSION });
+
+    const view = await render(<App />);
+    const user = userEvent.setup();
+    await user.press(view.getByTestId("startup-reset"));
+    const loadsBeforeReset = loads;
+    await user.press(view.getByTestId("startup-reset-confirm"));
+
+    await waitFor(() => expect(view.getByTestId("tab-home")).toBeOnTheScreen());
+    // One read for the retry: the shell reads the answer the gate already has.
+    expect(loads).toBe(loadsBeforeReset + 1);
+  });
+
+  it("says so when the reset itself fails, and lets it be tried again", async () => {
+    await localeReady;
+    const backend = mockTransport();
+    backend.commands.loadAppSettings = async () => {
+      throw new IpcCommandError({
+        kind: { type: "database", code: "corrupt", resetCommand: "rm -f x" },
+        message: "the database is not a database",
+        subsystem: "app",
+      });
+    };
+    backend.resetApplicationData = async () => {
+      throw new Error("the database could not be moved aside");
+    };
+    registerMobileBackend(backend);
+
+    const view = await render(<App />);
+    const user = userEvent.setup();
+    await user.press(view.getByTestId("startup-reset"));
+    await user.press(view.getByTestId("startup-reset-confirm"));
+
+    // A button that merely re-enabled would read as a reset that did nothing.
+    expect(await view.findByTestId("banner-danger")).toBeOnTheScreen();
+    expect(view.getByTestId("startup-reset-confirm")).toBeEnabled();
+  });
+
+  it("returns to the subscription list once a subscription is deleted", async () => {
+    await localeReady;
+    registerMobileBackend(mockTransport());
+    usePreferencesStore.setState({ privacyNoticeVersion: PRIVACY_NOTICE_VERSION });
+    // The real navigator, because the page guards its own removal while it is
+    // busy, and the editor unmounts the moment its subscription is gone: the
+    // way back has to survive both.
+    const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const view = await render(<App />);
+    const user = userEvent.setup();
+
+    await user.press(view.getByTestId("tab-settings"));
+    await user.press(view.getByTestId("settings-subscriptions"));
+    await user.press(await view.findByText("Example provider"));
+    await user.press(await view.findByText("Delete"));
+    const buttons = alert.mock.calls.at(-1)?.[2] ?? [];
+    await act(async () => buttons.find((button) => button.style === "destructive")?.onPress?.());
+
+    await waitFor(() => expect(view.getByText("No subscriptions")).toBeOnTheScreen());
+    expect(view.queryByText("Subscription details")).toBeNull();
+    alert.mockRestore();
   });
 
   it("asks again once the notice has a newer version than the one accepted", () => {

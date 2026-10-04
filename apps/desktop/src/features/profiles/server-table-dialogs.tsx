@@ -36,9 +36,15 @@ export function ServerTableDialogs({
   const deletingRunningNode =
     runningNodeId !== null && (pendingDelete ?? []).includes(runningNodeId);
 
-  const detailsItem = controller.profiles.find(
-    (item) => item.profile.id === controller.detailsId,
-  );
+  // `profiles` is a new list on every speed-test frame, so neither lookup
+  // below runs while the dialog it feeds is closed.
+  const detailsItem = controller.detailsId
+    ? controller.profiles.find((item) => item.profile.id === controller.detailsId)
+    : undefined;
+  const deletingSubscriptionId = controller.deletingSubscription?.id;
+  const deletingSubscriptionNodes = deletingSubscriptionId
+    ? controller.profiles.filter((entry) => entry.profile.subscriptionId === deletingSubscriptionId).length
+    : 0;
 
   return (
     <>
@@ -55,10 +61,9 @@ export function ServerTableDialogs({
         saveError={saveError}
       />
       {importMethod !== null ? <ImportProfilesDialog
-        onImported={controller.handleImported}
+        onImported={controller.handleDialogImported}
         onCloseFocus={() => controller.addTriggerRef.current?.focus()}
         onOpenChange={(open) => !open && setImportMethod(null)}
-        open
       /> : null}
       <SubscriptionsDialog
         subscription={controller.editingSubscription}
@@ -79,13 +84,7 @@ export function ServerTableDialogs({
       <ConfirmDialog
         cancelLabel={t("confirm.cancel")}
         confirmLabel={t("confirm.deleteProfilesConfirm")}
-        description={t("subscriptions.deleteHint", {
-          count: controller.profiles.filter(
-            (entry) =>
-              entry.profile.subscriptionId ===
-              controller.deletingSubscription?.id,
-          ).length,
-        })}
+        description={t("subscriptions.deleteHint", { count: deletingSubscriptionNodes })}
         destructive
         error={controller.operationError}
         onCloseAutoFocus={(event) => {

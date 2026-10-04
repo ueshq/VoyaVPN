@@ -1,20 +1,22 @@
-import { Accordion } from "heroui-native/accordion";
+import { PressableFeedback } from "heroui-native/pressable-feedback";
 import { Typography } from "heroui-native/text";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { View } from "react-native";
 
-const ITEM = "section";
+import { ExpandChevron } from "./expand-chevron";
 
 /**
- * A section that opens and closes under its title: one HeroUI `Accordion`
- * item. The trigger is a button carrying the `expanded` state a screen reader
- * announces, and collapsed content is not mounted at all.
+ * A section that opens and closes under its title.
  *
- * The trigger and the content drop the accordion's own inline padding so the
- * title lines up with the page content around it.
+ * It is a plain `PressableFeedback` row, not a HeroUI `Accordion` item: the
+ * accordion wraps its trigger in a heading-role header, and on iOS that
+ * wrapper becomes the element accessibility sees — VoiceOver announced the
+ * title as a heading and an `AXPress` on it went nowhere. A row we lay out
+ * ourselves exposes exactly one button carrying the `expanded` state a
+ * screen reader announces. Collapsed content is not mounted at all.
  *
  * Pass `isExpanded` to control it — the DNS page keeps its fields open while
- * they hold unsaved edits. Controlled, "closed" is the empty value rather than
- * `undefined`, which the accordion would read as "uncontrolled".
+ * they hold unsaved edits.
  */
 export function Disclosure({
   children,
@@ -30,25 +32,31 @@ export function Disclosure({
   onExpandedChange?: (isExpanded: boolean) => void;
   title: string;
 }) {
+  const [uncontrolled, setUncontrolled] = useState(false);
+  const expanded = isExpanded ?? uncontrolled;
+
   return (
-    <Accordion
-      selectionMode="single"
-      hideSeparator
-      value={isExpanded === undefined ? undefined : isExpanded ? ITEM : ""}
-      onValueChange={(value: string | string[] | undefined) => onExpandedChange?.(value === ITEM)}
-    >
-      <Accordion.Item value={ITEM}>
-        <Accordion.Trigger className="min-h-control px-0">
-          <Typography
-            maxFontSizeMultiplier={heading ? 2 : undefined}
-            className={`min-w-0 flex-1 text-foreground ${heading ? "text-xl font-semibold" : "text-base"}`}
-          >
-            {title}
-          </Typography>
-          <Accordion.Indicator />
-        </Accordion.Trigger>
-        <Accordion.Content className="gap-4 px-0">{children}</Accordion.Content>
-      </Accordion.Item>
-    </Accordion>
+    <View className="gap-2">
+      <PressableFeedback
+        animation="disable-all"
+        className="min-h-control flex-row items-center gap-2 px-0"
+        onPress={() => {
+          setUncontrolled(!expanded);
+          onExpandedChange?.(!expanded);
+        }}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+      >
+        <PressableFeedback.Highlight />
+        <Typography
+          maxFontSizeMultiplier={heading ? 2 : undefined}
+          className={`min-w-0 flex-1 text-foreground ${heading ? "text-xl font-semibold" : "text-base"}`}
+        >
+          {title}
+        </Typography>
+        <ExpandChevron expanded={expanded} />
+      </PressableFeedback>
+      {expanded ? <View className="gap-4 px-0">{children}</View> : null}
+    </View>
   );
 }

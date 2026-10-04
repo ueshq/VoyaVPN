@@ -8,11 +8,8 @@ import { useRuntimeStatusSeed } from "./use-runtime-status-seed";
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock("@voya/client/runtime-status", () => ({ refreshRuntimeStatusAndReport: refresh }));
 
-const desktopChannels = ["coreState", "sysProxy", "tun"] as const;
-const mobileChannels = ["coreState"] as const;
-
-function Seed({ channels }: { channels: readonly ("coreState" | "sysProxy" | "tun")[] }) {
-  useRuntimeStatusSeed(channels);
+function Seed() {
+  useRuntimeStatusSeed();
   return null;
 }
 
@@ -56,13 +53,11 @@ describe("runtime status hydration and resume", () => {
   });
 
   it("seeds the host's channels and samples the backend when the app becomes visible", async () => {
-    const view = render(<Seed channels={desktopChannels} />);
+    const view = render(<Seed />);
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
-    expect(refresh).toHaveBeenLastCalledWith(
-      expect.any(Function),
-      ["coreState", "sysProxy", "tun"],
-      expect.any(Function),
-    );
+    // No list of its own: the host's registration decides, as it does for the
+    // read-back after a runtime action.
+    expect(refresh).toHaveBeenLastCalledWith(expect.any(Function), undefined, expect.any(Function));
 
     // Hidden: the resume handler must not sample a surface nobody is looking at.
     visibility.setVisible(false);
@@ -81,18 +76,8 @@ describe("runtime status hydration and resume", () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
-  it("samples only coreState when the host asks for it", async () => {
-    render(<Seed channels={mobileChannels} />);
-    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
-    expect(refresh).toHaveBeenLastCalledWith(
-      expect.any(Function),
-      ["coreState"],
-      expect.any(Function),
-    );
-  });
-
   it("coalesces overlapping resume reads until reconciliation finishes", async () => {
-    render(<Seed channels={mobileChannels} />);
+    render(<Seed />);
     await act(async () => {});
     let settle: (() => void) | undefined;
     refresh.mockImplementationOnce(() => new Promise<void>((resolve) => { settle = resolve; }));

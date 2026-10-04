@@ -10,7 +10,23 @@ import os.log
 #if canImport(Libbox)
     final class VoyaPacketTunnelPlatformInterface: NSObject, LibboxPlatformInterfaceProtocol, LibboxCommandServerHandlerProtocol {
         private weak var provider: PacketTunnelProvider?
-        private var networkSettings: NEPacketTunnelNetworkSettings?
+        /// Written by `openTun` and `reset`, read by the DNS and proxy
+        /// callbacks — libbox calls each from a thread of its own, and a stop
+        /// can clear it while a network change is reading it.
+        private let settingsLock = NSLock()
+        private var lockedNetworkSettings: NEPacketTunnelNetworkSettings?
+        private var networkSettings: NEPacketTunnelNetworkSettings? {
+            get {
+                settingsLock.lock()
+                defer { settingsLock.unlock() }
+                return lockedNetworkSettings
+            }
+            set {
+                settingsLock.lock()
+                defer { settingsLock.unlock() }
+                lockedNetworkSettings = newValue
+            }
+        }
         private let defaultInterfaceMonitor = VoyaDefaultInterfaceMonitor()
 
         init(provider: PacketTunnelProvider) {
@@ -77,69 +93,58 @@ import os.log
         }
 
         private func makeIPv4Settings(_ options: LibboxTunOptionsProtocol) -> NEIPv4Settings {
-            var addresses: [String] = []
-            var masks: [String] = []
-            let addressIterator = options.getInet4Address()!
-            while addressIterator.hasNext() {
-                let prefix = addressIterator.next()!
-                addresses.append(prefix.address())
-                masks.append(prefix.mask())
+            let addresses = Self.drain(options.getInet4Address())
+            let settings = NEIPv4Settings(
+                addresses: addresses.map { $0.address() },
+                subnetMasks: addresses.map { $0.mask() }
+            )
+            let includedRoutes = Self.drain(options.getInet4RouteAddress()).map {
+                NEIPv4Route(destinationAddress: $0.address(), subnetMask: $0.mask())
             }
-
-            let settings = NEIPv4Settings(addresses: addresses, subnetMasks: masks)
-            var includedRoutes: [NEIPv4Route] = []
-            let routeIterator = options.getInet4RouteAddress()!
-            while routeIterator.hasNext() {
-                let prefix = routeIterator.next()!
-                includedRoutes.append(NEIPv4Route(destinationAddress: prefix.address(), subnetMask: prefix.mask()))
+            settings.includedRoutes = includedRoutes.isEmpty ? [.default()] : includedRoutes
+            settings.excludedRoutes = Self.drain(options.getInet4RouteExcludeAddress()).map {
+                NEIPv4Route(destinationAddress: $0.address(), subnetMask: $0.mask())
             }
-            if includedRoutes.isEmpty {
-                includedRoutes.append(.default())
-            }
-
-            var excludedRoutes: [NEIPv4Route] = []
-            let excludeIterator = options.getInet4RouteExcludeAddress()!
-            while excludeIterator.hasNext() {
-                let prefix = excludeIterator.next()!
-                excludedRoutes.append(NEIPv4Route(destinationAddress: prefix.address(), subnetMask: prefix.mask()))
-            }
-
-            settings.includedRoutes = includedRoutes
-            settings.excludedRoutes = excludedRoutes
             return settings
         }
 
         private func makeIPv6Settings(_ options: LibboxTunOptionsProtocol) -> NEIPv6Settings {
-            var addresses: [String] = []
-            var prefixes: [NSNumber] = []
-            let addressIterator = options.getInet6Address()!
-            while addressIterator.hasNext() {
-                let prefix = addressIterator.next()!
-                addresses.append(prefix.address())
-                prefixes.append(NSNumber(value: prefix.prefix()))
+            let addresses = Self.drain(options.getInet6Address())
+            let settings = NEIPv6Settings(
+                addresses: addresses.map { $0.address() },
+                networkPrefixLengths: addresses.map { NSNumber(value: $0.prefix()) }
+            )
+            let includedRoutes = Self.drain(options.getInet6RouteAddress()).map {
+                NEIPv6Route(destinationAddress: $0.address(), networkPrefixLength: NSNumber(value: $0.prefix()))
             }
-
-            let settings = NEIPv6Settings(addresses: addresses, networkPrefixLengths: prefixes)
-            var includedRoutes: [NEIPv6Route] = []
-            let routeIterator = options.getInet6RouteAddress()!
-            while routeIterator.hasNext() {
-                let prefix = routeIterator.next()!
-                includedRoutes.append(NEIPv6Route(destinationAddress: prefix.address(), networkPrefixLength: NSNumber(value: prefix.prefix())))
+            settings.includedRoutes = includedRoutes.isEmpty ? [.default()] : includedRoutes
+            settings.excludedRoutes = Self.drain(options.getInet6RouteExcludeAddress()).map {
+                NEIPv6Route(destinationAddress: $0.address(), networkPrefixLength: NSNumber(value: $0.prefix()))
             }
-            if includedRoutes.isEmpty {
-                includedRoutes.append(.default())
-            }
-
-            var excludedRoutes: [NEIPv6Route] = []
-            let excludeIterator = options.getInet6RouteExcludeAddress()!
-            while excludeIterator.hasNext() {
-                let prefix = excludeIterator.next()!
-                excludedRoutes.append(NEIPv6Route(destinationAddress: prefix.address(), networkPrefixLength: NSNumber(value: prefix.prefix())))
-            }
-
-            settings.includedRoutes = includedRoutes
-            settings.excludedRoutes = excludedRoutes
             return settings
+        }
+
+        /// Everything a libbox prefix iterator holds. Libbox hands these over
+        /// as optionals; a list it did not provide, or an entry it could not
+        /// produce, is an empty list or a skipped entry here rather than a
+        /// trap that takes the tunnel provider down mid-start.
+        private static func drain(_ iterator: (any LibboxRoutePrefixIteratorProtocol)?) -> [LibboxRoutePrefix] {
+            var prefixes: [LibboxRoutePrefix] = []
+            while let iterator, iterator.hasNext() {
+                if let prefix = iterator.next() {
+                    prefixes.append(prefix)
+                }
+            }
+            return prefixes
+        }
+
+        /// The same for a libbox string iterator.
+        private static func drain(_ iterator: (any LibboxStringIteratorProtocol)?) -> [String] {
+            var values: [String] = []
+            while let iterator, iterator.hasNext() {
+                values.append(iterator.next())
+            }
+            return values
         }
 
         private func makeProxySettings(_ options: LibboxTunOptionsProtocol) -> NEProxySettings {
@@ -150,20 +155,12 @@ import os.log
             settings.httpEnabled = true
             settings.httpsEnabled = true
 
-            var bypassDomains: [String] = []
-            let bypassIterator = options.getHTTPProxyBypassDomain()!
-            while bypassIterator.hasNext() {
-                bypassDomains.append(bypassIterator.next())
-            }
+            let bypassDomains = Self.drain(options.getHTTPProxyBypassDomain())
             if !bypassDomains.isEmpty {
                 settings.exceptionList = bypassDomains
             }
 
-            var matchDomains: [String] = []
-            let matchIterator = options.getHTTPProxyMatchDomain()!
-            while matchIterator.hasNext() {
-                matchDomains.append(matchIterator.next())
-            }
+            let matchDomains = Self.drain(options.getHTTPProxyMatchDomain())
             if !matchDomains.isEmpty {
                 settings.matchDomains = matchDomains
             }
@@ -189,13 +186,6 @@ import os.log
 
         func useProcFS() -> Bool {
             false
-        }
-
-        func writeLog(_ message: String?) {
-            guard let message else {
-                return
-            }
-            provider?.writeLog(message)
         }
 
         func startDefaultInterfaceMonitor(_ listener: LibboxInterfaceUpdateListenerProtocol?) throws {
@@ -247,7 +237,9 @@ import os.log
                 return
             }
 
-            runBlocking {
+            // Best-effort, like the two calls inside it: a cache that could
+            // not be cleared is not worth failing the caller over.
+            try? runBlocking {
                 provider.reasserting = true
                 defer {
                     provider.reasserting = false
@@ -261,41 +253,24 @@ import os.log
             nil
         }
 
-        func serviceStop() throws {
-            try provider?.closeService()
-        }
+        // MARK: - LibboxCommandServerHandlerProtocol
+        //
+        // libbox calls these four on behalf of a client of its command socket.
+        // This provider never opens that socket (see `startSingBox`): the app
+        // stops the tunnel through NetworkExtension and never reloads it in
+        // place, and the system proxy is the host's business. They exist to
+        // satisfy the protocol.
 
-        func serviceReload() throws {
-            try provider?.reloadService()
-        }
+        func serviceStop() throws {}
+
+        func serviceReload() throws {}
 
         func getSystemProxyStatus() throws -> LibboxSystemProxyStatus {
-            let status = LibboxSystemProxyStatus()
-            guard let proxySettings = networkSettings?.proxySettings,
-                  proxySettings.httpServer != nil
-            else {
-                return status
-            }
-
-            status.available = true
-            status.enabled = proxySettings.httpEnabled
-            return status
+            LibboxSystemProxyStatus()
         }
 
-        func setSystemProxyEnabled(_ isEnabled: Bool) throws {
-            guard let provider, let networkSettings, let proxySettings = networkSettings.proxySettings else {
-                return
-            }
-            guard proxySettings.httpServer != nil, proxySettings.httpEnabled != isEnabled else {
-                return
-            }
-
-            proxySettings.httpEnabled = isEnabled
-            proxySettings.httpsEnabled = isEnabled
-            networkSettings.proxySettings = proxySettings
-            try runBlocking {
-                try await provider.setTunnelNetworkSettingsAsync(networkSettings)
-            }
+        func setSystemProxyEnabled(_: Bool) throws {
+            throw platformError("The VoyaVPN PacketTunnel sets no system proxy.")
         }
 
         func triggerNativeCrash() throws {
@@ -350,34 +325,53 @@ import os.log
         }
     }
 
+    /// How long libbox is kept waiting on the system. The calls made through
+    /// here answer in well under a second; one that never does used to hold
+    /// its libbox thread for good, and with it the queue every later start
+    /// and stop of the tunnel waits on.
+    private let systemCallTimeout: TimeInterval = 30
+
+    /// Runs `block` to its end on a task and hands back what it produced, for
+    /// libbox callbacks, which are synchronous. Throws when the system has not
+    /// answered within `systemCallTimeout`; the task is left to finish alone.
     private func runBlocking<T>(_ block: @escaping () async throws -> T) throws -> T {
         let semaphore = DispatchSemaphore(value: 0)
         let box = VoyaResultBox<T>()
         Task.detached(priority: .userInitiated) {
             do {
-                box.result = .success(try await block())
+                box.store(.success(try await block()))
             } catch {
-                box.result = .failure(error)
+                box.store(.failure(error))
             }
             semaphore.signal()
         }
-        semaphore.wait()
-        return try box.result.get()
-    }
-
-    private func runBlocking<T>(_ block: @escaping () async -> T) -> T {
-        let semaphore = DispatchSemaphore(value: 0)
-        let box = VoyaResultBox<T>()
-        Task.detached(priority: .userInitiated) {
-            box.value = await block()
-            semaphore.signal()
+        guard semaphore.wait(timeout: .now() + systemCallTimeout) == .success,
+              let result = box.stored()
+        else {
+            throw NSError(
+                domain: "VoyaPacketTunnelPlatformInterface",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "The system did not answer within \(Int(systemCallTimeout)) seconds."]
+            )
         }
-        semaphore.wait()
-        return box.value
+        return try result.get()
     }
 
-    private final class VoyaResultBox<T> {
-        var result: Result<T, Error>!
-        var value: T!
+    /// Written by the task, read by the thread that waited for it.
+    private final class VoyaResultBox<T>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var result: Result<T, Error>?
+
+        func store(_ result: Result<T, Error>) {
+            lock.lock()
+            self.result = result
+            lock.unlock()
+        }
+
+        func stored() -> Result<T, Error>? {
+            lock.lock()
+            defer { lock.unlock() }
+            return result
+        }
     }
 #endif

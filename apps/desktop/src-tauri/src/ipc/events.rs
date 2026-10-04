@@ -1,15 +1,7 @@
-use std::sync::atomic::{AtomicU32, Ordering};
-
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use tauri_specta::Event;
 use voya_contracts::{AppEvent, InvalidateEvent, TransientStreamEvent};
-
-static NEXT_LOG_LINE_ID: AtomicU32 = AtomicU32::new(1);
-
-pub fn next_log_line_id() -> u32 {
-    NEXT_LOG_LINE_ID.fetch_add(1, Ordering::Relaxed)
-}
 
 // `Event` is tauri-specta's trait and the payloads are voya-contracts' types,
 // so the orphan rule rules out deriving one on the other. Each channel is a
@@ -35,24 +27,28 @@ pub struct TransientStreamChannel(pub TransientStreamEvent);
 pub struct AppChannel(pub AppEvent);
 
 /// Puts a contract payload on its channel.
+///
+/// By value: the channel wrapper owns its payload, and the payloads sent most
+/// often — the connection table, a log batch — are the largest, so borrowing
+/// here would mean copying each one just to serialize it.
 pub trait Emit {
-    fn emit<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>) -> tauri::Result<()>;
+    fn emit<R: tauri::Runtime>(self, app: &tauri::AppHandle<R>) -> tauri::Result<()>;
 }
 
 impl Emit for InvalidateEvent {
-    fn emit<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-        Event::emit(&InvalidateChannel(self.clone()), app)
+    fn emit<R: tauri::Runtime>(self, app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+        Event::emit(&InvalidateChannel(self), app)
     }
 }
 
 impl Emit for TransientStreamEvent {
-    fn emit<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-        Event::emit(&TransientStreamChannel(self.clone()), app)
+    fn emit<R: tauri::Runtime>(self, app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+        Event::emit(&TransientStreamChannel(self), app)
     }
 }
 
 impl Emit for AppEvent {
-    fn emit<R: tauri::Runtime>(&self, app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-        Event::emit(&AppChannel(self.clone()), app)
+    fn emit<R: tauri::Runtime>(self, app: &tauri::AppHandle<R>) -> tauri::Result<()> {
+        Event::emit(&AppChannel(self), app)
     }
 }

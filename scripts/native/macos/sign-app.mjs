@@ -1,6 +1,13 @@
 import { existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { capture, isCliEntrypoint, repoRootFromScript, run, truthy } from "../../lib/common.mjs";
+import {
+  capture,
+  isCliEntrypoint,
+  repoRootFromScript,
+  run,
+  runCli,
+  truthy,
+} from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
   packetTunnelBundleIdentifier,
@@ -247,10 +254,5 @@ function main() {
 // Guarded so importing this module (a unit test, another script) cannot start
 // codesigning the app bundle as a side effect of the import.
 if (isCliEntrypoint(import.meta.url)) {
-  try {
-    main();
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
-  }
+  runCli(main);
 }

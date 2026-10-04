@@ -4,6 +4,7 @@ import type {
   InvalidationScope,
   PolicyGroupRuntime,
   ProfileDetails,
+  Profile,
   ProfileSummaryEntry,
   ProxyMonitorStatus,
   SubscriptionUpdateResult,
@@ -18,6 +19,7 @@ import {
   makeMockSeed,
   makeProfileEntry,
   makeSubscription,
+  makeSubscriptionMetadata,
   type MockSeed,
 } from "./mock-seed";
 
@@ -397,6 +399,80 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       return resolve(record("proxySetTrafficMode", [mode], { mode }));
     },
 
+    saveProfile: (profile) => {
+      const summary = state.profiles.find((item) => item.profile.id === profile.id);
+      if (summary) {
+        summary.profile = {
+          ...summary.profile,
+          address: profile.protocol.server.address,
+          port: profile.protocol.server.port,
+          remarks: profile.remarks,
+        };
+      } else {
+        state.profiles.push({
+          isActive: false,
+          metrics: { countryCode: null, delayMs: 0, ipInfo: null, outcome: null, sort: state.profiles.length },
+          profile: {
+            address: profile.protocol.server.address,
+            id: profile.id,
+            kind: profile.protocol.kind,
+            port: profile.protocol.server.port,
+            remarks: profile.remarks,
+            subscriptionId: profile.subscriptionId,
+          },
+        });
+      }
+      invalidate("saveProfile", "profiles");
+
+      return resolve(
+        record("saveProfile", [profile], {
+          isActive: false,
+          metrics: { countryCode: null, delayMs: 0, ipInfo: null, outcome: null, sort: 0 },
+          profile,
+          traffic: { date: null, todayDownload: null, todayUpload: null, totalDownload: null, totalUpload: null },
+        }),
+      );
+    },
+
+    getProfile: (indexId) => {
+      const entry = state.profiles.find((item) => item.profile.id === indexId);
+      if (!entry) {
+        return Promise.reject(
+          new IpcCommandError({
+            kind: { type: "notFound", entity: "profile", id: indexId },
+            message: `no profile ${indexId}`,
+            subsystem: "profile",
+          }),
+        );
+      }
+      // The listing keeps only a summary; the full protocol the editor
+      // round-trips is rebuilt as a vmess node carrying the summary's facts.
+      const { profile } = entry;
+      const full: Profile = {
+        displayLog: false,
+        id: profile.id,
+        protocol: {
+          cipher: "auto",
+          kind: "vmess",
+          server: { address: profile.address, port: profile.port },
+          uuid: `mock-uuid-${profile.id}`,
+        },
+        remarks: profile.remarks,
+        subscriptionId: profile.subscriptionId,
+        tls: null,
+        transport: null,
+      };
+
+      return resolve(
+        record("getProfile", [indexId], {
+          isActive: entry.isActive,
+          metrics: entry.metrics,
+          profile: full,
+          traffic: { date: null, todayDownload: null, todayUpload: null, totalDownload: null, totalUpload: null },
+        }),
+      );
+    },
+
     listProfileSummaries: () =>
       resolve(
         record("listProfileSummaries", [], {
@@ -551,6 +627,16 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
         state.profiles.push(entry);
         return [entry];
       });
+      for (const id of targets) {
+        const existing = state.subscriptionMetadata.find((item) => item.subscriptionId === id);
+        const attempt = {
+          lastAttemptAt: Math.floor(Date.now() / 1000),
+          lastAttemptError: null,
+          lastAttemptFailed: false,
+        };
+        if (existing) Object.assign(existing, attempt);
+        else state.subscriptionMetadata.push(makeSubscriptionMetadata(id, attempt));
+      }
 
       const result: SubscriptionUpdateResult = {
         imported: imported.length,

@@ -1,14 +1,15 @@
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { queries } from "@voya/client/queries";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Check, RotateCcw } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { Spinner } from "@voya/ui/components/spinner";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { voyaCommands } from "@voya/client/transport";
 import { PageSurface } from "@/components/app-shell/page-section";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
+
+import { runningConnectionKey } from "@voya/features/home/use-connection-ip";
+import { useSettingsApplyStatus } from "@voya/features/settings/use-settings-apply-status";
 
 /**
  * Where the automatic saves stand: saving, saved, or saved but waiting to be
@@ -24,35 +25,30 @@ export function SettingsApplyStatus({
   saved?: boolean;
 }) {
   const { t } = useI18n();
-  const coreState = useRuntimeEventStore((state) => state.coreState?.state);
-  const query = useQuery({
-    ...queries.settingsApply,
-    refetchOnMount: "always",
+  // A save, a new connection or the end of one is what makes the status
+  // stale — not each step a connect passes through on the way. While a save
+  // is still running the answer would describe the settings before it.
+  const connection = useRuntimeEventStore(runningConnectionKey);
+  const query = useSettingsApplyStatus({
+    refreshKey: saving ? null : (connection ?? ""),
   });
   const { refetch } = query;
-  const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const pending = useRef(false);
-  useEffect(() => {
-    if (!saving) void refetch();
-  }, [saving, coreState, refetch]);
+  const { error: applyError, pending: working, submit } = useDialogSubmit();
+  // Both buttons that reach this are disabled while it runs. Whether it
+  // worked or not, the status is read again: a failed apply may have applied
+  // part of what was pending.
   async function apply() {
-    if (pending.current) return;
-    pending.current = true;
-    setWorking(true);
-    setError(null);
-    try {
+    await submit(async () => {
       await voyaCommands().applyPendingSettings();
-    } catch (cause) {
-      setError(redactOperationalError(cause));
-    } finally {
-      pending.current = false;
-      setWorking(false);
-      await refetch();
-    }
+    });
+    await refetch();
   }
   const status = query.data;
   const needsApply = status?.connected && status.action !== "none";
+  // A failed apply is only worth showing while there is still something to
+  // apply: once the core reconnected or went away, retrying it sends a command
+  // with nothing pending.
+  const error = needsApply ? applyError : null;
   if (!needsApply && !working && !error && !query.error) {
     if (!saving && (!saved || failed)) return null;
     return (

@@ -12,6 +12,17 @@ import { checkMobileLegalAssets } from "./legal-assets.mjs";
  * runs them, and `pnpm build:ios:appstore` runs them before it archives.
  */
 
+/**
+ * The oldest iOS the app and its tunnel extension run on.
+ *
+ * `ios-project.rb` writes it into the Xcode project as `DEPLOYMENT_TARGET`
+ * (a test holds the two together), the store lane checks the built bundles
+ * against it, and the smoke lane compiles the probe-core host for it — built
+ * for anything newer, a call that does not exist on this version would
+ * compile there and fail on a user's phone.
+ */
+export const IOS_DEPLOYMENT_TARGET = "15.1";
+
 const locales = ["en", "zh-Hans", "zh-Hant"];
 const tunnelExtensionPoint = "com.apple.networkextension.packet-tunnel";
 const networkExtensionKey = "com.apple.developer.networking.networkextension";

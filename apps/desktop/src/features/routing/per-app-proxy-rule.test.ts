@@ -1,12 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RoutingRule, Routing_Serialize } from "@voya/contracts";
+import { installFakeCommands } from "@voya/features/test/backend";
 import {
   buildPerAppRule,
   findPerAppRule,
   normalizeProcessNames,
   readPerAppRule,
+  savePerAppRule,
 } from "./per-app-proxy-rule";
+
+const ipc = installFakeCommands({
+  deleteRoutingRules: vi.fn(),
+  moveRoutingRule: vi.fn(),
+  saveRoutingRule: vi.fn(),
+});
 
 // Must match the module-private sentinel the editor writes into `remarks`.
 const PER_APP_RULE_SENTINEL = "voya:per-app-proxy";
@@ -97,5 +105,63 @@ describe("normalizeProcessNames", () => {
       "chrome.exe",
       "steam",
     ]);
+  });
+});
+
+describe("savePerAppRule", () => {
+  const other = rule({ id: "rule-other", process: null, remarks: "my own rule" });
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("turning it off keeps the chosen apps on a disabled rule", async () => {
+    const existing = rule();
+    await savePerAppRule(routing([existing]), "off", ["chrome.exe", " Steam "]);
+
+    expect(ipc.saveRoutingRule).toHaveBeenCalledExactlyOnceWith("routing-1", {
+      ...existing,
+      enabled: false,
+      process: ["chrome.exe", "Steam"],
+    });
+    expect(ipc.deleteRoutingRules).not.toHaveBeenCalled();
+  });
+
+  it("turning it off with no apps left deletes the rule, and without a rule does nothing", async () => {
+    await savePerAppRule(routing([rule()]), "off", []);
+    expect(ipc.deleteRoutingRules).toHaveBeenCalledExactlyOnceWith("routing-1", ["rule-1"]);
+
+    vi.resetAllMocks();
+    await savePerAppRule(routing([other]), "off", ["chrome.exe"]);
+    expect(ipc.saveRoutingRule).not.toHaveBeenCalled();
+    expect(ipc.deleteRoutingRules).not.toHaveBeenCalled();
+  });
+
+  it("turning it on saves the rule and pins it above the catch-all", async () => {
+    // The backend appends a new rule, which lands behind everything else.
+    const saved = rule({ id: "rule-new", outbound: "direct" });
+    ipc.saveRoutingRule.mockResolvedValue(routing([other, saved]));
+
+    await savePerAppRule(routing([other]), "exclude", ["chrome.exe"]);
+
+    expect(ipc.saveRoutingRule).toHaveBeenCalledExactlyOnceWith(
+      "routing-1",
+      buildPerAppRule("exclude", ["chrome.exe"], null),
+    );
+    expect(ipc.moveRoutingRule).toHaveBeenCalledExactlyOnceWith(
+      "routing-1",
+      "rule-new",
+      "top",
+      null,
+    );
+  });
+
+  it("leaves a rule that is already first where it is", async () => {
+    const existing = rule();
+    ipc.saveRoutingRule.mockResolvedValue(routing([existing, other]));
+
+    await savePerAppRule(routing([existing, other]), "include", ["chrome.exe"]);
+
+    expect(ipc.moveRoutingRule).not.toHaveBeenCalled();
   });
 });

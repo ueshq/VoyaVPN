@@ -10,7 +10,7 @@ import { nodeListRows, nodeSearchText } from "./node-list-rows";
 /**
  * What the list view is showing, as the persisted node-list store holds it.
  * Structural rather than the desktop hook's return type: the same shaping
- * feeds a React Native `SectionList`.
+ * feeds the phone's list.
  */
 export type NodeListSelection = {
   collapsed: ReadonlySet<string>;
@@ -21,8 +21,9 @@ export type NodeListSelection = {
 
 /**
  * The node list's data: the queries behind it, the live speedtest overlay and
- * the rows they add up to. Laying the rows out on a screen — virtualized on
- * the desktop, sectioned on mobile — is the view's business.
+ * the rows they add up to. Laying the rows out on a screen is the view's
+ * business, and so is drawing a row's live result on it: see
+ * `overlaySpeedtestResult`.
  */
 export function useNodeListData(
   nodeGroups: NodeListSelection,
@@ -55,7 +56,7 @@ export function useNodeListData(
   );
   // A speedtest delivers results many times a second. While neither the sort
   // nor the filter reads them, the rows are laid out from the listing alone,
-  // so a result frame rebuilds no groups; the grid overlays the few rows it
+  // so a result frame rebuilds no groups; each view overlays the few rows it
   // renders instead.
   const metricsDriveLayout = nodeGroups.sortByLatency || nodeGroups.hideUnreachable;
   const layoutProfiles = metricsDriveLayout ? profiles : base;
