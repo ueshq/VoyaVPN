@@ -234,7 +234,6 @@ describe("runtime event store", () => {
       activeTunBackend: null,
       connectedDurationMs: 0,
       mainPid: 42,
-      prePid: null,
     };
     const { setCoreState, setProxyConnections } = useRuntimeEventStore.getState();
     setCoreState({ ...core, state: "connected" });
@@ -257,7 +256,6 @@ describe("runtime event store", () => {
       activeTunBackend: null,
       connectedDurationMs: 0,
       mainPid: 42,
-      prePid: null,
     };
     const { pushTransientEvent, setCoreState } = useRuntimeEventStore.getState();
     const pushes = proxyConnectionsPushCount();
@@ -668,7 +666,6 @@ function coreStatus(state: RuntimeStatusResponse["state"]): RuntimeStatusRespons
     activeTunBackend: null,
     connectedDurationMs: state === "connected" ? 0 : null,
     mainPid: null,
-    prePid: null,
     state,
   };
 }

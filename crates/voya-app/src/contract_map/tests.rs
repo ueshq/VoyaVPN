@@ -547,7 +547,6 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
     assert_eq!(event.connected_duration_ms, response.connected_duration_ms);
     assert_eq!(event.active_profile_id, response.active_profile_id);
     assert_eq!(event.main_pid, response.main_pid);
-    assert_eq!(event.pre_pid, response.pre_pid);
     assert_eq!(event.active_tun_backend, response.active_tun_backend);
     assert_eq!(
         event.active_tun_backend,
@@ -570,7 +569,6 @@ fn the_status_response_and_the_status_event_agree_on_every_field() {
     );
     assert_eq!(connecting.connected_duration_ms, None);
     assert_eq!(connecting.main_pid, None);
-    assert_eq!(connecting.pre_pid, None);
     assert_eq!(connecting.active_tun_backend, None);
 
     let disconnected = runtime_status_response(SupervisorSnapshot::disconnected());
@@ -722,7 +720,7 @@ fn server_stat_mapping_keeps_each_counter_in_its_own_field() {
 }
 
 #[test]
-fn system_proxy_status_mapping_keeps_requested_and_effective_modes_apart() {
+fn system_proxy_status_mapping_reports_the_effective_mode() {
     for (management, expected) in [
         (
             voya_platform::sysproxy::SystemProxyManagement::Automatic,
@@ -744,10 +742,6 @@ fn system_proxy_status_mapping_keeps_requested_and_effective_modes_apart() {
             });
 
         assert_eq!(contract.management, expected);
-        assert_eq!(
-            contract.requested_mode,
-            voya_contracts::SystemProxyType::ForcedChange
-        );
         assert_eq!(
             contract.effective_mode,
             voya_contracts::SystemProxyType::ForcedClear

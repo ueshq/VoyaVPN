@@ -103,7 +103,6 @@ impl DownloadAttempt {
 pub struct DownloadRequest {
     pub url: String,
     pub user_agent: Option<String>,
-    pub prefer_proxy: bool,
     pub proxy_url: Option<String>,
     pub response_body_limit: Option<usize>,
 }
@@ -115,7 +114,6 @@ impl DownloadRequest {
         Self {
             url: url.into(),
             user_agent: None,
-            prefer_proxy: false,
             proxy_url: None,
             response_body_limit: None,
         }
@@ -290,33 +288,31 @@ impl DownloadClient {
             .response_body_limit
             .unwrap_or(default_response_body_limit);
 
-        if request.prefer_proxy {
-            if let Some(proxy_url) = request
-                .proxy_url
-                .as_deref()
-                .filter(|value| !value.is_empty())
-            {
-                let result = match self.proxy_client(&request.url, proxy_url) {
-                    Ok(client) => {
-                        request_body(
-                            &client,
-                            &request.url,
-                            request.user_agent.as_deref(),
-                            response_body_limit,
-                        )
-                        .await
-                    }
-                    Err(error) => Err(error),
-                };
-                attempts.push(attempt(&request.url, true, &result));
-                if let Ok(body) = result {
-                    if !body.is_empty() {
-                        return Ok(DownloadOutput {
-                            body,
-                            used_proxy: true,
-                            attempts,
-                        });
-                    }
+        if let Some(proxy_url) = request
+            .proxy_url
+            .as_deref()
+            .filter(|value| !value.is_empty())
+        {
+            let result = match self.proxy_client(&request.url, proxy_url) {
+                Ok(client) => {
+                    request_body(
+                        &client,
+                        &request.url,
+                        request.user_agent.as_deref(),
+                        response_body_limit,
+                    )
+                    .await
+                }
+                Err(error) => Err(error),
+            };
+            attempts.push(attempt(&request.url, true, &result));
+            if let Ok(body) = result {
+                if !body.is_empty() {
+                    return Ok(DownloadOutput {
+                        body,
+                        used_proxy: true,
+                        attempts,
+                    });
                 }
             }
         }
@@ -496,7 +492,9 @@ pub(crate) async fn read_response_text_limited(
     limit: usize,
 ) -> std::result::Result<String, LimitedBodyReadError> {
     let bytes = read_response_bytes_limited(response, limit).await?;
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+    // A valid body — nearly every one — becomes the string without a copy.
+    Ok(String::from_utf8(bytes)
+        .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned()))
 }
 
 fn map_download_body_error(url: &str, error: LimitedBodyReadError) -> DownloadError {
@@ -949,7 +947,6 @@ mod tests {
             .download_text(DownloadRequest {
                 url: format!("{base}/sub"),
                 user_agent: Some("VoyaTest/1".to_string()),
-                prefer_proxy: true,
                 proxy_url: Some("http://127.0.0.1:9".to_string()),
                 response_body_limit: None,
             })

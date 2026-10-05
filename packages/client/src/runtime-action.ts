@@ -142,14 +142,16 @@ export async function selectProfile(id: string, t: TranslationFunction, queryCli
 /** Choosing a node to use: the shared runtime guard, the running node and the two ways to pick one. */
 export function useProfileActivation(t: TranslationFunction) {
   const queryClient = useQueryClient();
-  const coreState = useRuntimeEventStore((state) => state.coreState);
+  // The id alone: the core state is replaced on every status read and event,
+  // and the node lists this feeds would re-render for each of them.
+  const runningId = useRuntimeEventStore((state) => runningProfileId(state.coreState));
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
   const busy = useSwitchBusy();
 
   return {
     activateProfile: (id: string) => activateProfile(id, t, queryClient),
     busy,
-    runningId: runningProfileId(coreState),
+    runningId,
     selectProfile: (id: string) => selectProfile(id, t, queryClient),
     switchingId,
   };

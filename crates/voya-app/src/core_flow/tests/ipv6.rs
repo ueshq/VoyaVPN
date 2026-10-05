@@ -236,7 +236,7 @@ async fn only_a_reconnect_that_can_change_the_node_asks_for_a_check() {
     flow.restart_if_connected(&config, CoreFlowReason::RoutingChanged)
         .await
         .expect("routing restart");
-    flow.restart_if_connected(&config, CoreFlowReason::DnsChanged)
+    flow.restart_if_connected(&config, CoreFlowReason::RoutingChanged)
         .await
         .expect("DNS restart");
     assert_eq!(harness.count("ipv6-check"), 1);

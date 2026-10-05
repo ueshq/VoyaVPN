@@ -68,12 +68,10 @@ export const CORE_FLOW_REASON_KEYS: Record<CoreFlowReason, TranslationKey> = {
   connect: "coreFlowReason.connect",
   connectionModeChanged: "coreFlowReason.connectionModeChanged",
   disconnect: "coreFlowReason.disconnect",
-  dnsChanged: "coreFlowReason.dnsChanged",
   ipv6EgressChanged: "coreFlowReason.ipv6EgressChanged",
   restart: "coreFlowReason.restart",
   routingChanged: "coreFlowReason.routingChanged",
   settingsSaved: "coreFlowReason.settingsSaved",
-  tunChanged: "coreFlowReason.tunChanged",
 };
 
 export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {

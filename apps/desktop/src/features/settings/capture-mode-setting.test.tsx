@@ -29,7 +29,6 @@ const disconnected: RuntimeStatusResponse = {
   activeTunBackend: null,
   connectedDurationMs: null,
   mainPid: null,
-  prePid: null,
   state: "disconnected",
 };
 
@@ -38,7 +37,6 @@ const automatic: SystemProxyStatusResponse = {
   exceptions: "",
   management: "automatic",
   proxy: null,
-  requestedMode: "forcedChange",
 };
 
 const processTun: TunStatus = {
@@ -49,14 +47,10 @@ const processTun: TunStatus = {
   expectedProviderPath: null,
   lastProviderError: null,
   nativeComponentReady: true,
-  needsServiceInstall: false,
-  needsVpnPermission: false,
-  preflight: { notes: [], platform: "linux", routeRestoreNote: "", state: "ready", windowsCleanupDevices: [] },
   providerPathMismatch: false,
   providerState: "notApplicable",
   requiresElevation: false,
   resolvedProviderPath: null,
-  restoreOnDisconnect: true,
 };
 
 const vpnStatus: ConnectionModeStatus = {

@@ -19,7 +19,6 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   activeSelectionRemoved: "notices.activeSelectionRemoved",
   coreStopped: "notices.coreStopped",
   dnsRefreshFailed: "notices.dnsRefreshFailed",
-  dnsSavedRestartFailed: "notices.dnsSavedRestartFailed",
   nativeTunStopped: "notices.nativeTunStopped",
   nodeIpv6Restored: "notices.nodeIpv6Restored",
   nodeIpv6Unsupported: "notices.nodeIpv6Unsupported",
@@ -39,7 +38,6 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   selfHostGaveUp: "notices.selfHostGaveUp",
   selfHostRefreshFailed: "notices.selfHostRefreshFailed",
   settingsRefreshFailed: "notices.settingsRefreshFailed",
-  settingsSavedRuntimeUpdateFailed: "notices.settingsSavedRuntimeUpdateFailed",
   settingsSavedSystemProxyUpdateFailed:
     "notices.settingsSavedSystemProxyUpdateFailed",
   subscriptionAutoUpdateFailed: "notices.subscriptionAutoUpdateFailed",
@@ -48,7 +46,6 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   systemProxyStatusRefreshFailed: "notices.systemProxyStatusRefreshFailed",
   trayActionFailed: "notices.trayActionFailed",
   trayRefreshFailed: "notices.trayRefreshFailed",
-  tunSavedRestartFailed: "notices.tunSavedRestartFailed",
   tunStatusRefreshFailed: "notices.tunStatusRefreshFailed",
 };
 

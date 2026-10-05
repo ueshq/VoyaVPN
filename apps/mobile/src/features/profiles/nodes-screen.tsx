@@ -71,9 +71,12 @@ export function NodesScreen() {
   // A run tests every node the list holds. Collapsing a group only hides its
   // rows — it must not take the nodes out of a "Test all" — and a search that
   // narrows the view is no reason to test less than everything either.
+  // The stored list, not the one with live results laid over it: the overlay
+  // is a new array on every result of a run and holds the same nodes.
+  const storedEntries = data.profilesQuery.data?.entries;
   const testableIds = useMemo(
-    () => data.profiles.map((entry) => entry.profile.id),
-    [data.profiles],
+    () => (storedEntries ?? []).map((entry) => entry.profile.id),
+    [storedEntries],
   );
 
   const selected = data.profiles.find((entry) => entry.isActive);

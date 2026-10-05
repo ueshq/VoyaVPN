@@ -43,6 +43,16 @@ import type {
   WindowChromeConfig,
 } from "../../src/ipc/bindings";
 
+export type SmokeCall = { args: Record<string, unknown>; command: string };
+
+/** The commands the mock has been sent so far, oldest first; `command` narrows to one. */
+export function smokeCalls(page: Page, command?: string): Promise<SmokeCall[]> {
+  return page.evaluate((name) => {
+    const { calls } = window.__VOYA_SMOKE__.state as { calls: SmokeCall[] };
+    return name === undefined ? calls : calls.filter((call) => call.command === name);
+  }, command);
+}
+
 export async function installTauriSmokeMock(
   page: Page,
   titleBarLayout: WindowChromeConfig["titleBarLayout"] = "none",
@@ -123,7 +133,6 @@ export async function installTauriSmokeMock(
       runtime: {
         activeProfileId: null,
         mainPid: null,
-        prePid: null,
         connectedDurationMs: null,
         activeTunBackend: null,
         state: "disconnected",
@@ -134,7 +143,6 @@ export async function installTauriSmokeMock(
         effectiveMode: "forcedClear",
         exceptions: "",
         proxy: null as string | null,
-        requestedMode: "forcedChange",
       },
       tun: {
         allowEnableTun: true,
@@ -144,20 +152,10 @@ export async function installTauriSmokeMock(
         expectedProviderPath: null as string | null,
         lastProviderError: null as string | null,
         nativeComponentReady: true,
-        needsServiceInstall: false,
-        needsVpnPermission: false,
-        preflight: {
-          notes: [] as string[],
-          platform: "linux",
-          routeRestoreNote: "Smoke mock does not mutate routes.",
-          state: "ready",
-          windowsCleanupDevices: [] as string[],
-        },
         providerPathMismatch: false,
         providerState: "notApplicable",
         requiresElevation: false,
         resolvedProviderPath: null as string | null,
-        restoreOnDisconnect: true,
       },
     };
 
@@ -402,7 +400,6 @@ export async function installTauriSmokeMock(
           state.runtime = {
             activeProfileId: active ? String(active.profile.id) : null,
             mainPid: 4242,
-            prePid: null,
             connectedDurationMs: 0,
             activeTunBackend: null,
             state: "connected",
@@ -413,7 +410,6 @@ export async function installTauriSmokeMock(
           state.runtime = {
             activeProfileId: null,
             mainPid: null,
-            prePid: null,
             connectedDurationMs: null,
             activeTunBackend: null,
             state: "disconnected",
@@ -449,7 +445,6 @@ export async function installTauriSmokeMock(
             state.sysProxy = {
               ...state.sysProxy,
               effectiveMode: "forcedChange",
-              requestedMode: "forcedChange",
             };
           }
           return Promise.resolve(connectionModeStatus());

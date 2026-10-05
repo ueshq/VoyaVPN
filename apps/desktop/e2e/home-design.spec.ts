@@ -80,7 +80,6 @@ for (const { layout, language } of [
         activeProfileId: profile.profile.id,
         activeTunBackend: "process",
         mainPid: 42,
-        prePid: null,
         state: "connected",
         connectedDurationMs: 1458000,
       };

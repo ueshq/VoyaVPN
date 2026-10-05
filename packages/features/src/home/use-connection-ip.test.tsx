@@ -19,7 +19,6 @@ const connected: RuntimeStatusResponse = {
   activeTunBackend: null,
   connectedDurationMs: 0,
   mainPid: 42,
-  prePid: null,
   state: "connected",
 };
 

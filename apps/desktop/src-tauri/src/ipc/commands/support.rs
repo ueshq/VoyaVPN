@@ -1,9 +1,6 @@
-use std::{
-    path::Path,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        LazyLock,
-    },
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    LazyLock,
 };
 
 use voya_app::log_batch::{LogBatcher, LOG_BATCH_CAPACITY, LOG_BATCH_WINDOW};
@@ -21,7 +18,7 @@ static LOG_FLUSHER_STARTED: AtomicBool = AtomicBool::new(false);
 pub(crate) fn runtime_manager(state: &AppState) -> RuntimeManager<'_> {
     state.services().runtime(
         state.supervisor(),
-        state.core_seed_resource_dir().map(Path::to_path_buf),
+        Some(state.core_seed_resource_dir().to_path_buf()),
     )
 }
 

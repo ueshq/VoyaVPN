@@ -226,7 +226,7 @@ impl<'db> ProfileManager<'db> {
                         .unwrap_or_default(),
                 };
                 existing.index_id.clone_from(&profile.index_id);
-                if !voya_core::profile_items_match(previous, &profile, false) {
+                if !voya_core::profile_items_match(previous, &profile) {
                     existing.clear_measurements();
                 }
                 existing

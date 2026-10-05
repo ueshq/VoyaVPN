@@ -16,19 +16,18 @@ const commands = { runtimeStatus: vi.fn(), systemProxyStatus: vi.fn(), tunStatus
 setVoyaCommands(commands as unknown as VoyaCommands);
 
 const core: RuntimeStatusResponse = {
-  state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, prePid: null, connectedDurationMs: null,
+  state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, connectedDurationMs: null,
 };
 const proxy: SystemProxyStatusResponse = {
   management: "automatic",
-  requestedMode: "forcedChange", effectiveMode: "unchanged", proxy: "127.0.0.1:10808",
+  effectiveMode: "unchanged", proxy: "127.0.0.1:10808",
   exceptions: "",
 };
 const tun: TunStatus = {
   backend: "macosPacketTunnel", enabled: false, allowEnableTun: true, nativeComponentReady: true,
-  elevationGranted: false, requiresElevation: false, needsServiceInstall: false, needsVpnPermission: false,
+  elevationGranted: false, requiresElevation: false,
   providerState: "stopped", lastProviderError: null, expectedProviderPath: null, resolvedProviderPath: null,
-  providerPathMismatch: false, restoreOnDisconnect: false,
-  preflight: { state: "ready", platform: "macos", notes: [], routeRestoreNote: "", windowsCleanupDevices: [] },
+  providerPathMismatch: false,
 };
 
 function deferred<T>() {

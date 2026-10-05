@@ -209,7 +209,6 @@ pub fn runtime_status_event(
             .and_then(|snapshot| snapshot.active_profile_id.clone())
             .or(active_profile_id),
         main_pid: snapshot.and_then(|snapshot| snapshot.main_pid),
-        pre_pid: snapshot.and_then(|snapshot| snapshot.pre_pid),
     }
 }
 
@@ -231,11 +230,6 @@ pub fn core_seed_install_result(
                 voya_contracts::CoreSeedInstallStatus::SeedMissing
             }
         },
-        installed_files: outcome
-            .copied_files
-            .iter()
-            .map(|path| path.to_string_lossy().into_owned())
-            .collect(),
     }
 }
 
@@ -264,7 +258,6 @@ pub fn system_proxy_status_to_contract(
                 voya_contracts::SystemProxyManagement::Unsupported
             }
         },
-        requested_mode: sysproxy_type_to_contract(status.requested_type),
         effective_mode: sysproxy_type_to_contract(status.effective_type),
         proxy: status.proxy,
         exceptions: status.exceptions,

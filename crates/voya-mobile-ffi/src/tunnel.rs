@@ -13,11 +13,10 @@ use std::{
 };
 
 use voya_platform::tun::{
+    handoff::{build_handoff, HandoffError, HandoffPaths},
     NativeTunController, NativeTunError, NativeTunProviderState, NativeTunStartRequest,
     NativeTunStatus, TunBackend,
 };
-
-use crate::handoff::{build_handoff, HandoffError};
 
 /// What the host app does with the tunnel, as uniffi sees it.
 ///
@@ -41,8 +40,6 @@ pub enum TunnelError {
     /// The user declined the VPN configuration prompt, or revoked it later.
     #[error("the system did not authorize the VPN configuration")]
     PermissionDenied,
-    #[error("the tunnel provider is not installed in this build")]
-    MissingProvider,
     #[error("the tunnel could not be started or stopped: {detail}")]
     Failed { detail: String },
 }
@@ -127,7 +124,7 @@ impl NativeTunController for HostTunController {
     }
 
     fn start(&self, request: NativeTunStartRequest) -> Result<(), NativeTunError> {
-        let handoff = build_handoff(&request, &self.shared_dir)
+        let handoff = build_handoff(&request, &handoff_paths(&self.shared_dir))
             .map_err(|error| handoff_failed(&request, &error))?;
 
         match self.host.start(handoff, request.kill_switch) {
@@ -180,12 +177,19 @@ fn start_failed(request: &NativeTunStartRequest, error: &TunnelError) -> NativeT
             backend: request.backend,
             message: error.to_string(),
         },
-        TunnelError::MissingProvider | TunnelError::Failed { .. } => {
-            NativeTunError::ControllerUnavailable {
-                backend: request.backend,
-                message: error.to_string(),
-            }
-        }
+        TunnelError::Failed { .. } => NativeTunError::ControllerUnavailable {
+            backend: request.backend,
+            message: error.to_string(),
+        },
+    }
+}
+
+/// Where the provider keeps its files in the mobile hosts' shared container.
+fn handoff_paths(shared_dir: &Path) -> HandoffPaths {
+    HandoffPaths {
+        status: shared_dir.join("PT/status.json"),
+        log: shared_dir.join("PT/provider.log"),
+        staging: shared_dir.join("srss"),
     }
 }
 

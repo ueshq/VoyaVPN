@@ -59,8 +59,7 @@ function optionalCount(value: string) {
 
 /**
  * Rebuilt for every opening, so a cancelled edit never leaks into the next one.
- * Not mounted while closed: it filters the whole node list, and that list
- * changes on every speedtest frame.
+ * Not mounted while closed: it filters the whole node list.
  */
 export function PolicyGroupDialog(props: Props) {
   return props.open ? <PolicyGroupEditor key={props.group?.id ?? "new"} {...props} /> : null;

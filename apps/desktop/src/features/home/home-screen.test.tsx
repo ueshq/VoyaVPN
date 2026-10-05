@@ -40,7 +40,6 @@ const ipcMock = installFakeCommands({
 const disconnectedStatus: RuntimeStatusResponse = {
   activeProfileId: null,
   mainPid: null,
-  prePid: null,
   connectedDurationMs: null,
   activeTunBackend: null,
   state: "disconnected",
@@ -49,7 +48,6 @@ const disconnectedStatus: RuntimeStatusResponse = {
 const connectedStatus: RuntimeStatusResponse = {
   activeProfileId: "node-tokyo",
   mainPid: 4242,
-  prePid: null,
   connectedDurationMs: null,
   activeTunBackend: null,
   state: "connected",
@@ -60,7 +58,6 @@ const sysProxyStatus: SystemProxyStatusResponse = {
   effectiveMode: "forcedClear",
   exceptions: "",
   proxy: null,
-  requestedMode: "forcedChange",
 };
 
 const tunStatusResponse: TunStatus = {
@@ -70,21 +67,11 @@ const tunStatusResponse: TunStatus = {
   elevationGranted: true,
   lastProviderError: null,
   nativeComponentReady: true,
-  needsServiceInstall: false,
-  needsVpnPermission: false,
-  preflight: {
-    notes: [],
-    platform: "macos",
-    routeRestoreNote: "",
-    state: "ready",
-    windowsCleanupDevices: [],
-  },
   expectedProviderPath: null,
   providerPathMismatch: false,
   providerState: "notApplicable",
   requiresElevation: false,
   resolvedProviderPath: null,
-  restoreOnDisconnect: true,
 };
 
 const missingTunnelMessages = {
@@ -482,7 +469,6 @@ describe("HomeScreen", () => {
     expect(useRuntimeEventStore.getState().coreState).toEqual({
       activeProfileId: "node-tokyo",
       mainPid: 4242,
-      prePid: null,
       connectedDurationMs: null,
       activeTunBackend: null,
       state: "connected",

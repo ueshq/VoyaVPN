@@ -107,8 +107,8 @@ pub(super) async fn check_connection_ip(state: &MobileState) -> Answer {
     let config = state
         .services
         .running_core_config(&state.config_mutations.current_config());
-    let snapshot = state.supervisor.status().await?;
-    let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot).await?;
+    let connected = state.supervisor.is_connected();
+    let exit = voya_app::connection_ip::check_connection_ip(&config, connected).await?;
 
     answer("check_connection_ip", &exit)
 }

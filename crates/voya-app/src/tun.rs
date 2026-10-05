@@ -5,10 +5,7 @@ use std::{
 };
 
 use thiserror::Error;
-use voya_contracts::{
-    TunBackend, TunPlatform, TunPreflight, TunPreflightState, TunProviderDiagnostics,
-    TunProviderState, TunStatus,
-};
+use voya_contracts::{TunBackend, TunProviderDiagnostics, TunProviderState, TunStatus};
 use voya_core::AppConfig;
 
 use crate::blocking::{run_blocking, BlockingTaskError};
@@ -19,7 +16,7 @@ use voya_platform::{
         tun_preflight, NativeTunController, NativeTunDiagnostics, NativeTunProviderState,
         PlatformNativeTunController, PlatformProviderRegistrationResolver,
         ProviderRegistrationResolver, TunBackend as PlatformTunBackend, TunPreflightReport,
-        TunPreflightState as PlatformTunPreflightState, MACOS_PACKET_TUNNEL_BUNDLE_ID,
+        MACOS_PACKET_TUNNEL_BUNDLE_ID,
     },
 };
 
@@ -90,15 +87,6 @@ pub struct TunManager {
 }
 
 impl TunManager {
-    #[must_use]
-    pub fn new(elevation: Arc<ElevationState>) -> Self {
-        Self::with_target_os_and_native_tun(
-            elevation,
-            TargetOs::current(),
-            Arc::new(PlatformNativeTunController),
-        )
-    }
-
     #[must_use]
     pub fn with_target_os(elevation: Arc<ElevationState>, target_os: TargetOs) -> Self {
         Self::with_target_os_and_native_tun(
@@ -188,8 +176,8 @@ impl TunManager {
     ///
     /// The probe forks `pluginkit`/`systemextensionsctl`/`sc.exe` and loads
     /// NetworkExtension preferences, so it runs off the async runtime, before
-    /// any config mutation guard is taken, and the decision is applied with
-    /// [`Self::apply_enabled`]. The returned status is what the config will
+    /// any config mutation guard is taken, and the caller then writes
+    /// `tun.enabled` itself. The returned status is what the config will
     /// report once applied: nothing but `enabled` ever came from the config,
     /// so the probe needs none.
     pub(crate) fn plan_set_enabled(&self, enabled: bool) -> Result<TunStatus, TunManagerError> {
@@ -219,11 +207,6 @@ impl TunManager {
         Ok(status)
     }
 
-    /// Apply a change already validated by [`Self::plan_set_enabled`].
-    pub fn apply_enabled(config: &mut AppConfig, enabled: bool) {
-        config.tun.enabled = enabled;
-    }
-
     fn status_with_report(
         &self,
         enabled: bool,
@@ -241,23 +224,11 @@ impl TunManager {
             allow_enable_tun: report.allow_enable_tun && !registration.path_mismatch,
             requires_elevation: report.requires_elevation,
             elevation_granted: report.elevation_granted,
-            needs_vpn_permission: native_status.provider_state
-                == NativeTunProviderState::PermissionRequired,
-            needs_service_install: report.backend == PlatformTunBackend::WindowsService
-                && !native_status.component_ready,
             native_component_ready: native_status.component_ready,
             last_provider_error: native_status.message,
             provider_path_mismatch: registration.path_mismatch,
             resolved_provider_path: registration.resolved_provider_path,
             expected_provider_path: registration.expected_provider_path,
-            // Nothing to restore where nothing was mutated. On a phone the
-            // OS tears the tunnel's routes down with the provider, so the app
-            // has no restore step of its own either.
-            restore_on_disconnect: !matches!(
-                self.target_os,
-                TargetOs::Other | TargetOs::Ios | TargetOs::Android
-            ),
-            preflight: tun_preflight_response(&report),
         };
 
         Ok((status, report))
@@ -401,20 +372,6 @@ const fn tun_provider_state(state: NativeTunProviderState) -> TunProviderState {
     }
 }
 
-fn tun_preflight_response(report: &TunPreflightReport) -> TunPreflight {
-    TunPreflight {
-        platform: tun_platform(report.os),
-        state: tun_preflight_state(report.state),
-        notes: report.notes.clone(),
-        route_restore_note: report.route_restore_note.clone(),
-        windows_cleanup_devices: report
-            .windows_cleanup_devices
-            .iter()
-            .map(|device| device.name.to_string())
-            .collect(),
-    }
-}
-
 fn tun_provider_diagnostics_response(
     backend: TunBackend,
     diagnostics: NativeTunDiagnostics,
@@ -451,26 +408,6 @@ fn provider_paths_equivalent(left: &Path, right: &Path) -> bool {
     left == right
 }
 
-const fn tun_platform(os: TargetOs) -> TunPlatform {
-    match os {
-        TargetOs::Windows => TunPlatform::Windows,
-        TargetOs::Linux => TunPlatform::Linux,
-        TargetOs::Macos => TunPlatform::Macos,
-        TargetOs::Ios => TunPlatform::Ios,
-        TargetOs::Android => TunPlatform::Android,
-        TargetOs::Other => TunPlatform::Other,
-    }
-}
-
-const fn tun_preflight_state(state: PlatformTunPreflightState) -> TunPreflightState {
-    match state {
-        PlatformTunPreflightState::Ready => TunPreflightState::Ready,
-        PlatformTunPreflightState::NeedsElevation => TunPreflightState::NeedsElevation,
-        PlatformTunPreflightState::ManualCheck => TunPreflightState::ManualCheck,
-        PlatformTunPreflightState::Unsupported => TunPreflightState::Unsupported,
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum TunManagerError {
     #[error("system authorization is required before enabling TUN on Unix")]
@@ -501,7 +438,7 @@ mod tests {
         enabled: bool,
     ) -> Result<TunStatus, TunManagerError> {
         let status = manager.plan_set_enabled(enabled)?;
-        TunManager::apply_enabled(config, enabled);
+        config.tun.enabled = enabled;
         Ok(status)
     }
 
@@ -656,7 +593,6 @@ mod tests {
         assert!(!status.enabled);
         assert!(!status.allow_enable_tun);
         assert!(status.requires_elevation);
-        assert_eq!(status.preflight.state, TunPreflightState::NeedsElevation);
         assert!(matches!(
             set_enabled(&manager, &mut config, true),
             Err(TunManagerError::ElevationRequired)
@@ -667,7 +603,6 @@ mod tests {
         assert!(status.enabled);
         assert!(status.allow_enable_tun);
         assert!(status.elevation_granted);
-        assert_eq!(status.preflight.state, TunPreflightState::Ready);
     }
 
     #[test]
@@ -710,7 +645,7 @@ mod tests {
         assert!(planned.enabled);
         assert!(!config.tun.enabled);
 
-        TunManager::apply_enabled(&mut config, true);
+        config.tun.enabled = true;
         assert!(config.tun.enabled);
         assert_eq!(manager.status(config.tun.enabled).expect("status"), planned);
     }
@@ -738,17 +673,7 @@ mod tests {
         assert!(!status.requires_elevation);
         assert_eq!(status.backend, TunBackend::WindowsService);
         assert_eq!(status.provider_state, TunProviderState::MissingComponent);
-        assert!(status.needs_service_install);
         assert!(!status.native_component_ready);
-        assert_eq!(status.preflight.state, TunPreflightState::Ready);
-        assert_eq!(
-            status.preflight.windows_cleanup_devices,
-            ["wintunsingbox_tun".to_string()]
-        );
-        assert!(status
-            .preflight
-            .route_restore_note
-            .contains("VoyaVPN Service"));
     }
 
     #[test]
@@ -765,7 +690,6 @@ mod tests {
         assert_eq!(status.backend, TunBackend::MacosPacketTunnel);
         assert_eq!(status.provider_state, TunProviderState::MissingComponent);
         assert!(!status.native_component_ready);
-        assert_eq!(status.preflight.state, TunPreflightState::Ready);
     }
 
     #[test]
@@ -844,6 +768,5 @@ mod tests {
         assert!(status.native_component_ready);
         assert_eq!(status.last_provider_error, None);
         assert!(status.allow_enable_tun);
-        assert!(!status.restore_on_disconnect);
     }
 }

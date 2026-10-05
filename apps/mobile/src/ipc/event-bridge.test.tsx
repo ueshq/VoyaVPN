@@ -90,7 +90,6 @@ describe("EventBridge", () => {
       activeTunBackend: null,
       connectedDurationMs: 0,
       mainPid: 1,
-      prePid: null,
       state: "connected",
     } as const;
 

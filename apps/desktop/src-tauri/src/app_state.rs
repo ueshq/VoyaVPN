@@ -20,7 +20,7 @@ use voya_platform::paths::AppPaths;
 pub(crate) struct AppState {
     pub(super) services: AppServices,
     pub(super) config_mutations: Arc<ConfigMutationCoordinator>,
-    pub(super) core_seed_resource_dir: Option<PathBuf>,
+    pub(super) core_seed_resource_dir: PathBuf,
     pub(super) elevation_manager: ElevationManager,
     pub(super) supervisor: CoreSupervisor,
     pub(super) statistics_manager: StatisticsManager,
@@ -52,8 +52,8 @@ impl AppState {
         self.services.runtime_paths()
     }
 
-    pub(crate) fn core_seed_resource_dir(&self) -> Option<&Path> {
-        self.core_seed_resource_dir.as_deref()
+    pub(crate) fn core_seed_resource_dir(&self) -> &Path {
+        &self.core_seed_resource_dir
     }
 
     pub(crate) fn elevation_manager(&self) -> &ElevationManager {

@@ -54,26 +54,25 @@ impl SettingsApplication {
             .proxy = Some(config.clone());
     }
 
-    /// The configuration the running core was started from. A saved change
-    /// waits for an apply, so this — not the saved settings — says which port
-    /// the core listens on.
+    /// The saved configuration with the running core's inbounds: what a
+    /// request through the local proxy has to dial while a port change is
+    /// still waiting to be applied. A saved change waits for an apply, so the
+    /// configuration the core was started from — not the saved settings — says
+    /// which port it listens on.
     #[must_use]
-    pub fn applied_core(&self) -> Option<AppConfig> {
-        self.applied
+    pub fn running_core_config(&self, saved: &AppConfig) -> AppConfig {
+        // Only the inbounds are wanted; the applied configuration carries every
+        // setting, and this runs for each request sent through the proxy.
+        let inbounds = self
+            .applied
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .core
-            .clone()
-    }
-
-    /// The saved configuration with the running core's inbounds: what a
-    /// request through the local proxy has to dial while a port change is
-    /// still waiting to be applied.
-    #[must_use]
-    pub fn running_core_config(&self, saved: &AppConfig) -> AppConfig {
+            .as_ref()
+            .map(|core| core.inbounds.clone());
         let mut config = saved.clone();
-        if let Some(core) = self.applied_core() {
-            config.inbounds = core.inbounds;
+        if let Some(inbounds) = inbounds {
+            config.inbounds = inbounds;
         }
         config
     }

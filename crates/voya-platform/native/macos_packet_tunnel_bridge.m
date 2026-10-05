@@ -10,9 +10,6 @@
 
 static NSString *const VoyaAppGroupIdentifier = @"group.app.voyavpn.desktop";
 static NSString *const VoyaProviderBundleIdentifier = @"app.voyavpn.desktop.PacketTunnel";
-static NSString *const VoyaRuntimeConfigRelativePath = @"Library/Application Support/VoyaVPN/packet-tunnel-runtime.json";
-static NSString *const VoyaProviderStatusRelativePath = @"Library/Application Support/VoyaVPN/packet-tunnel-status.json";
-static NSString *const VoyaProviderLogRelativePath = @"Library/Application Support/VoyaVPN/provider.log";
 static NSString *const VoyaLocalizedDescription = @"VoyaVPN";
 
 static char *VoyaCopyCString(NSString *string) {
@@ -455,198 +452,6 @@ static char *VoyaWaitForConnected(NETunnelProviderSession *session, int64_t time
     return VoyaCopyCString([@"startFailed:" stringByAppendingString:json]);
 }
 
-static NSURL *VoyaAppGroupURL(NSString *relativePath, NSError **outError) {
-    NSURL *container = [[NSFileManager defaultManager]
-        containerURLForSecurityApplicationGroupIdentifier:VoyaAppGroupIdentifier];
-    if (container == nil) {
-        if (outError != NULL) {
-            *outError = VoyaMakeError(@"VoyaVPN App Group container is unavailable.");
-        }
-        return nil;
-    }
-    return [container URLByAppendingPathComponent:relativePath];
-}
-
-static NSURL *VoyaRuntimeConfigURL(NSError **outError) {
-    return VoyaAppGroupURL(VoyaRuntimeConfigRelativePath, outError);
-}
-
-// The PacketTunnel extension runs in its own sandbox and cannot read files
-// inside the main app container, so local rule-set `.srs` paths must be
-// staged into the shared app group container and rewritten before the
-// config is handed to the provider.
-static NSString *VoyaStageLocalRulesets(NSString *singboxConfigJson, NSError **outError) {
-    NSData *jsonData = [singboxConfigJson dataUsingEncoding:NSUTF8StringEncoding];
-    if (jsonData == nil) {
-        if (outError != NULL) {
-            *outError = VoyaMakeError(@"sing-box config is not valid UTF-8.");
-        }
-        return nil;
-    }
-    NSError *decodeError = nil;
-    id configRoot = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&decodeError];
-    if (decodeError != nil || ![configRoot isKindOfClass:[NSDictionary class]]) {
-        if (outError != NULL) {
-            *outError = decodeError ?: VoyaMakeError(@"sing-box config is not a JSON object.");
-        }
-        return nil;
-    }
-    NSMutableDictionary *config = [(NSDictionary *)configRoot mutableCopy];
-    id routeObject = config[@"route"];
-    if (![routeObject isKindOfClass:[NSDictionary class]]) {
-        return singboxConfigJson;
-    }
-    id ruleSetObject = ((NSDictionary *)routeObject)[@"rule_set"];
-    if (![ruleSetObject isKindOfClass:[NSArray class]]) {
-        return singboxConfigJson;
-    }
-
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSURL *stagingDir = VoyaAppGroupURL(@"Library/Application Support/VoyaVPN/srss", outError);
-    if (stagingDir == nil) {
-        return nil;
-    }
-    NSError *mkdirError = nil;
-    if (![fileManager createDirectoryAtURL:stagingDir
-               withIntermediateDirectories:YES
-                                attributes:nil
-                                     error:&mkdirError]) {
-        if (outError != NULL) {
-            *outError = mkdirError;
-        }
-        return nil;
-    }
-
-    NSMutableArray *ruleSets = [NSMutableArray array];
-    BOOL rewritten = NO;
-    for (id entryObject in (NSArray *)ruleSetObject) {
-        if (![entryObject isKindOfClass:[NSDictionary class]]) {
-            [ruleSets addObject:entryObject];
-            continue;
-        }
-        NSMutableDictionary *entry = [(NSDictionary *)entryObject mutableCopy];
-        NSString *type = entry[@"type"];
-        NSString *path = entry[@"path"];
-        if ([type isKindOfClass:[NSString class]] && [type isEqualToString:@"local"]
-            && [path isKindOfClass:[NSString class]] && [path hasPrefix:@"/"]) {
-            NSURL *sourceURL = [NSURL fileURLWithPath:path];
-            NSURL *destinationURL = [stagingDir URLByAppendingPathComponent:sourceURL.lastPathComponent];
-            [fileManager removeItemAtURL:destinationURL error:nil];
-            NSError *copyError = nil;
-            if (![fileManager copyItemAtURL:sourceURL toURL:destinationURL error:&copyError]) {
-                if (outError != NULL) {
-                    *outError = VoyaMakeError([NSString
-                        stringWithFormat:@"Failed to stage rule-set %@ for the PacketTunnel: %@",
-                                          path, copyError.localizedDescription ?: @"unknown error"]);
-                }
-                return nil;
-            }
-            entry[@"path"] = destinationURL.path;
-            rewritten = YES;
-        }
-        [ruleSets addObject:entry];
-    }
-    if (!rewritten) {
-        return singboxConfigJson;
-    }
-    NSMutableDictionary *route = [(NSDictionary *)routeObject mutableCopy];
-    route[@"rule_set"] = ruleSets;
-    config[@"route"] = route;
-
-    NSError *encodeError = nil;
-    NSData *output = [NSJSONSerialization dataWithJSONObject:config
-                                                  options:0
-                                                    error:&encodeError];
-    if (output == nil) {
-        if (outError != NULL) {
-            *outError = encodeError;
-        }
-        return nil;
-    }
-    return [[NSString alloc] initWithData:output encoding:NSUTF8StringEncoding];
-}
-
-static NSData *VoyaCreateRuntimeConfigData(NSString *configPath, NSString *profileId, NSError **outError) {
-    if (![configPath hasPrefix:@"/"]) {
-        if (outError != NULL) {
-            *outError = VoyaMakeError(@"config path must be absolute");
-        }
-        return nil;
-    }
-
-    NSError *readError = nil;
-    NSError *stageError = nil;
-    NSString *singboxConfigJson = VoyaStageLocalRulesets(
-        [NSString stringWithContentsOfFile:configPath encoding:NSUTF8StringEncoding error:&readError],
-        &stageError);
-    if (readError != nil) {
-        if (outError != NULL) {
-            *outError = readError;
-        }
-        return nil;
-    }
-    if (singboxConfigJson == nil) {
-        if (outError != NULL) {
-            *outError = stageError ?: VoyaMakeError(@"Failed to stage sing-box rule-sets.");
-        }
-        return nil;
-    }
-
-    NSURL *statusURL = VoyaAppGroupURL(VoyaProviderStatusRelativePath, outError);
-    if (statusURL == nil) {
-        return nil;
-    }
-    NSURL *logURL = VoyaAppGroupURL(VoyaProviderLogRelativePath, outError);
-    if (logURL == nil) {
-        return nil;
-    }
-
-    NSDictionary *runtimeConfig = @{
-        @"version": @1,
-        @"activeProfileId": profileId ?: [NSNull null],
-        @"mainConfigPath": configPath,
-        @"statusPath": statusURL.path ?: @"",
-        @"logPath": logURL.path ?: @"",
-        @"singboxConfigJson": singboxConfigJson ?: @"",
-    };
-
-    NSError *encodeError = nil;
-    NSData *data = [NSJSONSerialization dataWithJSONObject:runtimeConfig options:0 error:&encodeError];
-    if (encodeError != nil) {
-        if (outError != NULL) {
-            *outError = encodeError;
-        }
-        return nil;
-    }
-    return data;
-}
-
-static BOOL VoyaWriteRuntimeConfigData(NSData *data, NSError **outError) {
-    NSURL *destination = VoyaRuntimeConfigURL(outError);
-    if (destination == nil) {
-        return NO;
-    }
-
-    NSError *mkdirError = nil;
-    BOOL created = [[NSFileManager defaultManager] createDirectoryAtURL:destination.URLByDeletingLastPathComponent
-                                            withIntermediateDirectories:YES
-                                                             attributes:nil
-                                                                  error:&mkdirError];
-    if (!created) {
-        if (outError != NULL) {
-            *outError = mkdirError;
-        }
-        return NO;
-    }
-
-    NSError *writeError = nil;
-    BOOL written = [data writeToURL:destination options:NSDataWritingAtomic error:&writeError];
-    if (!written && outError != NULL) {
-        *outError = writeError;
-    }
-    return written;
-}
-
 char *voya_macos_packet_tunnel_status(void) {
     @autoreleasepool {
         NSError *error = nil;
@@ -673,30 +478,18 @@ char *voya_macos_packet_tunnel_status(void) {
     }
 }
 
-char *voya_macos_packet_tunnel_start(const char *config_path, const char *profile_id, int64_t timeout_ms, int32_t include_all_networks) {
+// `runtime_config_json` is the handshake the provider is started with, built by
+// `voya_platform::tun::handoff`: it travels in the start options and is never
+// written to disk, so a start from System Settings has nothing to start with.
+char *voya_macos_packet_tunnel_start(const char *runtime_config_json, int64_t timeout_ms, int32_t include_all_networks) {
     @autoreleasepool {
-        if (config_path == NULL) {
-            return VoyaCopyCString(@"error:missing config path");
+        if (runtime_config_json == NULL) {
+            return VoyaCopyCString(@"error:missing runtime config");
         }
-
-        NSString *configPath = [NSString stringWithUTF8String:config_path];
-        NSString *profileId = profile_id != NULL ? [NSString stringWithUTF8String:profile_id] : nil;
-        if (configPath == nil) {
-            return VoyaCopyCString(@"error:config path is not valid UTF-8");
-        }
-        if (profile_id != NULL && profileId == nil) {
-            return VoyaCopyCString(@"error:node id is not valid UTF-8");
-        }
+        NSData *runtimeConfigData = [NSData dataWithBytes:runtime_config_json
+                                                  length:strlen(runtime_config_json)];
 
         NSError *error = nil;
-        NSData *runtimeConfigData = VoyaCreateRuntimeConfigData(configPath, profileId, &error);
-        if (runtimeConfigData == nil) {
-            return VoyaCopyError(error);
-        }
-        if (!VoyaWriteRuntimeConfigData(runtimeConfigData, &error)) {
-            return VoyaCopyError(error);
-        }
-
         NSString *activationResult = VoyaEnsureSystemExtensionActivated();
         if (activationResult.length > 0) {
             return VoyaCopyCString(activationResult);

@@ -22,7 +22,11 @@ use voya_core::{
 use voya_net::probe::SocksHttpProbe;
 use voya_platform::coreinfo::TargetOs;
 
-use super::{identity::pick_free_port, reality_public_key, spec::selfhost_spec, SelfHostDeps};
+use super::{
+    identity::{pick_free_port, reality_public_key},
+    spec::selfhost_spec,
+    SelfHostDeps,
+};
 use crate::{
     runtime::core_gen_platform,
     speedtest::{start_probe_core_page, ProbeCoreLauncher, ProcessProbeCoreLauncher},

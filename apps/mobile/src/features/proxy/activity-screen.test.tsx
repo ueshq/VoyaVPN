@@ -24,7 +24,6 @@ function connect() {
     activeTunBackend: null,
     connectedDurationMs: 1000,
     mainPid: 4242,
-    prePid: null,
     state: "connected",
   });
 }

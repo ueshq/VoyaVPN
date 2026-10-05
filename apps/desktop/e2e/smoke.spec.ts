@@ -4,21 +4,12 @@ import { readFileSync } from "node:fs";
 
 import { savedNodeFixture } from "./fixtures/saved-node";
 
-import { installTauriSmokeMock } from "./fixtures/tauri-mock";
+import { installTauriSmokeMock, smokeCalls } from "./fixtures/tauri-mock";
 
 const importFixture = readFileSync(
   new URL("./fixtures/vless-share-link.txt", import.meta.url),
   "utf8",
 ).trim();
-
-type SmokeCall = { args: Record<string, unknown>; command: string };
-
-async function smokeCalls(page: Page) {
-  return page.evaluate(() => {
-    const state = window.__VOYA_SMOKE__.state as { calls: SmokeCall[] };
-    return state.calls;
-  });
-}
 
 /**
  * "Connected" is a substring of "Disconnected", so the footer state must be
@@ -54,7 +45,6 @@ async function connectFakeCore(page: Page) {
         state.runtime = {
           activeProfileId: null,
           mainPid: 4242,
-          prePid: null,
           connectedDurationMs: null,
           activeTunBackend: null,
           state: "connected",
@@ -748,7 +738,6 @@ test("keeps traffic modes independent of the capture mode chosen in settings", a
       sysProxy: import("../src/ipc/bindings").SystemProxyStatusResponse;
       settings: import("../src/ipc/bindings").AppSettings;
     };
-    state.sysProxy.requestedMode = "unchanged";
     state.settings.network.systemProxy.mode = "unchanged";
     window.__VOYA_SMOKE__.emit("transient-stream-event", {
       kind: "sysProxyChanged",
@@ -824,7 +813,6 @@ test("offers macOS only the VPN, without system proxy or per-app settings", asyn
       ...state.sysProxy,
       effectiveMode: "unchanged",
       management: "unsupported",
-      requestedMode: "unchanged",
     };
     state.tun = { ...state.tun, backend: "macosPacketTunnel", enabled: true };
     window.__VOYA_SMOKE__.emit("transient-stream-event", {

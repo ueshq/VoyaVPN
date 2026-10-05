@@ -31,7 +31,6 @@ describe("semantic settings tabs", () => {
       .getState()
       .setSysProxy({
         management: "automatic",
-        requestedMode: "forcedClear",
         effectiveMode: "forcedClear",
         proxy: null,
         exceptions: "",
@@ -238,14 +237,10 @@ const macosTun: TunStatus = {
   expectedProviderPath: null,
   lastProviderError: null,
   nativeComponentReady: true,
-  needsServiceInstall: false,
-  needsVpnPermission: false,
-  preflight: { notes: [], platform: "macos", routeRestoreNote: "", state: "ready", windowsCleanupDevices: [] },
   providerPathMismatch: false,
   providerState: "stopped",
   requiresElevation: false,
   resolvedProviderPath: null,
-  restoreOnDisconnect: true,
 };
 
 function TabHarness({ Component }: { Component: SettingsTab }) {

@@ -17,7 +17,6 @@ uniffi::setup_scaffolding!();
 pub mod app;
 pub mod dispatch;
 pub mod events;
-pub mod handoff;
 mod logging;
 pub mod probe;
 pub mod sinks;

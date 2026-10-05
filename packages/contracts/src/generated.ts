@@ -419,13 +419,12 @@ export type ConnectionModeStatus = {
  *  changed") into its log sentences; the fragment is a code now so the whole
  *  sentence can be assembled in the reader's language.
  */
-export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "dnsChanged" | "tunChanged" | "connectionModeChanged" | "activeProfileChanged" | "policyGroupChanged" | "settingsSaved" | 
+export type CoreFlowReason = "connect" | "restart" | "disconnect" | "routingChanged" | "connectionModeChanged" | "activeProfileChanged" | "policyGroupChanged" | "settingsSaved" | 
 /**  The connected node's IPv6 egress turned out different from its record. */
 "ipv6EgressChanged";
 
 export type CoreSeedInstallResult = {
 	status: CoreSeedInstallStatus,
-	installedFiles: string[],
 };
 
 export type CoreSeedInstallStatus = "installed" | "alreadyInstalled" | "seedMissing";
@@ -714,7 +713,7 @@ export type NetworkSettings = {
  *  parts: a notice is a whole sentence in every locale, and languages do not
  *  agree on how to build one out of a subject and a verb.
  */
-export type NoticeCode = { code: "profileRefreshFailed" } | { code: "policyGroupRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "dnsSavedRestartFailed" } | { code: "tunSavedRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "policyGroupSavedRestartFailed" } | { code: "settingsSavedRuntimeUpdateFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "policyGroupSelectionRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | 
+export type NoticeCode = { code: "profileRefreshFailed" } | { code: "policyGroupRefreshFailed" } | { code: "subscriptionRefreshFailed" } | { code: "routingRefreshFailed" } | { code: "dnsRefreshFailed" } | { code: "proxyViewRefreshFailed" } | { code: "connectionModeRefreshFailed" } | { code: "settingsRefreshFailed" } | { code: "routingSavedRestartFailed" } | { code: "routingDeletedRestartFailed" } | { code: "routingSelectedRestartFailed" } | { code: "routingRuleSavedRestartFailed" } | { code: "routingRulesDeletedRestartFailed" } | { code: "routingRuleMovedRestartFailed" } | { code: "routingRulesResetRestartFailed" } | { code: "connectionModeSavedRestartFailed" } | { code: "activeProfileRestartFailed" } | { code: "policyGroupSavedRestartFailed" } | { code: "proxyModeSavedRuntimeUpdateFailed" } | { code: "policyGroupSelectionRuntimeUpdateFailed" } | { code: "settingsSavedSystemProxyUpdateFailed" } | { code: "systemProxyStatusRefreshFailed" } | { code: "tunStatusRefreshFailed" } | { code: "trayRefreshFailed" } | { code: "trayActionFailed" } | 
 /**  The running node or policy group was deleted, so the connection stopped. */
 { code: "activeSelectionRemoved" } | { code: "coreStopped" } | { code: "nativeTunStopped" } | { code: "coreStartedSystemProxyFailed" } | { code: "systemProxyRestoreFailed" } | { code: "subscriptionAutoUpdateFailed"; remarks: string } | 
 /**
@@ -1033,7 +1032,6 @@ export type RuntimeStatusResponse = {
 	activeTunBackend: TunBackend | null,
 	activeProfileId: string | null,
 	mainPid: number | null,
-	prePid: number | null,
 };
 
 export type SelfHostAddressFamily = "ipv4" | "ipv6";
@@ -1427,7 +1425,6 @@ export type SystemProxySettings = {
  */
 export type SystemProxyStatusResponse = {
 	management: SystemProxyManagement,
-	requestedMode: SystemProxyType,
 	/**
 	 *  The app's applied policy; always Unchanged where the system proxy is
 	 *  unsupported.
@@ -1494,18 +1491,6 @@ export type TransientStreamEvent =
 
 export type TunBackend = "process" | "macosPacketTunnel" | "windowsService" | "iosPacketTunnel" | "androidVpnService" | "unsupported";
 
-export type TunPlatform = "windows" | "linux" | "macos" | "ios" | "android" | "other";
-
-export type TunPreflight = {
-	platform: TunPlatform,
-	state: TunPreflightState,
-	notes: string[],
-	routeRestoreNote: string,
-	windowsCleanupDevices: string[],
-};
-
-export type TunPreflightState = "ready" | "needsElevation" | "manualCheck" | "unsupported";
-
 export type TunProviderDiagnostics = {
 	backend: TunBackend,
 	containerPath: string | null,
@@ -1543,15 +1528,11 @@ export type TunStatus = {
 	allowEnableTun: boolean,
 	requiresElevation: boolean,
 	elevationGranted: boolean,
-	needsVpnPermission: boolean,
-	needsServiceInstall: boolean,
 	nativeComponentReady: boolean,
 	lastProviderError: string | null,
 	providerPathMismatch: boolean,
 	resolvedProviderPath: string | null,
 	expectedProviderPath: string | null,
-	restoreOnDisconnect: boolean,
-	preflight: TunPreflight,
 };
 
 /**

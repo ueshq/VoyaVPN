@@ -1,14 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { installTauriSmokeMock } from "./fixtures/tauri-mock";
-
-type SmokeCall = { args: Record<string, unknown>; command: string };
-
-async function smokeCalls(page: Page) {
-  return page.evaluate(
-    () => (window.__VOYA_SMOKE__.state as { calls: SmokeCall[] }).calls,
-  );
-}
+import { installTauriSmokeMock, smokeCalls } from "./fixtures/tauri-mock";
 
 /** Screenshots are for review, so they wait for the dialog's entrance to finish. */
 async function capture(page: Page, dialog: Locator, path: string) {

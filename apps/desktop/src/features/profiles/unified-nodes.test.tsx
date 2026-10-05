@@ -61,7 +61,6 @@ function core(
     mainPid: state === "connected" ? 42 : null,
     activeProfileId: state === "connected" ? "profile-2" : null,
     activeTunBackend: null,
-    prePid: null,
     connectedDurationMs: null,
   };
 }

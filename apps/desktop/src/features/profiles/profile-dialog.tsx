@@ -33,6 +33,7 @@ import {
   profileFromDraft,
   type ProfileDraft,
 } from "@voya/features/profiles/profile-draft";
+import { useDialogSubmit } from "@/lib/use-dialog-submit";
 import { DraftTextField, Panel, type ProfilePanelProps } from "./profile-form-fields";
 import { ProtocolPanel } from "./profile-protocol-panel";
 import { SecurityPanel } from "./profile-security-panel";
@@ -90,7 +91,7 @@ function ProfileDialogForm({
     profile ? draftFromProfile(profile) : createDefaultDraft("vmess"),
   );
   const [fieldErrors, setFieldErrors] = useState<FieldErrorMap>({});
-  const [pending, setPending] = useState(false);
+  const { pending, submit } = useDialogSubmit();
 
   function update<Key extends keyof ProfileDraft>(
     key: Key,
@@ -125,12 +126,7 @@ function ProfileDialogForm({
       return;
     }
     setFieldErrors({});
-    setPending(true);
-    try {
-      await onSubmit(profileFromDraft(parsed.data));
-    } finally {
-      setPending(false);
-    }
+    await submit(() => onSubmit(profileFromDraft(parsed.data)));
   }
 
   return (

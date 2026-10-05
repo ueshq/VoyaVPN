@@ -575,11 +575,8 @@ pub struct ProfileListItem {
 }
 
 #[must_use]
-pub fn profile_items_match(left: &ProfileItem, right: &ProfileItem, compare_remarks: bool) -> bool {
-    left.protocol == right.protocol
-        && left.transport == right.transport
-        && left.tls == right.tls
-        && (!compare_remarks || left.remarks == right.remarks)
+pub fn profile_items_match(left: &ProfileItem, right: &ProfileItem) -> bool {
+    left.protocol == right.protocol && left.transport == right.transport && left.tls == right.tls
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -652,13 +649,12 @@ mod tests {
         duplicate.index_id = "other".to_string();
         duplicate.remarks = "renamed".to_string();
 
-        assert!(profile_items_match(&base, &duplicate, false));
-        assert!(!profile_items_match(&base, &duplicate, true));
+        assert!(profile_items_match(&base, &duplicate));
 
         duplicate.transport = Some(ProfileTransport::Websocket {
             host: Some("example.com".to_string()),
             path: Some("/other".to_string()),
         });
-        assert!(!profile_items_match(&base, &duplicate, false));
+        assert!(!profile_items_match(&base, &duplicate));
     }
 }

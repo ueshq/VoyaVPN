@@ -23,7 +23,6 @@ const core: RuntimeStatusResponse = {
   state: "connected",
   activeProfileId: null,
   mainPid: null,
-  prePid: null,
   connectedDurationMs: null,
   activeTunBackend: null,
 };

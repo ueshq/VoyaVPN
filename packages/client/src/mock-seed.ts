@@ -203,7 +203,6 @@ function makeRuntimeStatus(): RuntimeStatusResponse {
     activeTunBackend: null,
     connectedDurationMs: null,
     mainPid: null,
-    prePid: null,
     state: "disconnected",
   };
 }
@@ -214,7 +213,6 @@ function makeSystemProxyStatus(): SystemProxyStatusResponse {
     exceptions: "",
     management: "automatic",
     proxy: null,
-    requestedMode: "forcedChange",
   };
 }
 
@@ -227,20 +225,10 @@ function makeTunStatus(): TunStatus {
     expectedProviderPath: null,
     lastProviderError: null,
     nativeComponentReady: true,
-    needsServiceInstall: false,
-    needsVpnPermission: false,
-    preflight: {
-      notes: [],
-      platform: "linux",
-      routeRestoreNote: "The mock backend does not mutate routes.",
-      state: "ready",
-      windowsCleanupDevices: [],
-    },
     providerPathMismatch: false,
     providerState: "notApplicable",
     requiresElevation: false,
     resolvedProviderPath: null,
-    restoreOnDisconnect: true,
   };
 }
 

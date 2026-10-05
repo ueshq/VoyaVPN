@@ -189,20 +189,21 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
             if (VpnService.prepare(context) != null) {
                 throw TunnelException.PermissionDenied()
             }
-            val intent = Intent(context, VoyaVpnService::class.java).apply {
-                action = VoyaVpnService.ACTION_START
-                putExtra(VoyaVpnService.EXTRA_CONFIG_JSON, handoffJson)
-            }
+            val (intent, token) = VoyaVpnService.startIntent(context, handoffJson)
             VoyaVpnService.lastError = null
             VoyaVpnService.state = VoyaVpnService.State.STARTING
             try {
                 androidx.core.content.ContextCompat.startForegroundService(context, intent)
             } catch (error: Throwable) {
+                VoyaVpnService.forgetHandoff(token)
                 VoyaVpnService.lastError = error.message
                 VoyaVpnService.state = VoyaVpnService.State.FAILED
                 throw TunnelException.Failed(error.message ?: "could not start the tunnel service")
             }
             if (!awaitState(VoyaVpnService.State.RUNNING, START_TIMEOUT_MS)) {
+                // A start command the system has not delivered yet finds
+                // nothing to start with.
+                VoyaVpnService.forgetHandoff(token)
                 // The service is still trying. Left alone it could come up
                 // after this has reported a failure, holding the device's
                 // traffic with nothing in the app that believes a tunnel runs.

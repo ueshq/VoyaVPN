@@ -10,7 +10,6 @@ const EVERY_CHANGE: &[ConfigChange] = &[
     ConfigChange::ROUTING_RULES_DELETED,
     ConfigChange::ROUTING_RULE_MOVED,
     ConfigChange::ROUTING_RULES_RESET,
-    ConfigChange::TUN,
     ConfigChange::CONNECTION_MODE,
     ConfigChange::ACTIVE_PROFILE,
     ConfigChange::POLICY_GROUP,
@@ -54,7 +53,6 @@ fn each_change_names_its_own_operation_when_the_restart_fails() {
 
 #[test]
 fn the_non_routing_changes_keep_their_own_reasons() {
-    assert_eq!(ConfigChange::TUN.reason, CoreFlowReason::TunChanged);
     assert_eq!(
         ConfigChange::CONNECTION_MODE.reason,
         CoreFlowReason::ConnectionModeChanged

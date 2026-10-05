@@ -128,7 +128,6 @@ pub fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<voya_contracts::TrafficMode>()
         .typ::<voya_contracts::TrafficModeResponse>()
         .typ::<voya_contracts::TunStatus>()
-        .typ::<voya_contracts::TunPreflight>()
         .typ::<voya_contracts::TunProviderDiagnostics>()
         .typ::<voya_contracts::ServerStatItem>()
         .typ::<voya_contracts::WindowChromeConfig>()

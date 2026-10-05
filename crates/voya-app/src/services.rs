@@ -111,7 +111,7 @@ impl AppServices {
 
     #[must_use]
     pub(crate) fn config_mutations(&self, config: SharedAppConfig) -> ConfigMutationCoordinator {
-        ConfigMutationCoordinator::new(self.database.clone(), config)
+        ConfigMutationCoordinator::new(self.database.clone(), config).with_target_os(self.target_os)
     }
 
     /// The first `limit` nodes' ids and remarks in list order, plus `pinned`
@@ -420,11 +420,14 @@ impl AppServices {
         supervisor: CoreSupervisor,
     ) -> SpeedtestManager {
         self.speedtest_manager_with_launcher(
-            Arc::new(crate::speedtest::ProcessProbeCoreLauncher::new(
-                self.runtime_paths.clone(),
-                core_seed_resource_dir,
-                runner,
-            )),
+            Arc::new(
+                crate::speedtest::ProcessProbeCoreLauncher::new(
+                    self.runtime_paths.clone(),
+                    core_seed_resource_dir,
+                    runner,
+                )
+                .with_target_os(self.target_os),
+            ),
             supervisor,
         )
     }

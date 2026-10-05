@@ -244,7 +244,6 @@ async fn prepare_subscription_snapshot(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     let options = SubscriptionFetchOptions {
-        prefer_proxy: proxy_url.is_some(),
         proxy_url: proxy_url.map(str::to_string),
     };
 
@@ -254,20 +253,14 @@ async fn prepare_subscription_snapshot(
             continue;
         }
         if item.id.trim().is_empty() || item.url.trim().is_empty() || !is_http_url(&item.url) {
-            result.skipped = result.skipped.saturating_add(1);
-            record_outcome(
+            record_failed_fetch(
                 &mut result,
+                &mut failed_attempts,
                 &item.id,
-                SubscriptionUpdateStatus::Failed,
                 SubscriptionUpdateReason::InvalidSource,
-                0,
-                0,
+                "subscription URL is empty or not an http(s) link",
+                None,
             );
-            failed_attempts.push(FailedSubscriptionAttempt {
-                subscription_id: item.id.clone(),
-                attempted_at_unix: unix_now_seconds(),
-                error: "subscription URL is empty or not an http(s) link".to_string(),
-            });
             continue;
         }
         // `enabled` only switches automatic updates, which the scheduler checks
@@ -314,20 +307,14 @@ async fn prepare_subscription_snapshot(
                 });
             }
             Ok(fetch) => {
-                record_outcome(
+                record_failed_fetch(
                     &mut result,
+                    &mut failed_attempts,
                     &item.id,
-                    SubscriptionUpdateStatus::Failed,
                     SubscriptionUpdateReason::EmptyContent,
-                    0,
-                    0,
+                    EMPTY_FETCH_MESSAGE,
+                    None,
                 );
-                failed_attempts.push(FailedSubscriptionAttempt {
-                    subscription_id: item.id.clone(),
-                    attempted_at_unix: unix_now_seconds(),
-                    error: EMPTY_FETCH_MESSAGE.to_string(),
-                });
-                result.skipped = result.skipped.saturating_add(1);
                 // The warnings precede the outcome note because
                 // `unusable_update_message` reports the last message as the
                 // reason this subscription failed, and a dead mirror is not it.
@@ -337,28 +324,19 @@ async fn prepare_subscription_snapshot(
                     .push(subscription_message(&item.remarks, EMPTY_FETCH_MESSAGE));
             }
             Err(error) => {
-                record_outcome(
+                let diagnostic = redact_urls(&fetch_failure_message(&error));
+                record_failed_fetch(
                     &mut result,
+                    &mut failed_attempts,
                     &item.id,
-                    SubscriptionUpdateStatus::Failed,
                     if error.is_empty_response() {
                         SubscriptionUpdateReason::EmptyContent
                     } else {
                         SubscriptionUpdateReason::DownloadFailed
                     },
-                    0,
-                    0,
+                    &diagnostic,
+                    Some(diagnostic.clone()),
                 );
-                result.skipped = result.skipped.saturating_add(1);
-                let diagnostic = redact_urls(&fetch_failure_message(&error));
-                if let Some(outcome) = result.outcomes.last_mut() {
-                    outcome.diagnostic = Some(diagnostic.clone());
-                }
-                failed_attempts.push(FailedSubscriptionAttempt {
-                    subscription_id: item.id.clone(),
-                    attempted_at_unix: unix_now_seconds(),
-                    error: diagnostic.clone(),
-                });
                 result
                     .messages
                     .push(subscription_message(&item.remarks, &diagnostic));
@@ -371,6 +349,32 @@ async fn prepare_subscription_snapshot(
         result,
         failed_attempts,
     })
+}
+
+/// The bookkeeping every subscription that brought nothing shares: a failed
+/// outcome, the attempt to persist against it, and one more skipped.
+fn record_failed_fetch(
+    result: &mut SubscriptionUpdateResult,
+    failed_attempts: &mut Vec<FailedSubscriptionAttempt>,
+    id: &str,
+    reason: SubscriptionUpdateReason,
+    error: &str,
+    diagnostic: Option<String>,
+) {
+    result.skipped = result.skipped.saturating_add(1);
+    result.outcomes.push(SubscriptionUpdateOutcome {
+        subscription_id: id.to_string(),
+        status: SubscriptionUpdateStatus::Failed,
+        reason,
+        imported: 0,
+        removed_existing: 0,
+        diagnostic,
+    });
+    failed_attempts.push(FailedSubscriptionAttempt {
+        subscription_id: id.to_string(),
+        attempted_at_unix: unix_now_seconds(),
+        error: error.to_string(),
+    });
 }
 
 fn record_outcome(

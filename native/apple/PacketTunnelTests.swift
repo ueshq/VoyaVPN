@@ -18,7 +18,7 @@ private enum PacketTunnelTests {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         try validation()
-        try optionsPrecedeFile(root)
+        try configArrivesOnlyInOptions()
         try workingPaths()
         try appGroupIsABundleFact()
         try diagnosticsContainment(root)
@@ -41,18 +41,18 @@ private enum PacketTunnelTests {
         } catch PacketTunnelProviderError.emptyRuntimeConfig {}
     }
 
-    private static func optionsPrecedeFile(_ root: URL) throws {
-        let file = root.appendingPathComponent("runtime.json")
-        try JSONEncoder().encode(config(json: "file")).write(to: file)
+    private static func configArrivesOnlyInOptions() throws {
         let data = try JSONEncoder().encode(config(json: "options"))
-        let fromData = try PacketTunnelRuntime.loadRuntimeConfig(options: ["runtimeConfigJson": data as NSData], configURL: file)
-        let fromString = try PacketTunnelRuntime.loadRuntimeConfig(options: ["runtimeConfigJson": String(decoding: data, as: UTF8.self) as NSString], configURL: file)
-        let fromFile = try PacketTunnelRuntime.loadRuntimeConfig(configURL: file)
-        try expect(fromData.singboxConfigJson == "options" && fromString.singboxConfigJson == "options", "options must win")
-        try expect(fromFile.singboxConfigJson == "file", "missing options must load file")
+        let fromData = try PacketTunnelRuntime.loadRuntimeConfig(options: ["runtimeConfigJson": data as NSData])
+        let fromString = try PacketTunnelRuntime.loadRuntimeConfig(options: ["runtimeConfigJson": String(decoding: data, as: UTF8.self) as NSString])
+        try expect(fromData.singboxConfigJson == "options" && fromString.singboxConfigJson == "options", "options must be read")
         do {
-            _ = try PacketTunnelRuntime.loadRuntimeConfig(options: ["runtimeConfigJson": "malformed" as NSString], configURL: file)
-            throw Failure(message: "invalid options silently fell back to file")
+            _ = try PacketTunnelRuntime.loadRuntimeConfig(options: nil)
+            throw Failure(message: "a start with no options found a configuration")
+        } catch PacketTunnelProviderError.startedOutsideApp {}
+        do {
+            _ = try PacketTunnelRuntime.loadRuntimeConfig(options: ["runtimeConfigJson": "malformed" as NSString])
+            throw Failure(message: "invalid options were accepted")
         } catch is DecodingError {}
     }
 

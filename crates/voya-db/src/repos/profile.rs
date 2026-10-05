@@ -140,7 +140,7 @@ impl<'executor> ProfileRepository<'executor> {
         if self
             .get(&item.index_id)
             .await?
-            .is_some_and(|previous| !voya_core::profile_items_match(&previous, item, false))
+            .is_some_and(|previous| !voya_core::profile_items_match(&previous, item))
         {
             profile_ex.clear_measurements();
         }

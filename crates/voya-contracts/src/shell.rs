@@ -182,7 +182,6 @@ pub enum CoreSeedInstallStatus {
 #[serde(rename_all = "camelCase")]
 pub struct CoreSeedInstallResult {
     pub status: CoreSeedInstallStatus,
-    pub installed_files: Vec<String>,
 }
 
 /// What the runtime is doing, as both an answer and an announcement.
@@ -207,7 +206,6 @@ pub struct RuntimeStatusResponse {
     pub active_tun_backend: Option<TunBackend>,
     pub active_profile_id: Option<String>,
     pub main_pid: Option<u32>,
-    pub pre_pid: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -236,7 +234,6 @@ pub struct AppUpdaterStatus {
 #[serde(rename_all = "camelCase")]
 pub struct SystemProxyStatusResponse {
     pub management: SystemProxyManagement,
-    pub requested_mode: SystemProxyType,
     /// The app's applied policy; always Unchanged where the system proxy is
     /// unsupported.
     pub effective_mode: SystemProxyType,

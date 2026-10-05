@@ -97,11 +97,11 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     }) {
         tracing::warn!(?error, "failed to copy packaged rule sets at startup");
     }
-    let core_seed_resource_dir = Some(seed_dir);
-    let runner: Arc<dyn ProcessRunner> =
-        Arc::new(StdProcessRunner::with_log_sink(Arc::new(TauriSinks {
-            app: app.handle().clone(),
-        })));
+    // One value behind every sink trait the managers below ask for.
+    let sinks = Arc::new(TauriSinks {
+        app: app.handle().clone(),
+    });
+    let runner: Arc<dyn ProcessRunner> = Arc::new(StdProcessRunner::with_log_sink(sinks.clone()));
     let elevation_manager = ElevationManager::new(
         Arc::clone(&runner),
         runtime_paths.temp_dir().to_path_buf(),
@@ -116,9 +116,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // Probe cores get the same kill-with-the-app job object the supervisor
     // gives the real core below via `SupervisorDeps::platform_with_runner`.
     let speedtest_runner = JobAssignedRunner::new(
-        StdProcessRunner::with_log_sink(Arc::new(TauriSinks {
-            app: app.handle().clone(),
-        })),
+        StdProcessRunner::with_log_sink(sinks.clone()),
         &PlatformProcessJobFactory,
     );
     // One step for the managers below, which used to go unlogged: the ~400 ms a
@@ -128,38 +126,29 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     let runtime_guard = runtime_handle.inner().enter();
     let supervisor = CoreSupervisor::spawn(
         SupervisorDeps::platform_with_runner(Arc::clone(&runner), elevation_manager.state())
-            .with_event_sink(Arc::new(TauriSinks {
-                app: app.handle().clone(),
-            })),
+            .with_event_sink(sinks.clone()),
     );
     // One Clash client for the commands and the statistics loop alike.
     let proxy_runtime = ProxyRuntimeManager::new();
-    let statistics_manager = services.spawn_statistics(
-        supervisor.clone(),
-        proxy_runtime.clone(),
-        Arc::new(TauriSinks {
-            app: app.handle().clone(),
-        }),
-    );
+    let statistics_manager =
+        services.spawn_statistics(supervisor.clone(), proxy_runtime.clone(), sinks.clone());
     let subscription_auto_update = services.spawn_subscription_auto_update(
         Arc::clone(&config_mutations),
         &supervisor,
-        Arc::new(TauriSinks {
-            app: app.handle().clone(),
-        }),
+        sinks.clone(),
     );
     // Before the self-hosted node: this manager's launcher clears probe
     // configs a previous run left behind, and the node's self-test writes one.
     let speedtest_manager = services.speedtest_manager(
-        core_seed_resource_dir.clone(),
+        Some(seed_dir.clone()),
         Arc::new(speedtest_runner),
         supervisor.clone(),
     );
     let self_host = spawn_self_host(
-        app,
+        sinks,
         &services,
         &runtime_paths,
-        core_seed_resource_dir.clone(),
+        seed_dir.clone(),
         supervisor.clone(),
         Arc::clone(&config_mutations),
         log_level,
@@ -169,7 +158,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     app.manage(AppState {
         services,
         config_mutations,
-        core_seed_resource_dir,
+        core_seed_resource_dir: seed_dir,
         elevation_manager,
         supervisor,
         statistics_manager,
@@ -197,18 +186,16 @@ const PROBE_URL_ENV: &str = "VOYAVPN_PROBE_URL";
 /// has one exit-handler slot and the supervisor holds it — with the same
 /// kill-with-the-app job object the other cores get.
 fn spawn_self_host(
-    app: &tauri::App,
+    sinks: Arc<TauriSinks>,
     services: &AppServices,
     runtime_paths: &AppPaths,
-    core_seed_resource_dir: Option<PathBuf>,
+    core_seed_resource_dir: PathBuf,
     supervisor: CoreSupervisor,
     config_mutations: Arc<voya_app::config_mutation::ConfigMutationCoordinator>,
     log_level: String,
 ) -> SelfHostManager {
     let runner = JobAssignedRunner::new(
-        StdProcessRunner::with_log_sink(Arc::new(TauriSinks {
-            app: app.handle().clone(),
-        })),
+        StdProcessRunner::with_log_sink(sinks.clone()),
         &PlatformProcessJobFactory,
     );
     let probe_url = std::env::var(PROBE_URL_ENV)
@@ -217,7 +204,7 @@ fn spawn_self_host(
         .unwrap_or_else(|| DEFAULT_PROBE_BASE_URL.to_string());
     services.spawn_self_host(SelfHostDeps {
         paths: runtime_paths.clone(),
-        core_seed_resource_dir,
+        core_seed_resource_dir: Some(core_seed_resource_dir),
         runner: Arc::new(runner),
         target_os: TargetOs::current(),
         probe: probe_service(&probe_url),
@@ -228,9 +215,7 @@ fn spawn_self_host(
             supervisor,
             config: config_mutations,
         }),
-        sink: Arc::new(TauriSinks {
-            app: app.handle().clone(),
-        }),
+        sink: sinks,
         self_tester: Arc::new(ProbeCoreSelfTester::default()),
         log_level,
         restart_backoff: RestartBackoff::default(),

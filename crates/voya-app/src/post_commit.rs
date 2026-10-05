@@ -42,10 +42,6 @@ impl ConfigChange {
         Self::routing(NoticeCode::RoutingRulesDeletedRestartFailed);
     pub const ROUTING_RULE_MOVED: Self = Self::routing(NoticeCode::RoutingRuleMovedRestartFailed);
     pub const ROUTING_RULES_RESET: Self = Self::routing(NoticeCode::RoutingRulesResetRestartFailed);
-    pub const TUN: Self = Self {
-        reason: CoreFlowReason::TunChanged,
-        restart_failed_code: NoticeCode::TunSavedRestartFailed,
-    };
     pub const CONNECTION_MODE: Self = Self {
         reason: CoreFlowReason::ConnectionModeChanged,
         restart_failed_code: NoticeCode::ConnectionModeSavedRestartFailed,

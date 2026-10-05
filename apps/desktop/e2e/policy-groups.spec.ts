@@ -2,9 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 
 import type { PolicyGroup, ProfileDetails } from "../src/ipc/bindings";
 import { savedNodeFixture } from "./fixtures/saved-node";
-import { installTauriSmokeMock } from "./fixtures/tauri-mock";
+import { installTauriSmokeMock, smokeCalls as callsTo, type SmokeCall } from "./fixtures/tauri-mock";
 
-type SmokeCall = { command: string; args: Record<string, unknown> };
 type State = {
   calls: SmokeCall[];
   policyGroups: PolicyGroup[];
@@ -24,14 +23,6 @@ async function openNodes(page: Page) {
   }, savedNodeFixture);
   await page.goto("/");
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
-}
-
-function callsTo(page: Page, command: string) {
-  return page.evaluate(
-    (name) =>
-      (window.__VOYA_SMOKE__.state as State).calls.filter((call) => call.command === name),
-    command,
-  );
 }
 
 test("creates, uses, re-selects, tests and deletes a policy group", async ({ page }) => {

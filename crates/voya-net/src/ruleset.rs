@@ -46,7 +46,6 @@ pub type Result<T> = std::result::Result<T, RulesetError>;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AssetAcquisitionOptions {
-    pub prefer_proxy: bool,
     pub proxy_url: Option<String>,
 }
 
@@ -362,7 +361,6 @@ fn download_request(url: &str, options: &AssetAcquisitionOptions) -> DownloadReq
     DownloadRequest {
         url: url.to_string(),
         user_agent: None,
-        prefer_proxy: options.prefer_proxy,
         proxy_url: options.proxy_url.clone(),
         response_body_limit: Some(RULESET_ASSET_RESPONSE_LIMIT_BYTES),
     }
@@ -511,7 +509,6 @@ mod tests {
         .await;
         let target_root = unique_temp_root("ruleset-download");
         let options = AssetAcquisitionOptions {
-            prefer_proxy: true,
             proxy_url: Some("http://127.0.0.1:9".to_string()),
         };
 

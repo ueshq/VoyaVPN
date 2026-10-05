@@ -51,11 +51,6 @@ pub struct RuntimeManager<'runtime> {
 
 impl<'runtime> RuntimeManager<'runtime> {
     #[must_use]
-    pub fn new(database: &'runtime Database, paths: AppPaths, supervisor: CoreSupervisor) -> Self {
-        Self::with_target_os(database, paths, supervisor, TargetOs::current())
-    }
-
-    #[must_use]
     pub fn with_target_os(
         database: &'runtime Database,
         paths: AppPaths,

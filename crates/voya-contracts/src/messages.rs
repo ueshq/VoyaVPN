@@ -56,12 +56,9 @@ pub enum NoticeCode {
     RoutingRulesDeletedRestartFailed,
     RoutingRuleMovedRestartFailed,
     RoutingRulesResetRestartFailed,
-    DnsSavedRestartFailed,
-    TunSavedRestartFailed,
     ConnectionModeSavedRestartFailed,
     ActiveProfileRestartFailed,
     PolicyGroupSavedRestartFailed,
-    SettingsSavedRuntimeUpdateFailed,
     ProxyModeSavedRuntimeUpdateFailed,
     PolicyGroupSelectionRuntimeUpdateFailed,
     // ---- the change was saved but a follow-up side effect failed ----
@@ -112,8 +109,6 @@ pub enum CoreFlowReason {
     Restart,
     Disconnect,
     RoutingChanged,
-    DnsChanged,
-    TunChanged,
     ConnectionModeChanged,
     ActiveProfileChanged,
     PolicyGroupChanged,
@@ -434,7 +429,7 @@ mod tests {
         .expect("serialize core line");
         let app = serde_json::to_value(LogLineBody::App {
             code: LogCode::RestartingAfterChange {
-                reason: CoreFlowReason::DnsChanged,
+                reason: CoreFlowReason::RoutingChanged,
             },
             detail: None,
         })
@@ -444,7 +439,7 @@ mod tests {
         assert_eq!(core["line"], "inbound/mixed");
         assert_eq!(app["source"], "app");
         assert_eq!(app["code"]["code"], "restartingAfterChange");
-        assert_eq!(app["code"]["reason"], "dnsChanged");
+        assert_eq!(app["code"]["reason"], "routingChanged");
     }
 
     #[test]

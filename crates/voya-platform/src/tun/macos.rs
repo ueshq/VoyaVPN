@@ -461,17 +461,26 @@ pub(super) fn start_macos_packet_tunnel(
 fn start_macos_packet_tunnel_with_bridge(
     request: &NativeTunStartRequest,
 ) -> Result<(), NativeTunError> {
-    let config_path =
-        request
-            .main_config_path
-            .to_str()
-            .ok_or_else(|| NativeTunError::InvalidRequest {
-                backend: TunBackend::MacosPacketTunnel,
-                message: "main config path is not valid UTF-8".to_string(),
-            })?;
+    let invalid = |message: String| NativeTunError::InvalidRequest {
+        backend: TunBackend::MacosPacketTunnel,
+        message,
+    };
+    let container = macos_packet_tunnel_container_path()
+        .ok_or_else(|| invalid("VoyaVPN App Group container is unavailable.".to_string()))?;
+    // The handshake travels in the start options only. A copy an older build
+    // wrote would otherwise keep the node's credentials in the container.
+    let _ = fs::remove_file(container.join(MACOS_LEGACY_RUNTIME_CONFIG_RELATIVE_PATH));
+    let runtime_config = handoff::build_handoff(
+        request,
+        &handoff::HandoffPaths {
+            status: container.join(MACOS_PROVIDER_STATUS_RELATIVE_PATH),
+            log: container.join(MACOS_PROVIDER_LOG_RELATIVE_PATH),
+            staging: container.join(MACOS_PROVIDER_RULE_SETS_RELATIVE_PATH),
+        },
+    )
+    .map_err(|error| invalid(error.to_string()))?;
     let output = macos_packet_tunnel_bridge_start(
-        config_path,
-        request.active_profile_id.as_deref(),
+        &runtime_config,
         MACOS_PACKET_TUNNEL_START_TIMEOUT_MS,
         request.kill_switch,
     )?;

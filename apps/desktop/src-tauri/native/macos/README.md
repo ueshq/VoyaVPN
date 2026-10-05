@@ -14,7 +14,9 @@ Runtime shape:
 - Containing app bundle id: `app.voyavpn.desktop`
 - PacketTunnel extension bundle id: `app.voyavpn.desktop.PacketTunnel`
 - App Group: `group.app.voyavpn.desktop`
-- Runtime config file: `Library/Application Support/VoyaVPN/packet-tunnel-runtime.json`
+- Runtime config: handed to the provider in the start options and never
+  written to disk, so the VPN switch in System Settings cannot start the
+  tunnel on its own
 - libbox base dir: `PT/` at the App Group container root. It is short because
   libbox once bound `<base>/command.sock` there and macOS caps unix-socket
   paths (`sun_path`) at 104 bytes. The provider no longer opens that socket —

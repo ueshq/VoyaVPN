@@ -1,8 +1,16 @@
 use serde_json::{json, Value};
 use tempfile::TempDir;
-use voya_platform::tun::TunBackend;
 
 use super::*;
+use crate::tun::TunBackend;
+
+fn paths(shared: &Path) -> HandoffPaths {
+    HandoffPaths {
+        status: shared.join("PT/status.json"),
+        log: shared.join("PT/provider.log"),
+        staging: shared.join("srss"),
+    }
+}
 
 fn request(config_path: &Path) -> NativeTunStartRequest {
     NativeTunStartRequest {
@@ -27,9 +35,10 @@ fn the_payload_carries_the_config_inline_with_the_provider_paths() {
     let config = json!({ "log": { "level": "warn" }, "outbounds": [] });
     let config_path = write_config(temp.path(), &config);
 
-    let handoff: Value =
-        serde_json::from_str(&build_handoff(&request(&config_path), &shared).expect("builds"))
-            .expect("valid JSON");
+    let handoff: Value = serde_json::from_str(
+        &build_handoff(&request(&config_path), &paths(&shared)).expect("builds"),
+    )
+    .expect("valid JSON");
 
     assert_eq!(handoff["version"], 1);
     assert_eq!(handoff["activeProfileId"], "profile-1");
@@ -66,9 +75,10 @@ fn a_config_with_nothing_to_stage_is_passed_through_byte_for_byte() {
     let config_path = write_config(temp.path(), &config);
     let original = fs::read_to_string(&config_path).expect("reads");
 
-    let handoff: Value =
-        serde_json::from_str(&build_handoff(&request(&config_path), &shared).expect("builds"))
-            .expect("valid JSON");
+    let handoff: Value = serde_json::from_str(
+        &build_handoff(&request(&config_path), &paths(&shared)).expect("builds"),
+    )
+    .expect("valid JSON");
 
     assert_eq!(handoff["singboxConfigJson"], original);
     assert!(!shared.join("srss").exists(), "nothing should be staged");
@@ -90,9 +100,10 @@ fn a_local_rule_set_is_copied_into_the_shared_container_and_repointed() {
     });
     let config_path = write_config(temp.path(), &config);
 
-    let handoff: Value =
-        serde_json::from_str(&build_handoff(&request(&config_path), &shared).expect("builds"))
-            .expect("valid JSON");
+    let handoff: Value = serde_json::from_str(
+        &build_handoff(&request(&config_path), &paths(&shared)).expect("builds"),
+    )
+    .expect("valid JSON");
 
     let staged = shared.join("srss/geosite-cn.srs");
     assert_eq!(fs::read(&staged).expect("staged file"), b"rule-set bytes");
@@ -119,7 +130,8 @@ fn a_rule_set_that_cannot_be_staged_fails_the_start_rather_than_shipping_a_dead_
     });
     let config_path = write_config(temp.path(), &config);
 
-    let error = build_handoff(&request(&config_path), &shared).expect_err("no such rule set");
+    let error =
+        build_handoff(&request(&config_path), &paths(&shared)).expect_err("no such rule set");
 
     assert!(
         matches!(error, HandoffError::StageRuleSet { .. }),
@@ -134,14 +146,14 @@ fn an_unreadable_or_malformed_config_is_named_in_the_failure() {
     let missing = temp.path().join("gone.json");
 
     assert!(matches!(
-        build_handoff(&request(&missing), &shared).expect_err("no config"),
+        build_handoff(&request(&missing), &paths(&shared)).expect_err("no config"),
         HandoffError::ReadConfig { .. }
     ));
 
     let malformed = temp.path().join("config.json");
     fs::write(&malformed, "not json").expect("writes");
     assert!(matches!(
-        build_handoff(&request(&malformed), &shared).expect_err("bad config"),
+        build_handoff(&request(&malformed), &paths(&shared)).expect_err("bad config"),
         HandoffError::InvalidConfig { .. }
     ));
 }

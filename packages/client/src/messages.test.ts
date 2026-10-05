@@ -137,11 +137,11 @@ describe("backend message codes", () => {
   it("interpolates a log reason and appends the untranslated detail", () => {
     expect(
       logLineText(en, {
-        code: { code: "restartingAfterChange", reason: "dnsChanged" },
+        code: { code: "restartingAfterChange", reason: "routingChanged" },
         detail: null,
         source: "app",
       }),
-    ).toBe("DNS change — restarting the core");
+    ).toBe("Routing change — restarting the core");
     expect(
       logLineText(en, {
         code: { code: "coreExitRetryScheduled", attempt: 2, delayMs: 1500 },

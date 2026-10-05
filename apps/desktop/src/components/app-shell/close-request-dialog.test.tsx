@@ -26,7 +26,6 @@ describe("CloseRequestDialog", () => {
         activeTunBackend: null,
         connectedDurationMs: null,
         mainPid: 1,
-        prePid: null,
         state: "connected",
       },
     });

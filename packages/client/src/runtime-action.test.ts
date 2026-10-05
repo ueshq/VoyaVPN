@@ -71,7 +71,6 @@ function coreStatus(state: RuntimeStatusResponse["state"]): RuntimeStatusRespons
     activeTunBackend: null,
     connectedDurationMs: null,
     mainPid: connected ? 42 : null,
-    prePid: null,
     state,
   };
 }
@@ -85,7 +84,7 @@ function resetStores() {
 
 describe("runtime command responses", () => {
   const connected: RuntimeStatusResponse = {
-    activeProfileId: "node", activeTunBackend: null, mainPid: 42, prePid: null,
+    activeProfileId: "node", activeTunBackend: null, mainPid: 42,
     state: "connected", connectedDurationMs: 0,
   };
 

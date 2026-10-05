@@ -40,7 +40,7 @@ pub async fn update_srs_assets(
         .acquire_srs_assets(
             &assets,
             srs_dir(paths),
-            &asset_acquisition_options(proxy_url),
+            &AssetAcquisitionOptions { proxy_url },
         )
         .await?;
 
@@ -73,13 +73,6 @@ pub fn local_singbox_ruleset_paths(paths: &AppPaths) -> BTreeMap<String, String>
 #[must_use]
 fn srs_dir(paths: &AppPaths) -> PathBuf {
     paths.bin_dir().join(SRS_DIR_NAME)
-}
-
-fn asset_acquisition_options(proxy_url: Option<String>) -> AssetAcquisitionOptions {
-    AssetAcquisitionOptions {
-        prefer_proxy: true,
-        proxy_url,
-    }
 }
 
 fn resource_update_file(asset: AcquiredRuleset) -> ResourceUpdateFile {
@@ -138,14 +131,6 @@ mod tests {
             local.get("geosite-cn").map(PathBuf::from),
             Some(srs_dir(&paths).join("geosite-cn.srs"))
         );
-    }
-
-    #[test]
-    fn resource_updates_always_prefer_the_runtime_proxy() {
-        let options = asset_acquisition_options(Some("http://127.0.0.1:10808".to_string()));
-
-        assert!(options.prefer_proxy);
-        assert_eq!(options.proxy_url.as_deref(), Some("http://127.0.0.1:10808"));
     }
 
     #[test]

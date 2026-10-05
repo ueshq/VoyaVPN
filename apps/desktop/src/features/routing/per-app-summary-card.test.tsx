@@ -74,14 +74,10 @@ const macosTun: TunStatus = {
   expectedProviderPath: null,
   lastProviderError: null,
   nativeComponentReady: true,
-  needsServiceInstall: false,
-  needsVpnPermission: false,
-  preflight: { notes: [], platform: "macos", routeRestoreNote: "", state: "ready", windowsCleanupDevices: [] },
   providerPathMismatch: false,
   providerState: "stopped",
   requiresElevation: false,
   resolvedProviderPath: null,
-  restoreOnDisconnect: true,
 };
 
 function renderCard(value: Routing_Serialize, onEdit: () => void, locked?: boolean) {

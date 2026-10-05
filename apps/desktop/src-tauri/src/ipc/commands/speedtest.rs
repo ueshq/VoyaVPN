@@ -66,8 +66,8 @@ pub async fn check_connection_ip(
     let config = state
         .services()
         .running_core_config(&state.config_mutations().current_config());
-    let snapshot = state.supervisor().status().await.map_err(AppError::from)?;
-    let exit = voya_app::connection_ip::check_connection_ip(&config, &snapshot)
+    let connected = state.supervisor().is_connected();
+    let exit = voya_app::connection_ip::check_connection_ip(&config, connected)
         .await
         .map_err(AppError::from)?;
 

@@ -132,7 +132,6 @@ impl SubscriptionManager<'_> {
                 &match_indices,
                 &existing_profiles,
                 &config.active_profile_id,
-                subscription_id,
             ) {
                 let duplicate_index_ids = match_indices
                     .iter()
@@ -308,7 +307,7 @@ fn dedupe_profiles(profiles: Vec<ProfileItem>) -> Vec<ProfileItem> {
         let bucket = kept_by_endpoint.entry(endpoint_key(&profile)).or_default();
         if bucket
             .iter()
-            .any(|index| profile_items_match(&kept[*index], &profile, false))
+            .any(|index| profile_items_match(&kept[*index], &profile))
         {
             continue;
         }
@@ -365,7 +364,7 @@ impl ExistingProfiles {
             .filter(|index| {
                 self.entries[*index].as_ref().is_some_and(|(existing, _)| {
                     existing.subscription_id.as_deref() == subscription_id
-                        && profile_items_match(existing, profile, false)
+                        && profile_items_match(existing, profile)
                 })
             })
             .collect()
@@ -428,12 +427,13 @@ impl ExistingProfiles {
     }
 }
 
-/// The index id of the stored match the import updates in place.
+/// The index id of the stored match the import updates in place: the active
+/// node if it is one of them, otherwise the first in list order. The matches
+/// already share the import's subscription.
 fn choose_canonical_match_index(
     match_indices: &[usize],
     existing_profiles: &ExistingProfiles,
     active_index_id: &str,
-    target_subscription_id: Option<&str>,
 ) -> Option<String> {
     let entries = match_indices
         .iter()
@@ -444,20 +444,8 @@ fn choose_canonical_match_index(
         } else {
             1
         };
-        let target_subscription_id_rank = if target_subscription_id.is_some_and(|subscription_id| {
-            profile.subscription_id.as_deref() == Some(subscription_id)
-        }) {
-            0
-        } else {
-            1
-        };
 
-        (
-            active_rank,
-            target_subscription_id_rank,
-            profile_ex.sort,
-            *index,
-        )
+        (active_rank, profile_ex.sort, *index)
     })?;
     Some(canonical.index_id.clone())
 }

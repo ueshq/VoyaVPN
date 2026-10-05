@@ -103,8 +103,11 @@ impl SocksHttpProbe {
     }
 }
 
-pub async fn tcp_port_is_open(host: &str, port: u16) -> bool {
-    TcpStream::connect((host, port)).await.is_ok()
+/// Whether something on this machine accepts connections on `port`.
+pub async fn tcp_port_is_open(port: u16) -> bool {
+    TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+        .await
+        .is_ok()
 }
 
 fn check_cancelled(cancel: &CancellationFlag) -> Result<()> {
@@ -229,10 +232,10 @@ mod tests {
             .await
             .expect("probe listener should bind");
         let port = listener.local_addr().expect("listener address").port();
-        assert!(tcp_port_is_open("127.0.0.1", port).await);
+        assert!(tcp_port_is_open(port).await);
 
         drop(listener);
-        assert!(!tcp_port_is_open("127.0.0.1", port).await);
+        assert!(!tcp_port_is_open(port).await);
     }
 
     #[tokio::test]

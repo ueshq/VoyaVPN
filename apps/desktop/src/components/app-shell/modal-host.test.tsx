@@ -17,7 +17,7 @@ const ipcMocks = installFakeCommands({
 
 
 function seedInstallResult(status: CoreSeedInstallStatus) {
-  return { installedFiles: [], status };
+  return { status };
 }
 
 /**

@@ -24,15 +24,19 @@ const MACOS_PACKET_TUNNEL_SYSEX_NAME: &str = "app.voyavpn.desktop.PacketTunnel.s
 const MACOS_PROVIDER_STATUS_RELATIVE_PATH: &str =
     "Library/Application Support/VoyaVPN/packet-tunnel-status.json";
 const MACOS_PROVIDER_LOG_RELATIVE_PATH: &str = "Library/Application Support/VoyaVPN/provider.log";
+/// Where local rule sets are copied for the provider, whose sandbox cannot
+/// read the app's own container.
+#[cfg(target_os = "macos")]
+const MACOS_PROVIDER_RULE_SETS_RELATIVE_PATH: &str = "Library/Application Support/VoyaVPN/srss";
+/// The handshake as builds before 2026-10-04 left it on disk, credentials and
+/// all, on every connect.
+#[cfg(target_os = "macos")]
+const MACOS_LEGACY_RUNTIME_CONFIG_RELATIVE_PATH: &str =
+    "Library/Application Support/VoyaVPN/packet-tunnel-runtime.json";
 const PROVIDER_LOG_TAIL_LINES: usize = 200;
 
 #[cfg(any(target_os = "macos", windows))]
 use crate::process::{command_output_text, output_with_timeout, HELPER_TIMEOUT};
-
-pub const WINDOWS_TUN_DEVICES: &[WindowsTunDevice] = &[WindowsTunDevice {
-    name: "wintunsingbox_tun",
-    guid: "b738a021-9842-444c-10b0-a4e3f65ab5b6",
-}];
 
 /// Why this crate's controller refuses a mobile backend.
 ///
@@ -42,12 +46,6 @@ pub const WINDOWS_TUN_DEVICES: &[WindowsTunDevice] = &[WindowsTunDevice {
 /// a wiring mistake, and it says so rather than pretending the tunnel is down.
 const HOST_OWNED_TUNNEL: &str =
     "the tunnel on this platform is owned by the host app, not by voya-platform";
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WindowsTunDevice {
-    pub name: &'static str,
-    pub guid: &'static str,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TunBackend {
@@ -109,25 +107,12 @@ pub const fn tun_backend(os: TargetOs) -> TunBackend {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TunPreflightState {
-    Ready,
-    NeedsElevation,
-    ManualCheck,
-    Unsupported,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TunPreflightReport {
-    pub os: TargetOs,
     pub backend: TunBackend,
-    pub state: TunPreflightState,
     pub allow_enable_tun: bool,
     pub requires_elevation: bool,
     pub elevation_granted: bool,
-    pub notes: Vec<String>,
-    pub route_restore_note: String,
-    pub windows_cleanup_devices: Vec<WindowsTunDevice>,
 }
 
 #[must_use]
@@ -149,93 +134,12 @@ pub fn tun_preflight(os: TargetOs, elevation_granted: bool) -> TunPreflightRepor
     let backend = tun_backend(os);
     let requires_elevation = matches!(backend, TunBackend::Process);
     let allow_enable_tun = allow_enable_tun(os, elevation_granted);
-    let state = match backend {
-        TunBackend::Process if elevation_granted => TunPreflightState::Ready,
-        TunBackend::Process => TunPreflightState::NeedsElevation,
-        TunBackend::MacosPacketTunnel
-        | TunBackend::WindowsService
-        | TunBackend::IosPacketTunnel
-        | TunBackend::AndroidVpnService => TunPreflightState::Ready,
-        TunBackend::Unsupported => TunPreflightState::Unsupported,
-    };
 
     TunPreflightReport {
-        os,
         backend,
-        state,
         allow_enable_tun,
         requires_elevation,
         elevation_granted,
-        notes: tun_preflight_notes(os, elevation_granted),
-        route_restore_note: route_restore_note(os).to_string(),
-        windows_cleanup_devices: if os == TargetOs::Windows {
-            WINDOWS_TUN_DEVICES.to_vec()
-        } else {
-            Vec::new()
-        },
-    }
-}
-
-fn tun_preflight_notes(os: TargetOs, elevation_granted: bool) -> Vec<String> {
-    match tun_backend(os) {
-        TunBackend::WindowsService => vec![
-            "Windows transparent proxy is owned by the VoyaVPN Service, which runs sing-box and Wintun outside the desktop UI process."
-                .to_string(),
-            "The desktop app only writes the runtime config and asks the service to start or stop the tunnel."
-                .to_string(),
-        ],
-        TunBackend::MacosPacketTunnel => vec![
-            "macOS transparent proxy is owned by a Network Extension PacketTunnel provider, matching the system VPN model used by V2Box."
-                .to_string(),
-            "The desktop app only writes the runtime config and asks macOS to start or stop the VPN profile."
-                .to_string(),
-        ],
-        TunBackend::Process if elevation_granted => vec![
-            "Unix TUN start runs the core through the root-owned elevation launcher granted at enable time."
-                .to_string(),
-            "The elevated process is killed first during disconnect before regular process teardown."
-                .to_string(),
-        ],
-        TunBackend::Process => vec![
-            "Unix TUN start requires a one-time native authorization before enabling TUN; no admin password is stored."
-                .to_string(),
-        ],
-        TunBackend::IosPacketTunnel => vec![
-            "iOS traffic is captured by a NetworkExtension PacketTunnel provider running Libbox, the same model as macOS."
-                .to_string(),
-            "The app only hands the provider its runtime config and asks iOS to start or stop the VPN profile."
-                .to_string(),
-        ],
-        TunBackend::AndroidVpnService => vec![
-            "Android traffic is captured by a foreground VpnService that hands its tun descriptor to Libbox."
-                .to_string(),
-            "The first connection asks for VPN consent; Android shows the prompt and remembers the answer."
-                .to_string(),
-        ],
-        TunBackend::Unsupported => {
-            vec!["TUN mode is not supported on this platform yet.".to_string()]
-        }
-    }
-}
-
-fn route_restore_note(os: TargetOs) -> &'static str {
-    match tun_backend(os) {
-        TunBackend::WindowsService => {
-            "Disconnect asks the VoyaVPN Service to stop sing-box so Wintun routes and DNS state are restored by the service-owned lifecycle."
-        }
-        TunBackend::MacosPacketTunnel => {
-            "Disconnect asks macOS to stop the PacketTunnel VPN profile so routes and DNS state are restored by NetworkExtension."
-        }
-        TunBackend::Process => {
-            "Disconnect runs sudo kill for elevated TUN cores before normal teardown so core-owned routes can be restored by process exit."
-        }
-        TunBackend::IosPacketTunnel => {
-            "Disconnect asks iOS to stop the PacketTunnel provider, and NetworkExtension tears its routes and DNS down with it."
-        }
-        TunBackend::AndroidVpnService => {
-            "Disconnect stops the VpnService, and Android closes the tun descriptor and restores routes with it."
-        }
-        TunBackend::Unsupported => "No route mutation is attempted on unsupported platforms.",
     }
 }
 
@@ -356,7 +260,7 @@ pub struct NativeTunStartRequest {
 ///
 /// **Every method blocks the calling thread.** `start` and `stop` wait for the
 /// backend to reach a terminal state: up to
-/// [`MACOS_PACKET_TUNNEL_START_TIMEOUT_MS`] on macOS (plus the unbounded
+/// [`MACOS_PACKET_TUNNEL_START_TIMEOUT_MS`] on macOS (plus the bounded
 /// NetworkExtension preference load/save the bridge performs first) and up to
 /// the Windows service transition budget on Windows, and both read the
 /// generated config from disk on the way in. `status` and `diagnostics` spawn
@@ -534,6 +438,7 @@ fn platform_native_tun_stop(backend: TunBackend) -> Result<(), NativeTunError> {
     }
 }
 
+pub mod handoff;
 mod macos;
 pub use macos::{
     ensure_macos_provider_path_matches, parse_pluginkit_matches, parse_provider_status_json,
@@ -660,15 +565,6 @@ mod tests {
             NativeTunProviderState::NotApplicable.to_string(),
             "not applicable"
         );
-    }
-
-    #[test]
-    fn process_windows_tun_cleanup_abstraction_names_reference_devices() {
-        assert_eq!(WINDOWS_TUN_DEVICES.len(), 1);
-        assert_eq!(WINDOWS_TUN_DEVICES[0].name, "wintunsingbox_tun");
-        assert!(WINDOWS_TUN_DEVICES
-            .iter()
-            .all(|device| device.guid.len() == 36));
     }
 
     #[test]
@@ -888,28 +784,22 @@ enabled active teamID bundleID (version) name [state]
     }
 
     #[test]
-    fn tun_preflight_reports_backend_restore_notes_by_platform() {
+    fn tun_preflight_reports_backend_and_elevation_by_platform() {
         let windows = tun_preflight(TargetOs::Windows, false);
         assert_eq!(windows.backend, TunBackend::WindowsService);
-        assert_eq!(windows.state, TunPreflightState::Ready);
-        assert_eq!(windows.windows_cleanup_devices, WINDOWS_TUN_DEVICES);
-        assert!(windows.route_restore_note.contains("VoyaVPN Service"));
+        assert!(windows.allow_enable_tun);
 
         let macos = tun_preflight(TargetOs::Macos, false);
         assert_eq!(macos.backend, TunBackend::MacosPacketTunnel);
-        assert_eq!(macos.state, TunPreflightState::Ready);
         assert!(!macos.requires_elevation);
-        assert!(macos.route_restore_note.contains("PacketTunnel"));
 
         let linux_missing = tun_preflight(TargetOs::Linux, false);
         assert_eq!(linux_missing.backend, TunBackend::Process);
-        assert_eq!(linux_missing.state, TunPreflightState::NeedsElevation);
+        assert!(linux_missing.requires_elevation);
         assert!(!linux_missing.allow_enable_tun);
 
         let linux_ready = tun_preflight(TargetOs::Linux, true);
-        assert_eq!(linux_ready.state, TunPreflightState::Ready);
         assert!(linux_ready.allow_enable_tun);
-        assert!(linux_ready.route_restore_note.contains("sudo kill"));
     }
 
     fn temp_config_path(file_name: &str) -> PathBuf {

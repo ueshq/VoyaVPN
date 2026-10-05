@@ -56,7 +56,7 @@ fn entry() -> Result<(), ServiceError> {
         Some(command) if command.starts_with('-') => Err(ServiceError::InvalidArgs(format!(
             "unknown option: {command}"
         ))),
-        _ => run_service(args),
+        _ => run_service(),
     }
 }
 
@@ -103,17 +103,15 @@ fn parse_run_config(args: &[std::ffi::OsString]) -> Result<PathBuf, ServiceError
 }
 
 #[cfg(windows)]
-fn run_service(args: Vec<std::ffi::OsString>) -> Result<(), ServiceError> {
+fn run_service() -> Result<(), ServiceError> {
     use windows_service::{
         define_windows_service,
         service::{
-            ServiceAccess, ServiceControl, ServiceControlAccept, ServiceErrorControl,
-            ServiceExitCode, ServiceInfo, ServiceStartType, ServiceState, ServiceStatus,
+            ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus,
             ServiceType,
         },
         service_control_handler::{self, ServiceControlHandlerResult},
         service_dispatcher,
-        service_manager::{ServiceManager, ServiceManagerAccess},
     };
 
     /// Reported for every non-terminal transition and for a clean stop.
@@ -219,41 +217,12 @@ fn run_service(args: Vec<std::ffi::OsString>) -> Result<(), ServiceError> {
         Ok(())
     }
 
-    fn install_service(executable: PathBuf) -> Result<(), ServiceError> {
-        let manager = ServiceManager::local_computer(
-            None::<&str>,
-            ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,
-        )?;
-        let info = ServiceInfo {
-            name: SERVICE_NAME.into(),
-            display_name: "VoyaVPN Tunnel Service".into(),
-            service_type: ServiceType::OWN_PROCESS,
-            start_type: ServiceStartType::OnDemand,
-            error_control: ServiceErrorControl::Normal,
-            executable_path: executable,
-            launch_arguments: Vec::new(),
-            dependencies: Vec::new(),
-            account_name: None,
-            account_password: None,
-        };
-        let _service = manager.create_service(
-            &info,
-            ServiceAccess::START
-                | ServiceAccess::STOP
-                | ServiceAccess::QUERY_STATUS
-                | ServiceAccess::DELETE,
-        )?;
-        Ok(())
-    }
-
-    let _ = install_service as fn(PathBuf) -> Result<(), ServiceError>;
-    let _ = args;
     service_dispatcher::start(SERVICE_NAME, ffi_service_main)?;
     Ok(())
 }
 
 #[cfg(not(windows))]
-fn run_service(_args: Vec<std::ffi::OsString>) -> Result<(), ServiceError> {
+fn run_service() -> Result<(), ServiceError> {
     Err(ServiceError::Unsupported(
         "Windows service mode is only available on Windows".to_string(),
     ))

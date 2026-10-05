@@ -27,7 +27,6 @@ function status(state: RuntimeStatusResponse["state"]): RuntimeStatusResponse {
     activeTunBackend: null,
     connectedDurationMs: null,
     mainPid: state === "connected" ? 1 : null,
-    prePid: null,
     state,
   };
 }

@@ -149,7 +149,7 @@ final class SystemTunnelHost: TunnelHost, @unchecked Sendable {
         // No configuration is installed until the first connect saves one and
         // raises the system prompt. That is a tunnel not yet started, not a
         // missing component: an appex absent from the build surfaces as
-        // `MissingProvider` when a start is attempted.
+        // a failed start when one is attempted.
         guard let manager = found else { return "stopped" }
 
         switch manager.connection.status {

@@ -14,7 +14,7 @@
 //! - a watch loop that repeats the check, keeps the router lease alive, and
 //!   tells the user when the public address moves.
 
-use std::{net::IpAddr, path::PathBuf, sync::Arc};
+use std::{net::IpAddr, path::PathBuf, sync::Arc, time::Duration};
 
 use crate::{
     config_mutation::ConfigMutationCoordinator,
@@ -49,11 +49,8 @@ mod selftest;
 mod spec;
 mod watch;
 
-pub use environment::{classify_family, FamilyEvidence, ProbeEvidence};
-pub use identity::reality_public_key;
 pub use manager::SelfHostManager;
 pub use selftest::{NodeSelfTester, ProbeCoreSelfTester};
-pub use spec::{validate_self_host_config, SELF_HOST_MIN_PORT};
 
 /// Where the node reports what the user should see.
 pub trait SelfHostEventSink: Send + Sync {
@@ -136,6 +133,9 @@ pub trait HostTunnelState: Send + Sync {
     fn tunnel_active(&self) -> BoxFuture<'static, bool>;
 }
 
+/// How long the tunnel check waits for the supervisor's own answer.
+const TUNNEL_STATE_TIMEOUT: Duration = Duration::from_secs(1);
+
 /// The tunnel state as the connection core reports it: connected with a TUN
 /// backend, or with TUN mode on.
 pub struct SupervisorTunnelState {
@@ -148,11 +148,19 @@ impl HostTunnelState for SupervisorTunnelState {
         let supervisor = self.supervisor.clone();
         let config = Arc::clone(&self.config);
         Box::pin(async move {
-            let Ok(snapshot) = supervisor.status().await else {
-                return false;
-            };
-            snapshot.state == SupervisorConnectionState::Connected
-                && (snapshot.active_tun_backend.is_some() || config.current_config().tun.enabled)
+            let tun_enabled = config.current_config().tun.enabled;
+            // The supervisor answers in turn, and a tunnel start ahead of this
+            // read can hold it for many seconds while the network check waits
+            // with its lock held. What it publishes without a round trip is
+            // enough to answer by once that happens.
+            match tokio::time::timeout(TUNNEL_STATE_TIMEOUT, supervisor.status()).await {
+                Ok(Ok(snapshot)) => {
+                    snapshot.state == SupervisorConnectionState::Connected
+                        && (snapshot.active_tun_backend.is_some() || tun_enabled)
+                }
+                Ok(Err(_)) => false,
+                Err(_) => supervisor.is_connected() && tun_enabled,
+            }
         })
     }
 }
@@ -182,15 +190,15 @@ pub struct SelfHostDeps {
 /// from `initial` up to `max`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RestartBackoff {
-    pub initial: std::time::Duration,
-    pub max: std::time::Duration,
+    pub initial: Duration,
+    pub max: Duration,
 }
 
 impl Default for RestartBackoff {
     fn default() -> Self {
         Self {
-            initial: std::time::Duration::from_secs(1),
-            max: std::time::Duration::from_secs(30),
+            initial: Duration::from_secs(1),
+            max: Duration::from_secs(30),
         }
     }
 }

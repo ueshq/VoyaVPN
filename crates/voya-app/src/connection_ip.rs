@@ -14,8 +14,6 @@ use voya_contracts::ConnectionIpResult;
 use voya_core::AppConfig;
 use voya_net::probe::{NetworkProbeError, SocksHttpProbe};
 
-use crate::supervisor::{SupervisorConnectionState, SupervisorSnapshot};
-
 const CONNECTION_IP_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Debug, Error)]
@@ -30,12 +28,18 @@ pub enum ConnectionIpError {
     NoResponse,
 }
 
-/// Looks up the exit address of the connection `snapshot` describes.
+/// Looks up the exit address of the running connection.
+///
+/// `connected` is `CoreSupervisor::is_connected`: the lookup is asked for the
+/// moment a connection comes up and again on a timer, and a full status read
+/// would queue each of those behind whatever the supervisor is doing.
 pub async fn check_connection_ip(
     config: &AppConfig,
-    snapshot: &SupervisorSnapshot,
+    connected: bool,
 ) -> Result<ConnectionIpResult, ConnectionIpError> {
-    ensure_connected(snapshot.state)?;
+    if !connected {
+        return Err(ConnectionIpError::NotConnected);
+    }
     let probe = SocksHttpProbe::new(probe_port(config)?)?;
     let cancel = Arc::new(AtomicBool::new(false));
     let lookup = probe
@@ -53,14 +57,6 @@ pub async fn check_connection_ip(
     })
 }
 
-fn ensure_connected(state: SupervisorConnectionState) -> Result<(), ConnectionIpError> {
-    if state == SupervisorConnectionState::Connected {
-        Ok(())
-    } else {
-        Err(ConnectionIpError::NotConnected)
-    }
-}
-
 /// The mixed inbound port the core listens on for this configuration.
 fn probe_port(config: &AppConfig) -> Result<u16, ConnectionIpError> {
     let port = config.local_port();
@@ -74,18 +70,12 @@ fn probe_port(config: &AppConfig) -> Result<u16, ConnectionIpError> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn only_a_connected_core_is_probed() {
-        assert!(ensure_connected(SupervisorConnectionState::Connected).is_ok());
-        for state in [
-            SupervisorConnectionState::Disconnected,
-            SupervisorConnectionState::CleanupPending,
-        ] {
-            assert!(matches!(
-                ensure_connected(state),
-                Err(ConnectionIpError::NotConnected)
-            ));
-        }
+    #[tokio::test]
+    async fn only_a_connected_core_is_probed() {
+        assert!(matches!(
+            check_connection_ip(&AppConfig::default(), false).await,
+            Err(ConnectionIpError::NotConnected)
+        ));
     }
 
     #[test]

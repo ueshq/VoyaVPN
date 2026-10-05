@@ -327,7 +327,7 @@ pub(super) async fn wait_for_speedtest_ports(
     loop {
         check_cancelled(cancel)?;
         while let Some(port) = socks_ports.get(ready) {
-            if !tcp_port_is_open(LOOPBACK, *port).await {
+            if !tcp_port_is_open(*port).await {
                 break;
             }
             ready += 1;

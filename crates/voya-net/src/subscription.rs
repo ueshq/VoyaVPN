@@ -21,7 +21,6 @@ pub struct SubscriptionFetchSource {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubscriptionFetchOptions {
-    pub prefer_proxy: bool,
     pub proxy_url: Option<String>,
 }
 
@@ -189,7 +188,6 @@ fn text_request(
     DownloadRequest {
         url,
         user_agent: nonempty_string(Some(source.user_agent.as_str())),
-        prefer_proxy: options.prefer_proxy,
         proxy_url: options.proxy_url.clone(),
         response_body_limit: Some(SUBSCRIPTION_RESPONSE_LIMIT_BYTES),
     }
@@ -329,10 +327,7 @@ mod tests {
                     user_agent: String::new(),
                     convert_target: None,
                 },
-                &SubscriptionFetchOptions {
-                    prefer_proxy: false,
-                    proxy_url: None,
-                },
+                &SubscriptionFetchOptions { proxy_url: None },
             )
             .await
             .expect_err("loopback subscription URL should fail");
@@ -363,10 +358,7 @@ mod tests {
                     user_agent: "SubUA/2".to_string(),
                     convert_target: None,
                 },
-                &SubscriptionFetchOptions {
-                    prefer_proxy: false,
-                    proxy_url: None,
-                },
+                &SubscriptionFetchOptions { proxy_url: None },
                 SubscriptionUrlPolicy::AllowLocalForTests,
             )
             .await
@@ -405,10 +397,7 @@ mod tests {
                     user_agent: String::new(),
                     convert_target: None,
                 },
-                &SubscriptionFetchOptions {
-                    prefer_proxy: false,
-                    proxy_url: None,
-                },
+                &SubscriptionFetchOptions { proxy_url: None },
                 SubscriptionUrlPolicy::AllowLocalForTests,
             )
             .await
@@ -449,10 +438,7 @@ mod tests {
                     user_agent: String::new(),
                     convert_target: Some("clash".to_string()),
                 },
-                &SubscriptionFetchOptions {
-                    prefer_proxy: false,
-                    proxy_url: None,
-                },
+                &SubscriptionFetchOptions { proxy_url: None },
                 SubscriptionUrlPolicy::AllowLocalForTests,
             )
             .await

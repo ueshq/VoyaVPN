@@ -11,7 +11,6 @@ const connected = {
   activeTunBackend: null,
   connectedDurationMs: 65_000,
   mainPid: 4242,
-  prePid: null,
   state: "connected",
 } as const;
 

@@ -3,17 +3,6 @@ use specta::Type;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase")]
-pub enum TunPlatform {
-    Windows,
-    Linux,
-    Macos,
-    Ios,
-    Android,
-    Other,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
 pub enum TunBackend {
     Process,
     MacosPacketTunnel,
@@ -35,25 +24,6 @@ pub enum TunProviderState {
     Error,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub enum TunPreflightState {
-    Ready,
-    NeedsElevation,
-    ManualCheck,
-    Unsupported,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TunPreflight {
-    pub platform: TunPlatform,
-    pub state: TunPreflightState,
-    pub notes: Vec<String>,
-    pub route_restore_note: String,
-    pub windows_cleanup_devices: Vec<String>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TunStatus {
@@ -63,15 +33,11 @@ pub struct TunStatus {
     pub allow_enable_tun: bool,
     pub requires_elevation: bool,
     pub elevation_granted: bool,
-    pub needs_vpn_permission: bool,
-    pub needs_service_install: bool,
     pub native_component_ready: bool,
     pub last_provider_error: Option<String>,
     pub provider_path_mismatch: bool,
     pub resolved_provider_path: Option<String>,
     pub expected_provider_path: Option<String>,
-    pub restore_on_disconnect: bool,
-    pub preflight: TunPreflight,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, Type)]

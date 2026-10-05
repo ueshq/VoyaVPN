@@ -50,23 +50,20 @@ export function ImportScreen() {
   const [sourceNames, setSourceNames] = useState<Record<string, string>>({});
   const { busy, run: runOnce } = useBusyAction();
   const [error, setError] = useState<unknown>(null);
-  const [errorMessage, setErrorMessage] = useState<string | undefined>();
   const [choices, setChoices] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [failedIds, setFailedIds] = useState<string[]>([]);
   const [importedCount, setImportedCount] = useState(0);
-  const [denied, setDenied] = useState(false);
   function edit(value: string) { setText(value); setPreview(null); setAllNodes(false); setMessage(null); setError(null); setChoices([]); }
   const run = (action: () => Promise<void>) => runOnce(async () => {
-    setError(null); setErrorMessage(undefined); setDenied(false);
+    setError(null);
     try { await action(); }
-    catch (failure) {
-      setError(failure);
-      const code = failure && typeof failure === "object" && "code" in failure ? failure.code : null;
-      setDenied(code === "cameraDenied");
-      setErrorMessage(code === "cameraDenied" ? t("mobile.cameraDenied") : code === "noQr" ? t("mobile.noQr") : nothingImportable(failure) ? t("mobile.importInvalid") : undefined);
-    }
+    catch (failure) { setError(failure); }
   });
+  // Both follow the failure itself, so clearing it clears them too.
+  const errorCode = error && typeof error === "object" && "code" in error ? error.code : null;
+  const denied = errorCode === "cameraDenied";
+  const errorMessage = denied ? t("mobile.cameraDenied") : errorCode === "noQr" ? t("mobile.noQr") : nothingImportable(error) ? t("mobile.importInvalid") : undefined;
   async function recognize(camera: boolean) {
     const values = await (camera ? deviceActions().scanQr(t("actions.cancel")) : deviceActions().pickQr());
     if (!values) return;

@@ -8,7 +8,6 @@ import Foundation
 /// These sources are shared, so the identifier is read from the bundle the
 /// provider was loaded from rather than compiled in.
 private let appGroupInfoKey = "VoyaAppGroupIdentifier"
-private let runtimeConfigRelativePath = "Library/Application Support/VoyaVPN/packet-tunnel-runtime.json"
 
 /// What this provider calls itself in the unified log and in queue labels.
 enum PacketTunnelIdentity {
@@ -47,7 +46,13 @@ enum PacketTunnelRuntime {
         }
     }
 
-    static func loadRuntimeConfig(options: [String: NSObject]? = nil, configURL: URL? = nil) throws -> PacketTunnelRuntimeConfig {
+    /// The configuration the app handed over with the start request.
+    ///
+    /// It only ever arrives inline: neither app writes it to disk, because it
+    /// holds the node's credentials. A start without it came from the system —
+    /// the VPN switch in Settings, Control Center — which has no configuration
+    /// to give, and says so.
+    static func loadRuntimeConfig(options: [String: NSObject]?) throws -> PacketTunnelRuntimeConfig {
         if let data = options?["runtimeConfigJson"] as? Data {
             return try JSONDecoder().decode(PacketTunnelRuntimeConfig.self, from: data)
         }
@@ -56,20 +61,7 @@ enum PacketTunnelRuntime {
         {
             return try JSONDecoder().decode(PacketTunnelRuntimeConfig.self, from: data)
         }
-        #if os(iOS)
-            // The iOS app hands the configuration over inline and never writes
-            // the file, so a start without options came from the system — the
-            // VPN switch in Settings, Control Center — which has no
-            // configuration to give. Say so: reading a file nobody wrote only
-            // ever produced "no such file".
-            guard let configURL else {
-                throw PacketTunnelProviderError.startedOutsideApp
-            }
-            let data = try Data(contentsOf: configURL)
-        #else
-            let data = try Data(contentsOf: configURL ?? runtimeConfigURL())
-        #endif
-        return try JSONDecoder().decode(PacketTunnelRuntimeConfig.self, from: data)
+        throw PacketTunnelProviderError.startedOutsideApp
     }
 
     static func runtimePaths(containerURL: URL? = PacketTunnelRuntime.containerURL()) throws -> PacketTunnelRuntimePaths {
@@ -91,13 +83,6 @@ enum PacketTunnelRuntime {
         )
     }
 
-    static func runtimeConfigURL() throws -> URL {
-        guard let containerURL = containerURL() else {
-            throw PacketTunnelProviderError.missingAppGroupContainer
-        }
-
-        return containerURL.appendingPathComponent(runtimeConfigRelativePath)
-    }
 }
 
 struct PacketTunnelRuntimePaths {

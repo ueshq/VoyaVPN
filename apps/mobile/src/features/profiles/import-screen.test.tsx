@@ -61,6 +61,21 @@ test("a subscription's downloaded nodes count as imported, and lead on to the no
   await unmount(); client.clear();
 });
 
+test("typing after a camera denial clears the message and its Settings button together", async () => {
+  registerMobileBackend(mockTransport());
+  const device = mockDeviceActions({ scanQr: jest.fn().mockRejectedValue({ code: "cameraDenied" }) });
+  const client = makeTestQueryClient();
+  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const user = userEvent.setup();
+  await user.press(screen.getByText("Scan QR code"));
+  await screen.findByText(/Camera access is denied/);
+  await user.type(screen.getByLabelText("Add nodes or subscription"), "vless://token@example.test:443#Typed");
+  await waitFor(() => expect(screen.queryByText(/Camera access is denied/)).toBeNull());
+  expect(screen.queryByText("Settings")).toBeNull();
+  device.mockRestore();
+  await unmount(); client.clear();
+});
+
 test("camera denial offers recovery and multiple image codes require a choice before preview", async () => {
   registerMobileBackend(mockTransport());
   const device = mockDeviceActions({

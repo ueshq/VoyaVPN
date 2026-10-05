@@ -22,7 +22,6 @@ pub(super) const fn probes_ipv6_egress_after(reason: CoreFlowReason) -> bool {
             | CoreFlowReason::Restart
             | CoreFlowReason::ActiveProfileChanged
             | CoreFlowReason::PolicyGroupChanged
-            | CoreFlowReason::TunChanged
             | CoreFlowReason::SettingsSaved
     )
 }

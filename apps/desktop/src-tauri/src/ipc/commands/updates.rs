@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use super::{support::*, *};
 
 #[tauri::command]
@@ -70,25 +68,19 @@ pub async fn update_srs_assets(
 pub async fn install_core_seed(
     state: tauri::State<'_, AppState>,
 ) -> Result<CoreSeedInstallResult, AppError> {
-    let Some(seed_dir) = state.core_seed_resource_dir().map(Path::to_path_buf) else {
-        return Ok(CoreSeedInstallResult {
-            status: CoreSeedInstallStatus::SeedMissing,
-            installed_files: Vec::new(),
-        });
-    };
+    let seed_dir = state.core_seed_resource_dir().to_path_buf();
     let runtime_paths = state.runtime_paths().clone();
 
     run_blocking("core seed install", move || {
         // macOS launches the seed inside the signed bundle; nothing is copied.
-        if TargetOs::current() == TargetOs::Macos {
-            if let Some(executable) = discover_packaged_seed_executable(&seed_dir, TargetOs::Macos)
+        if TargetOs::current() == TargetOs::Macos
+            && discover_packaged_seed_executable(&seed_dir, TargetOs::Macos)
                 .map_err(|error| core_info_error(&error, AppErrorSubsystem::Runtime))?
-            {
-                return Ok(CoreSeedInstallResult {
-                    status: CoreSeedInstallStatus::AlreadyInstalled,
-                    installed_files: vec![executable.to_string_lossy().into_owned()],
-                });
-            }
+                .is_some()
+        {
+            return Ok(CoreSeedInstallResult {
+                status: CoreSeedInstallStatus::AlreadyInstalled,
+            });
         }
 
         let outcome = copy_seed_core_asset(&runtime_paths, &seed_dir)

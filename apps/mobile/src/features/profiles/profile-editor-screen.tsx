@@ -77,11 +77,6 @@ function Editor({ profile }: { profile: Profile }) {
   const [baseline, setBaseline] = useState({ address, name, port });
   const { busy, run } = useBusyAction();
   const [error, setError] = useState<unknown>(null);
-  const [fields, setFields] = useState({
-    address: false,
-    name: false,
-    port: false,
-  });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const dirty =
     name !== baseline.name ||
@@ -94,7 +89,7 @@ function Editor({ profile }: { profile: Profile }) {
 
   async function saveDraft(): Promise<boolean> {
     setError(null);
-    setFields({ address: false, name: false, port: false });
+    setFieldErrors({});
     const draft = {
       ...draftFromProfile(profile),
       address: address.trim(),
@@ -108,11 +103,6 @@ function Editor({ profile }: { profile: Profile }) {
         zodIssuesToErrorMap(parsed.error),
       );
       setFieldErrors(translated);
-      setFields({
-        address: Boolean(translated.address),
-        name: Boolean(translated.remarks),
-        port: Boolean(translated.port),
-      });
       return false;
     }
     try {
@@ -134,7 +124,7 @@ function Editor({ profile }: { profile: Profile }) {
       <Typography className="text-base text-subtle">
         {t("mobile.editorFieldsHint")}
       </Typography>
-      <TextField isInvalid={fields.name}>
+      <TextField isInvalid={Boolean(fieldErrors.remarks)}>
         <Label>{t("mobile.name")}</Label>
         <Input
           accessibilityLabel={t("mobile.name")}
@@ -144,7 +134,7 @@ function Editor({ profile }: { profile: Profile }) {
         />
         <FieldError>{fieldErrors.remarks}</FieldError>
       </TextField>
-      <TextField isInvalid={fields.address}>
+      <TextField isInvalid={Boolean(fieldErrors.address)}>
         <Label>{t("mobile.address")}</Label>
         <Input
           accessibilityLabel={t("mobile.address")}
@@ -156,7 +146,7 @@ function Editor({ profile }: { profile: Profile }) {
         />
         <FieldError>{fieldErrors.address}</FieldError>
       </TextField>
-      <TextField isInvalid={fields.port}>
+      <TextField isInvalid={Boolean(fieldErrors.port)}>
         <Label>{t("mobile.port")}</Label>
         <Input
           accessibilityLabel={t("mobile.port")}

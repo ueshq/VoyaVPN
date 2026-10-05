@@ -314,6 +314,14 @@ pub fn copy_seed_core_asset(
         SeedCopy::MissingOnly,
         &mut copied_files,
     )?;
+    // The manifest goes last and describes the executable just placed: a copy
+    // cut short leaves none, and one left over from an earlier core is replaced.
+    let seed_manifest = seed_dir.join(SEED_MANIFEST_FILE_NAME);
+    if seed_manifest.is_file() {
+        let manifest = target_dir.join(SEED_MANIFEST_FILE_NAME);
+        replace_file(&seed_manifest, &manifest)?;
+        copied_files.push(manifest);
+    }
     let chmod_paths = apply_executable_permission_plan(paths)?;
 
     Ok(CoreSeedCopyOutcome {
@@ -391,7 +399,7 @@ fn refresh_installed_seed(
 enum SeedCopy {
     /// A first install: files already there are left alone.
     MissingOnly,
-    /// A refresh: every file but the manifest is replaced.
+    /// A refresh: every file is replaced.
     Replace,
 }
 
@@ -452,11 +460,14 @@ fn copy_seed_dir_contents(
             continue;
         }
 
+        // The manifest is the caller's to place, after everything else.
+        if entry.file_name() == SEED_MANIFEST_FILE_NAME {
+            continue;
+        }
+
         if mode == SeedCopy::Replace {
-            if entry.file_name() != SEED_MANIFEST_FILE_NAME {
-                replace_file(&source_path, &target_path)?;
-                copied_files.push(target_path);
-            }
+            replace_file(&source_path, &target_path)?;
+            copied_files.push(target_path);
             continue;
         }
 
@@ -477,13 +488,7 @@ fn copy_seed_dir_contents(
                 source,
             })?;
         }
-        fs::copy(&source_path, &target_path).map_err(|source| {
-            CoreInfoError::CopyCoreSeedAsset {
-                source_path,
-                target_path: target_path.clone(),
-                source,
-            }
-        })?;
+        replace_file(&source_path, &target_path)?;
         copied_files.push(target_path);
     }
 
@@ -650,6 +655,52 @@ mod tests {
             fs::read(&app_data_exe).expect("read installed exe"),
             b"newer-installed"
         );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// The executable went missing but the manifest of the core it was stayed
+    /// behind — an antivirus removal, a copy cut short. The manifest left
+    /// afterwards has to name the core that was just installed.
+    #[test]
+    fn coreinfo_seed_copy_first_install_writes_the_manifest_last_and_fresh() {
+        let root = unique_temp_root("seed-first-manifest");
+        let paths = AppPaths::new(root.join("VoyaVPN"));
+        let seed_root = core_seed_resources_dir(root.join("resources"));
+        let executable_name = executable_name_for_current_os("sing-box");
+        let seed_dir = seed_root.join(CORE_DIR_NAME);
+        let installed_dir = paths.core_bin_dir(CORE_DIR_NAME);
+        fs::create_dir_all(&seed_dir).expect("create seed dir");
+        fs::create_dir_all(&installed_dir).expect("create app data dir");
+        fs::write(seed_dir.join(&executable_name), b"new-core").expect("write seed exe");
+        fs::write(
+            seed_dir.join(SEED_MANIFEST_FILE_NAME),
+            br#"{"executableSha256":"new"}"#,
+        )
+        .expect("write seed manifest");
+        fs::write(
+            installed_dir.join(SEED_MANIFEST_FILE_NAME),
+            br#"{"executableSha256":"old"}"#,
+        )
+        .expect("write leftover manifest");
+
+        let outcome = copy_seed_core_asset(&paths, &seed_root).expect("install");
+
+        assert_eq!(outcome.status, CoreSeedCopyStatus::Copied);
+        assert_eq!(
+            outcome.copied_files.last(),
+            Some(&installed_dir.join(SEED_MANIFEST_FILE_NAME))
+        );
+        assert_eq!(
+            seed_executable_digest(&installed_dir).as_deref(),
+            Some("new")
+        );
+        let leftovers: Vec<_> = fs::read_dir(&installed_dir)
+            .expect("list installed dir")
+            .filter_map(Result::ok)
+            .filter(|entry| entry.file_name().to_string_lossy().ends_with(".voya-new"))
+            .collect();
+        assert!(leftovers.is_empty());
 
         let _ = fs::remove_dir_all(root);
     }

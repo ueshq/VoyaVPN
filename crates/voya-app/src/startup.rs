@@ -70,11 +70,7 @@ impl AppOpening {
     /// only that.
     pub async fn finish(self) -> OpenedApp {
         let Self { services, config } = self;
-        let config_mutations = Arc::new(
-            services
-                .config_mutations(Arc::new(RwLock::new(config)))
-                .with_target_os(services.target_os()),
-        );
+        let config_mutations = Arc::new(services.config_mutations(Arc::new(RwLock::new(config))));
 
         let started = Instant::now();
         if let Err(error) = services.ensure_default_routing(&config_mutations).await {

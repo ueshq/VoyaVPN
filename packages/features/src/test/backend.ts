@@ -96,7 +96,6 @@ export function setCoreState(state: CoreState) {
       activeTunBackend: null,
       connectedDurationMs: null,
       mainPid: null,
-      prePid: null,
       state,
     },
   });

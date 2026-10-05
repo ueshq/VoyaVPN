@@ -30,8 +30,7 @@ mod macos_packet_tunnel_bridge {
     unsafe extern "C" {
         fn voya_macos_packet_tunnel_status() -> *mut c_char;
         fn voya_macos_packet_tunnel_start(
-            config_path: *const c_char,
-            profile_id: *const c_char,
+            runtime_config_json: *const c_char,
             timeout_ms: i64,
             include_all_networks: i32,
         ) -> *mut c_char;
@@ -50,25 +49,16 @@ mod macos_packet_tunnel_bridge {
     }
 
     pub fn start(
-        config_path: &str,
-        profile_id: Option<&str>,
+        runtime_config_json: &str,
         timeout_ms: i64,
         include_all_networks: bool,
     ) -> Result<String, NativeTunError> {
-        let config_path = c_string(config_path, "main config path")?;
-        let profile_id = match profile_id {
-            Some(profile_id) => Some(c_string(profile_id, "active node id")?),
-            None => None,
-        };
+        let runtime_config_json = c_string(runtime_config_json, "runtime config")?;
         bridge_string("start macOS PacketTunnel", || {
-            // SAFETY: both C strings remain alive for the duration of the call;
-            // the optional profile pointer is either valid or null.
+            // SAFETY: the C string remains alive for the duration of the call.
             unsafe {
                 voya_macos_packet_tunnel_start(
-                    config_path.as_ptr(),
-                    profile_id
-                        .as_ref()
-                        .map_or(std::ptr::null(), |profile_id| profile_id.as_ptr()),
+                    runtime_config_json.as_ptr(),
                     timeout_ms,
                     i32::from(include_all_networks),
                 )

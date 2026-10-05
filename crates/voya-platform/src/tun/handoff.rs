@@ -5,26 +5,30 @@
 //! configuration inline, and any rule set the config points at by absolute path
 //! is copied into the shared container first and its path rewritten.
 //!
-//! macOS does the same thing in Objective-C
-//! (`crates/voya-platform/native/macos_packet_tunnel_bridge.m`). This is the
-//! portable half — pure JSON handling with no framework in it — written once
-//! for iOS and Android, which is why the shape below matches that file's
-//! `runtimeConfig` dictionary field for field.
+//! It is pure JSON and file handling with no framework in it, so it is written
+//! once for every host that runs the core inside a provider: the macOS bridge
+//! and the mobile host each say where their container keeps things
+//! ([`HandoffPaths`]) and pass the text on.
 
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 
-use serde::Serialize;
-use serde_json::{Map, Value};
-use voya_platform::tun::NativeTunStartRequest;
+use serde_json::{json, Map, Value};
 
-/// Where staged rule sets and the provider's own files live, relative to the
-/// shared container the host passes in.
-const STAGING_DIR: &str = "srss";
-const STATUS_FILE: &str = "PT/status.json";
-const LOG_FILE: &str = "PT/provider.log";
+use super::NativeTunStartRequest;
+
+/// Where the provider's files live in the container both processes can reach.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HandoffPaths {
+    /// The status file the provider writes.
+    pub status: PathBuf,
+    /// The provider's own log.
+    pub log: PathBuf,
+    /// The directory local rule sets are copied into.
+    pub staging: PathBuf,
+}
 
 /// The payload version. The provider refuses a version it does not know, so
 /// this changes only when a field's meaning does.
@@ -53,27 +57,15 @@ pub enum HandoffError {
     Encode(#[from] serde_json::Error),
 }
 
-/// The dictionary the provider reads on start.
+/// Builds the handshake for a start request, staging local rule sets into
+/// `paths.staging` on the way.
 ///
 /// `singboxConfigJson` is the config *text*, not an object: the provider hands
 /// it to Libbox verbatim, and re-encoding it here would be one more chance to
 /// change it.
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct Handoff {
-    version: u32,
-    active_profile_id: Option<String>,
-    main_config_path: String,
-    status_path: String,
-    log_path: String,
-    singbox_config_json: String,
-}
-
-/// Builds the handshake for a start request, staging local rule sets into
-/// `shared_dir` on the way.
 pub fn build_handoff(
     request: &NativeTunStartRequest,
-    shared_dir: &Path,
+    paths: &HandoffPaths,
 ) -> Result<String, HandoffError> {
     let config_text = fs::read_to_string(&request.main_config_path).map_err(|source| {
         HandoffError::ReadConfig {
@@ -81,27 +73,26 @@ pub fn build_handoff(
             source,
         }
     })?;
-    let staged = stage_local_rule_sets(&config_text, &request.main_config_path, shared_dir)?;
+    let staged = stage_local_rule_sets(&config_text, &request.main_config_path, &paths.staging)?;
 
-    Ok(serde_json::to_string(&Handoff {
-        active_profile_id: request.active_profile_id.clone(),
-        log_path: shared_dir.join(LOG_FILE).display().to_string(),
-        main_config_path: request.main_config_path.display().to_string(),
-        singbox_config_json: staged,
-        status_path: shared_dir.join(STATUS_FILE).display().to_string(),
-        version: HANDOFF_VERSION,
-    })?)
+    Ok(serde_json::to_string(&json!({
+        "version": HANDOFF_VERSION,
+        "activeProfileId": request.active_profile_id,
+        "mainConfigPath": request.main_config_path.display().to_string(),
+        "statusPath": paths.status.display().to_string(),
+        "logPath": paths.log.display().to_string(),
+        "singboxConfigJson": staged,
+    }))?)
 }
 
-/// Copies every `type: "local"` rule set into the shared container and rewrites
-/// its path.
+/// Copies every `type: "local"` rule set into `staging` and rewrites its path.
 ///
 /// Returns the configuration text unchanged when there is nothing to rewrite,
 /// which is the common case: a config whose rule sets are all remote, or none.
 fn stage_local_rule_sets(
     config_text: &str,
     config_path: &Path,
-    shared_dir: &Path,
+    staging: &Path,
 ) -> Result<String, HandoffError> {
     let mut config: Value =
         serde_json::from_str(config_text).map_err(|_| HandoffError::InvalidConfig {
@@ -115,7 +106,6 @@ fn stage_local_rule_sets(
         return Ok(config_text.to_string());
     };
 
-    let staging = shared_dir.join(STAGING_DIR);
     let mut rewritten = false;
     for entry in rule_sets.iter_mut() {
         let Some(entry) = entry.as_object_mut() else {
@@ -129,8 +119,8 @@ fn stage_local_rule_sets(
         };
 
         if !rewritten {
-            fs::create_dir_all(&staging).map_err(|source| HandoffError::Staging {
-                path: staging.clone(),
+            fs::create_dir_all(staging).map_err(|source| HandoffError::Staging {
+                path: staging.to_path_buf(),
                 source,
             })?;
         }

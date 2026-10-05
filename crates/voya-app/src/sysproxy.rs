@@ -26,11 +26,6 @@ pub struct SystemProxyManager {
 
 impl SystemProxyManager {
     #[must_use]
-    pub fn new(service: SystemProxyService, paths: AppPaths) -> Self {
-        Self::with_target_os(service, paths, TargetOs::current())
-    }
-
-    #[must_use]
     pub const fn with_target_os(
         service: SystemProxyService,
         paths: AppPaths,

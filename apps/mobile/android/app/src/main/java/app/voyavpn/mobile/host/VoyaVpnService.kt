@@ -13,6 +13,8 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import app.voyavpn.mobile.MainActivity
 import app.voyavpn.mobile.R
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 
 /**
@@ -58,11 +60,12 @@ class VoyaVpnService : VpnService() {
             else -> Unit
         }
 
-        val config = intent?.getStringExtra(EXTRA_CONFIG_JSON)
+        val config = intent?.getStringExtra(EXTRA_HANDOFF_TOKEN)?.let(pendingHandoffs::remove)
         if (config == null) {
-            // Started by the system with no command to start *with*: there is
-            // nothing to connect to, and pretending otherwise would leave a
-            // running service with no core in it.
+            // Started by the system with no command to start *with*, or by a
+            // start the module has since given up on: there is nothing to
+            // connect to, and pretending otherwise would leave a running
+            // service with no core in it.
             stopSelfResult(startId)
             return START_NOT_STICKY
         }
@@ -189,7 +192,36 @@ class VoyaVpnService : VpnService() {
     companion object {
         const val ACTION_START = "app.voyavpn.mobile.START"
         const val ACTION_STOP = "app.voyavpn.mobile.STOP"
-        const val EXTRA_CONFIG_JSON = "configJson"
+        private const val EXTRA_HANDOFF_TOKEN = "handoffToken"
+
+        /**
+         * Configurations on their way to the service, by the token the start
+         * intent carries.
+         *
+         * The handshake holds the whole sing-box configuration, and a policy
+         * group puts every member in it. As an intent extra that crossed
+         * Binder — whose transaction buffer is about a megabyte — so a group
+         * of several hundred nodes threw `TransactionTooLargeException` and
+         * could never connect. The service is this process, so the text stays
+         * here and only its token travels.
+         */
+        private val pendingHandoffs = ConcurrentHashMap<String, String>()
+
+        /** A start intent for `handoffJson`, and the token to [forgetHandoff] it by. */
+        fun startIntent(context: Context, handoffJson: String): Pair<Intent, String> {
+            val token = UUID.randomUUID().toString()
+            pendingHandoffs[token] = handoffJson
+            val intent = Intent(context, VoyaVpnService::class.java).apply {
+                action = ACTION_START
+                putExtra(EXTRA_HANDOFF_TOKEN, token)
+            }
+            return intent to token
+        }
+
+        /** Drops a handoff the service never collected; a no-op once it has. */
+        fun forgetHandoff(token: String) {
+            pendingHandoffs.remove(token)
+        }
 
         private const val CHANNEL_ID = "app.voyavpn.mobile.tunnel"
         private const val NOTIFICATION_ID = 1
