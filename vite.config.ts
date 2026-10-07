@@ -24,6 +24,8 @@ export default defineConfig({
       "packages/contracts/src/generated.ts",
       "packages/contracts/src/commands.ts",
       "packages/contracts/*.json",
+      // Rewritten by Uniwind on every Metro bundle.
+      "apps/mobile/uniwind-env.d.ts",
       // Fixtures shared with Rust and patches applied by pnpm, kept as written.
       "tests/**",
       "patches/**",
