@@ -26,16 +26,25 @@ export function ConnectionLaunch() {
     let receivedEvent = false;
     const listener = Linking.addEventListener("url", ({ url }) => {
       const action = connectionLinkAction(url);
-      if (action) { receivedEvent = true; setRequest({ action }); }
+      if (action) {
+        receivedEvent = true;
+        setRequest({ action });
+      }
     });
-    void Linking.getInitialURL().then((url) => {
-      if (mounted && !receivedEvent) setRequest({ action: connectionLinkAction(url) });
-    }, () => {
-      // Unknown launch intent: do not risk connecting over a requested disconnect.
-      startupHandled.current = true;
-      if (mounted && !receivedEvent) setRequest({ action: null });
-    });
-    return () => { mounted = false; listener.remove(); };
+    void Linking.getInitialURL().then(
+      (url) => {
+        if (mounted && !receivedEvent) setRequest({ action: connectionLinkAction(url) });
+      },
+      () => {
+        // Unknown launch intent: do not risk connecting over a requested disconnect.
+        startupHandled.current = true;
+        if (mounted && !receivedEvent) setRequest({ action: null });
+      },
+    );
+    return () => {
+      mounted = false;
+      listener.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -60,20 +69,38 @@ export function ConnectionLaunch() {
     }
     startupHandled.current = true;
     handledRequest.current = request;
-    const action = explicit ? request.action : autoAtLaunch && useConnectionPreferences.getState().autoConnect ? "connect" : null;
+    const action = explicit
+      ? request.action
+      : autoAtLaunch && useConnectionPreferences.getState().autoConnect
+        ? "connect"
+        : null;
     if (!action) return;
     if (explicit) navigateToTab("home");
     if (action === "disconnect") {
-      if (core.state === "connected" || core.state === "cleanupPending") void runRuntimeAction("disconnect", t, { inline: true });
+      if (core.state === "connected" || core.state === "cleanupPending")
+        void runRuntimeAction("disconnect", t, { inline: true });
       return;
     }
     if (core.state !== "disconnected" || profiles.isError || groups.isError) return;
-    const selected = profiles.data?.entries.some((entry) => entry.isActive) || groups.data?.entries.some((entry) => entry.isActive);
+    const selected =
+      profiles.data?.entries.some((entry) => entry.isActive) || groups.data?.entries.some((entry) => entry.isActive);
     if (!selected) {
       if (explicit) openPage(profiles.data?.entries.length ? "nodePicker" : "import");
       return;
     }
     void runRuntimeAction("connect", t, { inline: true });
-  }, [request, core, busy, profiles.isPending, groups.isPending, profiles.isError, groups.isError, profiles.data, groups.data, autoAtLaunch, t]);
+  }, [
+    request,
+    core,
+    busy,
+    profiles.isPending,
+    groups.isPending,
+    profiles.isError,
+    groups.isError,
+    profiles.data,
+    groups.data,
+    autoAtLaunch,
+    t,
+  ]);
   return null;
 }

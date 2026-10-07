@@ -28,10 +28,7 @@ export function useServerTable() {
   // Usage and names are drawn on the desktop's group cards and details dialog
   // only, so they are read here rather than in the list data both apps share.
   const metadataQuery = useQuery(queries.subscriptionMetadata);
-  const subscriptionMetadata = useMemo(
-    () => metadataBySubscriptionId(metadataQuery.data ?? []),
-    [metadataQuery.data],
-  );
+  const subscriptionMetadata = useMemo(() => metadataBySubscriptionId(metadataQuery.data ?? []), [metadataQuery.data]);
   const subscriptionNames = useMemo(
     () =>
       new Map(
@@ -44,8 +41,7 @@ export function useServerTable() {
   );
   function subscriptionName(item: ProfileSummaryEntry) {
     return item.profile.subscriptionId
-      ? (subscriptionNames.get(item.profile.subscriptionId) ??
-          t("panes.subscriptions.untitled"))
+      ? (subscriptionNames.get(item.profile.subscriptionId) ?? t("panes.subscriptions.untitled"))
       : t("panes.profiles.card.local");
   }
   const listView = useNodeListVirtual(data.rows, data.search);

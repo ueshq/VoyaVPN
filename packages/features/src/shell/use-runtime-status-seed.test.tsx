@@ -35,7 +35,9 @@ function installVisibility(): VisibilityListeners {
   } satisfies AppVisibilityAdapter);
   return {
     notify: () => listeners.forEach((listener) => listener()),
-    setVisible: (next) => { visible = next; },
+    setVisible: (next) => {
+      visible = next;
+    },
     unsubscribeCount: () => unsubscribed,
   };
 }
@@ -80,7 +82,12 @@ describe("runtime status hydration and resume", () => {
     render(<Seed />);
     await act(async () => {});
     let settle: (() => void) | undefined;
-    refresh.mockImplementationOnce(() => new Promise<void>((resolve) => { settle = resolve; }));
+    refresh.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          settle = resolve;
+        }),
+    );
     await act(async () => {
       visibility.notify();
       visibility.notify();

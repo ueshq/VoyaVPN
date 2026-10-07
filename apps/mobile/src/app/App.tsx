@@ -13,12 +13,7 @@ import { isPrivacyNoticeAccepted } from "~/features/settings/privacy-notice";
 import { PrivacyNoticeScreen } from "~/features/settings/privacy-notice-screen";
 import { LogsScreen } from "~/features/settings/logs-screen";
 import { RuleDetailsScreen } from "~/features/routing/rule-details-screen";
-import {
-  DarkTheme,
-  DefaultTheme,
-  NavigationContainer,
-  useIsFocused,
-} from "@react-navigation/native";
+import { DarkTheme, DefaultTheme, NavigationContainer, useIsFocused } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createNativeBottomTabNavigator } from "@bottom-tabs/react-navigation";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -132,11 +127,16 @@ function MainTabs() {
       {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => {
         const { icon, titleKey } = SHELL_TABS[tab];
         return (
-          <Tab.Screen key={tab} name={tab} component={TAB_SCREENS[tab]} options={{
-            // UIKit and Android derive the accessible tab name from its title.
-            title: t(titleKey),
-            tabBarIcon: () => icon,
-          }} />
+          <Tab.Screen
+            key={tab}
+            name={tab}
+            component={TAB_SCREENS[tab]}
+            options={{
+              // UIKit and Android derive the accessible tab name from its title.
+              title: t(titleKey),
+              tabBarIcon: () => icon,
+            }}
+          />
         );
       })}
     </Tab.Navigator>
@@ -173,21 +173,42 @@ function Shell() {
           large title draws one itself. The back chevron is `StackBackButton`:
           the native one is invisible to React Native accessibility, so the
           header draws a labelled button instead. */}
-      <Stack.Navigator screenOptions={({ navigation }) => ({
-        headerBackVisible: false,
-        headerLeft: ({ canGoBack }) =>
-          canGoBack ? <StackBackButton onPress={() => navigation.goBack()} /> : null,
-        headerShadowVisible: false,
-        statusBarStyle: scheme === "dark" ? "light" : "dark",
-      })}>
+      <Stack.Navigator
+        screenOptions={({ navigation }) => ({
+          headerBackVisible: false,
+          headerLeft: ({ canGoBack }) => (canGoBack ? <StackBackButton onPress={() => navigation.goBack()} /> : null),
+          headerShadowVisible: false,
+          statusBarStyle: scheme === "dark" ? "light" : "dark",
+        })}
+      >
         <Stack.Screen name="main" component={MainTabs} options={{ headerShown: false, title: "VoyaVPN" }} />
-        <Stack.Screen name="nodePicker" component={PAGES.nodePicker} options={{ title: t("home.chooseNode"), presentation: "modal" }} />
-        <Stack.Screen name="sessionDetails" component={PAGES.sessionDetails} options={{ title: t("activity.connectionDetails") }} />
+        <Stack.Screen
+          name="nodePicker"
+          component={PAGES.nodePicker}
+          options={{ title: t("home.chooseNode"), presentation: "modal" }}
+        />
+        <Stack.Screen
+          name="sessionDetails"
+          component={PAGES.sessionDetails}
+          options={{ title: t("activity.connectionDetails") }}
+        />
         <Stack.Screen name="activity" component={PAGES.activity} options={{ title: t("tabs.connections") }} />
-        <Stack.Screen name="connectionDetails" component={PAGES.connectionDetails} options={{ title: t("activity.connectionDetails") }} />
+        <Stack.Screen
+          name="connectionDetails"
+          component={PAGES.connectionDetails}
+          options={{ title: t("activity.connectionDetails") }}
+        />
         <Stack.Screen name="import" component={PAGES.import} options={{ title: t("mobile.add") }} />
-        <Stack.Screen name="subscriptions" component={PAGES.subscriptions} options={{ title: t("mobile.subscriptions") }} />
-        <Stack.Screen name="subscription" component={PAGES.subscription} options={{ title: t("mobile.subscription") }} />
+        <Stack.Screen
+          name="subscriptions"
+          component={PAGES.subscriptions}
+          options={{ title: t("mobile.subscriptions") }}
+        />
+        <Stack.Screen
+          name="subscription"
+          component={PAGES.subscription}
+          options={{ title: t("mobile.subscription") }}
+        />
         <Stack.Screen name="editProfile" component={PAGES.editProfile} options={{ title: t("mobile.editNode") }} />
         <Stack.Screen name="general" component={PAGES.general} options={{ title: t("daily.appearance") }} />
         <Stack.Screen name="dns" component={PAGES.dns} options={{ title: t("mobile.connection") }} />
@@ -325,10 +346,7 @@ function useBackendStartup(attempt: number): StartupWatch {
       .catch((error: unknown) => {
         if (cancelled) return;
         const appError = appErrorOfKind(error, "database");
-        if (
-          appError &&
-          (appError.kind.code === "schemaUnsupported" || appError.kind.code === "corrupt")
-        ) {
+        if (appError && (appError.kind.code === "schemaUnsupported" || appError.kind.code === "corrupt")) {
           setResult({ attempt, value: { status: "failed", error: appError } });
         } else {
           // Any other failure is a normal command error: the shell's screens

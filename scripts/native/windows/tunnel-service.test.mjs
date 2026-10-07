@@ -81,13 +81,13 @@ describe("Windows tunnel service helper", () => {
     const env = { CARGO_BUILD_TARGET: "x86_64-pc-windows-msvc" };
     const runCommand = vi.fn();
 
-    expect(buildTunnelService({
-      env,
-      repoRoot: "C:\\repo",
-      runCommand,
-    })).toBe(
-      resolve("C:\\repo", "target", "x86_64-pc-windows-msvc", "release", "voyavpn-tunnel-service.exe"),
-    );
+    expect(
+      buildTunnelService({
+        env,
+        repoRoot: "C:\\repo",
+        runCommand,
+      }),
+    ).toBe(resolve("C:\\repo", "target", "x86_64-pc-windows-msvc", "release", "voyavpn-tunnel-service.exe"));
     expect(runCommand).toHaveBeenCalledWith(
       "cargo",
       ["build", "-p", "voyavpn", "--bin", "voyavpn-tunnel-service", "--release"],
@@ -184,9 +184,7 @@ describe("Windows tunnel service helper", () => {
     const staged = new Set([destinationPath, singBoxDestinationPath]);
     const removeFile = vi.fn();
     const runCommand = vi.fn();
-    const captureCommand = vi.fn()
-      .mockReturnValueOnce(stoppedService)
-      .mockReturnValueOnce(missingService);
+    const captureCommand = vi.fn().mockReturnValueOnce(stoppedService).mockReturnValueOnce(missingService);
 
     const result = uninstallTunnelService({
       platform: "win32",
@@ -200,11 +198,10 @@ describe("Windows tunnel service helper", () => {
     });
 
     expect(result.serviceExisted).toBe(true);
-    expect(runCommand).toHaveBeenCalledWith(
-      "sc.exe",
-      ["delete", WINDOWS_TUN_SERVICE_NAME],
-      { cwd: "/repo", shell: false },
-    );
+    expect(runCommand).toHaveBeenCalledWith("sc.exe", ["delete", WINDOWS_TUN_SERVICE_NAME], {
+      cwd: "/repo",
+      shell: false,
+    });
     expect(removeFile).toHaveBeenCalledWith(destinationPath, { force: true });
     expect(removeFile).toHaveBeenCalledWith(singBoxDestinationPath, { force: true });
   });
@@ -212,10 +209,12 @@ describe("Windows tunnel service helper", () => {
   it("reports a service stop timeout before replacing the executable", () => {
     const fixture = installFixture([runningService, runningService]);
 
-    expect(() => installTunnelService({
-      ...fixture.options,
-      timeoutMs: 0,
-    })).toThrow(/Timed out.*waiting for VoyaVPNTunnelService to stop/);
+    expect(() =>
+      installTunnelService({
+        ...fixture.options,
+        timeoutMs: 0,
+      }),
+    ).toThrow(/Timed out.*waiting for VoyaVPNTunnelService to stop/);
     expect(fixture.options.copyFile).not.toHaveBeenCalled();
   });
 
@@ -229,18 +228,14 @@ describe("Windows tunnel service helper", () => {
   });
 
   it("classifies elevated installation failures for the parent process", () => {
-    expect(tunnelServiceErrorExitCode(new Error(
-      "Timed out after 20000ms waiting for VoyaVPNTunnelService to stop.",
-    ))).toBe(20);
-    expect(tunnelServiceErrorExitCode(new Error(
-      "the Windows tunnel service copy verification failed.",
-    ))).toBe(21);
-    expect(tunnelServiceErrorExitCode(new Error(
-      "The sing-box core seed is missing: /repo/seed/sing-box.exe.",
-    ))).toBe(21);
-    expect(tunnelServiceErrorExitCode(new Error(
-      "sc.exe config VoyaVPNTunnelService failed.",
-    ))).toBe(22);
+    expect(
+      tunnelServiceErrorExitCode(new Error("Timed out after 20000ms waiting for VoyaVPNTunnelService to stop.")),
+    ).toBe(20);
+    expect(tunnelServiceErrorExitCode(new Error("the Windows tunnel service copy verification failed."))).toBe(21);
+    expect(tunnelServiceErrorExitCode(new Error("The sing-box core seed is missing: /repo/seed/sing-box.exe."))).toBe(
+      21,
+    );
+    expect(tunnelServiceErrorExitCode(new Error("sc.exe config VoyaVPNTunnelService failed."))).toBe(22);
   });
 
   it("stages the sing-box core beside the service so the caller cannot pick the binary", () => {
@@ -248,13 +243,8 @@ describe("Windows tunnel service helper", () => {
 
     const result = installTunnelService(fixture.options);
 
-    expect(result.singBoxDestinationPath).toBe(
-      "C:\\Program Files\\VoyaVPN\\sing_box\\sing-box.exe",
-    );
-    expect(fixture.options.copyFile).toHaveBeenCalledWith(
-      fixture.singBoxSourcePath,
-      fixture.singBoxDestinationPath,
-    );
+    expect(result.singBoxDestinationPath).toBe("C:\\Program Files\\VoyaVPN\\sing_box\\sing-box.exe");
+    expect(fixture.options.copyFile).toHaveBeenCalledWith(fixture.singBoxSourcePath, fixture.singBoxDestinationPath);
   });
 
   it("refuses to install without a staged sing-box seed", () => {

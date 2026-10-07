@@ -5,15 +5,8 @@ import { refreshQueries } from "@voya/client/queries";
 import { queryKeys } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import { getProtocolLabel, getTlsModeLabel, getTransportLabel } from "@voya/features/profiles/profile-constants";
-import {
-  draftFromProfile,
-  parseProfileDraft,
-  profileFromDraft,
-} from "@voya/features/profiles/profile-draft";
-import {
-  translateFieldErrors,
-  zodIssuesToErrorMap,
-} from "@voya/features/forms/zod-errors";
+import { draftFromProfile, parseProfileDraft, profileFromDraft } from "@voya/features/profiles/profile-draft";
+import { translateFieldErrors, zodIssuesToErrorMap } from "@voya/features/forms/zod-errors";
 import type { Profile } from "@voya/contracts";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { FieldError } from "heroui-native/field-error";
@@ -51,18 +44,11 @@ export function ProfileEditorScreen({ route }: NativeStackScreenProps<RootRoutes
     // The navigation bar already names this page; every other stack page
     // relies on that title alone, so an in-page one just said it twice.
     <DetailScreen accessibilityLabel={t("mobile.editNode")}>
-      {details.error ? (
-        <ErrorNotice
-          error={details.error}
-          retry={() => void details.refetch()}
-        />
-      ) : null}
+      {details.error ? <ErrorNotice error={details.error} retry={() => void details.refetch()} /> : null}
       {details.data ? (
         <Editor key={details.data.profile.id} profile={details.data.profile} />
       ) : details.isPending ? (
-        <Typography className="text-base text-subtle">
-          {t("panes.profiles.loadingNodes")}
-        </Typography>
+        <Typography className="text-base text-subtle">{t("panes.profiles.loadingNodes")}</Typography>
       ) : null}
     </DetailScreen>
   );
@@ -78,10 +64,7 @@ function Editor({ profile }: { profile: Profile }) {
   const { busy, run } = useBusyAction();
   const [error, setError] = useState<unknown>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const dirty =
-    name !== baseline.name ||
-    address !== baseline.address ||
-    port !== baseline.port;
+  const dirty = name !== baseline.name || address !== baseline.address || port !== baseline.port;
 
   async function save(): Promise<boolean> {
     return (await run(saveDraft)) ?? false;
@@ -98,10 +81,7 @@ function Editor({ profile }: { profile: Profile }) {
     };
     const parsed = parseProfileDraft(draft);
     if (!parsed.success) {
-      const translated = translateFieldErrors(
-        t,
-        zodIssuesToErrorMap(parsed.error),
-      );
+      const translated = translateFieldErrors(t, zodIssuesToErrorMap(parsed.error));
       setFieldErrors(translated);
       return false;
     }
@@ -121,17 +101,10 @@ function Editor({ profile }: { profile: Profile }) {
 
   return (
     <>
-      <Typography className="text-base text-subtle">
-        {t("mobile.editorFieldsHint")}
-      </Typography>
+      <Typography className="text-base text-subtle">{t("mobile.editorFieldsHint")}</Typography>
       <TextField isInvalid={Boolean(fieldErrors.remarks)}>
         <Label>{t("mobile.name")}</Label>
-        <Input
-          accessibilityLabel={t("mobile.name")}
-          value={name}
-          onChangeText={setName}
-          editable={!busy}
-        />
+        <Input accessibilityLabel={t("mobile.name")} value={name} onChangeText={setName} editable={!busy} />
         <FieldError>{fieldErrors.remarks}</FieldError>
       </TextField>
       <TextField isInvalid={Boolean(fieldErrors.address)}>
@@ -159,25 +132,19 @@ function Editor({ profile }: { profile: Profile }) {
       </TextField>
       <SaveStatus dirty={dirty} saving={busy} />
       <PrimaryButton label={t("actions.save")} isDisabled={!dirty || busy} onPress={() => void save()} />
-      <ErrorNotice
-        error={error}
-        message={dirty ? t("mobile.saveFailed") : undefined}
-      />
+      <ErrorNotice error={error} message={dirty ? t("mobile.saveFailed") : undefined} />
 
       {/* What the editor deliberately does not touch, stated so it does not
           read as an omission. */}
       <View className="gap-2">
-        <Typography className="px-1 text-sm font-medium text-subtle">
-          {t("mobile.editorSummary")}
-        </Typography>
+        <Typography className="px-1 text-sm font-medium text-subtle">{t("mobile.editorSummary")}</Typography>
         <ListGroup>
-          <ListRow
-            title={t("mobile.editorProtocol")}
-            description={getProtocolLabel(profile.protocol.kind)}
-          />
+          <ListRow title={t("mobile.editorProtocol")} description={getProtocolLabel(profile.protocol.kind)} />
           <ListRow
             title={t("mobile.editorTransport")}
-            description={profile.transport ? getTransportLabel(profile.transport.kind) : t("mobile.editorTransportNone")}
+            description={
+              profile.transport ? getTransportLabel(profile.transport.kind) : t("mobile.editorTransportNone")
+            }
           />
           <ListRow
             last

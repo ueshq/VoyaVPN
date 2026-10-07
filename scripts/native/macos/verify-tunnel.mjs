@@ -1,13 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  capture,
-  isCliEntrypoint,
-  repoRootFromScript,
-  requireDarwin,
-  runCli,
-  truthy,
-} from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, runCli, truthy } from "../../lib/common.mjs";
 import {
   appBundleIdentifier,
   codesignEntitlements,
@@ -57,7 +50,9 @@ function verifyProvisioningProfile(path, label, bundleIdentifier) {
 
   const profile = decodeProvisioningProfile(path);
   if (profile.bundleIdentifier !== bundleIdentifier) {
-    throw new Error(`${label} provisioning profile bundle id mismatch: expected ${bundleIdentifier}, got ${profile.bundleIdentifier}.`);
+    throw new Error(
+      `${label} provisioning profile bundle id mismatch: expected ${bundleIdentifier}, got ${profile.bundleIdentifier}.`,
+    );
   }
   assertProfileCapabilities(profile, { label, distribution: tunnel.distribution });
 
@@ -172,7 +167,9 @@ function verifyLaunchServicesMetadata() {
   requirePath(appInfoPlist, "macOS app Info.plist", { log: true });
   const carbonRequirement = plistBuddy(appInfoPlist, ":LSRequiresCarbon", true);
   if (carbonRequirement) {
-    throw new Error("macOS app Info.plist must not include LSRequiresCarbon; LaunchServices may refuse to open modern Tauri apps.");
+    throw new Error(
+      "macOS app Info.plist must not include LSRequiresCarbon; LaunchServices may refuse to open modern Tauri apps.",
+    );
   }
   console.log("✓ macOS app Info.plist does not include LSRequiresCarbon");
 }
@@ -205,12 +202,14 @@ function main() {
     // Required, and questioned by App Review: the inherited-sandbox seed and the
     // self-hosted node listen (docs/release/app-store-review-notes.md).
     "com.apple.security.network.server",
-    ...(appProfile ? [
-      "com.apple.application-identifier",
-      appProfile.applicationIdentifier,
-      "com.apple.developer.team-identifier",
-      appProfile.teamIdentifier,
-    ] : []),
+    ...(appProfile
+      ? [
+          "com.apple.application-identifier",
+          appProfile.applicationIdentifier,
+          "com.apple.developer.team-identifier",
+          appProfile.teamIdentifier,
+        ]
+      : []),
   ]);
   if (existsSync(tunnelService)) {
     verifySignature(tunnelService, "Tunnel service binary");
@@ -225,12 +224,14 @@ function main() {
     "com.apple.security.application-groups",
     "group.app.voyavpn.desktop",
     "com.apple.security.network.server",
-    ...(packetTunnelProfile ? [
-      "com.apple.application-identifier",
-      packetTunnelProfile.applicationIdentifier,
-      "com.apple.developer.team-identifier",
-      packetTunnelProfile.teamIdentifier,
-    ] : []),
+    ...(packetTunnelProfile
+      ? [
+          "com.apple.application-identifier",
+          packetTunnelProfile.applicationIdentifier,
+          "com.apple.developer.team-identifier",
+          packetTunnelProfile.teamIdentifier,
+        ]
+      : []),
   ]);
 }
 

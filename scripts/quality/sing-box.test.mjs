@@ -22,10 +22,7 @@ describe("sing-box acceptance run verification", () => {
   it("accepts a run where exactly the acceptance test passed", () => {
     const stdout = libtestOutput({
       running: 1,
-      lines: [
-        `test ${ACCEPTANCE_TEST} ... sing-box check passed for vless-ws-tls-mux-0`,
-        "ok",
-      ],
+      lines: [`test ${ACCEPTANCE_TEST} ... sing-box check passed for vless-ws-tls-mux-0`, "ok"],
       passed: 1,
       filtered: 212,
     });
@@ -76,12 +73,24 @@ describe("sing-box acceptance run verification", () => {
   it("rejects failed or ignored runs", () => {
     expect(
       acceptanceRunProblem(
-        libtestOutput({ running: 1, lines: [`test ${ACCEPTANCE_TEST} ... FAILED`], passed: 0, failed: 1, filtered: 212 }),
+        libtestOutput({
+          running: 1,
+          lines: [`test ${ACCEPTANCE_TEST} ... FAILED`],
+          passed: 0,
+          failed: 1,
+          filtered: 212,
+        }),
       ),
     ).toContain("1 failed");
     expect(
       acceptanceRunProblem(
-        libtestOutput({ running: 1, lines: [`test ${ACCEPTANCE_TEST} ... ignored`], passed: 0, ignored: 1, filtered: 212 }),
+        libtestOutput({
+          running: 1,
+          lines: [`test ${ACCEPTANCE_TEST} ... ignored`],
+          passed: 0,
+          ignored: 1,
+          filtered: 212,
+        }),
       ),
     ).toContain("1 ignored");
   });
@@ -95,7 +104,9 @@ describe("sing-box acceptance run verification", () => {
   });
 
   it("names the test exactly and runs only the voya-core lib target", () => {
-    expect(ACCEPTANCE_TEST_ARGS).toEqual(expect.arrayContaining(["-p", "voya-core", "--lib", "--exact", ACCEPTANCE_TEST]));
+    expect(ACCEPTANCE_TEST_ARGS).toEqual(
+      expect.arrayContaining(["-p", "voya-core", "--lib", "--exact", ACCEPTANCE_TEST]),
+    );
     expect(ACCEPTANCE_TEST_ARGS.indexOf("--exact")).toBeGreaterThan(ACCEPTANCE_TEST_ARGS.indexOf("--"));
   });
 

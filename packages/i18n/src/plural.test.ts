@@ -14,12 +14,8 @@ describe("plural messages", () => {
   });
 
   it("formats a large count in the app's language", () => {
-    expect(i18next.t("panes.profiles.import.summary.imported", { count: 1 })).toBe(
-      "Imported 1 node.",
-    );
-    expect(i18next.t("panes.profiles.import.summary.imported", { count: 12_345 })).toBe(
-      "Imported 12,345 nodes.",
-    );
+    expect(i18next.t("panes.profiles.import.summary.imported", { count: 1 })).toBe("Imported 1 node.");
+    expect(i18next.t("panes.profiles.import.summary.imported", { count: 12_345 })).toBe("Imported 12,345 nodes.");
   });
 
   it("reads the same in Chinese whatever the count", async () => {

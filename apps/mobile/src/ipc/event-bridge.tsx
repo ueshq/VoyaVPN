@@ -49,4 +49,3 @@ export function EventBridge() {
 
   return null;
 }
-

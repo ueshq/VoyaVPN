@@ -9,8 +9,7 @@ import { createI18nHost, LOCALE_STORAGE_KEY } from "./core";
  * instead; both sit on the same `./core`.
  */
 const setup = createI18nHost({
-  readStoredLocale: () =>
-    typeof window === "undefined" ? undefined : window.localStorage.getItem(LOCALE_STORAGE_KEY),
+  readStoredLocale: () => (typeof window === "undefined" ? undefined : window.localStorage.getItem(LOCALE_STORAGE_KEY)),
   persistLocale: (locale) => {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);

@@ -10,7 +10,13 @@ import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { applyChanges, changedFields } from "./settings-draft";
 import { saveQueue } from "../forms/save-queue";
 import { settingsFailure, useSettingsDraft } from "./use-settings-draft";
-import { applyUiPreferences, endUiPreferencesPreview, previewUiPreferences, reportUiPreferencesError, reportUiPreferencesReverted } from "./ui-preferences";
+import {
+  applyUiPreferences,
+  endUiPreferencesPreview,
+  previewUiPreferences,
+  reportUiPreferencesError,
+  reportUiPreferencesReverted,
+} from "./ui-preferences";
 
 export function useAppSettings() {
   const client = useQueryClient();
@@ -48,36 +54,39 @@ export function useAppSettings() {
 
   const failed = useLatestRef(draft.error !== null);
 
-  useEffect(() => () => {
-    const leave = (saveFailed: boolean) => {
-      const previewed = endUiPreferencesPreview(previewOwner);
-      // Nothing was being previewed, so the theme and language on screen are
-      // already the saved ones. Most users of this hook never touch appearance —
-      // the speed-test settings dialog, for one — and re-applying both on
-      // every close of theirs was work with no visible result.
-      if (!previewed) return;
-      const saved = client.getQueryData<AppSettings>(queryKeys.appSettings);
-      if (!saved) return;
-      // Leaving drops a preview whose save failed; say so instead of silently
-      // switching the theme or language back.
-      if (saveFailed && changedFields(saved.appearance, previewed).length) {
-        reportUiPreferencesReverted();
+  useEffect(
+    () => () => {
+      const leave = (saveFailed: boolean) => {
+        const previewed = endUiPreferencesPreview(previewOwner);
+        // Nothing was being previewed, so the theme and language on screen are
+        // already the saved ones. Most users of this hook never touch appearance —
+        // the speed-test settings dialog, for one — and re-applying both on
+        // every close of theirs was work with no visible result.
+        if (!previewed) return;
+        const saved = client.getQueryData<AppSettings>(queryKeys.appSettings);
+        if (!saved) return;
+        // Leaving drops a preview whose save failed; say so instead of silently
+        // switching the theme or language back.
+        if (saveFailed && changedFields(saved.appearance, previewed).length) {
+          reportUiPreferencesReverted();
+        }
+        void applyUiPreferences(saved.appearance).catch(reportUiPreferencesError);
+      };
+      const queue = saveQueue(client);
+      if (!queue.isSaving()) {
+        leave(failed.current);
+        return;
       }
-      void applyUiPreferences(saved.appearance).catch(reportUiPreferencesError);
-    };
-    const queue = saveQueue(client);
-    if (!queue.isSaving()) {
-      leave(failed.current);
-      return;
-    }
-    // The preview's own save is still on its way. Putting the cached
-    // appearance back now would show the old language and theme for the
-    // moment it takes, then switch again; what the save leaves in the cache
-    // decides instead. A save that fails from here on is reported by the
-    // draft, which is detached by then, so this only switches back: saying
-    // it again would be two notices for one failure.
-    void queue.settled().then(() => leave(false));
-  }, [client, failed, previewOwner]);
+      // The preview's own save is still on its way. Putting the cached
+      // appearance back now would show the old language and theme for the
+      // moment it takes, then switch again; what the save leaves in the cache
+      // decides instead. A save that fails from here on is reported by the
+      // draft, which is detached by then, so this only switches back: saying
+      // it again would be two notices for one failure.
+      void queue.settled().then(() => leave(false));
+    },
+    [client, failed, previewOwner],
+  );
 
   function setAppearance(preferences: AppearanceSettings) {
     previewUiPreferences(previewOwner, preferences);

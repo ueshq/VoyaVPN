@@ -61,9 +61,7 @@ export function ShareQrImage({
     return (
       <Alert variant="destructive">
         <AlertTriangle aria-hidden="true" />
-        <AlertDescription>
-          {redactOperationalError(qrCodeQuery.error)}
-        </AlertDescription>
+        <AlertDescription>{redactOperationalError(qrCodeQuery.error)}</AlertDescription>
       </Alert>
     );
   }
@@ -88,36 +86,23 @@ export function ShareQrImage({
   );
 }
 
-export function ShareQrDialog({
-  content,
-  onOpenChange,
-  open,
-}: ShareQrDialogProps) {
+export function ShareQrDialog({ content, onOpenChange, open }: ShareQrDialogProps) {
   const { t } = useI18n();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <ScrollableDialogContent
-        height="viewport"
-        width="lg"
-        closeLabel={t("actions.close")}
-      >
+      <ScrollableDialogContent height="viewport" width="lg" closeLabel={t("actions.close")}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <QrCode className="size-4" aria-hidden="true" />
             {t("panes.profiles.export.showQr")}
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            {t("panes.profiles.export.shareLinks")}
-          </DialogDescription>
+          <DialogDescription className="sr-only">{t("panes.profiles.export.shareLinks")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <div className="grid gap-4">
             <div className="grid gap-1">
-              <Label
-                className="text-xs text-muted-foreground"
-                htmlFor="profile-share-qr-content"
-              >
+              <Label className="text-xs text-muted-foreground" htmlFor="profile-share-qr-content">
                 {t("qr.content")}
               </Label>
               <Textarea
@@ -132,11 +117,7 @@ export function ShareQrDialog({
           </div>
         </DialogBody>
         <DialogFooter>
-          <Button
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
+          <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
             {t("actions.close")}
           </Button>
         </DialogFooter>

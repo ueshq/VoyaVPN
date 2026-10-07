@@ -1,10 +1,4 @@
-import {
-  captureSpawned,
-  checkedCapture,
-  commandFailure,
-  sleepSync,
-  validateTiming,
-} from "../../lib/common.mjs";
+import { captureSpawned, checkedCapture, commandFailure, sleepSync, validateTiming } from "../../lib/common.mjs";
 import { appBundleIdentifier as defaultProviderId } from "./tunnel-layout.mjs";
 
 const packetTunnelExecutable = "VoyaPacketTunnel";
@@ -97,8 +91,9 @@ export function prepareVoyaForLocalBuild({
 } = {}) {
   validateTiming(timeoutMs, pollIntervalMs);
 
-  const runningGuiExecutables = [...new Set(guiExecutables)]
-    .filter((executable) => executable && isProcessRunning(executable));
+  const runningGuiExecutables = [...new Set(guiExecutables)].filter(
+    (executable) => executable && isProcessRunning(executable),
+  );
   if (runningGuiExecutables.length > 0) {
     throw new Error(
       `VoyaVPN is still running (${runningGuiExecutables.join(", ")}). Quit the app before replacing ${replacementTarget}.`,
@@ -133,9 +128,10 @@ export function prepareVoyaForLocalBuild({
       const activeIds = connections
         .filter((connection) => !isDisconnected(connection))
         .map((connection) => connection.id);
-      const detail = activeIds.length > 0
-        ? ` Active connection(s): ${activeIds.join(", ")}.`
-        : " The VoyaPacketTunnel process is still running.";
+      const detail =
+        activeIds.length > 0
+          ? ` Active connection(s): ${activeIds.join(", ")}.`
+          : " The VoyaPacketTunnel process is still running.";
       throw new Error(
         `Timed out after ${timeoutMs}ms waiting for VoyaVPN to stop before replacing ${replacementTarget}.${detail}`,
       );

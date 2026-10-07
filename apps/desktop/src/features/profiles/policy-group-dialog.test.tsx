@@ -18,9 +18,7 @@ const nodes = [node("a", "Tokyo"), node("b", "Osaka")];
 
 function renderDialog(group: PolicyGroup | null = null) {
   const onOpenChange = vi.fn();
-  render(
-    <PolicyGroupDialog group={group} nodes={nodes} onOpenChange={onOpenChange} open subscriptions={[]} />,
-  );
+  render(<PolicyGroupDialog group={group} nodes={nodes} onOpenChange={onOpenChange} open subscriptions={[]} />);
   return onOpenChange;
 }
 
@@ -46,7 +44,10 @@ describe("PolicyGroupDialog", () => {
       toleranceMs: null,
     });
     const order = screen.getByRole("list", { name: "Try order" });
-    const names = () => within(order).getAllByRole("listitem").map((item) => item.textContent);
+    const names = () =>
+      within(order)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent);
 
     expect(names()).toEqual(["1Tokyo", "2Osaka"]);
     expect(screen.getByRole("button", { name: "Move Tokyo up" })).toBeDisabled();

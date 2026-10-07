@@ -57,12 +57,7 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
           data-testid="policy-groups-section"
         >
           {policyGroupEntries.map((entry) => (
-            <PolicyGroupCard
-              controller={controller}
-              entry={entry}
-              key={entry.group.id}
-              testedDelays={testedDelays}
-            />
+            <PolicyGroupCard controller={controller} entry={entry} key={entry.group.id} testedDelays={testedDelays} />
           ))}
         </section>
       ) : null}
@@ -84,9 +79,7 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
             {t("policyGroups.deleteHint")}
             {/* Same warning as deleting the node in use: say it before, not after. */}
             {deletingPolicyGroup?.isActive && controller.coreConnected ? (
-              <span className="mt-2 block font-medium text-warning">
-                {t("policyGroups.deleteActiveHint")}
-              </span>
+              <span className="mt-2 block font-medium text-warning">{t("policyGroups.deleteActiveHint")}</span>
             ) : null}
           </>
         }
@@ -96,9 +89,7 @@ export function PolicyGroupsSection({ controller }: { controller: ServerTableCon
           event.preventDefault();
           void removePolicyGroup();
         }}
-        onOpenChange={(open) =>
-          !open && !deletingPolicyGroupPending && setDeletingPolicyGroup(null)
-        }
+        onOpenChange={(open) => !open && !deletingPolicyGroupPending && setDeletingPolicyGroup(null)}
         open={deletingPolicyGroup !== null}
         pending={deletingPolicyGroupPending}
         title={t("policyGroups.deleteTitle", { name: deletingPolicyGroup?.group.name })}
@@ -140,14 +131,11 @@ function PolicyGroupCard({
   // Without a running core a selector still shows the member it starts on.
   const currentId =
     live?.nowProfileId ??
-    (group.strategy === "selector"
-      ? (group.selectedProfileId ?? members[0]?.profileId ?? null)
-      : null);
+    (group.strategy === "selector" ? (group.selectedProfileId ?? members[0]?.profileId ?? null) : null);
   // A running group reports its members' delays; otherwise the last speed test does.
   const delays = live ? runtimeMemberDelays(live) : testedDelays;
   const collapsible = members.length > COLLAPSED_MEMBER_LIMIT;
-  const shownMembers =
-    collapsible && !showAllMembers ? members.slice(0, COLLAPSED_MEMBER_LIMIT) : members;
+  const shownMembers = collapsible && !showAllMembers ? members.slice(0, COLLAPSED_MEMBER_LIMIT) : members;
   const speedtestKey = `policy:${group.id}`;
   const inUse = isActive && coreConnected;
   const source = group.autoCreated
@@ -195,11 +183,7 @@ function PolicyGroupCard({
               type="button"
               variant="ghost"
             >
-              {testingPolicyGroup ? (
-                <Spinner className="size-4" />
-              ) : (
-                <Zap aria-hidden="true" className="size-4" />
-              )}
+              {testingPolicyGroup ? <Spinner className="size-4" /> : <Zap aria-hidden="true" className="size-4" />}
               <span data-slot="button-label">{t("nodeGroups.test")}</span>
             </Button>
           ) : (
@@ -222,18 +206,16 @@ function PolicyGroupCard({
           )}
           {/* The same outline "use" action as a node row. */}
           <span title={members.length === 0 ? t("nodeGroups.empty") : undefined}>
-          <Button
-            disabled={inUse || switchingPolicyGroupId !== null || members.length === 0}
-            onClick={() => void activatePolicyGroup(group.id)}
-            size="sm"
-            type="button"
-            variant={inUse ? "secondary" : "outline"}
-          >
-            {switchingPolicyGroupId === group.id ? (
-              <Spinner className="size-4" />
-            ) : null}
-            {t(inUse ? "policyGroups.inUse" : "policyGroups.use")}
-          </Button>
+            <Button
+              disabled={inUse || switchingPolicyGroupId !== null || members.length === 0}
+              onClick={() => void activatePolicyGroup(group.id)}
+              size="sm"
+              type="button"
+              variant={inUse ? "secondary" : "outline"}
+            >
+              {switchingPolicyGroupId === group.id ? <Spinner className="size-4" /> : null}
+              {t(inUse ? "policyGroups.inUse" : "policyGroups.use")}
+            </Button>
           </span>
           <Button
             aria-label={t("policyGroups.editNamed", { name: group.name })}

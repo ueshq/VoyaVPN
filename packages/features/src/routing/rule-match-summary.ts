@@ -14,10 +14,7 @@ export type MatchChip =
 
 const LIST_FIELDS: readonly MatchListField[] = ["domain", "ip", "process", "protocol"];
 
-type MatcherFields = Pick<
-  RoutingRule,
-  "domain" | "inboundTags" | "ip" | "network" | "port" | "process" | "protocol"
->;
+type MatcherFields = Pick<RoutingRule, "domain" | "inboundTags" | "ip" | "network" | "port" | "process" | "protocol">;
 
 export function ruleMatchChips(rule: RoutingRule): MatchChip[] {
   const chips: MatchChip[] = [];

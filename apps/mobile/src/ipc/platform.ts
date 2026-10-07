@@ -21,7 +21,9 @@ export function registerMobileBackend(backend: VoyaTransport = createTransport()
   setVoyaCommands(transport.commands);
   // iOS requests authorization while saving NETunnelProvider preferences.
   // Android must launch VpnService.prepare from the foreground Activity.
-  setElevationHandler(() => Platform.OS === "android" ? deviceActions().requestVpnAuthorization() : Promise.resolve(false));
+  setElevationHandler(() =>
+    Platform.OS === "android" ? deviceActions().requestVpnAuthorization() : Promise.resolve(false),
+  );
 
   // Both halves are native here. The desktop reads through the backend because
   // a WebView read needs a user gesture; React Native has no such restriction,

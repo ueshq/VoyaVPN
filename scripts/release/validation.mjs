@@ -32,7 +32,11 @@ export function uniqueSorted(values) {
 }
 
 export function isStableChannel(channel) {
-  return String(channel ?? "").trim().toLowerCase() === "stable";
+  return (
+    String(channel ?? "")
+      .trim()
+      .toLowerCase() === "stable"
+  );
 }
 
 /** Detects the placeholder markers the credential-free configs and fixtures use. */
@@ -275,7 +279,10 @@ export function safeArtifactPath(artifact, context) {
 
 function isSignatureArtifact(artifact) {
   return (
-    artifact?.kind === "signature" || String(artifact?.name ?? "").toLowerCase().endsWith(".sig")
+    artifact?.kind === "signature" ||
+    String(artifact?.name ?? "")
+      .toLowerCase()
+      .endsWith(".sig")
   );
 }
 

@@ -15,9 +15,12 @@ export function useCopiedLabel(durationMs = 2000) {
   const [failed, setFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
 
   const markCopied = useCallback(() => {
     setFailed(false);

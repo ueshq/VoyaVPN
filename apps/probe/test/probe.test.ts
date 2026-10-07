@@ -48,16 +48,24 @@ describe("probe handler", () => {
 
   it("probes IPv6 callers over IPv6", async () => {
     const dial = dialer({ 42443: "timeout" });
-    const response = await handleRequest(
-      probeRequest({ ports: [42443] }, { "CF-Connecting-IP": "2606:4700::1111" }),
-      { dial },
-    );
+    const response = await handleRequest(probeRequest({ ports: [42443] }, { "CF-Connecting-IP": "2606:4700::1111" }), {
+      dial,
+    });
     expect(await body(response)).toMatchObject({ family: "ipv6", ip: "2606:4700::1111" });
     expect(dial).toHaveBeenCalledWith("2606:4700::1111", 42443, 4000);
   });
 
   it("never dials a private, loopback or missing caller address", async () => {
-    for (const address of ["", "10.0.0.2", "127.0.0.1", "100.64.3.4", "::1", "fd00::1", "::ffff:192.168.1.1", "nonsense"]) {
+    for (const address of [
+      "",
+      "10.0.0.2",
+      "127.0.0.1",
+      "100.64.3.4",
+      "::1",
+      "fd00::1",
+      "::ffff:192.168.1.1",
+      "nonsense",
+    ]) {
       const dial = dialer({});
       const response = await handleRequest(probeRequest({ ports: [42443] }, { "CF-Connecting-IP": address }), { dial });
       expect(response.status, address).toBe(403);
@@ -126,27 +134,65 @@ describe("probe handler", () => {
 describe("caller address screening", () => {
   it("accepts only globally routable unicast", () => {
     for (const address of [
-      CALLER, "8.8.8.8", "2606:4700::1111", "2001:4860::8888", "::ffff:8.8.8.8",
+      CALLER,
+      "8.8.8.8",
+      "2606:4700::1111",
+      "2001:4860::8888",
+      "::ffff:8.8.8.8",
       // Neighbours of the special-purpose blocks below stay public.
-      "192.0.1.1", "192.0.3.1", "198.17.255.255", "198.20.0.1", "198.51.101.1", "203.0.112.1", "203.0.114.1",
-      "192.88.98.1", "192.88.100.1",
-      "223.255.255.254", "2001:200::1", "3fff:1000::1",
+      "192.0.1.1",
+      "192.0.3.1",
+      "198.17.255.255",
+      "198.20.0.1",
+      "198.51.101.1",
+      "203.0.112.1",
+      "203.0.114.1",
+      "192.88.98.1",
+      "192.88.100.1",
+      "223.255.255.254",
+      "2001:200::1",
+      "3fff:1000::1",
     ]) {
       expect(isPublicAddress(address), address).toBe(true);
     }
     for (const address of [
-      "0.1.2.3", "10.1.2.3", "100.100.100.200", "169.254.169.254", "172.20.0.1", "192.168.0.1", "224.0.0.1",
-      "::", "fe80::1", "fc00::1", "ff02::1", "2001:db8::1", "2001::1", "2002::1", "1:2:3:4:5:6:7:8:9", "1::2::3",
+      "0.1.2.3",
+      "10.1.2.3",
+      "100.100.100.200",
+      "169.254.169.254",
+      "172.20.0.1",
+      "192.168.0.1",
+      "224.0.0.1",
+      "::",
+      "fe80::1",
+      "fc00::1",
+      "ff02::1",
+      "2001:db8::1",
+      "2001::1",
+      "2002::1",
+      "1:2:3:4:5:6:7:8:9",
+      "1::2::3",
     ]) {
       expect(isPublicAddress(address), address).toBe(false);
     }
     // Reserved, documentation and benchmarking space, IPv4-mapped included.
     for (const address of [
-      "192.0.0.9", "192.0.2.7", "198.18.0.1", "198.19.255.254", "198.51.100.7", "203.0.113.7",
-      "240.0.0.1", "255.255.255.255", "::ffff:203.0.113.7",
+      "192.0.0.9",
+      "192.0.2.7",
+      "198.18.0.1",
+      "198.19.255.254",
+      "198.51.100.7",
+      "203.0.113.7",
+      "240.0.0.1",
+      "255.255.255.255",
+      "::ffff:203.0.113.7",
       // 6to4 relay anycast, the IPv4 half of the excluded `2002::/16`.
       "192.88.99.1",
-      "2001:2::1", "2001:10::1", "2001:1ff:ffff::1", "3fff::1", "3fff:fff::1",
+      "2001:2::1",
+      "2001:10::1",
+      "2001:1ff:ffff::1",
+      "3fff::1",
+      "3fff:fff::1",
     ]) {
       expect(isPublicAddress(address), address).toBe(false);
     }

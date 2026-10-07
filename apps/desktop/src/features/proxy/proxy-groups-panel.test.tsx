@@ -75,9 +75,7 @@ describe("ProxyGroupsPanel", () => {
     useRuntimeEventStore.setState({ coreState: { ...connected, state: "disconnected" } });
     renderPanel();
 
-    expect(
-      await screen.findByText("Connect to see which node your policy group uses."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Connect to see which node your policy group uses.")).toBeInTheDocument();
     expect(ipc.policyGroupRuntime).not.toHaveBeenCalled();
   });
 
@@ -123,9 +121,7 @@ describe("ProxyGroupsPanel", () => {
     renderPanel();
 
     await waitFor(() =>
-      expect(
-        screen.getAllByTestId("proxy-group-member").find((row) => row.dataset.current),
-      ).toHaveTextContent("Tokyo"),
+      expect(screen.getAllByTestId("proxy-group-member").find((row) => row.dataset.current)).toHaveTextContent("Tokyo"),
     );
     expect(screen.queryByRole("button", { name: /Osaka/ })).not.toBeInTheDocument();
     expect(screen.getByText("Lowest latency")).toBeInTheDocument();

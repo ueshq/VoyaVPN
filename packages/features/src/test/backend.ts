@@ -1,11 +1,7 @@
 import { vi, type Mock } from "vite-plus/test";
 
 import type { CoreState, VoyaCommands } from "@voya/contracts";
-import {
-  setAppVisibility,
-  setClipboard,
-  setElevationHandler,
-} from "@voya/client/platform";
+import { setAppVisibility, setClipboard, setElevationHandler } from "@voya/client/platform";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { setVoyaCommands } from "@voya/client/transport";
 
@@ -26,18 +22,14 @@ import { setVoyaCommands } from "@voya/client/transport";
  * clipboard reads through `readClipboardText` and writes through the WebView,
  * and visibility follows `document.visibilityState`.
  */
-export function installFakeCommands<Commands extends object>(
-  commands: Commands,
-): Commands {
+export function installFakeCommands<Commands extends object>(commands: Commands): Commands {
   const surface = new Proxy(commands, {
     get(target, property: string) {
       if (property in target) {
         return target[property as keyof Commands];
       }
 
-      return vi.fn(() =>
-        Promise.reject(new Error(`the test did not stub ${property}()`)),
-      );
+      return vi.fn(() => Promise.reject(new Error(`the test did not stub ${property}()`)));
     },
   });
 
@@ -55,8 +47,7 @@ export function installFakeCommands<Commands extends object>(
     },
   });
   setAppVisibility({
-    isVisible: () =>
-      typeof document === "undefined" || document.visibilityState === "visible",
+    isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
     subscribe: (onChange) => {
       document.addEventListener("visibilitychange", onChange);
       return () => document.removeEventListener("visibilitychange", onChange);

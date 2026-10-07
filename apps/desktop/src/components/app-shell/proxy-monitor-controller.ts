@@ -36,9 +36,7 @@ const STOP_DELAY_MS = 2_000;
  * state the UI shows. `starting` / `stopping` stay local — they describe an
  * in-flight command, not application state.
  */
-export function createProxyMonitorController({
-  onError,
-}: ProxyMonitorControllerOptions): ProxyMonitorController {
+export function createProxyMonitorController({ onError }: ProxyMonitorControllerOptions): ProxyMonitorController {
   let startTimer: number | null = null;
   let stopTimer: number | null = null;
   let starting = false;
@@ -74,7 +72,8 @@ export function createProxyMonitorController({
 
       starting = true;
       useRuntimeEventStore.getState().setProxyMonitorStarting();
-      void voyaCommands().proxyStartMonitor()
+      void voyaCommands()
+        .proxyStartMonitor()
         .then((status) => {
           useRuntimeEventStore.getState().setProxyMonitorStatus(status);
           // The surface may have gone away while the command was in flight.
@@ -100,7 +99,8 @@ export function createProxyMonitorController({
       }
 
       stopping = true;
-      void voyaCommands().proxyStopMonitor()
+      void voyaCommands()
+        .proxyStopMonitor()
         .then((status) => {
           useRuntimeEventStore.getState().setProxyMonitorStatus(status);
         })
@@ -124,9 +124,11 @@ export function createProxyMonitorController({
       clearStartTimer();
       clearStopTimer();
       if (isRunning()) {
-        void voyaCommands().proxyStopMonitor().catch((error: unknown) => {
-          console.error("[proxy-monitor] failed to stop during cleanup", error);
-        });
+        void voyaCommands()
+          .proxyStopMonitor()
+          .catch((error: unknown) => {
+            console.error("[proxy-monitor] failed to stop during cleanup", error);
+          });
       }
     },
     setWanted(next) {

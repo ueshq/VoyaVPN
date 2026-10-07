@@ -138,7 +138,9 @@ describe("SelfHostScreen", () => {
     const dialog = await screen.findByRole("dialog", { name: "Share links" });
     const code = await within(dialog).findByRole("img", { name: "Generated QR code" });
 
-    await user.click(within(within(dialog).getAllByTestId("self-host-link")[1]).getByRole("button", { pressed: false }));
+    await user.click(
+      within(within(dialog).getAllByTestId("self-host-link")[1]).getByRole("button", { pressed: false }),
+    );
 
     await waitFor(() => expect(ipc.generateQrCode).toHaveBeenCalledWith(ssLink().link));
     // The previous code stays, dimmed, instead of the frame emptying out.
@@ -150,7 +152,11 @@ describe("SelfHostScreen", () => {
     const user = setupUser();
     ipc.getSelfHostState.mockResolvedValue(runningState());
     let fail: (error: Error) => void = () => {};
-    ipc.generateQrCode.mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+    ipc.generateQrCode.mockReturnValue(
+      new Promise((_, reject) => {
+        fail = reject;
+      }),
+    );
     renderScreen();
 
     await user.click(await findTile("Share links"));
@@ -231,9 +237,7 @@ describe("SelfHostScreen", () => {
 
     await user.click(within(status).getByRole("button", { name: "Allow" }));
     expect(ipc.applySelfHostFirewallRule).toHaveBeenCalledOnce();
-    await waitFor(() =>
-      expect(within(status).queryByRole("button", { name: "Allow" })).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(within(status).queryByRole("button", { name: "Allow" })).not.toBeInTheDocument());
     expect(within(status).queryByText(/Windows Firewall may block/)).not.toBeInTheDocument();
   });
 
@@ -271,7 +275,9 @@ describe("SelfHostScreen", () => {
     ).toBeInTheDocument();
     expect(within(status).getByRole("button", { name: "Check again" })).toBeInTheDocument();
     expect(within(status).queryByText(/Checked at/)).not.toBeInTheDocument();
-    const findings = within(status).getAllByRole("listitem").map((item) => item.textContent);
+    const findings = within(status)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent);
     expect(findings).toEqual([
       "The router cannot forward automatically. Forward the node's ports (TCP and UDP) to this device by hand.",
       "Timed out: a router or firewall blocks the connection.",
@@ -665,9 +671,7 @@ function environment(): SelfHostEnvironmentReport {
       reasons: ["noPublicAddress"],
       verifiedByProbe: false,
     }),
-    localAddresses: [
-      { address: "192.168.1.20", family: "ipv4", interface: "en0", scope: "private" },
-    ],
+    localAddresses: [{ address: "192.168.1.20", family: "ipv4", interface: "en0", scope: "private" }],
     portMapping: {
       detail: null,
       gatewayExternalAddress: "203.0.113.7",

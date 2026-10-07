@@ -37,9 +37,9 @@ describe("the shared sing-box checkout", () => {
   it("refuses a pinned tag that resolves to some other commit", () => {
     const { commit, root, sourceDir } = checkoutWithTag(DEFAULT_SING_BOX_VERSION);
 
-    expect(() =>
-      ensureSingBoxSource({ env: {}, ref: DEFAULT_SING_BOX_VERSION, repoRoot: root, sourceDir }),
-    ).toThrow(new RegExp(`resolved to ${commit}, not the pinned`));
+    expect(() => ensureSingBoxSource({ env: {}, ref: DEFAULT_SING_BOX_VERSION, repoRoot: root, sourceDir })).toThrow(
+      new RegExp(`resolved to ${commit}, not the pinned`),
+    );
   });
 
   it("builds an unpinned ref only when that is asked for", () => {

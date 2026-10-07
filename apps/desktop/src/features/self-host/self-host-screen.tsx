@@ -6,12 +6,7 @@ import { ScrollArea } from "@voya/ui/components/scroll-area";
 import { Skeleton } from "@voya/ui/components/skeleton";
 
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import {
-  PageContent,
-  PageSection,
-  PageSurface,
-  PageTitle,
-} from "@/components/app-shell/page-section";
+import { PageContent, PageSection, PageSurface, PageTitle } from "@/components/app-shell/page-section";
 import type { SelfHostState } from "@voya/contracts";
 
 import { ActionTile } from "./action-tile";
@@ -45,11 +40,7 @@ export function SelfHostScreen() {
         <ScrollArea className="min-h-0 min-w-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:block!">
           {state ? (
             <div className="grid gap-4">
-              <HostingCard
-                controller={controller}
-                onOpenSettings={() => setDialog("settings")}
-                state={state}
-              />
+              <HostingCard controller={controller} onOpenSettings={() => setDialog("settings")} state={state} />
               <div className="grid grid-cols-2 gap-4">
                 <ActionTile
                   icon={Link2}

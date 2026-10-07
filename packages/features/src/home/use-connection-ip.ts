@@ -13,9 +13,7 @@ import { type RuntimeEventState, useRuntimeEventStore } from "@voya/client/runti
  * so the session's connection count is what tells a reconnect to the same node
  * from the connection before it.
  */
-export function runningConnectionKey(
-  state: Pick<RuntimeEventState, "connectionEpoch" | "coreState">,
-): string | null {
+export function runningConnectionKey(state: Pick<RuntimeEventState, "connectionEpoch" | "coreState">): string | null {
   const core = state.coreState;
   return core?.state === "connected"
     ? `${core.activeProfileId ?? ""}:${core.mainPid ?? ""}:${state.connectionEpoch}`

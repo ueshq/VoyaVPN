@@ -16,23 +16,19 @@ import {
   ScrollableDialogContent,
 } from "@voya/ui/components/dialog";
 import { Disclosure } from "@voya/ui/components/disclosure";
-import {
-  CheckboxField,
-  FieldLayout,
-  SelectField,
-  TextAreaField,
-  TextField,
-} from "@voya/ui/components/form-fields";
+import { CheckboxField, FieldLayout, SelectField, TextAreaField, TextField } from "@voya/ui/components/form-fields";
 
 import type { RoutingRule, RoutingRuleScope } from "@voya/contracts";
 import { validationFieldErrors } from "@voya/client/messages";
-import {
-  translateFieldErrors,
-  zodIssuesToErrorMap,
-  type FieldErrorMap,
-} from "@voya/features/forms/zod-errors";
+import { translateFieldErrors, zodIssuesToErrorMap, type FieldErrorMap } from "@voya/features/forms/zod-errors";
 
-import { OUTBOUND_LABEL_KEYS, type RuleGroupOutbound, appendMatcherLine, describeOutbound, groupOutboundValue } from "@voya/features/routing/rule-outbound";
+import {
+  OUTBOUND_LABEL_KEYS,
+  type RuleGroupOutbound,
+  appendMatcherLine,
+  describeOutbound,
+  groupOutboundValue,
+} from "@voya/features/routing/rule-outbound";
 import { RULE_SCOPE_LABEL_KEYS } from "@/features/routing/routing-constants";
 import { routingRuleSchema, type RoutingRulePayload } from "@voya/features/routing/routing-form-schema";
 import { formToRule, ruleToForm, type RuleFormState } from "@/features/routing/routing-form-values";
@@ -150,11 +146,7 @@ export function RoutingRuleDialog({
           <DialogDescription className="sr-only">{t("panes.routing.ruleEditor")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
-          <form
-            className="grid min-h-0 gap-4"
-            id="routing-rule-form"
-            onSubmit={(event) => void submitForm(event)}
-          >
+          <form className="grid min-h-0 gap-4" id="routing-rule-form" onSubmit={(event) => void submitForm(event)}>
             <div className="grid gap-3 sm:grid-cols-2">
               <TextField
                 disabled={managedLabel !== null}
@@ -211,16 +203,8 @@ export function RoutingRuleDialog({
                 label={t("panes.routing.network")}
               >
                 <div className="flex h-control items-center gap-5">
-                  <CheckboxField
-                    checked={form.tcp}
-                    label="TCP"
-                    onChange={(checked) => update("tcp", checked)}
-                  />
-                  <CheckboxField
-                    checked={form.udp}
-                    label="UDP"
-                    onChange={(checked) => update("udp", checked)}
-                  />
+                  <CheckboxField checked={form.tcp} label="TCP" onChange={(checked) => update("tcp", checked)} />
+                  <CheckboxField checked={form.udp} label="UDP" onChange={(checked) => update("udp", checked)} />
                 </div>
               </FieldLayout>
             </div>
@@ -233,10 +217,7 @@ export function RoutingRuleDialog({
                 value={form.process}
               />
             ) : null}
-            <Disclosure
-              invalid={Boolean(errors.scope ?? errors.protocol)}
-              title={t("panes.routing.advanced")}
-            >
+            <Disclosure invalid={Boolean(errors.scope ?? errors.protocol)} title={t("panes.routing.advanced")}>
               <SelectField
                 description={t("panes.routing.scopeHelp")}
                 error={errors.scope}
@@ -320,4 +301,3 @@ function MatcherPresets({
     </div>
   );
 }
-

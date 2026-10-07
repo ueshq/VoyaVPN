@@ -33,7 +33,9 @@ describe("checked command capture", () => {
   it("preserves output without trimming and returns the process result", () => {
     const { script } = commandFixture('process.stdout.write(" out\\n"); process.stderr.write("err\\n");');
     expect(checkedCapture(process.execPath, [script])).toMatchObject({
-      status: 0, stdout: " out\n", stderr: "err\n",
+      status: 0,
+      stdout: " out\n",
+      stderr: "err\n",
     });
   });
 
@@ -64,7 +66,8 @@ describe("spawned command capture", () => {
   it("hands back a non-zero exit as an answer rather than a failure", () => {
     const { script } = commandFixture('process.stdout.write("nothing found\\n"); process.exit(1);');
     expect(captureSpawned(process.execPath, [script])).toMatchObject({
-      status: 1, stdout: "nothing found\n",
+      status: 1,
+      stdout: "nothing found\n",
     });
   });
 
@@ -79,21 +82,26 @@ describe("spawned command capture", () => {
     const refused = Object.assign(new Error("fork refused"), { code: "EAGAIN" });
     expect(() => captureSpawned("tool", [], {}, () => ({ error: refused }))).toThrow(refused);
     expect(captureSpawned("tool", ["--flag"], { cwd: "/" }, (...call) => ({ call, status: 3 }))).toEqual({
-      call: ["tool", ["--flag"], { cwd: "/" }], status: 3,
+      call: ["tool", ["--flag"], { cwd: "/" }],
+      status: 3,
     });
   });
 });
 
 describe("shared native tool helpers", () => {
   it("reports status and stderr while redacting command arguments", () => {
-    expect(commandFailure("tool", ["--token", "secret"], { status: 7, stdout: "out", stderr: "err" }).message)
-      .toBe("tool --token *** failed with status 7: err");
-    expect(commandFailure("tool", [], { status: null, stdout: " out " }).message)
-      .toBe("tool failed with status unknown: out");
+    expect(commandFailure("tool", ["--token", "secret"], { status: 7, stdout: "out", stderr: "err" }).message).toBe(
+      "tool --token *** failed with status 7: err",
+    );
+    expect(commandFailure("tool", [], { status: null, stdout: " out " }).message).toBe(
+      "tool failed with status unknown: out",
+    );
   });
 
   it("reads Windows environment names without changing the first non-empty match", () => {
-    expect(environmentValue({ programfiles: "  ", PROGRAMW6432: " C:\\Apps " }, "ProgramFiles", "ProgramW6432")).toBe("C:\\Apps");
+    expect(environmentValue({ programfiles: "  ", PROGRAMW6432: " C:\\Apps " }, "ProgramFiles", "ProgramW6432")).toBe(
+      "C:\\Apps",
+    );
     expect(environmentValue({ windir: "first", SystemRoot: "second" }, "SystemRoot", "windir")).toBe("first");
     expect(environmentValue(undefined, "SystemRoot")).toBe("");
   });

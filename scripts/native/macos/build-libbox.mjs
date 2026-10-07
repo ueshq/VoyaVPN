@@ -15,9 +15,7 @@ import { ensureSingBoxSource, installLibboxTools, singBoxSourceDir } from "../si
 const repoRoot = repoRootFromScript(import.meta.url);
 const sourceDir = singBoxSourceDir(repoRoot);
 const frameworkRoot = resolve(repoRoot, "apps", "desktop", "src-tauri", "native", "macos", "Frameworks");
-const targetFramework = resolve(
-  process.env.VOYAVPN_LIBBOX_FRAMEWORK || resolve(frameworkRoot, "Libbox.framework"),
-);
+const targetFramework = resolve(process.env.VOYAVPN_LIBBOX_FRAMEWORK || resolve(frameworkRoot, "Libbox.framework"));
 
 /**
  * The macOS slice, and only that one.
@@ -43,7 +41,9 @@ export function findUniversalMacosFramework(xcframeworkPath) {
   if (candidates.length === 0) {
     throw new Error(`Libbox.xcframework has no macOS Libbox.framework slice: ${xcframeworkPath}`);
   }
-  candidates.sort((left, right) => Number(/arm64_x86_64|x86_64_arm64/.test(right)) - Number(/arm64_x86_64|x86_64_arm64/.test(left)));
+  candidates.sort(
+    (left, right) => Number(/arm64_x86_64|x86_64_arm64/.test(right)) - Number(/arm64_x86_64|x86_64_arm64/.test(left)),
+  );
   return candidates[0];
 }
 

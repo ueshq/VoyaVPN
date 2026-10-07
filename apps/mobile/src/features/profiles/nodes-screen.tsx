@@ -4,7 +4,12 @@ import { MoreHorizontal } from "lucide-react-native";
 import { useProfileActivation } from "@voya/client/runtime-action";
 import type { NodeListRow } from "@voya/features/profiles/node-list-rows";
 import type { ProfileSummaryEntry } from "@voya/contracts";
-import { profileLatency, profileLatencyFailed, profileLatencyTone, profileTitle } from "@voya/features/profiles/profile-display";
+import {
+  profileLatency,
+  profileLatencyFailed,
+  profileLatencyTone,
+  profileTitle,
+} from "@voya/features/profiles/profile-display";
 import { overlaySpeedtestResult, useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
@@ -65,9 +70,7 @@ export function NodesScreen() {
   // callback that is rebuilt each render through a ref.
   const { busy: switching, runningId } = activation;
   const { toggleGroup } = selection;
-  const selectRef = useLatestRef((id: string) =>
-    operation.runOperation(() => activation.selectProfile(id)),
-  );
+  const selectRef = useLatestRef((id: string) => operation.runOperation(() => activation.selectProfile(id)));
 
   // A run tests every node the list holds. Collapsing a group only hides its
   // rows — it must not take the nodes out of a "Test all" — and a search that
@@ -75,10 +78,7 @@ export function NodesScreen() {
   // The stored list, not the one with live results laid over it: the overlay
   // is a new array on every result of a run and holds the same nodes.
   const storedEntries = data.profilesQuery.data?.entries;
-  const testableIds = useMemo(
-    () => (storedEntries ?? []).map((entry) => entry.profile.id),
-    [storedEntries],
-  );
+  const testableIds = useMemo(() => (storedEntries ?? []).map((entry) => entry.profile.id), [storedEntries]);
 
   const selected = data.profiles.find((entry) => entry.isActive);
   // The phone lists the groups without their running member or its delays,
@@ -89,10 +89,13 @@ export function NodesScreen() {
 
   const returnFocusId = useRef<string | null>(null);
   // Focus goes back to the row the sheet was opened from once it closes.
-  const openActions = useCallback((entry: ProfileSummaryEntry) => {
-    returnFocusId.current = entry.profile.id;
-    setActionsFor(entry);
-  }, [setActionsFor]);
+  const openActions = useCallback(
+    (entry: ProfileSummaryEntry) => {
+      returnFocusId.current = entry.profile.id;
+      setActionsFor(entry);
+    },
+    [setActionsFor],
+  );
   const importRef = useRef<View>(null);
   const nodeRefs = useRef(new Map<string, View>());
   const { width, fontScale } = useWindowDimensions();
@@ -180,11 +183,17 @@ export function NodesScreen() {
                 </View>
               }
             />
-            {selected ? <ListGroup><ListRow
-              title={`${t("mobile.currentSelection")}: ${profileTitle(selected.profile.remarks, t)}`}
-              titleLines={0} description={selected.profile.address} last
-              onPress={() => openActions(selected)}
-            /></ListGroup> : null}
+            {selected ? (
+              <ListGroup>
+                <ListRow
+                  title={`${t("mobile.currentSelection")}: ${profileTitle(selected.profile.remarks, t)}`}
+                  titleLines={0}
+                  description={selected.profile.address}
+                  last
+                  onPress={() => openActions(selected)}
+                />
+              </ListGroup>
+            ) : null}
             <Button
               ref={importRef}
               className="py-3"
@@ -195,7 +204,9 @@ export function NodesScreen() {
               <ClipboardPaste size={18} color={testableIds.length ? accentForeground : onAccent} />
               <Button.Label>{t("mobile.add")}</Button.Label>
             </Button>
-            <ListGroup><ListRow last chevron title={t("mobile.subscriptions")} onPress={() => openPage("subscriptions")} /></ListGroup>
+            <ListGroup>
+              <ListRow last chevron title={t("mobile.subscriptions")} onPress={() => openPage("subscriptions")} />
+            </ListGroup>
             {operation.operationMessage ? (
               <Banner status="info" liveRegion message={operation.operationMessage} />
             ) : null}
@@ -216,18 +227,24 @@ export function NodesScreen() {
                       titleLines={2}
                       description={t(POLICY_GROUP_STRATEGY_HINT_KEYS[entry.group.strategy])}
                       descriptionLines={0}
-                      leading={<SelectionMark state={entry.isActive ? (groups.coreConnected ? "inUse" : "selected") : "none"} />}
-                      trailing={entry.isActive ? (
-                        <Typography className={`text-sm font-medium ${groups.coreConnected ? "text-connected" : "text-brand"}`}>
-                          {t(groups.coreConnected ? "policyGroups.inUse" : "policyGroups.active")}
-                        </Typography>
-                      ) : null}
+                      leading={
+                        <SelectionMark
+                          state={entry.isActive ? (groups.coreConnected ? "inUse" : "selected") : "none"}
+                        />
+                      }
+                      trailing={
+                        entry.isActive ? (
+                          <Typography
+                            className={`text-sm font-medium ${groups.coreConnected ? "text-connected" : "text-brand"}`}
+                          >
+                            {t(groups.coreConnected ? "policyGroups.inUse" : "policyGroups.active")}
+                          </Typography>
+                        ) : null
+                      }
                       isDisabled={groups.switchingPolicyGroupId !== null}
                       // Like a node row: a stopped core only remembers the
                       // group; connecting stays the Home button's job.
-                      onPress={() =>
-                        void operation.runOperation(() => groups.selectPolicyGroup(entry.group.id))
-                      }
+                      onPress={() => void operation.runOperation(() => groups.selectPolicyGroup(entry.group.id))}
                       accessibilityState={{ selected: entry.isActive }}
                     />
                   ))}
@@ -236,14 +253,18 @@ export function NodesScreen() {
             ) : null}
           </View>
         }
-        ListEmptyComponent={data.profilesQuery.isPending ? <Typography className="px-page py-4 text-base text-subtle">{t("panes.profiles.loadingNodes")}</Typography> : data.profilesQuery.error ? undefined :
-          <View className="px-page pt-4">
-            <EmptyState
-              icons={[Server]}
-              title={t("panes.profiles.empty")}
-              description={t("panes.profiles.emptyDescription")}
-            />
-          </View>
+        ListEmptyComponent={
+          data.profilesQuery.isPending ? (
+            <Typography className="px-page py-4 text-base text-subtle">{t("panes.profiles.loadingNodes")}</Typography>
+          ) : data.profilesQuery.error ? undefined : (
+            <View className="px-page pt-4">
+              <EmptyState
+                icons={[Server]}
+                title={t("panes.profiles.empty")}
+                description={t("panes.profiles.emptyDescription")}
+              />
+            </View>
+          )
         }
       />
 
@@ -314,9 +335,7 @@ const NodeRow = memo(function NodeRow({
   openActions: (entry: ProfileSummaryEntry) => void;
   nodeRefs: RefObject<Map<string, View>>;
 }) {
-  const result = useRuntimeEventStore(
-    (state) => state.speedtestResultsByProfileId[stored.profile.id],
-  );
+  const result = useRuntimeEventStore((state) => state.speedtestResultsByProfileId[stored.profile.id]);
   const entry = overlaySpeedtestResult(stored, result);
   // The pill always holds the latency column's place. A failure's reason is
   // too long for it, so the pill says it failed and the reason gets a line.
@@ -337,30 +356,28 @@ const NodeRow = memo(function NodeRow({
       titleLines={stackedActions ? 0 : 2}
       description={`${getProtocolLabel(entry.profile.kind)} · ${entry.profile.address}`}
       leading={
-        <SelectionMark
-          state={runningId === entry.profile.id ? "inUse" : entry.isActive ? "selected" : "none"}
-        />
+        <SelectionMark state={runningId === entry.profile.id ? "inUse" : entry.isActive ? "selected" : "none"} />
       }
       trailingInteractive
       accessibilityLabel={`${profileTitle(entry.profile.remarks, t)}, ${getProtocolLabel(entry.profile.kind)}, ${entry.profile.address}, ${latencyText}`}
       trailing={
         <View className={`gap-1 ${stackedActions ? "flex-row items-center" : "items-end"}`}>
-          <Button isIconOnly className="h-12 w-12" variant="ghost" accessibilityLabel={actionsLabel(entry, t)} onPress={() => openActions(entry)}>
+          <Button
+            isIconOnly
+            className="h-12 w-12"
+            variant="ghost"
+            accessibilityLabel={actionsLabel(entry, t)}
+            onPress={() => openActions(entry)}
+          >
             <MoreHorizontal size={20} color={accentForeground} />
           </Button>
           <Chip size="sm" variant="soft" color={LATENCY_COLOR[profileLatencyTone(entry)]}>
-            <Chip.Label className="tabular-nums">
-              {failed ? t("speedtest.outcome.failed") : latencyText}
-            </Chip.Label>
+            <Chip.Label className="tabular-nums">{failed ? t("speedtest.outcome.failed") : latencyText}</Chip.Label>
           </Chip>
           {runningId === entry.profile.id ? (
-            <Typography className="text-sm font-medium text-connected">
-              {t("panes.profiles.card.using")}
-            </Typography>
+            <Typography className="text-sm font-medium text-connected">{t("panes.profiles.card.using")}</Typography>
           ) : entry.isActive ? (
-            <Typography className="text-sm font-medium text-brand">
-              {t("panes.profiles.card.default")}
-            </Typography>
+            <Typography className="text-sm font-medium text-brand">{t("panes.profiles.card.default")}</Typography>
           ) : null}
         </View>
       }
@@ -369,11 +386,7 @@ const NodeRow = memo(function NodeRow({
       // Tapping the already-active row selects nothing new — it opens the
       // actions sheet instead, the same thing the header's
       // current-selection row does, so the tap always answers.
-      onPress={() =>
-        entry.isActive
-          ? openActions(entry)
-          : void selectRef.current(entry.profile.id)
-      }
+      onPress={() => (entry.isActive ? openActions(entry) : void selectRef.current(entry.profile.id))}
       // A phone has no right-click, so the desktop's row menu is a long
       // press; the sheet says what it offers.
       onLongPress={() => openActions(entry)}
@@ -383,7 +396,9 @@ const NodeRow = memo(function NodeRow({
       accessibilityActions={[{ label: actionsLabel(entry, t), name: "longpress" }]}
     >
       {failed && entry.metrics.outcome !== "failed" ? (
-        <Typography className="text-sm text-danger" numberOfLines={2}>{latencyText}</Typography>
+        <Typography className="text-sm text-danger" numberOfLines={2}>
+          {latencyText}
+        </Typography>
       ) : null}
     </ListRow>
   );

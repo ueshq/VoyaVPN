@@ -36,13 +36,7 @@ const SELF_TEST_FAILURES = [
  * re-checks after the node starts and every ten minutes, so this stays current
  * without the button, which is offered only while hosting is on.
  */
-export function NetworkStatus({
-  controller,
-  state,
-}: {
-  controller: SelfHostController;
-  state: SelfHostState;
-}) {
+export function NetworkStatus({ controller, state }: { controller: SelfHostController; state: SelfHostState }) {
   const { t } = useI18n();
   const { environment } = state;
   const checking = controller.pending === "check";
@@ -166,9 +160,7 @@ function Findings({
           {t("panes.selfHost.network.localAddress", { addresses: localAddresses.join(", ") })}
         </p>
       ) : null}
-      {reachable ? (
-        <p className="text-xs text-muted-foreground">{t("panes.selfHost.network.probeNote")}</p>
-      ) : null}
+      {reachable ? <p className="text-xs text-muted-foreground">{t("panes.selfHost.network.probeNote")}</p> : null}
     </>
   );
 }
@@ -178,9 +170,7 @@ function FamilyRow({ report }: { report: SelfHostFamilyReport }) {
   return (
     <div className="flex min-w-0 items-center gap-3 text-sm" data-testid={`self-host-family-${report.family}`}>
       <span className="w-10 shrink-0 text-muted-foreground">{t(ADDRESS_KIND_KEYS[report.family])}</span>
-      <span className="min-w-0 truncate font-mono">
-        {report.publicAddress ?? t("panes.selfHost.network.none")}
-      </span>
+      <span className="min-w-0 truncate font-mono">{report.publicAddress ?? t("panes.selfHost.network.none")}</span>
       <Badge className="ms-auto" variant={reachabilityTone(report.reachability)}>
         {t(REACHABILITY_KEYS[report.reachability])}
       </Badge>

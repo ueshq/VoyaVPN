@@ -3,7 +3,10 @@ import type { TranslationFunction, TranslationKey } from "@voya/i18n/core";
 
 /** Outcome state is authoritative; diagnostic messages can include successes. */
 export function isSubscriptionUpdateFailure(result: SubscriptionUpdateResult) {
-  return result.outcomes.some((item) => item.status === "failed") && !result.outcomes.some((item) => item.status === "success");
+  return (
+    result.outcomes.some((item) => item.status === "failed") &&
+    !result.outcomes.some((item) => item.status === "success")
+  );
 }
 
 const REASONS = {
@@ -23,7 +26,10 @@ export function assertSubscriptionUpdated(result: SubscriptionUpdateResult, t: T
 }
 
 export function subscriptionUpdateMessages(result: SubscriptionUpdateResult, t: TranslationFunction) {
-  return result.outcomes.filter((item) => item.status !== "success").map((item) => t(REASONS[item.reason])).join("\n");
+  return result.outcomes
+    .filter((item) => item.status !== "success")
+    .map((item) => t(REASONS[item.reason]))
+    .join("\n");
 }
 
 export function formatSubscriptionUpdateSummary(result: SubscriptionUpdateResult, t: TranslationFunction) {

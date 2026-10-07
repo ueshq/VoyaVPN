@@ -47,9 +47,7 @@ export function EmptyState({
         <Typography maxFontSizeMultiplier={2} className="text-center text-xl font-semibold text-foreground">
           {title}
         </Typography>
-        {description ? (
-          <Typography className="text-center text-base text-subtle">{description}</Typography>
-        ) : null}
+        {description ? <Typography className="text-center text-base text-subtle">{description}</Typography> : null}
       </View>
       {action ? <View className="w-full">{action}</View> : null}
     </Surface>

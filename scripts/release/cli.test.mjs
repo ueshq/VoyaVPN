@@ -8,7 +8,11 @@ const repoRoot = repoRootFromScript(import.meta.url);
 function stream() {
   let value = "";
   return {
-    stream: { write: (chunk) => { value += String(chunk); } },
+    stream: {
+      write: (chunk) => {
+        value += String(chunk);
+      },
+    },
     value: () => value,
   };
 }

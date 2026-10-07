@@ -69,7 +69,14 @@ const defaultLibboxFramework = resolve(nativeRoot, "Frameworks", "Libbox.framewo
 const libboxFramework = resolve(process.env.VOYAVPN_LIBBOX_FRAMEWORK || defaultLibboxFramework);
 const embeddedLibboxFramework = tunnelLayout.embeddedLibboxFramework;
 const appEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "macos-app.plist");
-const packetTunnelEntitlements = resolve(repoRoot, "apps", "desktop", "src-tauri", "entitlements", "packet-tunnel.plist");
+const packetTunnelEntitlements = resolve(
+  repoRoot,
+  "apps",
+  "desktop",
+  "src-tauri",
+  "entitlements",
+  "packet-tunnel.plist",
+);
 const provisioningProfileDir = resolve(process.env.VOYAVPN_PROVISIONING_PROFILE_DIR || defaultProvisioningProfileDir);
 const generatedEntitlementsDir = resolve(outRoot, "generated-entitlements");
 
@@ -303,18 +310,14 @@ function buildPacketTunnel() {
   run("xcrun", ["strip", "-x", appexBinary], { cwd: repoRoot });
 
   const versions = packetTunnelVersions();
-  writePlist(
-    resolve(nativeRoot, "PacketTunnel", "Info.plist"),
-    resolve(appexContents, "Info.plist"),
-    {
-      "$(PRODUCT_MODULE_NAME)": "VoyaPacketTunnel",
-      "$(EXECUTABLE_NAME)": packetTunnelExecutableName,
-      "$(MACOSX_DEPLOYMENT_TARGET)": deployment.minimumSystemVersion,
-      "$(MARKETING_VERSION)": versions.marketing,
-      "$(CURRENT_PROJECT_VERSION)": versions.build,
-      "$(BUNDLE_PACKAGE_TYPE)": tunnelLayout.infoPackageType,
-    },
-  );
+  writePlist(resolve(nativeRoot, "PacketTunnel", "Info.plist"), resolve(appexContents, "Info.plist"), {
+    "$(PRODUCT_MODULE_NAME)": "VoyaPacketTunnel",
+    "$(EXECUTABLE_NAME)": packetTunnelExecutableName,
+    "$(MACOSX_DEPLOYMENT_TARGET)": deployment.minimumSystemVersion,
+    "$(MARKETING_VERSION)": versions.marketing,
+    "$(CURRENT_PROJECT_VERSION)": versions.build,
+    "$(BUNDLE_PACKAGE_TYPE)": tunnelLayout.infoPackageType,
+  });
 
   rmSync(embeddedLibboxFramework, { force: true, recursive: true });
   if (hasLibbox) {
@@ -372,9 +375,7 @@ function main() {
   buildPacketTunnel();
   const profiles = stageProvisioningProfiles();
   maybeCodesign(profiles);
-  console.log(
-    `macOS native tunnel staged for ${macosDistribution} as ${tunnelLayout.label}: ${appexBundle}`,
-  );
+  console.log(`macOS native tunnel staged for ${macosDistribution} as ${tunnelLayout.label}: ${appexBundle}`);
 }
 
 // Guarded so importing this module (a unit test, another script) cannot start

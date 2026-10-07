@@ -50,7 +50,9 @@ describe("NoticeHost", () => {
       isVisible: () => visible,
       subscribe: (onChange) => {
         listeners.add(onChange);
-        return () => { listeners.delete(onChange); };
+        return () => {
+          listeners.delete(onChange);
+        };
       },
     });
     await render(<NoticeHost />);
@@ -79,10 +81,7 @@ describe("NoticeHost", () => {
 
     await render(<NoticeHost />);
 
-    expect((Alert.alert as jest.Mock).mock.calls.map(([title]) => title)).toEqual([
-      "First",
-      "Second",
-    ]);
+    expect((Alert.alert as jest.Mock).mock.calls.map(([title]) => title)).toEqual(["First", "Second"]);
     expect(useToastStore.getState().toasts).toEqual([]);
   });
 });

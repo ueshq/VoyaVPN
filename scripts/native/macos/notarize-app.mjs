@@ -3,12 +3,16 @@ import { dirname, extname, resolve } from "node:path";
 import { checkedCapture, repoRootFromScript, requireDarwin, run, runCli } from "../../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
-const appBundle = resolve(process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(repoRoot, "target", "native", "macos", "VoyaVPN.app"));
+const appBundle = resolve(
+  process.env.VOYAVPN_MACOS_APP_BUNDLE || resolve(repoRoot, "target", "native", "macos", "VoyaVPN.app"),
+);
 const artifact = process.env.VOYAVPN_NOTARY_ARTIFACT ? resolve(process.env.VOYAVPN_NOTARY_ARTIFACT) : null;
 const notaryZip = resolve(repoRoot, "target", "native", "macos", "VoyaVPN-notary.zip");
 
 function distributionMode() {
-  const normalized = String(process.env.VOYAVPN_MACOS_DISTRIBUTION ?? "developer-id").trim().toLowerCase();
+  const normalized = String(process.env.VOYAVPN_MACOS_DISTRIBUTION ?? "developer-id")
+    .trim()
+    .toLowerCase();
   if (["app-store", "appstore", "testflight", "mas"].includes(normalized)) {
     return "app-store";
   }
@@ -70,20 +74,18 @@ function stapleTarget(submittedArtifact) {
 
 function submitForNotarization(submittedArtifact) {
   const credentials = notaryCredentials();
-  const output = checkedCapture("xcrun", [
-    "notarytool",
-    "submit",
-    submittedArtifact,
-    "--wait",
-    "--output-format",
-    "json",
-    ...credentials,
-  ], { cwd: repoRoot }).stdout;
+  const output = checkedCapture(
+    "xcrun",
+    ["notarytool", "submit", submittedArtifact, "--wait", "--output-format", "json", ...credentials],
+    { cwd: repoRoot },
+  ).stdout;
   const result = JSON.parse(output);
   const id = result.id || result.jobId;
   if (result.status !== "Accepted") {
     if (id) {
-      const log = checkedCapture("xcrun", ["notarytool", "log", id, "--output-format", "json", ...credentials], { cwd: repoRoot }).stdout;
+      const log = checkedCapture("xcrun", ["notarytool", "log", id, "--output-format", "json", ...credentials], {
+        cwd: repoRoot,
+      }).stdout;
       console.error(log);
     }
     throw new Error(`notarization failed for ${submittedArtifact}: ${result.status || "unknown status"}`);
@@ -94,7 +96,9 @@ function submitForNotarization(submittedArtifact) {
 function main() {
   requireDarwin("macOS notarization must run on macOS.");
   if (distributionMode() === "app-store") {
-    throw new Error("App Store/TestFlight builds are submitted through App Store Connect and are not notarized with notarytool.");
+    throw new Error(
+      "App Store/TestFlight builds are submitted through App Store Connect and are not notarized with notarytool.",
+    );
   }
 
   const submittedArtifact = prepareArtifact();

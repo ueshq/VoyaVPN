@@ -73,8 +73,7 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
   });
   const modeStatusQuery = useQuery(queries.connectionMode);
 
-  const activeRouting =
-    routingsQuery.data?.find((routing) => routing.isActive) ?? null;
+  const activeRouting = routingsQuery.data?.find((routing) => routing.isActive) ?? null;
 
   // Seed the form from the active routing once it has loaded. Adjusting state
   // during render (React's documented pattern) instead of in an effect avoids
@@ -97,14 +96,10 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
     }
     return candidates.filter(
       (candidate) =>
-        candidate.displayName.toLowerCase().includes(needle) ||
-        candidate.processName.toLowerCase().includes(needle),
+        candidate.displayName.toLowerCase().includes(needle) || candidate.processName.toLowerCase().includes(needle),
     );
   }, [candidates, deferredSearch]);
-  const selectedKeys = useMemo(
-    () => new Set(selected.map((process) => process.toLowerCase())),
-    [selected],
-  );
+  const selectedKeys = useMemo(() => new Set(selected.map((process) => process.toLowerCase())), [selected]);
 
   function toggleProcess(processName: string) {
     setSelected((current) => {
@@ -133,8 +128,7 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
     });
   }
 
-  const vpnHintProminent =
-    modeStatusQuery.data?.processRulesEffective === false;
+  const vpnHintProminent = modeStatusQuery.data?.processRulesEffective === false;
   // Turning the rule on without any app would save nothing; say so instead.
   const missingApps = mode !== "off" && normalizeProcessNames(selected).length === 0;
 
@@ -146,33 +140,23 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
             <AppWindow className="size-4" aria-hidden="true" />
             {t("panes.routing.perAppTitle")}
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            {t("panes.routing.perAppDescription")}
-          </DialogDescription>
+          <DialogDescription className="sr-only">{t("panes.routing.perAppDescription")}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           {activeRouting == null && !routingsQuery.isLoading ? (
             <Alert>
-              <AlertDescription>
-                {t("panes.routing.perAppNoActiveRouting")}
-              </AlertDescription>
+              <AlertDescription>{t("panes.routing.perAppNoActiveRouting")}</AlertDescription>
             </Alert>
           ) : (
             <div className="grid gap-4">
               <SegmentedControl aria-label={t("panes.routing.perAppTitle")}>
                 {MODE_OPTIONS.map((option) => (
-                  <SegmentedControlItem
-                    key={option}
-                    onClick={() => setMode(option)}
-                    pressed={mode === option}
-                  >
+                  <SegmentedControlItem key={option} onClick={() => setMode(option)} pressed={mode === option}>
                     {t(PER_APP_MODE_LABEL_KEYS[option])}
                   </SegmentedControlItem>
                 ))}
               </SegmentedControl>
-              <p className="text-xs text-muted-foreground">
-                {t(MODE_HINT_KEYS[mode])}
-              </p>
+              <p className="text-xs text-muted-foreground">{t(MODE_HINT_KEYS[mode])}</p>
 
               {/* Only worth saying when the running mode cannot apply app rules. */}
               {vpnHintProminent ? (
@@ -187,11 +171,7 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
                   {selected.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
                       {selected.map((process) => (
-                        <Badge
-                          className="gap-1 pe-1"
-                          key={process.toLowerCase()}
-                          variant="secondary"
-                        >
+                        <Badge className="gap-1 pe-1" key={process.toLowerCase()} variant="secondary">
                           <span className="max-w-48 truncate">{process}</span>
                           <Button
                             aria-label={t("panes.routing.perAppRemove", {
@@ -212,10 +192,7 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
                   ) : null}
 
                   <div className="grid gap-2">
-                    <Label
-                      className="text-xs text-muted-foreground"
-                      htmlFor="per-app-search"
-                    >
+                    <Label className="text-xs text-muted-foreground" htmlFor="per-app-search">
                       {t("panes.routing.perAppRunningApps")}
                     </Label>
                     <Input
@@ -227,19 +204,14 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
                     />
                     {candidatesQuery.isLoading ? (
                       <div className="h-56 rounded-md border bg-card">
-                        <p
-                          className="p-3 text-xs text-muted-foreground"
-                          role="status"
-                        >
+                        <p className="p-3 text-xs text-muted-foreground" role="status">
                           {t("panes.routing.perAppLoading")}
                         </p>
                       </div>
                     ) : filteredCandidates.length === 0 ? (
                       <div className="h-56 rounded-md border bg-card">
                         <EmptyState
-                          description={t(
-                            "panes.routing.perAppEmptyDescription",
-                          )}
+                          description={t("panes.routing.perAppEmptyDescription")}
                           icon={AppWindow}
                           title={t("panes.routing.perAppEmpty")}
                         />
@@ -253,9 +225,7 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
                         itemKey={(candidate) => candidate.processName.toLowerCase()}
                         items={filteredCandidates}
                         renderItem={(candidate) => {
-                          const checked = selectedKeys.has(
-                            candidate.processName.toLowerCase(),
-                          );
+                          const checked = selectedKeys.has(candidate.processName.toLowerCase());
                           const checkboxId = `per-app-${candidate.processName.toLowerCase()}`;
 
                           return (
@@ -266,20 +236,13 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
                               <Checkbox
                                 checked={checked}
                                 id={checkboxId}
-                                onCheckedChange={() =>
-                                  toggleProcess(candidate.processName)
-                                }
+                                onCheckedChange={() => toggleProcess(candidate.processName)}
                               />
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate font-medium">
-                                  {candidate.displayName}
-                                </span>
-                                {candidate.processName !==
-                                  candidate.displayName ||
-                                candidate.executablePath ? (
+                                <span className="block truncate font-medium">{candidate.displayName}</span>
+                                {candidate.processName !== candidate.displayName || candidate.executablePath ? (
                                   <span className="block truncate text-xs text-muted-foreground">
-                                    {candidate.executablePath ??
-                                      candidate.processName}
+                                    {candidate.executablePath ?? candidate.processName}
                                   </span>
                                 ) : null}
                               </span>
@@ -292,10 +255,7 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
 
                   <div className="flex items-end gap-2">
                     <div className="grid min-w-0 flex-1 gap-1">
-                      <Label
-                        className="text-xs text-muted-foreground"
-                        htmlFor="per-app-manual"
-                      >
+                      <Label className="text-xs text-muted-foreground" htmlFor="per-app-manual">
                         {t("panes.routing.perAppManualAdd")}
                       </Label>
                       <Input
@@ -338,11 +298,7 @@ export function PerAppProxyDialog({ onOpenChange }: PerAppProxyDialogProps) {
           )}
         </DialogBody>
         <DialogFooter>
-          <Button
-            onClick={() => onOpenChange(false)}
-            type="button"
-            variant="outline"
-          >
+          <Button onClick={() => onOpenChange(false)} type="button" variant="outline">
             {t("actions.cancel")}
           </Button>
           <Button

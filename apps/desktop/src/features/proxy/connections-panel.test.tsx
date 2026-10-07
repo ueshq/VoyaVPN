@@ -6,7 +6,12 @@ import { createTestQueryClient, renderWithQuery } from "@voya/features/test/rend
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { createAppQueryClient } from "@voya/client/query-client";
-import type { ProxyConnectionItem, ProxyConnectionsSnapshot, Routing_Serialize, RuntimeStatusResponse } from "@voya/contracts";
+import type {
+  ProxyConnectionItem,
+  ProxyConnectionsSnapshot,
+  Routing_Serialize,
+  RuntimeStatusResponse,
+} from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useShellStore } from "@/stores/shell-store";
@@ -341,13 +346,9 @@ describe("ConnectionsPanel", () => {
     expect(screen.getByText("No matching connections")).toBeInTheDocument();
     // The empty state and the search field both offer "Clear search"; this
     // exercises the empty state's action button.
-    const emptyState = screen
-      .getByText("No matching connections")
-      .closest('div[role="status"]');
+    const emptyState = screen.getByText("No matching connections").closest('div[role="status"]');
     expect(emptyState).not.toBeNull();
-    await userEvent.click(
-      within(emptyState as HTMLElement).getByRole("button", { name: "Clear search" }),
-    );
+    await userEvent.click(within(emptyState as HTMLElement).getByRole("button", { name: "Clear search" }));
     expect(screen.getByTestId("connection-row")).toBeInTheDocument();
   });
 

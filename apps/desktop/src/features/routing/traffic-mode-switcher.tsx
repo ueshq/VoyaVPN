@@ -21,10 +21,7 @@ export function TrafficModeSwitcher() {
     <div className="flex items-center gap-2">
       <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
         <span id="routing-traffic-mode-label">{t("panes.routing.trafficMode")}</span>
-        <ModeInfo
-          hint={t("panes.routing.trafficModeHint")}
-          label={t("panes.routing.trafficModeInfo")}
-        />
+        <ModeInfo hint={t("panes.routing.trafficModeHint")} label={t("panes.routing.trafficModeInfo")} />
       </span>
       <SegmentedControl
         aria-labelledby="routing-traffic-mode-label"

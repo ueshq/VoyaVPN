@@ -18,6 +18,17 @@ export function DetailScreen({
   gap?: "gap-4" | "gap-6";
 }) {
   const insets = useScreenInsets();
-  return <ScrollView accessibilityLabel={accessibilityLabel} className="flex-1 bg-canvas" contentContainerClassName={`${gap} px-page`} contentContainerStyle={insets}
-    keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>{children}</ScrollView>;
+  return (
+    <ScrollView
+      accessibilityLabel={accessibilityLabel}
+      className="flex-1 bg-canvas"
+      contentContainerClassName={`${gap} px-page`}
+      contentContainerStyle={insets}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      automaticallyAdjustKeyboardInsets
+    >
+      {children}
+    </ScrollView>
+  );
 }

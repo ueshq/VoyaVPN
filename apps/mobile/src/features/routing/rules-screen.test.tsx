@@ -37,7 +37,6 @@ beforeEach(() => {
   useRuntimeEventStore.getState().setCoreState(mockBackend().state.runtime);
 });
 
-
 describe("RulesScreen", () => {
   it("lists the active rule set with what each rule matches", async () => {
     await seedRule("Office");
@@ -87,9 +86,7 @@ describe("RulesScreen", () => {
     // not the platform `valueChange` the RN control used to emit.
     await user.press(await screen.findByRole("switch", { name: "Office" }));
 
-    await waitFor(() =>
-      expect(mockBackend().state.routings[0].rules[0].enabled).toBe(false),
-    );
+    await waitFor(() => expect(mockBackend().state.routings[0].rules[0].enabled).toBe(false));
   });
 
   it("greys the rules out in global mode, because none of them apply", async () => {
@@ -108,8 +105,6 @@ describe("RulesScreen", () => {
         "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
       ),
     ).toBeOnTheScreen();
-    await waitFor(() =>
-      expect(screen.getByRole("switch", { name: "Office" })).toBeDisabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Office" })).toBeDisabled());
   });
 });

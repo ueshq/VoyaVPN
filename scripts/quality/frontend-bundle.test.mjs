@@ -46,7 +46,10 @@ describe("frontend bundle budgets", () => {
   });
 
   it("catches a total-size regression that no single chunk budget would catch", () => {
-    const many = [...assets, ...Array.from({ length: 20 }, (_, index) => ({ name: `chunk-${index}.js`, bytes: 40 * 1024 }))];
+    const many = [
+      ...assets,
+      ...Array.from({ length: 20 }, (_, index) => ({ name: `chunk-${index}.js`, bytes: 40 * 1024 })),
+    ];
     const { failures } = checkBundleBudgets(many);
 
     expect(failures).toHaveLength(1);
@@ -65,7 +68,11 @@ describe("frontend startup budget", () => {
   const sizeOf = (script) => sizes[script] * 1024;
 
   it("counts the entry and its preloads, not the stylesheet or public scripts", () => {
-    expect(startupScripts(html)).toEqual(["assets/index-abc.js", "assets/vendor-react-abc.js", "assets/vendor-data-abc.js"]);
+    expect(startupScripts(html)).toEqual([
+      "assets/index-abc.js",
+      "assets/vendor-react-abc.js",
+      "assets/vendor-data-abc.js",
+    ]);
     expect(checkStartupBudget(startupScripts(html), sizeOf).failures).toEqual([]);
   });
 

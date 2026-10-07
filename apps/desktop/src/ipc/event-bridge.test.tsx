@@ -107,20 +107,37 @@ describe("EventBridge", () => {
     const { unmount } = renderWithQuery(<EventBridge />, { queryClient });
     await waitFor(() => expect(bridgeMocks.transientStreamEventListen).toHaveBeenCalledOnce());
     vi.useFakeTimers();
-    const emit = (outcome: string) => bridgeMocks.listeners.transientStreamEvent[0]?.({ payload: {
-      kind: "speedtestResults", payload: [{ indexId: "node", delay: 42, ipInfo: null, countryCode: "US", detail: null, outcome }],
-    } });
-    act(() => { emit("testing"); emit("waiting"); });
+    const emit = (outcome: string) =>
+      bridgeMocks.listeners.transientStreamEvent[0]?.({
+        payload: {
+          kind: "speedtestResults",
+          payload: [{ indexId: "node", delay: 42, ipInfo: null, countryCode: "US", detail: null, outcome }],
+        },
+      });
+    act(() => {
+      emit("testing");
+      emit("waiting");
+    });
     expect(vi.getTimerCount()).toBe(0);
-    act(() => { emit("completed"); emit("failed"); emit("completed"); });
-    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    act(() => {
+      emit("completed");
+      emit("failed");
+      emit("completed");
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
     expect(invalidate).not.toHaveBeenCalled();
-    await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
     // Only the node list carries flags; policy groups are not refetched per
     // result.
     expect(invalidate).toHaveBeenCalledExactlyOnceWith({ queryKey: ["profiles", "list"] });
     expect(queryClient.getQueryData(["profiles", "list"])).toEqual(snapshot);
-    act(() => { emit("completed"); });
+    act(() => {
+      emit("completed");
+    });
     unmount();
     await vi.advanceTimersByTimeAsync(3000);
     expect(invalidate).toHaveBeenCalledOnce();

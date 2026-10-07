@@ -1,9 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import {
-  useQueryClient,
-  type QueryClient,
-  type QueryKey,
-} from "@tanstack/react-query";
+import { useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { z } from "zod";
 
 import { appErrorOfKind } from "@voya/client/errors";
@@ -14,11 +10,7 @@ import { redactOperationalError } from "@voya/utils/operational-redaction";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { toastError } from "@voya/client/toast-store";
 
-import {
-  applyChanges,
-  SettingsDraft,
-  type SettingsChange,
-} from "./settings-draft";
+import { applyChanges, SettingsDraft, type SettingsChange } from "./settings-draft";
 import { saveQueue } from "../forms/save-queue";
 
 // Async failures use the current locale even after the originating pane unmounts.
@@ -68,16 +60,8 @@ export function useSettingsDraft<T>({
     drafts.set(key, created);
     return created;
   });
-  const snapshot = useSyncExternalStore(
-    draft.subscribe,
-    draft.getSnapshot,
-    draft.getSnapshot,
-  );
-  const saving = useSyncExternalStore(
-    queue.subscribe,
-    queue.isSaving,
-    queue.isSaving,
-  );
+  const snapshot = useSyncExternalStore(draft.subscribe, draft.getSnapshot, draft.getSnapshot);
+  const saving = useSyncExternalStore(queue.subscribe, queue.isSaving, queue.isSaving);
 
   useEffect(() => {
     // The draft outlives this pane, so it gets a writer that reads this
@@ -90,17 +74,11 @@ export function useSettingsDraft<T>({
   // `applyChanges` copies the whole bundle. Unmemoized, every render of a
   // settings screen made a new one, and effects keyed on a part of it ran
   // each time.
-  const value = useMemo(
-    () => (data ? applyChanges(data, snapshot.changes) : null),
-    [data, snapshot.changes],
-  );
+  const value = useMemo(() => (data ? applyChanges(data, snapshot.changes) : null), [data, snapshot.changes]);
   return {
     value,
     error: failures.length ? failures[0].message : null,
-    fieldErrors: Object.assign(
-      {},
-      ...failures.map((failure) => failure.fields),
-    ) as Record<string, string>,
+    fieldErrors: Object.assign({}, ...failures.map((failure) => failure.fields)) as Record<string, string>,
     retry: draft.retry,
     saved: snapshot.saved && snapshot.changes.length === 0,
     saving,

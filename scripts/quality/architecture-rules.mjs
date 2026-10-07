@@ -187,8 +187,7 @@ export const clashBoundaryRules = [
 export const untranslatedMessageRule = {
   id: "untranslated-message",
   pattern: /\bValidationCode::Untranslated\b|\bValidationIssue::untranslated\s*\(/u,
-  message:
-    "untranslated validation text belongs in contract_map/errors.rs; add a ValidationCode variant instead",
+  message: "untranslated validation text belongs in contract_map/errors.rs; add a ValidationCode variant instead",
 };
 
 /**
@@ -268,9 +267,7 @@ export function cargoPackageVersion(manifest, workspaceManifest) {
  */
 export function xcodeMarketingVersion(pbxproj) {
   const values = new Set(
-    [...pbxproj.matchAll(/^\s*MARKETING_VERSION\s*=\s*([^;]+);/gmu)].map(([, value]) =>
-      value.trim(),
-    ),
+    [...pbxproj.matchAll(/^\s*MARKETING_VERSION\s*=\s*([^;]+);/gmu)].map(([, value]) => value.trim()),
   );
   if (values.size !== 1) return undefined;
 

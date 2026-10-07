@@ -91,8 +91,11 @@ describe("macOS native tunnel layout", () => {
     });
     // Before the app bundle exists, tauri.conf.json's value stands in.
     expect(
-      resolvePacketTunnelDeploymentTarget({ appMinimumSystemVersion: "", fallbackMinimumSystemVersion: "12.0", hostArch: "arm64" })
-        .minimumSystemVersion,
+      resolvePacketTunnelDeploymentTarget({
+        appMinimumSystemVersion: "",
+        fallbackMinimumSystemVersion: "12.0",
+        hostArch: "arm64",
+      }).minimumSystemVersion,
     ).toBe("12.0");
     expect(() => resolvePacketTunnelDeploymentTarget({ hostArch: "arm64" })).toThrow(/no LSMinimumSystemVersion/u);
   });
@@ -106,7 +109,10 @@ describe("macOS native tunnel layout", () => {
 
   it("infers distribution from signing identity names", () => {
     expect(
-      distributionFromIdentityName("Developer ID Application: Beijing Wangcai Technology Co., Ltd. (4LUKJ56532)", "auto"),
+      distributionFromIdentityName(
+        "Developer ID Application: Beijing Wangcai Technology Co., Ltd. (4LUKJ56532)",
+        "auto",
+      ),
     ).toBe("developer-id");
     expect(distributionFromIdentityName("Apple Distribution: Example Team", "auto")).toBe("app-store");
     expect(distributionFromIdentityName("", "auto")).toBe("app-store");
@@ -185,7 +191,9 @@ describe("PacketTunnel version fields", () => {
       build: "0.2.0",
       marketing: "0.2.0",
     });
-    expect(resolvePacketTunnelVersions({ appShortVersion: "  ", appBundleVersion: "", packageVersion: "0.2.0" })).toEqual({
+    expect(
+      resolvePacketTunnelVersions({ appShortVersion: "  ", appBundleVersion: "", packageVersion: "0.2.0" }),
+    ).toEqual({
       build: "0.2.0",
       marketing: "0.2.0",
     });
@@ -217,29 +225,36 @@ describe("macOS DMG artifact paths", () => {
     ["x86_64 arm64\n", "universal"],
     ["", "aarch64"],
   ])("names the image from bundle architectures %j", (archs, suffix) => {
-    const captureCommand = vi.fn()
-      .mockReturnValueOnce({ stdout: "VoyaVPN\n" })
-      .mockReturnValueOnce({ stdout: archs });
-    expect(resolveDmgPath({ ...options, hostArch: "arm64", captureCommand }))
-      .toBe(`/tmp/voya-dmg/VoyaVPN_1.2.3_${suffix}.dmg`);
+    const captureCommand = vi.fn().mockReturnValueOnce({ stdout: "VoyaVPN\n" }).mockReturnValueOnce({ stdout: archs });
+    expect(resolveDmgPath({ ...options, hostArch: "arm64", captureCommand })).toBe(
+      `/tmp/voya-dmg/VoyaVPN_1.2.3_${suffix}.dmg`,
+    );
     expect(captureCommand).toHaveBeenLastCalledWith(
-      "lipo", ["-archs", "/Applications/VoyaVPN.app/Contents/MacOS/VoyaVPN"], { env: options.env },
+      "lipo",
+      ["-archs", "/Applications/VoyaVPN.app/Contents/MacOS/VoyaVPN"],
+      { env: options.env },
     );
   });
 
   it("honors explicit path and architecture without reading the bundle", () => {
     const captureCommand = vi.fn();
-    expect(resolveDmgPath({
-      ...options, captureCommand,
-      env: { VOYAVPN_MACOS_DMG_PATH: " /tmp/custom.dmg ", VOYAVPN_MACOS_DMG_ARCH: "ignored" },
-    })).toBe("/tmp/custom.dmg");
-    expect(resolveDmgPath({ ...options, captureCommand, env: { VOYAVPN_MACOS_DMG_ARCH: " universal " } }))
-      .toBe("/tmp/voya-dmg/VoyaVPN_1.2.3_universal.dmg");
+    expect(
+      resolveDmgPath({
+        ...options,
+        captureCommand,
+        env: { VOYAVPN_MACOS_DMG_PATH: " /tmp/custom.dmg ", VOYAVPN_MACOS_DMG_ARCH: "ignored" },
+      }),
+    ).toBe("/tmp/custom.dmg");
+    expect(resolveDmgPath({ ...options, captureCommand, env: { VOYAVPN_MACOS_DMG_ARCH: " universal " } })).toBe(
+      "/tmp/voya-dmg/VoyaVPN_1.2.3_universal.dmg",
+    );
     expect(captureCommand).not.toHaveBeenCalled();
   });
 
   it("reports bundle inspection failures before selecting an artifact", () => {
-    const captureCommand = vi.fn(() => { throw new Error("cannot inspect bundle"); });
+    const captureCommand = vi.fn(() => {
+      throw new Error("cannot inspect bundle");
+    });
     expect(() => resolveDmgPath({ ...options, captureCommand })).toThrow("cannot inspect bundle");
   });
 });

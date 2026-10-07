@@ -5,12 +5,7 @@ import { createTestQueryClient, renderWithQuery } from "@voya/features/test/rend
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { changeLocale } from "@voya/i18n";
-import type {
-  ProfileSummaryEntry,
-  RuntimeStatusResponse,
-  SystemProxyStatusResponse,
-  TunStatus,
-} from "@voya/contracts";
+import type { ProfileSummaryEntry, RuntimeStatusResponse, SystemProxyStatusResponse, TunStatus } from "@voya/contracts";
 import { IpcCommandError } from "@voya/client/errors";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
@@ -76,8 +71,7 @@ const tunStatusResponse: TunStatus = {
 
 const missingTunnelMessages = {
   en: "The running copy of VoyaVPN is missing its VPN extension. Quit and open the fully installed app from Applications. If the extension is still missing, reinstall VoyaVPN.",
-  "zh-Hans":
-    "当前运行的 VoyaVPN 缺少 VPN 扩展。请退出后从“应用程序”打开完整安装版；若仍提示缺失，请重新安装。",
+  "zh-Hans": "当前运行的 VoyaVPN 缺少 VPN 扩展。请退出后从“应用程序”打开完整安装版；若仍提示缺失，请重新安装。",
 };
 
 // The real error class and kind check: the sudo-retry and missing-core paths
@@ -116,9 +110,7 @@ describe("HomeScreen", () => {
     ipcMock.listPolicyGroups.mockResolvedValue({ entries: [] });
     ipcMock.policyGroupRuntime.mockResolvedValue(null);
     ipcMock.runtimeStatus.mockResolvedValue(disconnectedStatus);
-    mockProfileList([
-      makeActiveProfile({ id: "active", remarks: "Active node" }),
-    ]);
+    mockProfileList([makeActiveProfile({ id: "active", remarks: "Active node" })]);
     ipcMock.setActiveProfile.mockResolvedValue(makeProfile(0));
     ipcMock.systemProxyStatus.mockResolvedValue(sysProxyStatus);
     ipcMock.tunRequestElevation.mockResolvedValue(tunStatusResponse);
@@ -141,9 +133,7 @@ describe("HomeScreen", () => {
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     expect(screen.queryByText("Not protected")).not.toBeInTheDocument();
     expect(screen.queryByText("Add a node to connect")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Details" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("home-connected-info")).not.toBeInTheDocument();
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
@@ -152,39 +142,29 @@ describe("HomeScreen", () => {
 
   it("states the connection in words and marks where traffic leaves", async () => {
     useRuntimeEventStore.setState({ coreState: connectedStatus });
-    mockProfileList([
-      makeActiveProfile({ id: "node-tokyo", remarks: "🇯🇵 Tokyo Edge" }),
-    ]);
+    mockProfileList([makeActiveProfile({ id: "node-tokyo", remarks: "🇯🇵 Tokyo Edge" })]);
     const { container } = renderHome();
     await screen.findByRole("heading", { name: "Tokyo Edge" });
     const status = screen.getByTestId("home-status");
     expect(status).toHaveAttribute("role", "status");
     expect(status).toHaveTextContent("Connected");
     // No country was measured, so the flag in the name places the marker.
-    expect(
-      container.querySelector('.home-map-marker[data-country="JP"]'),
-    ).toHaveAttribute("data-state", "connected");
+    expect(container.querySelector('.home-map-marker[data-country="JP"]')).toHaveAttribute("data-state", "connected");
   });
 
   it("marks the selected node's country before connecting", async () => {
-    mockProfileList([
-      makeActiveProfile({ id: "active", remarks: "🇸🇬 Singapore" }),
-    ]);
+    mockProfileList([makeActiveProfile({ id: "active", remarks: "🇸🇬 Singapore" })]);
     const { container } = renderHome();
     await screen.findByRole("heading", { name: "Singapore" });
     expect(screen.getByTestId("home-status")).toHaveTextContent("Disconnected");
-    expect(
-      container.querySelector('.home-map-marker[data-country="SG"]'),
-    ).toHaveAttribute("data-state", "selected");
+    expect(container.querySelector('.home-map-marker[data-country="SG"]')).toHaveAttribute("data-state", "selected");
   });
 
   it("guides an empty home without a status headline or a map marker", async () => {
     mockProfileList([]);
     const { container } = renderHome();
     await waitFor(() => expect(connectButton()).toBeEnabled());
-    expect(screen.getByTestId("home-status")).toHaveTextContent(
-      "Add a subscription or paste a link to get started",
-    );
+    expect(screen.getByTestId("home-status")).toHaveTextContent("Add a subscription or paste a link to get started");
     // Adding is not connecting, so the button does not show a power glyph.
     expect(connectButton().querySelector(".lucide-plus")).not.toBeNull();
     expect(connectButton().querySelector(".lucide-power")).toBeNull();
@@ -291,19 +271,13 @@ describe("HomeScreen", () => {
   it("shows the running node and navigates directly to nodes without connecting", async () => {
     useRuntimeEventStore.setState({ sysProxy: sysProxyStatus });
     useRuntimeEventStore.setState({ coreState: connectedStatus });
-    mockProfileList([
-      makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" }),
-    ]);
+    mockProfileList([makeActiveProfile({ id: "node-tokyo", remarks: "Tokyo Edge" })]);
     const user = userEvent.setup();
     renderHome();
-    expect(
-      screen.queryByRole("heading", { level: 1 }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
     expect(connectButton()).toHaveAttribute("aria-pressed", "true");
     expect(connectButton()).toHaveAccessibleName("Disconnect");
-    expect(
-      await screen.findByRole("heading", { name: "Tokyo Edge" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tokyo Edge" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Reconnect" }));
     await waitFor(() => expect(ipcMock.restartCore).toHaveBeenCalledOnce());
@@ -338,9 +312,7 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(connectButton()).toBeEnabled());
     await user.click(connectButton());
     await waitFor(() => expect(ipcMock.disconnectCore).toHaveBeenCalledOnce());
-    await waitFor(() =>
-      expect(useRuntimeEventStore.getState().coreState).toEqual(pending),
-    );
+    await waitFor(() => expect(useRuntimeEventStore.getState().coreState).toEqual(pending));
     expect(ipcMock.tunStatus).toHaveBeenCalled();
     expect(connectButton()).toBeEnabled();
     expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
@@ -359,9 +331,7 @@ describe("HomeScreen", () => {
   });
 
   it("opens the missing-core recovery modal instead of a toast", async () => {
-    mockProfileList([
-      makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" }),
-    ]);
+    mockProfileList([makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile.mockRejectedValue(
       new IpcCommandError({
         kind: {
@@ -390,15 +360,12 @@ describe("HomeScreen", () => {
   });
 
   it("requests system authorization once and retries a connect that needed it", async () => {
-    mockProfileList([
-      makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" }),
-    ]);
+    mockProfileList([makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile
       .mockRejectedValueOnce(
         new IpcCommandError({
           kind: { type: "elevationRequired" },
-          message:
-            "system authorization is required before enabling TUN on Unix",
+          message: "system authorization is required before enabling TUN on Unix",
           subsystem: "tun",
         }),
       )
@@ -414,18 +381,14 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(connectButton()).toBeEnabled());
     await user.click(connectButton());
 
-    await waitFor(() =>
-      expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(2),
-    );
+    await waitFor(() => expect(ipcMock.connectActiveProfile).toHaveBeenCalledTimes(2));
     expect(ipcMock.tunRequestElevation).toHaveBeenCalledTimes(1);
     expect(useToastStore.getState().toasts).toHaveLength(0);
     expect(useRuntimeActionStore.getState().missingCore).toBeNull();
   });
 
   it("explains a declined authorization dialog instead of the raw failure", async () => {
-    mockProfileList([
-      makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" }),
-    ]);
+    mockProfileList([makeActiveProfile({ id: "tokyo", remarks: "Tokyo Edge" })]);
     ipcMock.connectActiveProfile.mockRejectedValue(
       new IpcCommandError({
         kind: { type: "elevationRequired" },
@@ -473,9 +436,7 @@ describe("HomeScreen", () => {
       activeTunBackend: null,
       state: "connected",
     });
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Could not disconnect: sudo kill failed",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not disconnect: sudo kill failed");
     expect(connectButton()).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
@@ -507,9 +468,7 @@ describe("HomeScreen", () => {
     ipcMock.listProfileSummaries.mockRejectedValueOnce(new Error("Profiles unavailable"));
     renderHome();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Could not read the node list: Profiles unavailable",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not read the node list: Profiles unavailable");
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { name: "Active node" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -543,29 +502,26 @@ describe("HomeScreen", () => {
     expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
   });
 
-  it.each(["connected", "cleanupPending"] as const)("still disconnects an empty profile list while %s", async (state) => {
-    useRuntimeEventStore.setState({ coreState: { ...connectedStatus, state } });
-    mockProfileList([]);
-    renderHome();
-    await userEvent.click(connectButton());
-    await waitFor(() => expect(ipcMock.disconnectCore).toHaveBeenCalledOnce());
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
-  });
+  it.each(["connected", "cleanupPending"] as const)(
+    "still disconnects an empty profile list while %s",
+    async (state) => {
+      useRuntimeEventStore.setState({ coreState: { ...connectedStatus, state } });
+      mockProfileList([]);
+      renderHome();
+      await userEvent.click(connectButton());
+      await waitFor(() => expect(ipcMock.disconnectCore).toHaveBeenCalledOnce());
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(ipcMock.connectActiveProfile).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps the current node honest when the running profile differs from the saved selection", async () => {
     useRuntimeEventStore.setState({ coreState: connectedStatus });
-    mockProfileList([
-      makeActiveProfile({ id: "other", remarks: "Other saved node" }),
-    ]);
+    mockProfileList([makeActiveProfile({ id: "other", remarks: "Other saved node" })]);
     const user = userEvent.setup();
     renderHome();
-    expect(
-      await screen.findByRole("heading", { name: "node-tokyo" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Other saved node" }),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "node-tokyo" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Other saved node" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Switch node" }));
     expect(useShellStore.getState().activeTab).toBe("profiles");
     expect(ipcMock.setActiveProfile).not.toHaveBeenCalled();
@@ -583,29 +539,19 @@ describe("HomeScreen", () => {
         enabled: true,
         nativeComponentReady: false,
         providerState: "missingComponent",
-        lastProviderError:
-          "PacketTunnel extension is not bundled in this build",
+        lastProviderError: "PacketTunnel extension is not bundled in this build",
       };
       useRuntimeEventStore.setState({ tun: status });
       ipcMock.tunStatus.mockResolvedValue(status);
 
       renderHome();
 
-      const summary = await screen.findByText((text) =>
-        text.endsWith(missingTunnelMessages[locale]),
-      );
-      expect(summary).toHaveTextContent(
-        locale === "en" ? "Missing component" : "缺少组件",
-      );
-      expect(summary).not.toHaveTextContent(
-        "PacketTunnel extension is not bundled in this build",
-      );
-      expect(status.lastProviderError).toBe(
-        "PacketTunnel extension is not bundled in this build",
-      );
+      const summary = await screen.findByText((text) => text.endsWith(missingTunnelMessages[locale]));
+      expect(summary).toHaveTextContent(locale === "en" ? "Missing component" : "缺少组件");
+      expect(summary).not.toHaveTextContent("PacketTunnel extension is not bundled in this build");
+      expect(status.lastProviderError).toBe("PacketTunnel extension is not bundled in this build");
     },
   );
-
 
   it("offers no traffic or capture mode controls", async () => {
     useRuntimeEventStore.setState({ coreState: disconnectedStatus });
@@ -622,12 +568,14 @@ describe("HomeScreen", () => {
   });
 
   it("asks macOS users to allow the VPN configuration", async () => {
-    useRuntimeEventStore.setState({ tun: {
-      ...tunStatusResponse,
-      backend: "macosPacketTunnel",
-      enabled: true,
-      providerState: "permissionRequired",
-    } });
+    useRuntimeEventStore.setState({
+      tun: {
+        ...tunStatusResponse,
+        backend: "macosPacketTunnel",
+        enabled: true,
+        providerState: "permissionRequired",
+      },
+    });
     renderHome();
 
     expect(
@@ -648,24 +596,21 @@ describe("HomeScreen", () => {
       providerState: "missingComponent",
       message: "Tunnel service is not installed",
     },
-  ] as const)(
-    "keeps $backend diagnostics visible under the mode card",
-    async ({ backend, providerState, message }) => {
-      useRuntimeEventStore.setState({ tun: {
+  ] as const)("keeps $backend diagnostics visible under the mode card", async ({ backend, providerState, message }) => {
+    useRuntimeEventStore.setState({
+      tun: {
         ...tunStatusResponse,
         backend,
         enabled: true,
         lastProviderError: message,
         nativeComponentReady: false,
         providerState,
-      } });
-      renderHome();
+      },
+    });
+    renderHome();
 
-      expect(
-        await screen.findByText((text) => text.endsWith(message)),
-      ).toBeInTheDocument();
-    },
-  );
+    expect(await screen.findByText((text) => text.endsWith(message))).toBeInTheDocument();
+  });
 
   it("prevents connecting while a capture mode change is pending", async () => {
     useRuntimeActionStore.setState({ modePending: true });
@@ -677,15 +622,10 @@ describe("HomeScreen", () => {
   });
 });
 
-function makeActiveProfile(
-  overrides: Parameters<typeof makeProfileFixture>[1] = {},
-): ProfileSummaryEntry {
+function makeActiveProfile(overrides: Parameters<typeof makeProfileFixture>[1] = {}): ProfileSummaryEntry {
   return { ...makeProfile(0, overrides), isActive: true };
 }
 
-function makeProfile(
-  index: number,
-  overrides: Parameters<typeof makeProfileFixture>[1] = {},
-): ProfileSummaryEntry {
+function makeProfile(index: number, overrides: Parameters<typeof makeProfileFixture>[1] = {}): ProfileSummaryEntry {
   return makeProfileFixture(index, overrides, false);
 }

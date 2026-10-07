@@ -23,7 +23,6 @@ const ipc = installFakeCommands({
   saveRoutingRule: vi.fn(),
 });
 
-
 const clients = new Set<QueryClient>();
 
 describe("RoutingScreen", () => {
@@ -103,9 +102,7 @@ describe("RoutingScreen", () => {
     const deletion = await screen.findByRole("alertdialog");
     expect(deletion).toHaveTextContent("“Office” will be permanently deleted.");
     await user.click(within(deletion).getByRole("button", { name: "Delete" }));
-    await waitFor(() =>
-      expect(ipc.deleteRoutingRules).toHaveBeenCalledWith("route-active", ["rule-office"]),
-    );
+    await waitFor(() => expect(ipc.deleteRoutingRules).toHaveBeenCalledWith("route-active", ["rule-office"]));
 
     await user.click(screen.getByRole("menuitem", { name: "More" }));
     await user.click(screen.getByRole("menuitem", { name: "Restore defaults" }));
@@ -164,9 +161,7 @@ describe("RoutingScreen", () => {
     expect(screen.getByRole("button", { name: "Add rule" }).parentElement).not.toHaveAttribute("title");
     expect(screen.getByRole("switch", { name: "Enable Office" })).toBeEnabled();
     expect(
-      screen.queryByText(
-        "Global mode is on: all captured traffic goes through the proxy and these rules are skipped.",
-      ),
+      screen.queryByText("Global mode is on: all captured traffic goes through the proxy and these rules are skipped."),
     ).not.toBeInTheDocument();
   });
 
@@ -176,7 +171,7 @@ describe("RoutingScreen", () => {
     await screen.findByText("Office");
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
-    expect(await screen.findByRole("heading", { name: "Per-app proxy" , level: 2 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Per-app proxy", level: 2 })).toBeInTheDocument();
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -220,9 +215,7 @@ describe("RoutingScreen", () => {
 
     await user.click(await screen.findByRole("button", { name: "Use proxy instead" }));
     const confirm = await screen.findByRole("alertdialog");
-    expect(
-      within(confirm).getByRole("heading", { name: "Send “Gone” through the proxy?" }),
-    ).toBeInTheDocument();
+    expect(within(confirm).getByRole("heading", { name: "Send “Gone” through the proxy?" })).toBeInTheDocument();
     expect(ipc.saveRoutingRule).not.toHaveBeenCalled();
     await user.click(within(confirm).getByRole("button", { name: "Use proxy" }));
 

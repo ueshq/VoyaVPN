@@ -1,9 +1,4 @@
-import {
-  act,
-  fireEvent,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
 import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
@@ -38,9 +33,8 @@ function renderDialog(onImported = vi.fn(), onOpenChange = vi.fn()) {
   queryClients.add(queryClient);
 
   // The page mounts the dialog only while it is open.
-  const ui = (open: boolean) => (
-    open ? <ImportProfilesDialog onImported={onImported} onOpenChange={onOpenChange} /> : <></>
-  );
+  const ui = (open: boolean) =>
+    open ? <ImportProfilesDialog onImported={onImported} onOpenChange={onOpenChange} /> : <></>;
   const result = renderWithQuery(ui(true), { queryClient });
   return {
     ...result,
@@ -75,9 +69,7 @@ describe("ImportProfilesDialog import results", () => {
     ipcMocks.importProfilesFromText.mockResolvedValue(
       makeImportResult({
         failed: 2,
-        lineIssues: [
-          { line: 3, code: { code: "parseFailed", detail: "unsupported scheme" } },
-        ],
+        lineIssues: [{ line: 3, code: { code: "parseFailed", detail: "unsupported scheme" } }],
         parsed: 2,
         skipped: 1,
       }),
@@ -92,9 +84,7 @@ describe("ImportProfilesDialog import results", () => {
     // One import produces exactly one summary: the dialog owns it while it stays
     // open, the profiles banner owns it once it closes.
     expect(
-      await screen.findByText(
-        "Imported 0 nodes. 1 skipped. 2 failed to parse. Target: Manual import.",
-      ),
+      await screen.findByText("Imported 0 nodes. 1 skipped. 2 failed to parse. Target: Manual import."),
     ).toBeInTheDocument();
     expect(screen.getByText("Line 3 was skipped: the link is not in a format VoyaVPN can read.")).toBeInTheDocument();
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
@@ -115,15 +105,10 @@ describe("ImportProfilesDialog import results", () => {
 });
 
 describe("ImportProfilesDialog sources and lifecycle", () => {
-
   it("clears the previous preview, target and error on each opening", async () => {
     const user = userEvent.setup();
-    ipcMocks.listSubscriptions.mockResolvedValue([
-      { id: "sub-target", remarks: "Target subscription" },
-    ]);
-    ipcMocks.importProfilesFromText.mockRejectedValue(
-      new Error("Import failed"),
-    );
+    ipcMocks.listSubscriptions.mockResolvedValue([{ id: "sub-target", remarks: "Target subscription" }]);
+    ipcMocks.importProfilesFromText.mockRejectedValue(new Error("Import failed"));
     const { setOpen } = renderDialog();
     fireEvent.change(screen.getByLabelText("Import payload"), {
       target: { value: "vless://draft" },
@@ -133,9 +118,7 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
     setOpen(false);
     setOpen(true);
     expect(screen.getByLabelText("Import payload")).toHaveValue("");
-    expect(
-      screen.queryByRole("combobox", { name: "Target" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Target" })).not.toBeInTheDocument();
     expect(screen.queryByText("Import failed")).not.toBeInTheDocument();
   });
 
@@ -160,12 +143,8 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
     await act(async () => finishImport(makeImportResult({ failed: 1 })));
     expect(submit).toBeEnabled();
-    expect(screen.getByLabelText("Import payload")).toHaveValue(
-      "vless://draft",
-    );
+    expect(screen.getByLabelText("Import payload")).toHaveValue("vless://draft");
   });
-
-
 
   it("closes once the text only added subscriptions, leaving their update to the page", async () => {
     ipcMocks.importProfilesFromText.mockResolvedValue(
@@ -182,9 +161,7 @@ describe("ImportProfilesDialog sources and lifecycle", () => {
     await userEvent.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
-    expect(onImported).toHaveBeenCalledWith(
-      expect.objectContaining({ addedSubscriptionIds: ["sub-1"] }),
-    );
+    expect(onImported).toHaveBeenCalledWith(expect.objectContaining({ addedSubscriptionIds: ["sub-1"] }));
   });
 });
 
@@ -200,20 +177,11 @@ describe("ImportProfilesDialog QR scanning", () => {
       },
     });
 
-    await waitFor(() =>
-      expect(screen.getByLabelText("Import payload")).toHaveValue(
-        "vless://image.example",
-      ),
-    );
+    await waitFor(() => expect(screen.getByLabelText("Import payload")).toHaveValue("vless://image.example"));
     expect(ipcMocks.importProfilesFromText).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Import" }));
-    await waitFor(() =>
-      expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith(
-        "vless://image.example",
-        null,
-      ),
-    );
+    await waitFor(() => expect(ipcMocks.importProfilesFromText).toHaveBeenCalledWith("vless://image.example", null));
   });
 
   it("shows the localized no-QR result without changing the payload", async () => {
@@ -243,18 +211,14 @@ describe("ImportProfilesDialog QR scanning", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Import payload")).toHaveValue(
-        "trojan://typed.example\nvless://image.example",
-      ),
+      expect(screen.getByLabelText("Import payload")).toHaveValue("trojan://typed.example\nvless://image.example"),
     );
   });
 });
 
 // Full `ImportProfilesResult` shape; a partial one is what let the dialog paper
 // over non-nullable contract fields with `??`.
-function makeImportResult(
-  overrides: Partial<ImportProfilesResult> = {},
-): ImportProfilesResult {
+function makeImportResult(overrides: Partial<ImportProfilesResult> = {}): ImportProfilesResult {
   return {
     deduped: 0,
     discardedNodeOverrides: 0,

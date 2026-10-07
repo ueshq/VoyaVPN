@@ -90,7 +90,9 @@ describe("UpdatesPanel", () => {
     const user = userEvent.setup();
     const client = createTestQueryClient();
     let finish!: () => void;
-    const write = new Promise<void>((resolve) => { finish = resolve; });
+    const write = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
     saveQueue(client).enqueue({}, () => write);
     const installed = makeTauriUpdate();
     tauriMocks.check.mockResolvedValueOnce(makeTauriUpdate()).mockResolvedValueOnce(installed);

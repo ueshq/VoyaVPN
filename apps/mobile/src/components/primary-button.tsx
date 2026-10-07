@@ -18,11 +18,7 @@ export function PrimaryButton({
   onPress: () => void;
 }) {
   return (
-    <Button
-      isDisabled={isDisabled}
-      className={isDisabled ? "button--primary-disabled" : undefined}
-      onPress={onPress}
-    >
+    <Button isDisabled={isDisabled} className={isDisabled ? "button--primary-disabled" : undefined} onPress={onPress}>
       <Button.Label className={isDisabled ? "text-subtle" : undefined}>{label}</Button.Label>
     </Button>
   );

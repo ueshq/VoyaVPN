@@ -32,18 +32,9 @@ export function ProfileDetailsDialog({
   controller: ServerTableController;
   item: ProfileSummaryEntry;
 }) {
-  const {
-    activation,
-    handleSpeedtest,
-    restoreDetailsFocus,
-    setDetailsId,
-    speedtestRunning,
-    subscriptionName,
-    t,
-  } = controller;
-  const stat = useRuntimeEventStore(
-    (state) => state.serverStatsByProfileId[item.profile.id],
-  );
+  const { activation, handleSpeedtest, restoreDetailsFocus, setDetailsId, speedtestRunning, subscriptionName, t } =
+    controller;
+  const stat = useRuntimeEventStore((state) => state.serverStatsByProfileId[item.profile.id]);
   const { profile } = item;
   const detailsQuery = useQuery(profileDetailsQuery(profile.id));
   const details = detailsQuery.data;
@@ -61,10 +52,7 @@ export function ProfileDetailsDialog({
     ["panes.profiles.cardFields.port", profile.port || "—"],
     ["panes.profiles.cardFields.protocol", getProtocolLabel(profile.kind)],
     ["panes.profiles.cardFields.group", subscriptionName(item)],
-    [
-      "panes.profiles.cardFields.transport",
-      transport ? getTransportLabel(transport.kind) : "—",
-    ],
+    ["panes.profiles.cardFields.transport", transport ? getTransportLabel(transport.kind) : "—"],
     ["panes.profiles.cardFields.security", tls ? getTlsModeLabel(tls.mode) : "—"],
     ["panes.profiles.cardFields.delay", profileLatency(item, t)],
     ["panes.profiles.cardFields.ipInfo", item.metrics.ipInfo || "—"],
@@ -91,9 +79,7 @@ export function ProfileDetailsDialog({
       >
         <DialogHeader>
           <DialogTitle>{t("panes.profiles.card.detailsTitle")}</DialogTitle>
-          <DialogDescription className="break-all">
-            {profileTitle(profile.remarks, t)}
-          </DialogDescription>
+          <DialogDescription className="break-all">{profileTitle(profile.remarks, t)}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           {/* Without this a failed read looks like a node with no transport, TLS or traffic. */}
@@ -115,12 +101,7 @@ export function ProfileDetailsDialog({
         <DialogFooter>
           <Button
             disabled={speedtestRunning}
-            onClick={() =>
-              void handleSpeedtest(
-                { profileIds: [profile.id], scope: "profiles" },
-                `node:${profile.id}`,
-              )
-            }
+            onClick={() => void handleSpeedtest({ profileIds: [profile.id], scope: "profiles" }, `node:${profile.id}`)}
             type="button"
             variant="outline"
           >

@@ -177,7 +177,8 @@ export function seedOriginProblems(manifest) {
     );
   }
   const excluded = (Array.isArray(manifest.tags) ? manifest.tags : []).filter((tag) =>
-    SING_BOX_SOURCE_EXCLUDED_TAGS.includes(tag));
+    SING_BOX_SOURCE_EXCLUDED_TAGS.includes(tag),
+  );
   if (excluded.length) {
     problems.push(`The bundled sing-box seed was built with ${excluded.join(", ")}.`);
   }
@@ -213,9 +214,13 @@ function verifyBundleShape(layout) {
   requirePath(layout.provisioningProfile, "PacketTunnel provisioning profile");
   verifyLoginItemPlist(appContents, { log: true });
   const reason = "must not ship in the App Store package";
-  requireAbsent(incompatiblePacketTunnelBundle(appContents, "app-store"), "A Developer ID system extension", { reason });
+  requireAbsent(incompatiblePacketTunnelBundle(appContents, "app-store"), "A Developer ID system extension", {
+    reason,
+  });
   // Remove after 2026-10-31, together with the matching guard in build-tunnel.mjs.
-  requireAbsent(legacyPacketTunnelAppexBundle(appContents), "A PacketTunnel under the old bundle-id folder name", { reason });
+  requireAbsent(legacyPacketTunnelAppexBundle(appContents), "A PacketTunnel under the old bundle-id folder name", {
+    reason,
+  });
   requireAbsent(resolve(appContents, "MacOS", "export-bindings"), "The export-bindings development tool", { reason });
   requireAbsent(resolve(appContents, "MacOS", "voyavpn-tunnel-service"), "The Windows-only tunnel service", { reason });
 }
@@ -228,8 +233,8 @@ function verifyDistributionProfile(path, label, bundleIdentifier) {
   }
   if (!isStoreDistributionProfile(profile)) {
     throw new Error(
-      `${label} profile "${profile.name}" is not a Mac App Store distribution profile. `
-        + "Create a Mac App Store Connect profile for it (docs/release/macos-app-store.md).",
+      `${label} profile "${profile.name}" is not a Mac App Store distribution profile. ` +
+        "Create a Mac App Store Connect profile for it (docs/release/macos-app-store.md).",
     );
   }
   console.log(`✓ ${label} provisioning profile is a Mac App Store profile: ${profile.name}`);
@@ -282,7 +287,9 @@ function verifySeedOrigin() {
 
 function throwProblems(problems) {
   if (problems.length) {
-    throw new Error(`App Store validation would reject this bundle:\n${problems.map((line) => `  - ${line}`).join("\n")}`);
+    throw new Error(
+      `App Store validation would reject this bundle:\n${problems.map((line) => `  - ${line}`).join("\n")}`,
+    );
   }
 }
 
@@ -299,7 +306,9 @@ function verifyAppExtensions(appMinimumSystemVersion) {
     });
   });
   throwProblems(problems);
-  console.log(`✓ App extensions name their executables and declare macOS ${appMinimumSystemVersion}: ${folders.join(", ")}`);
+  console.log(
+    `✓ App extensions name their executables and declare macOS ${appMinimumSystemVersion}: ${folders.join(", ")}`,
+  );
 }
 
 function verifyDeploymentTargets(executables, appMinimumSystemVersion) {

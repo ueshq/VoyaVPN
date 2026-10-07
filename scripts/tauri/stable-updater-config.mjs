@@ -63,12 +63,7 @@ export function writeStableUpdaterOverlay({ repoRoot, env = process.env }) {
     },
   };
   const overlayPath = resolve(repoRoot, "target", "release-config", "tauri.updater.stable.generated.json");
-  const metadataPath = resolve(
-    repoRoot,
-    "target",
-    "release-config",
-    "tauri.updater.stable.generated.metadata.json",
-  );
+  const metadataPath = resolve(repoRoot, "target", "release-config", "tauri.updater.stable.generated.metadata.json");
   const overlayText = writeJson(overlayPath, overlay);
   writeJson(metadataPath, {
     path: relative(repoRoot, overlayPath).replaceAll("\\", "/"),

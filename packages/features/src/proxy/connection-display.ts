@@ -77,7 +77,7 @@ export function arrangeConnections(
   return filtered
     .map(({ connection, routeText }) => ({
       connection,
-      text: column === "route" ? routeText : connection[column] ?? "",
+      text: column === "route" ? routeText : (connection[column] ?? ""),
     }))
     .sort((a, b) => direction * a.text.localeCompare(b.text))
     .map(({ connection }) => connection);

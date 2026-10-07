@@ -19,10 +19,7 @@ const contentClasses =
 const itemClasses =
   "relative flex min-w-0 cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[variant=destructive]:text-danger data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-danger data-[variant=destructive]:data-[highlighted]:bg-destructive/10 data-[variant=destructive]:data-[highlighted]:text-danger [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
-function ContextMenuContent({
-  className,
-  ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
+function ContextMenuContent({ className, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Content>) {
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Content
@@ -53,10 +50,7 @@ function ContextMenuItem({
   );
 }
 
-function ContextMenuSeparator({
-  className,
-  ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.Separator>) {
+function ContextMenuSeparator({ className, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.Separator>) {
   return (
     <ContextMenuPrimitive.Separator
       className={cn("-mx-1 my-1 h-px bg-border", className)}
@@ -90,10 +84,7 @@ function ContextMenuSubTrigger({
   );
 }
 
-function ContextMenuSubContent({
-  className,
-  ...props
-}: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>) {
+function ContextMenuSubContent({ className, ...props }: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>) {
   return (
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.SubContent

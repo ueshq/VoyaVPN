@@ -62,7 +62,10 @@ function validateUpdaterMetadata(latest, updatesBaseUrl) {
   assert(!forbiddenSerializedContent(latest), "latest.json contains placeholder, example, or GitHub content");
 
   const keys = Object.keys(latest.platforms).sort((left, right) => left.localeCompare(right));
-  const missing = missingExpectedValues(stableTargets.map((target) => target.updater), new Set(keys));
+  const missing = missingExpectedValues(
+    stableTargets.map((target) => target.updater),
+    new Set(keys),
+  );
   assert(missing.length === 0, `latest.json is missing first-stable updater target(s): ${missing.join(", ")}`);
 
   for (const [target, platform] of Object.entries(latest.platforms)) {
@@ -78,7 +81,10 @@ function validateCoreManifest(manifest, cdnBaseUrl) {
   assert(manifest.baseUrl === cdnBaseUrl, "core manifest baseUrl must match readiness CDN base URL");
   assert(Array.isArray(manifest.assets), "core manifest assets[] must be an array");
 
-  assert(manifest.assets.length === 0, "downloadable core assets are not supported; sing-box is bundled with the application");
+  assert(
+    manifest.assets.length === 0,
+    "downloadable core assets are not supported; sing-box is bundled with the application",
+  );
 }
 
 function safeRelativePath(value, context) {
@@ -173,7 +179,9 @@ async function checkStableUpdaterConfigEvidence(reporter, options, roots, update
     );
   }
   if (copiedOverlayHashes.size > 1) {
-    failures.push(`package targets uploaded different stable updater overlay files: ${[...copiedOverlayHashes].join(", ")}`);
+    failures.push(
+      `package targets uploaded different stable updater overlay files: ${[...copiedOverlayHashes].join(", ")}`,
+    );
   }
 
   if (failures.length > 0) {

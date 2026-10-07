@@ -53,8 +53,7 @@
   /* Connected state — Primer success emphasis for the VPN connected/affirmative semantics. */
   --connected: #1f883d;
   --connected-foreground: #ffffff;
-  --connected-glow:
-    0 0 0 1px rgb(31 136 61 / 0.4), 0 0 12px -2px rgb(31 136 61 / 0.3);
+  --connected-glow: 0 0 0 1px rgb(31 136 61 / 0.4), 0 0 12px -2px rgb(31 136 61 / 0.3);
 
   /* Safe Passage — brand accents. signal/glow re-point to --connected (names preserved).
      Use sparingly: connected state / primary connect glow / active node. */
@@ -62,12 +61,9 @@
   --signal-foreground: var(--connected-foreground);
 
   /* Depth ladder + connection glow */
-  --shadow-sm:
-    0 1px 2px 0 rgb(31 35 40 / 0.06), 0 1px 3px 0 rgb(31 35 40 / 0.1);
-  --shadow-md:
-    0 2px 4px -1px rgb(31 35 40 / 0.08), 0 4px 12px -2px rgb(31 35 40 / 0.12);
-  --shadow-lg:
-    0 8px 16px -4px rgb(31 35 40 / 0.1), 0 16px 32px -8px rgb(31 35 40 / 0.16);
+  --shadow-sm: 0 1px 2px 0 rgb(31 35 40 / 0.06), 0 1px 3px 0 rgb(31 35 40 / 0.1);
+  --shadow-md: 0 2px 4px -1px rgb(31 35 40 / 0.08), 0 4px 12px -2px rgb(31 35 40 / 0.12);
+  --shadow-lg: 0 8px 16px -4px rgb(31 35 40 / 0.1), 0 16px 32px -8px rgb(31 35 40 / 0.16);
   --glow-signal: var(--connected-glow);
 
   /* Primer surface ladder — base rungs alias existing semantics; interaction rungs use
@@ -95,10 +91,8 @@
 
   /* Primer elevation — resting/overlay shadow families (light ink rgb(31 35 40)).
      Named --shadow-raised/-overlay indirection is registered in @theme inline. */
-  --elevation-raised:
-    0px 1px 1px rgb(31 35 40 / 0.04), 0px 0px 1px rgb(31 35 40 / 0.12);
-  --elevation-overlay:
-    0px 8px 24px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.12);
+  --elevation-raised: 0px 1px 1px rgb(31 35 40 / 0.04), 0px 0px 1px rgb(31 35 40 / 0.12);
+  --elevation-overlay: 0px 8px 24px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.12);
 
   /* nicenote motion — named durations (consumed by the @utility duration-* blocks below).
      Theme-agnostic; ADS easings live in @theme inline. */
@@ -178,15 +172,12 @@
      signal/glow inherit via the :root indirection. */
   --connected: #238636;
   --connected-foreground: #ffffff;
-  --connected-glow:
-    0 0 0 1px rgb(63 185 80 / 0.4), 0 0 14px -2px rgb(63 185 80 / 0.35);
+  --connected-glow: 0 0 0 1px rgb(63 185 80 / 0.4), 0 0 14px -2px rgb(63 185 80 / 0.35);
 
   /* Depth ladder + connection glow (deeper shadows on the dark canvas) */
   --shadow-sm: 0 1px 2px 0 rgb(1 4 9 / 0.4), 0 1px 3px 0 rgb(1 4 9 / 0.5);
-  --shadow-md:
-    0 2px 4px -1px rgb(1 4 9 / 0.45), 0 4px 12px -2px rgb(1 4 9 / 0.55);
-  --shadow-lg:
-    0 8px 16px -4px rgb(1 4 9 / 0.5), 0 16px 32px -8px rgb(1 4 9 / 0.6);
+  --shadow-md: 0 2px 4px -1px rgb(1 4 9 / 0.45), 0 4px 12px -2px rgb(1 4 9 / 0.55);
+  --shadow-lg: 0 8px 16px -4px rgb(1 4 9 / 0.5), 0 16px 32px -8px rgb(1 4 9 / 0.6);
 
   /* Primer surface ladder — GitHub dark separates by borders; muted tints elevate. */
   --surface: var(--background);
@@ -209,12 +200,8 @@
   --accent-blue-hover: #79c0ff;
 
   /* Primer elevation — deep shadows gain a 1px border ring on the dark canvas. */
-  --elevation-raised:
-    0px 0px 0px 1px rgb(1 4 9 / 0), 0px 1px 1px rgb(1 4 9 / 0.45),
-    0px 0px 1px rgb(1 4 9 / 0.5);
-  --elevation-overlay:
-    0px 0px 0px 1px #3d444d, 0px 8px 24px rgb(1 4 9 / 0.85),
-    0px 0px 1px 1px rgb(1 4 9 / 0.4);
+  --elevation-raised: 0px 0px 0px 1px rgb(1 4 9 / 0), 0px 1px 1px rgb(1 4 9 / 0.45), 0px 0px 1px rgb(1 4 9 / 0.5);
+  --elevation-overlay: 0px 0px 0px 1px #3d444d, 0px 8px 24px rgb(1 4 9 / 0.85), 0px 0px 1px 1px rgb(1 4 9 / 0.4);
 
   /* Primer semantic families (dark) */
   --text-subtle: #9198a1;
@@ -318,11 +305,9 @@ html.voyavpn-acrylic.dark body {
   /* Safe Passage typography roles. Display uses the GitHub system stack;
      mono is reserved for logs, connections, editors, and data cells. */
   --font-display:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", Helvetica, Arial, sans-serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
-    monospace;
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
   --radius-xs: 2px;
   --radius-sm: 3px;
@@ -417,9 +402,8 @@ html.voyavpn-acrylic.dark body {
   body {
     @apply min-h-svh w-full overscroll-none bg-background text-foreground;
     font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC",
-      "Hiragino Sans GB", "Microsoft YaHei", Helvetica, Arial, sans-serif,
-      "Apple Color Emoji", "Segoe UI Emoji";
+      -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+      Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
     font-size: var(--type-body-size);
     line-height: var(--type-body-line);
     letter-spacing: 0;

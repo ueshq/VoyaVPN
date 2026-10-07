@@ -3,16 +3,15 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  createDefaultDraft,
-  type ProfileDraft,
-} from "@voya/features/profiles/profile-draft";
+import { createDefaultDraft, type ProfileDraft } from "@voya/features/profiles/profile-draft";
 import { SecurityPanel } from "./profile-security-panel";
 
 function SecurityPanelHarness({ tlsMode }: { tlsMode: ProfileDraft["tlsMode"] }) {
-  const [draft, setDraft] = useState<ProfileDraft>(() =>
-    ({ ...createDefaultDraft("vless"), remarks: "Pinned node", tlsMode }),
-  );
+  const [draft, setDraft] = useState<ProfileDraft>(() => ({
+    ...createDefaultDraft("vless"),
+    remarks: "Pinned node",
+    tlsMode,
+  }));
 
   return (
     <>
@@ -21,9 +20,7 @@ function SecurityPanelHarness({ tlsMode }: { tlsMode: ProfileDraft["tlsMode"] })
       <SecurityPanel
         draft={draft}
         errors={{ certificatePem: "Invalid certificate" }}
-        onChange={(key, value) =>
-          setDraft((current) => ({ ...current, [key]: value }))
-        }
+        onChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))}
       />
     </>
   );
@@ -63,7 +60,8 @@ it("changes security mode and persists the editable TLS and REALITY fields", asy
   const user = userEvent.setup();
   render(<SecurityPanelHarness tlsMode="tls" />);
   for (const [label, value, key] of [
-    ["SNI", "example.test", "serverName"], ["ALPN", "h2", "alpn"],
+    ["SNI", "example.test", "serverName"],
+    ["ALPN", "h2", "alpn"],
   ]) {
     await user.type(screen.getByLabelText(label), value);
     expect(JSON.parse(screen.getByTestId("form").textContent ?? "{}")[key]).toBe(value);
@@ -75,7 +73,8 @@ it("changes security mode and persists the editable TLS and REALITY fields", asy
   await user.click(screen.getByRole("combobox"));
   await user.click(screen.getByRole("option", { name: "REALITY" }));
   for (const [label, value, key] of [
-    ["REALITY public key", "public-key", "realityPublicKey"], ["Short ID", "abcd", "realityShortId"],
+    ["REALITY public key", "public-key", "realityPublicKey"],
+    ["Short ID", "abcd", "realityShortId"],
   ]) {
     await user.type(screen.getByLabelText(label), value);
     expect(JSON.parse(screen.getByTestId("form").textContent ?? "{}")[key]).toBe(value);

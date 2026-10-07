@@ -12,7 +12,6 @@ const preferencesMocks = installFakeCommands({
   loadUiPreferences: vi.fn(),
 });
 
-
 describe("PreferencesBridge", () => {
   beforeEach(async () => {
     vi.clearAllMocks();

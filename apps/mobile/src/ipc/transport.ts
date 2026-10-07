@@ -1,11 +1,7 @@
 import { NativeEventEmitter, TurboModuleRegistry } from "react-native";
 import type { VoyaCommands, VoyaEventName, VoyaEventPayload } from "@voya/contracts";
 
-import {
-  createNativeTransport,
-  type VoyaNativeEvents,
-  type VoyaNativeModule,
-} from "./native-transport";
+import { createNativeTransport, type VoyaNativeEvents, type VoyaNativeModule } from "./native-transport";
 
 /**
  * What this app needs of a backend: the command surface and the three channels.
@@ -15,10 +11,7 @@ import {
  */
 export type VoyaTransport = {
   commands: VoyaCommands;
-  on: <Name extends VoyaEventName>(
-    name: Name,
-    listener: (payload: VoyaEventPayload<Name>) => void,
-  ) => () => void;
+  on: <Name extends VoyaEventName>(name: Name, listener: (payload: VoyaEventPayload<Name>) => void) => () => void;
   /**
    * Moves a database the backend rejected aside, so the next command starts
    * against a fresh one. Not a command: it is what is left when no command
@@ -52,8 +45,6 @@ function nativeEvents(native: VoyaNativeModule): VoyaNativeEvents {
 
   return {
     addListener: (name, listener) =>
-      emitter.addListener(name, (payload) =>
-        listener(payload as { channel: string; payloadJson: string }),
-      ),
+      emitter.addListener(name, (payload) => listener(payload as { channel: string; payloadJson: string })),
   };
 }

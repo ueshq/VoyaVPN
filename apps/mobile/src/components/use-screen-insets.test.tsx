@@ -11,7 +11,9 @@ function Content() {
 it("does not add system or tab insets a second time inside native tabs", async () => {
   const view = await render(
     <SafeAreaInsetsContext value={{ top: 59, bottom: 34, left: 0, right: 0 }}>
-      <NativeTabSafeAreaContext value={true}><Content /></NativeTabSafeAreaContext>
+      <NativeTabSafeAreaContext value={true}>
+        <Content />
+      </NativeTabSafeAreaContext>
     </SafeAreaInsetsContext>,
   );
   expect(view.getByTestId("content")).toHaveStyle({ paddingTop: 16, paddingBottom: 24 });

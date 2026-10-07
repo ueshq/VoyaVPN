@@ -11,7 +11,7 @@
       // Babel rewrites helper calls into `@babel/runtime` imports, so no
       // source file names it.
       // Gradle resolves both packages by path from settings.gradle/build.gradle.
-      "ignoreDependencies": ["@babel/runtime", "@react-native/codegen", "@react-native/gradle-plugin"]
+      "ignoreDependencies": ["@babel/runtime", "@react-native/codegen", "@react-native/gradle-plugin"],
     },
     "apps/desktop": {
       "entry": ["src/**/*.{test,spec}.{ts,tsx}"],
@@ -21,8 +21,8 @@
       "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
       "ignoreBinaries": ["tauri-driver"],
       "ignoreIssues": {
-        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"]
-      }
+        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],
+      },
     },
     "apps/probe": {
       "entry": ["src/index.ts", "test/**/*.test.ts"],
@@ -31,33 +31,33 @@
       // operator installs, so it is not a workspace dependency.
       "ignoreBinaries": ["wrangler"],
       // `cloudflare:sockets` is a Workers runtime module, not a package.
-      "ignoreDependencies": ["cloudflare"]
+      "ignoreDependencies": ["cloudflare"],
     },
     "apps/web": {
       // scripts/build.mjs loads src/render.tsx through Vite's module runner, and
       // vite.config.ts names src/site.css as a build input, both by path, so
       // knip cannot follow either.
       "entry": ["src/render.tsx", "src/site.css", "test/**/*.test.{ts,tsx}"],
-      "project": ["scripts/**/*.mjs", "src/**/*.{ts,tsx,css}", "test/**/*.{ts,tsx}"]
+      "project": ["scripts/**/*.mjs", "src/**/*.{ts,tsx,css}", "test/**/*.{ts,tsx}"],
     },
     "packages/ui": {
-      "project": ["src/**/*.{ts,tsx,css}"]
+      "project": ["src/**/*.{ts,tsx,css}"],
     },
     // Generated from bindings.ts; every DTO is part of the contract whether or
     // not a frontend reads it today.
     "packages/contracts": {
       "project": ["src/**/*.ts"],
       "ignoreIssues": {
-        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"]
-      }
+        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"],
+      },
     },
     "packages/client": {
       "entry": ["src/*.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
     },
     "packages/features": {
       "entry": ["src/**/*.test.{ts,tsx}"],
-      "project": ["src/**/*.{ts,tsx}"]
-    }
-  }
+      "project": ["src/**/*.{ts,tsx}"],
+    },
+  },
 }

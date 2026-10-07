@@ -555,9 +555,7 @@
 }
 /* Keep the icon on a direct path to the center while the remaining label width shrinks to zero. */
 .app-sidebar[data-collapsed="true"] .sidebar-nav-item {
-  padding-inline: calc(
-    (var(--sidebar-collapsed-width) - 1px - 28px - 16px) / 2
-  );
+  padding-inline: calc((var(--sidebar-collapsed-width) - 1px - 28px - 16px) / 2);
   gap: 0;
 }
 .app-sidebar[data-collapsed="true"] .sidebar-nav-label {
@@ -617,4 +615,6 @@
   max-width: 672px;
   margin-top: 8px;
 }
-.home-content > .home-metrics { margin-top: 0; }
+.home-content > .home-metrics {
+  margin-top: 0;
+}

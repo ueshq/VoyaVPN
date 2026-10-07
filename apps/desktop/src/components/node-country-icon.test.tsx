@@ -14,9 +14,12 @@ describe("NodeCountryIcon", () => {
     expect(container.querySelector("svg")).toBeNull();
   });
 
-  it.each([null, undefined, "", "XX", "ZZ", "US injected", "🇯🇵 Japan", "USA"])("uses the globe for %s", (countryCode) => {
-    const { container } = render(<NodeCountryIcon countryCode={countryCode} />);
-    expect(container.querySelector("svg")).toBeInTheDocument();
-    expect(container.querySelector(".fi")).toBeNull();
-  });
+  it.each([null, undefined, "", "XX", "ZZ", "US injected", "🇯🇵 Japan", "USA"])(
+    "uses the globe for %s",
+    (countryCode) => {
+      const { container } = render(<NodeCountryIcon countryCode={countryCode} />);
+      expect(container.querySelector("svg")).toBeInTheDocument();
+      expect(container.querySelector(".fi")).toBeNull();
+    },
+  );
 });

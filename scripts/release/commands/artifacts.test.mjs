@@ -178,13 +178,13 @@ describe("release artifacts", () => {
       expect(selectUpdaterPayloadPath([path, `${path}.sig`], target)).toBeNull();
     }
     expect(selectUpdaterPayload([{ kind: "updater", name: "old.zip" }])).toBeNull();
-    expect(selectUpdaterPayload([
-      { kind: "signature", name: "app.sig", updaterPayload: true },
-    ])).toBeNull();
-    expect(() => selectUpdaterPayload([
-      { name: "first.exe", updaterPayload: true },
-      { name: "second.exe", updaterPayload: true },
-    ])).toThrow(/marks 2 updater payloads/);
+    expect(selectUpdaterPayload([{ kind: "signature", name: "app.sig", updaterPayload: true }])).toBeNull();
+    expect(() =>
+      selectUpdaterPayload([
+        { name: "first.exe", updaterPayload: true },
+        { name: "second.exe", updaterPayload: true },
+      ]),
+    ).toThrow(/marks 2 updater payloads/);
   });
 
   it("marks the Tauri 2 in-place updater payload and its signature in the manifest", async () => {
@@ -213,7 +213,11 @@ describe("release artifacts", () => {
   it("marks the AppImage on Linux and the .app.tar.gz on macOS", async () => {
     const root = await workDir();
 
-    const linux = await collect(await writeBundle(join(root, "linux"), linuxBundle), join(root, "linux-out"), "linux-x86_64");
+    const linux = await collect(
+      await writeBundle(join(root, "linux"), linuxBundle),
+      join(root, "linux-out"),
+      "linux-x86_64",
+    );
     expect(selectUpdaterPayload(linux.artifacts).originalRelativePath).toBe("appimage/VoyaVPN_0.1.0_amd64.AppImage");
 
     const darwin = await collect(
@@ -261,15 +265,16 @@ describe("release artifacts", () => {
     const overlayPath = join(root, "overlay.json");
 
     const writeOverlay = async (overlay) => writeFile(overlayPath, JSON.stringify(overlay));
-    const run = () =>
-      collect(inputDir, join(root, "out"), "darwin-aarch64", ["--stable-updater-config", overlayPath]);
+    const run = () => collect(inputDir, join(root, "out"), "darwin-aarch64", ["--stable-updater-config", overlayPath]);
 
     await writeOverlay({ bundle: { createUpdaterArtifacts: false } });
     await expect(run()).rejects.toThrow(/must enable bundle.createUpdaterArtifacts/);
 
     await writeOverlay({
       bundle: { createUpdaterArtifacts: true },
-      plugins: { updater: { pubkey: "REPLACE_BEFORE_RELEASE", endpoints: ["https://updates.voyavpn.dev/latest.json"] } },
+      plugins: {
+        updater: { pubkey: "REPLACE_BEFORE_RELEASE", endpoints: ["https://updates.voyavpn.dev/latest.json"] },
+      },
     });
     await expect(run()).rejects.toThrow(/approved non-placeholder updater public key/);
 

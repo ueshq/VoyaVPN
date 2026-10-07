@@ -41,9 +41,7 @@ type PluralLeaf = Extract<LocaleLeaf, `${string}_${PluralSuffix}`>;
  * `count`, so the form is never written at a call site: a hand-picked `x_one`
  * is not a `TranslationKey` at all.
  */
-type PluralTranslationKey = PluralLeaf extends `${infer Base}_${PluralSuffix}`
-  ? Base
-  : never;
+type PluralTranslationKey = PluralLeaf extends `${infer Base}_${PluralSuffix}` ? Base : never;
 export type TranslationKey = Exclude<LocaleLeaf, PluralLeaf> | PluralTranslationKey;
 /**
  * A plural message takes its `count` as a number — a formatted string would

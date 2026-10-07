@@ -71,14 +71,15 @@ function runtime(groupId: string, nowProfileId = "a"): PolicyGroupRuntime {
 
 const setOperationError = vi.fn();
 
-function mount(entries: PolicyGroupEntry[], runOperation = vi.fn(async (operation: () => Promise<unknown>) => {
-  await operation();
-  return true;
-})) {
+function mount(
+  entries: PolicyGroupEntry[],
+  runOperation = vi.fn(async (operation: () => Promise<unknown>) => {
+    await operation();
+    return true;
+  }),
+) {
   ipc.listPolicyGroups.mockResolvedValue({ entries } satisfies PolicyGroupListing);
-  const hook = renderHookWithQuery(() =>
-    usePolicyGroups({ runOperation, setOperationError }, i18next.t.bind(i18next)),
-  );
+  const hook = renderHookWithQuery(() => usePolicyGroups({ runOperation, setOperationError }, i18next.t.bind(i18next)));
   return { ...hook, runOperation };
 }
 
@@ -119,7 +120,12 @@ describe("usePolicyGroups", () => {
 
     await act(() => result.current.activatePolicyGroup("g1"));
 
-    expect(runtimeAction.activateSelection).toHaveBeenCalledWith("group:g1", expect.any(Function), expect.any(Function), { inline: false });
+    expect(runtimeAction.activateSelection).toHaveBeenCalledWith(
+      "group:g1",
+      expect.any(Function),
+      expect.any(Function),
+      { inline: false },
+    );
     expect(ipc.setActivePolicyGroup).toHaveBeenCalledWith("g1");
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({
@@ -162,7 +168,12 @@ describe("usePolicyGroups", () => {
 
     await act(() => result.current.selectPolicyGroup("g1"));
 
-    expect(runtimeAction.activateSelection).toHaveBeenCalledWith("group:g1", expect.any(Function), expect.any(Function), { inline: false });
+    expect(runtimeAction.activateSelection).toHaveBeenCalledWith(
+      "group:g1",
+      expect.any(Function),
+      expect.any(Function),
+      { inline: false },
+    );
     expect(ipc.setActivePolicyGroup).toHaveBeenCalledWith("g1");
   });
 
@@ -203,11 +214,7 @@ describe("usePolicyGroups", () => {
     ipc.listPolicyGroups.mockResolvedValue({ entries: [entry("g1", true)] } satisfies PolicyGroupListing);
     useRuntimeEventStore.setState({ coreState: connectedCore });
     const { result } = renderHookWithQuery(() =>
-      usePolicyGroups(
-        { runOperation: vi.fn(), setOperationError },
-        i18next.t.bind(i18next),
-        { live: false },
-      ),
+      usePolicyGroups({ runOperation: vi.fn(), setOperationError }, i18next.t.bind(i18next), { live: false }),
     );
 
     await waitFor(() => expect(result.current.policyGroupEntries).toHaveLength(1));

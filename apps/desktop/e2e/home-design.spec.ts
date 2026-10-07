@@ -1,11 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import type {
-  AppSettings,
-  ProfileDetails,
-  RuntimeStatusResponse,
-  TunStatus,
-} from "../src/ipc/bindings";
+import type { AppSettings, ProfileDetails, RuntimeStatusResponse, TunStatus } from "../src/ipc/bindings";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 const tokyo: ProfileDetails = {
@@ -59,50 +54,72 @@ for (const { layout, language } of [
   { layout: "macos", language: "zh-Hans" },
   { layout: "windows", language: "zh-Hans" },
 ] as const) {
-  const labels = language === "en"
-    ? { addNode: "Add node", connect: "Connect", disconnect: "Disconnect", collapse: "Collapse sidebar", expand: "Expand sidebar", settings: "Settings", switchNode: "Switch node", nodes: "Nodes", home: "Home", import: "Import" }
-    : { addNode: "添加节点", connect: "连接", disconnect: "断开连接", collapse: "收起侧栏", expand: "展开侧栏", settings: "设置", switchNode: "切换节点", nodes: "节点", home: "主页", import: "导入" };
+  const labels =
+    language === "en"
+      ? {
+          addNode: "Add node",
+          connect: "Connect",
+          disconnect: "Disconnect",
+          collapse: "Collapse sidebar",
+          expand: "Expand sidebar",
+          settings: "Settings",
+          switchNode: "Switch node",
+          nodes: "Nodes",
+          home: "Home",
+          import: "Import",
+        }
+      : {
+          addNode: "添加节点",
+          connect: "连接",
+          disconnect: "断开连接",
+          collapse: "收起侧栏",
+          expand: "展开侧栏",
+          settings: "设置",
+          switchNode: "切换节点",
+          nodes: "节点",
+          home: "主页",
+          import: "导入",
+        };
   test(`home ${layout} ${language} layout stays usable across window sizes, themes and sidebar widths`, async ({
     page,
   }, testInfo) => {
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     await installTauriSmokeMock(page, layout);
-    await page.addInitScript(({ profile, language }) => {
-      const state = window.__VOYA_SMOKE__.state as {
-        profiles: ProfileDetails[];
-        settings: AppSettings;
-        runtime: RuntimeStatusResponse;
-        tun: TunStatus;
-      };
-      state.profiles = [profile];
-      state.settings.appearance.language = language;
-      state.runtime = {
-        activeProfileId: profile.profile.id,
-        activeTunBackend: "process",
-        mainPid: 42,
-        state: "connected",
-        connectedDurationMs: 1458000,
-      };
-      state.tun = {
-        ...state.tun,
-        enabled: true,
-        backend: "process",
-        providerState: "running",
-      };
-    }, { profile: tokyo, language });
+    await page.addInitScript(
+      ({ profile, language }) => {
+        const state = window.__VOYA_SMOKE__.state as {
+          profiles: ProfileDetails[];
+          settings: AppSettings;
+          runtime: RuntimeStatusResponse;
+          tun: TunStatus;
+        };
+        state.profiles = [profile];
+        state.settings.appearance.language = language;
+        state.runtime = {
+          activeProfileId: profile.profile.id,
+          activeTunBackend: "process",
+          mainPid: 42,
+          state: "connected",
+          connectedDurationMs: 1458000,
+        };
+        state.tun = {
+          ...state.tun,
+          enabled: true,
+          backend: "process",
+          providerState: "running",
+        };
+      },
+      { profile: tokyo, language },
+    );
     await page.setViewportSize({ width: 1232, height: 800 });
     await page.goto("/");
     const connect = page.getByTestId("home-connect-button");
     await expect(connect).toHaveAccessibleName(labels.disconnect);
     await expect(connect).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("home-screen").getByRole("heading", { level: 1 })).toHaveCount(0);
-    await expect(
-      page.getByRole("heading", { name: "日本 · 东京 01" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "日本 · 东京 01" })).toBeVisible();
     await expect(page.locator(".home-node-icon .fi-jp")).toBeVisible();
-    await expect(page.getByTestId("home-connection-duration")).toContainText(
-      "00:24:",
-    );
+    await expect(page.getByTestId("home-connection-duration")).toContainText("00:24:");
     // The map is a themed mask, and it marks where the connection leaves.
     expect(
       await page.locator(".home-world-map").evaluate((element) => {
@@ -110,10 +127,7 @@ for (const { layout, language } of [
         return land.maskImage || land.webkitMaskImage;
       }),
     ).toContain("world-map");
-    await expect(page.locator('.home-map-marker[data-country="JP"]')).toHaveAttribute(
-      "data-state",
-      "connected",
-    );
+    await expect(page.locator('.home-map-marker[data-country="JP"]')).toHaveAttribute("data-state", "connected");
     await page.evaluate(async () => {
       await document.fonts.ready;
       window.__VOYA_SMOKE__.emit("transient-stream-event", {
@@ -136,14 +150,12 @@ for (const { layout, language } of [
       await page.setViewportSize({ width, height });
       const card = page.locator(".home-node-card");
       await expect(card).toBeInViewport({ ratio: 1 });
-      const metrics = await page
-        .getByTestId("home-screen")
-        .evaluate((element) => ({
-          width: element.clientWidth,
-          scrollWidth: element.scrollWidth,
-          height: element.clientHeight,
-          scrollHeight: element.scrollHeight,
-        }));
+      const metrics = await page.getByTestId("home-screen").evaluate((element) => ({
+        width: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        height: element.clientHeight,
+        scrollHeight: element.scrollHeight,
+      }));
       expect(metrics.scrollWidth).toBe(metrics.width);
       expect(metrics.scrollHeight).toBeLessThanOrEqual(metrics.height + 1);
       await expectNoModeControls(page);
@@ -156,56 +168,44 @@ for (const { layout, language } of [
     await expect(page.locator("html")).toHaveClass(/dark/);
     // The theme effect can run between separate evaluate calls. Compare both
     // colors in one browser frame and wait for the theme to settle.
-    await expect.poll(() => page.locator(".home-node-name").evaluate((el) =>
-      getComputedStyle(el).color === getComputedStyle(document.body).color,
-    )).toBe(true);
+    await expect
+      .poll(() =>
+        page
+          .locator(".home-node-name")
+          .evaluate((el) => getComputedStyle(el).color === getComputedStyle(document.body).color),
+      )
+      .toBe(true);
     await expectNoModeControls(page);
     await page.screenshot({ path: testInfo.outputPath("home-dark-960.png") });
     await page.getByRole("button", { name: labels.collapse }).click();
-    await expect(
-      page.getByRole("button", { name: labels.expand }),
-    ).toHaveAttribute("aria-expanded", "false");
-    await expect(
-      page.getByRole("tab", { name: labels.settings, exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: labels.expand })).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("tab", { name: labels.settings, exact: true })).toBeVisible();
     await expectNoModeControls(page);
     await page.screenshot({
       path: testInfo.outputPath("home-collapsed-960.png"),
     });
     await page.getByRole("button", { name: labels.switchNode }).click();
-    await expect(
-      page.getByRole("heading", { name: labels.nodes, exact: true }),
-    ).toBeFocused();
+    await expect(page.getByRole("heading", { name: labels.nodes, exact: true })).toBeFocused();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.getByRole("tab", { name: labels.home, exact: true }).click();
 
     // A renderer reload restores the existing backend duration rather than starting at zero.
     await page.reload();
-    await expect(page.getByTestId("home-connection-duration")).toContainText(
-      "00:24:",
-    );
+    await expect(page.getByTestId("home-connection-duration")).toContainText("00:24:");
     await page.evaluate(() => {
       const state = window.__VOYA_SMOKE__.state as {
         profiles: ProfileDetails[];
       };
-      state.profiles[0]!.profile.remarks = "A very long server name ".repeat(
-        20,
-      );
+      state.profiles[0]!.profile.remarks = "A very long server name ".repeat(20);
       window.__VOYA_SMOKE__.emit("invalidate-event", {
         keys: [{ reason: "home-design", scope: { kind: "profiles" } }],
       });
     });
-    await expect(page.locator(".home-node-name")).toContainText(
-      "A very long server name",
+    await expect(page.locator(".home-node-name")).toContainText("A very long server name");
+    expect(await page.locator(".home-node-name").evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(
+      true,
     );
-    expect(
-      await page
-        .locator(".home-node-name")
-        .evaluate((element) => element.scrollWidth > element.clientWidth),
-    ).toBe(true);
-    await expect(page.getByRole("button", { name: labels.switchNode })).toBeInViewport(
-      { ratio: 1 },
-    );
+    await expect(page.getByRole("button", { name: labels.switchNode })).toBeInViewport({ ratio: 1 });
     await page.screenshot({ path: testInfo.outputPath("home-long-name.png") });
     await page.evaluate(() => {
       const state = window.__VOYA_SMOKE__.state as {
@@ -229,9 +229,7 @@ for (const { layout, language } of [
       });
     });
     // An empty home offers adding a node instead of a Connect that cannot connect.
-    await expect(
-      page.getByRole("button", { name: labels.addNode, exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("button", { name: labels.addNode, exact: true })).toBeVisible();
     await expect(page.getByTestId("home-connection-duration")).toHaveCount(0);
     const home = page.getByTestId("home-screen");
     await expect(home.getByRole("heading")).toHaveCount(0);
@@ -239,12 +237,7 @@ for (const { layout, language } of [
     await expect(home.getByText(/Not protected|未受保护|Add a node to connect|添加节点后即可连接/)).toHaveCount(0);
     await expectNoModeControls(page);
     await page.screenshot({ path: testInfo.outputPath("home-empty.png") });
-    expect(
-      await page.evaluate(
-        () =>
-          (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled,
-      ),
-    ).toEqual([]);
+    expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled)).toEqual([]);
   });
 }
 
@@ -262,7 +255,9 @@ test("home points at the Rules page while global mode skips every rule", async (
   await page.setViewportSize({ width: 1180, height: 760 });
   await page.goto("/");
 
-  const chip = page.getByTestId("home-screen").getByRole("button", { name: "Routing setting: Global proxy", exact: true });
+  const chip = page
+    .getByTestId("home-screen")
+    .getByRole("button", { name: "Routing setting: Global proxy", exact: true });
   await expect(chip).toBeVisible();
   await expect(chip).toContainText("Routing setting:");
   // A pointer, not a control.

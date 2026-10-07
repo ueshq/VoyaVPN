@@ -24,14 +24,9 @@ type NodeListSelection = {
  * business, and so is drawing a row's live result on it: see
  * `overlaySpeedtestResult`.
  */
-export function useNodeListData(
-  nodeGroups: NodeListSelection,
-  t: TranslationFunction,
-) {
+export function useNodeListData(nodeGroups: NodeListSelection, t: TranslationFunction) {
   const subscriptionsQuery = useQuery(queries.subscriptions);
-  const speedtestResultsByProfileId = useRuntimeEventStore(
-    (state) => state.speedtestResultsByProfileId,
-  );
+  const speedtestResultsByProfileId = useRuntimeEventStore((state) => state.speedtestResultsByProfileId);
   const profilesQuery = useQuery(queries.profileList);
   const base = profilesQuery.data?.entries ?? NO_PROFILES;
   const profiles = useMemo(
@@ -120,10 +115,7 @@ export function applySpeedtestResults(
  * newer one replaces it, so each result is overlaid once however many frames
  * follow, and the row keeps its identity between them.
  */
-const overlays = new WeakMap<
-  SpeedtestResult,
-  { entry: ProfileSummaryEntry; item: ProfileSummaryEntry }
->();
+const overlays = new WeakMap<SpeedtestResult, { entry: ProfileSummaryEntry; item: ProfileSummaryEntry }>();
 
 /**
  * `item` with a live speedtest result on top. Idempotent: `item` itself when
@@ -141,11 +133,7 @@ export function overlaySpeedtestResult(
   const delayMs = result.delay ?? item.metrics.delayMs;
   const ipInfo = result.ipInfo ?? item.metrics.ipInfo;
   const { outcome } = result;
-  if (
-    delayMs === item.metrics.delayMs &&
-    ipInfo === item.metrics.ipInfo &&
-    outcome === item.metrics.outcome
-  ) {
+  if (delayMs === item.metrics.delayMs && ipInfo === item.metrics.ipInfo && outcome === item.metrics.outcome) {
     return item;
   }
   const entry = { ...item, metrics: { ...item.metrics, delayMs, ipInfo, outcome } };

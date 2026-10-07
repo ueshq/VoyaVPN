@@ -1,9 +1,4 @@
-import type {
-  Profile,
-  ProfileDetails,
-  ProfileProtocol,
-  ProfileSummaryEntry,
-} from "@voya/contracts";
+import type { Profile, ProfileDetails, ProfileProtocol, ProfileSummaryEntry } from "@voya/contracts";
 
 type FixtureOverrides = Partial<Profile>;
 
@@ -37,7 +32,8 @@ export function makeProfileDetailsFixture(
       remarks: overrides.remarks ?? `Server ${index}`,
       subscriptionId: overrides.subscriptionId ?? null,
       tls: overrides.tls ?? null,
-      transport: overrides.transport ?? ("server" in protocol ? { header: null, host: null, kind: "tcp", path: null } : null),
+      transport:
+        overrides.transport ?? ("server" in protocol ? { header: null, host: null, kind: "tcp", path: null } : null),
     },
     traffic: {
       date: 1,

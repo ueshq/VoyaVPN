@@ -81,10 +81,7 @@ export function ActivityScreen() {
   const needle = search.trim().toLowerCase();
   const searching = needle.length > 0;
   // Per snapshot, not per keystroke: the table can hold thousands of rows.
-  const searchHays = useMemo(
-    () => (searching ? connections.map(connectionSearchHay) : null),
-    [connections, searching],
-  );
+  const searchHays = useMemo(() => (searching ? connections.map(connectionSearchHay) : null), [connections, searching]);
   const rows = useMemo(
     () =>
       arrangeConnections(connections, {
@@ -99,12 +96,21 @@ export function ActivityScreen() {
   function confirmCloseAll() {
     Alert.alert(t("activity.disconnectAll"), t("mobile.closeAllConfirm"), [
       { text: t("actions.cancel"), style: "cancel" },
-      { text: t("activity.disconnectAll"), style: "destructive", onPress: () => {
-        setClosing(true); setCloseError(null);
-        // The answer is the table after the close; without it the closed
-        // rows stay until the next push.
-        void voyaCommands().proxyCloseConnection(null).then(setProxyConnections).catch(setCloseError).finally(() => setClosing(false));
-      } },
+      {
+        text: t("activity.disconnectAll"),
+        style: "destructive",
+        onPress: () => {
+          setClosing(true);
+          setCloseError(null);
+          // The answer is the table after the close; without it the closed
+          // rows stay until the next push.
+          void voyaCommands()
+            .proxyCloseConnection(null)
+            .then(setProxyConnections)
+            .catch(setCloseError)
+            .finally(() => setClosing(false));
+        },
+      },
     ]);
   }
 
@@ -139,11 +145,7 @@ export function ActivityScreen() {
           title={t("activity.connectToView")}
           description={t("activity.connectHint")}
           action={
-            <Button
-              className="py-3"
-              variant="secondary"
-              onPress={() => navigateToTab("home")}
-            >
+            <Button className="py-3" variant="secondary" onPress={() => navigateToTab("home")}>
               <Button.Label>{t("activity.goHome")}</Button.Label>
             </Button>
           }
@@ -164,7 +166,15 @@ export function ActivityScreen() {
       ListHeaderComponent={
         <View className="gap-3 px-page pb-3">
           <ErrorNotice error={closeError} />
-          <ErrorNotice error={error ?? snapshotQuery.error ?? (monitor.state === "failed" ? monitor.message || true : null)} message={t("mobile.monitorFailed")} retry={() => { setError(null); setAttempt(attempt + 1); void snapshotQuery.refetch(); }} />
+          <ErrorNotice
+            error={error ?? snapshotQuery.error ?? (monitor.state === "failed" ? monitor.message || true : null)}
+            message={t("mobile.monitorFailed")}
+            retry={() => {
+              setError(null);
+              setAttempt(attempt + 1);
+              void snapshotQuery.refetch();
+            }}
+          />
           <SearchField value={search} onChange={setSearch}>
             <SearchField.Group>
               <SearchField.SearchIcon />
@@ -187,19 +197,27 @@ export function ActivityScreen() {
                   })
                 : t("activity.connectionCount", { count: connections.length })}
             </Typography>
-            <Button className="min-h-12 h-auto py-2" size="sm" variant="danger-soft" isDisabled={closing || connections.length === 0} onPress={confirmCloseAll}>
+            <Button
+              className="min-h-12 h-auto py-2"
+              size="sm"
+              variant="danger-soft"
+              isDisabled={closing || connections.length === 0}
+              onPress={confirmCloseAll}
+            >
               <Button.Label>{t("activity.disconnectAll")}</Button.Label>
             </Button>
           </View>
         </View>
       }
-      ListEmptyComponent={monitor.state === "failed" || error || snapshotQuery.error ? undefined :
-        <View className="px-page">
-          <EmptyState
-            icons={[needle ? SearchX : Activity]}
-            title={needle ? t("activity.noMatches") : t("activity.liveConnections")}
-          />
-        </View>
+      ListEmptyComponent={
+        monitor.state === "failed" || error || snapshotQuery.error ? undefined : (
+          <View className="px-page">
+            <EmptyState
+              icons={[needle ? SearchX : Activity]}
+              title={needle ? t("activity.noMatches") : t("activity.liveConnections")}
+            />
+          </View>
+        )
       }
     />
   );

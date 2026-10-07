@@ -69,7 +69,9 @@ export async function checkTauriConfig(reporter, options, updatesBaseUrl) {
     ]);
   } else {
     if (placeholderText(updater.pubkey)) {
-      reporter.blocker("Tauri updater public key", [`${detailsPrefix}: plugins.updater.pubkey is empty or a placeholder`]);
+      reporter.blocker("Tauri updater public key", [
+        `${detailsPrefix}: plugins.updater.pubkey is empty or a placeholder`,
+      ]);
     } else if (String(updater.pubkey).trim().length < 32) {
       reporter.blocker("Tauri updater public key", [`${detailsPrefix}: plugins.updater.pubkey is too short`]);
     } else {
@@ -112,7 +114,9 @@ export async function checkTauriConfig(reporter, options, updatesBaseUrl) {
       if (badEndpoints.length > 0) {
         reporter.blocker("Tauri updater endpoints", badEndpoints);
       } else {
-        reporter.pass("Tauri updater endpoints", [`${updater.endpoints.length} endpoint template(s) use stable URL rules`]);
+        reporter.pass("Tauri updater endpoints", [
+          `${updater.endpoints.length} endpoint template(s) use stable URL rules`,
+        ]);
       }
     }
   }
@@ -133,6 +137,8 @@ export async function checkTauriConfig(reporter, options, updatesBaseUrl) {
   if (resources["../../../docs/release/THIRD_PARTY_NOTICES.md"] === "release/THIRD_PARTY_NOTICES.md") {
     reporter.pass("bundled notices resource", [`${detailsPrefix}: THIRD_PARTY_NOTICES.md is bundled`]);
   } else {
-    reporter.fail("bundled notices resource", [`${detailsPrefix}: release notices resource is missing from bundle.resources`]);
+    reporter.fail("bundled notices resource", [
+      `${detailsPrefix}: release notices resource is missing from bundle.resources`,
+    ]);
   }
 }

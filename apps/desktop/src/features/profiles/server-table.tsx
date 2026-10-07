@@ -15,10 +15,7 @@ export function ProfilesScreen() {
   const { search, searchRef, setSearch, clearSearch } = controller.nodeGroups;
   return (
     <PageSection className="profile-cards-screen" aria-label={t("panes.profiles.title")}>
-      <PageTitle
-        title={t("panes.profiles.title")}
-        actions={<ServerTableToolbar controller={controller} />}
-      />
+      <PageTitle title={t("panes.profiles.title")} actions={<ServerTableToolbar controller={controller} />} />
       <PageContent>
         <ServerTableNotices controller={controller} />
         {controller.profiles.length > 0 || search ? (
@@ -33,7 +30,10 @@ export function ProfilesScreen() {
               onClear={clearSearch}
             />
             <p className="text-xs text-muted-foreground" role="status">
-              {t("panes.profiles.search.count", { count: controller.visibleProfileCount, total: controller.profiles.length })}
+              {t("panes.profiles.search.count", {
+                count: controller.visibleProfileCount,
+                total: controller.profiles.length,
+              })}
             </p>
           </div>
         ) : null}

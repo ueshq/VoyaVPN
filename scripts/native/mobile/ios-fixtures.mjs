@@ -4,16 +4,28 @@ import { networkInterfaces } from "node:os";
 import { spawn } from "node:child_process";
 
 export function lanAddress(interfaces = networkInterfaces()) {
-  const address = Object.values(interfaces).flat().find((entry) =>
-    entry && entry.family === "IPv4" && !entry.internal &&
-    /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address));
-  if (!address) throw new Error("A private LAN IPv4 address is required for the subscription fixture (the app rejects loopback subscriptions).");
+  const address = Object.values(interfaces)
+    .flat()
+    .find(
+      (entry) =>
+        entry &&
+        entry.family === "IPv4" &&
+        !entry.internal &&
+        /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address),
+    );
+  if (!address)
+    throw new Error(
+      "A private LAN IPv4 address is required for the subscription fixture (the app rejects loopback subscriptions).",
+    );
   return address.address;
 }
 
 export async function unusedPort() {
   const server = createTcpServer();
-  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
   const port = server.address().port;
   await new Promise((resolve) => server.close(resolve));
   return port;
@@ -23,9 +35,11 @@ function clipboard(device, text) {
   return new Promise((resolve, reject) => {
     const child = spawn("xcrun", ["simctl", text === undefined ? "pbpaste" : "pbcopy", device]);
     let output = "";
-    child.stdout.on("data", (data) => { output += data; });
+    child.stdout.on("data", (data) => {
+      output += data;
+    });
     child.once("error", reject);
-    child.once("close", (code) => code === 0 ? resolve(output) : reject(new Error(`simctl clipboard: ${code}`)));
+    child.once("close", (code) => (code === 0 ? resolve(output) : reject(new Error(`simctl clipboard: ${code}`))));
     child.stdin.end(text);
   });
 }
@@ -34,9 +48,13 @@ function appearance(device, value) {
   return new Promise((resolve, reject) => {
     const child = spawn("xcrun", ["simctl", "ui", device, "appearance", ...(value ? [value] : [])]);
     let output = "";
-    child.stdout.on("data", (data) => { output += data; });
+    child.stdout.on("data", (data) => {
+      output += data;
+    });
     child.once("error", reject);
-    child.once("close", (code) => code === 0 ? resolve(output.trim()) : reject(new Error(`simctl appearance: ${code}`)));
+    child.once("close", (code) =>
+      code === 0 ? resolve(output.trim()) : reject(new Error(`simctl appearance: ${code}`)),
+    );
   });
 }
 
@@ -48,8 +66,13 @@ export async function startFixtures({ device, address, record }) {
     try {
       // Only the subscription endpoint needs LAN access. Clipboard/control
       // requests belong to the local XCTest runner, never another LAN client.
-      if (["/clipboard", "/delay", "/appearance"].includes(request.url) && request.socket.remoteAddress !== "127.0.0.1") {
-        response.writeHead(403); response.end(); return;
+      if (
+        ["/clipboard", "/delay", "/appearance"].includes(request.url) &&
+        request.socket.remoteAddress !== "127.0.0.1"
+      ) {
+        response.writeHead(403);
+        response.end();
+        return;
       }
       const chunks = [];
       for await (const chunk of request) chunks.push(chunk);
@@ -57,7 +80,11 @@ export async function startFixtures({ device, address, record }) {
       record(`${request.method} ${request.url}`);
       switch (request.url) {
         case "/appearance":
-          if (request.method === "POST" && !["light", "dark"].includes(body)) { response.writeHead(400); response.end(); break; }
+          if (request.method === "POST" && !["light", "dark"].includes(body)) {
+            response.writeHead(400);
+            response.end();
+            break;
+          }
           response.end(await appearance(device(), request.method === "POST" ? body : undefined));
           break;
         case "/clipboard":
@@ -71,24 +98,42 @@ export async function startFixtures({ device, address, record }) {
           downloads += 1;
           const title = downloads === 1 ? "A" : downloads === 2 ? "Updated" : "Refreshed";
           response.setHeader("profile-title", "QA Subscription");
-          response.end([
-            `vless://55555555-5555-5555-5555-555555555555@qa-sub.example.test:443?security=tls#QA%20Subscription%20${title}`,
-            "vless://66666666-6666-6666-6666-666666666666@qa-sub-b.example.test:443?security=tls#QA%20Subscription%20B",
-          ].join("\n"));
+          response.end(
+            [
+              `vless://55555555-5555-5555-5555-555555555555@qa-sub.example.test:443?security=tls#QA%20Subscription%20${title}`,
+              "vless://66666666-6666-6666-6666-666666666666@qa-sub-b.example.test:443?security=tls#QA%20Subscription%20B",
+            ].join("\n"),
+          );
           break;
         }
         case "/ping": {
-          const timer = setTimeout(() => { timers.delete(timer); response.writeHead(204); response.end(); }, delay);
+          const timer = setTimeout(() => {
+            timers.delete(timer);
+            response.writeHead(204);
+            response.end();
+          }, delay);
           timers.add(timer);
           break;
         }
-        case "/ip": response.end('{"ip":"192.0.2.1","country":"QA"}'); break;
-        case "/health": response.end("ok"); break;
-        default: response.writeHead(404); response.end();
+        case "/ip":
+          response.end('{"ip":"192.0.2.1","country":"QA"}');
+          break;
+        case "/health":
+          response.end("ok");
+          break;
+        default:
+          response.writeHead(404);
+          response.end();
       }
-    } catch (error) { response.writeHead(500); response.end(String(error)); }
+    } catch (error) {
+      response.writeHead(500);
+      response.end(String(error));
+    }
   });
-  await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "0.0.0.0", resolve); });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "0.0.0.0", resolve);
+  });
   const port = server.address().port;
   return {
     controlUrl: `http://127.0.0.1:${port}`,

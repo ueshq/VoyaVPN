@@ -60,10 +60,7 @@ export function makeProfileEntry(
   };
 }
 
-export function makeSubscription(
-  index = 0,
-  overrides: Partial<Subscription> = {},
-): Subscription {
+export function makeSubscription(index = 0, overrides: Partial<Subscription> = {}): Subscription {
   return {
     additionalUrl: "",
     autoUpdateIntervalMinutes: null,
@@ -232,10 +229,7 @@ function makeTunStatus(): TunStatus {
   };
 }
 
-export function makeRoutingRule(
-  index = 0,
-  overrides: Partial<RoutingRule> = {},
-): RoutingRule {
+export function makeRoutingRule(index = 0, overrides: Partial<RoutingRule> = {}): RoutingRule {
   return {
     domain: null,
     enabled: true,
@@ -259,10 +253,7 @@ export function makeRoutingRule(
  * union with the deserialize shape, which has no `isActive` — what a backend
  * *returns* is always the serialize side.
  */
-export function makeRouting(
-  index = 0,
-  overrides: Partial<Routing_Serialize> = {},
-): Routing_Serialize {
+export function makeRouting(index = 0, overrides: Partial<Routing_Serialize> = {}): Routing_Serialize {
   return {
     id: `routing-${index}`,
     isActive: index === 0,
@@ -278,10 +269,7 @@ function makeConnectionsSnapshot(): ProxyConnectionsSnapshot {
 }
 
 /** One live connection, the way the Clash API reports one. */
-export function makeConnection(
-  index = 0,
-  overrides: Partial<ProxyConnectionItem> = {},
-): ProxyConnectionItem {
+export function makeConnection(index = 0, overrides: Partial<ProxyConnectionItem> = {}): ProxyConnectionItem {
   return {
     chains: ["proxy", `Node ${index}`],
     connectionType: "TCP",

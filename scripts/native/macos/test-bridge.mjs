@@ -9,22 +9,56 @@ const root = repoRootFromScript(import.meta.url);
 const directory = mkdtempSync(join(tmpdir(), "voya-tunnel-wait-"));
 try {
   const binary = join(directory, "tunnel-wait-tests");
-  run("xcrun", ["clang", "-fobjc-arc", "-fblocks", "-Wall", "-Wextra", "-Werror",
+  run("xcrun", [
+    "clang",
+    "-fobjc-arc",
+    "-fblocks",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
     resolve(root, "crates/voya-platform/native/macos_tunnel_wait_tests.m"),
-    "-framework", "Foundation", "-framework", "NetworkExtension", "-o", binary]);
+    "-framework",
+    "Foundation",
+    "-framework",
+    "NetworkExtension",
+    "-o",
+    binary,
+  ]);
   run(binary, []);
   const chromeBinary = join(directory, "window-chrome-tests");
-  run("xcrun", ["clang", "-fobjc-arc", "-fblocks", "-Wall", "-Wextra", "-Werror",
+  run("xcrun", [
+    "clang",
+    "-fobjc-arc",
+    "-fblocks",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
     resolve(root, "crates/voya-platform/native/macos_window_chrome.m"),
     resolve(root, "crates/voya-platform/native/macos_window_chrome_tests.m"),
-    "-framework", "AppKit", "-o", chromeBinary]);
+    "-framework",
+    "AppKit",
+    "-o",
+    chromeBinary,
+  ]);
   run(chromeBinary, []);
   const loginItemBinary = join(directory, "login-item-tests");
-  run("xcrun", ["clang", "-fobjc-arc", "-fblocks", "-Wall", "-Wextra", "-Werror",
+  run("xcrun", [
+    "clang",
+    "-fobjc-arc",
+    "-fblocks",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
     "-mmacosx-version-min=10.15",
     resolve(root, "crates/voya-platform/native/macos_login_item.m"),
     resolve(root, "crates/voya-platform/native/macos_login_item_tests.m"),
-    "-framework", "Foundation", "-framework", "ServiceManagement", "-o", loginItemBinary]);
+    "-framework",
+    "Foundation",
+    "-framework",
+    "ServiceManagement",
+    "-o",
+    loginItemBinary,
+  ]);
   run(loginItemBinary, []);
 
   const nativeRoot = resolve(root, "apps/desktop/src-tauri/native/macos");
@@ -40,10 +74,15 @@ try {
     console.log(`SKIP PacketTunnel Libbox typecheck: framework absent at ${framework}`);
   }
   const runtimeBinary = join(directory, "packet-tunnel-runtime-tests");
-  run("xcrun", ["swiftc", "-parse-as-library",
+  run("xcrun", [
+    "swiftc",
+    "-parse-as-library",
     join(appleRoot, "PacketTunnel/PacketTunnelRuntime.swift"),
     join(appleRoot, "PacketTunnel/PacketTunnelDiagnostics.swift"),
-    join(appleRoot, "PacketTunnelTests.swift"), "-o", runtimeBinary]);
+    join(appleRoot, "PacketTunnelTests.swift"),
+    "-o",
+    runtimeBinary,
+  ]);
   run(runtimeBinary, []);
 } finally {
   rmSync(directory, { recursive: true, force: true });

@@ -44,20 +44,13 @@ export function WorldMap({ marker }: { marker: HomeMapMarker | null }) {
             <Stop offset="1" stopColor={land} stopOpacity="0.4" />
           </LinearGradient>
         </Defs>
-        <Path
-          d={WORLD_MAP_LAND}
-          fill="url(#voya-world-map-fade)"
-          fillRule="evenodd"
-          testID="world-map-land"
-        />
+        <Path d={WORLD_MAP_LAND} fill="url(#voya-world-map-fade)" fillRule="evenodd" testID="world-map-land" />
       </Svg>
       {marker && position ? (
         <View
           // Half the dot's own size, so the percentage lands on its centre.
           className={`absolute -ml-1.5 -mt-1.5 h-3 w-3 rounded-full ${
-            marker.state === "connected"
-              ? "bg-connected"
-              : "border-2 border-brand bg-canvas"
+            marker.state === "connected" ? "bg-connected" : "border-2 border-brand bg-canvas"
           }`}
           style={{ left: `${position.left}%`, top: `${position.top}%` }}
           testID={`world-map-marker-${marker.countryCode}`}

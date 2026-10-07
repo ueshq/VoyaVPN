@@ -35,9 +35,17 @@ export function ServerTableNotices({ controller }: { controller: ServerTableCont
   return (
     <>
       {directImportPending ? (
-        <PageSurface className="flex shrink-0 items-center gap-2 px-4 py-2 text-sm text-muted-foreground" role="status" aria-busy="true">
+        <PageSurface
+          className="flex shrink-0 items-center gap-2 px-4 py-2 text-sm text-muted-foreground"
+          role="status"
+          aria-busy="true"
+        >
           <Spinner className="size-4" />
-          {directImportPending === "qrScreen" ? t("qr.scanningScreen") : directImportPending === "import" ? t("panes.profiles.import.importing") : t("panes.profiles.importDialog.reading")}
+          {directImportPending === "qrScreen"
+            ? t("qr.scanningScreen")
+            : directImportPending === "import"
+              ? t("panes.profiles.import.importing")
+              : t("panes.profiles.importDialog.reading")}
         </PageSurface>
       ) : null}
       {operationError ? (
@@ -48,13 +56,12 @@ export function ServerTableNotices({ controller }: { controller: ServerTableCont
           </span>
         </InlinePageError>
       ) : null}
-      {profilesQuery.isError ? (
-        <InlinePageError>
-          {redactOperationalError(profilesQuery.error)}
-        </InlinePageError>
-      ) : null}
+      {profilesQuery.isError ? <InlinePageError>{redactOperationalError(profilesQuery.error)}</InlinePageError> : null}
       {operationMessage ? (
-        <PageSurface role="status" className="flex shrink-0 items-start gap-2 bg-success-bg px-4 py-2 text-sm text-success">
+        <PageSurface
+          role="status"
+          className="flex shrink-0 items-start gap-2 bg-success-bg px-4 py-2 text-sm text-success"
+        >
           <span className="min-w-0 flex-1">{operationMessage}</span>
           <DismissButton label={t("common.dismiss")} onClick={() => setOperationMessage(null)} />
         </PageSurface>

@@ -62,10 +62,7 @@ function normalizeUiPreferences(preferences: AppearanceSettings): NormalizedUiPr
  * stored preference. Only the backend acknowledgement persists it; leaving
  * clears any failed preview.
  */
-export async function applyUiPreferences(
-  preferences: AppearanceSettings,
-  options?: { persist?: boolean },
-) {
+export async function applyUiPreferences(preferences: AppearanceSettings, options?: { persist?: boolean }) {
   const normalized = normalizeUiPreferences(preferences);
   const persist = options?.persist !== false;
   const preferencesStore = usePreferencesStore.getState();

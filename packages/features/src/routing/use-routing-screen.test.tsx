@@ -44,9 +44,7 @@ describe("useRoutingScreen", () => {
     ipcMocks.saveRoutingRule.mockResolvedValue(active());
     const { result } = renderController();
 
-    await waitFor(() =>
-      expect(result.current.groupOutbounds).toEqual([{ id: "work", name: "Work" }]),
-    );
+    await waitFor(() => expect(result.current.groupOutbounds).toEqual([{ id: "work", name: "Work" }]));
     const target = result.current.rules[0]!;
     act(() => result.current.requestFixOutbound(target));
     // Retargeting a rule waits for the user to confirm it.
@@ -79,9 +77,7 @@ describe("useRoutingScreen", () => {
     ipcMocks.listRoutings.mockResolvedValue([{ ...active(), rules: [rule("rule-a"), perApp()] }]);
     const { result } = renderController();
 
-    await waitFor(() =>
-      expect(result.current.rules.map((item) => item.id)).toEqual(["rule-a", "rule-per-app"]),
-    );
+    await waitFor(() => expect(result.current.rules.map((item) => item.id)).toEqual(["rule-a", "rule-per-app"]));
   });
 
   it("switches a rule, showing the requested state until the save settles", async () => {
@@ -111,9 +107,7 @@ describe("useRoutingScreen", () => {
     const committed: Routing_Serialize = {
       ...active(),
       isActive: false,
-      rules: active().rules.map((item) =>
-        item.id === "rule-a" ? { ...item, enabled: false } : item,
-      ),
+      rules: active().rules.map((item) => (item.id === "rule-a" ? { ...item, enabled: false } : item)),
     };
     await act(async () => {
       finish(committed);
@@ -149,18 +143,14 @@ describe("useRoutingScreen", () => {
   });
 
   it("moves a rule to the very top when no per-app rule is pinned", async () => {
-    ipcMocks.listRoutings.mockResolvedValue([
-      { ...active(), rules: [rule("rule-a"), rule("rule-b")] },
-    ]);
+    ipcMocks.listRoutings.mockResolvedValue([{ ...active(), rules: [rule("rule-a"), rule("rule-b")] }]);
     ipcMocks.moveRoutingRule.mockResolvedValue(active());
     const { result } = renderController();
     await waitFor(() => expect(result.current.rules).toHaveLength(2));
 
     act(() => result.current.moveRule(result.current.rules[1], "top"));
 
-    await waitFor(() =>
-      expect(ipcMocks.moveRoutingRule).toHaveBeenCalledWith("route-active", "rule-b", "top", null),
-    );
+    await waitFor(() => expect(ipcMocks.moveRoutingRule).toHaveBeenCalledWith("route-active", "rule-b", "top", null));
   });
 
   it("turns a drag and drop into the backend's insertion slot", async () => {
@@ -175,22 +165,12 @@ describe("useRoutingScreen", () => {
     expect(committed).toBe(true);
     // List index 0 → 2 is rule set index 1 → 3; the slot still counts the
     // moving rule, so it is 4.
-    expect(ipcMocks.moveRoutingRule).toHaveBeenLastCalledWith(
-      "route-active",
-      "rule-a",
-      "position",
-      4,
-    );
+    expect(ipcMocks.moveRoutingRule).toHaveBeenLastCalledWith("route-active", "rule-a", "position", 4);
 
     await act(async () => {
       committed = await result.current.reorderRule("rule-c", 2, 0);
     });
-    expect(ipcMocks.moveRoutingRule).toHaveBeenLastCalledWith(
-      "route-active",
-      "rule-c",
-      "position",
-      1,
-    );
+    expect(ipcMocks.moveRoutingRule).toHaveBeenLastCalledWith("route-active", "rule-c", "position", 1);
 
     ipcMocks.moveRoutingRule.mockRejectedValueOnce(new Error("move failed"));
     await act(async () => {
@@ -205,9 +185,7 @@ describe("useRoutingScreen", () => {
   });
 
   it("saves a rule and closes the editor only when the backend accepts it", async () => {
-    ipcMocks.saveRoutingRule
-      .mockResolvedValueOnce(active())
-      .mockRejectedValueOnce(new Error("rule save failed"));
+    ipcMocks.saveRoutingRule.mockResolvedValueOnce(active()).mockRejectedValueOnce(new Error("rule save failed"));
     const { result } = renderController();
     await waitFor(() => expect(result.current.rules).toHaveLength(3));
     const payload = rule("rule-new");
@@ -262,9 +240,7 @@ describe("useRoutingScreen", () => {
     expect(result.current.pendingConfirm).toEqual({ kind: "deleteRule", rule: target });
     expect(ipcMocks.deleteRoutingRules).not.toHaveBeenCalled();
     act(() => result.current.confirmPending());
-    await waitFor(() =>
-      expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("route-active", ["rule-b"]),
-    );
+    await waitFor(() => expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("route-active", ["rule-b"]));
     expect(result.current.pendingConfirm).toBeNull();
 
     act(() => result.current.requestResetRules());
@@ -298,11 +274,7 @@ describe("useRoutingScreen", () => {
     act(() => result.current.confirmPending());
 
     expect(committed).toBe(false);
-    for (const mock of [
-      ipcMocks.saveRoutingRule,
-      ipcMocks.moveRoutingRule,
-      ipcMocks.resetRoutingRules,
-    ]) {
+    for (const mock of [ipcMocks.saveRoutingRule, ipcMocks.moveRoutingRule, ipcMocks.resetRoutingRules]) {
       expect(mock).not.toHaveBeenCalled();
     }
   });

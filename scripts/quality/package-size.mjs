@@ -15,7 +15,13 @@ import { parseArgs as parseArgsShared } from "../lib/args.mjs";
 
 const BINARIES = ["voyavpn", "voyavpn-tunnel-service"];
 const PACKAGE_EXTENSIONS = [".dmg", ".exe", ".msi", ".deb", ".rpm", ".AppImage", ".tar.gz"];
-const APP_PARTS = ["Contents/MacOS", "Contents/Resources", "Contents/PlugIns", "Contents/Library", "Contents/Frameworks"];
+const APP_PARTS = [
+  "Contents/MacOS",
+  "Contents/Resources",
+  "Contents/PlugIns",
+  "Contents/Library",
+  "Contents/Frameworks",
+];
 
 const argSpec = {
   "--target": { key: "target" },
@@ -76,7 +82,11 @@ export function collectSizes(repoRoot, options) {
 }
 
 export function markdownTable(rows) {
-  return ["| Artifact | Size |", "| --- | ---: |", ...rows.map(({ bytes, path }) => `| \`${path}\` | ${formatBytes(bytes)} |`)].join("\n");
+  return [
+    "| Artifact | Size |",
+    "| --- | ---: |",
+    ...rows.map(({ bytes, path }) => `| \`${path}\` | ${formatBytes(bytes)} |`),
+  ].join("\n");
 }
 
 if (isCliEntrypoint(import.meta.url)) {

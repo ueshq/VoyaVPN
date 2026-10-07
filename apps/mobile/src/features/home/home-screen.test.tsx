@@ -53,7 +53,9 @@ describe("HomeScreen", () => {
     await renderHome();
 
     // What to check, not "iOS PacketTunnel: Error", which names a component.
-    expect(await screen.findByText(/The VPN did not start\. Check that VoyaVPN is turned on in Settings → VPN/)).toBeOnTheScreen();
+    expect(
+      await screen.findByText(/The VPN did not start\. Check that VoyaVPN is turned on in Settings → VPN/),
+    ).toBeOnTheScreen();
     expect(screen.queryByText("iOS PacketTunnel: Error")).toBeNull();
     // Collapsed details are not mounted, so the untranslated text is not on screen.
     expect(screen.queryByText(/did not come up/)).toBeNull();
@@ -87,9 +89,7 @@ describe("HomeScreen", () => {
     // the backend publishes.
     expect(await screen.findByText("Connected")).toBeOnTheScreen();
     expect(screen.getByText("Disconnect")).toBeOnTheScreen();
-    expect(
-      mockBackend().state.calls.map((call) => call.command),
-    ).toContain("connectActiveProfile");
+    expect(mockBackend().state.calls.map((call) => call.command)).toContain("connectActiveProfile");
   });
 
   it("keeps session details behind an explicit entry and shows no transfer rates", async () => {
@@ -138,7 +138,11 @@ describe("HomeScreen", () => {
     // authorization is missing, and the node the connect was for is deleted.
     const tun = { ...makeMockSeed().tun, backend: "iosPacketTunnel", providerPathMismatch: false } as const;
     useRuntimeEventStore.setState({
-      tun: { ...tun, lastProviderError: "the system did not authorize the VPN configuration", providerState: "permissionRequired" },
+      tun: {
+        ...tun,
+        lastProviderError: "the system did not authorize the VPN configuration",
+        providerState: "permissionRequired",
+      },
     });
     mockBackend().state.profiles = mockBackend().state.profiles.map((entry) => ({ ...entry, isActive: false }));
     const first = await renderHome();
@@ -149,10 +153,12 @@ describe("HomeScreen", () => {
     await first.unmount();
 
     // With a node selected again the same status is worth saying once more.
-    mockBackend().state.profiles = mockBackend().state.profiles.map((entry, index) => ({ ...entry, isActive: index === 0 }));
+    mockBackend().state.profiles = mockBackend().state.profiles.map((entry, index) => ({
+      ...entry,
+      isActive: index === 0,
+    }));
     const second = await renderHome();
     expect(await screen.findByText(/iOS asks to add a VPN configuration/)).toBeOnTheScreen();
     await second.unmount();
   });
-
 });

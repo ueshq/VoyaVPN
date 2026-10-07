@@ -2,12 +2,7 @@ import { resolve } from "node:path";
 
 import { repoRootFromScript } from "../lib/common.mjs";
 import { readJson } from "../lib/fs.mjs";
-import {
-  criticalModules,
-  evaluateCoverage,
-  globalMinimums,
-  runtimeModules,
-} from "./frontend-coverage-policy.mjs";
+import { criticalModules, evaluateCoverage, globalMinimums, runtimeModules } from "./frontend-coverage-policy.mjs";
 
 const root = repoRootFromScript(import.meta.url);
 const summary = readJson(resolve(root, "coverage/coverage-summary.json"));
@@ -20,9 +15,7 @@ const { failures } = evaluateCoverage({
 if (failures.length > 0) {
   console.error("\nFrontend coverage policy failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
-  console.error(
-    "\nGlobal minimums and per-module floors live in scripts/quality/frontend-coverage-policy.mjs.",
-  );
+  console.error("\nGlobal minimums and per-module floors live in scripts/quality/frontend-coverage-policy.mjs.");
   process.exit(1);
 }
 

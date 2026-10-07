@@ -15,12 +15,7 @@ import {
 } from "@voya/ui/components/dialog";
 import { Disclosure } from "@voya/ui/components/disclosure";
 
-import {
-  NumberField,
-  SettingsFields,
-  SettingsSwitch,
-  TextField,
-} from "@/features/settings/settings-form";
+import { NumberField, SettingsFields, SettingsSwitch, TextField } from "@/features/settings/settings-form";
 import type { SelfHostConfig, SelfHostState } from "@voya/contracts";
 
 import type { SelfHostController } from "./use-self-host";
@@ -60,15 +55,11 @@ export function NodeSettingsDialog({
 
   // The disguise site and its port share one field, so they share its error.
   const siteError = controller.fieldErrors.realityServerName ?? controller.fieldErrors.realityServerPort;
-  const errors = siteError
-    ? { ...controller.fieldErrors, realityServerName: siteError }
-    : controller.fieldErrors;
-  const advancedInvalid =
-    state.runtime.problem === "portInUse" || ADVANCED_FIELDS.some((field) => field in errors);
+  const errors = siteError ? { ...controller.fieldErrors, realityServerName: siteError } : controller.fieldErrors;
+  const advancedInvalid = state.runtime.problem === "portInUse" || ADVANCED_FIELDS.some((field) => field in errors);
 
   const siteIsDefault =
-    config.realityServerName === defaults.realityServerName &&
-    config.realityServerPort === defaults.realityServerPort;
+    config.realityServerName === defaults.realityServerName && config.realityServerPort === defaults.realityServerPort;
   const site = siteIsDefault
     ? ""
     : config.realityServerPort === defaults.realityServerPort
@@ -150,9 +141,7 @@ export function NodeSettingsDialog({
                       placeholder={defaults.realityServerName}
                       validate={(text) => {
                         const { port } = parseSite(text);
-                        return port === null || (port >= 1 && port <= MAX_PORT)
-                          ? undefined
-                          : t("validation.invalid");
+                        return port === null || (port >= 1 && port <= MAX_PORT) ? undefined : t("validation.invalid");
                       }}
                       value={site}
                     />

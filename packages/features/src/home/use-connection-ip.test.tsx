@@ -55,9 +55,7 @@ describe("useConnectionIp", () => {
     useRuntimeEventStore.setState({ coreState: connected });
     renderMetric();
 
-    await waitFor(() =>
-      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"),
-    );
+    await waitFor(() => expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"));
   });
 
   it("remembers the address when the screen unmounts and remounts", async () => {
@@ -66,9 +64,7 @@ describe("useConnectionIp", () => {
     const queryClient = createTestQueryClient();
     const view = renderWithQuery(<Metric />, { queryClient });
 
-    await waitFor(() =>
-      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"),
-    );
+    await waitFor(() => expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"));
 
     view.unmount();
     renderWithQuery(<Metric />, { queryClient });
@@ -81,9 +77,7 @@ describe("useConnectionIp", () => {
     useRuntimeEventStore.setState({ coreState: connected });
     const queryClient = createTestQueryClient();
     renderWithQuery(<Metric />, { queryClient });
-    await waitFor(() =>
-      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"),
-    );
+    await waitFor(() => expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"));
 
     // A reconnect is a new core process, so a new key.
     ipc.checkConnectionIp.mockResolvedValue({ countryCode: "SG", ip: "198.51.100.7" });
@@ -91,9 +85,7 @@ describe("useConnectionIp", () => {
       useRuntimeEventStore.setState({ coreState: { ...connected, mainPid: 43 } });
     });
 
-    await waitFor(() =>
-      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("198.51.100.7 · SG"),
-    );
+    await waitFor(() => expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("198.51.100.7 · SG"));
     const cached = queryClient.getQueryCache().findAll({ queryKey: queryKeys.connectionIp });
     expect(cached.map((query) => query.queryKey[1])).toEqual(["tokyo:43:0"]);
   });
@@ -106,9 +98,7 @@ describe("useConnectionIp", () => {
     act(() => setCoreState(inProvider));
     const queryClient = createTestQueryClient();
     const view = renderWithQuery(<Metric />, { queryClient });
-    await waitFor(() =>
-      expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"),
-    );
+    await waitFor(() => expect(screen.getByTestId("home-exit-ip")).toHaveTextContent("203.0.113.9 · JP"));
 
     view.unmount();
     act(() => {

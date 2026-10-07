@@ -47,11 +47,9 @@
   --color-accent-subtle: var(--accent-subtle);
   --shadow-frame: var(--shadow-frame);
   --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", Helvetica, Arial, sans-serif;
-  --font-mono:
-    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
-    monospace;
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 @layer base {

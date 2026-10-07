@@ -92,15 +92,11 @@ const QUIET_REASONS: ReadonlySet<SelfHostReasonCode> = new Set([
 ]);
 
 /** What to do about the check, across both address families, each said once. */
-export function actionableReasons(
-  environment: Pick<SelfHostEnvironmentReport, "ipv4" | "ipv6">,
-): SelfHostReasonCode[] {
+export function actionableReasons(environment: Pick<SelfHostEnvironmentReport, "ipv4" | "ipv6">): SelfHostReasonCode[] {
   // The port-forward verdict already says the device is behind a router.
   const saidByVerdict = overallReachability(environment) === "needsPortForward" ? "behindNat" : null;
   const reasons = [...environment.ipv4.reasons, ...environment.ipv6.reasons];
-  return [...new Set(reasons)].filter(
-    (reason) => !QUIET_REASONS.has(reason) && reason !== saidByVerdict,
-  );
+  return [...new Set(reasons)].filter((reason) => !QUIET_REASONS.has(reason) && reason !== saidByVerdict);
 }
 
 /** A tone as a status dot, shared by the entry tiles and the network verdict. */

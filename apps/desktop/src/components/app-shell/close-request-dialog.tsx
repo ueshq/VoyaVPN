@@ -52,19 +52,13 @@ export function CloseRequestDialog() {
           <DialogDescription>
             {t("closePrompt.message")}
             {connected ? (
-              <span className="mt-1 block font-medium text-warning">
-                {t("closePrompt.quitDisconnects")}
-              </span>
+              <span className="mt-1 block font-medium text-warning">{t("closePrompt.quitDisconnects")}</span>
             ) : null}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
           <label className="flex items-center gap-2 text-sm">
-            <Checkbox
-              checked={remember}
-              disabled={busy}
-              onCheckedChange={(checked) => setRemember(checked === true)}
-            />
+            <Checkbox checked={remember} disabled={busy} onCheckedChange={(checked) => setRemember(checked === true)} />
             {t("closePrompt.remember")}
           </label>
           {error ? (

@@ -223,10 +223,7 @@ const statisticsBuffer = createFrameBuffer<PendingStatistics>(
 const MAX_PAYLOAD_STRING_LENGTH = 4096;
 
 const SERVER_STAT_NUMBER_KEYS = ["dateNow", "todayDown", "todayUp", "totalDown", "totalUp"] as const;
-const STATISTICS_NUMBER_KEYS = [
-  "downloadBytesPerSecond",
-  "uploadBytesPerSecond",
-] as const;
+const STATISTICS_NUMBER_KEYS = ["downloadBytesPerSecond", "uploadBytesPerSecond"] as const;
 
 const initialProxyMonitorStatus: RuntimeProxyMonitorStatus = {
   message: null,

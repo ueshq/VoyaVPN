@@ -48,9 +48,7 @@ export const useNodeListStore = create<NodeListState>()(
 function persistedView(record: Record<string, unknown>): Partial<NodeListView> {
   const view: Partial<NodeListView> = {};
   if (Array.isArray(record.collapsedGroups)) {
-    view.collapsedGroups = record.collapsedGroups.filter(
-      (key): key is string => typeof key === "string",
-    );
+    view.collapsedGroups = record.collapsedGroups.filter((key): key is string => typeof key === "string");
   }
   if (typeof record.hideUnreachable === "boolean") view.hideUnreachable = record.hideUnreachable;
   if (typeof record.sortByLatency === "boolean") view.sortByLatency = record.sortByLatency;

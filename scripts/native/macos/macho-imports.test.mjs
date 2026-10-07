@@ -136,8 +136,8 @@ describe("privilege-escalation gate", () => {
       'do shell script "/bin/sh " & quoted form of "x" with administrator privileges\0/usr/local/libexec/voya-vpn\0',
     );
     expect(privilegeEscalationProblems({ name: "MacOS/voyavpn", bytes })).toEqual([
-      "MacOS/voyavpn contains privilege-escalation text (with administrator privileges, /usr/local/libexec); "
-        + "App Review Guideline 2.4.5 forbids it.",
+      "MacOS/voyavpn contains privilege-escalation text (with administrator privileges, /usr/local/libexec); " +
+        "App Review Guideline 2.4.5 forbids it.",
     ]);
   });
 

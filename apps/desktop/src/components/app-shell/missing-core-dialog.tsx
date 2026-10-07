@@ -51,27 +51,17 @@ export function MissingCoreDialog() {
     // failure shown to nobody and its success connecting behind a dialog the
     // user had closed.
     <Dialog open onOpenChange={(open) => !open && !busy && closeMissingCore()}>
-      <ScrollableDialogContent
-        height="viewport"
-        width="lg"
-        closeLabel={t("actions.close")}
-      >
+      <ScrollableDialogContent height="viewport" width="lg" closeLabel={t("actions.close")}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Cpu className="size-4" aria-hidden="true" />
             {t("missingCore.title")}
           </DialogTitle>
-          <DialogDescription>
-            {t("missingCore.description", { core: "sing-box" })}
-          </DialogDescription>
+          <DialogDescription>{t("missingCore.description", { core: "sing-box" })}</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <div className="grid gap-2 text-sm">
-            {seedMissing ? (
-              <p className="text-muted-foreground">
-                {t("missingCore.seedMissingHint")}
-              </p>
-            ) : null}
+            {seedMissing ? <p className="text-muted-foreground">{t("missingCore.seedMissingHint")}</p> : null}
             {error ? <p className="text-danger">{error}</p> : null}
           </div>
         </DialogBody>
@@ -81,11 +71,7 @@ export function MissingCoreDialog() {
               {t("actions.close")}
             </Button>
           ) : (
-            <Button
-              disabled={busy}
-              onClick={() => void installAndConnect()}
-              type="button"
-            >
+            <Button disabled={busy} onClick={() => void installAndConnect()} type="button">
               {busy ? t("missingCore.installing") : t("missingCore.install")}
             </Button>
           )}

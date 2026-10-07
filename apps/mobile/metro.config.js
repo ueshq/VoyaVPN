@@ -37,10 +37,7 @@ const config = {
   projectRoot,
   watchFolders: [workspaceRoot],
   resolver: {
-    nodeModulesPaths: [
-      path.resolve(projectRoot, "node_modules"),
-      path.resolve(workspaceRoot, "node_modules"),
-    ],
+    nodeModulesPaths: [path.resolve(projectRoot, "node_modules"), path.resolve(workspaceRoot, "node_modules")],
     unstable_enablePackageExports: true,
     extraNodeModules: {
       "@babel/runtime": path.resolve(projectRoot, "node_modules/@babel/runtime"),
@@ -66,13 +63,10 @@ const config = {
  * could replace either. Reanimated's wrapper only folds its own frames out of
  * red-box stacks.
  */
-module.exports = withUniwindConfig(
-  wrapWithReanimatedMetroConfig(mergeConfig(getDefaultConfig(projectRoot), config)),
-  {
-    // Both paths are resolved against the working directory Metro runs in,
-    // which is this app's directory; an absolute path would be joined onto it.
-    cssEntryFile: "global.css",
-    dtsFile: "uniwind-env.d.ts",
-    polyfills: { rem: 16 },
-  },
-);
+module.exports = withUniwindConfig(wrapWithReanimatedMetroConfig(mergeConfig(getDefaultConfig(projectRoot), config)), {
+  // Both paths are resolved against the working directory Metro runs in,
+  // which is this app's directory; an absolute path would be joined onto it.
+  cssEntryFile: "global.css",
+  dtsFile: "uniwind-env.d.ts",
+  polyfills: { rem: 16 },
+});

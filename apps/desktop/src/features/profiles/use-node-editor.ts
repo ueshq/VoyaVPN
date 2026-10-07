@@ -9,10 +9,7 @@ import { formatImportSummary } from "@voya/features/profiles/server-table-action
 import type { DialogImportMethod } from "@/features/profiles/import-methods";
 import type { TranslationFunction } from "@voya/i18n";
 import type { NodeOperation } from "@voya/features/profiles/use-node-operation";
-type DialogState =
-  | { mode: "create"; profile?: null }
-  | { mode: "edit"; profile: Profile }
-  | null;
+type DialogState = { mode: "create"; profile?: null } | { mode: "edit"; profile: Profile } | null;
 
 export function useNodeEditor(
   { runOperation, setOperationError, setOperationMessage }: NodeOperation,

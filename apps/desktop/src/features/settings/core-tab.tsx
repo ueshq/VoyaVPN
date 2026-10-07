@@ -1,13 +1,7 @@
 import { Disclosure } from "@voya/ui/components/disclosure";
 import { trimToNull } from "@voya/utils/text";
 import { SETTING_DEFAULTS } from "@/features/settings/settings-values";
-import {
-  NumberField,
-  SelectField,
-  SettingsGroup,
-  SettingsSwitch,
-  TextField,
-} from "./settings-form";
+import { NumberField, SelectField, SettingsGroup, SettingsSwitch, TextField } from "./settings-form";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 
@@ -57,11 +51,7 @@ const COLLAPSED_FIELDS = [
   "hysteria.",
 ];
 
-export function CoreTab({
-  controller,
-}: {
-  controller: AppSettingsFormController;
-}) {
+export function CoreTab({ controller }: { controller: AppSettingsFormController }) {
   const { t } = useI18n();
   const { settings, update } = controller;
 
@@ -88,36 +78,28 @@ export function CoreTab({
           field="core.logEnabled"
           checked={settings.core.logEnabled}
           label={t("settings.core.logEnabled")}
-          onCheckedChange={(logEnabled) =>
-            patchCore({ logEnabled })
-          }
+          onCheckedChange={(logEnabled) => patchCore({ logEnabled })}
         />
         <SettingsSwitch
           field="core.defaultAllowInsecure"
           checked={settings.core.defaultAllowInsecure}
           description={t("settings.core.allowInsecureHint")}
           label={t("settings.core.allowInsecure")}
-          onCheckedChange={(defaultAllowInsecure) =>
-            patchCore({ defaultAllowInsecure })
-          }
+          onCheckedChange={(defaultAllowInsecure) => patchCore({ defaultAllowInsecure })}
         />
         <SettingsSwitch
           field="core.muxEnabled"
           checked={settings.core.muxEnabled}
           description={t("settings.core.muxEnabledHint")}
           label={t("settings.core.muxEnabled")}
-          onCheckedChange={(muxEnabled) =>
-            patchCore({ muxEnabled })
-          }
+          onCheckedChange={(muxEnabled) => patchCore({ muxEnabled })}
         />
         <SettingsSwitch
           field="core.cacheFileEnabled"
           checked={settings.core.cacheFileEnabled}
           description={t("settings.core.cacheFileHint")}
           label={t("settings.core.cacheFileEnabled")}
-          onCheckedChange={(cacheFileEnabled) =>
-            patchCore({ cacheFileEnabled })
-          }
+          onCheckedChange={(cacheFileEnabled) => patchCore({ cacheFileEnabled })}
         />
         <SelectField
           field="core.logLevel"
@@ -132,9 +114,7 @@ export function CoreTab({
           field="core.tlsFragment"
           id="rt-tls-fragment"
           label={t("settings.core.tlsFragment")}
-          onChange={(tlsFragment) =>
-            patchCore({ tlsFragment: tlsFragment as TlsFragmentMode })
-          }
+          onChange={(tlsFragment) => patchCore({ tlsFragment: tlsFragment as TlsFragmentMode })}
           optionLabel={TLS_FRAGMENT_LABELS}
           options={TLS_FRAGMENT_MODES}
           value={settings.core.tlsFragment}
@@ -147,8 +127,7 @@ export function CoreTab({
             label={t("settings.core.fragmentFallbackDelay")}
             onChange={(delay) =>
               patchCore({
-                fragmentFallbackDelayMs:
-                  delay ?? SETTING_DEFAULTS.fragmentFallbackDelayMs,
+                fragmentFallbackDelayMs: delay ?? SETTING_DEFAULTS.fragmentFallbackDelayMs,
               })
             }
             value={settings.core.fragmentFallbackDelayMs}
@@ -181,18 +160,14 @@ export function CoreTab({
             field="core.sendThrough"
             id="rt-send-through"
             label={t("settings.core.sendThrough")}
-            onChange={(sendThrough) =>
-              patchCore({ sendThrough: trimToNull(sendThrough) })
-            }
+            onChange={(sendThrough) => patchCore({ sendThrough: trimToNull(sendThrough) })}
             value={settings.core.sendThrough ?? ""}
           />
           <TextField
             field="core.bindInterface"
             id="rt-bind-interface"
             label={t("settings.core.bindInterface")}
-            onChange={(bindInterface) =>
-              patchCore({ bindInterface: trimToNull(bindInterface) })
-            }
+            onChange={(bindInterface) => patchCore({ bindInterface: trimToNull(bindInterface) })}
             value={settings.core.bindInterface ?? ""}
           />
         </SettingsGroup>
@@ -214,8 +189,7 @@ export function CoreTab({
             label={t("settings.fields.muxMaxConnections")}
             onChange={(maxConnections) =>
               patchMux({
-                maxConnections:
-                  maxConnections ?? SETTING_DEFAULTS.muxMaxConnections,
+                maxConnections: maxConnections ?? SETTING_DEFAULTS.muxMaxConnections,
               })
             }
             value={settings.multiplexing.maxConnections}
@@ -224,9 +198,7 @@ export function CoreTab({
             field="multiplexing.padding"
             checked={settings.multiplexing.padding ?? false}
             label={t("settings.fields.muxPadding")}
-            onCheckedChange={(padding) =>
-              patchMux({ padding })
-            }
+            onCheckedChange={(padding) => patchMux({ padding })}
           />
         </SettingsGroup>
 
@@ -262,9 +234,7 @@ export function CoreTab({
             label={t("settings.core.hysteriaHopInterval")}
             onChange={(hopIntervalSeconds) =>
               patchHysteria({
-                hopIntervalSeconds:
-                  hopIntervalSeconds ??
-                  SETTING_DEFAULTS.hysteriaHopIntervalSeconds,
+                hopIntervalSeconds: hopIntervalSeconds ?? SETTING_DEFAULTS.hysteriaHopIntervalSeconds,
               })
             }
             value={settings.hysteria.hopIntervalSeconds}

@@ -9,8 +9,11 @@ import type { RuntimeStatusResponse } from "@voya/contracts";
 import { ConnectedInfo } from "./connected-info";
 
 const connected: RuntimeStatusResponse = {
-  state: "connected", connectedDurationMs: 1458000, activeProfileId: "tokyo",
-  activeTunBackend: null, mainPid: 42,
+  state: "connected",
+  connectedDurationMs: 1458000,
+  activeProfileId: "tokyo",
+  activeTunBackend: null,
+  mainPid: 42,
 };
 
 function Metrics() {
@@ -24,17 +27,24 @@ describe("backend connection duration", () => {
     vi.useFakeTimers({ toFake: ["performance", "setInterval", "clearInterval"] });
     useRuntimeEventStore.setState({ coreState: null, coreStateReceivedAt: null });
   });
-  afterEach(() => { cleanup(); vi.useRealTimers(); });
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it("restores a backend duration and keeps counting across home unmounts", () => {
     useRuntimeEventStore.getState().setCoreState(connected);
     const first = render(<Metrics />);
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:24:18");
-    act(() => { vi.advanceTimersByTime(2000); });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:24:20");
     first.unmount();
     expect(vi.getTimerCount()).toBe(0);
-    act(() => { vi.advanceTimersByTime(10000); });
+    act(() => {
+      vi.advanceTimersByTime(10000);
+    });
     render(<Metrics />);
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:24:30");
   });
@@ -44,10 +54,16 @@ describe("backend connection duration", () => {
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("—");
     act(() => useRuntimeEventStore.getState().pushTransientEvent({ kind: "coreState", payload: connected }));
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:24:18");
-    act(() => { vi.advanceTimersByTime(3000); });
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
     act(() => useRuntimeEventStore.getState().setCoreState({ ...connected, connectedDurationMs: 0 }));
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:00:00");
-    act(() => useRuntimeEventStore.getState().setCoreState({ ...connected, state: "cleanupPending", connectedDurationMs: null }));
+    act(() =>
+      useRuntimeEventStore
+        .getState()
+        .setCoreState({ ...connected, state: "cleanupPending", connectedDurationMs: null }),
+    );
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("—");
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -55,17 +71,23 @@ describe("backend connection duration", () => {
   it("keeps its tick schedule when samples arrive between ticks", () => {
     useRuntimeEventStore.getState().setCoreState(connected);
     render(<Metrics />);
-    act(() => { vi.advanceTimersByTime(600); });
-    act(() => useRuntimeEventStore.getState().pushTransientEvent({
-      kind: "coreState",
-      payload: { ...connected, connectedDurationMs: 1458600 },
-    }));
+    act(() => {
+      vi.advanceTimersByTime(600);
+    });
+    act(() =>
+      useRuntimeEventStore.getState().pushTransientEvent({
+        kind: "coreState",
+        payload: { ...connected, connectedDurationMs: 1458600 },
+      }),
+    );
     expect(vi.getTimerCount()).toBe(1);
 
     // The timer started with the first sample still fires at the one-second
     // mark: 1458.6 s sampled plus 0.4 s since. A timer restarted by the sample
     // would not fire until 1.6 s, and never at all under a faster stream.
-    act(() => { vi.advanceTimersByTime(400); });
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:24:19");
   });
 
@@ -76,12 +98,18 @@ describe("backend connection duration", () => {
     expect(vi.getTimerCount()).toBe(1);
 
     visibility.mockReturnValue("hidden");
-    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
     expect(vi.getTimerCount()).toBe(0);
-    act(() => { vi.advanceTimersByTime(5000); });
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
 
     visibility.mockReturnValue("visible");
-    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
     expect(vi.getTimerCount()).toBe(1);
     expect(screen.getByTestId("home-connection-duration")).toHaveTextContent("00:24:23");
     visibility.mockRestore();

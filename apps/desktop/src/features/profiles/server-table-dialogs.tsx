@@ -9,11 +9,7 @@ import { ProfileDialog } from "./profile-dialog";
 import { ShareQrDialog } from "./share-qr-dialog";
 import type { ServerTableController } from "./use-server-table";
 
-export function ServerTableDialogs({
-  controller,
-}: {
-  controller: ServerTableController;
-}) {
+export function ServerTableDialogs({ controller }: { controller: ServerTableController }) {
   const {
     confirmDelete,
     dialogState,
@@ -33,8 +29,7 @@ export function ServerTableDialogs({
 
   // Deleting the node the core is running stops the connection; say so first.
   const runningNodeId = useRuntimeEventStore((state) => runningProfileId(state.coreState));
-  const deletingRunningNode =
-    runningNodeId !== null && (pendingDelete ?? []).includes(runningNodeId);
+  const deletingRunningNode = runningNodeId !== null && (pendingDelete ?? []).includes(runningNodeId);
 
   // `profiles` is a new list on every speed-test frame, so neither lookup
   // below runs while the dialog it feeds is closed.
@@ -48,9 +43,7 @@ export function ServerTableDialogs({
 
   return (
     <>
-      {detailsItem ? (
-        <ProfileDetailsDialog controller={controller} item={detailsItem} />
-      ) : null}
+      {detailsItem ? <ProfileDetailsDialog controller={controller} item={detailsItem} /> : null}
       <ProfileDialog
         onCloseFocus={controller.restoreProfileDialogFocus}
         mode={dialogState?.mode ?? "create"}
@@ -60,19 +53,16 @@ export function ServerTableDialogs({
         profile={dialogState?.mode === "edit" ? dialogState.profile : null}
         saveError={saveError}
       />
-      {importMethod !== null ? <ImportProfilesDialog
-        onImported={controller.handleDialogImported}
-        onCloseFocus={() => controller.addTriggerRef.current?.focus()}
-        onOpenChange={(open) => !open && setImportMethod(null)}
-      /> : null}
+      {importMethod !== null ? (
+        <ImportProfilesDialog
+          onImported={controller.handleDialogImported}
+          onCloseFocus={() => controller.addTriggerRef.current?.focus()}
+          onOpenChange={(open) => !open && setImportMethod(null)}
+        />
+      ) : null}
       <SubscriptionsDialog
         subscription={controller.editingSubscription}
-        onCloseFocus={() =>
-          restoreFocus(
-            controller.subscriptionTriggerRef.current,
-            controller.viewportRef.current,
-          )
-        }
+        onCloseFocus={() => restoreFocus(controller.subscriptionTriggerRef.current, controller.viewportRef.current)}
         onOpenChange={setSubscriptionsOpen}
         open={subscriptionsOpen}
       />
@@ -89,19 +79,14 @@ export function ServerTableDialogs({
         error={controller.operationError}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          restoreFocus(
-            controller.subscriptionTriggerRef.current,
-            controller.viewportRef.current,
-          );
+          restoreFocus(controller.subscriptionTriggerRef.current, controller.viewportRef.current);
         }}
         onConfirm={(event) => {
           event.preventDefault();
           void controller.removeSubscription();
         }}
         onOpenChange={(open) =>
-          !open &&
-          !controller.deletingSubscriptionPending &&
-          controller.setDeletingSubscription(null)
+          !open && !controller.deletingSubscriptionPending && controller.setDeletingSubscription(null)
         }
         open={!!controller.deletingSubscription}
         pending={controller.deletingSubscriptionPending}
@@ -118,9 +103,7 @@ export function ServerTableDialogs({
               count: pendingDelete?.length ?? 0,
             })}
             {deletingRunningNode ? (
-              <span className="mt-2 block font-medium text-warning">
-                {t("confirm.deleteActiveProfileHint")}
-              </span>
+              <span className="mt-2 block font-medium text-warning">{t("confirm.deleteActiveProfileHint")}</span>
             ) : null}
           </>
         }

@@ -29,11 +29,7 @@ describe("PageSection primitives", () => {
 
   it("renders the large page identity as the page's single h1 with actions", () => {
     const { getByRole, getByTestId } = render(
-      <PageTitle
-        actions={<button type="button">New</button>}
-        data-testid="title"
-        title="Nodes"
-      />,
+      <PageTitle actions={<button type="button">New</button>} data-testid="title" title="Nodes" />,
     );
 
     const title = getByTestId("title");
@@ -45,9 +41,7 @@ describe("PageSection primitives", () => {
     const heading = getByRole("heading", { level: 1, name: "Nodes" });
     expect(heading.className).toContain("text-page");
     // Actions park at the trailing edge via the logical ms-auto push.
-    expect(
-      getByRole("button", { name: "New" }).parentElement?.className,
-    ).toContain("ms-auto");
+    expect(getByRole("button", { name: "New" }).parentElement?.className).toContain("ms-auto");
   });
 
   it("drags the window from the title row only under macOS chrome", () => {

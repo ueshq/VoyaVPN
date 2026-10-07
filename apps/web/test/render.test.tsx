@@ -31,13 +31,7 @@ describe("routes", () => {
 describe("renderSite", () => {
   it("renders every page, a 404 per locale and a sitemap", () => {
     expect([...files.keys()].sort()).toEqual(
-      [
-        ...ROUTES.map(fileFor),
-        "404.html",
-        "zh-hans/404.html",
-        "zh-hant/404.html",
-        "sitemap.xml",
-      ].sort(),
+      [...ROUTES.map(fileFor), "404.html", "zh-hans/404.html", "zh-hant/404.html", "sitemap.xml"].sort(),
     );
     const sitemap = page("sitemap.xml");
     for (const route of ROUTES) expect(sitemap).toContain(`<loc>${urlFor(route)}</loc>`);

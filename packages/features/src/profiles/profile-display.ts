@@ -5,7 +5,11 @@ import { formatDelay } from "@voya/utils/formatting";
 
 export function profileLatency(item: ProfileSummaryEntry, t: TranslationFunction) {
   const { delayMs, outcome } = item.metrics;
-  return outcome && outcome !== "completed" ? speedtestOutcomeText(t, outcome) : delayMs > 0 ? formatDelay(delayMs) : t("panes.profiles.card.untested");
+  return outcome && outcome !== "completed"
+    ? speedtestOutcomeText(t, outcome)
+    : delayMs > 0
+      ? formatDelay(delayMs)
+      : t("panes.profiles.card.untested");
 }
 
 type LatencyTone = "good" | "fair" | "poor" | "unknown";

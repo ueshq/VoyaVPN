@@ -153,7 +153,11 @@ describe("built Info.plist fields", () => {
 
   it("accepts an app and extension with one version and build number", () => {
     expect(
-      builtInfoProblems({ app: info("app.voyavpn.mobile"), tunnel: info("app.voyavpn.mobile.PacketTunnel"), ...expected }),
+      builtInfoProblems({
+        app: info("app.voyavpn.mobile"),
+        tunnel: info("app.voyavpn.mobile.PacketTunnel"),
+        ...expected,
+      }),
     ).toEqual([]);
   });
 
@@ -204,7 +208,9 @@ describe("xcodebuild inputs", () => {
   });
 
   it("names the package after version and build number", () => {
-    expect(resolveIpaPath({ outputDir: "/out", version: "0.1.0", buildNumber: "412" })).toBe("/out/VoyaVPN_0.1.0_412.ipa");
+    expect(resolveIpaPath({ outputDir: "/out", version: "0.1.0", buildNumber: "412" })).toBe(
+      "/out/VoyaVPN_0.1.0_412.ipa",
+    );
   });
 });
 
@@ -240,7 +246,15 @@ describe("installing the selected profiles for Xcode", () => {
   });
 
   it("leaves a profile alone that Xcode already has", () => {
-    const io = { mkdirSync: () => { throw new Error("must not write"); }, readFileSync: () => Buffer.alloc(0), writeFileSync: () => { throw new Error("must not write"); } };
+    const io = {
+      mkdirSync: () => {
+        throw new Error("must not write");
+      },
+      readFileSync: () => Buffer.alloc(0),
+      writeFileSync: () => {
+        throw new Error("must not write");
+      },
+    };
     const profile = { uuid: "e897aa9a", path: "/xcode/profiles/e897aa9a.mobileprovision" };
     expect(installProfileForXcode(profile, "/xcode/profiles", io)).toBe(profile.path);
   });

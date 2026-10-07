@@ -32,9 +32,7 @@ export function ConnectedInfo({
     function schedule() {
       window.clearInterval(timer);
       timer =
-        document.visibilityState === "hidden"
-          ? undefined
-          : window.setInterval(() => setNow(performance.now()), 1000);
+        document.visibilityState === "hidden" ? undefined : window.setInterval(() => setNow(performance.now()), 1000);
     }
     function onVisibilityChange() {
       if (document.visibilityState !== "hidden") setNow(performance.now());
@@ -51,8 +49,14 @@ export function ConnectedInfo({
   const elapsed = duration == null ? null : duration + Math.max(0, now - (receivedAt ?? now));
   return (
     <dl className="home-metrics" data-testid="home-connected-info">
-      <div><dt>{t("home.latency")}</dt><dd>{delayMs == null ? "—" : formatDelay(delayMs)}</dd></div>
-      <div><dt>{t("home.duration")}</dt><dd data-testid="home-connection-duration">{elapsed == null ? "—" : formatDurationMs(elapsed)}</dd></div>
+      <div>
+        <dt>{t("home.latency")}</dt>
+        <dd>{delayMs == null ? "—" : formatDelay(delayMs)}</dd>
+      </div>
+      <div>
+        <dt>{t("home.duration")}</dt>
+        <dd data-testid="home-connection-duration">{elapsed == null ? "—" : formatDurationMs(elapsed)}</dd>
+      </div>
       {children}
     </dl>
   );

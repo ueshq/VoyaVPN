@@ -64,7 +64,10 @@ export function parseArgs(argv, spec, defaults = {}) {
     }
 
     if (definition.list) {
-      const values = raw.split(",").map((value) => value.trim()).filter(Boolean);
+      const values = raw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
       options[definition.key] = [...(options[definition.key] ?? []), ...values];
       continue;
     }

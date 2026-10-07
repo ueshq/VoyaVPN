@@ -6,14 +6,43 @@ import { globalMinimums } from "./scripts/quality/frontend-coverage-policy.mjs";
 // Oxlint reads `eslint-disable` comments too, but new ones use `oxlint-disable`.
 const tauriBoundaryMessage = "ADR-0002: only apps/desktop/src/ipc may import Tauri APIs.";
 const sharedPlatformMessage = "Shared frontend code must reach the platform through @voya/client/platform.";
-const hermesMessage =
-  "Hermes does not implement every ES2023 copying method. Copy the array, then mutate the copy.";
+const hermesMessage = "Hermes does not implement every ES2023 copying method. Copy the array, then mutate the copy.";
 
 export default defineConfig({
   // Bare `vp dev` / `vp build` / `vp preview` at the root mean the desktop
   // renderer: every package has a vite.config.ts for its tests, so without
   // this vp would ask which one. Read statically, so it must stay a literal.
   defaultPackage: "./apps/desktop",
+  fmt: {
+    // The code predates the formatter and mixes line widths; 120 is the width
+    // that rewrites the fewest lines.
+    printWidth: 120,
+    sortPackageJson: false,
+    ignorePatterns: [
+      // Generated, and compared byte for byte by check:bindings.
+      "apps/desktop/src/ipc/bindings.ts",
+      "packages/contracts/src/generated.ts",
+      "packages/contracts/src/commands.ts",
+      "packages/contracts/*.json",
+      // Fixtures shared with Rust and patches applied by pnpm, kept as written.
+      "tests/**",
+      "patches/**",
+      "pnpm-lock.yaml",
+      // Native projects, bundled resources and the Rust side have their own tools.
+      "**/resources/**",
+      "apps/mobile/ios/**",
+      "apps/mobile/android/**",
+      "apps/desktop/src-tauri/**",
+      "crates/**",
+      "**/*.toml",
+      // Prose: Oxfmt would pad every Markdown table to its widest cell.
+      "**/*.md",
+      "**/dist/**",
+      "coverage/**",
+      "target/**",
+      ".agents/**",
+    ],
+  },
   lint: {
     plugins: ["eslint", "typescript", "react", "oxc"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }, "./scripts/lint/voya-plugin.mjs"],

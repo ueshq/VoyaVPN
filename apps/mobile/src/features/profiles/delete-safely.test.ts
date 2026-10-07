@@ -10,7 +10,11 @@ beforeEach(() => {
 
 test("disconnect failure retains the selected node and releases the action lock", async () => {
   const backend = mockBackend();
-  jest.spyOn(backend.commands, "runtimeStatus").mockResolvedValue({ ...await backend.commands.runtimeStatus(), state: "connected", activeProfileId: "selected" });
+  jest.spyOn(backend.commands, "runtimeStatus").mockResolvedValue({
+    ...(await backend.commands.runtimeStatus()),
+    state: "connected",
+    activeProfileId: "selected",
+  });
   jest.spyOn(backend.commands, "disconnectCore").mockRejectedValue(new Error("stop failed"));
   const remove = jest.fn();
   await expect(deleteSafely(["selected"], remove)).rejects.toThrow("stop failed");
@@ -22,7 +26,12 @@ test("claims the lock before asynchronous inspection so a second delete cannot r
   const backend = mockBackend();
   const status = await backend.commands.runtimeStatus();
   let resolveStatus!: (value: typeof status) => void;
-  jest.spyOn(backend.commands, "runtimeStatus").mockImplementation(() => new Promise((resolve) => { resolveStatus = resolve; }));
+  jest.spyOn(backend.commands, "runtimeStatus").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveStatus = resolve;
+      }),
+  );
   const remove = jest.fn();
   const first = deleteSafely(["unselected"], remove);
   await expect(deleteSafely(["unselected"], remove)).rejects.toThrow("Runtime transition");

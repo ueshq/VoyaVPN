@@ -40,11 +40,7 @@ type ResultMessage = {
  * Mounted while it is open — the Nodes page renders it only then — so each
  * opening is a fresh instance with its own draft and its own async reads.
  */
-export function ImportProfilesDialog({
-  onCloseFocus,
-  onImported,
-  onOpenChange,
-}: ImportProfilesDialogProps) {
+export function ImportProfilesDialog({ onCloseFocus, onImported, onOpenChange }: ImportProfilesDialogProps) {
   const { t } = useI18n();
   const qrFileInputRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -113,10 +109,7 @@ export function ImportProfilesDialog({
     }
   }
 
-  async function readIntoPayload(
-    read: () => Promise<string>,
-    formatError: (error: unknown) => string,
-  ) {
+  async function readIntoPayload(read: () => Promise<string>, formatError: (error: unknown) => string) {
     if (pendingRef.current) return;
     pendingRef.current = "read";
     setPending("read");
@@ -189,25 +182,16 @@ export function ImportProfilesDialog({
             <Upload className="size-4" aria-hidden="true" />
             {t("panes.profiles.importDialog.title")}
           </DialogTitle>
-          <DialogDescription>
-            {t("panes.profiles.importDialog.description")}
-          </DialogDescription>
+          <DialogDescription>{t("panes.profiles.importDialog.description")}</DialogDescription>
         </DialogHeader>
 
         <DialogBody>
           <Card className="gap-3 rounded-xl bg-surface-raised p-3 shadow-raised">
             <CardContent className="grid gap-3 p-0">
-              <p className="text-sm text-muted-foreground">
-                {t("subscriptions.manualImportHint")}
-              </p>
+              <p className="text-sm text-muted-foreground">{t("subscriptions.manualImportHint")}</p>
 
               <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  disabled={busy}
-                  onClick={() => qrFileInputRef.current?.click()}
-                  type="button"
-                  variant="outline"
-                >
+                <Button disabled={busy} onClick={() => qrFileInputRef.current?.click()} type="button" variant="outline">
                   <ImagePlus className="size-4" aria-hidden="true" />
                   {t("qr.scanImage")}
                 </Button>
@@ -221,10 +205,7 @@ export function ImportProfilesDialog({
                   type="file"
                 />
                 {pending === "read" ? (
-                  <span
-                    className="flex items-center gap-2 text-sm text-muted-foreground"
-                    role="status"
-                  >
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
                     <Spinner className="size-4" />
                     {t("panes.profiles.importDialog.reading")}
                   </span>
@@ -232,10 +213,7 @@ export function ImportProfilesDialog({
               </div>
 
               <div className="grid gap-1">
-                <Label
-                  className="text-xs text-muted-foreground"
-                  htmlFor="import-payload"
-                >
+                <Label className="text-xs text-muted-foreground" htmlFor="import-payload">
                   {t("panes.profiles.importDialog.payload")}
                 </Label>
                 <Textarea
@@ -276,22 +254,11 @@ export function ImportProfilesDialog({
         </DialogBody>
 
         <DialogFooter>
-          <Button
-            disabled={pending === "import"}
-            onClick={() => changeOpen(false)}
-            type="button"
-            variant="outline"
-          >
+          <Button disabled={pending === "import"} onClick={() => changeOpen(false)} type="button" variant="outline">
             {t("actions.close")}
           </Button>
-          <Button
-            disabled={!canImport || busy}
-            onClick={() => void handleImport()}
-            type="button"
-          >
-            {pending === "import" ? (
-              <Spinner className="size-4" />
-            ) : null}
+          <Button disabled={!canImport || busy} onClick={() => void handleImport()} type="button">
+            {pending === "import" ? <Spinner className="size-4" /> : null}
             {t("panes.profiles.toolbar.import")}
           </Button>
         </DialogFooter>

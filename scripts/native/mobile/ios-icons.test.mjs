@@ -61,7 +61,9 @@ describe("iOS app icon set", () => {
   });
 
   it("rejects a missing file, a wrong size and an unreferenced file", () => {
-    const files = goodFiles().set("icon-167.png", png({ size: 152 })).set("stray.png", png({ size: 20 }));
+    const files = goodFiles()
+      .set("icon-167.png", png({ size: 152 }))
+      .set("stray.png", png({ size: 20 }));
     files.delete("icon-180.png");
     expect(iconProblems({ contents, files })).toEqual([
       "icon-180.png (iphone 60x60@3x) is missing.",

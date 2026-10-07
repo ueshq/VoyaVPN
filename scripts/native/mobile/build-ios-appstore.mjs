@@ -1,15 +1,19 @@
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-import {
-  capture,
-  checkedCapture,
-  isCliEntrypoint,
-  repoRootFromScript,
-  runCli,
-} from "../../lib/common.mjs";
+import { capture, checkedCapture, isCliEntrypoint, repoRootFromScript, runCli } from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
 import { resolveStoreBuildNumber } from "../../tauri/mac-app-store-config.mjs";
 import { bundleImportReport, bundlePrivilegeEscalationReport } from "../macos/macho-imports.mjs";
@@ -64,7 +68,9 @@ export function iosProfileProblems(profile, bundleId) {
     problems.push(`${label} is for ${profile.applicationIdentifier}, expected ${profile.teamIdentifier}.${bundleId}.`);
   }
   if (!isStoreDistributionProfile(profile)) {
-    problems.push(`${label} is not an App Store distribution profile (it lists devices or has no distribution certificate).`);
+    problems.push(
+      `${label} is not an App Store distribution profile (it lists devices or has no distribution certificate).`,
+    );
   }
   if (profile.getTaskAllow) {
     problems.push(`${label} allows debugging (get-task-allow); App Store profiles do not.`);
@@ -109,7 +115,10 @@ export function entitlementProblems(entitlements, { name, bundleId, teamId }) {
 /** Version fields of the built app and extension, read from their Info.plists. */
 export function builtInfoProblems({ app, tunnel, version, buildNumber }) {
   const problems = [];
-  for (const [name, info] of [["VoyaVPN.app", app], ["PacketTunnel.appex", tunnel]]) {
+  for (const [name, info] of [
+    ["VoyaVPN.app", app],
+    ["PacketTunnel.appex", tunnel],
+  ]) {
     if (info.shortVersion !== version) {
       problems.push(`${name} CFBundleShortVersionString is ${info.shortVersion}, expected ${version}.`);
     }
@@ -259,11 +268,11 @@ function resolveStoreProfile(bundleId, explicitEnvName, identity) {
   const profileDir = override
     ? [resolve(override)]
     : [
-      defaultProvisioningProfileDir,
-      installedProvisioningProfileDir,
-      // Where Xcode 16 and later keep profiles, including ones this lane installed.
-      resolve(homedir(), "Library/Developer/Xcode/UserData/Provisioning Profiles"),
-    ];
+        defaultProvisioningProfileDir,
+        installedProvisioningProfileDir,
+        // Where Xcode 16 and later keep profiles, including ones this lane installed.
+        resolve(homedir(), "Library/Developer/Xcode/UserData/Provisioning Profiles"),
+      ];
   const { profile, rejections } = resolveProfileFromEnv({
     bundleIdentifier: bundleId,
     explicitEnvName,
@@ -272,8 +281,8 @@ function resolveStoreProfile(bundleId, explicitEnvName, identity) {
   });
   if (!profile) {
     throw new Error(
-      `${formatProfileSelectionError("App Store", bundleId, rejections, profileDir)}\n`
-        + "Create an App Store Connect distribution profile for it (docs/release/mobile-ios-signing.md).",
+      `${formatProfileSelectionError("App Store", bundleId, rejections, profileDir)}\n` +
+        "Create an App Store Connect distribution profile for it (docs/release/mobile-ios-signing.md).",
     );
   }
   throwProblems(`Provisioning profile for ${bundleId}`, iosProfileProblems(profile, bundleId));
@@ -362,10 +371,17 @@ export function main(argv = process.argv.slice(2)) {
 
   let signing = null;
   if (!unsigned) {
-    const identity = resolveSigningIdentity(process.env.VOYAVPN_CODESIGN_IDENTITY?.trim() || distributionIdentity, "App Store");
+    const identity = resolveSigningIdentity(
+      process.env.VOYAVPN_CODESIGN_IDENTITY?.trim() || distributionIdentity,
+      "App Store",
+    );
     console.log(`✓ Signing identity: ${identity.name}`);
     const appProfile = resolveStoreProfile(appBundleId, "VOYAVPN_IOS_APP_PROVISIONING_PROFILE", identity);
-    const tunnelProfile = resolveStoreProfile(tunnelBundleId, "VOYAVPN_IOS_PACKET_TUNNEL_PROVISIONING_PROFILE", identity);
+    const tunnelProfile = resolveStoreProfile(
+      tunnelBundleId,
+      "VOYAVPN_IOS_PACKET_TUNNEL_PROVISIONING_PROFILE",
+      identity,
+    );
     signing = { teamId: appProfile.teamIdentifier, identityName: identity.name, appProfile, tunnelProfile };
     const profileDir = xcodeProfileDir({ xcodeMajor: parseXcodeMajor(xcodeVersion), home: homedir() });
     for (const profile of [appProfile, tunnelProfile]) {
@@ -401,16 +417,25 @@ export function main(argv = process.argv.slice(2)) {
   if (signing) {
     // The same settings as a file: evidence of what was signed with, and the
     // fallback (`-xcconfig`) if a future Xcode stops resolving the macro.
-    writeFileSync(resolve(outputDir, "signing.xcconfig"), `${signingSettings.map((line) => line.replace("=", " = ")).join("\n")}\n`);
+    writeFileSync(
+      resolve(outputDir, "signing.xcconfig"),
+      `${signingSettings.map((line) => line.replace("=", " = ")).join("\n")}\n`,
+    );
   }
   runLogged("archive", "xcodebuild", [
     "archive",
-    "-workspace", resolve(ios, "VoyaVPN.xcworkspace"),
-    "-scheme", "VoyaVPN",
-    "-configuration", "Release",
-    "-destination", "generic/platform=iOS",
-    "-archivePath", archive,
-    "-derivedDataPath", resolve(ios, "build/DerivedData-appstore"),
+    "-workspace",
+    resolve(ios, "VoyaVPN.xcworkspace"),
+    "-scheme",
+    "VoyaVPN",
+    "-configuration",
+    "Release",
+    "-destination",
+    "generic/platform=iOS",
+    "-archivePath",
+    archive,
+    "-derivedDataPath",
+    resolve(ios, "build/DerivedData-appstore"),
     `CURRENT_PROJECT_VERSION=${buildNumber}`,
     "ARCHS=arm64",
     "ONLY_ACTIVE_ARCH=NO",
@@ -426,7 +451,10 @@ export function main(argv = process.argv.slice(2)) {
   if (readdirSync(resolve(app, "PlugIns")).length !== 1) {
     throw new Error("VoyaVPN.app embeds more than the PacketTunnel extension.");
   }
-  throwProblems("Built Info.plist", builtInfoProblems({ app: builtInfo(app), tunnel: builtInfo(tunnel), version, buildNumber }));
+  throwProblems(
+    "Built Info.plist",
+    builtInfoProblems({ app: builtInfo(app), tunnel: builtInfo(tunnel), version, buildNumber }),
+  );
   console.log(`✓ App and PacketTunnel are ${version} (${buildNumber}) for iOS ${minimumOsVersion}+`);
 
   const imports = bundleImportReport(app);
@@ -446,9 +474,16 @@ export function main(argv = process.argv.slice(2)) {
   const { teamId } = signing;
   throwProblems("Signed entitlements", [
     ...entitlementProblems(signedEntitlements(app), { name: "VoyaVPN.app", bundleId: appBundleId, teamId }),
-    ...entitlementProblems(signedEntitlements(tunnel), { name: "PacketTunnel.appex", bundleId: tunnelBundleId, teamId }),
+    ...entitlementProblems(signedEntitlements(tunnel), {
+      name: "PacketTunnel.appex",
+      bundleId: tunnelBundleId,
+      teamId,
+    }),
   ]);
-  for (const [bundle, profile] of [[app, signing.appProfile], [tunnel, signing.tunnelProfile]]) {
+  for (const [bundle, profile] of [
+    [app, signing.appProfile],
+    [tunnel, signing.tunnelProfile],
+  ]) {
     const embedded = decodeProvisioningProfile(resolve(bundle, "embedded.mobileprovision"));
     if (embedded.uuid !== profile.uuid) {
       throw new Error(`${bundle} embeds profile ${embedded.uuid}, expected ${profile.uuid}.`);
@@ -468,9 +503,12 @@ export function main(argv = process.argv.slice(2)) {
   rmSync(exportDir, { recursive: true, force: true });
   runLogged("export", "xcodebuild", [
     "-exportArchive",
-    "-archivePath", archive,
-    "-exportOptionsPlist", exportOptions,
-    "-exportPath", exportDir,
+    "-archivePath",
+    archive,
+    "-exportOptionsPlist",
+    exportOptions,
+    "-exportPath",
+    exportDir,
   ]);
   const exported = readdirSync(exportDir).find((name) => name.endsWith(".ipa"));
   if (!exported) throw new Error(`xcodebuild exported no .ipa into ${exportDir}.`);

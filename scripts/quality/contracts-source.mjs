@@ -109,14 +109,10 @@ function parseEntry(name, text) {
  * runtime, on the device.
  */
 function assertArgumentsMatch(name, parameters, args) {
-  const declared = parameters.trim()
-    ? parameters.split(",").map((parameter) => parameter.split(":")[0].trim())
-    : [];
+  const declared = parameters.trim() ? parameters.split(",").map((parameter) => parameter.split(":")[0].trim()) : [];
 
   if (declared.join(",") !== args.join(",")) {
-    throw new Error(
-      `Command ${name} declares (${declared.join(", ")}) but invokes with (${args.join(", ")})`,
-    );
+    throw new Error(`Command ${name} declares (${declared.join(", ")}) but invokes with (${args.join(", ")})`);
   }
 }
 
@@ -316,7 +312,7 @@ function renderCommandWire(commands, events) {
     " */",
     "export const VOYA_COMMAND_WIRE = {",
     ...members,
-    '} as const satisfies Record<keyof VoyaCommands, { name: string; params: readonly string[] }>;',
+    "} as const satisfies Record<keyof VoyaCommands, { name: string; params: readonly string[] }>;",
     "",
     "/**",
     " * The wire name each event channel is published under: what a transport",
@@ -393,14 +389,7 @@ export function generateContractsSource(bindingsSource) {
   const commands = parseCommands(commandsBlock);
   const events = parseEvents(eventsBlock, typesBlock);
 
-  return [
-    HEADER,
-    renderCommands(commands),
-    "",
-    renderEvents(events),
-    "",
-    "/* Types */",
-    typesBlock.trim(),
-    "",
-  ].join("\n");
+  return [HEADER, renderCommands(commands), "", renderEvents(events), "", "/* Types */", typesBlock.trim(), ""].join(
+    "\n",
+  );
 }

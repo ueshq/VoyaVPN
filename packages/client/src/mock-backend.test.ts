@@ -31,9 +31,7 @@ describe("createMockBackend", () => {
       entries: [{ profile: { remarks: "Tokyo" } }],
       undecodableProfiles: 0,
     });
-    await expect(seeded.commands.listSubscriptions()).resolves.toMatchObject([
-      { remarks: "Work" },
-    ]);
+    await expect(seeded.commands.listSubscriptions()).resolves.toMatchObject([{ remarks: "Work" }]);
     await expect(seeded.commands.loadUiPreferences()).resolves.toEqual({
       language: "en",
       theme: "system",
@@ -53,16 +51,14 @@ describe("createMockBackend", () => {
       "appSettings",
     ]);
     const { entries } = await backend.commands.listProfileSummaries();
-    expect(entries.filter((entry) => entry.isActive).map((entry) => entry.profile.id)).toEqual([
-      "profile-1",
-    ]);
+    expect(entries.filter((entry) => entry.isActive).map((entry) => entry.profile.id)).toEqual(["profile-1"]);
   });
 
   it("rejects a switch to a node it does not have, with the entity and id", async () => {
     await expect(backend.commands.setActiveProfile("ghost")).rejects.toSatisfy(
       (error: unknown) =>
-        appErrorOfKind(error, "notFound")?.kind.entity === "profile"
-        && appErrorOfKind(error, "notFound")?.kind.id === "ghost",
+        appErrorOfKind(error, "notFound")?.kind.entity === "profile" &&
+        appErrorOfKind(error, "notFound")?.kind.id === "ghost",
     );
   });
 
@@ -163,21 +159,15 @@ describe("the routing surface", () => {
     });
 
     expect(saved.rules).toMatchObject([{ id: "rule-0", remarks: "Office" }]);
-    await expect(backend.commands.listRoutings()).resolves.toMatchObject([
-      { rules: [{ remarks: "Office" }] },
-    ]);
+    await expect(backend.commands.listRoutings()).resolves.toMatchObject([{ rules: [{ remarks: "Office" }] }]);
 
-    await expect(backend.commands.deleteRoutingRules(routing.id, ["rule-0"])).resolves.toMatchObject(
-      { rules: [] },
-    );
+    await expect(backend.commands.deleteRoutingRules(routing.id, ["rule-0"])).resolves.toMatchObject({ rules: [] });
   });
 
   it("refuses a rule for a routing profile it does not have", async () => {
     const backend = createMockBackend();
 
-    await expect(
-      backend.commands.deleteRoutingRules("ghost", ["rule-0"]),
-    ).rejects.toSatisfy(
+    await expect(backend.commands.deleteRoutingRules("ghost", ["rule-0"])).rejects.toSatisfy(
       (error: unknown) => appErrorOfKind(error, "notFound")?.kind.entity === "routing",
     );
   });

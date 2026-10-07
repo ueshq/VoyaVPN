@@ -43,9 +43,10 @@ function unescapeXml(text) {
  * which keeps these checks free of `plutil` and so runnable on Linux CI.
  */
 export function parsePlist(xml) {
-  const tokens = String(xml)
-    .replace(/<\?xml[\s\S]*?\?>|<!DOCTYPE[\s\S]*?>|<!--[\s\S]*?-->/gu, "")
-    .match(/<[^>]+>|[^<]+/gu) ?? [];
+  const tokens =
+    String(xml)
+      .replace(/<\?xml[\s\S]*?\?>|<!DOCTYPE[\s\S]*?>|<!--[\s\S]*?-->/gu, "")
+      .match(/<[^>]+>|[^<]+/gu) ?? [];
   let index = 0;
   const next = () => tokens[index++];
   const skipSpace = () => {
@@ -149,7 +150,10 @@ export function tunnelIdentityProblems({ appPlist, appexPlist, appEntitlements, 
       `The PacketTunnel declares App Group ${JSON.stringify(appexPlist.VoyaAppGroupIdentifier)}, the app ${JSON.stringify(group)}.`,
     );
   }
-  for (const [name, entitlements] of [["app", appEntitlements], ["PacketTunnel", appexEntitlements]]) {
+  for (const [name, entitlements] of [
+    ["app", appEntitlements],
+    ["PacketTunnel", appexEntitlements],
+  ]) {
     if (JSON.stringify(entitlements[appGroupsKey]) !== JSON.stringify([group])) {
       problems.push(`The ${name} entitlements must list exactly the App Group ${group}.`);
     }

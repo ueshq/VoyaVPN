@@ -4,12 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { appErrorOfKind } from "@voya/client/errors";
 import { voyaCommands } from "@voya/client/transport";
-import type {
-  MoveAction,
-  RoutingRule,
-  Routing_Serialize,
-  ValidationIssue,
-} from "@voya/contracts";
+import type { MoveAction, RoutingRule, Routing_Serialize, ValidationIssue } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";
 import { toastError } from "@voya/client/toast-store";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -57,9 +52,7 @@ export function useRoutingScreen() {
   const [ruleDialog, setRuleDialog] = useState<RuleDialogState>(null);
   const [ruleSaveFailure, setRuleSaveFailure] = useState<RuleSaveError | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
-  const [pendingToggles, setPendingToggles] = useState<ReadonlyMap<string, boolean>>(
-    () => new Map(),
-  );
+  const [pendingToggles, setPendingToggles] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [perAppOpen, setPerAppOpen] = useState(false);
   const routingsQuery = useQuery(queries.routings);
   const nodeNamesQuery = useQuery({ ...queries.profileList, select: nodeOutboundNames });
@@ -70,10 +63,7 @@ export function useRoutingScreen() {
   // else. The page shows that rule as its own card, so the sortable list starts
   // after it and every position sent to the backend is shifted past it.
   const offset = activeRouting?.rules[0]?.remarks === PER_APP_SENTINEL ? 1 : 0;
-  const rules = useMemo(
-    () => activeRouting?.rules.slice(offset) ?? NO_RULES,
-    [activeRouting, offset],
-  );
+  const rules = useMemo(() => activeRouting?.rules.slice(offset) ?? NO_RULES, [activeRouting, offset]);
   // A set, because every rule row looks its outbound up in it.
   const nodeNameList = nodeNamesQuery.data;
   const nodeNames = useMemo<ReadonlySet<string> | null>(
@@ -91,9 +81,7 @@ export function useRoutingScreen() {
     // into the cache shows the result at once; the backend's `routings`
     // invalidation still refetches the list afterwards.
     client.setQueryData<Routing_Serialize[]>(queryKeys.routings, (current) =>
-      current?.map((routing) =>
-        routing.id === saved.id ? { ...saved, isActive: routing.isActive } : routing,
-      ),
+      current?.map((routing) => (routing.id === saved.id ? { ...saved, isActive: routing.isActive } : routing)),
     );
   }
 

@@ -4,9 +4,7 @@ import { formatBytes } from "@voya/utils/formatting";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function metadataBySubscriptionId(
-  items: readonly SubscriptionMetadata[],
-): Map<string, SubscriptionMetadata> {
+export function metadataBySubscriptionId(items: readonly SubscriptionMetadata[]): Map<string, SubscriptionMetadata> {
   return new Map(items.map((item) => [item.subscriptionId, item]));
 }
 
@@ -19,9 +17,7 @@ function usedTrafficBytes(metadata: SubscriptionMetadata | null | undefined): nu
 }
 
 /** Remaining quota clamped to zero, or `null` without a positive total. */
-export function remainingTrafficBytes(
-  metadata: SubscriptionMetadata | null | undefined,
-): number | null {
+export function remainingTrafficBytes(metadata: SubscriptionMetadata | null | undefined): number | null {
   const total = metadata?.totalBytes;
   if (metadata == null || total == null || total <= 0) {
     return null;
@@ -49,10 +45,7 @@ export function remainingDays(
   return Math.max(0, Math.ceil((expireAtUnixSeconds * 1000 - nowMs) / DAY_MS));
 }
 
-export function isExpired(
-  expireAtUnixSeconds: number | null | undefined,
-  nowMs: number = Date.now(),
-): boolean {
+export function isExpired(expireAtUnixSeconds: number | null | undefined, nowMs: number = Date.now()): boolean {
   return expireAtUnixSeconds != null && expireAtUnixSeconds > 0 && expireAtUnixSeconds * 1000 <= nowMs;
 }
 
@@ -86,9 +79,7 @@ export function subscriptionUsageStats(
     stats.push({
       destructive: expired,
       key: "days",
-      label: expired
-        ? t("home.subscriptionCard.expired")
-        : t("home.subscriptionCard.remainingDays", { days }),
+      label: expired ? t("home.subscriptionCard.expired") : t("home.subscriptionCard.remainingDays", { days }),
     });
   }
 

@@ -42,9 +42,7 @@ export function StartupFailureScreen({
           actions above the fold on the smallest window. */}
       {confirming ? null : (
         <>
-          <Typography className="text-base text-foreground">
-            {t("startupFailure.resetExplanation")}
-          </Typography>
+          <Typography className="text-base text-foreground">{t("startupFailure.resetExplanation")}</Typography>
           <Disclosure title={t("mobile.details")}>
             <Typography className="text-sm text-subtle" selectable>
               {redactOperationalMessage(error.message)}
@@ -57,14 +55,17 @@ export function StartupFailureScreen({
           <Typography className="text-base font-semibold text-foreground">
             {t("startupFailure.confirmTitle")}
           </Typography>
-          <Typography className="text-base text-foreground">
-            {t("startupFailure.confirmMessage")}
-          </Typography>
+          <Typography className="text-base text-foreground">{t("startupFailure.confirmMessage")}</Typography>
           <ErrorNotice error={resetFailure} />
           <Button testID="startup-reset-confirm" isDisabled={busy} onPress={onReset}>
             <Button.Label>{t("startupFailure.confirmReset")}</Button.Label>
           </Button>
-          <Button testID="startup-reset-cancel" variant="secondary" isDisabled={busy} onPress={() => setConfirming(false)}>
+          <Button
+            testID="startup-reset-cancel"
+            variant="secondary"
+            isDisabled={busy}
+            onPress={() => setConfirming(false)}
+          >
             <Button.Label>{t("actions.cancel")}</Button.Label>
           </Button>
         </>

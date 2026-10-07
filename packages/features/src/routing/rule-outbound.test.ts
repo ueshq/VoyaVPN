@@ -8,14 +8,7 @@ describe("rule outbounds", () => {
   it("lists each routable node name once, in list order", () => {
     expect(
       nodeOutboundNames({
-        entries: [
-          entry("Tokyo"),
-          entry(""),
-          entry("  "),
-          entry("direct"),
-          entry("Osaka"),
-          entry("Tokyo"),
-        ],
+        entries: [entry("Tokyo"), entry(""), entry("  "), entry("direct"), entry("Osaka"), entry("Tokyo")],
       }),
     ).toEqual(["Tokyo", "Osaka"]);
   });

@@ -11,7 +11,9 @@ function wrapper({ children }: { children: ReactNode }) {
   return <TestProviders queryClient={makeTestQueryClient()}>{children}</TestProviders>;
 }
 
-beforeAll(async () => { await localeReady; });
+beforeAll(async () => {
+  await localeReady;
+});
 
 it("replaces a screen that throws with a retry, and shows the screen again once it renders", async () => {
   // React logs the caught error; the boundary logs it once more.

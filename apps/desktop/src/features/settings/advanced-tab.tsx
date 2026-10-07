@@ -8,13 +8,7 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { useShellStore } from "@/stores/shell-store";
 import { CoreTab } from "./core-tab";
-import {
-  NumberField,
-  SelectField,
-  SettingsGroup,
-  SettingsSwitch,
-  TextField,
-} from "./settings-form";
+import { NumberField, SelectField, SettingsGroup, SettingsSwitch, TextField } from "./settings-form";
 import { SETTING_DEFAULTS } from "@/features/settings/settings-values";
 import { TunDiagnosticsButton } from "./tun-diagnostics-button";
 import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
@@ -47,18 +41,12 @@ const TUN_ICMP_LABELS: Record<string, TranslationKey> = {
  * system proxy, the core and the runtime log. Speed test settings
  * sit with the tests on the Nodes page.
  */
-export function AdvancedTab({
-  controller,
-}: {
-  controller: AppSettingsFormController;
-}) {
+export function AdvancedTab({ controller }: { controller: AppSettingsFormController }) {
   const { t } = useI18n();
   const { settings, update } = controller;
   // macOS has no system proxy mode, so its group is only offered where the
   // app manages one.
-  const systemProxyManaged = useRuntimeEventStore(
-    (state) => state.sysProxy?.management === "automatic",
-  );
+  const systemProxyManaged = useRuntimeEventStore((state) => state.sysProxy?.management === "automatic");
 
   const patchTun = (patch: Partial<typeof settings.network.tun>) =>
     update((current) => ({
@@ -68,9 +56,7 @@ export function AdvancedTab({
         tun: { ...current.network.tun, ...patch },
       },
     }));
-  const patchSystemProxy = (
-    patch: Partial<typeof settings.network.systemProxy>,
-  ) =>
+  const patchSystemProxy = (patch: Partial<typeof settings.network.systemProxy>) =>
     update((current) => ({
       ...current,
       network: {
@@ -81,33 +67,24 @@ export function AdvancedTab({
 
   return (
     <div className="grid gap-4">
-      <SettingsGroup
-        title={t("settings.sections.tun")}
-        actions={<TunDiagnosticsButton />}
-      >
+      <SettingsGroup title={t("settings.sections.tun")} actions={<TunDiagnosticsButton />}>
         <SettingsSwitch
           field="network.tun.autoRoute"
           checked={settings.network.tun.autoRoute}
           description={t("settings.network.tunAutoRouteHint")}
           label={t("settings.network.tunAutoRoute")}
-          onCheckedChange={(autoRoute) =>
-            patchTun({ autoRoute })
-          }
+          onCheckedChange={(autoRoute) => patchTun({ autoRoute })}
         />
         <SettingsSwitch
           field="network.tun.ipv6Enabled"
           checked={settings.network.tun.ipv6Enabled}
           description={t("settings.network.enableIpv6Hint")}
           label={t("settings.network.enableIpv6Address")}
-          onCheckedChange={(ipv6Enabled) =>
-            patchTun({ ipv6Enabled })
-          }
+          onCheckedChange={(ipv6Enabled) => patchTun({ ipv6Enabled })}
         />
         <Disclosure
           title={t("common.advanced")}
-          invalid={Object.keys(controller.fieldErrors).some((field) =>
-            field.startsWith("network.tun"),
-          )}
+          invalid={Object.keys(controller.fieldErrors).some((field) => field.startsWith("network.tun"))}
         >
           <SelectField
             description={t("settings.network.tunStackHint")}
@@ -146,9 +123,7 @@ export function AdvancedTab({
             field="network.systemProxy.bypassLocal"
             checked={settings.network.systemProxy.bypassLocal}
             label={t("settings.network.bypassLocalAddress")}
-            onCheckedChange={(bypassLocal) =>
-              patchSystemProxy({ bypassLocal })
-            }
+            onCheckedChange={(bypassLocal) => patchSystemProxy({ bypassLocal })}
           />
           <TextField
             field="network.systemProxy.exceptions"
@@ -161,22 +136,13 @@ export function AdvancedTab({
       ) : null}
 
       <CoreTab controller={controller} />
-      <RuntimeLogGroup
-        coreLogEnabled={settings.core.logEnabled}
-        logLevel={settings.core.logLevel}
-      />
+      <RuntimeLogGroup coreLogEnabled={settings.core.logEnabled} logLevel={settings.core.logLevel} />
     </div>
   );
 }
 
 /** The runtime log, kept with the other diagnostics rather than a main page. */
-function RuntimeLogGroup({
-  coreLogEnabled,
-  logLevel,
-}: {
-  coreLogEnabled: boolean;
-  logLevel: string;
-}) {
+function RuntimeLogGroup({ coreLogEnabled, logLevel }: { coreLogEnabled: boolean; logLevel: string }) {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -195,11 +161,9 @@ function RuntimeLogGroup({
       // animation ends: left on, a second request would have nothing to start.
       const section = heading.closest("section");
       section?.setAttribute("data-settings-highlight", "true");
-      section?.addEventListener(
-        "animationend",
-        () => section.removeAttribute("data-settings-highlight"),
-        { once: true },
-      );
+      section?.addEventListener("animationend", () => section.removeAttribute("data-settings-highlight"), {
+        once: true,
+      });
       useShellStore.getState().consumeSettingsTarget();
     });
     return () => cancelAnimationFrame(frame);
@@ -209,11 +173,7 @@ function RuntimeLogGroup({
 
   return (
     <SettingsGroup headingRef={headingRef} title={t("tabs.logs")}>
-      {coreLogEnabled ? null : (
-        <p className="text-xs text-muted-foreground">
-          {t("settings.logs.coreLogOff")}
-        </p>
-      )}
+      {coreLogEnabled ? null : <p className="text-xs text-muted-foreground">{t("settings.logs.coreLogOff")}</p>}
       {levelHint ? (
         <p className="text-xs text-muted-foreground" role="status">
           {t(levelHint)}

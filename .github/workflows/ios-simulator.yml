@@ -3,19 +3,19 @@ name: iOS simulator
 on:
   pull_request:
     paths:
-      - 'apps/mobile/**'
-      - 'packages/**'
-      - 'crates/**'
-      - 'native/apple/**'
-      - 'scripts/native/**'
-      - 'scripts/core/**'
-      - 'scripts/lib/**'
-      - 'scripts/quality/mobile-*'
-      - 'Cargo.*'
-      - 'package.json'
-      - 'pnpm-*.yaml'
-      - '.github/actions/**'
-      - '.github/workflows/ios-simulator.yml'
+      - "apps/mobile/**"
+      - "packages/**"
+      - "crates/**"
+      - "native/apple/**"
+      - "scripts/native/**"
+      - "scripts/core/**"
+      - "scripts/lib/**"
+      - "scripts/quality/mobile-*"
+      - "Cargo.*"
+      - "package.json"
+      - "pnpm-*.yaml"
+      - ".github/actions/**"
+      - ".github/workflows/ios-simulator.yml"
   workflow_dispatch:
     inputs:
       full:

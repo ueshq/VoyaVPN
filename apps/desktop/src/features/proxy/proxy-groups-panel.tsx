@@ -25,9 +25,7 @@ import { toastError } from "@voya/client/toast-store";
  */
 export function ProxyGroupsPanel() {
   const { t } = useI18n();
-  const connected = useRuntimeEventStore(
-    (state) => state.coreState?.state === "connected",
-  );
+  const connected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const setActiveTab = useShellStore((state) => state.setActiveTab);
   const { activeGroup: active, runtime } = useActivePolicyGroup();
   const memberSwitch = usePolicyGroupMemberSwitch();
@@ -53,12 +51,7 @@ export function ProxyGroupsPanel() {
       <EmptyState
         actions={
           connected ? (
-            <Button
-              onClick={() => setActiveTab("profiles")}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
+            <Button onClick={() => setActiveTab("profiles")} size="sm" type="button" variant="outline">
               {t("proxy.groups.openNodes")}
             </Button>
           ) : (
@@ -104,11 +97,7 @@ export function ProxyGroupsPanel() {
           type="button"
           variant="outline"
         >
-          {testing ? (
-            <Spinner className="size-4" />
-          ) : (
-            <Zap aria-hidden="true" className="size-4" />
-          )}
+          {testing ? <Spinner className="size-4" /> : <Zap aria-hidden="true" className="size-4" />}
           {t("nodeGroups.test")}
         </Button>
       </div>
@@ -121,9 +110,7 @@ export function ProxyGroupsPanel() {
           delayPlaceholder="—"
           delays={delays}
           members={active.members}
-          onChoose={
-            group.strategy === "selector" ? (profileId) => void choose(profileId) : undefined
-          }
+          onChoose={group.strategy === "selector" ? (profileId) => void choose(profileId) : undefined}
           stretch
           testId="proxy-group-member"
         />

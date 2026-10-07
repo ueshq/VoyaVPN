@@ -102,7 +102,11 @@ function MenubarSub(props: React.ComponentProps<typeof MenubarPrimitive.Sub>) {
   return <MenubarPrimitive.Sub {...props} />;
 }
 
-function MenubarSubTrigger({ children, className, ...props }: React.ComponentProps<typeof MenubarPrimitive.SubTrigger>) {
+function MenubarSubTrigger({
+  children,
+  className,
+  ...props
+}: React.ComponentProps<typeof MenubarPrimitive.SubTrigger>) {
   return (
     <MenubarPrimitive.SubTrigger className={cn(itemClasses, className)} {...props}>
       {children}

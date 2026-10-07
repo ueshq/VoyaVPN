@@ -1,11 +1,6 @@
 import type { ReactElement, ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  render,
-  renderHook,
-  type RenderHookResult,
-  type RenderResult,
-} from "@testing-library/react";
+import { render, renderHook, type RenderHookResult, type RenderResult } from "@testing-library/react";
 
 type WithQueryClient = { queryClient: QueryClient };
 

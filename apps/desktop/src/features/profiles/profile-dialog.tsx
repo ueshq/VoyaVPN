@@ -16,16 +16,9 @@ import {
 import { SelectField } from "@voya/ui/components/form-fields";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { Profile } from "@voya/contracts";
-import {
-  translateFieldErrors,
-  zodIssuesToErrorMap,
-  type FieldErrorMap,
-} from "@voya/features/forms/zod-errors";
+import { translateFieldErrors, zodIssuesToErrorMap, type FieldErrorMap } from "@voya/features/forms/zod-errors";
 
-import {
-  isProfileKind,
-  PROFILE_PROTOCOL_OPTIONS,
-} from "@voya/features/profiles/profile-constants";
+import { isProfileKind, PROFILE_PROTOCOL_OPTIONS } from "@voya/features/profiles/profile-constants";
 import {
   createDefaultDraft,
   draftFromProfile,
@@ -93,10 +86,7 @@ function ProfileDialogForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrorMap>({});
   const { pending, submit } = useDialogSubmit();
 
-  function update<Key extends keyof ProfileDraft>(
-    key: Key,
-    value: ProfileDraft[Key],
-  ) {
+  function update<Key extends keyof ProfileDraft>(key: Key, value: ProfileDraft[Key]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
@@ -113,16 +103,10 @@ function ProfileDialogForm({
     if (!parsed.success) {
       setFieldErrors(zodIssuesToErrorMap(parsed.error));
       // Hidden fields keep their session draft. Reveal their section on errors.
-      document
-        .querySelectorAll<HTMLDetailsElement>("#profile-form details")
-        .forEach((detail) => {
-          detail.open = true;
-        });
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>('#profile-form [aria-invalid="true"]')
-          ?.focus(),
-      );
+      document.querySelectorAll<HTMLDetailsElement>("#profile-form details").forEach((detail) => {
+        detail.open = true;
+      });
+      requestAnimationFrame(() => document.querySelector<HTMLElement>('#profile-form [aria-invalid="true"]')?.focus());
       return;
     }
     setFieldErrors({});
@@ -145,20 +129,12 @@ function ProfileDialogForm({
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Server className="size-4" aria-hidden="true" />
-          {mode === "edit"
-            ? t("panes.profiles.dialog.editTitle")
-            : t("panes.profiles.dialog.addTitle")}
+          {mode === "edit" ? t("panes.profiles.dialog.editTitle") : t("panes.profiles.dialog.addTitle")}
         </DialogTitle>
-        <DialogDescription className="sr-only">
-          {t("panes.profiles.dialog.description")}
-        </DialogDescription>
+        <DialogDescription className="sr-only">{t("panes.profiles.dialog.description")}</DialogDescription>
       </DialogHeader>
       <DialogBody>
-        <form
-          className="min-h-0"
-          id="profile-form"
-          onSubmit={(event) => void submitForm(event)}
-        >
+        <form className="min-h-0" id="profile-form" onSubmit={(event) => void submitForm(event)}>
           <div className="grid gap-4">
             <Panel icon={Tag} title={t("panes.profiles.panels.profile")}>
               <div className="grid gap-3 lg:grid-cols-[14rem_1fr]">
@@ -171,25 +147,12 @@ function ProfileDialogForm({
                   value={draft.kind}
                 />
 
-                <DraftTextField
-                  {...panel}
-                  label={t("panes.profiles.fields.remarks")}
-                  name="remarks"
-                />
+                <DraftTextField {...panel} label={t("panes.profiles.fields.remarks")} name="remarks" />
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[1fr_7rem]">
-                <DraftTextField
-                  {...panel}
-                  label={t("panes.profiles.fields.address")}
-                  name="address"
-                />
-                <DraftTextField
-                  {...panel}
-                  inputMode="numeric"
-                  label={t("panes.profiles.fields.port")}
-                  name="port"
-                />
+                <DraftTextField {...panel} label={t("panes.profiles.fields.address")} name="address" />
+                <DraftTextField {...panel} inputMode="numeric" label={t("panes.profiles.fields.port")} name="port" />
               </div>
             </Panel>
 
@@ -208,12 +171,7 @@ function ProfileDialogForm({
         ) : null}
       </DialogBody>
       <DialogFooter>
-        <Button
-          disabled={pending}
-          onClick={() => onOpenChange(false)}
-          type="button"
-          variant="outline"
-        >
+        <Button disabled={pending} onClick={() => onOpenChange(false)} type="button" variant="outline">
           {t("panes.profiles.dialog.cancel")}
         </Button>
         <Button disabled={pending} form="profile-form" type="submit">

@@ -15,14 +15,18 @@ function mockDeviceActions(actions: Partial<DeviceActions>) {
   return jest.spyOn(native, "deviceActions").mockReturnValue(actions as DeviceActions);
 }
 
-beforeAll(async () => { await localeReady; });
+beforeAll(async () => {
+  await localeReady;
+});
 test("preview is read-only; confirming imports and updates only subscription sources", async () => {
   registerMobileBackend(mockTransport());
   const backend = mockBackend();
   const client = makeTestQueryClient();
   const readText = jest.fn(async () => "https://provider.example.test/new\nvless://token@example.test:443#Mixed");
   setClipboard({ readText, writeText: async () => {} });
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   expect(readText).not.toHaveBeenCalled();
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
@@ -34,20 +38,27 @@ test("preview is read-only; confirming imports and updates only subscription sou
   expect(backend.state.calls.some((call) => call.command === "importProfilesFromText")).toBe(false);
   expect(screen.queryByText("Read clipboard")).toBeNull();
   await user.press(screen.getByText("Edit"));
-  expect(screen.getByDisplayValue("https://provider.example.test/new\nvless://token@example.test:443#Mixed")).toBeOnTheScreen();
+  expect(
+    screen.getByDisplayValue("https://provider.example.test/new\nvless://token@example.test:443#Mixed"),
+  ).toBeOnTheScreen();
   expect(backend.state.calls.some((call) => call.command === "importProfilesFromText")).toBe(false);
   await user.press(screen.getByText("Preview"));
   await user.press(screen.getByText("Confirm import"));
-  await waitFor(() => expect(backend.state.calls.filter((call) => call.command === "updateSubscriptions")).toHaveLength(1));
+  await waitFor(() =>
+    expect(backend.state.calls.filter((call) => call.command === "updateSubscriptions")).toHaveLength(1),
+  );
   expect(screen.queryByText(/Some subscriptions could not be updated/)).toBeNull();
-  await unmount(); client.clear();
+  await unmount();
+  client.clear();
 });
 
 test("a subscription's downloaded nodes count as imported, and lead on to the node list", async () => {
   registerMobileBackend(mockTransport());
   const client = makeTestQueryClient();
   setClipboard({ readText: async () => "https://provider.example.test/only", writeText: async () => {} });
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
   await user.press(screen.getByText("Preview"));
@@ -58,14 +69,17 @@ test("a subscription's downloaded nodes count as imported, and lead on to the no
   expect(await screen.findByText(/^Connect to /)).toBeOnTheScreen();
   expect(screen.getByText(/Imported 1 node/)).toBeOnTheScreen();
   expect(screen.queryByText(/Imported 0 nodes/)).toBeNull();
-  await unmount(); client.clear();
+  await unmount();
+  client.clear();
 });
 
 test("typing after a camera denial clears the message and its Settings button together", async () => {
   registerMobileBackend(mockTransport());
   const device = mockDeviceActions({ scanQr: jest.fn().mockRejectedValue({ code: "cameraDenied" }) });
   const client = makeTestQueryClient();
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   const user = userEvent.setup();
   await user.press(screen.getByText("Scan QR code"));
   await screen.findByText(/Camera access is denied/);
@@ -73,7 +87,8 @@ test("typing after a camera denial clears the message and its Settings button to
   await waitFor(() => expect(screen.queryByText(/Camera access is denied/)).toBeNull());
   expect(screen.queryByText("Settings")).toBeNull();
   device.mockRestore();
-  await unmount(); client.clear();
+  await unmount();
+  client.clear();
 });
 
 test("camera denial offers recovery and multiple image codes require a choice before preview", async () => {
@@ -84,7 +99,9 @@ test("camera denial offers recovery and multiple image codes require a choice be
   });
   const backend = mockBackend();
   const client = makeTestQueryClient();
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   const user = userEvent.setup();
   await user.press(screen.getByText("Scan QR code"));
   await screen.findByText(/Camera access is denied/);
@@ -95,19 +112,24 @@ test("camera denial offers recovery and multiple image codes require a choice be
   await user.press(screen.getByText("vless://two@example.test:443#Two"));
   expect(screen.getByDisplayValue("vless://two@example.test:443#Two")).toBeOnTheScreen();
   expect(backend.state.calls.some((call) => call.command === "importProfilesFromText")).toBe(false);
-  await unmount(); client.clear(); device.mockRestore();
+  await unmount();
+  client.clear();
+  device.mockRestore();
 });
-
 
 test("an unknown native failure uses a general recovery message, not invalid-link advice", async () => {
   registerMobileBackend(mockTransport());
   const device = mockDeviceActions({ scanQr: jest.fn().mockRejectedValue({ code: "unavailable" }) });
   const client = makeTestQueryClient();
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   await userEvent.setup().press(screen.getByText("Scan QR code"));
   await screen.findByText("Could not complete this action. Retry or view diagnostics.");
   expect(screen.queryByText(/No importable/)).toBeNull();
-  await unmount(); client.clear(); device.mockRestore();
+  await unmount();
+  client.clear();
+  device.mockRestore();
 });
 
 // The backend files "parsed, but no node in it" as a missing profile. On this
@@ -117,10 +139,25 @@ test("text with nothing importable gets import advice, whichever way the backend
   const backend = mockBackend();
   const client = makeTestQueryClient();
   setClipboard({ readText: async () => "not-a-node", writeText: async () => {} });
-  const preview = jest.spyOn(backend.commands, "previewImportProfiles")
-    .mockRejectedValueOnce(new IpcCommandError({ kind: { type: "notFound", entity: "profile", id: null }, subsystem: "subscription", message: "no importable nodes were found" }))
-    .mockRejectedValueOnce(new IpcCommandError({ kind: { type: "notFound", entity: "subscription", id: "gone" }, subsystem: "subscription", message: "subscription not found" }));
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const preview = jest
+    .spyOn(backend.commands, "previewImportProfiles")
+    .mockRejectedValueOnce(
+      new IpcCommandError({
+        kind: { type: "notFound", entity: "profile", id: null },
+        subsystem: "subscription",
+        message: "no importable nodes were found",
+      }),
+    )
+    .mockRejectedValueOnce(
+      new IpcCommandError({
+        kind: { type: "notFound", entity: "subscription", id: "gone" },
+        subsystem: "subscription",
+        message: "subscription not found",
+      }),
+    );
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
 
@@ -131,7 +168,9 @@ test("text with nothing importable gets import advice, whichever way the backend
   // Something else that is genuinely missing keeps its own wording.
   await user.press(screen.getByText("Preview"));
   await screen.findByText("This item no longer exists. Refresh the list and choose again.");
-  preview.mockRestore(); await unmount(); client.clear();
+  preview.mockRestore();
+  await unmount();
+  client.clear();
 });
 
 test("a subscription line in the preview is information, not a red problem", async () => {
@@ -140,22 +179,33 @@ test("a subscription line in the preview is information, not a red problem", asy
   const client = makeTestQueryClient();
   setClipboard({ readText: async () => "https://provider.example.test/sub", writeText: async () => {} });
   const preview = jest.spyOn(backend.commands, "previewImportProfiles").mockResolvedValue({
-    nodes: [], subscriptionUrls: ["https://provider.example.test/sub"], failed: 0,
+    nodes: [],
+    subscriptionUrls: ["https://provider.example.test/sub"],
+    failed: 0,
     lineIssues: [{ line: 1, code: { code: "subscriptionSourceAdded" } }],
   });
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
   await user.press(screen.getByText("Preview"));
   await screen.findByText("Line 1 will be added as a subscription and updated to import its nodes once you confirm.");
-  preview.mockRestore(); await unmount(); client.clear();
+  preview.mockRestore();
+  await unmount();
+  client.clear();
 });
 
 test("after a confirmed import the summary replaces the input form until the user adds more", async () => {
   registerMobileBackend(mockTransport());
   const client = makeTestQueryClient();
-  setClipboard({ readText: async () => "https://provider.example.test/new\nvless://token@example.test:443#Mixed", writeText: async () => {} });
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  setClipboard({
+    readText: async () => "https://provider.example.test/new\nvless://token@example.test:443#Mixed",
+    writeText: async () => {},
+  });
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
   await user.press(screen.getByText("Preview"));
@@ -171,7 +221,8 @@ test("after a confirmed import the summary replaces the input form until the use
 
   await user.press(screen.getByText("Add more"));
   expect(screen.getByText("Read clipboard")).toBeOnTheScreen();
-  await unmount(); client.clear();
+  await unmount();
+  client.clear();
 });
 
 test("a summary with no imported nodes offers no node picker", async () => {
@@ -180,14 +231,28 @@ test("a summary with no imported nodes offers no node picker", async () => {
   mockBackend().commands.updateSubscriptions = async (subscriptionId) => ({
     imported: 0,
     messages: [],
-    outcomes: [{ subscriptionId: subscriptionId ?? "", status: "success", reason: "updated", imported: 0, removedExisting: 0, diagnostic: null }],
+    outcomes: [
+      {
+        subscriptionId: subscriptionId ?? "",
+        status: "success",
+        reason: "updated",
+        imported: 0,
+        removedExisting: 0,
+        diagnostic: null,
+      },
+    ],
     removedExisting: 0,
     skipped: 0,
     updated: 0,
   });
   const client = makeTestQueryClient();
-  setClipboard({ readText: async () => "https://provider.example.test/only-a-subscription", writeText: async () => {} });
-  const { unmount } = await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  setClipboard({
+    readText: async () => "https://provider.example.test/only-a-subscription",
+    writeText: async () => {},
+  });
+  const { unmount } = await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
   await user.press(screen.getByText("Preview"));
@@ -198,7 +263,8 @@ test("a summary with no imported nodes offers no node picker", async () => {
   // Nothing was imported, so the only sensible next step is importing again.
   expect(screen.queryByText("Choose a node")).toBeNull();
   expect(screen.getByText("Add nodes or subscription")).toBeOnTheScreen();
-  await unmount(); client.clear();
+  await unmount();
+  client.clear();
 });
 
 test("a single imported node connects only after the explicit connect action", async () => {
@@ -206,7 +272,9 @@ test("a single imported node connects only after the explicit connect action", a
   const backend = mockBackend();
   setClipboard({ readText: async () => "vless://token@single.example.test:443#Single", writeText: async () => {} });
   const client = makeTestQueryClient();
-  await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  await render(<ImportScreen />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   const user = userEvent.setup();
   await user.press(screen.getByText("Read clipboard"));
   await user.press(screen.getByText("Preview"));
@@ -215,5 +283,7 @@ test("a single imported node connects only after the explicit connect action", a
   expect(backend.state.calls.some((c) => c.command === "connectActiveProfile")).toBe(false);
   await user.press(connect);
   await waitFor(() => expect(backend.state.calls.some((c) => c.command === "connectActiveProfile")).toBe(true));
-  expect(backend.state.runtime.activeProfileId).toBe(backend.state.profiles.find((p) => p.profile.remarks === "Single")?.profile.id);
+  expect(backend.state.runtime.activeProfileId).toBe(
+    backend.state.profiles.find((p) => p.profile.remarks === "Single")?.profile.id,
+  );
 });

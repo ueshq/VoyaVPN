@@ -64,10 +64,7 @@ export function RulesScreen() {
       // and the like — which are an identity, not a name. The shared helper is
       // what turns them into the words the desktop shows.
       const name = ruleDisplayName(item, t);
-      const target = outboundText(
-        describeOutbound(item.outbound, nodeNames, groupOutbounds),
-        t,
-      );
+      const target = outboundText(describeOutbound(item.outbound, nodeNames, groupOutbounds), t);
       return (
         <ListRow
           inset
@@ -116,7 +113,9 @@ export function RulesScreen() {
                 onChange={(value) => trafficMode.selectMode(value)}
                 isDisabled={trafficMode.disabled}
               />
-              <Typography className="text-sm text-subtle">{t(rulesApply ? "daily.ruleHint" : "daily.globalHint")}</Typography>
+              <Typography className="text-sm text-subtle">
+                {t(rulesApply ? "daily.ruleHint" : "daily.globalHint")}
+              </Typography>
               {trafficMode.disabledReason ? (
                 <Typography className="text-sm text-subtle">{t(trafficMode.disabledReason)}</Typography>
               ) : null}
@@ -128,15 +127,17 @@ export function RulesScreen() {
           {rules.length > 0 ? (
             // Explain rule order before the list, so the hint is visible
             // without scrolling through every rule.
-            <Typography className="text-sm text-subtle">
-              {t("panes.routing.ruleOrderHint")}
-            </Typography>
+            <Typography className="text-sm text-subtle">{t("panes.routing.ruleOrderHint")}</Typography>
           ) : null}
         </View>
       }
       ListEmptyComponent={
         <View className="px-page">
-          {routing.loading ? <Spinner /> : routing.loadError ? null : <EmptyState icons={[Route]} title={t("panes.routing.emptyRules")} />}
+          {routing.loading ? (
+            <Spinner />
+          ) : routing.loadError ? null : (
+            <EmptyState icons={[Route]} title={t("panes.routing.emptyRules")} />
+          )}
         </View>
       }
     />

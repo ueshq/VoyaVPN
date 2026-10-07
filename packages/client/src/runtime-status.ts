@@ -42,32 +42,34 @@ export async function refreshRuntimeStatus(
   isMounted: () => boolean = () => true,
 ): Promise<Array<{ channel: RuntimeChannel; error: unknown }>> {
   const store = useRuntimeEventStore.getState();
-  const results = await Promise.allSettled(channels.map(async (channel) => {
-    const isLatest = beginRuntimeRead(channel);
-    const current = () => isMounted() && isLatest();
-    try {
-      switch (channel) {
-        case "coreState": {
-          const status = await voyaCommands().runtimeStatus();
-          if (current()) store.setCoreState(status);
-          break;
+  const results = await Promise.allSettled(
+    channels.map(async (channel) => {
+      const isLatest = beginRuntimeRead(channel);
+      const current = () => isMounted() && isLatest();
+      try {
+        switch (channel) {
+          case "coreState": {
+            const status = await voyaCommands().runtimeStatus();
+            if (current()) store.setCoreState(status);
+            break;
+          }
+          case "sysProxy": {
+            const status = await voyaCommands().systemProxyStatus();
+            if (current()) store.setSysProxy(status);
+            break;
+          }
+          case "tun": {
+            const status = await voyaCommands().tunStatus();
+            if (current()) store.setTun(status);
+            break;
+          }
         }
-        case "sysProxy": {
-          const status = await voyaCommands().systemProxyStatus();
-          if (current()) store.setSysProxy(status);
-          break;
-        }
-        case "tun": {
-          const status = await voyaCommands().tunStatus();
-          if (current()) store.setTun(status);
-          break;
-        }
+      } catch (error) {
+        if (current()) throw error;
       }
-    } catch (error) {
-      if (current()) throw error;
-    }
-  }));
-  return results.flatMap((result, index) => result.status === "rejected"
-    ? [{ channel: channels[index]!, error: result.reason as unknown }]
-    : []);
+    }),
+  );
+  return results.flatMap((result, index) =>
+    result.status === "rejected" ? [{ channel: channels[index]!, error: result.reason as unknown }] : [],
+  );
 }

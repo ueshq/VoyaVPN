@@ -7,8 +7,19 @@ import { ErrorNotice } from "~/components/error-notice";
 export function CoreLogOption() {
   const { t } = useI18n();
   const app = useAppSettings();
-  return <>
-    <ErrorNotice error={app.error} retry={app.retry} />
-    {app.settings ? <ListGroup><SwitchRow last label={t("settings.core.logEnabled")} value={app.settings.core.logEnabled} onChange={(logEnabled) => app.update((current) => ({ ...current, core: { ...current.core, logEnabled } }))} /></ListGroup> : null}
-  </>;
+  return (
+    <>
+      <ErrorNotice error={app.error} retry={app.retry} />
+      {app.settings ? (
+        <ListGroup>
+          <SwitchRow
+            last
+            label={t("settings.core.logEnabled")}
+            value={app.settings.core.logEnabled}
+            onChange={(logEnabled) => app.update((current) => ({ ...current, core: { ...current.core, logEnabled } }))}
+          />
+        </ListGroup>
+      ) : null}
+    </>
+  );
 }

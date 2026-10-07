@@ -14,7 +14,12 @@ function wrapper({ children }: { children: ReactNode }) {
 
 describe("Disclosure", () => {
   it("is a button that says whether it is open, and mounts its content only when it is", async () => {
-    await render(<Disclosure title="Licenses"><Text>MIT</Text></Disclosure>, { wrapper });
+    await render(
+      <Disclosure title="Licenses">
+        <Text>MIT</Text>
+      </Disclosure>,
+      { wrapper },
+    );
 
     const toggle = screen.getByRole("button", { name: "Licenses" });
     expect(toggle).not.toBeExpanded();
@@ -28,7 +33,9 @@ describe("Disclosure", () => {
   it("stays open while its owner holds it open", async () => {
     const onExpandedChange = jest.fn();
     await render(
-      <Disclosure title="Advanced" isExpanded onExpandedChange={onExpandedChange}><Text>Remote DNS</Text></Disclosure>,
+      <Disclosure title="Advanced" isExpanded onExpandedChange={onExpandedChange}>
+        <Text>Remote DNS</Text>
+      </Disclosure>,
       { wrapper },
     );
 
@@ -42,7 +49,9 @@ describe("SwitchRow", () => {
   it("keeps the switch the named control a screen reader operates", async () => {
     const onChange = jest.fn();
     await render(
-      <ListGroup><SwitchRow last label="FakeIP" value={false} onChange={onChange} /></ListGroup>,
+      <ListGroup>
+        <SwitchRow last label="FakeIP" value={false} onChange={onChange} />
+      </ListGroup>,
       { wrapper },
     );
 

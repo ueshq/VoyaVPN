@@ -17,11 +17,7 @@ import { useAppSettings } from "@voya/features/settings/use-app-settings";
  * The latency test's own settings, next to the tests they change. They save
  * automatically, like every other setting.
  */
-export function SpeedtestSettingsDialog({
-  onOpenChange,
-}: {
-  onOpenChange: (open: boolean) => void;
-}) {
+export function SpeedtestSettingsDialog({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
   const { t } = useI18n();
   const controller = useAppSettings();
   const { settings } = controller;

@@ -13,11 +13,7 @@ import { activateSelection, chooseSelection } from "@voya/client/runtime-action"
 
 import { useBusyAction } from "../forms/use-busy-action";
 import { profileMemberName } from "./profile-display";
-import {
-  useActivePolicyGroup,
-  useGroupDelayTest,
-  usePolicyGroupMemberSwitch,
-} from "./use-policy-group-runtime";
+import { useActivePolicyGroup, useGroupDelayTest, usePolicyGroupMemberSwitch } from "./use-policy-group-runtime";
 import type { NodeOperation } from "./use-node-operation";
 
 /** Marks a group switch in the shared runtime-action guard, apart from node ids. */
@@ -30,9 +26,7 @@ export function usePolicyGroups(
   { live = true, inline = false }: { live?: boolean; inline?: boolean } = {},
 ) {
   const queryClient = useQueryClient();
-  const coreConnected = useRuntimeEventStore(
-    (state) => state.coreState?.state === "connected",
-  );
+  const coreConnected = useRuntimeEventStore((state) => state.coreState?.state === "connected");
   const switchingId = useRuntimeActionStore((state) => state.switchingId);
   const { policyGroupsQuery, runtime: policyGroupRuntimeState } = useActivePolicyGroup({ live });
   const policyGroupEntries = policyGroupsQuery.data?.entries ?? [];
@@ -59,24 +53,29 @@ export function usePolicyGroups(
 
   /** Makes the group active, then connects, or restarts a running core, with it. */
   function activatePolicyGroup(id: string) {
-    return activateSelection(`${GROUP_SWITCH_PREFIX}${id}`, t, async () => {
-      // A group replaces a node used on its own; say which one it set aside.
-      const replacedNode = policyGroupEntries.some((entry) => entry.isActive)
-        ? null
-        : queryClient
-            .getQueryData<ProfileSummaryListing>(queryKeys.profileList)
-            ?.entries.find((entry) => entry.isActive)?.profile;
-      await voyaCommands().setActivePolicyGroup(id);
-      if (replacedNode) {
-        useToastStore.getState().pushToast({
-          description: t("policyGroups.replacedNode", {
-            node: profileMemberName(replacedNode.remarks, replacedNode.id),
-          }),
-          severity: "info",
-          title: t("policyGroups.switchedTitle"),
-        });
-      }
-    }, { inline });
+    return activateSelection(
+      `${GROUP_SWITCH_PREFIX}${id}`,
+      t,
+      async () => {
+        // A group replaces a node used on its own; say which one it set aside.
+        const replacedNode = policyGroupEntries.some((entry) => entry.isActive)
+          ? null
+          : queryClient
+              .getQueryData<ProfileSummaryListing>(queryKeys.profileList)
+              ?.entries.find((entry) => entry.isActive)?.profile;
+        await voyaCommands().setActivePolicyGroup(id);
+        if (replacedNode) {
+          useToastStore.getState().pushToast({
+            description: t("policyGroups.replacedNode", {
+              node: profileMemberName(replacedNode.remarks, replacedNode.id),
+            }),
+            severity: "info",
+            title: t("policyGroups.switchedTitle"),
+          });
+        }
+      },
+      { inline },
+    );
   }
 
   /**

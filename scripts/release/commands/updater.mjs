@@ -239,7 +239,9 @@ async function main(argv = []) {
     return;
   }
   if (isStableChannel(options.channel) && options.placeholderSignatures) {
-    throw new Error("Stable updater metadata cannot use --placeholder-signatures; use a dry-run channel for placeholders.");
+    throw new Error(
+      "Stable updater metadata cannot use --placeholder-signatures; use a dry-run channel for placeholders.",
+    );
   }
 
   const version = options.version ?? (await readPackageVersion(repoRoot));
@@ -297,7 +299,13 @@ async function main(argv = []) {
       const requireManifestMetadata = isStableChannel(options.channel);
       if (isStableChannel(options.channel)) {
         assertStableArtifactMetadata(payload, target, version, options.channel, `${target} updater payload`);
-        assertStableArtifactMetadata(signatureArtifact, target, version, options.channel, `${target} updater signature`);
+        assertStableArtifactMetadata(
+          signatureArtifact,
+          target,
+          version,
+          options.channel,
+          `${target} updater signature`,
+        );
       }
       const payloadEvidence = await verifyArtifactFile(
         targetArtifacts.manifestDir,
@@ -415,7 +423,10 @@ async function main(argv = []) {
     targetCount: targetEvidence.length,
     firstStableTargetCount: firstStableTargets.length,
     firstStableTargets,
-    checksumCount: evidence.reduce((count, entry) => count + (entry.sha256 ? 1 : 0) + (entry.signatureSha256 ? 1 : 0), 0),
+    checksumCount: evidence.reduce(
+      (count, entry) => count + (entry.sha256 ? 1 : 0) + (entry.signatureSha256 ? 1 : 0),
+      0,
+    ),
     sourceArtifactNames: uniqueSorted(
       evidence.flatMap((entry) => [entry.sourceArtifactName, entry.sourceSignatureArtifactName]),
     ),
@@ -444,7 +455,9 @@ async function main(argv = []) {
   console.log(`Wrote updater evidence to ${relative(repoRoot, evidencePath)}`);
   const signedEvidence = evidence.filter((entry) => entry.source === "signed-artifact");
   if (signedEvidence.length > 0) {
-    console.log(`Signed updater artifacts: ${signedEvidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`);
+    console.log(
+      `Signed updater artifacts: ${signedEvidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`,
+    );
     const verifiedEvidence = signedEvidence.filter((entry) => entry.signatureVerified === true);
     if (verifiedEvidence.length > 0) {
       console.log(
@@ -452,7 +465,9 @@ async function main(argv = []) {
       );
     }
   } else {
-    console.log(`Dry-run updater placeholders: ${evidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`);
+    console.log(
+      `Dry-run updater placeholders: ${evidence.map((entry) => `${entry.target}=${entry.artifact}`).join(", ")}`,
+    );
   }
 }
 

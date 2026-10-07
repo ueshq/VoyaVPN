@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  formatBytes,
-  formatBytesPerSecond,
-  formatClock,
-  formatDelay,
-  formatDurationMs,
-} from "./formatting";
+import { formatBytes, formatBytesPerSecond, formatClock, formatDelay, formatDurationMs } from "./formatting";
 
 describe("formatting", () => {
   it("formats byte counts with shared binary units", () => {

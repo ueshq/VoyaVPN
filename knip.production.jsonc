@@ -17,7 +17,7 @@
       "ignore": ["src/**/*.test.{ts,tsx}", "src/test/**"],
       // Babel rewrites helper calls into `@babel/runtime` imports, so no
       // source file names it.
-      "ignoreDependencies": ["@babel/runtime"]
+      "ignoreDependencies": ["@babel/runtime"],
     },
     "apps/desktop": {
       "entry": ["src/main.tsx!"],
@@ -25,8 +25,8 @@
       "ignore": ["e2e/**", "src/**/*.{test,spec}.{ts,tsx}", "src/**/*.test-fixture.ts", "src/test/**"],
       "ignoreDependencies": ["@tauri-apps/cli", "flag-icons"],
       "ignoreIssues": {
-        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"]
-      }
+        "src/ipc/bindings.ts": ["duplicates", "enumMembers", "exports", "types"],
+      },
     },
     "apps/probe": {
       "entry": ["src/index.ts!"],
@@ -34,7 +34,7 @@
       "ignore": ["test/**"],
       "ignoreBinaries": ["wrangler"],
       // `cloudflare:sockets` is a Workers runtime module, not a package.
-      "ignoreDependencies": ["cloudflare"]
+      "ignoreDependencies": ["cloudflare"],
     },
     "apps/web": {
       // What ships is the rendered HTML, so the render tree is the production
@@ -42,48 +42,43 @@
       // which are devDependencies.
       "entry": ["src/render.tsx!"],
       "project": ["src/**/*.{ts,tsx}!"],
-      "ignore": ["test/**"]
+      "ignore": ["test/**"],
     },
     "packages/i18n": {
       "entry": ["src/core.ts", "src/index.ts", "src/native.ts", "src/use-i18n.ts"],
       "project": ["src/**/*.{ts,tsx}!"],
-      "ignore": ["src/**/*.test.{ts,tsx}"]
+      "ignore": ["src/**/*.test.{ts,tsx}"],
     },
     "packages/ui": {
       "entry": ["src/components/*.{ts,tsx}", "src/lib/*.ts"],
       "project": ["src/**/*.{ts,tsx,css}!"],
-      "ignore": ["src/**/*.test.{ts,tsx}", "src/test/setup.ts"]
+      "ignore": ["src/**/*.test.{ts,tsx}", "src/test/setup.ts"],
     },
     "packages/utils": {
       "entry": ["src/*.ts"],
       "project": ["src/**/*.{ts,tsx}!"],
-      "ignore": ["src/**/*.test.{ts,tsx}"]
+      "ignore": ["src/**/*.test.{ts,tsx}"],
     },
     "packages/contracts": {
       "entry": ["src/index.ts", "src/commands.ts"],
       "project": ["src/**/*.ts!"],
       "ignoreIssues": {
-        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"]
-      }
+        "src/generated.ts": ["duplicates", "enumMembers", "exports", "types"],
+      },
     },
     "packages/client": {
       "entry": ["src/*.ts"],
       "project": ["src/**/*.ts!"],
       // The storage seam and the in-memory backend tests register; neither is
       // reachable from a shipped path, deliberately.
-      "ignore": [
-        "src/**/*.test.ts",
-        "src/test-storage.ts",
-        "src/mock-backend.ts",
-        "src/mock-seed.ts"
-      ]
+      "ignore": ["src/**/*.test.ts", "src/test-storage.ts", "src/mock-backend.ts", "src/mock-seed.ts"],
     },
     "packages/features": {
       "entry": ["src/*/*.{ts,tsx}!"],
       "project": ["src/**/*.{ts,tsx}!"],
       // The package's own harness and fixtures, deliberately not reachable
       // from a shipped path.
-      "ignore": ["src/**/*.test.{ts,tsx}", "src/**/*.test-fixture.ts", "src/test/**"]
-    }
-  }
+      "ignore": ["src/**/*.test.{ts,tsx}", "src/**/*.test-fixture.ts", "src/test/**"],
+    },
+  },
 }

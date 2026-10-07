@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 
 /** Optional commit-on-blur input behavior; ordinary shared fields stay controlled. */
-export function useCommittedInput({ value, onChange, deferred, validate, onInvalid }: {
+export function useCommittedInput({
+  value,
+  onChange,
+  deferred,
+  validate,
+  onInvalid,
+}: {
   value: string;
   onChange: (value: string) => void;
   deferred: boolean;
@@ -27,17 +33,28 @@ export function useCommittedInput({ value, onChange, deferred, validate, onInval
     }
     pending.current = null;
     latest.current.onChange(text);
-    if (!leaving) { setLocal(null); setError(undefined); }
+    if (!leaving) {
+      setLocal(null);
+      setError(undefined);
+    }
   }
 
   const flush = useLatestRef(commit);
-  useEffect(() => () => { flush.current(true); }, [flush]);
+  useEffect(
+    () => () => {
+      flush.current(true);
+    },
+    [flush],
+  );
 
   return {
     value: local ?? value,
     error,
     onChange: (text: string) => {
-      if (!deferred) { onChange(text); return; }
+      if (!deferred) {
+        onChange(text);
+        return;
+      }
       pending.current = text;
       setLocal(text);
       setError(undefined);
@@ -47,15 +64,26 @@ export function useCommittedInput({ value, onChange, deferred, validate, onInval
       commit();
     },
     onKeyDown: (event: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      if (deferred && event.key === "Enter" && !event.nativeEvent.isComposing && !composing.current && event.currentTarget.tagName !== "TEXTAREA") {
+      if (
+        deferred &&
+        event.key === "Enter" &&
+        !event.nativeEvent.isComposing &&
+        !composing.current &&
+        event.currentTarget.tagName !== "TEXTAREA"
+      ) {
         event.preventDefault();
         commit();
       }
     },
-    onCompositionStart: () => { composing.current = true; },
+    onCompositionStart: () => {
+      composing.current = true;
+    },
     onCompositionEnd: () => {
       composing.current = false;
-      if (blurredWhileComposing.current) { blurredWhileComposing.current = false; commit(); }
+      if (blurredWhileComposing.current) {
+        blurredWhileComposing.current = false;
+        commit();
+      }
     },
   };
 }

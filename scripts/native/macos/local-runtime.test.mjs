@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 
-import {
-  parseScutilNetworkConnections,
-  prepareVoyaForLocalBuild,
-} from "./local-runtime.mjs";
+import { parseScutilNetworkConnections, prepareVoyaForLocalBuild } from "./local-runtime.mjs";
 
 const voyaId = "9E69EDC4-0CFD-4A90-BDFA-7AE633F1C16C";
 const secondVoyaId = "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE";
@@ -36,9 +33,7 @@ describe("parseScutilNetworkConnections", () => {
 * (Connected)      AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE VPN (app.voyavpn.desktop.other) "Other" [VPN:app.voyavpn.desktop.other]
 * (Disconnected)   ${voyaId} VPN (app.voyavpn.desktop) "VoyaVPN" [VPN:app.voyavpn.desktop]`;
 
-    expect(parseScutilNetworkConnections(output)).toEqual([
-      { id: voyaId, state: "Disconnected" },
-    ]);
+    expect(parseScutilNetworkConnections(output)).toEqual([{ id: voyaId, state: "Disconnected" }]);
   });
 });
 
@@ -104,14 +99,8 @@ describe("prepareVoyaForLocalBuild", () => {
   it("stops only active services when multiple Voya profiles exist", () => {
     const listConnections = vi
       .fn()
-      .mockReturnValueOnce([
-        connection("Disconnected"),
-        connection("Connecting", secondVoyaId),
-      ])
-      .mockReturnValue([
-        connection("Disconnected"),
-        connection("Disconnected", secondVoyaId),
-      ]);
+      .mockReturnValueOnce([connection("Disconnected"), connection("Connecting", secondVoyaId)])
+      .mockReturnValue([connection("Disconnected"), connection("Disconnected", secondVoyaId)]);
     const stopConnection = vi.fn();
     const runtimeOptions = options({ listConnections, stopConnection });
 
@@ -130,9 +119,7 @@ describe("prepareVoyaForLocalBuild", () => {
       timeoutMs: 50,
     });
 
-    expect(() => prepareVoyaForLocalBuild(runtimeOptions)).toThrow(
-      /The VoyaPacketTunnel process is still running/,
-    );
+    expect(() => prepareVoyaForLocalBuild(runtimeOptions)).toThrow(/The VoyaPacketTunnel process is still running/);
     expect(stopConnection).not.toHaveBeenCalled();
   });
 

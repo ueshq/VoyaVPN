@@ -1,10 +1,4 @@
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  rmSync,
-  statSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { resolve, win32 } from "node:path";
 
 import {
@@ -23,8 +17,7 @@ import { singBoxExecutableName, singBoxSeedDir } from "../../core/sing-box-insta
 
 export const WINDOWS_TUN_SERVICE_NAME = "VoyaVPNTunnelService";
 const WINDOWS_TUN_SERVICE_DISPLAY_NAME = "VoyaVPN Tunnel Service";
-const WINDOWS_TUN_SERVICE_DESCRIPTION =
-  "Runs VoyaVPN transparent TUN with sing-box and Wintun.";
+const WINDOWS_TUN_SERVICE_DESCRIPTION = "Runs VoyaVPN transparent TUN with sing-box and Wintun.";
 export const WINDOWS_TUN_EXIT_STOP_TIMEOUT = 20;
 export const WINDOWS_TUN_EXIT_COPY_FAILED = 21;
 export const WINDOWS_TUN_EXIT_REGISTRATION_FAILED = 22;
@@ -41,8 +34,8 @@ export const WINDOWS_TUN_EXIT_REGISTRATION_FAILED = 22;
  * roots are pinned inside the service binary.
  */
 export const WINDOWS_TUN_SERVICE_SDDL =
-  "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)"
-  + "(A;;CCLCSWRPWPLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)";
+  "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" +
+  "(A;;CCLCSWRPWPLOCRRC;;;IU)(A;;CCLCSWLOCRRC;;;SU)";
 
 const defaultRepoRoot = repoRootFromScript(import.meta.url);
 const serviceExecutableName = "voyavpn-tunnel-service.exe";
@@ -162,11 +155,7 @@ function singBoxSeedExecutablePath(repoRoot = defaultRepoRoot) {
   return resolve(singBoxSeedDir(repoRoot), singBoxExecutableName("win32"));
 }
 
-export function buildTunnelService({
-  env = process.env,
-  repoRoot = defaultRepoRoot,
-  runCommand = run,
-} = {}) {
+export function buildTunnelService({ env = process.env, repoRoot = defaultRepoRoot, runCommand = run } = {}) {
   runCommand("cargo", ["build", "-p", "voyavpn", "--bin", "voyavpn-tunnel-service", "--release"], {
     cwd: repoRoot,
     env,
@@ -175,15 +164,7 @@ export function buildTunnelService({
   return tunnelServiceSourcePath(repoRoot, env);
 }
 
-function stageProtectedFile({
-  sourcePath,
-  destinationPath,
-  label,
-  copyFile,
-  fileExists,
-  hashFile,
-  makeDirectory,
-}) {
+function stageProtectedFile({ sourcePath, destinationPath, label, copyFile, fileExists, hashFile, makeDirectory }) {
   try {
     makeDirectory(win32.dirname(destinationPath), { recursive: true });
     copyFile(sourcePath, destinationPath);
@@ -205,14 +186,7 @@ function stageProtectedFile({
 function lockRuntimeStagingDirectory(runCommand, runtimeDir, cwd) {
   runCommand(
     "icacls.exe",
-    [
-      runtimeDir,
-      "/inheritance:r",
-      "/grant",
-      "*S-1-5-18:(OI)(CI)F",
-      "/grant",
-      "*S-1-5-32-544:(OI)(CI)F",
-    ],
+    [runtimeDir, "/inheritance:r", "/grant", "*S-1-5-18:(OI)(CI)F", "/grant", "*S-1-5-32-544:(OI)(CI)F"],
     { cwd, shell: false },
   );
 }
@@ -297,18 +271,18 @@ export function installTunnelService({
     WINDOWS_TUN_SERVICE_DISPLAY_NAME,
   ];
   runSc(runCommand, configureArgs, repoRoot);
-  runSc(
-    runCommand,
-    ["description", WINDOWS_TUN_SERVICE_NAME, WINDOWS_TUN_SERVICE_DESCRIPTION],
-    repoRoot,
-  );
+  runSc(runCommand, ["description", WINDOWS_TUN_SERVICE_NAME, WINDOWS_TUN_SERVICE_DESCRIPTION], repoRoot);
   runSc(runCommand, ["sdset", WINDOWS_TUN_SERVICE_NAME, WINDOWS_TUN_SERVICE_SDDL], repoRoot);
 
   const config = captureSc(captureCommand, ["qc", WINDOWS_TUN_SERVICE_NAME], repoRoot);
   if (config.status !== 0) {
     throw commandFailure("sc.exe", ["qc", WINDOWS_TUN_SERVICE_NAME], config);
   }
-  if (!String(config.stdout || config.stderr || "").toLowerCase().includes(destinationPath.toLowerCase())) {
+  if (
+    !String(config.stdout || config.stderr || "")
+      .toLowerCase()
+      .includes(destinationPath.toLowerCase())
+  ) {
     throw new Error(
       `${WINDOWS_TUN_SERVICE_NAME} was registered with an unexpected binary path. Expected ${destinationPath}.`,
     );
@@ -361,9 +335,7 @@ export function uninstallTunnelService({
         break;
       }
       if (elapsedMs === timeoutMs) {
-        throw new Error(
-          `Timed out after ${timeoutMs}ms waiting for ${WINDOWS_TUN_SERVICE_NAME} to be deleted.`,
-        );
+        throw new Error(`Timed out after ${timeoutMs}ms waiting for ${WINDOWS_TUN_SERVICE_NAME} to be deleted.`);
       }
       const delayMs = Math.min(pollIntervalMs, timeoutMs - elapsedMs);
       wait(delayMs);
@@ -381,11 +353,7 @@ export function uninstallTunnelService({
   return { destinationPath, singBoxDestinationPath, serviceExisted: existed };
 }
 
-function queryTunnelService({
-  platform = process.platform,
-  repoRoot = defaultRepoRoot,
-  runCommand = run,
-} = {}) {
+function queryTunnelService({ platform = process.platform, repoRoot = defaultRepoRoot, runCommand = run } = {}) {
   requireWindows(platform);
   runSc(runCommand, ["query", WINDOWS_TUN_SERVICE_NAME], repoRoot);
   runSc(runCommand, ["qc", WINDOWS_TUN_SERVICE_NAME], repoRoot);

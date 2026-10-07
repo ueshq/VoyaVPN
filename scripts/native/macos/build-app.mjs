@@ -105,9 +105,9 @@ function requireNotaryCredentials(lane) {
     return;
   }
   if (
-    process.env.VOYAVPN_NOTARY_APPLE_ID?.trim()
-    && process.env.VOYAVPN_NOTARY_TEAM_ID?.trim()
-    && process.env.VOYAVPN_NOTARY_PASSWORD?.trim()
+    process.env.VOYAVPN_NOTARY_APPLE_ID?.trim() &&
+    process.env.VOYAVPN_NOTARY_TEAM_ID?.trim() &&
+    process.env.VOYAVPN_NOTARY_PASSWORD?.trim()
   ) {
     return;
   }
@@ -195,7 +195,9 @@ function requireAppleSilicon() {
   // The store package is arm64 only: the core seed, the Rust binaries and the
   // PacketTunnel are all built for the host architecture.
   if (process.arch !== "arm64") {
-    throw new Error("pnpm build:mac:appstore builds the arm64-only store package and must run on an Apple Silicon Mac.");
+    throw new Error(
+      "pnpm build:mac:appstore builds the arm64-only store package and must run on an Apple Silicon Mac.",
+    );
   }
 }
 
@@ -340,10 +342,14 @@ function main() {
   };
   run("pnpm", ["native:macos:dmg"], commandOptions(dmgEnv));
   if (!notarizationSkipped) {
-    run("pnpm", ["native:macos:app:notarize"], commandOptions({
-      ...dmgEnv,
-      VOYAVPN_NOTARY_ARTIFACT: finalDmgPath,
-    }));
+    run(
+      "pnpm",
+      ["native:macos:app:notarize"],
+      commandOptions({
+        ...dmgEnv,
+        VOYAVPN_NOTARY_ARTIFACT: finalDmgPath,
+      }),
+    );
     run(
       "spctl",
       ["--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", finalDmgPath],

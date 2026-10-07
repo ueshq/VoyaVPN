@@ -75,8 +75,7 @@ export default defineConfig({
   build: {
     // Flags stay separate files: inlined, all ~250 would ride in the chunk that
     // imports them (node-country-icon.tsx) although a screen shows a handful.
-    assetsInlineLimit: (filePath) =>
-      /[\\/]flag-icons[\\/]flags[\\/]/.test(filePath) ? false : undefined,
+    assetsInlineLimit: (filePath) => (/[\\/]flag-icons[\\/]flags[\\/]/.test(filePath) ? false : undefined),
     rolldownOptions: {
       output: {
         codeSplitting: {

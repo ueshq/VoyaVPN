@@ -8,14 +8,7 @@ afterEach(cleanup);
 describe("SwitchField", () => {
   it("labels the switch, describes it and toggles from its label", () => {
     const onChange = vi.fn();
-    render(
-      <SwitchField
-        checked={false}
-        description="Starts with the system"
-        label="Autostart"
-        onChange={onChange}
-      />,
-    );
+    render(<SwitchField checked={false} description="Starts with the system" label="Autostart" onChange={onChange} />);
 
     const toggle = screen.getByRole("switch", { name: "Autostart" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
@@ -26,9 +19,7 @@ describe("SwitchField", () => {
 
   it("stays inert while disabled and reports an error", () => {
     const onChange = vi.fn();
-    render(
-      <SwitchField checked disabled error="Needs VPN mode" label="Kill switch" onChange={onChange} />,
-    );
+    render(<SwitchField checked disabled error="Needs VPN mode" label="Kill switch" onChange={onChange} />);
 
     const toggle = screen.getByRole("switch", { name: "Kill switch" }) as HTMLButtonElement;
     expect(toggle.disabled).toBe(true);

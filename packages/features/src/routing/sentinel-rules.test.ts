@@ -25,9 +25,7 @@ describe("sentinel rules", () => {
   });
 
   it("names managed rules by label, user rules by remarks, and blank rules as untitled", () => {
-    expect(ruleDisplayName({ remarks: "voya:block-ads" }, t)).toBe(
-      "t(panes.routing.sentinel.blockAds)",
-    );
+    expect(ruleDisplayName({ remarks: "voya:block-ads" }, t)).toBe("t(panes.routing.sentinel.blockAds)");
     expect(ruleDisplayName({ remarks: "Office" }, t)).toBe("Office");
     expect(ruleDisplayName({ remarks: "  " }, t)).toBe("t(panes.routing.untitled)");
     expect(ruleDisplayName({ remarks: null }, t)).toBe("t(panes.routing.untitled)");

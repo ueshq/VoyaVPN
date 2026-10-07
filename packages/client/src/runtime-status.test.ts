@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { i18next } from "@voya/i18n";
-import type {
-  RuntimeStatusResponse,
-  SystemProxyStatusResponse,
-  TunStatus,
-  VoyaCommands,
-} from "@voya/contracts";
+import type { RuntimeStatusResponse, SystemProxyStatusResponse, TunStatus, VoyaCommands } from "@voya/contracts";
 import { useRuntimeEventStore } from "./runtime-event-store";
 import { useToastStore } from "./toast-store";
 import { setVoyaCommands } from "./transport";
@@ -16,23 +11,37 @@ const commands = { runtimeStatus: vi.fn(), systemProxyStatus: vi.fn(), tunStatus
 setVoyaCommands(commands as unknown as VoyaCommands);
 
 const core: RuntimeStatusResponse = {
-  state: "connected", activeTunBackend: null, activeProfileId: "node", mainPid: 1, connectedDurationMs: null,
+  state: "connected",
+  activeTunBackend: null,
+  activeProfileId: "node",
+  mainPid: 1,
+  connectedDurationMs: null,
 };
 const proxy: SystemProxyStatusResponse = {
   management: "automatic",
-  effectiveMode: "unchanged", proxy: "127.0.0.1:10808",
+  effectiveMode: "unchanged",
+  proxy: "127.0.0.1:10808",
   exceptions: "",
 };
 const tun: TunStatus = {
-  backend: "macosPacketTunnel", enabled: false, allowEnableTun: true, nativeComponentReady: true,
-  elevationGranted: false, requiresElevation: false,
-  providerState: "stopped", lastProviderError: null, expectedProviderPath: null, resolvedProviderPath: null,
+  backend: "macosPacketTunnel",
+  enabled: false,
+  allowEnableTun: true,
+  nativeComponentReady: true,
+  elevationGranted: false,
+  requiresElevation: false,
+  providerState: "stopped",
+  lastProviderError: null,
+  expectedProviderPath: null,
+  resolvedProviderPath: null,
   providerPathMismatch: false,
 };
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 

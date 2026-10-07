@@ -13,7 +13,9 @@ class SaveQueue {
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   };
 
   isSaving = () => this.running;
@@ -24,12 +26,17 @@ class SaveQueue {
     if (this.running) return;
     this.running = true;
     this.publish();
-    queueMicrotask(() => { void this.drain(); });
+    queueMicrotask(() => {
+      void this.drain();
+    });
   }
 
-  settled = (): Promise<void> => this.running
-    ? new Promise((resolve) => { this.waiters.add(resolve); })
-    : Promise.resolve();
+  settled = (): Promise<void> =>
+    this.running
+      ? new Promise((resolve) => {
+          this.waiters.add(resolve);
+        })
+      : Promise.resolve();
 
   private async drain() {
     try {

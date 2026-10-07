@@ -19,12 +19,12 @@ describe("tunProviderLabel", () => {
 
   // A phone's tunnel is its own backend, not an unsupported one.
   it("names the phone backends rather than calling them unsupported", () => {
-    expect(
-      tunProviderLabel(tun({ backend: "iosPacketTunnel", providerState: "running" }), t()),
-    ).toBe("iOS PacketTunnel: Running");
-    expect(
-      tunProviderLabel(tun({ backend: "androidVpnService", providerState: "stopped" }), t()),
-    ).toBe("Android VpnService: Stopped");
+    expect(tunProviderLabel(tun({ backend: "iosPacketTunnel", providerState: "running" }), t())).toBe(
+      "iOS PacketTunnel: Running",
+    );
+    expect(tunProviderLabel(tun({ backend: "androidVpnService", providerState: "stopped" }), t())).toBe(
+      "Android VpnService: Stopped",
+    );
   });
 
   it("appends the provider's own error when it has one", () => {
@@ -57,12 +57,7 @@ describe("tunProviderLabel", () => {
   });
 
   it("explains a macOS extension missing from the running copy", () => {
-    expect(
-      tunProviderLabel(
-        tun({ backend: "macosPacketTunnel", providerState: "missingComponent" }),
-        t(),
-      ),
-    ).toBe(
+    expect(tunProviderLabel(tun({ backend: "macosPacketTunnel", providerState: "missingComponent" }), t())).toBe(
       `macOS PacketTunnel: Missing component: ${i18next.t("status.macosTunnelMissing")}`,
     );
   });

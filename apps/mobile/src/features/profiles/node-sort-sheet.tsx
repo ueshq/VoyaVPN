@@ -82,7 +82,12 @@ export function NodeSortMenu({
             className="gap-4 rounded-t-3xl bg-canvas p-5"
             style={[{ paddingBottom: Math.max(20, insets.bottom) }, column]}
           >
-            <Typography ref={titleRef} accessibilityRole="header" maxFontSizeMultiplier={2} className="px-1 text-xl font-semibold text-foreground">
+            <Typography
+              ref={titleRef}
+              accessibilityRole="header"
+              maxFontSizeMultiplier={2}
+              className="px-1 text-xl font-semibold text-foreground"
+            >
               {label}
             </Typography>
             <ListGroup>

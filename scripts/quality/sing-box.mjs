@@ -2,10 +2,7 @@ import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 
 import { capture, describeCommand, isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
-import {
-  ensureSingBoxSeedForBuild,
-  singBoxExecutableName,
-} from "../core/sing-box-installer.mjs";
+import { ensureSingBoxSeedForBuild, singBoxExecutableName } from "../core/sing-box-installer.mjs";
 
 /**
  * The one voya-core test that feeds every acceptance config to `sing-box check`.

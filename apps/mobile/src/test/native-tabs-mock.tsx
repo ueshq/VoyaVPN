@@ -12,18 +12,21 @@ export function NativeTabsMock({ children, items, selectedPage, tabBarHidden, on
   return (
     <View>
       {children}
-      {!tabBarHidden && items.filter((item) => !item.hidden).map((item) => (
-        <Pressable
-          key={item.key}
-          accessibilityRole="tab"
-          accessibilityLabel={item.title}
-          accessibilityState={{ selected: selectedPage === item.key }}
-          disabled={item.preventsDefault}
-          onPress={() => onPageSelected?.({ nativeEvent: { key: item.key } })}
-        >
-          <Text>{item.title}</Text>
-        </Pressable>
-      ))}
+      {!tabBarHidden &&
+        items
+          .filter((item) => !item.hidden)
+          .map((item) => (
+            <Pressable
+              key={item.key}
+              accessibilityRole="tab"
+              accessibilityLabel={item.title}
+              accessibilityState={{ selected: selectedPage === item.key }}
+              disabled={item.preventsDefault}
+              onPress={() => onPageSelected?.({ nativeEvent: { key: item.key } })}
+            >
+              <Text>{item.title}</Text>
+            </Pressable>
+          ))}
     </View>
   );
 }

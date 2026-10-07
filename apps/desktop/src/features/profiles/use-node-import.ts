@@ -19,9 +19,20 @@ const SCREEN_FAILURE_KEYS = {
 
 function emptyResult(): ImportProfilesResult {
   return {
-    imported: 0, updated: 0, skipped: 0, parsed: 0, filtered: 0, deduped: 0,
-    failed: 0, removedExisting: 0, removedDuplicates: 0, discardedNodeOverrides: 0,
-    subscriptionId: null, importedProfileIds: [], updatedProfileIds: [], lineIssues: [],
+    imported: 0,
+    updated: 0,
+    skipped: 0,
+    parsed: 0,
+    filtered: 0,
+    deduped: 0,
+    failed: 0,
+    removedExisting: 0,
+    removedDuplicates: 0,
+    discardedNodeOverrides: 0,
+    subscriptionId: null,
+    importedProfileIds: [],
+    updatedProfileIds: [],
+    lineIssues: [],
     addedSubscriptionIds: [],
   };
 }
@@ -30,10 +41,9 @@ function mergeResult(total: ImportProfilesResult, next: ImportProfilesResult) {
   const previousIds = new Set(total.importedProfileIds);
   const repeated = next.importedProfileIds.filter((id) => previousIds.has(id)).length;
   total.importedProfileIds = [...new Set([...total.importedProfileIds, ...next.importedProfileIds])];
-  total.updatedProfileIds = [...new Set([
-    ...total.updatedProfileIds,
-    ...next.updatedProfileIds.filter((id) => !previousIds.has(id)),
-  ])];
+  total.updatedProfileIds = [
+    ...new Set([...total.updatedProfileIds, ...next.updatedProfileIds.filter((id) => !previousIds.has(id))]),
+  ];
   total.imported = total.importedProfileIds.length;
   total.updated = total.updatedProfileIds.length;
   total.skipped += next.skipped + repeated;
@@ -45,9 +55,7 @@ function mergeResult(total: ImportProfilesResult, next: ImportProfilesResult) {
   total.removedDuplicates += next.removedDuplicates;
   total.discardedNodeOverrides += next.discardedNodeOverrides;
   total.lineIssues.push(...next.lineIssues);
-  total.addedSubscriptionIds = [
-    ...new Set([...total.addedSubscriptionIds, ...next.addedSubscriptionIds]),
-  ];
+  total.addedSubscriptionIds = [...new Set([...total.addedSubscriptionIds, ...next.addedSubscriptionIds])];
 }
 
 export function useNodeImport(
@@ -72,9 +80,13 @@ export function useNodeImport(
       if (method === "clipboard") {
         // Read through the platform clipboard: a WebView read asks the user to
         // confirm "Paste" every time, so the desktop reads it natively.
-        const text = (await clipboard().readText().catch(() => {
-          throw new Error(t("panes.profiles.import.clipboardUnavailable"));
-        })).trim();
+        const text = (
+          await clipboard()
+            .readText()
+            .catch(() => {
+              throw new Error(t("panes.profiles.import.clipboardUnavailable"));
+            })
+        ).trim();
         if (!text) throw new Error(t("panes.profiles.import.clipboardEmpty"));
         payloads = [text];
       } else {
@@ -83,7 +95,9 @@ export function useNodeImport(
         if (scanned.failureReason) issues.push(t(SCREEN_FAILURE_KEYS[scanned.failureReason]));
         payloads = scanned.status === "found" ? scanned.texts : [];
         if (payloads.length === 0) {
-          throw new Error(issues.join(" ") || t(scanned.status === "unavailable" ? "qr.screenUnavailable" : "qr.noQrFound"));
+          throw new Error(
+            issues.join(" ") || t(scanned.status === "unavailable" ? "qr.screenUnavailable" : "qr.noQrFound"),
+          );
         }
       }
       if (!isActive()) return;
@@ -115,7 +129,8 @@ export function useNodeImport(
       } catch (error) {
         issues.push(redactOperationalError(error));
       }
-      if (isActive() && issues.length > 0) setOperationError((current) => [...new Set([current, ...issues].filter(Boolean))].join("\n"));
+      if (isActive() && issues.length > 0)
+        setOperationError((current) => [...new Set([current, ...issues].filter(Boolean))].join("\n"));
     } catch (error) {
       if (isActive()) setOperationError(redactOperationalError(error));
     } finally {

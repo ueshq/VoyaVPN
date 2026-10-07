@@ -3,19 +3,14 @@ import { expect, test } from "@playwright/test";
 import { installTauriSmokeMock } from "./fixtures/tauri-mock";
 
 for (const layout of ["macos", "windows"] as const) {
-  test(`${layout} chrome blends into the shell and keeps page controls reachable`, async ({
-    page,
-  }, testInfo) => {
+  test(`${layout} chrome blends into the shell and keeps page controls reachable`, async ({ page }, testInfo) => {
     await installTauriSmokeMock(page, layout);
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     await page.setViewportSize({ width: 1180, height: 760 });
     await page.goto("/");
     const sidebar = page.getByRole("complementary");
     const titlebar = page.locator('[data-slot="titlebar"]');
-    await expect(page.locator(".app-shell")).toHaveAttribute(
-      "data-window-chrome",
-      layout,
-    );
+    await expect(page.locator(".app-shell")).toHaveAttribute("data-window-chrome", layout);
     // The document never scrolls or rubber-bands; only feature viewports do.
     const root = page.locator("html");
     await expect(root).toHaveCSS("overflow-y", "hidden");
@@ -37,58 +32,37 @@ for (const layout of ["macos", "windows"] as const) {
     await expect(titlebar).not.toContainText("VoyaVPN");
     await expect(titlebar).toHaveCSS(
       "background-color",
-      await page
-        .locator(".home-screen")
-        .evaluate((el) => getComputedStyle(el).backgroundColor),
+      await page.locator(".home-screen").evaluate((el) => getComputedStyle(el).backgroundColor),
     );
-    await expect(page.locator(".sidebar-toolbar")).toHaveAttribute(
-      "data-tauri-drag-region",
-    );
+    await expect(page.locator(".sidebar-toolbar")).toHaveAttribute("data-tauri-drag-region");
     const collapse = page.getByRole("button", { name: "Collapse sidebar" });
     await expect(collapse).not.toHaveAttribute("data-tauri-drag-region");
     // On macOS the toggle follows the traffic lights in their 46 px row.
     expect(await collapse.boundingBox()).toMatchObject(
-      layout === "macos"
-        ? { x: 88, y: 9, width: 28, height: 28 }
-        : { width: 28, height: 28 },
+      layout === "macos" ? { x: 88, y: 9, width: 28, height: 28 } : { width: 28, height: 28 },
     );
 
     if (layout === "windows") {
       await page.getByRole("button", { name: "Minimize" }).click();
       await page.getByRole("button", { name: "Maximize" }).click();
       await page.getByRole("button", { name: "Restore" }).click();
-      await expect(
-        page.getByRole("button", { name: "Maximize" }),
-      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Maximize" })).toBeVisible();
       await page.getByRole("button", { name: "Close", exact: true }).click();
       const calls = await page.evaluate(() =>
-        (
-          window.__VOYA_SMOKE__.state as { calls: { command: string }[] }
-        ).calls.map((call) => call.command),
+        (window.__VOYA_SMOKE__.state as { calls: { command: string }[] }).calls.map((call) => call.command),
       );
-      expect(calls).toEqual(
-        expect.arrayContaining([
-          "minimize_window",
-          "toggle_maximize_window",
-          "close_window",
-        ]),
-      );
+      expect(calls).toEqual(expect.arrayContaining(["minimize_window", "toggle_maximize_window", "close_window"]));
     } else {
       await expect(titlebar.getByRole("button")).toHaveCount(0);
     }
 
     await page.setViewportSize({ width: 960, height: 640 });
     await collapse.click();
-    await expect(sidebar).toHaveCSS(
-      "width",
-      layout === "macos" ? "96px" : "72px",
-    );
+    await expect(sidebar).toHaveCSS("width", layout === "macos" ? "96px" : "72px");
     const toggle = page.getByRole("button", { name: "Expand sidebar" });
     const toggleBounds = await toggle.boundingBox();
     // The collapsed toggle drops below the traffic-light row or caption band.
-    expect(toggleBounds!.y).toBeGreaterThanOrEqual(
-      layout === "macos" ? 46 : 20,
-    );
+    expect(toggleBounds!.y).toBeGreaterThanOrEqual(layout === "macos" ? 46 : 20);
     if (layout === "macos") {
       expect(toggleBounds!.x).toBeCloseTo(33.5, 0);
     }
@@ -99,10 +73,7 @@ for (const layout of ["macos", "windows"] as const) {
     // macOS pages drag from the title row; Windows reserves caption space above
     // the page. Either way the title sits as far below the top as above the content.
     for (const name of ["Nodes", "Settings", "Network activity", "Rules"]) {
-      await page
-        .getByRole("tablist", { name: "Main sections" })
-        .getByRole("tab", { name, exact: true })
-        .click();
+      await page.getByRole("tablist", { name: "Main sections" }).getByRole("tab", { name, exact: true }).click();
       const panel = page.locator("#shell-tabpanel");
       const heading = panel.locator('[data-slot="page-title"]');
       await expect(heading).toBeVisible();
@@ -126,9 +97,7 @@ for (const layout of ["macos", "windows"] as const) {
         expect(title.y).toBeGreaterThanOrEqual(dragBounds.y + dragBounds.height);
         await expect(titlebar).toHaveCSS(
           "background-color",
-          await page
-            .locator(".shell-content-column")
-            .evaluate((el) => getComputedStyle(el).backgroundColor),
+          await page.locator(".shell-content-column").evaluate((el) => getComputedStyle(el).backgroundColor),
         );
       }
       const action = panel
@@ -156,11 +125,6 @@ for (const layout of ["macos", "windows"] as const) {
     await page.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);
     await expect(add).toBeFocused();
-    expect(
-      await page.evaluate(
-        () =>
-          (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled,
-      ),
-    ).toEqual([]);
+    expect(await page.evaluate(() => (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled)).toEqual([]);
   });
 }

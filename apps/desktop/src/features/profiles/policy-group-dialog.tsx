@@ -76,12 +76,8 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
     [needle, nodes],
   );
   const memberIds = useMemo(() => new Set(form.memberIds), [form.memberIds]);
-  const remarksById = useMemo(
-    () => new Map(nodes.map((entry) => [entry.profile.id, entry.profile.remarks])),
-    [nodes],
-  );
-  const canSave =
-    form.name.trim() !== "" && (form.memberIds.length > 0 || form.sourceSubscriptionId !== null);
+  const remarksById = useMemo(() => new Map(nodes.map((entry) => [entry.profile.id, entry.profile.remarks])), [nodes]);
+  const canSave = form.name.trim() !== "" && (form.memberIds.length > 0 || form.sourceSubscriptionId !== null);
 
   function patch(next: Partial<PolicyGroup>) {
     setForm((current) => ({ ...current, ...next }));
@@ -119,12 +115,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
 
   return (
     <Dialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <ScrollableDialogContent
-        height="viewport"
-        width="xl"
-        closeLabel={t("actions.close")}
-        showCloseButton={!pending}
-      >
+      <ScrollableDialogContent height="viewport" width="xl" closeLabel={t("actions.close")} showCloseButton={!pending}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers aria-hidden="true" className="size-4" />
@@ -211,9 +202,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
                   const name = profileMemberName(remarks, id);
                   return (
                     <li className="flex items-center gap-2 text-sm" key={id}>
-                      <span className="w-5 text-end text-xs tabular-nums text-muted-foreground">
-                        {index + 1}
-                      </span>
+                      <span className="w-5 text-end text-xs tabular-nums text-muted-foreground">{index + 1}</span>
                       <span className="min-w-0 flex-1 truncate">{name}</span>
                       <Button
                         aria-label={t("policyGroups.moveUp", { name })}
@@ -243,9 +232,7 @@ function PolicyGroupEditor({ group, nodes, onOpenChange, open, subscriptions }: 
           ) : null}
           {form.strategy === "selector" ? null : (
             <Disclosure
-              invalid={Boolean(
-                fieldErrors.testUrl || fieldErrors.intervalSeconds || fieldErrors.toleranceMs,
-              )}
+              invalid={Boolean(fieldErrors.testUrl || fieldErrors.intervalSeconds || fieldErrors.toleranceMs)}
               title={t("common.advanced")}
             >
               <div className="grid gap-3">

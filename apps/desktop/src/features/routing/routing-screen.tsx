@@ -12,13 +12,7 @@ import { Skeleton } from "@voya/ui/components/skeleton";
 import { cn } from "@voya/ui/lib/utils";
 
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
-import {
-  PageContent,
-  PageHeader,
-  PageSection,
-  PageSurface,
-  PageTitle,
-} from "@/components/app-shell/page-section";
+import { PageContent, PageHeader, PageSection, PageSurface, PageTitle } from "@/components/app-shell/page-section";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
 import { PerAppProxyDialog } from "./per-app-proxy-dialog";
@@ -61,11 +55,19 @@ export function RoutingScreen() {
             <Menubar bare>
               <MenubarMenu>
                 <MenubarTrigger asChild className="min-h-8">
-                  <Button size="sm" variant="outline"><MoreHorizontal aria-hidden="true" className="size-4" />{t("common.more")}</Button>
+                  <Button size="sm" variant="outline">
+                    <MoreHorizontal aria-hidden="true" className="size-4" />
+                    {t("common.more")}
+                  </Button>
                 </MenubarTrigger>
                 <MenubarContent align="end">
-                  <MenubarItem disabled={editBlockedReason !== undefined} onSelect={controller.requestResetRules} title={editBlockedReason}>
-                    <RotateCcw aria-hidden="true" className="size-4" />{resetLabel}
+                  <MenubarItem
+                    disabled={editBlockedReason !== undefined}
+                    onSelect={controller.requestResetRules}
+                    title={editBlockedReason}
+                  >
+                    <RotateCcw aria-hidden="true" className="size-4" />
+                    {resetLabel}
                   </MenubarItem>
                 </MenubarContent>
               </MenubarMenu>
@@ -88,18 +90,12 @@ export function RoutingScreen() {
       <PageContent>
         {error ? <InlinePageError>{error}</InlinePageError> : null}
         <TrafficModeBanner />
-        <PerAppSummaryCard
-          locked={rulesLocked}
-          onEdit={() => controller.setPerAppOpen(true)}
-          routing={activeRouting}
-        />
+        <PerAppSummaryCard locked={rulesLocked} onEdit={() => controller.setPerAppOpen(true)} routing={activeRouting} />
         <PageSurface className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <PageHeader>
             <div className="grid min-w-0 flex-1 gap-0.5">
               <p className="text-sm text-muted-foreground">{t("panes.routing.ruleOrderHint")}</p>
-              {connected ? (
-                <p className="text-xs text-muted-foreground">{t("panes.routing.reconnectHint")}</p>
-              ) : null}
+              {connected ? <p className="text-xs text-muted-foreground">{t("panes.routing.reconnectHint")}</p> : null}
             </div>
           </PageHeader>
           {/* Radix's intrinsic-width wrapper must not expand the panel to the
@@ -109,21 +105,13 @@ export function RoutingScreen() {
               "min-h-0 min-w-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:block! [&_[data-slot=scroll-area-viewport]>div]:h-full",
             )}
           >
-            <RulesBody
-              controller={controller}
-              locked={rulesLocked}
-              processRulesSupported={processRulesSupported}
-            />
+            <RulesBody controller={controller} locked={rulesLocked} processRulesSupported={processRulesSupported} />
           </ScrollArea>
         </PageSurface>
       </PageContent>
 
       <RoutingRuleDialog
-        key={
-          ruleDialog?.mode === "edit"
-            ? `rule-${ruleDialog.rule.id}`
-            : `rule-${ruleDialog?.mode ?? "closed"}`
-        }
+        key={ruleDialog?.mode === "edit" ? `rule-${ruleDialog.rule.id}` : `rule-${ruleDialog?.mode ?? "closed"}`}
         groupOutbounds={controller.groupOutbounds}
         mode={ruleDialog?.mode ?? "create"}
         nodeNames={controller.nodeNames}
@@ -164,11 +152,7 @@ function RulesBody({
   }
   if (!controller.activeRouting) {
     return controller.loadError ? null : (
-      <EmptyState
-        className="h-full content-center"
-        icon={Route}
-        title={t("panes.routing.noActiveRouting")}
-      />
+      <EmptyState className="h-full content-center" icon={Route} title={t("panes.routing.noActiveRouting")} />
     );
   }
   if (controller.rules.length === 0) {
@@ -178,7 +162,11 @@ function RulesBody({
         description={t("panes.routing.emptyRulesHint")}
         icon={Route}
         title={t("panes.routing.emptyRules")}
-        actions={<Button disabled={locked} onClick={controller.requestResetRules} size="sm" variant="outline">{t("panes.routing.resetRules")}</Button>}
+        actions={
+          <Button disabled={locked} onClick={controller.requestResetRules} size="sm" variant="outline">
+            {t("panes.routing.resetRules")}
+          </Button>
+        }
       />
     );
   }

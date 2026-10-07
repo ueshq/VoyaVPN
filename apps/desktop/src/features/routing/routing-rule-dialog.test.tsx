@@ -16,16 +16,12 @@ describe("RoutingRuleDialog", () => {
     expect(screen.getByRole("heading", { name: "Create rule" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(
-      await screen.findByText(
-        "Add at least one condition: a domain, IP, port, network, app or protocol.",
-      ),
+      await screen.findByText("Add at least one condition: a domain, IP, port, network, app or protocol."),
     ).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Port"), "invalid");
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(
-      await screen.findByText("Port must be a comma-separated list of ports or ranges"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Port must be a comma-separated list of ports or ranges")).toBeInTheDocument();
     expect(onSubmit).not.toHaveBeenCalled();
 
     await user.clear(screen.getByLabelText("Port"));
@@ -110,16 +106,12 @@ describe("RoutingRuleDialog", () => {
       rule: rule({ outbound: "Paris", scope: "routing" }),
     });
 
-    expect(screen.getByRole("combobox", { name: "Outbound" })).toHaveTextContent(
-      "Paris (node not found)",
-    );
+    expect(screen.getByRole("combobox", { name: "Outbound" })).toHaveTextContent("Paris (node not found)");
     await chooseOption(user, "Outbound", "Tokyo");
     await chooseOption(user, "Applies to", "Routing and DNS");
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
-      expect(onSubmit).toHaveBeenCalledWith(
-        expect.objectContaining({ outbound: "Tokyo", scope: "all" }),
-      ),
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ outbound: "Tokyo", scope: "all" })),
     );
     unmount();
 
@@ -161,9 +153,7 @@ describe("RoutingRuleDialog", () => {
 
     expect(screen.queryByLabelText("Process")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ process: ["curl"] })),
-    );
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ process: ["curl"] })));
   });
 
   it("offers policy groups as outbounds and one-click rule sets", async () => {
@@ -216,11 +206,7 @@ function renderDialog(props: Partial<ComponentProps<typeof RoutingRuleDialog>> =
   );
 }
 
-async function chooseOption(
-  user: ReturnType<typeof userEvent.setup>,
-  label: string,
-  option: string,
-) {
+async function chooseOption(user: ReturnType<typeof userEvent.setup>, label: string, option: string) {
   await user.click(screen.getByRole("combobox", { name: label }));
   const listbox = await screen.findByRole("listbox");
   await user.click(within(listbox).getByRole("option", { name: option }));

@@ -57,15 +57,18 @@ export function CaptureModeSetting() {
       : active === "inactive"
         ? INACTIVE_STATUS_KEYS[capture.mode]
         : ACTIVE_STATUS_KEYS[active];
-  if (!capture.available) return vpnOnly ? (
-    <SettingsGroup title={t("settings.sections.captureMode")}>
-      <div className="grid gap-1">
-        <p className="text-sm font-medium">{t("settings.captureMode.vpn")}</p>
-        <p className="text-xs text-muted-foreground">{t("settings.captureMode.vpnOnly")}</p>
-      </div>
-      <p className="text-xs text-muted-foreground" role="status">{t(statusKey)}</p>
-    </SettingsGroup>
-  ) : null;
+  if (!capture.available)
+    return vpnOnly ? (
+      <SettingsGroup title={t("settings.sections.captureMode")}>
+        <div className="grid gap-1">
+          <p className="text-sm font-medium">{t("settings.captureMode.vpn")}</p>
+          <p className="text-xs text-muted-foreground">{t("settings.captureMode.vpnOnly")}</p>
+        </div>
+        <p className="text-xs text-muted-foreground" role="status">
+          {t(statusKey)}
+        </p>
+      </SettingsGroup>
+    ) : null;
 
   return (
     <SettingsGroup title={t("settings.sections.captureMode")}>

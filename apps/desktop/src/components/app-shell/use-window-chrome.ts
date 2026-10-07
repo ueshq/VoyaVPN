@@ -18,7 +18,8 @@ export function useWindowChrome(): WindowChromeConfig {
   useEffect(() => {
     let cancelled = false;
 
-    voyaCommands().getWindowChromeConfig()
+    voyaCommands()
+      .getWindowChromeConfig()
       .then((config) => {
         if (!cancelled) setChrome(config);
       })

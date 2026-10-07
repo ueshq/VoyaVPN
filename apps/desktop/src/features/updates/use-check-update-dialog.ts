@@ -37,17 +37,11 @@ export function useCheckUpdateDialog() {
     queryFn: () => voyaCommands().appUpdateStatus(),
     queryKey: queryKeys.appUpdaterStatus,
   });
-  const appUpdaterError =
-    appActionError ??
-    (statusQuery.error ? redactOperationalError(statusQuery.error) : null);
+  const appUpdaterError = appActionError ?? (statusQuery.error ? redactOperationalError(statusQuery.error) : null);
   const appUpdaterStatus: AppUpdaterStatus | null = statusQuery.data ?? null;
 
   /** Run one app-updater action under its busy marker; `onSettled` runs on both paths. */
-  async function withWorking(
-    kind: UpdateWorkingState,
-    run: () => Promise<void>,
-    onSettled?: () => void,
-  ) {
+  async function withWorking(kind: UpdateWorkingState, run: () => Promise<void>, onSettled?: () => void) {
     setWorking(kind);
     setAppActionError(null);
     try {
@@ -75,9 +69,7 @@ export function useCheckUpdateDialog() {
         setAppInstallResult(null);
         setInstallProgress(null);
         await queue.settled();
-        setAppInstallResult(
-          await installCheckedAppUpdate(setInstallProgress),
-        );
+        setAppInstallResult(await installCheckedAppUpdate(setInstallProgress));
       },
       () => setInstallProgress(null),
     );

@@ -20,10 +20,7 @@ export type ResolvedLogLine = StoredLogLine & {
  * on every batch, several times a second; a line is translated and stamped
  * once per language, and an entry leaves with its line.
  */
-const resolvedLines = new WeakMap<
-  StoredLogLine,
-  { resolved: ResolvedLogLine; t: TranslationFunction }
->();
+const resolvedLines = new WeakMap<StoredLogLine, { resolved: ResolvedLogLine; t: TranslationFunction }>();
 
 /**
  * One stored line as both log views show, search and export it. The text is

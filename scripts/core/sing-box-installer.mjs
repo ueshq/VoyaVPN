@@ -201,7 +201,9 @@ export function singBoxPinStatus({
  * silently shipping a binary App Review has already rejected.
  */
 export function requestedSingBoxSeedOrigin(env = process.env) {
-  const raw = String(env[SING_BOX_SEED_ORIGIN_ENV] ?? "").trim().toLowerCase();
+  const raw = String(env[SING_BOX_SEED_ORIGIN_ENV] ?? "")
+    .trim()
+    .toLowerCase();
   if (raw && !SING_BOX_SEED_ORIGINS.has(raw)) {
     throw new Error(`${SING_BOX_SEED_ORIGIN_ENV} must be "upstream" or "source" (got ${JSON.stringify(raw)}).`);
   }
@@ -319,7 +321,12 @@ export function verifyStagedSingBoxSeed({
 
   const manifest = readSingBoxSeedManifest(seedDir);
   if (!manifest) {
-    return { code: "manifest-missing", ok: false, reason: `${SING_BOX_SEED_MANIFEST} is missing or unreadable`, staged: true };
+    return {
+      code: "manifest-missing",
+      ok: false,
+      reason: `${SING_BOX_SEED_MANIFEST} is missing or unreadable`,
+      staged: true,
+    };
   }
   // A seed staged for the other origin is stale for this build, never
   // acceptable: that is what keeps a source seed out of a Developer ID
@@ -354,9 +361,16 @@ export function verifyStagedSingBoxSeed({
   }
 
   const status = singBoxPinStatus({ arch, env, platform, version });
-  if (!/^[a-f0-9]{64}$/i.test(String(manifest.sha256 ?? "")) ||
-      !/^[a-f0-9]{64}$/i.test(String(manifest.executableSha256 ?? ""))) {
-    return { code: "manifest-invalid", ok: false, reason: `${SING_BOX_SEED_MANIFEST} must contain archive and executable SHA-256 digests`, staged: true };
+  if (
+    !/^[a-f0-9]{64}$/i.test(String(manifest.sha256 ?? "")) ||
+    !/^[a-f0-9]{64}$/i.test(String(manifest.executableSha256 ?? ""))
+  ) {
+    return {
+      code: "manifest-invalid",
+      ok: false,
+      reason: `${SING_BOX_SEED_MANIFEST} must contain archive and executable SHA-256 digests`,
+      staged: true,
+    };
   }
   if (status.pinned && manifest.sha256 !== status.expected) {
     return {
@@ -375,7 +389,15 @@ export function verifyStagedSingBoxSeed({
     return digestProblem;
   }
 
-  return { code: "verified", manifest, ok: true, origin: "upstream", pinned: status.pinned, reason: null, staged: true };
+  return {
+    code: "verified",
+    manifest,
+    ok: true,
+    origin: "upstream",
+    pinned: status.pinned,
+    reason: null,
+    staged: true,
+  };
 }
 
 function executableDigestProblem(seedDir, executableName, manifest) {
@@ -404,11 +426,19 @@ function verifyStagedSourceSingBoxSeed({ arch, env, executableName, manifest, pl
   }
   const target = singBoxPinKey({ arch, platform });
   if (manifest.target !== target) {
-    return failure("target-mismatch", `staged seed was built for ${manifest.target ?? "(unknown)"}, expected ${target}`);
+    return failure(
+      "target-mismatch",
+      `staged seed was built for ${manifest.target ?? "(unknown)"}, expected ${target}`,
+    );
   }
-  if (!/^[a-f0-9]{40}$/i.test(String(manifest.commit ?? "")) ||
-      !/^[a-f0-9]{64}$/i.test(String(manifest.executableSha256 ?? ""))) {
-    return failure("manifest-invalid", `${SING_BOX_SEED_MANIFEST} must contain the source commit and executable SHA-256`);
+  if (
+    !/^[a-f0-9]{40}$/i.test(String(manifest.commit ?? "")) ||
+    !/^[a-f0-9]{64}$/i.test(String(manifest.executableSha256 ?? ""))
+  ) {
+    return failure(
+      "manifest-invalid",
+      `${SING_BOX_SEED_MANIFEST} must contain the source commit and executable SHA-256`,
+    );
   }
   const status = singBoxSourcePinStatus({ env, version });
   if (status.pinned && manifest.commit.toLowerCase() !== status.expected) {
@@ -421,7 +451,8 @@ function verifyStagedSourceSingBoxSeed({ arch, env, executableName, manifest, pl
     return failure("unpinned", status.reason);
   }
   const excluded = (Array.isArray(manifest.tags) ? manifest.tags : []).filter((tag) =>
-    SING_BOX_SOURCE_EXCLUDED_TAGS.includes(tag));
+    SING_BOX_SOURCE_EXCLUDED_TAGS.includes(tag),
+  );
   if (excluded.length || !sameSingBoxBuildTags(manifest.tags)) {
     return failure(
       "source-tags-mismatch",
@@ -448,11 +479,7 @@ export function singBoxSeedDir(repoRoot) {
   return join(coreSeedsDir(repoRoot), SING_BOX_CORE_DIR);
 }
 
-export function defaultAppConfigDir({
-  env = process.env,
-  home = homedir(),
-  platform = process.platform,
-} = {}) {
+export function defaultAppConfigDir({ env = process.env, home = homedir(), platform = process.platform } = {}) {
   if (env.VOYAVPN_APP_CONFIG_DIR?.trim()) {
     return resolve(env.VOYAVPN_APP_CONFIG_DIR.trim());
   }
@@ -535,12 +562,7 @@ function copyDirectoryContents(sourceDir, targetDir) {
   }
 }
 
-function copySingBoxSeedToAppData({
-  appConfigDir,
-  logger = console,
-  platform = process.platform,
-  repoRoot,
-} = {}) {
+function copySingBoxSeedToAppData({ appConfigDir, logger = console, platform = process.platform, repoRoot } = {}) {
   const sourceDir = singBoxSeedDir(repoRoot);
   const targetDir = singBoxAppBinDir(appConfigDir);
   if (!hasExpectedSingBoxExecutable(sourceDir, platform)) {
@@ -554,12 +576,7 @@ function copySingBoxSeedToAppData({
   return { copied: true, sourceDir, targetDir };
 }
 
-function copySingBoxAppDataToSeed({
-  appConfigDir,
-  logger = console,
-  platform = process.platform,
-  repoRoot,
-} = {}) {
+function copySingBoxAppDataToSeed({ appConfigDir, logger = console, platform = process.platform, repoRoot } = {}) {
   const sourceDir = singBoxAppBinDir(appConfigDir);
   const targetDir = singBoxSeedDir(repoRoot);
   if (!hasExpectedSingBoxExecutable(sourceDir, platform)) {
@@ -608,9 +625,7 @@ function stagePayloadRecursive(sourceDir, destinationSeedDir, kept, platform) {
       continue;
     }
 
-    const targetName = /^sing-box(\.exe)?$/i.test(entry.name)
-      ? singBoxExecutableName(platform)
-      : entry.name;
+    const targetName = /^sing-box(\.exe)?$/i.test(entry.name) ? singBoxExecutableName(platform) : entry.name;
     cpSync(sourcePath, join(destinationSeedDir, targetName));
     kept.push(targetName);
   }

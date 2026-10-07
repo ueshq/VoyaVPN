@@ -15,9 +15,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async ({ page }) => {
-  const unhandled = await page.evaluate(
-    () => (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled,
-  );
+  const unhandled = await page.evaluate(() => (window.__VOYA_SMOKE__.state as { unhandled: string[] }).unhandled);
   expect(unhandled).toEqual([]);
 });
 
@@ -69,9 +67,7 @@ test("hosts a node, checks the network and hands out links", async ({ page }, te
   await links.getByRole("button", { name: "Reset keys" }).click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Reset keys" }).click();
   await expect
-    .poll(async () =>
-      (await smokeCalls(page)).some((call) => call.command === "rotate_self_host_credentials"),
-    )
+    .poll(async () => (await smokeCalls(page)).some((call) => call.command === "rotate_self_host_credentials"))
     .toBe(true);
   await links.getByRole("button", { name: "Done" }).click();
 

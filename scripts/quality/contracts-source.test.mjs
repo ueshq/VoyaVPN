@@ -104,10 +104,9 @@ describe("parseEvents", () => {
   });
 
   it("refuses to silently drop an event", () => {
-    const block = [
-      '\tappEvent: makeEvent<AppEvent>("app-event"),',
-      "\tweird: makeEvent<Foo | Bar>(someName),",
-    ].join("\n");
+    const block = ['\tappEvent: makeEvent<AppEvent>("app-event"),', "\tweird: makeEvent<Foo | Bar>(someName),"].join(
+      "\n",
+    );
 
     expect(() => parseEvents(block)).toThrow(/Parsed 1 events but bindings.ts declares 2/);
   });
@@ -173,7 +172,8 @@ describe("generateCommandWire", () => {
 
   it("refuses a command whose invocation disagrees with its parameters", () => {
     // A reordered object would send `{ a: b, b: a }` and only fail on device.
-    const block = '\tmoveProfile: (id: string, action: MoveAction) => typedError<null, AppError>(__TAURI_INVOKE("move_profile", { action, id })),';
+    const block =
+      '\tmoveProfile: (id: string, action: MoveAction) => typedError<null, AppError>(__TAURI_INVOKE("move_profile", { action, id })),';
 
     expect(() => parseCommands(block)).toThrow(/declares \(id, action\) but invokes with \(action, id\)/);
   });
@@ -230,12 +230,7 @@ describe("generateEventShapes", () => {
     expect(generateEventShapes(bindings)).toBe(committed);
     // Counted inside the events block: the runtime section below it declares
     // `makeEvent` itself, which is not a channel.
-    const eventsBlock = bindings.slice(
-      bindings.indexOf("/** Events */"),
-      bindings.indexOf("/* Types */"),
-    );
-    expect(Object.keys(JSON.parse(committed))).toHaveLength(
-      eventsBlock.split("makeEvent<").length - 1,
-    );
+    const eventsBlock = bindings.slice(bindings.indexOf("/** Events */"), bindings.indexOf("/* Types */"));
+    expect(Object.keys(JSON.parse(committed))).toHaveLength(eventsBlock.split("makeEvent<").length - 1);
   });
 });

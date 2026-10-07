@@ -13,28 +13,21 @@ import { AdvancedTab } from "./advanced-tab";
 import { ConnectionTab } from "./connection-tab";
 import { TestsTab } from "./tests-tab";
 import { installFakeCommands } from "@voya/features/test/backend";
-import type {
-  AppSettingsController,
-  AppSettingsFormController,
-} from "@voya/features/settings/use-app-settings";
+import type { AppSettingsController, AppSettingsFormController } from "@voya/features/settings/use-app-settings";
 
 installFakeCommands({ setLogStreaming: vi.fn(async () => null) });
 
-type SettingsTab = (props: {
-  controller: AppSettingsFormController;
-}) => React.ReactNode;
+type SettingsTab = (props: { controller: AppSettingsFormController }) => React.ReactNode;
 
 describe("semantic settings tabs", () => {
   beforeEach(() => {
     useRuntimeEventStore.setState({ coreState: null, tun: null });
-    useRuntimeEventStore
-      .getState()
-      .setSysProxy({
-        management: "automatic",
-        effectiveMode: "forcedClear",
-        proxy: null,
-        exceptions: "",
-      });
+    useRuntimeEventStore.getState().setSysProxy({
+      management: "automatic",
+      effectiveMode: "forcedClear",
+      proxy: null,
+      exceptions: "",
+    });
   });
   it("offers capture mode and the system proxy only where the platform has them", () => {
     const { unmount } = render(<TabHarness Component={AdvancedTab} />);
@@ -68,16 +61,12 @@ describe("semantic settings tabs", () => {
 
     // On/off settings apply at once, so they are switches rather than checkboxes.
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    for (const toggle of screen.getAllByRole("switch"))
-      await user.click(toggle);
-    for (const input of container.querySelectorAll<HTMLInputElement>(
-      'input:not([type="checkbox"])',
-    )) {
+    for (const toggle of screen.getAllByRole("switch")) await user.click(toggle);
+    for (const input of container.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])')) {
       fireEvent.change(input, {
         target: { value: input.inputMode === "numeric" ? "" : "changed" },
       });
-      if (input.inputMode === "numeric")
-        fireEvent.change(input, { target: { value: "12" } });
+      if (input.inputMode === "numeric") fireEvent.change(input, { target: { value: "12" } });
       fireEvent.blur(input);
     }
 
@@ -89,27 +78,18 @@ describe("semantic settings tabs", () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={CoreTab} />);
 
-    expect(
-      container.querySelector("#rt-fragment-fallback-delay"),
-    ).not.toBeInTheDocument();
+    expect(container.querySelector("#rt-fragment-fallback-delay")).not.toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: "TLS fragmentation" }));
-    await user.click(
-      await screen.findByRole("option", { name: "Split ClientHello" }),
-    );
-    expect(container.querySelector("#rt-fragment-fallback-delay")).toHaveValue(
-      "500",
-    );
+    await user.click(await screen.findByRole("option", { name: "Split ClientHello" }));
+    expect(container.querySelector("#rt-fragment-fallback-delay")).toHaveValue("500");
   });
 
   it("updates TUN and system proxy controls", async () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={AdvancedTab} />);
 
-    for (const toggle of screen.getAllByRole("switch"))
-      await user.click(toggle);
-    for (const input of container.querySelectorAll<HTMLInputElement>(
-      'input:not([type="checkbox"])',
-    )) {
+    for (const toggle of screen.getAllByRole("switch")) await user.click(toggle);
+    for (const input of container.querySelectorAll<HTMLInputElement>('input:not([type="checkbox"])')) {
       fireEvent.change(input, {
         target: { value: input.inputMode === "numeric" ? "1500" : " value " },
       });
@@ -117,9 +97,7 @@ describe("semantic settings tabs", () => {
     }
 
     expect(container.querySelector("#rt-tun-mtu")).toHaveValue("1500");
-    expect(container.querySelector("#rt-sysproxy-exceptions")).toHaveValue(
-      " value ",
-    );
+    expect(container.querySelector("#rt-sysproxy-exceptions")).toHaveValue(" value ");
   });
 
   it("turns the kill switch on and restores a cleared port to its default", async () => {
@@ -127,9 +105,7 @@ describe("semantic settings tabs", () => {
     const initial = makeAppSettings().network.tun.strictRoute;
     const { container } = render(<TabHarness Component={ConnectionTab} />);
 
-    await user.click(
-      screen.getByRole("switch", { name: "Block traffic outside the VPN" }),
-    );
+    await user.click(screen.getByRole("switch", { name: "Block traffic outside the VPN" }));
     expect(
       screen.getByRole("switch", {
         checked: !initial,
@@ -148,20 +124,13 @@ describe("semantic settings tabs", () => {
     const user = userEvent.setup();
     const { container } = render(<TabHarness Component={ConnectionTab} />);
 
-    expect(
-      screen.queryByRole("switch", { name: "Separate LAN port" }),
-    ).not.toBeInTheDocument();
-    await user.click(
-      screen.getByRole("switch", { name: "Allow connections from the LAN" }),
-    );
+    expect(screen.queryByRole("switch", { name: "Separate LAN port" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Allow connections from the LAN" }));
     expect(container.querySelector("#rt-inbound-password")).not.toBeInTheDocument();
     await user.click(screen.getByRole("switch", { name: "Separate LAN port" }));
 
     expect(container.querySelector("#rt-inbound-username")).toBeInTheDocument();
-    expect(container.querySelector("#rt-inbound-password")).toHaveAttribute(
-      "type",
-      "password",
-    );
+    expect(container.querySelector("#rt-inbound-password")).toHaveAttribute("type", "password");
   });
 
   it("updates every speed-test setting and handles empty numbers", () => {
@@ -170,18 +139,14 @@ describe("semantic settings tabs", () => {
     for (const input of container.querySelectorAll<HTMLInputElement>("input")) {
       fireEvent.change(input, {
         target: {
-          value:
-            input.inputMode === "numeric" ? "" : "https://new.example.test",
+          value: input.inputMode === "numeric" ? "" : "https://new.example.test",
         },
       });
-      if (input.inputMode === "numeric")
-        fireEvent.change(input, { target: { value: "25" } });
+      if (input.inputMode === "numeric") fireEvent.change(input, { target: { value: "25" } });
       fireEvent.blur(input);
     }
 
-    expect(screen.getByLabelText("Latency test URL")).toHaveValue(
-      "https://new.example.test",
-    );
+    expect(screen.getByLabelText("Latency test URL")).toHaveValue("https://new.example.test");
     expect(container.querySelector("#rt-speedtest-timeout")).toHaveValue("25");
     expect(screen.queryByLabelText("Speed Test URL")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("UDP Test Url")).not.toBeInTheDocument();
@@ -190,22 +155,11 @@ describe("semantic settings tabs", () => {
   it("selects the active UI language when the stored language was removed", () => {
     const settings = makeAppSettings();
     settings.appearance.language = "fa";
-    render(
-      <GeneralTab controller={{ ...emptyController(false, null), settings }} />,
-    );
+    render(<GeneralTab controller={{ ...emptyController(false, null), settings }} />);
 
-    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "简体中文" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: "繁體中文" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "简体中文" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "繁體中文" })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("updates appearance and autostart", async () => {
@@ -213,15 +167,9 @@ describe("semantic settings tabs", () => {
     render(<TabHarness Component={GeneralTab} />);
 
     await user.click(screen.getByRole("button", { name: "Dark" }));
-    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
     await user.click(screen.getByRole("button", { name: "简体中文" }));
-    expect(screen.getByRole("button", { name: "简体中文" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "简体中文" })).toHaveAttribute("aria-pressed", "true");
     const autostart = screen.getByRole("switch", { name: "Autostart" });
     expect(autostart).not.toBeChecked();
     await user.click(autostart);
@@ -261,10 +209,7 @@ function TabHarness({ Component }: { Component: SettingsTab }) {
   return <Component controller={controller} />;
 }
 
-function emptyController(
-  working: boolean,
-  error: string | null,
-): AppSettingsController {
+function emptyController(working: boolean, error: string | null): AppSettingsController {
   return {
     error,
     fieldErrors: {},
@@ -273,8 +218,7 @@ function emptyController(
     retry: vi.fn(),
     setAppearance: vi.fn(),
     settings: null,
-    update:
-      vi.fn<(updater: (current: AppSettings) => AppSettings) => void>(),
+    update: vi.fn<(updater: (current: AppSettings) => AppSettings) => void>(),
     working,
   };
 }

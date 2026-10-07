@@ -10,10 +10,7 @@ import { appVisibilityAdapter } from "./platform";
  * adapter once it is registered.
  */
 export function useAppVisible() {
-  const subscribe = useCallback(
-    (onChange: () => void) => appVisibilityAdapter().subscribe(onChange),
-    [],
-  );
+  const subscribe = useCallback((onChange: () => void) => appVisibilityAdapter().subscribe(onChange), []);
   const getSnapshot = useCallback(() => appVisibilityAdapter().isVisible(), []);
 
   return useSyncExternalStore(subscribe, getSnapshot);

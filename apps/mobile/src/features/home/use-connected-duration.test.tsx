@@ -110,11 +110,15 @@ describe("useConnectedDurationMs", () => {
     const { result, rerender } = await renderHook(() => useConnectedDurationMs());
     mockFocused = false;
     await rerender({});
-    await act(async () => { jest.advanceTimersByTime(5000); });
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
     expect(result.current).toBe(65_000);
     mockFocused = true;
     await rerender({});
-    await act(async () => { jest.advanceTimersByTime(0); });
+    await act(async () => {
+      jest.advanceTimersByTime(0);
+    });
     expect(result.current).toBe(70_000);
   });
 });

@@ -12,7 +12,6 @@ const ipcMocks = installFakeCommands({
   tunProviderDiagnostics: vi.fn(),
 });
 
-
 const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 
 const packetTunnelDiagnostics: TunProviderDiagnostics = {
@@ -29,9 +28,7 @@ const packetTunnelDiagnostics: TunProviderDiagnostics = {
   packagingMode: "systemExtension",
   providerBundlePath: "/Applications/VoyaVPN.app/Contents/PlugIns/VoyaPacketTunnel.appex",
   providerLogTail: ["2026-07-08T10:00:00Z failed: The VPN session failed."],
-  registrationPaths: [
-    "4LUKJ56532 app.voyavpn.desktop.PacketTunnel (0.1.0/1) VoyaVPN PacketTunnel [activated enabled]",
-  ],
+  registrationPaths: ["4LUKJ56532 app.voyavpn.desktop.PacketTunnel (0.1.0/1) VoyaVPN PacketTunnel [activated enabled]"],
   statusPath:
     "/Users/test/Library/Group Containers/group.app.voyavpn.desktop/Library/Application Support/VoyaVPN/packet-tunnel-status.json",
   statusState: "failed",

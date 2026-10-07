@@ -191,8 +191,7 @@ const known = {
   defineAnimation: ID,
   makeMutable: sharedValue,
   makeShareableCloneRecursive: ID,
-  isSharedValue: (value) =>
-    typeof value === "object" && value !== null && "value" in value,
+  isSharedValue: (value) => typeof value === "object" && value !== null && "value" in value,
   isWorkletFunction: () => false,
   getAnimatedStyle: () => ({}),
   getUseOfValueInStyleWarning: NOOP,
@@ -224,8 +223,14 @@ const known = {
   },
   Extrapolation: { EXTEND: "extend", CLAMP: "clamp", IDENTITY: "identity" },
   interpolate: (_value, _input, output) => (output ? output[0] : 0),
-  runOnJS: (fn) => (...args) => fn(...args),
-  runOnUI: (fn) => (...args) => fn(...args),
+  runOnJS:
+    (fn) =>
+    (...args) =>
+      fn(...args),
+  runOnUI:
+    (fn) =>
+    (...args) =>
+      fn(...args),
   Keyframe: class Keyframe extends BaseAnimationMock {
     constructor(definition) {
       super();

@@ -4,10 +4,7 @@ import { Button } from "@voya/ui/components/button";
 import { useShellStore } from "@/stores/shell-store";
 import { NodeCountryIcon } from "@/components/node-country-icon";
 import { PageSurface } from "@/components/app-shell/page-section";
-import {
-  dataTableRowHover,
-  dataTableRowSelected,
-} from "@/components/app-shell/data-table-surface";
+import { dataTableRowHover, dataTableRowSelected } from "@/components/app-shell/data-table-surface";
 
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { Skeleton } from "@voya/ui/components/skeleton";
@@ -29,11 +26,7 @@ import { ProfileCardMenu, ProfileRowContextMenu } from "./server-table-menus";
 import { overlaySpeedtestResult } from "@voya/features/profiles/use-node-list-data";
 import type { ServerTableController } from "./use-server-table";
 
-export function ProfileCardList({
-  controller,
-}: {
-  controller: ServerTableController;
-}) {
+export function ProfileCardList({ controller }: { controller: ServerTableController }) {
   const {
     activation,
     nodeGroups,
@@ -65,12 +58,7 @@ export function ProfileCardList({
         }
       >
         {profilesQuery.isLoading && !rows.length ? (
-          <div
-            aria-label={t("panes.profiles.loadingNodes")}
-            aria-busy="true"
-            className="grid gap-2"
-            role="status"
-          >
+          <div aria-label={t("panes.profiles.loadingNodes")} aria-busy="true" className="grid gap-2" role="status">
             {Array.from({ length: 8 }, (_, index) => (
               <div className="node-card-surface profile-node-card" key={index}>
                 <Skeleton className="size-8 shrink-0 rounded-lg" />
@@ -87,7 +75,9 @@ export function ProfileCardList({
             <EmptyState
               actions={
                 <Button
-                  onClick={() => nodeGroups.search.trim() ? nodeGroups.clearSearch() : useShellStore.getState().openProfilesAddMenu()}
+                  onClick={() =>
+                    nodeGroups.search.trim() ? nodeGroups.clearSearch() : useShellStore.getState().openProfilesAddMenu()
+                  }
                   size="sm"
                   type="button"
                 >
@@ -96,7 +86,9 @@ export function ProfileCardList({
                 </Button>
               }
               className="h-full content-center"
-              description={t(nodeGroups.search.trim() ? "panes.profiles.search.emptyHint" : "panes.profiles.emptyDescription")}
+              description={t(
+                nodeGroups.search.trim() ? "panes.profiles.search.emptyHint" : "panes.profiles.emptyDescription",
+              )}
               icon={Inbox}
               title={t(nodeGroups.search.trim() ? "panes.profiles.search.empty" : "panes.profiles.empty")}
             />
@@ -131,10 +123,7 @@ export function ProfileCardList({
                 );
               // Rows are laid out from the listing while nothing sorts or
               // filters by latency; live results land on the rendered few.
-              const item = overlaySpeedtestResult(
-                row.item,
-                speedtestResultsByProfileId[row.item.profile.id],
-              );
+              const item = overlaySpeedtestResult(row.item, speedtestResultsByProfileId[row.item.profile.id]);
               const { profile } = item;
               const id = profile.id;
               const running = activation.runningId === id;
@@ -182,16 +171,11 @@ export function ProfileCardList({
                               </span>
                               {running ? (
                                 <span className="node-card-state" data-state="running">
-                                  <span
-                                    aria-hidden="true"
-                                    className="size-1.5 rounded-full bg-connected"
-                                  />
+                                  <span aria-hidden="true" className="size-1.5 rounded-full bg-connected" />
                                   {t("panes.profiles.aria.activeProfile")}
                                 </span>
                               ) : item.isActive ? (
-                                <span className="node-card-state">
-                                  {t("panes.profiles.card.default")}
-                                </span>
+                                <span className="node-card-state">{t("panes.profiles.card.default")}</span>
                               ) : null}
                             </span>
                           </button>
@@ -221,14 +205,14 @@ export function ProfileCardList({
                             type="button"
                             variant="outline"
                           >
-                            {switching ? (
-                              <Spinner className="size-4" />
-                            ) : null}
+                            {switching ? <Spinner className="size-4" /> : null}
                             {switching
                               ? t("panes.profiles.card.switching")
                               : running
                                 ? t("panes.profiles.card.using")
-                                : t(activation.runningId ? "panes.profiles.card.switch" : "panes.profiles.card.connect")}
+                                : t(
+                                    activation.runningId ? "panes.profiles.card.switch" : "panes.profiles.card.connect",
+                                  )}
                           </Button>
                           <ProfileCardMenu controller={controller} item={item} />
                         </div>

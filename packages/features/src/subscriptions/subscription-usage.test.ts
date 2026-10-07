@@ -29,13 +29,9 @@ function metadata(overrides: Partial<SubscriptionMetadata> = {}): SubscriptionMe
 
 describe("traffic figures", () => {
   it("clamps remaining traffic at zero and requires a positive total", () => {
-    expect(
-      remainingTrafficBytes(metadata({ totalBytes: 1000, uploadBytes: 100, downloadBytes: 200 })),
-    ).toBe(700);
+    expect(remainingTrafficBytes(metadata({ totalBytes: 1000, uploadBytes: 100, downloadBytes: 200 }))).toBe(700);
     expect(remainingTrafficBytes(metadata({ totalBytes: 1000, downloadBytes: 250 }))).toBe(750);
-    expect(
-      remainingTrafficBytes(metadata({ totalBytes: 100, uploadBytes: 900, downloadBytes: 900 })),
-    ).toBe(0);
+    expect(remainingTrafficBytes(metadata({ totalBytes: 100, uploadBytes: 900, downloadBytes: 900 }))).toBe(0);
     expect(remainingTrafficBytes(metadata({ totalBytes: 0 }))).toBeNull();
     expect(remainingTrafficBytes(metadata())).toBeNull();
   });

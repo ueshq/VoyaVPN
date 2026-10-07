@@ -2,17 +2,8 @@ import type * as React from "react";
 import { MoreHorizontal } from "lucide-react";
 
 import { Button } from "@voya/ui/components/button";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuTrigger,
-} from "@voya/ui/components/context-menu";
-import {
-  Menubar,
-  MenubarContent,
-  MenubarMenu,
-  MenubarTrigger,
-} from "@voya/ui/components/menubar";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@voya/ui/components/context-menu";
+import { Menubar, MenubarContent, MenubarMenu, MenubarTrigger } from "@voya/ui/components/menubar";
 
 /**
  * The "⋯" overflow menu every row and panel header ends in: a ghost icon
@@ -31,10 +22,7 @@ function MoreMenu({
   triggerSize = "icon-sm",
 }: Omit<React.ComponentProps<typeof Menubar>, "bare" | "children"> & {
   children: React.ReactNode;
-  contentProps?: Omit<
-    React.ComponentProps<typeof MenubarContent>,
-    "align" | "children"
-  >;
+  contentProps?: Omit<React.ComponentProps<typeof MenubarContent>, "align" | "children">;
   disabled?: boolean;
   /** Announced on the trigger and, unless `contentProps` overrides it, the menu. */
   label: string;
@@ -47,14 +35,7 @@ function MoreMenu({
     <Menubar bare className={className}>
       <MenubarMenu>
         <MenubarTrigger asChild disabled={disabled}>
-          <Button
-            aria-label={label}
-            ref={triggerRef}
-            size={triggerSize}
-            title={title}
-            type="button"
-            variant="ghost"
-          >
+          <Button aria-label={label} ref={triggerRef} size={triggerSize} title={title} type="button" variant="ghost">
             <MoreHorizontal aria-hidden="true" className="size-4" />
           </Button>
         </MenubarTrigger>

@@ -108,10 +108,7 @@ describe("PolicyGroupsSection", () => {
 
     // Before it runs, a group's test measures its member nodes directly.
     await user.click(screen.getByRole("button", { name: "Test group" }));
-    expect(idle.handleSpeedtest).toHaveBeenCalledWith(
-      { profileIds: ["a", "b"], scope: "profiles" },
-      "policy:g2",
-    );
+    expect(idle.handleSpeedtest).toHaveBeenCalledWith({ profileIds: ["a", "b"], scope: "profiles" }, "policy:g2");
     await user.click(screen.getByRole("button", { name: "Use this group" }));
     await user.click(screen.getByRole("button", { name: "Edit Europe" }));
     await user.click(screen.getByRole("button", { name: "Delete Europe" }));

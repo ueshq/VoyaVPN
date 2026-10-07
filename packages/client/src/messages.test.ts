@@ -105,12 +105,8 @@ describe("backend message codes", () => {
   });
 
   it("interpolates a notice parameter", () => {
-    expect(
-      noticeText(en, { code: "subscriptionAutoUpdateFailed", remarks: "Nightly feed" }),
-    ).toContain("Nightly feed");
-    expect(
-      noticeText(zh, { code: "subscriptionAutoUpdateFailed", remarks: "Nightly feed" }),
-    ).toContain("Nightly feed");
+    expect(noticeText(en, { code: "subscriptionAutoUpdateFailed", remarks: "Nightly feed" })).toContain("Nightly feed");
+    expect(noticeText(zh, { code: "subscriptionAutoUpdateFailed", remarks: "Nightly feed" })).toContain("Nightly feed");
   });
 
   it("renders every log code, and only translates app-authored lines", () => {
@@ -129,9 +125,7 @@ describe("backend message codes", () => {
 
     // Core output and `tracing` diagnostics are the writer's own words.
     expect(logLineText(zh, { line: "inbound/mixed", source: "core" })).toBe("inbound/mixed");
-    expect(logLineText(zh, { line: "voyavpn::runtime: boom", source: "diagnostic" })).toBe(
-      "voyavpn::runtime: boom",
-    );
+    expect(logLineText(zh, { line: "voyavpn::runtime: boom", source: "diagnostic" })).toBe("voyavpn::runtime: boom");
   });
 
   it("interpolates a log reason and appends the untranslated detail", () => {
@@ -201,9 +195,7 @@ describe("backend message codes", () => {
       validationText(en, {
         code: { code: "invalidPort" },
         field: "activeProfile",
-        scope: [
-          { outbound: "Node", rule: "Rule", kind: "routingRuleOutbound" },
-        ],
+        scope: [{ outbound: "Node", rule: "Rule", kind: "routingRuleOutbound" }],
       }),
     ).toBe("Rule Rule → Node: The port must be between 1 and 65535");
     expect(

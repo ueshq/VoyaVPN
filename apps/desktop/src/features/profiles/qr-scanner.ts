@@ -36,9 +36,13 @@ export async function scanQrBlob(blob: Blob): Promise<string> {
     const luma = rgbaToLuma(context.getImageData(0, 0, width, height).data);
 
     const result = await voyaCommands().decodeQrImage(width, height, bytesToBase64(luma));
-    const text = result.status === "found"
-      ? result.texts.map((payload) => payload.trim()).filter(Boolean).join("\n")
-      : "";
+    const text =
+      result.status === "found"
+        ? result.texts
+            .map((payload) => payload.trim())
+            .filter(Boolean)
+            .join("\n")
+        : "";
     if (!text) {
       throw new QrScanError("notFound");
     }

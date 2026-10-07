@@ -22,16 +22,49 @@ type FieldLayoutProps = {
   layout?: "stack" | "row";
 };
 
-export function FieldLayout({ addon, children, className, description, error, group = false, id, label, layout = "stack" }: FieldLayoutProps) {
+export function FieldLayout({
+  addon,
+  children,
+  className,
+  description,
+  error,
+  group = false,
+  id,
+  label,
+  layout = "stack",
+}: FieldLayoutProps) {
   return (
-    <div role={group ? "group" : undefined} aria-labelledby={group && label ? `${id}-label` : undefined} aria-describedby={group ? descriptionIds(id, description, error) : undefined} className={cn("grid min-w-0 gap-1.5", layout === "row" && label && "@min-[42rem]:grid-cols-[minmax(12rem,1fr)_minmax(0,22rem)] @min-[42rem]:items-start @min-[42rem]:gap-x-6", className)}>
-      {label ? <div className={cn("grid min-w-0 gap-1", layout === "row" && "py-1.5")}>
-        <Label className="leading-5" htmlFor={group ? undefined : id} id={`${id}-label`}>{label}</Label>
-        {description ? <p className="text-xs text-muted-foreground" id={`${id}-description`}>{description}</p> : null}
-      </div> : null}
+    <div
+      role={group ? "group" : undefined}
+      aria-labelledby={group && label ? `${id}-label` : undefined}
+      aria-describedby={group ? descriptionIds(id, description, error) : undefined}
+      className={cn(
+        "grid min-w-0 gap-1.5",
+        layout === "row" &&
+          label &&
+          "@min-[42rem]:grid-cols-[minmax(12rem,1fr)_minmax(0,22rem)] @min-[42rem]:items-start @min-[42rem]:gap-x-6",
+        className,
+      )}
+    >
+      {label ? (
+        <div className={cn("grid min-w-0 gap-1", layout === "row" && "py-1.5")}>
+          <Label className="leading-5" htmlFor={group ? undefined : id} id={`${id}-label`}>
+            {label}
+          </Label>
+          {description ? (
+            <p className="text-xs text-muted-foreground" id={`${id}-description`}>
+              {description}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="grid min-w-0 gap-1.5">
         {children}
-        {error ? <span className="text-xs text-danger" id={`${id}-error`}>{error}</span> : null}
+        {error ? (
+          <span className="text-xs text-danger" id={`${id}-error`}>
+            {error}
+          </span>
+        ) : null}
         {addon}
       </div>
     </div>
@@ -58,11 +91,32 @@ type TextFieldProps = FieldProps & {
 };
 
 function descriptionIds(id: string, description: ReactNode, error: string | undefined) {
-  return [description ? `${id}-description` : null, error ? `${id}-error` : null].filter(Boolean).join(" ") || undefined;
+  return (
+    [description ? `${id}-description` : null, error ? `${id}-error` : null].filter(Boolean).join(" ") || undefined
+  );
 }
 
 function TextInputField({
-  addon, className, commitOnBlur = false, description, disabled, error, id, inputClassName, inputMode, label, layout, multiline, onBlur, onChange, onInvalid, placeholder, required, type, validate, value,
+  addon,
+  className,
+  commitOnBlur = false,
+  description,
+  disabled,
+  error,
+  id,
+  inputClassName,
+  inputMode,
+  label,
+  layout,
+  multiline,
+  onBlur,
+  onChange,
+  onInvalid,
+  placeholder,
+  required,
+  type,
+  validate,
+  value,
 }: TextFieldProps & { multiline?: boolean }) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
@@ -72,18 +126,33 @@ function TextInputField({
   const Control = multiline ? Textarea : Input;
 
   return (
-    <FieldLayout addon={addon} className={className} description={description} error={message} id={inputId} label={label} layout={layout}>
+    <FieldLayout
+      addon={addon}
+      className={className}
+      description={description}
+      error={message}
+      id={inputId}
+      label={label}
+      layout={layout}
+    >
       <Control
         {...inputProps}
         aria-describedby={descriptionIds(inputId, description, message)}
         aria-invalid={message ? true : undefined}
         aria-required={required || undefined}
-        className={cn(multiline ? "min-h-24 resize-y" : undefined, layout === "row" && !multiline && "h-8", inputClassName)}
+        className={cn(
+          multiline ? "min-h-24 resize-y" : undefined,
+          layout === "row" && !multiline && "h-8",
+          inputClassName,
+        )}
         disabled={disabled}
         id={inputId}
         inputMode={inputMode}
         onChange={(event) => input.onChange(event.target.value)}
-        onBlur={() => { input.onBlur(); onBlur?.(); }}
+        onBlur={() => {
+          input.onBlur();
+          onBlur?.();
+        }}
         placeholder={placeholder}
         type={multiline ? undefined : type}
       />
@@ -91,25 +160,58 @@ function TextInputField({
   );
 }
 
-export function TextField(props: TextFieldProps) { return <TextInputField {...props} />; }
-export function TextAreaField(props: TextFieldProps) { return <TextInputField {...props} multiline />; }
+export function TextField(props: TextFieldProps) {
+  return <TextInputField {...props} />;
+}
+export function TextAreaField(props: TextFieldProps) {
+  return <TextInputField {...props} multiline />;
+}
 
 const EMPTY_SELECT_VALUE = "__voyavpn_empty_select_value__";
 
 export function SelectField({
-  className, description, disabled, error, id, label, layout, onChange, options, value,
+  className,
+  description,
+  disabled,
+  error,
+  id,
+  label,
+  layout,
+  onChange,
+  options,
+  value,
 }: FieldProps & { options: ReadonlyArray<{ label: string; value: string }> }) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
 
   return (
-    <FieldLayout className={className} description={description} error={error} id={inputId} label={label} layout={layout}>
-      <Select disabled={disabled} onValueChange={(next) => onChange(next === EMPTY_SELECT_VALUE ? "" : next)} value={value === "" ? EMPTY_SELECT_VALUE : value}>
-        <SelectTrigger aria-describedby={descriptionIds(inputId, description, error)} aria-invalid={error ? true : undefined} className={cn("w-full", layout === "row" && "h-8")} id={inputId}>
+    <FieldLayout
+      className={className}
+      description={description}
+      error={error}
+      id={inputId}
+      label={label}
+      layout={layout}
+    >
+      <Select
+        disabled={disabled}
+        onValueChange={(next) => onChange(next === EMPTY_SELECT_VALUE ? "" : next)}
+        value={value === "" ? EMPTY_SELECT_VALUE : value}
+      >
+        <SelectTrigger
+          aria-describedby={descriptionIds(inputId, description, error)}
+          aria-invalid={error ? true : undefined}
+          className={cn("w-full", layout === "row" && "h-8")}
+          id={inputId}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {options.map((option) => <SelectItem key={option.value || EMPTY_SELECT_VALUE} value={option.value || EMPTY_SELECT_VALUE}>{option.label}</SelectItem>)}
+          {options.map((option) => (
+            <SelectItem key={option.value || EMPTY_SELECT_VALUE} value={option.value || EMPTY_SELECT_VALUE}>
+              {option.label}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </FieldLayout>
@@ -128,16 +230,46 @@ type ToggleFieldProps = {
 };
 
 /** One choice among several that are submitted together. */
-export function CheckboxField({ checked, className, description, disabled, error, id, label, onChange }: ToggleFieldProps) {
+export function CheckboxField({
+  checked,
+  className,
+  description,
+  disabled,
+  error,
+  id,
+  label,
+  onChange,
+}: ToggleFieldProps) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   return (
     <div className={cn("flex items-start gap-2", disabled && "opacity-55", className)}>
-      <Checkbox aria-describedby={descriptionIds(inputId, description, error)} aria-invalid={error ? true : undefined} className="mt-0.5" checked={checked} disabled={disabled} id={inputId} onCheckedChange={(next) => onChange(next === true)} />
+      <Checkbox
+        aria-describedby={descriptionIds(inputId, description, error)}
+        aria-invalid={error ? true : undefined}
+        className="mt-0.5"
+        checked={checked}
+        disabled={disabled}
+        id={inputId}
+        onCheckedChange={(next) => onChange(next === true)}
+      />
       <div className="grid min-w-0 gap-1">
-        <Label className={cn("text-sm leading-5", disabled ? "cursor-not-allowed" : "cursor-pointer")} htmlFor={inputId}>{label}</Label>
-        {description ? <p className="text-xs text-muted-foreground" id={`${inputId}-description`}>{description}</p> : null}
-        {error ? <span className="text-xs text-danger" id={`${inputId}-error`}>{error}</span> : null}
+        <Label
+          className={cn("text-sm leading-5", disabled ? "cursor-not-allowed" : "cursor-pointer")}
+          htmlFor={inputId}
+        >
+          {label}
+        </Label>
+        {description ? (
+          <p className="text-xs text-muted-foreground" id={`${inputId}-description`}>
+            {description}
+          </p>
+        ) : null}
+        {error ? (
+          <span className="text-xs text-danger" id={`${inputId}-error`}>
+            {error}
+          </span>
+        ) : null}
       </div>
     </div>
   );
@@ -147,17 +279,47 @@ export function CheckboxField({ checked, className, description, disabled, error
  * An on/off setting that takes effect at once. The label reads first and the
  * switch sits at the row's end, in the same column as every other control.
  */
-export function SwitchField({ checked, className, description, disabled, error, id, label, onChange }: ToggleFieldProps) {
+export function SwitchField({
+  checked,
+  className,
+  description,
+  disabled,
+  error,
+  id,
+  label,
+  onChange,
+}: ToggleFieldProps) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   return (
     <div className={cn("flex items-start justify-between gap-4", disabled && "opacity-55", className)}>
       <div className="grid min-w-0 gap-1">
-        <Label className={cn("text-sm leading-5", disabled ? "cursor-not-allowed" : "cursor-pointer")} htmlFor={inputId}>{label}</Label>
-        {description ? <p className="text-xs text-muted-foreground" id={`${inputId}-description`}>{description}</p> : null}
-        {error ? <span className="text-xs text-danger" id={`${inputId}-error`}>{error}</span> : null}
+        <Label
+          className={cn("text-sm leading-5", disabled ? "cursor-not-allowed" : "cursor-pointer")}
+          htmlFor={inputId}
+        >
+          {label}
+        </Label>
+        {description ? (
+          <p className="text-xs text-muted-foreground" id={`${inputId}-description`}>
+            {description}
+          </p>
+        ) : null}
+        {error ? (
+          <span className="text-xs text-danger" id={`${inputId}-error`}>
+            {error}
+          </span>
+        ) : null}
       </div>
-      <Switch aria-describedby={descriptionIds(inputId, description, error)} aria-invalid={error ? true : undefined} className="mt-0.5" checked={checked} disabled={disabled} id={inputId} onCheckedChange={onChange} />
+      <Switch
+        aria-describedby={descriptionIds(inputId, description, error)}
+        aria-invalid={error ? true : undefined}
+        className="mt-0.5"
+        checked={checked}
+        disabled={disabled}
+        id={inputId}
+        onCheckedChange={onChange}
+      />
     </div>
   );
 }

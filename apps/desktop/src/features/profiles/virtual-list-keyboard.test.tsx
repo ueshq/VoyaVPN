@@ -7,16 +7,24 @@ const scroll = vi.fn();
 
 function List({ count = 3, prevent = false }: { count?: number; prevent?: boolean }) {
   return (
-    <div data-testid="viewport" tabIndex={0} onKeyDown={(event) => {
-      if (prevent) event.preventDefault();
-      navigateVirtualList(event, count, scroll, "data-row", "button");
-    }}>
+    <div
+      data-testid="viewport"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (prevent) event.preventDefault();
+        navigateVirtualList(event, count, scroll, "data-row", "button");
+      }}
+    >
       {[0, 1, 2].map((index) => (
-        <div data-row={index} key={index}><button>{index}</button></div>
+        <div data-row={index} key={index}>
+          <button>{index}</button>
+        </div>
       ))}
       <input aria-label="search" />
       <textarea aria-label="notes" />
-      <div role="menu"><button>menu item</button></div>
+      <div role="menu">
+        <button>menu item</button>
+      </div>
     </div>
   );
 }
@@ -30,12 +38,18 @@ describe("virtual list keyboard navigation", () => {
       return frames.length;
     });
   });
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
   it.each([
-    ["ArrowDown", "0", 1], ["ArrowUp", "2", 1],
-    ["Home", "2", 0], ["End", "0", 2],
-    ["ArrowUp", "0", 0], ["ArrowDown", "2", 2],
+    ["ArrowDown", "0", 1],
+    ["ArrowUp", "2", 1],
+    ["Home", "2", 0],
+    ["End", "0", 2],
+    ["ArrowUp", "0", 0],
+    ["ArrowDown", "2", 2],
   ])("%s scrolls before restoring focus from row %s", (key, from, next) => {
     render(<List />);
     const source = screen.getByRole("button", { name: from });
@@ -68,11 +82,14 @@ describe("virtual list keyboard navigation", () => {
     expect(frames).toHaveLength(0);
   });
 
-  it.each([{ altKey: true }, { ctrlKey: true }, { metaKey: true }, { key: "Enter" }])("ignores unrelated or modified keys %j", (options) => {
-    render(<List />);
-    fireEvent.keyDown(screen.getByTestId("viewport"), { key: "ArrowDown", ...options });
-    expect(scroll).not.toHaveBeenCalled();
-  });
+  it.each([{ altKey: true }, { ctrlKey: true }, { metaKey: true }, { key: "Enter" }])(
+    "ignores unrelated or modified keys %j",
+    (options) => {
+      render(<List />);
+      fireEvent.keyDown(screen.getByTestId("viewport"), { key: "ArrowDown", ...options });
+      expect(scroll).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([{ count: 0 }, { prevent: true }])("ignores empty lists and handled events %j", (props) => {
     render(<List {...props} />);

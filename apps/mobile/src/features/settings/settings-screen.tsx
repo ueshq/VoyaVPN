@@ -7,14 +7,26 @@ import { PageHeader } from "~/components/page-header";
 
 export function SettingsScreen() {
   const { t } = useI18n();
-  return <DetailScreen>
-    <PageHeader title={t("tabs.settings")} />
-    <ListGroup>
-      <ListRow chevron title={t("mobile.subscriptions")} testID="settings-subscriptions" onPress={() => openPage("subscriptions")} />
-      <ListRow chevron title={t("daily.appearance")} testID="settings-general" onPress={() => openPage("general")} />
-      <ListRow chevron title={t("mobile.connection")} testID="settings-dns" onPress={() => openPage("dns")} />
-      <ListRow chevron title={t("daily.diagnostics")} testID="settings-maintenance" onPress={() => openPage("maintenance")} />
-      <ListRow last chevron title={t("daily.about")} testID="settings-about" onPress={() => openPage("about")} />
-    </ListGroup>
-  </DetailScreen>;
+  return (
+    <DetailScreen>
+      <PageHeader title={t("tabs.settings")} />
+      <ListGroup>
+        <ListRow
+          chevron
+          title={t("mobile.subscriptions")}
+          testID="settings-subscriptions"
+          onPress={() => openPage("subscriptions")}
+        />
+        <ListRow chevron title={t("daily.appearance")} testID="settings-general" onPress={() => openPage("general")} />
+        <ListRow chevron title={t("mobile.connection")} testID="settings-dns" onPress={() => openPage("dns")} />
+        <ListRow
+          chevron
+          title={t("daily.diagnostics")}
+          testID="settings-maintenance"
+          onPress={() => openPage("maintenance")}
+        />
+        <ListRow last chevron title={t("daily.about")} testID="settings-about" onPress={() => openPage("about")} />
+      </ListGroup>
+    </DetailScreen>
+  );
 }

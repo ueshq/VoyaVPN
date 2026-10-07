@@ -65,9 +65,7 @@ export function formatImportSummary(result: ImportProfilesResult, t: TranslateFn
     parts.push(t("panes.profiles.import.summary.deduped", { count: result.deduped.toLocaleString() }));
   }
   if (result.discardedNodeOverrides > 0) {
-    parts.push(
-      t("panes.profiles.import.discardedNodeOverrides", { count: result.discardedNodeOverrides }),
-    );
+    parts.push(t("panes.profiles.import.discardedNodeOverrides", { count: result.discardedNodeOverrides }));
   }
 
   return parts.join(" ");

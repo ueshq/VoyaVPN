@@ -2,7 +2,13 @@ import { ListGroup } from "heroui-native/list-group";
 import { PressableFeedback } from "heroui-native/pressable-feedback";
 import { Separator } from "heroui-native/separator";
 import type { ReactNode, Ref } from "react";
-import { View, type AccessibilityActionEvent, type AccessibilityActionInfo, type AccessibilityRole, type AccessibilityState } from "react-native";
+import {
+  View,
+  type AccessibilityActionEvent,
+  type AccessibilityActionInfo,
+  type AccessibilityRole,
+  type AccessibilityState,
+} from "react-native";
 
 /**
  * One row of an inset grouped list, built from HeroUI's `ListGroup` parts:
@@ -89,8 +95,12 @@ export function ListRow({
     <>
       {leading ? <ListGroup.ItemPrefix className="w-7 items-center">{leading}</ListGroup.ItemPrefix> : null}
       <ListGroup.ItemContent className="min-w-0 gap-0.5">
-        <ListGroup.ItemTitle className={titleClassName} numberOfLines={titleLines}>{title}</ListGroup.ItemTitle>
-        {description ? <ListGroup.ItemDescription numberOfLines={descriptionLines}>{description}</ListGroup.ItemDescription> : null}
+        <ListGroup.ItemTitle className={titleClassName} numberOfLines={titleLines}>
+          {title}
+        </ListGroup.ItemTitle>
+        {description ? (
+          <ListGroup.ItemDescription numberOfLines={descriptionLines}>{description}</ListGroup.ItemDescription>
+        ) : null}
         {children}
       </ListGroup.ItemContent>
     </>
@@ -112,23 +122,32 @@ export function ListRow({
   } as const;
 
   if (trailingInteractive && (onPress || onLongPress)) {
-    return <View className={`overflow-hidden ${shape}`}>
-      <View className={stacked ? "" : "flex-row items-center"}>
-        <PressableFeedback animation="disable-all" className="flex-1" {...pressProps}>
-          <PressableFeedback.Highlight />
-          <ListGroup.Item disabled accessible={false} className={stacked ? "" : "pr-2"}>{text}</ListGroup.Item>
-        </PressableFeedback>
-        <ListGroup.ItemSuffix className={stacked ? "px-4 pb-4" : "shrink-0 pr-4"}>{trailing}</ListGroup.ItemSuffix>
-      </View>{divider}
-    </View>;
+    return (
+      <View className={`overflow-hidden ${shape}`}>
+        <View className={stacked ? "" : "flex-row items-center"}>
+          <PressableFeedback animation="disable-all" className="flex-1" {...pressProps}>
+            <PressableFeedback.Highlight />
+            <ListGroup.Item disabled accessible={false} className={stacked ? "" : "pr-2"}>
+              {text}
+            </ListGroup.Item>
+          </PressableFeedback>
+          <ListGroup.ItemSuffix className={stacked ? "px-4 pb-4" : "shrink-0 pr-4"}>{trailing}</ListGroup.ItemSuffix>
+        </View>
+        {divider}
+      </View>
+    );
   }
 
   const row = (
     <ListGroup.Item disabled accessible={false} className={stacked ? "flex-col items-stretch" : ""}>
       {stacked ? <View className="flex-row items-center gap-3">{text}</View> : text}
       {trailing ? (
-        <ListGroup.ItemSuffix className={stacked ? (leading ? "pl-10" : "") : "shrink-0 items-end"}>{trailing}</ListGroup.ItemSuffix>
-      ) : chevron ? <ListGroup.ItemSuffix /> : null}
+        <ListGroup.ItemSuffix className={stacked ? (leading ? "pl-10" : "") : "shrink-0 items-end"}>
+          {trailing}
+        </ListGroup.ItemSuffix>
+      ) : chevron ? (
+        <ListGroup.ItemSuffix />
+      ) : null}
     </ListGroup.Item>
   );
 

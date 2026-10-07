@@ -82,7 +82,11 @@ function WindowControls() {
       <button
         aria-label={t("window.minimize")}
         className={buttonClass}
-        onClick={() => void voyaCommands().minimizeWindow().catch(() => undefined)}
+        onClick={() =>
+          void voyaCommands()
+            .minimizeWindow()
+            .catch(() => undefined)
+        }
         type="button"
       >
         <Minus className="size-4" aria-hidden="true" />
@@ -90,7 +94,11 @@ function WindowControls() {
       <button
         aria-label={maximized ? t("window.restore") : t("window.maximize")}
         className={buttonClass}
-        onClick={() => void voyaCommands().toggleMaximizeWindow().catch(() => undefined)}
+        onClick={() =>
+          void voyaCommands()
+            .toggleMaximizeWindow()
+            .catch(() => undefined)
+        }
         type="button"
       >
         {maximized ? (
@@ -102,7 +110,11 @@ function WindowControls() {
       <button
         aria-label={t("window.close")}
         className="flex h-full w-12 items-center justify-center text-foreground/70 transition-colors hover:bg-destructive hover:text-white"
-        onClick={() => void voyaCommands().closeWindow().catch(() => undefined)}
+        onClick={() =>
+          void voyaCommands()
+            .closeWindow()
+            .catch(() => undefined)
+        }
         type="button"
       >
         <X className="size-4" aria-hidden="true" />

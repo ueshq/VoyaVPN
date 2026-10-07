@@ -25,8 +25,12 @@ export async function executeRuntimeAction(action: RuntimeAction) {
   const commands = voyaCommands();
   // Called through the binding rather than passed as a detached reference: a
   // native transport is free to implement its surface as methods.
-  const command = action === "connect" ? () => commands.connectActiveProfile()
-    : action === "disconnect" ? () => commands.disconnectCore() : () => commands.restartCore();
+  const command =
+    action === "connect"
+      ? () => commands.connectActiveProfile()
+      : action === "disconnect"
+        ? () => commands.disconnectCore()
+        : () => commands.restartCore();
   const status = await runWithElevation(command);
   if (isLatest()) useRuntimeEventStore.getState().setCoreState(status);
   return status;
@@ -98,21 +102,31 @@ export async function activateSelection(
 }
 
 /** Makes a node the active selection, then connects or restarts with it. */
-function activateProfile(id: string, t: TranslationFunction, queryClient: QueryClient, options: { inline?: boolean } = {}) {
-  return activateSelection(id, t, async () => {
-    // A node replaces the policy group in use; say which one it set aside.
-    const replacedGroup = queryClient
-      .getQueryData<PolicyGroupListing>(queryKeys.policyGroups)
-      ?.entries.find((entry) => entry.isActive)?.group.name;
-    await voyaCommands().setActiveProfile(id);
-    if (replacedGroup) {
-      useToastStore.getState().pushToast({
-        description: t("policyGroups.replacedByNode", { group: replacedGroup }),
-        severity: "info",
-        title: t("policyGroups.switchedTitle"),
-      });
-    }
-  }, options);
+function activateProfile(
+  id: string,
+  t: TranslationFunction,
+  queryClient: QueryClient,
+  options: { inline?: boolean } = {},
+) {
+  return activateSelection(
+    id,
+    t,
+    async () => {
+      // A node replaces the policy group in use; say which one it set aside.
+      const replacedGroup = queryClient
+        .getQueryData<PolicyGroupListing>(queryKeys.policyGroups)
+        ?.entries.find((entry) => entry.isActive)?.group.name;
+      await voyaCommands().setActiveProfile(id);
+      if (replacedGroup) {
+        useToastStore.getState().pushToast({
+          description: t("policyGroups.replacedByNode", { group: replacedGroup }),
+          severity: "info",
+          title: t("policyGroups.switchedTitle"),
+        });
+      }
+    },
+    options,
+  );
 }
 
 /**
@@ -144,7 +158,12 @@ export async function chooseSelection(
 }
 
 /** [`chooseSelection`] for a node. */
-export function selectProfile(id: string, t: TranslationFunction, queryClient: QueryClient, options: { inline?: boolean } = {}) {
+export function selectProfile(
+  id: string,
+  t: TranslationFunction,
+  queryClient: QueryClient,
+  options: { inline?: boolean } = {},
+) {
   return chooseSelection(
     id,
     () => activateProfile(id, t, queryClient, options),
@@ -188,7 +207,13 @@ function reportRuntimeActionError(
   if (missingCore) {
     useRuntimeActionStore.getState().showMissingCore(missingCore);
   } else if (inline) {
-    useRuntimeActionStore.getState().failInline(action, runtimeActionMessage(error, t), error instanceof IpcCommandError ? error.appError.kind.type : undefined);
+    useRuntimeActionStore
+      .getState()
+      .failInline(
+        action,
+        runtimeActionMessage(error, t),
+        error instanceof IpcCommandError ? error.appError.kind.type : undefined,
+      );
   } else {
     toastError(
       {
@@ -206,9 +231,7 @@ function reportRuntimeActionError(
  * prompt was declined: the user's choice, which deserves words, not a code.
  */
 function runtimeActionMessage(error: unknown, t: TranslationFunction) {
-  return appErrorOfKind(error, "elevationRequired")
-    ? t("home.authorizationDeclined")
-    : redactOperationalError(error);
+  return appErrorOfKind(error, "elevationRequired") ? t("home.authorizationDeclined") : redactOperationalError(error);
 }
 
 export function isRuntimeTransitioning(state: RuntimeStatusResponse["state"]) {
@@ -225,9 +248,7 @@ export function runtimeBusy(state: RuntimeStatusResponse["state"]) {
  * every screen derives from these two subscriptions, so they cannot drift.
  */
 export function useRuntimeBusy() {
-  const transitioning = useRuntimeEventStore((state) =>
-    isRuntimeTransitioning(coreStateOf(state.coreState)),
-  );
+  const transitioning = useRuntimeEventStore((state) => isRuntimeTransitioning(coreStateOf(state.coreState)));
   const pending = useRuntimeActionStore(runtimeActionPending);
   return transitioning || pending;
 }
@@ -242,9 +263,7 @@ function switchBusy(state: RuntimeStatusResponse["state"]) {
 
 /** The reactive form of [`switchBusy`], for rendering a switch button's busy state. */
 function useSwitchBusy() {
-  const cleaning = useRuntimeEventStore(
-    (state) => coreStateOf(state.coreState) === "cleanupPending",
-  );
+  const cleaning = useRuntimeEventStore((state) => coreStateOf(state.coreState) === "cleanupPending");
   return useRuntimeBusy() || cleaning;
 }
 
@@ -270,7 +289,5 @@ export async function runWithElevation<T>(action: () => Promise<T>): Promise<T> 
 export function missingCorePayload(error: unknown): MissingCorePayload | null {
   const missingCore = appErrorOfKind(error, "missingCore");
 
-  return missingCore
-    ? { message: missingCore.message }
-    : null;
+  return missingCore ? { message: missingCore.message } : null;
 }

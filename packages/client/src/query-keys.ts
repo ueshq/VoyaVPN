@@ -114,12 +114,8 @@ const INVALIDATION_KEYS = {
  * while `bindings.ts` is in sync — `pnpm check:bindings` is a CI gate — so the
  * bridge skips it rather than throwing inside a Tauri event callback.
  */
-export function invalidationQueryKey(
-  scope: InvalidationScope,
-): QueryKeyRoot | null {
+export function invalidationQueryKey(scope: InvalidationScope): QueryKeyRoot | null {
   // An own-property check, so an unknown kind such as `toString` cannot
   // resolve through the prototype.
-  return Object.hasOwn(INVALIDATION_KEYS, scope.kind)
-    ? INVALIDATION_KEYS[scope.kind]
-    : null;
+  return Object.hasOwn(INVALIDATION_KEYS, scope.kind) ? INVALIDATION_KEYS[scope.kind] : null;
 }

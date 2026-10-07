@@ -43,9 +43,7 @@ describe("connection rule text", () => {
   });
 
   it("explains an unmatched connection and leaves unknown rules as reported", () => {
-    expect(connectionRuleText({ rule: "final", rulePayload: null }, rules, t)).toBe(
-      "No rule matched (default route)",
-    );
+    expect(connectionRuleText({ rule: "final", rulePayload: null }, rules, t)).toBe("No rule matched (default route)");
     expect(connectionRuleText({ rule: "ip_cidr=[10.0.0.0/8]", rulePayload: null }, null, t)).toBe(
       "ip_cidr=[10.0.0.0/8]",
     );

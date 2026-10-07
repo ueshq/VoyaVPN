@@ -99,12 +99,7 @@ function AppErrorFallback({ onRetry }: { onRetry: () => void }) {
         <Button onClick={onRetry} size="sm" type="button">
           {t("actions.retry")}
         </Button>
-        <Button
-          onClick={() => window.location.reload()}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
+        <Button onClick={() => window.location.reload()} size="sm" type="button" variant="outline">
           {t("actions.reload")}
         </Button>
       </div>

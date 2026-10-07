@@ -41,12 +41,8 @@ export function VirtualScrollList<T>({
     paddingEnd: 4,
     paddingStart: 4,
   });
-  const rows = firstPaintVirtualItems(
-    virtualizer.getVirtualItems(),
-    items.length,
-    estimateSize,
-    12,
-    (index) => itemKey(items[index]!),
+  const rows = firstPaintVirtualItems(virtualizer.getVirtualItems(), items.length, estimateSize, 12, (index) =>
+    itemKey(items[index]!),
   );
 
   return (

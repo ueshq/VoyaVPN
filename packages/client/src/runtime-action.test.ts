@@ -1,12 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { TranslationFunction } from "@voya/i18n";
-import type {
-  AppError,
-  AppErrorKind,
-  RuntimeStatusResponse,
-  VoyaCommands,
-} from "@voya/contracts";
+import type { AppError, AppErrorKind, RuntimeStatusResponse, VoyaCommands } from "@voya/contracts";
 import { queryKeys } from "./query-keys";
 import { useRuntimeEventStore } from "./runtime-event-store";
 import { beginRuntimeRead } from "./runtime-state-version";
@@ -84,8 +79,11 @@ function resetStores() {
 
 describe("runtime command responses", () => {
   const connected: RuntimeStatusResponse = {
-    activeProfileId: "node", activeTunBackend: null, mainPid: 42,
-    state: "connected", connectedDurationMs: 0,
+    activeProfileId: "node",
+    activeTunBackend: null,
+    mainPid: 42,
+    state: "connected",
+    connectedDurationMs: 0,
   };
 
   beforeEach(() => {
@@ -106,7 +104,11 @@ describe("runtime command responses", () => {
 
   it.each(["event", "read"] as const)("keeps a newer %s when an older command completes", async (source) => {
     let resolve!: (status: RuntimeStatusResponse) => void;
-    ipcMocks.connectActiveProfile.mockReturnValueOnce(new Promise<RuntimeStatusResponse>((done) => { resolve = done; }));
+    ipcMocks.connectActiveProfile.mockReturnValueOnce(
+      new Promise<RuntimeStatusResponse>((done) => {
+        resolve = done;
+      }),
+    );
     const pending = executeRuntimeAction("connect");
     const newer = { ...connected, mainPid: 99 };
     if (source === "event") {
@@ -152,10 +154,7 @@ describe("runWithElevation", () => {
 
   it("requests authorization once and retries the action when it is granted", async () => {
     const failure = new IpcCommandError(
-      appError(
-        { type: "elevationRequired" },
-        "system authorization is required before enabling TUN on Unix",
-      ),
+      appError({ type: "elevationRequired" }, "system authorization is required before enabling TUN on Unix"),
     );
     const action = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue("connected");
     requestElevation.mockResolvedValue(true);
@@ -169,9 +168,7 @@ describe("runWithElevation", () => {
   // containing "authorization". Rewording — or translating — the backend text
   // must not change what happens.
   it("retries on the typed kind alone, whatever the message says", async () => {
-    const failure = new IpcCommandError(
-      appError({ type: "elevationRequired" }, "系统需要一次性授权"),
-    );
+    const failure = new IpcCommandError(appError({ type: "elevationRequired" }, "系统需要一次性授权"));
     const action = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue("connected");
     requestElevation.mockResolvedValue(true);
 
@@ -185,9 +182,7 @@ describe("runWithElevation", () => {
   // the old substring match read it as "ask again", re-opening the dialog and
   // re-running the connect.
   it("does not prompt for a failure that merely mentions authorization", async () => {
-    const failure = new IpcCommandError(
-      appError({ type: "internal" }, "native authorization was cancelled"),
-    );
+    const failure = new IpcCommandError(appError({ type: "internal" }, "native authorization was cancelled"));
     const action = vi.fn().mockRejectedValue(failure);
 
     await expect(runWithElevation(action)).rejects.toBe(failure);
@@ -337,7 +332,9 @@ describe("activateSelection", () => {
 
   it("keeps a picker failure inline and releases the switch lock", async () => {
     const failure = new IpcCommandError(appError({ type: "notFound", entity: "profile", id: "node" }));
-    await expect(activateSelection("node", t, vi.fn().mockRejectedValue(failure), { inline: true })).resolves.toBe(false);
+    await expect(activateSelection("node", t, vi.fn().mockRejectedValue(failure), { inline: true })).resolves.toBe(
+      false,
+    );
     expect(useRuntimeActionStore.getState().lastError).toMatchObject({ action: "connect", reason: "notFound" });
     expect(useRuntimeActionStore.getState().switchingId).toBeNull();
     expect(useToastStore.getState().toasts).toHaveLength(0);
@@ -412,8 +409,6 @@ describe("missingCorePayload", () => {
   it("ignores plain errors and typed errors of other kinds", () => {
     expect(missingCorePayload(new Error("core missing"))).toBeNull();
     expect(missingCorePayload("core missing")).toBeNull();
-    expect(
-      missingCorePayload(new IpcCommandError(appError({ type: "internal" }, "boom"))),
-    ).toBeNull();
+    expect(missingCorePayload(new IpcCommandError(appError({ type: "internal" }, "boom")))).toBeNull();
   });
 });

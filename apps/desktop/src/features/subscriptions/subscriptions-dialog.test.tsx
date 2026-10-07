@@ -32,7 +32,7 @@ beforeEach(() => {
     skipped: 0,
     removedExisting: 0,
     messages: [],
-      outcomes: [],
+    outcomes: [],
   });
 });
 function fill() {
@@ -52,7 +52,9 @@ describe("Subscription editor", () => {
     expect(screen.getByLabelText("Auto-update interval (hours)")).toHaveValue("1");
     fill();
     await userEvent.click(screen.getByRole("button", { name: "Add and update" }));
-    expect(ipc.saveSubscription).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, autoUpdateIntervalMinutes: 60 }));
+    expect(ipc.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: true, autoUpdateIntervalMinutes: 60 }),
+    );
   });
 
   it.each([
@@ -67,7 +69,9 @@ describe("Subscription editor", () => {
     expect(screen.getByLabelText("Auto-update interval (hours)")).toHaveValue("1");
     await userEvent.click(screen.getByRole("switch", { name: "Automatic updates" }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(ipc.saveSubscription).toHaveBeenCalledWith(expect.objectContaining({ enabled: false, autoUpdateIntervalMinutes: null }));
+    expect(ipc.saveSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false, autoUpdateIntervalMinutes: null }),
+    );
   });
 
   it("explains required fields on blur or submit and focuses the first invalid input", async () => {
@@ -94,12 +98,8 @@ describe("Subscription editor", () => {
     render(<SubscriptionsDialog open onOpenChange={close} />);
     fill();
     expect(ipc.saveSubscription).not.toHaveBeenCalled();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Add and update" }),
-    );
-    await waitFor(() =>
-      expect(ipc.updateSubscriptions).toHaveBeenCalledWith("created"),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Add and update" }));
+    await waitFor(() => expect(ipc.updateSubscriptions).toHaveBeenCalledWith("created"));
     expect(close).toHaveBeenCalledWith(false);
   });
   it("keeps a saved source and redacted update failure available for retry", async () => {
@@ -109,9 +109,7 @@ describe("Subscription editor", () => {
     const close = vi.fn();
     render(<SubscriptionsDialog open onOpenChange={close} />);
     fill();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Add and update" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Add and update" }));
     expect(await screen.findByRole("alert")).not.toHaveTextContent("secret");
     expect(close).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "Retry update" }));
@@ -119,16 +117,8 @@ describe("Subscription editor", () => {
     expect(ipc.saveSubscription.mock.calls[1][0].id).toBe("created");
   });
   it("edits a single source without refreshing nodes or discarding advanced values", async () => {
-    render(
-      <SubscriptionsDialog
-        open
-        subscription={{ ...source, userAgent: "Voya" }}
-        onOpenChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByLabelText("Auto-update interval (hours)")).toHaveValue(
-      "2",
-    );
+    render(<SubscriptionsDialog open subscription={{ ...source, userAgent: "Voya" }} onOpenChange={vi.fn()} />);
+    expect(screen.getByLabelText("Auto-update interval (hours)")).toHaveValue("2");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(ipc.saveSubscription).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -153,9 +143,7 @@ describe("Subscription editor", () => {
     fireEvent.change(screen.getByLabelText("Auto-update interval (hours)"), {
       target: { value: "1" },
     });
-    await userEvent.click(
-      screen.getByRole("button", { name: "Add and update" }),
-    );
+    await userEvent.click(screen.getByRole("button", { name: "Add and update" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("save failed");
     expect(screen.getByLabelText("Remarks")).toHaveValue("New source");
   });

@@ -3,11 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { Activity, ArrowDown, ArrowUp, Inbox, LoaderCircle, RefreshCw, Unplug } from "lucide-react";
 
 import { ConfirmDialog } from "@voya/ui/components/confirm-dialog";
-import {
-  dataTableHeader,
-  dataTableRowDivider,
-  dataTableRowHover,
-} from "@/components/app-shell/data-table-surface";
+import { dataTableHeader, dataTableRowDivider, dataTableRowHover } from "@/components/app-shell/data-table-surface";
 import { Button } from "@voya/ui/components/button";
 import { EmptyState } from "@voya/ui/components/empty-state";
 import { SearchInput } from "@voya/ui/components/search-input";
@@ -26,11 +22,7 @@ import { ConnectionDetails } from "./connection-details";
 import { useConnectionsTable } from "./use-connections-table";
 import { connectionBytes, connectionKey } from "@voya/features/proxy/connection-display";
 import type { ConnectionSort } from "@voya/features/proxy/connection-display";
-import {
-  connectionRoute,
-  routeLabel,
-  type ConnectionRoute,
-} from "@voya/features/proxy/connection-route";
+import { connectionRoute, routeLabel, type ConnectionRoute } from "@voya/features/proxy/connection-route";
 
 type SortColumn = ConnectionSort["column"];
 const GRID = "grid grid-cols-[minmax(0,1fr)_minmax(0,0.6fr)_minmax(0,0.6fr)_7rem] gap-4";
@@ -85,12 +77,7 @@ export function ConnectionsPanel({
     initialRect: { height: 520, width: 900 },
     overscan: 10,
   });
-  const renderedRows = firstPaintVirtualItems(
-    virtualizer.getVirtualItems(),
-    rows.length,
-    ROW_HEIGHT,
-    30,
-  );
+  const renderedRows = firstPaintVirtualItems(virtualizer.getVirtualItems(), rows.length, ROW_HEIGHT, 30);
   const headings: { column: SortColumn; label: string }[] = [
     { column: "host", label: t("activity.target") },
     { column: "process", label: t("activity.application") },
@@ -100,9 +87,7 @@ export function ConnectionsPanel({
   const moreLabel = t("proxy.moreActions");
   const disconnected = coreState?.state === "disconnected";
   // The same wording the sidebar and Home use for a state in transition.
-  const waitingLabel = coreState
-    ? t(CORE_STATE_TRANSLATION_KEYS[coreState.state])
-    : t("activity.statusLoading");
+  const waitingLabel = coreState ? t(CORE_STATE_TRANSLATION_KEYS[coreState.state]) : t("activity.statusLoading");
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col outline-none" ref={panelRef} tabIndex={-1}>
@@ -145,10 +130,7 @@ export function ConnectionsPanel({
               type="button"
               variant="ghost"
             >
-              <RefreshCw
-                aria-hidden="true"
-                className={cn("size-4", refreshing && "animate-spin")}
-              />
+              <RefreshCw aria-hidden="true" className={cn("size-4", refreshing && "animate-spin")} />
             </Button>
             <MoreMenu label={moreLabel} title={moreLabel}>
               <MenubarItem
@@ -180,36 +162,32 @@ export function ConnectionsPanel({
               </Button>
             </div>
           ) : null}
-          <div
-            className="min-h-0 flex-1 overflow-y-auto"
-            ref={viewportRef}
-            data-testid="connections-viewport"
-          >
+          <div className="min-h-0 flex-1 overflow-y-auto" ref={viewportRef} data-testid="connections-viewport">
             <div className={cn("sticky top-0 z-10 flex items-center gap-2 pe-2", dataTableHeader)}>
               <div className={cn(GRID, "min-w-0 flex-1 px-4 py-2")}>
-              {headings.map(({ column, label }) => (
-                <div
-                  aria-sort={sort?.column === column ? (sort.ascending ? "ascending" : "descending") : "none"}
-                  className="min-w-0"
-                  key={column}
-                  role="columnheader"
-                >
-                <button
-                  className="flex min-w-0 max-w-full items-center gap-1 text-start"
-                  type="button"
-                  onClick={() => setSort({ column, ascending: sort?.column === column ? !sort.ascending : true })}
-                >
-                  <span className="truncate">{label}</span>
-                  {sort?.column === column ? (
-                    sort.ascending ? (
-                      <ArrowUp className="size-3 shrink-0" aria-hidden="true" />
-                    ) : (
-                      <ArrowDown className="size-3 shrink-0" aria-hidden="true" />
-                    )
-                  ) : null}
-                </button>
-                </div>
-              ))}
+                {headings.map(({ column, label }) => (
+                  <div
+                    aria-sort={sort?.column === column ? (sort.ascending ? "ascending" : "descending") : "none"}
+                    className="min-w-0"
+                    key={column}
+                    role="columnheader"
+                  >
+                    <button
+                      className="flex min-w-0 max-w-full items-center gap-1 text-start"
+                      type="button"
+                      onClick={() => setSort({ column, ascending: sort?.column === column ? !sort.ascending : true })}
+                    >
+                      <span className="truncate">{label}</span>
+                      {sort?.column === column ? (
+                        sort.ascending ? (
+                          <ArrowUp className="size-3 shrink-0" aria-hidden="true" />
+                        ) : (
+                          <ArrowDown className="size-3 shrink-0" aria-hidden="true" />
+                        )
+                      ) : null}
+                    </button>
+                  </div>
+                ))}
               </div>
               <span aria-hidden="true" className={ACTION_SLOT} />
             </div>
@@ -241,65 +219,65 @@ export function ConnectionsPanel({
                       )}
                       style={{ transform: `translateY(${start}px)` }}
                     >
-                    <button
-                      type="button"
-                      data-testid="connection-row"
-                      className={cn(
-                        GRID,
-                        "h-full min-w-0 flex-1 items-center px-4 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                      )}
-                      onClick={(event) => {
-                        returnFocusRef.current = event.currentTarget;
-                        setSelection({ connection, ended: false });
-                      }}
-                    >
-                      <span className="truncate font-medium">{connection.host || "—"}</span>
-                      <span className="truncate text-muted-foreground">{connection.process || "—"}</span>
-                      <span className="min-w-0">
-                        {route.kind === "unknown" ? (
-                          <span className="text-muted-foreground">—</span>
-                        ) : (
-                          <span
-                            className={cn(
-                              "inline-flex h-5 max-w-full items-center rounded-md px-1.5 text-xs font-medium",
-                              ROUTE_CHIP_CLASSES[route.kind],
-                            )}
-                            data-route={route.kind}
-                            title={routeLabel(route, t)}
-                          >
-                            <span className="truncate">{routeLabel(route, t)}</span>
-                          </span>
+                      <button
+                        type="button"
+                        data-testid="connection-row"
+                        className={cn(
+                          GRID,
+                          "h-full min-w-0 flex-1 items-center px-4 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         )}
-                      </span>
-                      <span className="space-y-0.5 text-xs tabular-nums text-muted-foreground">
-                        <span className="flex items-center gap-1.5">
-                          <ArrowUp className="size-3" aria-hidden="true" />
-                          <span className="sr-only">{t("sidebar.upload")}</span>
-                          {connectionBytes(connection.upload)}
+                        onClick={(event) => {
+                          returnFocusRef.current = event.currentTarget;
+                          setSelection({ connection, ended: false });
+                        }}
+                      >
+                        <span className="truncate font-medium">{connection.host || "—"}</span>
+                        <span className="truncate text-muted-foreground">{connection.process || "—"}</span>
+                        <span className="min-w-0">
+                          {route.kind === "unknown" ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <span
+                              className={cn(
+                                "inline-flex h-5 max-w-full items-center rounded-md px-1.5 text-xs font-medium",
+                                ROUTE_CHIP_CLASSES[route.kind],
+                              )}
+                              data-route={route.kind}
+                              title={routeLabel(route, t)}
+                            >
+                              <span className="truncate">{routeLabel(route, t)}</span>
+                            </span>
+                          )}
                         </span>
-                        <span className="flex items-center gap-1.5">
-                          <ArrowDown className="size-3" aria-hidden="true" />
-                          <span className="sr-only">{t("sidebar.download")}</span>
-                          {connectionBytes(connection.download)}
+                        <span className="space-y-0.5 text-xs tabular-nums text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            <ArrowUp className="size-3" aria-hidden="true" />
+                            <span className="sr-only">{t("sidebar.upload")}</span>
+                            {connectionBytes(connection.upload)}
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <ArrowDown className="size-3" aria-hidden="true" />
+                            <span className="sr-only">{t("sidebar.download")}</span>
+                            {connectionBytes(connection.download)}
+                          </span>
                         </span>
+                      </button>
+                      <span className={ACTION_SLOT}>
+                        {connectionId ? (
+                          <Button
+                            aria-label={t("activity.disconnectRow", { target })}
+                            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                            disabled={closeMutation.isPending}
+                            onClick={() => closeMutation.mutate(connectionId)}
+                            size="icon-sm"
+                            title={t("activity.disconnectRow", { target })}
+                            type="button"
+                            variant="ghost"
+                          >
+                            <Unplug aria-hidden="true" className="size-4" />
+                          </Button>
+                        ) : null}
                       </span>
-                    </button>
-                    <span className={ACTION_SLOT}>
-                      {connectionId ? (
-                        <Button
-                          aria-label={t("activity.disconnectRow", { target })}
-                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                          disabled={closeMutation.isPending}
-                          onClick={() => closeMutation.mutate(connectionId)}
-                          size="icon-sm"
-                          title={t("activity.disconnectRow", { target })}
-                          type="button"
-                          variant="ghost"
-                        >
-                          <Unplug aria-hidden="true" className="size-4" />
-                        </Button>
-                      ) : null}
-                    </span>
                     </div>
                   );
                 })}

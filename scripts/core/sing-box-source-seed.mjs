@@ -99,7 +99,12 @@ export function parseSingBoxVersionOutput(text) {
   const tags = value("Tags");
   return {
     revision: value("Revision"),
-    tags: tags ? tags.split(",").map((tag) => tag.trim()).filter(Boolean) : [],
+    tags: tags
+      ? tags
+          .split(",")
+          .map((tag) => tag.trim())
+          .filter(Boolean)
+      : [],
     version,
   };
 }
@@ -205,7 +210,10 @@ export async function buildAndStageSingBoxSeed({
     run("go", args, { cwd: sourceDir, env: goBuildEnv(env) });
 
     const reported = parseSingBoxVersionOutput(checkedCapture(output, ["version"]).stdout);
-    if (!sameSingBoxBuildTags(reported.tags) || reported.tags.some((tag) => SING_BOX_SOURCE_EXCLUDED_TAGS.includes(tag))) {
+    if (
+      !sameSingBoxBuildTags(reported.tags) ||
+      reported.tags.some((tag) => SING_BOX_SOURCE_EXCLUDED_TAGS.includes(tag))
+    ) {
       throw new Error(`built sing-box reports tags ${reported.tags.join(",")}, expected ${tags.join(",")}`);
     }
     if (reported.revision && reported.revision.toLowerCase() !== commit) {

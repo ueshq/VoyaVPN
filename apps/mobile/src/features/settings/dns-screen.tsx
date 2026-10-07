@@ -35,7 +35,12 @@ import { SaveStatus } from "~/components/save-status";
 const FIELDS = [
   { key: "remote", labelKey: "panes.dns.remoteDns", hintKey: null, placeholderKey: "panes.dns.remoteDnsPlaceholder" },
   { key: "direct", labelKey: "panes.dns.directDns", hintKey: null, placeholderKey: "panes.dns.directDnsPlaceholder" },
-  { key: "bootstrap", labelKey: "panes.dns.bootstrapDns", hintKey: "panes.dns.bootstrapHint", placeholderKey: "panes.dns.bootstrapDnsPlaceholder" },
+  {
+    key: "bootstrap",
+    labelKey: "panes.dns.bootstrapDns",
+    hintKey: "panes.dns.bootstrapHint",
+    placeholderKey: "panes.dns.bootstrapDnsPlaceholder",
+  },
 ] as const;
 const SWITCHES = [
   { key: "fakeIp", labelKey: "panes.dns.fakeIp", hintKey: "panes.dns.fakeIpHint" },
@@ -61,12 +66,18 @@ export function DnsScreen() {
   const [fields, setFields] = useState<Record<string, string>>({});
   const form = query.data ? { ...query.data, ...patch } : null;
   const dirty = Object.keys(patch).length > 0;
-  function edit(next: Partial<DnsSettings>) { setPatch((previous) => ({ ...previous, ...next })); setSaved(false); setError(null); setFields((previous) => Object.fromEntries(Object.entries(previous).filter(([key]) => !(key in next)))); }
+  function edit(next: Partial<DnsSettings>) {
+    setPatch((previous) => ({ ...previous, ...next }));
+    setSaved(false);
+    setError(null);
+    setFields((previous) => Object.fromEntries(Object.entries(previous).filter(([key]) => !(key in next))));
+  }
   const save = async () => (await run(saveEdits)) ?? false;
   async function saveEdits() {
     if (!form) return false;
     Keyboard.dismiss();
-    setError(null); setFields({});
+    setError(null);
+    setFields({});
     try {
       // The app-settings bundle carries a copy of these fields. A save of it
       // still on its way — General saves as it is edited — read the old DNS
@@ -75,7 +86,9 @@ export function DnsScreen() {
       const latest = await voyaCommands().loadDnsSettings();
       const result = await voyaCommands().saveDnsSettings({ ...latest, ...patch });
       await cacheSavedDns(client, result);
-      setPatch({}); setSaved(true); return true;
+      setPatch({});
+      setSaved(true);
+      return true;
     } catch (failure) {
       setError(failure);
       const validation = appErrorOfKind(failure, "validation");
@@ -87,46 +100,99 @@ export function DnsScreen() {
   async function defaults() {
     try {
       const baseline = await voyaCommands().getDefaultDnsSettings();
-      setError(null); setFields({});
-      edit({ remote: baseline.remote, direct: baseline.direct, bootstrap: baseline.bootstrap, fakeIp: baseline.fakeIp, blockBindingQuery: baseline.blockBindingQuery });
-    } catch (failure) { setError(failure); }
+      setError(null);
+      setFields({});
+      edit({
+        remote: baseline.remote,
+        direct: baseline.direct,
+        bootstrap: baseline.bootstrap,
+        fakeIp: baseline.fakeIp,
+        blockBindingQuery: baseline.blockBindingQuery,
+      });
+    } catch (failure) {
+      setError(failure);
+    }
   }
-  return <DetailScreen>
-    <ConnectionOptions />
-    <Typography className="text-base text-subtle">{t("daily.dnsHint")}</Typography>
-    <ErrorNotice error={query.error} retry={() => void query.refetch()} />
-    {form ? <>
-      {/* Unsaved edits keep the fields open: collapsing them would hide what is about to be saved. */}
-      <Disclosure title={t("mobile.advanced")} isExpanded={advanced || dirty} onExpandedChange={setAdvanced}>
-        {FIELDS.map(({ key, labelKey, hintKey, placeholderKey }) => <TextField key={key} isInvalid={Boolean(fields[key])}>
-          <Label>{t(labelKey)}</Label>
-          <Input value={form[key] ?? ""} placeholder={t(placeholderKey)} onChangeText={(value) => edit({ [key]: value })} editable={!saving} autoCapitalize="none" autoCorrect={false} returnKeyType="done" onSubmitEditing={Keyboard.dismiss} accessibilityLabel={t(labelKey)} />
-          {hintKey ? <Typography className="text-sm text-subtle">{t(hintKey)}</Typography> : null}
-          <FieldError>{fields[key]}</FieldError>
-        </TextField>)}
-        <ListGroup>{SWITCHES.map(({ key, labelKey, hintKey }, index) => <SwitchRow key={key} last={index === SWITCHES.length - 1} label={t(labelKey)} description={hintKey ? t(hintKey) : undefined} isDisabled={saving} value={form[key] ?? false} onChange={(value) => edit({ [key]: value })} />)}</ListGroup>
-      </Disclosure>
-      {/* "Saved" only after a real save in this session: a page that opens
+  return (
+    <DetailScreen>
+      <ConnectionOptions />
+      <Typography className="text-base text-subtle">{t("daily.dnsHint")}</Typography>
+      <ErrorNotice error={query.error} retry={() => void query.refetch()} />
+      {form ? (
+        <>
+          {/* Unsaved edits keep the fields open: collapsing them would hide what is about to be saved. */}
+          <Disclosure title={t("mobile.advanced")} isExpanded={advanced || dirty} onExpandedChange={setAdvanced}>
+            {FIELDS.map(({ key, labelKey, hintKey, placeholderKey }) => (
+              <TextField key={key} isInvalid={Boolean(fields[key])}>
+                <Label>{t(labelKey)}</Label>
+                <Input
+                  value={form[key] ?? ""}
+                  placeholder={t(placeholderKey)}
+                  onChangeText={(value) => edit({ [key]: value })}
+                  editable={!saving}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={Keyboard.dismiss}
+                  accessibilityLabel={t(labelKey)}
+                />
+                {hintKey ? <Typography className="text-sm text-subtle">{t(hintKey)}</Typography> : null}
+                <FieldError>{fields[key]}</FieldError>
+              </TextField>
+            ))}
+            <ListGroup>
+              {SWITCHES.map(({ key, labelKey, hintKey }, index) => (
+                <SwitchRow
+                  key={key}
+                  last={index === SWITCHES.length - 1}
+                  label={t(labelKey)}
+                  description={hintKey ? t(hintKey) : undefined}
+                  isDisabled={saving}
+                  value={form[key] ?? false}
+                  onChange={(value) => edit({ [key]: value })}
+                />
+              ))}
+            </ListGroup>
+          </Disclosure>
+          {/* "Saved" only after a real save in this session: a page that opens
           already saying "Saved" teaches the user to ignore the line. */}
-      <SaveStatus dirty={dirty} saved={saved} saving={saving} />
-      <ErrorNotice error={error} message={t("mobile.saveFailed")} />
-      {advanced || dirty ? <>
-      <PrimaryButton label={t("actions.save")} isDisabled={!dirty || saving} onPress={() => void save()} />
-      <Button variant="secondary" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.restoreDns")}</Button.Label></Button>
-      </> : null}
-    </> : null}
-    <ErrorNotice error={apply.error} retry={() => void apply.refetch()} />
-    <ErrorNotice error={applyError} message={t("notices.settingsSavedRuntimeUpdateFailed")} />
-    {!dirty && apply.data?.connected && apply.data.action === "none" ? <Typography accessibilityLiveRegion="polite" className="text-sm text-subtle">{t("mobile.applied")}</Typography> : null}
-    {(saved || !dirty) && apply.data?.action !== undefined && apply.data.action !== "none" ? <>
-      <Typography className="text-base text-subtle">{t("mobile.applyPending")}</Typography>
-      <Button variant="secondary" isDisabled={saving} onPress={() => {
-        void run(async () => {
-          setApplyError(null);
-          await voyaCommands().applyPendingSettings();
-          await client.invalidateQueries({ queryKey: queryKeys.appSettings });
-        }).catch(setApplyError);
-      }}><Button.Label>{t("mobile.apply")}</Button.Label></Button>
-    </> : null}
-  </DetailScreen>;
+          <SaveStatus dirty={dirty} saved={saved} saving={saving} />
+          <ErrorNotice error={error} message={t("mobile.saveFailed")} />
+          {advanced || dirty ? (
+            <>
+              <PrimaryButton label={t("actions.save")} isDisabled={!dirty || saving} onPress={() => void save()} />
+              <Button variant="secondary" isDisabled={saving} onPress={() => void defaults()}>
+                <Button.Label>{t("mobile.restoreDns")}</Button.Label>
+              </Button>
+            </>
+          ) : null}
+        </>
+      ) : null}
+      <ErrorNotice error={apply.error} retry={() => void apply.refetch()} />
+      <ErrorNotice error={applyError} message={t("notices.settingsSavedRuntimeUpdateFailed")} />
+      {!dirty && apply.data?.connected && apply.data.action === "none" ? (
+        <Typography accessibilityLiveRegion="polite" className="text-sm text-subtle">
+          {t("mobile.applied")}
+        </Typography>
+      ) : null}
+      {(saved || !dirty) && apply.data?.action !== undefined && apply.data.action !== "none" ? (
+        <>
+          <Typography className="text-base text-subtle">{t("mobile.applyPending")}</Typography>
+          <Button
+            variant="secondary"
+            isDisabled={saving}
+            onPress={() => {
+              void run(async () => {
+                setApplyError(null);
+                await voyaCommands().applyPendingSettings();
+                await client.invalidateQueries({ queryKey: queryKeys.appSettings });
+              }).catch(setApplyError);
+            }}
+          >
+            <Button.Label>{t("mobile.apply")}</Button.Label>
+          </Button>
+        </>
+      ) : null}
+    </DetailScreen>
+  );
 }

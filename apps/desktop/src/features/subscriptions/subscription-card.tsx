@@ -22,8 +22,7 @@ export function SubscriptionMetaLine({
   metadata: SubscriptionMetadata | null | undefined;
   t: TranslateFn;
 }) {
-  const stats: { destructive?: boolean; key: string; label: string }[] =
-    subscriptionUsageStats(metadata, t);
+  const stats: { destructive?: boolean; key: string; label: string }[] = subscriptionUsageStats(metadata, t);
   if (metadata?.lastUpdateAt != null) {
     const { unit, value } = relativeTimeFrom(metadata.lastUpdateAt);
     const formatted = new Intl.RelativeTimeFormat(language, {
@@ -41,34 +40,18 @@ export function SubscriptionMetaLine({
   const ratio = usageRatio(metadata);
   return (
     <div className={cn("grid gap-2", className)}>
-      <p
-        className={cn(
-          "flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground",
-        )}
-      >
+      <p className={cn("flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground")}>
         {stats.map((stat, index) => (
           <span className="inline-flex items-center gap-x-2" key={stat.key}>
             {index > 0 ? <span aria-hidden="true">·</span> : null}
-            <span
-              className={
-                stat.destructive ? "font-medium text-danger" : undefined
-              }
-            >
-              {stat.label}
-            </span>
+            <span className={stat.destructive ? "font-medium text-danger" : undefined}>{stat.label}</span>
           </span>
         ))}
       </p>
       {ratio !== null ? (
-        <div
-          aria-hidden="true"
-          className="h-1 overflow-hidden rounded-full bg-muted"
-        >
+        <div aria-hidden="true" className="h-1 overflow-hidden rounded-full bg-muted">
           <div
-            className={cn(
-              "h-full rounded-full bg-brand",
-              isTrafficExhausted(metadata) && "bg-destructive",
-            )}
+            className={cn("h-full rounded-full bg-brand", isTrafficExhausted(metadata) && "bg-destructive")}
             style={{ width: `${Math.round(ratio * 100)}%` }}
           />
         </div>

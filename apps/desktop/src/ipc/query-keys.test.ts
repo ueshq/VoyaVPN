@@ -52,10 +52,7 @@ const bindingsSource = sources["./bindings.ts"] ?? "";
 
 /** Every production module: tests, fixtures and the test harness excluded. */
 const productionSources = Object.entries(sources).filter(
-  ([path]) =>
-    !/\.(test|spec)\.tsx?$/.test(path) &&
-    !path.endsWith(".test-fixture.ts") &&
-    !path.startsWith("../test/"),
+  ([path]) => !/\.(test|spec)\.tsx?$/.test(path) && !path.endsWith(".test-fixture.ts") && !path.startsWith("../test/"),
 );
 
 /** Parameterised keys, mapped back to the root a scope can invalidate. */
@@ -101,17 +98,13 @@ function findUseQueryCalls(source: string): string[] {
 function rootOf(expression: string): string | null {
   const registryRead = /^queryKeys\.([A-Za-z0-9]+)$/.exec(expression);
   if (registryRead) {
-    const entry = queryKeys[registryRead[1] as keyof typeof queryKeys] as
-      | readonly string[]
-      | undefined;
+    const entry = queryKeys[registryRead[1] as keyof typeof queryKeys] as readonly string[] | undefined;
     return entry?.[0] ?? null;
   }
 
   const factoryCall = /^([A-Za-z0-9]+QueryKey)\(/.exec(expression);
   if (factoryCall) {
-    const factory = keyFactories[factoryCall[1] as keyof typeof keyFactories] as
-      | (() => readonly unknown[])
-      | undefined;
+    const factory = keyFactories[factoryCall[1] as keyof typeof keyFactories] as (() => readonly unknown[]) | undefined;
     const root = factory ? factory()[0] : null;
     return typeof root === "string" ? root : null;
   }
@@ -194,12 +187,8 @@ describe("query key registry", () => {
   it("returns null for a scope this build cannot map", () => {
     // Only reachable with a stale bindings.ts, which `check:bindings` prevents;
     // the bridge relies on the null so it never throws in an event callback.
-    expect(
-      invalidationQueryKey({ kind: "somethingNewer" } as unknown as InvalidationScope),
-    ).toBeNull();
+    expect(invalidationQueryKey({ kind: "somethingNewer" } as unknown as InvalidationScope)).toBeNull();
     // Nor through a name every object inherits.
-    expect(
-      invalidationQueryKey({ kind: "toString" } as unknown as InvalidationScope),
-    ).toBeNull();
+    expect(invalidationQueryKey({ kind: "toString" } as unknown as InvalidationScope)).toBeNull();
   });
 });

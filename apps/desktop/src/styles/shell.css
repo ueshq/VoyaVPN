@@ -30,13 +30,11 @@
   background: inherit;
   user-select: none;
 }
-.app-shell[data-window-chrome="windows"]:not([data-active-tab="home"])
-  .shell-panel {
+.app-shell[data-window-chrome="windows"]:not([data-active-tab="home"]) .shell-panel {
   padding-top: 40px;
 }
 /* macOS pages drag from their title row instead, which would sit under the strip. */
-.app-shell[data-window-chrome="macos"]:not([data-active-tab="home"])
-  .shell-titlebar {
+.app-shell[data-window-chrome="macos"]:not([data-active-tab="home"]) .shell-titlebar {
   display: none;
 }
 /* The traffic lights (16 px inset) and the sidebar toggle share one row on macOS. */
@@ -59,16 +57,12 @@
   justify-content: flex-start;
 }
 /* 88 px starts the toggle just after the zoom button. */
-.app-shell[data-window-chrome="macos"]
-  .app-sidebar:not([data-collapsed="true"])
-  .sidebar-toolbar {
+.app-shell[data-window-chrome="macos"] .app-sidebar:not([data-collapsed="true"]) .sidebar-toolbar {
   height: var(--macos-header-height);
   padding-inline-start: 88px;
 }
 /* The collapsed rail is too narrow for that row, so the toggle drops below it. */
-.app-shell[data-window-chrome="macos"]
-  .app-sidebar[data-collapsed="true"]
-  .sidebar-toolbar {
+.app-shell[data-window-chrome="macos"] .app-sidebar[data-collapsed="true"] .sidebar-toolbar {
   height: calc(2 * var(--macos-header-height));
   padding-top: var(--macos-header-height);
 }

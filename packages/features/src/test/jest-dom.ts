@@ -13,7 +13,9 @@ declare module "vite-plus/test" {
   // The body is empty because the matchers come entirely from `extends`, and
   // the parameter list must match Vitest's declaration to merge.
   /* oxlint-disable no-empty-object-type */
-  interface Matchers<R extends void | Promise<void> = void | Promise<void>, T = unknown>
-    extends TestingLibraryMatchers<unknown, R> {}
+  interface Matchers<R extends void | Promise<void> = void | Promise<void>, T = unknown> extends TestingLibraryMatchers<
+    unknown,
+    R
+  > {}
   /* oxlint-enable no-empty-object-type */
 }

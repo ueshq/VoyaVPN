@@ -113,33 +113,29 @@ export const VALIDATION_KEYS: Record<ValidationCode["code"], TranslationKey> = {
   untranslated: "validation.invalid",
 };
 
-export const VALIDATION_SCOPE_KEYS: Record<
-  ValidationScope["kind"],
-  TranslationKey
-> = {
+export const VALIDATION_SCOPE_KEYS: Record<ValidationScope["kind"], TranslationKey> = {
   policyGroupMember: "validation.scope.policyGroupMember",
   routingRuleOutbound: "validation.scope.routingRuleOutbound",
 };
 
-export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> =
-  {
-    cancelled: "speedtest.outcome.cancelled",
-    completed: "speedtest.outcome.completed",
-    coreUnavailable: "speedtest.outcome.coreUnavailable",
-    failed: "speedtest.outcome.failed",
-    invalidProfile: "speedtest.outcome.invalidProfile",
-    noAvailablePort: "speedtest.outcome.noAvailablePort",
-    protocolUnsupported: "speedtest.outcome.protocolUnsupported",
-    proxyConnectFailed: "speedtest.outcome.proxyConnectFailed",
-    proxyConnectionClosed: "speedtest.outcome.proxyConnectionClosed",
-    proxyConnectionRefused: "speedtest.outcome.proxyConnectionRefused",
-    reconnectRequired: "speedtest.outcome.reconnectRequired",
-    skipped: "speedtest.outcome.skipped",
-    testing: "speedtest.outcome.testing",
-    timedOut: "speedtest.outcome.timedOut",
-    unknown: "speedtest.outcome.unknown",
-    waiting: "speedtest.outcome.waiting",
-  };
+export const SPEEDTEST_OUTCOME_KEYS: Record<SpeedtestOutcome, TranslationKey> = {
+  cancelled: "speedtest.outcome.cancelled",
+  completed: "speedtest.outcome.completed",
+  coreUnavailable: "speedtest.outcome.coreUnavailable",
+  failed: "speedtest.outcome.failed",
+  invalidProfile: "speedtest.outcome.invalidProfile",
+  noAvailablePort: "speedtest.outcome.noAvailablePort",
+  protocolUnsupported: "speedtest.outcome.protocolUnsupported",
+  proxyConnectFailed: "speedtest.outcome.proxyConnectFailed",
+  proxyConnectionClosed: "speedtest.outcome.proxyConnectionClosed",
+  proxyConnectionRefused: "speedtest.outcome.proxyConnectionRefused",
+  reconnectRequired: "speedtest.outcome.reconnectRequired",
+  skipped: "speedtest.outcome.skipped",
+  testing: "speedtest.outcome.testing",
+  timedOut: "speedtest.outcome.timedOut",
+  unknown: "speedtest.outcome.unknown",
+  waiting: "speedtest.outcome.waiting",
+};
 
 export const IMPORT_LINE_KEYS: Record<ImportLineCode["code"], TranslationKey> = {
   invalidPort: "panes.profiles.import.line.invalidPort",
@@ -161,10 +157,7 @@ export function logLineText(t: TranslationFunction, body: LogLineBody) {
     return body.line;
   }
 
-  const reason =
-    "reason" in body.code
-      ? t(CORE_FLOW_REASON_KEYS[body.code.reason])
-      : undefined;
+  const reason = "reason" in body.code ? t(CORE_FLOW_REASON_KEYS[body.code.reason]) : undefined;
   const text = t(LOG_KEYS[body.code.code], { ...body.code, reason });
 
   return body.detail ? `${text}: ${body.detail}` : text;
@@ -187,9 +180,7 @@ export function validationText(t: TranslationFunction, issue: ValidationIssue) {
     return message;
   }
 
-  const breadcrumb = issue.scope
-    .map((scope) => t(VALIDATION_SCOPE_KEYS[scope.kind], scope))
-    .join(" / ");
+  const breadcrumb = issue.scope.map((scope) => t(VALIDATION_SCOPE_KEYS[scope.kind], scope)).join(" / ");
 
   return `${breadcrumb}: ${message}`;
 }
@@ -198,15 +189,10 @@ export function validationFieldErrors(
   t: TranslationFunction,
   issues: readonly ValidationIssue[],
 ): Record<string, string> {
-  return Object.fromEntries(
-    issues.map((issue) => [issue.field, validationText(t, issue)]),
-  );
+  return Object.fromEntries(issues.map((issue) => [issue.field, validationText(t, issue)]));
 }
 
-export function speedtestOutcomeText(
-  t: TranslationFunction,
-  outcome: SpeedtestOutcome,
-) {
+export function speedtestOutcomeText(t: TranslationFunction, outcome: SpeedtestOutcome) {
   return t(SPEEDTEST_OUTCOME_KEYS[outcome]);
 }
 

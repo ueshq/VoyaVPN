@@ -31,13 +31,9 @@ export function useNodeSubscriptions<Trigger = never>(
   t: TranslationFunction,
 ) {
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
-  const [editingSubscription, setEditingSubscription] =
-    useState<Subscription | null>(null);
-  const [deletingSubscription, setDeletingSubscription] =
-    useState<Subscription | null>(null);
-  const [pendingActions, setPendingActions] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
+  const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
+  const [deletingSubscription, setDeletingSubscription] = useState<Subscription | null>(null);
+  const [pendingActions, setPendingActions] = useState<ReadonlySet<string>>(() => new Set());
   const pendingActionsRef = useRef(new Set<string>());
   const subscriptionTriggerRef = useRef<Trigger | null>(null);
   const mounted = useMountedRef();
@@ -90,7 +86,12 @@ export function useNodeSubscriptions<Trigger = never>(
     const active = () => mounted.current && isActive();
     if (ids.length === 0 || !active() || !claimPending(IMPORTED)) return;
     const total: SubscriptionUpdateResult = {
-      imported: 0, updated: 0, skipped: 0, removedExisting: 0, messages: [], outcomes: [],
+      imported: 0,
+      updated: 0,
+      skipped: 0,
+      removedExisting: 0,
+      messages: [],
+      outcomes: [],
     };
     const failures: string[] = [];
     setOperationError(null);
@@ -112,7 +113,9 @@ export function useNodeSubscriptions<Trigger = never>(
         }
       }
       if (!active()) return;
-      setOperationMessage(total.updated > 0 || failures.length === 0 ? formatSubscriptionUpdateSummary(total, t) : null);
+      setOperationMessage(
+        total.updated > 0 || failures.length === 0 ? formatSubscriptionUpdateSummary(total, t) : null,
+      );
       if (failures.length > 0) {
         setOperationError(`${t("panes.subscriptions.importUpdateFailed")}\n${[...new Set(failures)].join("\n")}`);
       }
@@ -124,9 +127,7 @@ export function useNodeSubscriptions<Trigger = never>(
   async function removeSubscription() {
     if (!deletingSubscription || !claimPending(DELETING)) return;
     try {
-      if (
-        await runOperation(() => voyaCommands().deleteSubscriptions([deletingSubscription.id]))
-      ) {
+      if (await runOperation(() => voyaCommands().deleteSubscriptions([deletingSubscription.id]))) {
         setDeletingSubscription(null);
       }
     } finally {

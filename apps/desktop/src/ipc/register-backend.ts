@@ -1,8 +1,4 @@
-import {
-  setAppVisibility,
-  setClipboard,
-  setElevationHandler,
-} from "@voya/client/platform";
+import { setAppVisibility, setClipboard, setElevationHandler } from "@voya/client/platform";
 import { setVoyaCommands } from "@voya/client/transport";
 
 import { ipcCommands } from "@/ipc/commands";

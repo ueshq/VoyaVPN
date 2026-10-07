@@ -94,8 +94,11 @@ CGO: enabled
   });
 
   it("explains a missing Go toolchain before any work starts", () => {
-    expect(requireGoToolchain({ captureCommand: () => ({ status: 0, stdout: "go version go1.26.4 darwin/arm64\n" }) }))
-      .toBe("go1.26.4 darwin/arm64");
-    expect(() => requireGoToolchain({ captureCommand: () => ({ error: new Error("ENOENT") }) })).toThrow(/brew install go/);
+    expect(
+      requireGoToolchain({ captureCommand: () => ({ status: 0, stdout: "go version go1.26.4 darwin/arm64\n" }) }),
+    ).toBe("go1.26.4 darwin/arm64");
+    expect(() => requireGoToolchain({ captureCommand: () => ({ error: new Error("ENOENT") }) })).toThrow(
+      /brew install go/,
+    );
   });
 });

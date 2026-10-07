@@ -20,37 +20,18 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  AppWindow,
-  Globe,
-  GripVertical,
-  Layers,
-  Network,
-  Plug,
-  TriangleAlert,
-} from "lucide-react";
+import { AppWindow, Globe, GripVertical, Layers, Network, Plug, TriangleAlert } from "lucide-react";
 
 import type { TranslationFunction } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { Switch } from "@voya/ui/components/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@voya/ui/components/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@voya/ui/components/table";
 import { Spinner } from "@voya/ui/components/spinner";
 import { cn } from "@voya/ui/lib/utils";
 
-import {
-  dataTableHeader,
-  dataTableRowDivider,
-  dataTableRowHover,
-} from "@/components/app-shell/data-table-surface";
+import { dataTableHeader, dataTableRowDivider, dataTableRowHover } from "@/components/app-shell/data-table-surface";
 import type { RoutingRule } from "@voya/contracts";
 
 import { OUTBOUND_LABEL_KEYS, describeOutbound, type RuleGroupOutbound } from "@voya/features/routing/rule-outbound";
@@ -157,13 +138,9 @@ export function RoutingRuleList({
   const announcements: Announcements = {
     onDragCancel: ({ active }) => t("panes.routing.dragCancel", { name: nameOf(active.id) }),
     onDragEnd: ({ active, over }) =>
-      over
-        ? t("panes.routing.dragEnd", { name: nameOf(active.id), position: positionOf(over.id) })
-        : undefined,
+      over ? t("panes.routing.dragEnd", { name: nameOf(active.id), position: positionOf(over.id) }) : undefined,
     onDragOver: ({ active, over }) =>
-      over
-        ? t("panes.routing.dragOver", { name: nameOf(active.id), position: positionOf(over.id) })
-        : undefined,
+      over ? t("panes.routing.dragOver", { name: nameOf(active.id), position: positionOf(over.id) }) : undefined,
     onDragStart: ({ active }) => t("panes.routing.dragStart", { name: nameOf(active.id) }),
   };
 
@@ -272,15 +249,7 @@ function SortableRuleRow({
 }) {
   const { t } = useI18n();
   const name = ruleDisplayName(rule, t);
-  const {
-    attributes,
-    isDragging,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    transition,
-  } = useSortable({
+  const { attributes, isDragging, listeners, setActivatorNodeRef, setNodeRef, transform, transition } = useSortable({
     attributes: { roleDescription: t("panes.routing.sortableRole") },
     // One move at a time: indices of a second drag would be computed against
     // an order the backend has not committed yet. Locked rules do not move.
@@ -332,9 +301,7 @@ function SortableRuleRow({
               disabled={locked || pendingEnabled !== undefined}
               onCheckedChange={(checked) => onToggle(rule, checked)}
             />
-            {pendingEnabled !== undefined ? (
-              <Spinner className="size-3.5 text-muted-foreground" />
-            ) : null}
+            {pendingEnabled !== undefined ? <Spinner className="size-3.5 text-muted-foreground" /> : null}
           </span>
         </TableCell>
         <TableCell className={cn("overflow-hidden px-3 py-1.5", muted)}>
@@ -350,11 +317,7 @@ function SortableRuleRow({
               {name}
             </button>
             {sentinelLabelKey(rule.remarks) ? (
-              <Badge
-                className="shrink-0 bg-background"
-                title={t("panes.routing.managedRuleHint")}
-                variant="outline"
-              >
+              <Badge className="shrink-0 bg-background" title={t("panes.routing.managedRuleHint")} variant="outline">
                 {t("panes.routing.managedRule")}
               </Badge>
             ) : null}
@@ -380,13 +343,7 @@ function SortableRuleRow({
   );
 }
 
-function RuleMatch({
-  processRulesSupported,
-  rule,
-}: {
-  processRulesSupported: boolean;
-  rule: RoutingRule;
-}) {
+function RuleMatch({ processRulesSupported, rule }: { processRulesSupported: boolean; rule: RoutingRule }) {
   const { t } = useI18n();
   if (!ruleHasMatcher(rule)) {
     return (
@@ -410,27 +367,14 @@ function RuleMatch({
   );
 }
 
-function MatchChipView({
-  chip,
-  processRulesSupported,
-}: {
-  chip: MatchChip;
-  processRulesSupported: boolean;
-}) {
+function MatchChipView({ chip, processRulesSupported }: { chip: MatchChip; processRulesSupported: boolean }) {
   const { t } = useI18n();
   switch (chip.kind) {
     case "scope":
-      return (
-        <span className={cn(CHIP_CLASS, "text-muted-foreground")}>
-          {t(RULE_SCOPE_LABEL_KEYS[chip.scope])}
-        </span>
-      );
+      return <span className={cn(CHIP_CLASS, "text-muted-foreground")}>{t(RULE_SCOPE_LABEL_KEYS[chip.scope])}</span>;
     case "port":
       return (
-        <span
-          className={CHIP_CLASS}
-          title={chip.port ? t("panes.routing.port") : t("panes.routing.network")}
-        >
+        <span className={CHIP_CLASS} title={chip.port ? t("panes.routing.port") : t("panes.routing.network")}>
           <Plug aria-hidden="true" className="size-3 shrink-0" />
           <span className="truncate">{[chip.network, chip.port].filter(Boolean).join(" ")}</span>
         </span>
@@ -442,18 +386,12 @@ function MatchChipView({
       return (
         <span
           className={cn(CHIP_CLASS, unsupported && "text-warning line-through")}
-          title={
-            unsupported
-              ? t("panes.routing.processUnsupported")
-              : matchFieldTitle(chip.field, t)
-          }
+          title={unsupported ? t("panes.routing.processUnsupported") : matchFieldTitle(chip.field, t)}
         >
           <Icon aria-hidden="true" className="size-3 shrink-0" />
           <span className="truncate">{chip.first}</span>
           {chip.more > 0 ? (
-            <span className="shrink-0 text-muted-foreground">
-              {t("panes.routing.matchMore", { count: chip.more })}
-            </span>
+            <span className="shrink-0 text-muted-foreground">{t("panes.routing.matchMore", { count: chip.more })}</span>
           ) : null}
         </span>
       );
@@ -501,13 +439,7 @@ function OutboundBadge({
             </span>
           </Badge>
           {onFix ? (
-            <Button
-              disabled={locked}
-              onClick={onFix}
-              size="xs"
-              type="button"
-              variant="ghost"
-            >
+            <Button disabled={locked} onClick={onFix} size="xs" type="button" variant="ghost">
               {t("panes.routing.fixOutbound")}
             </Button>
           ) : null}

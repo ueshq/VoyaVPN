@@ -70,7 +70,8 @@ describe("rules traffic mode", () => {
     const group = screen.getByRole("group", { name: "Traffic mode" });
     expect(within(group).getAllByRole("button")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Direct" })).not.toBeInTheDocument();
-    const hint = "Rule: Rules decide which traffic uses the proxy;\nGlobal: All captured traffic uses the selected node;";
+    const hint =
+      "Rule: Rules decide which traffic uses the proxy;\nGlobal: All captured traffic uses the selected node;";
     expect(screen.queryByText(hint)).not.toBeInTheDocument();
     const info = screen.getByRole("button", { name: "About traffic mode" });
     await user.hover(info);
@@ -175,7 +176,11 @@ describe("rules traffic mode", () => {
 
   it("keeps the global guard until a save finishes even after leaving the page", async () => {
     let finish!: (value: TrafficModeResponse) => void;
-    mocks.save.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    mocks.save.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
     const user = userEvent.setup();
     const { unmount } = renderSwitcher();
     await waitFor(() => expect(screen.getByRole("button", { name: "Global" })).toBeEnabled());
@@ -188,13 +193,16 @@ describe("rules traffic mode", () => {
     await waitFor(() => expect(runtimeActionPending()).toBe(false));
   });
 
-  it.each(["connecting", "disconnecting", "cleanupPending"] as const)("disables mode changes while %s", async (state) => {
-    setCoreState(state);
-    renderSwitcher();
-    await waitFor(() => expect(mocks.load).toHaveBeenCalledOnce());
-    expect(screen.getByRole("button", { name: "Global" })).toBeDisabled();
-    expect(mocks.save).not.toHaveBeenCalled();
-  });
+  it.each(["connecting", "disconnecting", "cleanupPending"] as const)(
+    "disables mode changes while %s",
+    async (state) => {
+      setCoreState(state);
+      renderSwitcher();
+      await waitFor(() => expect(mocks.load).toHaveBeenCalledOnce());
+      expect(screen.getByRole("button", { name: "Global" })).toBeDisabled();
+      expect(mocks.save).not.toHaveBeenCalled();
+    },
+  );
 
   it("disables changes until settings load and offers retry on read failure", async () => {
     mocks.load.mockRejectedValueOnce(new Error("read failed"));

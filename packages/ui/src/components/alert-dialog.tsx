@@ -5,24 +5,15 @@ import { buttonVariants } from "@voya/ui/components/button-variants";
 import { useDialogFocus } from "@voya/ui/lib/dialog-focus";
 import { cn } from "@voya/ui/lib/utils";
 
-function AlertDialog({
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
+function AlertDialog({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
 
-function AlertDialogPortal({
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Portal>) {
-  return (
-    <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />
-  );
+function AlertDialogPortal({ ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Portal>) {
+  return <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />;
 }
 
-function AlertDialogOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
+function AlertDialogOverlay({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
   return (
     <AlertDialogPrimitive.Overlay
       data-slot="alert-dialog-overlay"
@@ -58,10 +49,7 @@ function AlertDialogContent({
   );
 }
 
-function AlertDialogHeader({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="alert-dialog-header"
@@ -71,26 +59,17 @@ function AlertDialogHeader({
   );
 }
 
-function AlertDialogFooter({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="alert-dialog-footer"
-      className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
-        className,
-      )}
+      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
       {...props}
     />
   );
 }
 
-function AlertDialogTitle({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Title>) {
+function AlertDialogTitle({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Title>) {
   return (
     <AlertDialogPrimitive.Title
       data-slot="alert-dialog-title"
@@ -113,10 +92,7 @@ function AlertDialogDescription({
   );
 }
 
-function AlertDialogAction({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+function AlertDialogAction({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
   return (
     <AlertDialogPrimitive.Action
       data-slot="alert-dialog-action"
@@ -126,10 +102,7 @@ function AlertDialogAction({
   );
 }
 
-function AlertDialogCancel({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
+function AlertDialogCancel({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
   return (
     <AlertDialogPrimitive.Cancel
       data-slot="alert-dialog-cancel"

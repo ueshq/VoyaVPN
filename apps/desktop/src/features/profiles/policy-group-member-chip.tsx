@@ -75,9 +75,7 @@ function PolicyGroupMemberChip({
   const fallback = delay || delayPlaceholder;
   const content = (
     <>
-      <span className={stretch ? "min-w-0 flex-1 truncate text-start" : "max-w-48 truncate"}>
-        {name}
-      </span>
+      <span className={stretch ? "min-w-0 flex-1 truncate text-start" : "max-w-48 truncate"}>{name}</span>
       {fallback ? <span className="text-xs text-muted-foreground">{fallback}</span> : null}
     </>
   );

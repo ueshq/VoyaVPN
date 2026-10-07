@@ -9,15 +9,9 @@ import { DraftTextField, Panel, type ProfilePanelProps } from "./profile-form-fi
 export function ProtocolPanel(panel: ProfilePanelProps) {
   const { t } = useI18n();
   const { draft, onChange } = panel;
-  const uuid = (
-    <DraftTextField {...panel} label={t("panes.profiles.fields.uuid")} name="uuid" />
-  );
-  const username = (
-    <DraftTextField {...panel} label={t("panes.profiles.fields.username")} name="username" />
-  );
-  const password = (
-    <DraftTextField {...panel} label={t("panes.profiles.fields.password")} name="password" />
-  );
+  const uuid = <DraftTextField {...panel} label={t("panes.profiles.fields.uuid")} name="uuid" />;
+  const username = <DraftTextField {...panel} label={t("panes.profiles.fields.username")} name="username" />;
+  const password = <DraftTextField {...panel} label={t("panes.profiles.fields.password")} name="password" />;
   const congestionControl = (
     <DraftTextField
       {...panel}
@@ -116,11 +110,7 @@ export function ProtocolPanel(panel: ProfilePanelProps) {
             <DraftTextField {...panel} label={t("panes.profiles.fields.privateKey")} name="privateKey" />
             <DraftTextField {...panel} label={t("panes.profiles.fields.peerPublicKey")} name="peerPublicKey" />
             <DraftTextField {...panel} label={t("panes.profiles.fields.presharedKey")} name="presharedKey" />
-            <DraftTextField
-              {...panel}
-              label={t("panes.profiles.fields.interfaceAddress")}
-              name="interfaceAddress"
-            />
+            <DraftTextField {...panel} label={t("panes.profiles.fields.interfaceAddress")} name="interfaceAddress" />
             <DraftTextField {...panel} label={t("panes.profiles.fields.allowedIps")} name="allowedIps" />
             <DraftTextField {...panel} label={t("panes.profiles.fields.reservedBytes")} name="reserved" />
             <DraftTextField {...panel} inputMode="numeric" label={t("panes.profiles.fields.mtu")} name="mtu" />

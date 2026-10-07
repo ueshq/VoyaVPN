@@ -51,10 +51,7 @@ describe("EventBridge", () => {
     // Policy groups hang off the profiles root, so the event's own
     // `policyGroups` key is already covered: invalidating it as well would
     // cancel the list fetch the root just started and send it again.
-    expect(invalidate.mock.calls.map(([options]) => options?.queryKey)).toEqual([
-      ["profiles"],
-      ["app-settings"],
-    ]);
+    expect(invalidate.mock.calls.map(([options]) => options?.queryKey)).toEqual([["profiles"], ["app-settings"]]);
 
     await unmount();
     await voyaTransport().commands.setActiveProfile("profile-0");

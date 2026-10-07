@@ -23,23 +23,12 @@ const ANDROID_ABIS = [
 const repoRoot = repoRootFromScript(import.meta.url);
 const { directory: profileDir, profile } = rustProfile();
 const jniLibs = resolve(repoRoot, "apps", "mobile", "android", "app", "src", "main", "jniLibs");
-const bindingsRoot = resolve(
-  repoRoot,
-  "apps",
-  "mobile",
-  "android",
-  "app",
-  "src",
-  "main",
-  "java",
-);
+const bindingsRoot = resolve(repoRoot, "apps", "mobile", "android", "app", "src", "main", "java");
 
 function requireEnvironment() {
   for (const variable of ["ANDROID_HOME", "ANDROID_NDK_HOME"]) {
     if (!process.env[variable]) {
-      throw new Error(
-        `${variable} is not set. Install the Android SDK and NDK, then point ${variable} at them.`,
-      );
+      throw new Error(`${variable} is not set. Install the Android SDK and NDK, then point ${variable} at them.`);
     }
   }
 }
@@ -65,7 +54,9 @@ function buildLibraries() {
       profile,
       // bindgen reads UniFFI metadata from the ELF symbol table. Gradle strips
       // the packaged JNI library later, after the bindings have been generated.
-      "--", "-C", "strip=none",
+      "--",
+      "-C",
+      "strip=none",
     ],
     { cwd: repoRoot },
   );

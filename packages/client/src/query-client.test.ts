@@ -37,8 +37,7 @@ describe("createAppQueryClient", () => {
   it("falls back to the generic operation title and redacts the message", async () => {
     const queryClient = createAppQueryClient();
     const mutation = queryClient.getMutationCache().build<void, Error, void, unknown>(queryClient, {
-      mutationFn: () =>
-        Promise.reject(new Error("request failed https://user:secret@example.test/sub")),
+      mutationFn: () => Promise.reject(new Error("request failed https://user:secret@example.test/sub")),
     });
 
     await expect(mutation.execute(undefined)).rejects.toThrow("request failed");

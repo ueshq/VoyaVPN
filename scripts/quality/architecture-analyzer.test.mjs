@@ -38,7 +38,9 @@ pub unsafe fn after() {}
   });
 
   it("counts all lines when production follows a test module", () => {
-    const hiddenLines = Array.from({ length: 801 }, (_, index) => `pub const LINE_${index}: usize = ${index};`).join("\n");
+    const hiddenLines = Array.from({ length: 801 }, (_, index) => `pub const LINE_${index}: usize = ${index};`).join(
+      "\n",
+    );
     const source = `#[cfg(test)]\nmod tests {}\n${hiddenLines}`;
     const result = splitRustProduction(source);
 

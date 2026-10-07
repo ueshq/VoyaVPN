@@ -4,11 +4,7 @@ import {
   DEFAULT_SING_BOX_VERSION,
   verifyStagedSingBoxSeed,
 } from "../../../core/sing-box-installer.mjs";
-import {
-  hasStagedRuleSets,
-  ruleSetSeedDir,
-  verifyStagedRuleSets,
-} from "../../../core/rule-sets-installer.mjs";
+import { hasStagedRuleSets, ruleSetSeedDir, verifyStagedRuleSets } from "../../../core/rule-sets-installer.mjs";
 import { repoRoot, resolveRepoPath, isDryRun } from "./inputs.mjs";
 
 const requiredDocs = [
@@ -113,9 +109,10 @@ export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStaged
     return;
   }
 
-  const label = verification.origin === "source"
-    ? `source-built ${verification.manifest.version} (${verification.manifest.target})`
-    : verification.manifest.assetName;
+  const label =
+    verification.origin === "source"
+      ? `source-built ${verification.manifest.version} (${verification.manifest.target})`
+      : verification.manifest.assetName;
   if (!verification.pinned) {
     reporter.blocker("bundled sing-box seed", [
       `${label} was staged with ${ALLOW_UNPINNED_SING_BOX_ENV}; its content is unverified`,
@@ -137,10 +134,7 @@ export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStaged
  */
 export async function checkRuleSetSeedPinning(
   reporter,
-  {
-    isStaged = () => hasStagedRuleSets(ruleSetSeedDir(repoRoot)),
-    verify = verifyStagedRuleSets,
-  } = {},
+  { isStaged = () => hasStagedRuleSets(ruleSetSeedDir(repoRoot)), verify = verifyStagedRuleSets } = {},
 ) {
   if (!isStaged()) {
     reporter.skip("bundled rule sets", ["no rule sets staged; nothing here to check"]);
@@ -180,12 +174,19 @@ export const signingInputNames = [
  * can pass `HAS_<NAME>=true` instead of the value.
  */
 export function hasSigningInput(name, env = process.env) {
-  return Boolean(env[name]) || String(env[`HAS_${name}`] ?? "").trim().toLowerCase() === "true";
+  return (
+    Boolean(env[name]) ||
+    String(env[`HAS_${name}`] ?? "")
+      .trim()
+      .toLowerCase() === "true"
+  );
 }
 
 export async function checkStableEnvironment(reporter, options) {
   if (isDryRun(options)) {
-    reporter.pass("stable-only secrets", ["dry-run mode does not require signing, notarization, or publication secrets"]);
+    reporter.pass("stable-only secrets", [
+      "dry-run mode does not require signing, notarization, or publication secrets",
+    ]);
     return;
   }
 
@@ -210,7 +211,10 @@ export async function checkStableEnvironment(reporter, options) {
   }
 
   if (missing.length > 0) {
-    reporter.fail("stable required env inputs", missing.map((name) => `missing: ${name}`));
+    reporter.fail(
+      "stable required env inputs",
+      missing.map((name) => `missing: ${name}`),
+    );
     return;
   }
 

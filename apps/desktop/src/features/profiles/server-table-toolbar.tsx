@@ -29,11 +29,7 @@ import { SpeedtestButton } from "./server-table-menus";
 import { SpeedtestSettingsDialog } from "./speedtest-settings-dialog";
 import type { ServerTableController } from "./use-server-table";
 
-export function ServerTableToolbar({
-  controller,
-}: {
-  controller: ServerTableController;
-}) {
+export function ServerTableToolbar({ controller }: { controller: ServerTableController }) {
   const {
     handleCancelSpeedtest,
     handleDirectImport,
@@ -72,9 +68,7 @@ export function ServerTableToolbar({
       data-slot="toolbar"
       role="toolbar"
     >
-      <DisabledReason
-        reason={profiles.length ? undefined : t("panes.profiles.speedtest.nothingToTest")}
-      >
+      <DisabledReason reason={profiles.length ? undefined : t("panes.profiles.speedtest.nothingToTest")}>
         {/* A run restored from an earlier launch has no known owner, so Test all can stop it. */}
         <SpeedtestButton
           busyElsewhere={speedtestRunning && speedtestSource !== null && speedtestSource !== "all"}
@@ -109,10 +103,7 @@ export function ServerTableToolbar({
               onSelect={() => nodeGroups.setSortByLatency(!nodeGroups.sortByLatency)}
               role="menuitemcheckbox"
             >
-              <Check
-                aria-hidden="true"
-                className={cn(!nodeGroups.sortByLatency && "invisible")}
-              />
+              <Check aria-hidden="true" className={cn(!nodeGroups.sortByLatency && "invisible")} />
               {t("panes.profiles.view.sortByLatency")}
             </MenubarItem>
             <MenubarItem
@@ -120,10 +111,7 @@ export function ServerTableToolbar({
               onSelect={() => nodeGroups.setHideUnreachable(!nodeGroups.hideUnreachable)}
               role="menuitemcheckbox"
             >
-              <Check
-                aria-hidden="true"
-                className={cn(!nodeGroups.hideUnreachable && "invisible")}
-              />
+              <Check aria-hidden="true" className={cn(!nodeGroups.hideUnreachable && "invisible")} />
               {t("panes.profiles.view.hideUnreachable")}
             </MenubarItem>
             <MenubarSeparator />
@@ -146,10 +134,7 @@ export function ServerTableToolbar({
         type="button"
         variant="outline"
       >
-        <RefreshCw
-          aria-hidden="true"
-          className={cn("size-4", updatingAllSubscriptions && "animate-spin")}
-        />
+        <RefreshCw aria-hidden="true" className={cn("size-4", updatingAllSubscriptions && "animate-spin")} />
         {t("panes.profiles.toolbar.updateAllSubscriptions")}
       </Button>
       <Menubar
@@ -180,29 +165,31 @@ export function ServerTableToolbar({
           >
             {IMPORT_METHODS.map(({ method, labelKey, icon: Icon }, index) => {
               return (
-              <MenubarItem
-                key={method}
-                disabled={directImportPending !== null || updatingSubscriptions.size > 0}
-                ref={index === 0 ? firstAddItemRef : undefined}
-                onSelect={() => {
-                  if (method === "clipboard" || method === "qrScreen") {
-                    void handleDirectImport(method);
-                  } else {
-                    openingDialogRef.current = true;
-                    setImportMethod(method);
-                  }
-                }}
-              >
-                <Icon aria-hidden="true" />
-                {t(labelKey)}
-              </MenubarItem>
+                <MenubarItem
+                  key={method}
+                  disabled={directImportPending !== null || updatingSubscriptions.size > 0}
+                  ref={index === 0 ? firstAddItemRef : undefined}
+                  onSelect={() => {
+                    if (method === "clipboard" || method === "qrScreen") {
+                      void handleDirectImport(method);
+                    } else {
+                      openingDialogRef.current = true;
+                      setImportMethod(method);
+                    }
+                  }}
+                >
+                  <Icon aria-hidden="true" />
+                  {t(labelKey)}
+                </MenubarItem>
               );
             })}
             <MenubarSeparator />
-            <MenubarItem onSelect={() => {
-              openingDialogRef.current = true;
-              openSubscription(null, addTriggerRef.current ?? undefined);
-            }}>
+            <MenubarItem
+              onSelect={() => {
+                openingDialogRef.current = true;
+                openSubscription(null, addTriggerRef.current ?? undefined);
+              }}
+            >
               <Rss aria-hidden="true" />
               <span className="grid">
                 <span>{t("home.subscriptionCard.add")}</span>
@@ -212,26 +199,28 @@ export function ServerTableToolbar({
                 </span>
               </span>
             </MenubarItem>
-            <MenubarItem onSelect={() => {
-              openingDialogRef.current = true;
-              setDialogState({ mode: "create" });
-            }}>
+            <MenubarItem
+              onSelect={() => {
+                openingDialogRef.current = true;
+                setDialogState({ mode: "create" });
+              }}
+            >
               <FilePlus2 aria-hidden="true" />
               {t("panes.profiles.toolbar.manualNode")}
             </MenubarItem>
-            <MenubarItem onSelect={() => {
-              openingDialogRef.current = true;
-              openGroupEditor(null);
-            }}>
+            <MenubarItem
+              onSelect={() => {
+                openingDialogRef.current = true;
+                openGroupEditor(null);
+              }}
+            >
               <Layers aria-hidden="true" />
               {t("policyGroups.new")}
             </MenubarItem>
           </MenubarContent>
         </MenubarMenu>
       </Menubar>
-      {speedtestSettingsOpen ? (
-        <SpeedtestSettingsDialog onOpenChange={setSpeedtestSettingsOpen} />
-      ) : null}
+      {speedtestSettingsOpen ? <SpeedtestSettingsDialog onOpenChange={setSpeedtestSettingsOpen} /> : null}
     </div>
   );
 }

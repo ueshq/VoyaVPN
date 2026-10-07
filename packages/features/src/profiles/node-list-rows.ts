@@ -88,18 +88,14 @@ export function nodeListRows(
   const byGroup = profilesByNodeGroup(profiles);
   const needle = view.search?.trim().toLocaleLowerCase() ?? "";
   const rows: NodeListRow[] = [];
-  function append(
-    groupKey: NodeSourceKey,
-    name: string,
-    subscription: Subscription | null,
-  ) {
+  function append(groupKey: NodeSourceKey, name: string, subscription: Subscription | null) {
     const allMembers = byGroup.get(groupKey) ?? [];
     // A search naming the group shows all of it; otherwise each node matches
     // on its own name and address.
-    const matched = !needle || name.toLocaleLowerCase().includes(needle)
-      ? allMembers
-      : allMembers.filter((item) =>
-        (view.searchHays?.get(item.profile.id) ?? nodeSearchText(item)).includes(needle));
+    const matched =
+      !needle || name.toLocaleLowerCase().includes(needle)
+        ? allMembers
+        : allMembers.filter((item) => (view.searchHays?.get(item.profile.id) ?? nodeSearchText(item)).includes(needle));
     const members = arrangeMembers(matched, view);
     byGroup.delete(groupKey);
     if (needle && !members.length) return;
@@ -126,13 +122,10 @@ export function nodeListRows(
         }),
       );
   }
-  for (const source of [...subscriptions].sort(
-    (a, b) => a.sort - b.sort || a.id.localeCompare(b.id),
-  ))
+  for (const source of [...subscriptions].sort((a, b) => a.sort - b.sort || a.id.localeCompare(b.id)))
     append(`subscription:${source.id}`, source.remarks || unknownName, source);
   // Keep source nodes isolated even before subscription information is available.
-  for (const key of byGroup.keys())
-    if (key !== LOCAL_GROUP_KEY) append(key, unknownName, null);
+  for (const key of byGroup.keys()) if (key !== LOCAL_GROUP_KEY) append(key, unknownName, null);
   if (byGroup.has(LOCAL_GROUP_KEY)) append(LOCAL_GROUP_KEY, localName, null);
   return rows;
 }

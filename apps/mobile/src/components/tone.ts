@@ -34,10 +34,7 @@ const TONE_TEXT = {
  * be written out where this is called — Tailwind finds classes by scanning
  * the source.
  */
-export function useClassColor(
-  className: string,
-  property: "backgroundColor" | "color" = "color",
-) {
+export function useClassColor(className: string, property: "backgroundColor" | "color" = "color") {
   const value = useResolveClassNames(className)[property];
 
   return typeof value === "string" ? value : undefined;

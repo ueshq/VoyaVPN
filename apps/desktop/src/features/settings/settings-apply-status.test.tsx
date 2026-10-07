@@ -47,17 +47,11 @@ it("retains the pending proxy action after failure and retries it", async () => 
     .mockRejectedValueOnce(new Error("proxy failed"))
     .mockResolvedValueOnce({ connected: true, action: "reapplyProxy" });
   mount();
-  await userEvent.click(
-    await screen.findByRole("button", { name: "Apply proxy settings" }),
-  );
+  await userEvent.click(await screen.findByRole("button", { name: "Apply proxy settings" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("proxy failed");
   await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-  await waitFor(() =>
-    expect(ipc.applyPendingSettings).toHaveBeenCalledTimes(2),
-  );
-  expect(
-    await screen.findByRole("button", { name: "Apply proxy settings" }),
-  ).toBeEnabled();
+  await waitFor(() => expect(ipc.applyPendingSettings).toHaveBeenCalledTimes(2));
+  expect(await screen.findByRole("button", { name: "Apply proxy settings" })).toBeEnabled();
 });
 it("drops a failed apply's error once nothing is left to apply", async () => {
   ipc.getSettingsApplyStatus.mockResolvedValue({ connected: true, action: "reapplyProxy" });
@@ -78,11 +72,7 @@ it("hides the banner when disconnected and prevents apply while saving", async (
     action: "none",
   });
   const first = mount();
-  await waitFor(() =>
-    expect(first.client.getQueryState(queryKeys.settingsApply)?.status).toBe(
-      "success",
-    ),
-  );
+  await waitFor(() => expect(first.client.getQueryState(queryKeys.settingsApply)?.status).toBe("success"));
   expect(first.container).toBeEmptyDOMElement();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
   first.unmount();
@@ -91,9 +81,7 @@ it("hides the banner when disconnected and prevents apply while saving", async (
     action: "reconnect",
   });
   mount(true);
-  expect(
-    await screen.findByRole("button", { name: "Apply and reconnect" }),
-  ).toBeDisabled();
+  expect(await screen.findByRole("button", { name: "Apply and reconnect" })).toBeDisabled();
 });
 it("says when changes are being saved and once they are saved", async () => {
   ipc.getSettingsApplyStatus.mockResolvedValue({
@@ -107,9 +95,7 @@ it("says when changes are being saved and once they are saved", async () => {
   expect(await screen.findByRole("status")).toHaveTextContent("Saving…");
   view.rerender(status({ saved: true, saving: false }));
   expect(
-    await screen.findByText(
-      "All changes saved. Connection changes take effect the next time you connect.",
-    ),
+    await screen.findByText("All changes saved. Connection changes take effect the next time you connect."),
   ).toBeInTheDocument();
   view.rerender(status({ failed: true, saved: true, saving: false }));
   expect(view.container).toBeEmptyDOMElement();

@@ -116,7 +116,12 @@ describe("CaptureModeSetting", () => {
   });
 
   it.each([
-    { enabled: false, activeTunBackend: "process" as const, proxy: "forcedClear" as const, text: "The VPN is capturing system traffic." },
+    {
+      enabled: false,
+      activeTunBackend: "process" as const,
+      proxy: "forcedClear" as const,
+      text: "The VPN is capturing system traffic.",
+    },
     { enabled: true, activeTunBackend: null, proxy: "forcedChange" as const, text: "The system proxy is set." },
   ])("shows actual capture when the saved choice differs ($text)", ({ enabled, activeTunBackend, proxy, text }) => {
     useRuntimeEventStore.setState({
@@ -214,7 +219,10 @@ describe("CaptureModeSetting", () => {
   it("submits one change at a time", async () => {
     let finish: ((status: ConnectionModeStatus) => void) | undefined;
     ipc.setConnectionMode.mockImplementation(
-      () => new Promise<ConnectionModeStatus>((resolve) => { finish = resolve; }),
+      () =>
+        new Promise<ConnectionModeStatus>((resolve) => {
+          finish = resolve;
+        }),
     );
     const user = userEvent.setup();
     render(<CaptureModeSetting />);

@@ -29,9 +29,7 @@ export type AppUpdateProgress = {
   total: number | null;
 };
 
-type DownloadEvent = Parameters<
-  NonNullable<Parameters<TauriUpdate["downloadAndInstall"]>[0]>
->[0];
+type DownloadEvent = Parameters<NonNullable<Parameters<TauriUpdate["downloadAndInstall"]>[0]>>[0];
 
 export async function checkAppUpdate(): Promise<AppUpdateCheckResult> {
   let update: TauriUpdate | null = null;

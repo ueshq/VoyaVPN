@@ -101,10 +101,7 @@ describe("buildPerAppRule", () => {
 
 describe("normalizeProcessNames", () => {
   it("trims, drops empties, and dedupes case-insensitively", () => {
-    expect(normalizeProcessNames([" chrome.exe ", "", "Chrome.EXE", "steam"])).toEqual([
-      "chrome.exe",
-      "steam",
-    ]);
+    expect(normalizeProcessNames([" chrome.exe ", "", "Chrome.EXE", "steam"])).toEqual(["chrome.exe", "steam"]);
   });
 });
 
@@ -148,12 +145,7 @@ describe("savePerAppRule", () => {
       "routing-1",
       buildPerAppRule("exclude", ["chrome.exe"], null),
     );
-    expect(ipc.moveRoutingRule).toHaveBeenCalledExactlyOnceWith(
-      "routing-1",
-      "rule-new",
-      "top",
-      null,
-    );
+    expect(ipc.moveRoutingRule).toHaveBeenCalledExactlyOnceWith("routing-1", "rule-new", "top", null);
   });
 
   it("leaves a rule that is already first where it is", async () => {

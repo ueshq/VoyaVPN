@@ -1,13 +1,5 @@
 import { useRef } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  Folder,
-  RefreshCw,
-  Rss,
-  Settings,
-  Trash2,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, RefreshCw, Rss, Settings, Trash2 } from "lucide-react";
 import { useI18n } from "@voya/i18n/use-i18n";
 import { SubscriptionMetaLine } from "@/features/subscriptions/subscription-card";
 import { Button } from "@voya/ui/components/button";
@@ -39,20 +31,14 @@ export function NodeGroupCard({
   const moreRef = useRef<HTMLButtonElement>(null);
   // A dialog opened from the menu keeps its focus instead of the menu's trigger.
   const openingDialogRef = useRef(false);
-  const metadata = subscription
-    ? controller.subscriptionMetadata.get(subscription.id)
-    : null;
+  const metadata = subscription ? controller.subscriptionMetadata.get(subscription.id) : null;
   const source = `group:${row.groupKey}`;
   const moreLabel = t("nodeGroups.moreFor", { name: row.name });
   const updateLabel = t("home.subscriptionCard.update");
   const returnFocusTo = () => moreRef.current ?? document.body;
 
   return (
-    <article
-      className="node-group-surface node-group-header"
-      data-testid="node-group-card"
-      aria-label={row.name}
-    >
+    <article className="node-group-surface node-group-header" data-testid="node-group-card" aria-label={row.name}>
       <div className="node-group-heading">
         <button
           className="node-group-toggle"
@@ -70,15 +56,9 @@ export function NodeGroupCard({
             <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
           )}
           {row.groupKey.startsWith("subscription:") ? (
-            <Rss
-              aria-hidden="true"
-              className="size-5 shrink-0 text-muted-foreground"
-            />
+            <Rss aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
           ) : (
-            <Folder
-              aria-hidden="true"
-              className="size-5 shrink-0 text-muted-foreground"
-            />
+            <Folder aria-hidden="true" className="size-5 shrink-0 text-muted-foreground" />
           )}
           <span className="min-w-0">
             <span className="block truncate font-semibold" title={row.name}>
@@ -105,11 +85,7 @@ export function NodeGroupCard({
             >
               <RefreshCw
                 aria-hidden="true"
-                className={
-                  controller.updatingSubscriptions.has(subscription.id)
-                    ? "size-4 animate-spin"
-                    : "size-4"
-                }
+                className={controller.updatingSubscriptions.has(subscription.id) ? "size-4 animate-spin" : "size-4"}
               />
               <span data-slot="button-label">{updateLabel}</span>
             </Button>
@@ -185,17 +161,10 @@ export function NodeGroupCard({
         </div>
       </div>
       {subscription ? (
-        <SubscriptionMetaLine
-          language={language}
-          metadata={metadata}
-          t={t}
-          className="px-5 pb-3"
-        />
+        <SubscriptionMetaLine language={language} metadata={metadata} t={t} className="px-5 pb-3" />
       ) : null}
       {row.expanded && !row.members.length ? (
-        <p className="node-group-empty">
-          {t(subscription ? "subscriptions.empty" : "nodeGroups.empty")}
-        </p>
+        <p className="node-group-empty">{t(subscription ? "subscriptions.empty" : "nodeGroups.empty")}</p>
       ) : null}
     </article>
   );

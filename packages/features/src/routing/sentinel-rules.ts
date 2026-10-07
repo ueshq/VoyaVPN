@@ -29,10 +29,7 @@ export function sentinelLabelKey(remarks: string | null | undefined): Translatio
 }
 
 /** What the page calls a rule: a managed rule's translated name, else its remarks. */
-export function ruleDisplayName(
-  rule: Pick<RoutingRule, "remarks">,
-  t: TranslationFunction,
-): string {
+export function ruleDisplayName(rule: Pick<RoutingRule, "remarks">, t: TranslationFunction): string {
   const labelKey = sentinelLabelKey(rule.remarks);
   if (labelKey) {
     return t(labelKey);

@@ -1,5 +1,16 @@
 import type * as React from "react";
-import { Activity, ArrowDown, ArrowUp, Home, PanelLeft, PanelRight, RadioTower, Route, Server, Settings } from "lucide-react";
+import {
+  Activity,
+  ArrowDown,
+  ArrowUp,
+  Home,
+  PanelLeft,
+  PanelRight,
+  RadioTower,
+  Route,
+  Server,
+  Settings,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@voya/ui/lib/utils";
@@ -123,12 +134,7 @@ function SidebarFooter() {
   const download = formatBytesPerSecond(statistics?.downloadBytesPerSecond ?? 0);
 
   return (
-    <div
-      aria-label={t("status.aria")}
-      className="sidebar-footer"
-      data-state={state}
-      data-testid="sidebar-footer"
-    >
+    <div aria-label={t("status.aria")} className="sidebar-footer" data-state={state} data-testid="sidebar-footer">
       {/* Visible on every page, so being connected never has to be guessed from the rates. */}
       {/* The collapsed sidebar clips the label, so hovering the dot still says it. */}
       <p className="sidebar-status" title={t(CORE_STATE_TRANSLATION_KEYS[state])}>
@@ -145,12 +151,12 @@ function SidebarFooter() {
               {layout === "expanded" && <p className="sidebar-traffic-title">{t("sidebar.traffic")}</p>}
               <div className="sidebar-traffic-row">
                 <ArrowUp aria-hidden="true" className="size-4" />
-                {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.upload")}{" "}</span>}
+                {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.upload")} </span>}
                 <span className="sidebar-traffic-value">{upload}</span>
               </div>
               <div className="sidebar-traffic-row">
                 <ArrowDown aria-hidden="true" className="size-4" />
-                {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.download")}{" "}</span>}
+                {layout === "expanded" && <span className="sidebar-traffic-label">{t("sidebar.download")} </span>}
                 <span className="sidebar-traffic-value">{download}</span>
               </div>
             </div>

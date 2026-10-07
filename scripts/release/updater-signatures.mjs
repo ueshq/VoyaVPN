@@ -97,11 +97,7 @@ function decodeTauriUpdaterSignature(signatureBase64, label = "updater signature
 
   const minisignSignature = strictBase64ToUtf8(signatureBase64, label);
   const lines = minisignSignature.trimEnd().split(/\r?\n/);
-  if (
-    lines.length !== 4 ||
-    !lines[0].startsWith("untrusted comment: ") ||
-    !lines[2].startsWith("trusted comment: ")
-  ) {
+  if (lines.length !== 4 || !lines[0].startsWith("untrusted comment: ") || !lines[2].startsWith("trusted comment: ")) {
     throw new UpdaterSignatureError(`${label} must decode to a four-line minisign signature`);
   }
 
@@ -146,7 +142,12 @@ async function hashFileBlake2b512(path) {
   return hash.digest();
 }
 
-async function verifyTauriUpdaterSignatureFile(payloadPath, signatureBase64, publicKeyBase64, context = "updater artifact") {
+async function verifyTauriUpdaterSignatureFile(
+  payloadPath,
+  signatureBase64,
+  publicKeyBase64,
+  context = "updater artifact",
+) {
   const publicKey = decodeTauriUpdaterPublicKey(publicKeyBase64, `${context} public key`);
   const signature = decodeTauriUpdaterSignature(signatureBase64, `${context} signature`);
   if (!publicKey.keyId.equals(signature.keyId)) {

@@ -1,12 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-import type {
-  AppEvent,
-  InvalidateEvent,
-  NoticeCode,
-  ShellTabTarget,
-  TransientStreamEvent,
-} from "@voya/contracts";
+import type { AppEvent, InvalidateEvent, NoticeCode, ShellTabTarget, TransientStreamEvent } from "@voya/contracts";
 import type { TranslationFunction } from "@voya/i18n/core";
 import { getErrorMessage } from "@voya/utils/error";
 
@@ -96,8 +90,9 @@ export function createEventRouter(options: EventRouterOptions): EventRouter {
       // One event often names a root and something under it (`profiles` and
       // the policy groups it contains). Invalidating both cancels the fetch the
       // first one started and sends the same command a second time.
-      const covered = invalidated.some((root) =>
-        root.length < queryKey.length && root.every((part, index) => part === queryKey[index]));
+      const covered = invalidated.some(
+        (root) => root.length < queryKey.length && root.every((part, index) => part === queryKey[index]),
+      );
       if (!covered) {
         void options.queryClient.invalidateQueries({ queryKey });
       }
@@ -139,9 +134,11 @@ export function createEventRouter(options: EventRouterOptions): EventRouter {
     // and a full refetch of it per result was the dominant cost of a long run,
     // so results coalesce into one list refresh per COUNTRY_REFRESH_MS. The
     // run's closing invalidation covers the tail.
-    if (event.kind === "speedtestResults"
-      && event.payload.some((result) => !speedtestPending(result))
-      && countryRefresh === undefined) {
+    if (
+      event.kind === "speedtestResults" &&
+      event.payload.some((result) => !speedtestPending(result)) &&
+      countryRefresh === undefined
+    ) {
       countryRefresh = setTimeout(() => {
         countryRefresh = undefined;
         void options.queryClient.invalidateQueries({ queryKey: queryKeys.profileList });
@@ -159,7 +156,6 @@ export function createEventRouter(options: EventRouterOptions): EventRouter {
     },
   };
 }
-
 
 function reportEventRouterError(context: string, error: unknown) {
   console.error(`[event-router] ${context}: ${getErrorMessage(error)}`);

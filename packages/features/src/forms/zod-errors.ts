@@ -38,9 +38,6 @@ function localeKeyExists(key: string): boolean {
 }
 
 /** Renders a field-error map for a surface whose props take plain strings. */
-export function translateFieldErrors(
-  t: TranslationFunction,
-  errors: FieldErrorMap,
-): Record<string, string> {
+export function translateFieldErrors(t: TranslationFunction, errors: FieldErrorMap): Record<string, string> {
   return Object.fromEntries(Object.entries(errors).map(([field, key]) => [field, t(key)]));
 }

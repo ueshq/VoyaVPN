@@ -32,9 +32,7 @@ describe("rule match summary", () => {
       { kind: "port", network: "TCP/UDP", port: null },
       { kind: "scope", scope: "dns" },
     ]);
-    expect(ruleMatchChips(rule({ port: "80", scope: "all" }))).toEqual([
-      { kind: "port", network: null, port: "80" },
-    ]);
+    expect(ruleMatchChips(rule({ port: "80", scope: "all" }))).toEqual([{ kind: "port", network: null, port: "80" }]);
   });
 
   it("knows a rule without matchers never applies", () => {

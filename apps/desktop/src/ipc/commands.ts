@@ -6,9 +6,7 @@ import { commands as rawCommands } from "@/ipc/bindings";
 
 /** The generated binding with each command's result envelope unwrapped. */
 type Unwrapped<Raw> = {
-  [Name in keyof Raw]: Raw[Name] extends (
-    ...args: infer Args
-  ) => Promise<CommandResult<infer Value>>
+  [Name in keyof Raw]: Raw[Name] extends (...args: infer Args) => Promise<CommandResult<infer Value>>
     ? (...args: Args) => Promise<Value>
     : never;
 };
@@ -21,15 +19,13 @@ type Unwrapped<Raw> = {
  * names and the generated binding lacks, or one whose arguments or result
  * drifted, fails to compile here.
  */
-export const ipcCommands = (Object.fromEntries(
+export const ipcCommands = Object.fromEntries(
   Object.entries(rawCommands).map(([key, command]) => [
     key,
     wrapCommand(command as (...args: unknown[]) => Promise<CommandResult<unknown>>),
   ]),
-) as Unwrapped<typeof rawCommands>) satisfies VoyaCommands;
+) as Unwrapped<typeof rawCommands> satisfies VoyaCommands;
 
-function wrapCommand<Args extends unknown[], T>(
-  command: (...args: Args) => Promise<CommandResult<T>>,
-) {
+function wrapCommand<Args extends unknown[], T>(command: (...args: Args) => Promise<CommandResult<T>>) {
   return async (...args: Args): Promise<T> => unwrapCommandResult(await command(...args));
 }

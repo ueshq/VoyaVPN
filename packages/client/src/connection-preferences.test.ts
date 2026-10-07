@@ -4,7 +4,10 @@ import { useConnectionPreferences } from "./connection-preferences";
 
 const storage = installTestStorage();
 const key = "voyavpn.mobile.connection";
-beforeEach(() => { storage.clear(); useConnectionPreferences.setState({ autoConnect: false, recentIds: [] }); });
+beforeEach(() => {
+  storage.clear();
+  useConnectionPreferences.setState({ autoConnect: false, recentIds: [] });
+});
 it("persists opt-in and bounds recent successful selections without duplicate ids", async () => {
   const state = useConnectionPreferences.getState();
   state.setAutoConnect(true);
@@ -14,7 +17,11 @@ it("persists opt-in and bounds recent successful selections without duplicate id
   expect(useConnectionPreferences.getState().autoConnect).toBe(true);
 });
 it("does not turn malformed or old preferences into permission to auto-connect", async () => {
-  for (const state of [{}, { autoConnect: "true", recentIds: "node" }, { autoConnect: null, recentIds: [null, 2, "", "a", "a", "b"] }]) {
+  for (const state of [
+    {},
+    { autoConnect: "true", recentIds: "node" },
+    { autoConnect: null, recentIds: [null, 2, "", "a", "a", "b"] },
+  ]) {
     storage.write(key, JSON.stringify({ state, version: 0 }));
     await useConnectionPreferences.persist.rehydrate();
     expect(useConnectionPreferences.getState().autoConnect).toBe(false);

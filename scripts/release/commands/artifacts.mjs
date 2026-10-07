@@ -132,7 +132,9 @@ const updaterPayloadPatterns = {
 };
 
 export function updaterPayloadPlatform(target) {
-  const value = String(target ?? "").trim().toLowerCase();
+  const value = String(target ?? "")
+    .trim()
+    .toLowerCase();
   if (value.startsWith("darwin") || value.startsWith("macos")) {
     return "darwin";
   }
@@ -156,9 +158,7 @@ export function selectUpdaterPayloadPath(relativePaths, target) {
   }
 
   const signed = new Set(
-    relativePaths
-      .filter((path) => path.toLowerCase().endsWith(".sig"))
-      .map((path) => path.slice(0, -4).toLowerCase()),
+    relativePaths.filter((path) => path.toLowerCase().endsWith(".sig")).map((path) => path.slice(0, -4).toLowerCase()),
   );
 
   const pattern = updaterPayloadPatterns[platform];
@@ -330,9 +330,7 @@ async function main(argv = []) {
       // with Tauri 2 in-place updater artifacts, "which file does the updater
       // serve" cannot be derived from the suffix alone.
       ...(updaterPayloadPath && originalRelativePath === updaterPayloadPath ? { updaterPayload: true } : {}),
-      ...(updaterPayloadPath && originalRelativePath === `${updaterPayloadPath}.sig`
-        ? { updaterSignature: true }
-        : {}),
+      ...(updaterPayloadPath && originalRelativePath === `${updaterPayloadPath}.sig` ? { updaterSignature: true } : {}),
     });
   }
 

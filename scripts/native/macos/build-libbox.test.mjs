@@ -45,10 +45,12 @@ describe("Libbox macOS staging", () => {
 
   it("rejects a single-architecture framework", async () => {
     const { root, xcframework } = await fixture();
-    expect(() => stageLibbox({
-      outputXCFramework: xcframework,
-      destinationFramework: join(root, "Libbox.framework"),
-      captureCommand: () => ({ status: 0, stdout: "arm64", stderr: "" }),
-    })).toThrow(/missing x86_64/);
+    expect(() =>
+      stageLibbox({
+        outputXCFramework: xcframework,
+        destinationFramework: join(root, "Libbox.framework"),
+        captureCommand: () => ({ status: 0, stdout: "arm64", stderr: "" }),
+      }),
+    ).toThrow(/missing x86_64/);
   });
 });

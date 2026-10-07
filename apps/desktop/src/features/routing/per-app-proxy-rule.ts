@@ -94,10 +94,7 @@ export async function savePerAppRule(
     return;
   }
 
-  const saved = await voyaCommands().saveRoutingRule(
-    routing.id,
-    buildPerAppRule(mode, processes, existing),
-  );
+  const saved = await voyaCommands().saveRoutingRule(routing.id, buildPerAppRule(mode, processes, existing));
   const savedRule = findPerAppRule(saved);
   if (savedRule && saved.rules[0]?.id !== savedRule.id) {
     await voyaCommands().moveRoutingRule(saved.id, savedRule.id, "top", null);

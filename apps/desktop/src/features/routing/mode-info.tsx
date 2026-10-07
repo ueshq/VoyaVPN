@@ -1,10 +1,6 @@
 import { Info } from "lucide-react";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@voya/ui/components/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@voya/ui/components/tooltip";
 
 export function ModeInfo({ label, hint }: { label: string; hint: string }) {
   return (

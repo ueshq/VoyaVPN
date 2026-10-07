@@ -1,14 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import {
-  capture,
-  isCliEntrypoint,
-  repoRootFromScript,
-  requireDarwin,
-  run,
-  runCli,
-} from "../../lib/common.mjs";
+import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, runCli } from "../../lib/common.mjs";
 
 /**
  * Wires the iOS Xcode project up to everything this repo builds for it.
@@ -33,8 +26,7 @@ const SCRIPT = "ios-project.rb";
  */
 function rubyWithXcodeproj({ captureCommand = capture } = {}) {
   const probe = (binary, env) =>
-    captureCommand(binary, ["-e", "require 'xcodeproj'"], { env: { ...process.env, ...env } })
-      .status === 0;
+    captureCommand(binary, ["-e", "require 'xcodeproj'"], { env: { ...process.env, ...env } }).status === 0;
 
   if (probe("ruby", {})) return { binary: "ruby", env: {} };
 

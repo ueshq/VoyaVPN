@@ -5,11 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { repoRootFromScript } from "../lib/common.mjs";
-import {
-  normalizeCiEnv,
-  requestedStableUpdaterConfig,
-  writeStableUpdaterOverlay,
-} from "./stable-updater-config.mjs";
+import { normalizeCiEnv, requestedStableUpdaterConfig, writeStableUpdaterOverlay } from "./stable-updater-config.mjs";
 
 const temporaryDirectories = [];
 const publicKey = readFileSync(
@@ -53,10 +49,9 @@ describe("stable updater config", () => {
     });
 
     const overlay = JSON.parse(await readFile(overlayPath, "utf8"));
-    const metadata = JSON.parse(await readFile(
-      join(repoRoot, "target/release-config/tauri.updater.stable.generated.metadata.json"),
-      "utf8",
-    ));
+    const metadata = JSON.parse(
+      await readFile(join(repoRoot, "target/release-config/tauri.updater.stable.generated.metadata.json"), "utf8"),
+    );
     expect(overlay.bundle.createUpdaterArtifacts).toBe(true);
     expect(overlay.plugins.updater.endpoints).toEqual(["https://updates.voyavpn.dev/stable/latest.json"]);
     expect(overlay.plugins.updater.pubkey).toBe(publicKey);
@@ -75,18 +70,24 @@ describe("stable updater config", () => {
     };
 
     expect(() => writeStableUpdaterOverlay({ repoRoot, env: {} })).toThrow(/TAURI_SIGNING_PRIVATE_KEY/);
-    expect(() => writeStableUpdaterOverlay({
-      repoRoot,
-      env: { ...baseEnv, VOYAVPN_UPDATES_BASE_URL: "http://updates.voyavpn.dev/stable" },
-    })).toThrow(/must use https/);
-    expect(() => writeStableUpdaterOverlay({
-      repoRoot,
-      env: { ...baseEnv, VOYAVPN_UPDATES_BASE_URL: "https://cdn.example.com/stable" },
-    })).toThrow(/must not use example/);
-    expect(() => writeStableUpdaterOverlay({
-      repoRoot,
-      env: { ...baseEnv, VOYAVPN_UPDATER_PUBLIC_KEY: "placeholder" },
-    })).toThrow(/non-placeholder/);
+    expect(() =>
+      writeStableUpdaterOverlay({
+        repoRoot,
+        env: { ...baseEnv, VOYAVPN_UPDATES_BASE_URL: "http://updates.voyavpn.dev/stable" },
+      }),
+    ).toThrow(/must use https/);
+    expect(() =>
+      writeStableUpdaterOverlay({
+        repoRoot,
+        env: { ...baseEnv, VOYAVPN_UPDATES_BASE_URL: "https://cdn.example.com/stable" },
+      }),
+    ).toThrow(/must not use example/);
+    expect(() =>
+      writeStableUpdaterOverlay({
+        repoRoot,
+        env: { ...baseEnv, VOYAVPN_UPDATER_PUBLIC_KEY: "placeholder" },
+      }),
+    ).toThrow(/non-placeholder/);
   });
 
   // Long enough and no placeholder word, so only structural decoding catches it.
@@ -101,13 +102,15 @@ describe("stable updater config", () => {
     const repoRoot = await mkdtemp(join(tmpdir(), "voyavpn-updater-config-malformed-"));
     temporaryDirectories.push(repoRoot);
 
-    expect(() => writeStableUpdaterOverlay({
-      repoRoot,
-      env: {
-        TAURI_SIGNING_PRIVATE_KEY: "private",
-        VOYAVPN_UPDATER_PUBLIC_KEY: malformedKey,
-        VOYAVPN_UPDATES_BASE_URL: "https://updates.voyavpn.dev/stable",
-      },
-    })).toThrow(/approved updater public key/);
+    expect(() =>
+      writeStableUpdaterOverlay({
+        repoRoot,
+        env: {
+          TAURI_SIGNING_PRIVATE_KEY: "private",
+          VOYAVPN_UPDATER_PUBLIC_KEY: malformedKey,
+          VOYAVPN_UPDATES_BASE_URL: "https://updates.voyavpn.dev/stable",
+        },
+      }),
+    ).toThrow(/approved updater public key/);
   });
 });

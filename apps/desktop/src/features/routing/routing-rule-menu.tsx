@@ -1,11 +1,4 @@
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronsDown,
-  ChevronsUp,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, Pencil, Trash2 } from "lucide-react";
 import type { ReactElement } from "react";
 
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -39,22 +32,13 @@ export function RuleRowContextMenu({
   label: string;
 }) {
   return (
-    <RowContextMenu
-      content={<RuleMenuItems actions={actions} primitives={CONTEXT_MENU_PRIMITIVES} />}
-      label={label}
-    >
+    <RowContextMenu content={<RuleMenuItems actions={actions} primitives={CONTEXT_MENU_PRIMITIVES} />} label={label}>
       {children}
     </RowContextMenu>
   );
 }
 
-export function RuleRowMenuButton({
-  actions,
-  label,
-}: {
-  actions: RuleMenuActions;
-  label: string;
-}) {
+export function RuleRowMenuButton({ actions, label }: { actions: RuleMenuActions; label: string }) {
   return (
     // The 32 px trigger is wider than the cell's content box; it overhangs the leading padding.
     <MoreMenu className="justify-end" disabled={actions.locked} label={label}>

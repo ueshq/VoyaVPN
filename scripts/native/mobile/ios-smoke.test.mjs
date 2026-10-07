@@ -12,12 +12,24 @@ test("subscription fixture never falls back to forbidden loopback", () => {
   assert.equal(lanAddress({ eth: [{ family: "IPv4", internal: false, address: "192.168.2.9" }] }), "192.168.2.9");
 });
 test("selects a usable iOS runtime by numeric version", () => {
-  const entry = (version, isAvailable = true) => ({ version, isAvailable, identifier: `com.apple.CoreSimulator.SimRuntime.iOS-${version}` });
+  const entry = (version, isAvailable = true) => ({
+    version,
+    isAvailable,
+    identifier: `com.apple.CoreSimulator.SimRuntime.iOS-${version}`,
+  });
   assert.equal(selectRuntime([entry("26.9"), entry("26.10"), entry("27.0", false)]), entry("26.10").identifier);
   assert.throws(() => selectRuntime([]), /Install an iOS/);
 });
 test("a misspelt option is refused instead of silently running the default", () => {
-  assert.doesNotThrow(() => assertKnownArguments(["--full", "--reuse-libbox", "--test=testVisualMatrix", "--device=iPhone 17", "--content-size=large"]));
+  assert.doesNotThrow(() =>
+    assertKnownArguments([
+      "--full",
+      "--reuse-libbox",
+      "--test=testVisualMatrix",
+      "--device=iPhone 17",
+      "--content-size=large",
+    ]),
+  );
   assert.throws(() => assertKnownArguments(["--devices=iPhone 17"]), /Unknown argument: --devices=iPhone 17/);
   assert.throws(() => assertKnownArguments(["--matrix"]), /Unknown argument/);
 });
@@ -37,7 +49,9 @@ test("subscription updates serve changed real links and the latency target respo
       assert.match(await response.text(), new RegExp(`QA%20Subscription%20${title}`));
     }
     assert.equal((await fetch(fixture.controlUrl + "/ping")).status, 204);
-  } finally { await fixture.close(); }
+  } finally {
+    await fixture.close();
+  }
 });
 
 test("Pods are reused only with matching locks, project and dependency inputs", () => {
@@ -57,5 +71,7 @@ test("Pods are reused only with matching locks, project and dependency inputs", 
     writeFileSync(join(ios, "Pods/Manifest.lock"), "out of sync");
     assert.equal(podsUpToDate(root), false);
     assert.throws(() => recordInstalledPods(root), /consistent lock/);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

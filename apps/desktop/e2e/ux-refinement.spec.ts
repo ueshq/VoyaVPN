@@ -25,10 +25,30 @@ test("search finds collapsed source nodes and restores the previous grouping on 
   await installTauriSmokeMock(page);
   await page.addInitScript((base) => {
     const state = window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[]; subscriptions: Subscription[] };
-    state.subscriptions = [{ id: "travel", remarks: "Travel", url: "https://example.test/sub", additionalUrl: "", userAgent: "", enabled: false, sort: 0, filter: null, converterTarget: null, autoUpdateIntervalMinutes: null }];
+    state.subscriptions = [
+      {
+        id: "travel",
+        remarks: "Travel",
+        url: "https://example.test/sub",
+        additionalUrl: "",
+        userAgent: "",
+        enabled: false,
+        sort: 0,
+        filter: null,
+        converterTarget: null,
+        autoUpdateIntervalMinutes: null,
+      },
+    ];
     state.profiles = Array.from({ length: 36 }, (_, index) => ({
-      ...base, isActive: index === 0,
-      profile: { ...base.profile, id: `node-${index}`, remarks: `Tokyo ${index}`, subscriptionId: "travel", protocol: { ...base.profile.protocol, server: { address: `node-${index}.example.test`, port: 443 } } },
+      ...base,
+      isActive: index === 0,
+      profile: {
+        ...base.profile,
+        id: `node-${index}`,
+        remarks: `Tokyo ${index}`,
+        subscriptionId: "travel",
+        protocol: { ...base.profile.protocol, server: { address: `node-${index}.example.test`, port: 443 } },
+      },
     }));
   }, savedNodeFixture);
   await page.goto("/");

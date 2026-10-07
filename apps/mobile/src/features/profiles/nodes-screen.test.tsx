@@ -37,7 +37,6 @@ beforeEach(() => {
   useRuntimeEventStore.setState({ coreState: null });
 });
 
-
 describe("NodesScreen", () => {
   it("groups nodes by source, local last, with each group's size", async () => {
     await renderNodes();
@@ -131,7 +130,14 @@ describe("NodesScreen", () => {
         kind: "speedtestResults",
         payload: [
           { countryCode: null, delay: 0, detail: null, indexId: "profile-0", ipInfo: null, outcome: "testing" },
-          { countryCode: null, delay: 0, detail: null, indexId: "profile-1", ipInfo: null, outcome: "proxyConnectFailed" },
+          {
+            countryCode: null,
+            delay: 0,
+            detail: null,
+            indexId: "profile-1",
+            ipInfo: null,
+            outcome: "proxyConnectFailed",
+          },
         ],
       });
     });
@@ -184,9 +190,7 @@ describe("NodesScreen", () => {
 
   it("only remembers a policy group chosen while disconnected", async () => {
     const backendInstance = mockBackend();
-    backendInstance.state.policyGroups = [
-      makePolicyGroupEntry(0, { name: "Fastest" }),
-    ];
+    backendInstance.state.policyGroups = [makePolicyGroupEntry(0, { name: "Fastest" })];
     await renderNodes();
     const user = userEvent.setup();
 
@@ -194,14 +198,10 @@ describe("NodesScreen", () => {
     await user.press(await screen.findByRole("button", { name: /Fastest/ }));
 
     await waitFor(() =>
-      expect(backendInstance.state.calls.map((call) => call.command)).toContain(
-        "setActivePolicyGroup",
-      ),
+      expect(backendInstance.state.calls.map((call) => call.command)).toContain("setActivePolicyGroup"),
     );
     // The same as tapping a node: connecting is the Home button's job.
-    expect(backendInstance.state.calls.map((call) => call.command)).not.toContain(
-      "connectActiveProfile",
-    );
+    expect(backendInstance.state.calls.map((call) => call.command)).not.toContain("connectActiveProfile");
   });
 
   it("offers share, QR and delete behind a long press", async () => {
@@ -242,9 +242,7 @@ describe("NodesScreen", () => {
     await user.longPress(await screen.findByText("🇺🇸 Los Angeles"));
 
     expect(
-      await screen.findByText(
-        "Subscription nodes come from their subscription and cannot be edited, moved or deleted",
-      ),
+      await screen.findByText("Subscription nodes come from their subscription and cannot be edited, moved or deleted"),
     ).toBeOnTheScreen();
     expect(screen.queryByText("Delete")).toBeNull();
   });

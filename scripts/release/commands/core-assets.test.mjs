@@ -44,23 +44,33 @@ describe("core asset manifest", () => {
     const output = join(outputDir, "core-assets.json");
     await writeFile(fixture, JSON.stringify({ assets: [{ coreType: "sing_box" }] }));
 
-    await expect(main([
-      "--fixture", fixture, "--out", output, "--channel", channel,
-      "--base-url", "https://cdn.voyavpn.dev/stable",
-    ])).rejects.toThrow(/not supported/);
+    await expect(
+      main([
+        "--fixture",
+        fixture,
+        "--out",
+        output,
+        "--channel",
+        channel,
+        "--base-url",
+        "https://cdn.voyavpn.dev/stable",
+      ]),
+    ).rejects.toThrow(/not supported/);
     await expect(readFile(output)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("fails closed for a GitHub stable CDN base", async () => {
-    await expect(main([
-      "--fixture",
-      resolve(repoRoot, "tests/fixtures/release/core-assets.json"),
-      "--out",
-      resolve(repoRoot, "target/test-core-assets.json"),
-      "--base-url",
-      "https://github.com/voyavpn/releases",
-      "--channel",
-      "stable",
-    ])).rejects.toThrow(/GitHub|production/i);
+    await expect(
+      main([
+        "--fixture",
+        resolve(repoRoot, "tests/fixtures/release/core-assets.json"),
+        "--out",
+        resolve(repoRoot, "target/test-core-assets.json"),
+        "--base-url",
+        "https://github.com/voyavpn/releases",
+        "--channel",
+        "stable",
+      ]),
+    ).rejects.toThrow(/GitHub|production/i);
   });
 });

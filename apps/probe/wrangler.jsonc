@@ -16,7 +16,7 @@
       "namespace_id": "1001",
       // A network check sends one request per address family; six a minute
       // per caller leaves room for retries and nothing for scanning.
-      "simple": { "limit": 6, "period": 60 }
-    }
-  ]
+      "simple": { "limit": 6, "period": 60 },
+    },
+  ],
 }

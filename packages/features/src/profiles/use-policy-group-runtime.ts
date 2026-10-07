@@ -31,11 +31,7 @@ function usePolicyGroupRuntime(activeGroupId: string | null) {
   });
 
   const runtime = runtimeQuery.data ?? null;
-  return connected &&
-    activeGroupId !== null &&
-    runtime?.groupId === activeGroupId
-    ? runtime
-    : null;
+  return connected && activeGroupId !== null && runtime?.groupId === activeGroupId ? runtime : null;
 }
 
 /**
@@ -67,9 +63,7 @@ export function usePolicyGroupMemberSwitch() {
 
   return useCallback(
     async (groupId: string, profileId: string, commit: () => Promise<boolean>) => {
-      const previousRuntime = queryClient.getQueryData<PolicyGroupRuntime | null>(
-        queryKeys.policyGroupRuntime,
-      );
+      const previousRuntime = queryClient.getQueryData<PolicyGroupRuntime | null>(queryKeys.policyGroupRuntime);
       const previousGroups = queryClient.getQueryData<PolicyGroupListing>(queryKeys.policyGroups);
       // Kept as the cache stored them (structural sharing may store a copy),
       // so a rollback can tell whether anything replaced them since.
@@ -95,16 +89,10 @@ export function usePolicyGroupMemberSwitch() {
         // A runtime poll or an invalidation refetch can land during the
         // commit, and it is newer than the snapshot taken above: only a cache
         // still holding the optimistic value goes back.
-        if (
-          optimisticRuntime &&
-          queryClient.getQueryData(queryKeys.policyGroupRuntime) === optimisticRuntime
-        ) {
+        if (optimisticRuntime && queryClient.getQueryData(queryKeys.policyGroupRuntime) === optimisticRuntime) {
           queryClient.setQueryData(queryKeys.policyGroupRuntime, previousRuntime);
         }
-        if (
-          optimisticGroups &&
-          queryClient.getQueryData(queryKeys.policyGroups) === optimisticGroups
-        ) {
+        if (optimisticGroups && queryClient.getQueryData(queryKeys.policyGroups) === optimisticGroups) {
           queryClient.setQueryData(queryKeys.policyGroups, previousGroups);
         }
       }

@@ -46,7 +46,9 @@ export function PrivacyNoticeContent() {
       <Typography className="text-base text-foreground">{t("mobile.privacyNoticeIntro")}</Typography>
       {STATEMENTS.map((key) => (
         <View key={key} className="flex-row gap-2">
-          <Typography accessible={false} className="text-base text-subtle">•</Typography>
+          <Typography accessible={false} className="text-base text-subtle">
+            •
+          </Typography>
           <Typography className="flex-1 text-base text-foreground">{t(key)}</Typography>
         </View>
       ))}
@@ -77,7 +79,12 @@ export function PrivacyNoticeScreen() {
         contentContainerClassName="gap-6 px-page"
         contentContainerStyle={[{ paddingBottom: insets.bottom + 24, paddingTop: insets.top + 24 }, column]}
       >
-        <Typography ref={titleRef} onLayout={focusTitle} accessibilityRole="header" className="text-3xl font-bold text-foreground">
+        <Typography
+          ref={titleRef}
+          onLayout={focusTitle}
+          accessibilityRole="header"
+          className="text-3xl font-bold text-foreground"
+        >
           {t("mobile.privacyNoticeTitle")}
         </Typography>
         <PrivacyNoticeContent />

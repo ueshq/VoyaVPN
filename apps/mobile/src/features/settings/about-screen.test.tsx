@@ -10,7 +10,9 @@ import { PRIVACY_POLICY_URL, SUPPORT_URL } from "./privacy-notice";
 
 type DeviceActions = ReturnType<typeof native.deviceActions>;
 
-beforeAll(async () => { await localeReady; });
+beforeAll(async () => {
+  await localeReady;
+});
 beforeEach(() => {
   jest.spyOn(native, "deviceActions").mockReturnValue({ appVersion: async () => "0.1.0 (412)" } as DeviceActions);
 });

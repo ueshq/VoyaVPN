@@ -13,7 +13,14 @@ import { DnsScreen } from "./dns-screen";
 import { LogsScreen } from "./logs-screen";
 
 function renderSettings(section: "general" | "dns" | "maintenance" | "logs" = "general") {
-  const Screen = section === "dns" ? DnsScreen : section === "maintenance" ? MaintenanceScreen : section === "logs" ? LogsScreen : GeneralScreen;
+  const Screen =
+    section === "dns"
+      ? DnsScreen
+      : section === "maintenance"
+        ? MaintenanceScreen
+        : section === "logs"
+          ? LogsScreen
+          : GeneralScreen;
   return renderScreen(<Screen />);
 }
 
@@ -122,8 +129,11 @@ describe("SettingsScreen", () => {
   });
 
   it("distinguishes saved DNS from an unsuccessful apply and allows retry", async () => {
-    const status = jest.spyOn(mockBackend().commands, "getSettingsApplyStatus").mockResolvedValue({ action: "reconnect", connected: true });
-    const apply = jest.spyOn(mockBackend().commands, "applyPendingSettings")
+    const status = jest
+      .spyOn(mockBackend().commands, "getSettingsApplyStatus")
+      .mockResolvedValue({ action: "reconnect", connected: true });
+    const apply = jest
+      .spyOn(mockBackend().commands, "applyPendingSettings")
       .mockRejectedValueOnce(new Error("reconnect failed"))
       .mockImplementationOnce(async () => {
         status.mockResolvedValue({ action: "none", connected: true });
@@ -132,7 +142,9 @@ describe("SettingsScreen", () => {
     await renderSettings("dns");
     const user = userEvent.setup();
     await user.press(await screen.findByText("Reconnect & apply"));
-    expect(await screen.findByText("Settings saved, but they could not be applied to the current connection")).toBeOnTheScreen();
+    expect(
+      await screen.findByText("Settings saved, but they could not be applied to the current connection"),
+    ).toBeOnTheScreen();
     // The DNS form itself is not left marked unsaved by the failed apply, and
     // a page that never saved in this session shows no "Saved" line at all.
     expect(screen.queryByText("Unsaved changes")).toBeNull();
@@ -141,7 +153,8 @@ describe("SettingsScreen", () => {
     await user.press(screen.getByText("Reconnect & apply"));
     expect(await screen.findByText("Applied to the current connection")).toBeOnTheScreen();
     expect(screen.queryByText("Settings saved, but they could not be applied to the current connection")).toBeNull();
-    status.mockRestore(); apply.mockRestore();
+    status.mockRestore();
+    apply.mockRestore();
   });
 
   it("saves advanced DNS switches explicitly", async () => {
@@ -162,9 +175,18 @@ describe("SettingsScreen", () => {
     expect(await screen.findByText("Detailed connection logging is on.")).toBeOnTheScreen();
     // Lines are only delivered while the Logs screen is open, so what the
     // buffer happens to hold says nothing about whether the core is logging.
-    await act(() => useRuntimeEventStore.setState({ logLines: [{
-      id: 1, loggedAt: Date.now(), level: "info", body: { source: "core", line: "history" },
-    }] }));
+    await act(() =>
+      useRuntimeEventStore.setState({
+        logLines: [
+          {
+            id: 1,
+            loggedAt: Date.now(),
+            level: "info",
+            body: { source: "core", line: "history" },
+          },
+        ],
+      }),
+    );
     expect(screen.getByText("Detailed connection logging is on.")).toBeOnTheScreen();
   });
 

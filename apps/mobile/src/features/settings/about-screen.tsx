@@ -13,16 +13,32 @@ import { PrivacyNoticeContent } from "./privacy-notice-screen";
 export function AboutScreen() {
   const { t } = useI18n();
   const version = useQuery({ queryKey: ["mobile", "version"], queryFn: () => deviceActions().appVersion() });
-  return <DetailScreen>
-    <Typography accessibilityRole="header" className="text-2xl font-semibold text-foreground">VoyaVPN {version.data ?? ""}</Typography>
-    <Typography accessibilityRole="header" className="text-lg font-semibold text-foreground">{t("mobile.help")}</Typography>
-    <Typography className="text-base text-subtle">{t("mobile.helpText")}</Typography>
-    <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
-    <Typography accessibilityRole="header" className="text-lg font-semibold text-foreground">{t("mobile.privacy")}</Typography>
-    <PrivacyNoticeContent />
-    {Platform.OS === "android" ? <Typography className="text-base text-subtle">{t("mobile.androidScannerPrivacy")}</Typography> : null}
-    <Disclosure title={t("mobile.licenses")}>
-      <Typography selectable className="text-sm text-foreground">{notices.license}{"\n\n"}{notices.thirdParty}</Typography>
-    </Disclosure>
-  </DetailScreen>;
+  return (
+    <DetailScreen>
+      <Typography accessibilityRole="header" className="text-2xl font-semibold text-foreground">
+        VoyaVPN {version.data ?? ""}
+      </Typography>
+      <Typography accessibilityRole="header" className="text-lg font-semibold text-foreground">
+        {t("mobile.help")}
+      </Typography>
+      <Typography className="text-base text-subtle">{t("mobile.helpText")}</Typography>
+      <Button variant="secondary" onPress={() => openPage("logs")}>
+        <Button.Label>{t("mobile.diagnostics")}</Button.Label>
+      </Button>
+      <Typography accessibilityRole="header" className="text-lg font-semibold text-foreground">
+        {t("mobile.privacy")}
+      </Typography>
+      <PrivacyNoticeContent />
+      {Platform.OS === "android" ? (
+        <Typography className="text-base text-subtle">{t("mobile.androidScannerPrivacy")}</Typography>
+      ) : null}
+      <Disclosure title={t("mobile.licenses")}>
+        <Typography selectable className="text-sm text-foreground">
+          {notices.license}
+          {"\n\n"}
+          {notices.thirdParty}
+        </Typography>
+      </Disclosure>
+    </DetailScreen>
+  );
 }

@@ -3,12 +3,7 @@ import type * as React from "react";
 import { ChevronDown } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@voya/ui/components/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@voya/ui/components/card";
 import { TextField } from "@voya/ui/components/form-fields";
 import type { ProfileDraft } from "@voya/features/profiles/profile-draft";
 
@@ -41,14 +36,7 @@ export function DraftTextField({
   name: DraftTextKey;
   placeholder?: string;
 }) {
-  return (
-    <TextField
-      {...input}
-      error={errors[name]}
-      onChange={(value) => onChange(name, value)}
-      value={draft[name]}
-    />
-  );
+  return <TextField {...input} error={errors[name]} onChange={(value) => onChange(name, value)} value={draft[name]} />;
 }
 
 export function Panel({

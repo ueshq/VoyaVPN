@@ -9,12 +9,7 @@ import { Card } from "heroui-native/card";
 import { LinkButton } from "heroui-native/link-button";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
-import {
-  ChevronRight,
-  Globe,
-  Server,
-  type LucideIcon,
-} from "lucide-react-native";
+import { ChevronRight, Globe, Server, type LucideIcon } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { View } from "react-native";
 
@@ -42,45 +37,36 @@ export function HomeScreen() {
   const subtleColor = useToneColor("neutral");
   const primary = primaryAction(runtime);
   if (runtime.ready && runtime.lastError && !runtime.inProgress) {
-    primary.labelKey = runtime.lastError.reason === "notFound" ? "home.chooseNode" : runtime.lastError.reason === "elevationRequired" ? "mobile.authorizeAgain" : "actions.retry";
+    primary.labelKey =
+      runtime.lastError.reason === "notFound"
+        ? "home.chooseNode"
+        : runtime.lastError.reason === "elevationRequired"
+          ? "mobile.authorizeAgain"
+          : "actions.retry";
     primary.run = runtime.lastError.reason === "notFound" ? () => openPage("nodePicker") : runtime.retryLastAction;
   }
   const ipQuery = runtime.exitIp;
 
-  const nodeName = runtime.nodeEntry
-    ? profileTitle(runtime.nodeEntry.profile.remarks, t)
-    : null;
+  const nodeName = runtime.nodeEntry ? profileTitle(runtime.nodeEntry.profile.remarks, t) : null;
 
   return (
     <DetailScreen accessibilityLabel={t("home.aria")}>
       <PageHeader title={t("tabs.home")} />
 
       <Card className="gap-5 p-5">
-
         {/* With no nodes at all the empty-state card below is the message —
             a second "No nodes" line above the CTA would only repeat it. */}
         {runtime.hasNodes ? (
           <View className="items-center gap-1">
             <View className="max-w-full flex-row items-center gap-2">
-              <View
-                accessible={false}
-                className={`h-2.5 w-2.5 rounded-full ${STATE_DOT[runtime.state]}`}
-              />
-              <Typography
-                maxFontSizeMultiplier={1.6}
-                className="shrink text-2xl font-semibold text-foreground"
-              >
+              <View accessible={false} className={`h-2.5 w-2.5 rounded-full ${STATE_DOT[runtime.state]}`} />
+              <Typography maxFontSizeMultiplier={1.6} className="shrink text-2xl font-semibold text-foreground">
                 {t(CORE_STATE_KEYS[runtime.state])}
               </Typography>
             </View>
-            <LinkButton
-              className="min-h-12 max-w-full"
-              onPress={() => openPage("nodePicker")}
-            >
+            <LinkButton className="min-h-12 max-w-full" onPress={() => openPage("nodePicker")}>
               <LinkButton.Label className="text-center text-accent">
-                {runtime.activeGroup
-                  ? runtime.activeGroup.group.name
-                  : (nodeName ?? t("home.noSelection"))}
+                {runtime.activeGroup ? runtime.activeGroup.group.name : (nodeName ?? t("home.noSelection"))}
               </LinkButton.Label>
             </LinkButton>
             {/* The traffic mode in words a first-time user can parse, and the
@@ -89,11 +75,7 @@ export function HomeScreen() {
                 the node name above is already the blue thing to tap. */}
             <LinkButton className="min-h-9" onPress={() => navigateToTab("rules")}>
               <LinkButton.Label className="text-center text-sm text-subtle">
-                {t(
-                  trafficMode.mode === "global"
-                    ? "mobile.trafficModeGlobal"
-                    : "mobile.trafficModeRule",
-                )}
+                {t(trafficMode.mode === "global" ? "mobile.trafficModeGlobal" : "mobile.trafficModeRule")}
               </LinkButton.Label>
               <ChevronRight size={16} color={subtleColor} accessible={false} />
             </LinkButton>
@@ -125,16 +107,12 @@ export function HomeScreen() {
           onPress={primary.run}
           accessibilityLabel={t(primary.labelKey)}
         >
-          {runtime.inProgress || runtime.profilesPending ? (
-            <Spinner size="sm" />
-          ) : null}
+          {runtime.inProgress || runtime.profilesPending ? <Spinner size="sm" /> : null}
           <Button.Label>{t(primary.labelKey)}</Button.Label>
         </Button>
       </Card>
 
-      {runtime.modePending ? (
-        <Banner status="info" message={t("home.modePendingReason")} />
-      ) : null}
+      {runtime.modePending ? <Banner status="info" message={t("home.modePendingReason")} /> : null}
       {/* Both error blocks explain a connect that failed or is about to be
           attempted, so they are gated on a node being selected: with none,
           they would only repeat what the "Choose a node" button already says
@@ -151,10 +129,18 @@ export function HomeScreen() {
                 ? t("home.authorizationDeclined")
                 : runtime.lastError.reason === "notFound"
                   ? t("daily.missingNode")
-                  : runtime.lastError.action !== "disconnect" ? t("daily.connectionFailed") : undefined
+                  : runtime.lastError.action !== "disconnect"
+                    ? t("daily.connectionFailed")
+                    : undefined
             }
           />
-          {runtime.lastError.action !== "disconnect" && runtime.lastError.reason !== "notFound" && runtime.lastError.reason !== "elevationRequired" ? <Button variant="secondary" onPress={() => openPage("nodePicker")}><Button.Label>{t("home.switchNode")}</Button.Label></Button> : null}
+          {runtime.lastError.action !== "disconnect" &&
+          runtime.lastError.reason !== "notFound" &&
+          runtime.lastError.reason !== "elevationRequired" ? (
+            <Button variant="secondary" onPress={() => openPage("nodePicker")}>
+              <Button.Label>{t("home.switchNode")}</Button.Label>
+            </Button>
+          ) : null}
         </Failure>
       ) : runtime.ready && runtime.tunIssue ? (
         <Failure>
@@ -171,42 +157,25 @@ export function HomeScreen() {
           two figures could only ever read zero. */}
       {runtime.connected ? (
         <Card className="gap-4 p-5">
-          <Fact
-            icon={Globe}
-            label={t("home.exitIp")}
-            value={exitIpLabel(ipQuery, t)}
-            selectable
-          />
+          <Fact icon={Globe} label={t("home.exitIp")} value={exitIpLabel(ipQuery, t)} selectable />
         </Card>
       ) : null}
-      {runtime.connected ? <Button
-        testID="home-details"
-        variant="secondary"
-        onPress={() => openPage("sessionDetails")}
-      >
-        <Button.Label>{t("activity.connectionDetails")}</Button.Label>
-      </Button> : null}
+      {runtime.connected ? (
+        <Button testID="home-details" variant="secondary" onPress={() => openPage("sessionDetails")}>
+          <Button.Label>{t("activity.connectionDetails")}</Button.Label>
+        </Button>
+      ) : null}
 
       {/* The same shape as the two error blocks above (`Failure`), so every
           failure on this screen offers its retry, its technical details and
           the log — `mobile.failed` promises both actions. */}
       {runtime.profilesError ? (
         <Failure>
-          <ErrorNotice
-            error={runtime.profilesError}
-            retryLabel={t("actions.retry")}
-            retry={runtime.retryProfiles}
-          />
+          <ErrorNotice error={runtime.profilesError} retryLabel={t("actions.retry")} retry={runtime.retryProfiles} />
         </Failure>
       ) : null}
-      {runtime.hasNodes ||
-      runtime.profilesPending ||
-      runtime.profilesError ? null : (
-        <EmptyState
-          icons={[Server]}
-          title={t("panes.profiles.empty")}
-          description={t("daily.importNeedsSource")}
-        />
+      {runtime.hasNodes || runtime.profilesPending || runtime.profilesError ? null : (
+        <EmptyState icons={[Server]} title={t("panes.profiles.empty")} description={t("daily.importNeedsSource")} />
       )}
     </DetailScreen>
   );
@@ -237,13 +206,7 @@ const STATE_DOT = {
   disconnecting: "bg-warning",
 } satisfies Record<CoreState, string>;
 
-function MetricLabel({
-  icon: Icon,
-  label,
-}: {
-  icon: LucideIcon;
-  label: string;
-}) {
+function MetricLabel({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   const color = useToneColor("neutral");
 
   return (
@@ -269,10 +232,7 @@ function Fact({
   return (
     <View className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1">
       <MetricLabel icon={icon} label={label} />
-      <Typography
-        selectable={selectable}
-        className="max-w-full text-base font-medium text-foreground tabular-nums"
-      >
+      <Typography selectable={selectable} className="max-w-full text-base font-medium text-foreground tabular-nums">
         {value}
       </Typography>
     </View>
@@ -303,10 +263,16 @@ function primaryAction(runtime: ReturnType<typeof useHomeRuntime>): {
   run: () => void;
 } {
   if (runtime.state === "connecting" || runtime.state === "disconnecting") {
-    return { labelKey: runtime.state === "connecting" ? "status.connecting" : "status.disconnecting", run: runtime.handlePrimaryAction };
+    return {
+      labelKey: runtime.state === "connecting" ? "status.connecting" : "status.disconnecting",
+      run: runtime.handlePrimaryAction,
+    };
   }
   if (runtime.connected || runtime.state === "cleanupPending") {
-    return { labelKey: runtime.state === "cleanupPending" ? "home.retryDisconnect" : "actions.disconnect", run: runtime.handlePrimaryAction };
+    return {
+      labelKey: runtime.state === "cleanupPending" ? "home.retryDisconnect" : "actions.disconnect",
+      run: runtime.handlePrimaryAction,
+    };
   }
   if (!runtime.hasNodes) {
     return { labelKey: "mobile.add", run: () => openPage("import") };
@@ -317,4 +283,3 @@ function primaryAction(runtime: ReturnType<typeof useHomeRuntime>): {
 
   return { labelKey: "actions.connect", run: runtime.handlePrimaryAction };
 }
-

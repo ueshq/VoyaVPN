@@ -25,17 +25,11 @@ const CLOSE_ACTION_LABELS: Record<CloseAction, TranslationKey> = {
   quit: "settings.closeActionOptions.quit",
 };
 
-export function GeneralTab({
-  controller,
-}: {
-  controller: AppSettingsFormController;
-}) {
+export function GeneralTab({ controller }: { controller: AppSettingsFormController }) {
   const { language, localeOptions, t } = useI18n();
   const { settings, setAppearance, update, working } = controller;
 
-  const selectedLanguage = localeOptions.some(
-    (locale) => locale.code === settings.appearance.language,
-  )
+  const selectedLanguage = localeOptions.some((locale) => locale.code === settings.appearance.language)
     ? settings.appearance.language
     : language;
 
@@ -105,9 +99,7 @@ export function GeneralTab({
           field="behavior.startMinimized"
           checked={settings.behavior.startMinimized}
           description={t(
-            settings.behavior.autostart
-              ? "options.startMinimizedHint"
-              : "options.startMinimizedNeedsAutostart",
+            settings.behavior.autostart ? "options.startMinimizedHint" : "options.startMinimizedNeedsAutostart",
           )}
           disabled={working || !settings.behavior.autostart}
           label={t("options.startMinimized")}

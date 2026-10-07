@@ -1,12 +1,7 @@
 import { useI18n } from "@voya/i18n/use-i18n";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 
-import {
-  NumberField,
-  SettingsGroup,
-  SettingsSwitch,
-  TextField,
-} from "./settings-form";
+import { NumberField, SettingsGroup, SettingsSwitch, TextField } from "./settings-form";
 import { SETTING_DEFAULTS } from "@/features/settings/settings-values";
 import { CaptureModeSetting } from "./capture-mode-setting";
 import type { AppSettingsFormController } from "@voya/features/settings/use-app-settings";
@@ -15,31 +10,22 @@ import type { AppSettingsFormController } from "@voya/features/settings/use-app-
  * Connection choices an ordinary user makes: the kill switch and the local
  * proxy port. DNS follows on the same tab.
  */
-export function ConnectionTab({
-  controller,
-}: {
-  controller: AppSettingsFormController;
-}) {
+export function ConnectionTab({ controller }: { controller: AppSettingsFormController }) {
   const { t } = useI18n();
   const { settings, update } = controller;
   // Where the system proxy can be chosen instead, the kill switch only covers
   // VPN mode.
   const systemProxyMode = useRuntimeEventStore(
-    (state) =>
-      state.sysProxy?.management === "automatic" && state.tun?.enabled === false,
+    (state) => state.sysProxy?.management === "automatic" && state.tun?.enabled === false,
   );
 
   const inbound = settings.network.inbounds[0];
-  const patchInbound = (
-    patch: Partial<(typeof settings.network.inbounds)[number]>,
-  ) =>
+  const patchInbound = (patch: Partial<(typeof settings.network.inbounds)[number]>) =>
     update((current) => ({
       ...current,
       network: {
         ...current.network,
-        inbounds: current.network.inbounds.map((item, index) =>
-          index === 0 ? { ...item, ...patch } : item,
-        ),
+        inbounds: current.network.inbounds.map((item, index) => (index === 0 ? { ...item, ...patch } : item)),
       },
     }));
 
@@ -53,11 +39,7 @@ export function ConnectionTab({
         <SettingsSwitch
           checked={settings.network.tun.strictRoute}
           disabled={systemProxyMode}
-          description={t(
-            systemProxyMode
-              ? "settings.killSwitch.vpnOnly"
-              : "settings.killSwitch.hint",
-          )}
+          description={t(systemProxyMode ? "settings.killSwitch.vpnOnly" : "settings.killSwitch.hint")}
           field="network.tun.strictRoute"
           label={t("settings.killSwitch.label")}
           onCheckedChange={(strictRoute) =>
@@ -98,9 +80,7 @@ export function ConnectionTab({
             description={t("settings.network.sniffingHint")}
             field="network.inbounds.0.sniffingEnabled"
             label={t("settings.network.sniffing")}
-            onCheckedChange={(sniffingEnabled) =>
-              patchInbound({ sniffingEnabled })
-            }
+            onCheckedChange={(sniffingEnabled) => patchInbound({ sniffingEnabled })}
           />
           <SettingsSwitch
             checked={inbound.secondaryPortEnabled}
@@ -109,18 +89,14 @@ export function ConnectionTab({
             })}
             field="network.inbounds.0.secondaryPortEnabled"
             label={t("settings.network.secondPort")}
-            onCheckedChange={(secondaryPortEnabled) =>
-              patchInbound({ secondaryPortEnabled })
-            }
+            onCheckedChange={(secondaryPortEnabled) => patchInbound({ secondaryPortEnabled })}
           />
           <SettingsSwitch
             checked={inbound.lanConnectionsAllowed}
             description={t("settings.network.allowLanHint")}
             field="network.inbounds.0.lanConnectionsAllowed"
             label={t("settings.network.allowLan")}
-            onCheckedChange={(lanConnectionsAllowed) =>
-              patchInbound({ lanConnectionsAllowed })
-            }
+            onCheckedChange={(lanConnectionsAllowed) => patchInbound({ lanConnectionsAllowed })}
           />
           {inbound.lanConnectionsAllowed ? (
             <SettingsSwitch
@@ -130,9 +106,7 @@ export function ConnectionTab({
               })}
               field="network.inbounds.0.separateLanPort"
               label={t("settings.network.separateLanPort")}
-              onCheckedChange={(separateLanPort) =>
-                patchInbound({ separateLanPort })
-              }
+              onCheckedChange={(separateLanPort) => patchInbound({ separateLanPort })}
             />
           ) : null}
           {inbound.lanConnectionsAllowed && inbound.separateLanPort ? (

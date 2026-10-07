@@ -3,13 +3,20 @@ import { createTestQueryClient, renderHookWithQuery } from "@voya/features/test/
 import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@voya/client/query-keys";
-import { installSettingsBackend, serverSettings, settingsIpc } from "@voya/features/settings/settings-backend.test-fixture";
+import {
+  installSettingsBackend,
+  serverSettings,
+  settingsIpc,
+} from "@voya/features/settings/settings-backend.test-fixture";
 import { saveQueue } from "@voya/features/forms/save-queue";
 import { useDnsSettings } from "./use-dns-settings";
 
 // The hook reaches the backend through the shared seam, so the fixture
 // registers itself there rather than standing in for a module.
-beforeEach(async () => { installSettingsBackend(); await changeLocale("en"); });
+beforeEach(async () => {
+  installSettingsBackend();
+  await changeLocale("en");
+});
 afterEach(cleanup);
 function mount(enabled = true, seedApp = true) {
   const client = createTestQueryClient();
@@ -50,10 +57,13 @@ describe("DNS automatic writes", () => {
   it("maps backend errors and retries without automatic retry loops", async () => {
     const { result, settle } = mount();
     await waitFor(() => expect(result.current.form).not.toBeNull());
-    settingsIpc.saveDnsSettings.mockRejectedValueOnce(new settingsIpc.IpcCommandError({
-      kind: { type: "validation", issues: [{ code: { code: "dnsAddressEmpty" }, field: "direct", scope: [] }] },
-      message: "DNS rejected", subsystem: "dns",
-    }));
+    settingsIpc.saveDnsSettings.mockRejectedValueOnce(
+      new settingsIpc.IpcCommandError({
+        kind: { type: "validation", issues: [{ code: { code: "dnsAddressEmpty" }, field: "direct", scope: [] }] },
+        message: "DNS rejected",
+        subsystem: "dns",
+      }),
+    );
     act(() => result.current.updateSimple({ direct: "bad" }));
     await settle();
     expect(result.current.fieldErrors.direct).toBe("The DNS address must not be empty");
@@ -69,7 +79,10 @@ describe("DNS automatic writes", () => {
 
   it("stays lazy before opening DNS and ignores premature edits", async () => {
     const { result, settle } = mount(false, false);
-    act(() => { result.current.updateSimple({ remote: "1.1.1.1" }); result.current.retry(); });
+    act(() => {
+      result.current.updateSimple({ remote: "1.1.1.1" });
+      result.current.retry();
+    });
     await settle();
     expect(result.current.form).toBeNull();
     expect(settingsIpc.loadDnsSettings).not.toHaveBeenCalled();

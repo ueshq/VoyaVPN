@@ -28,13 +28,21 @@ describe("Mac App Store Tauri config", () => {
   it("prefers an explicit build number and validates its shape", () => {
     const captureCommand = gitCount("999\n");
     expect(
-      resolveMacAppStoreBuildNumber({ env: { VOYAVPN_MACOS_BUILD_NUMBER: " 12.3 " }, repoRoot: "/repo", captureCommand }),
+      resolveMacAppStoreBuildNumber({
+        env: { VOYAVPN_MACOS_BUILD_NUMBER: " 12.3 " },
+        repoRoot: "/repo",
+        captureCommand,
+      }),
     ).toBe("12.3");
     expect(captureCommand).not.toHaveBeenCalled();
 
     for (const invalid of ["1.2.3.4", "v12", "12-rc", "1..2"]) {
       expect(() =>
-        resolveMacAppStoreBuildNumber({ env: { VOYAVPN_MACOS_BUILD_NUMBER: invalid }, repoRoot: "/repo", captureCommand }),
+        resolveMacAppStoreBuildNumber({
+          env: { VOYAVPN_MACOS_BUILD_NUMBER: invalid },
+          repoRoot: "/repo",
+          captureCommand,
+        }),
       ).toThrow(/VOYAVPN_MACOS_BUILD_NUMBER/);
     }
   });
@@ -44,14 +52,15 @@ describe("Mac App Store Tauri config", () => {
     expect(resolveMacAppStoreBuildNumber({ env: {}, repoRoot: "/repo", captureCommand })).toBe("412");
     expect(captureCommand).toHaveBeenCalledWith("git", ["rev-list", "--count", "HEAD"], { cwd: "/repo" });
 
-    expect(() => resolveMacAppStoreBuildNumber({ env: {}, repoRoot: "/repo", captureCommand: gitCount("", 128) })).toThrow(
-      /set VOYAVPN_MACOS_BUILD_NUMBER/,
-    );
+    expect(() =>
+      resolveMacAppStoreBuildNumber({ env: {}, repoRoot: "/repo", captureCommand: gitCount("", 128) }),
+    ).toThrow(/set VOYAVPN_MACOS_BUILD_NUMBER/);
   });
 
   it("reads the iOS lane's build number from its own variable", () => {
     const captureCommand = gitCount("412\n");
-    const resolve = (env) => resolveStoreBuildNumber({ envName: "VOYAVPN_IOS_BUILD_NUMBER", env, repoRoot: "/repo", captureCommand });
+    const resolve = (env) =>
+      resolveStoreBuildNumber({ envName: "VOYAVPN_IOS_BUILD_NUMBER", env, repoRoot: "/repo", captureCommand });
 
     expect(resolve({ VOYAVPN_IOS_BUILD_NUMBER: "7", VOYAVPN_MACOS_BUILD_NUMBER: "9" })).toBe("7");
     expect(resolve({ VOYAVPN_MACOS_BUILD_NUMBER: "9" })).toBe("412");

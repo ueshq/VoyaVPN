@@ -33,12 +33,8 @@ function watchProgress(ids: string[], onDone: (done: number) => void) {
 }
 
 export function useNodeSpeedtest({ runOperation }: NodeOperation) {
-  const speedtestRunning = useRuntimeEventStore(
-    (state) => state.speedtestRunning,
-  );
-  const setSpeedtestRunning = useRuntimeEventStore(
-    (state) => state.setSpeedtestRunning,
-  );
+  const speedtestRunning = useRuntimeEventStore((state) => state.speedtestRunning);
+  const setSpeedtestRunning = useRuntimeEventStore((state) => state.setSpeedtestRunning);
   const [run, setRun] = useState<SpeedtestRun | null>(null);
 
   async function handleSpeedtest(target: SpeedtestTarget, source = "all") {

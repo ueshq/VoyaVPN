@@ -59,7 +59,9 @@ export const usePreferencesStore = create<PreferencesState>()(
         themeMode: state.themeMode,
       }),
       merge: mergeValidated<PreferencesState>(({ privacyNoticeVersion, ruleLibraryUpdatedAt, themeMode }) => ({
-        ...(typeof privacyNoticeVersion === "number" && Number.isInteger(privacyNoticeVersion) && privacyNoticeVersion > 0
+        ...(typeof privacyNoticeVersion === "number" &&
+        Number.isInteger(privacyNoticeVersion) &&
+        privacyNoticeVersion > 0
           ? { privacyNoticeVersion }
           : {}),
         ...(typeof ruleLibraryUpdatedAt === "number" && Number.isFinite(ruleLibraryUpdatedAt)

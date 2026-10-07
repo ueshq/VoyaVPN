@@ -42,9 +42,7 @@ export function SwitchRow({
       >
         <View className="min-w-0 flex-1 gap-1">
           <Label className="min-w-0 flex-1">{label}</Label>
-          {description ? (
-            <Typography className="text-sm text-subtle">{description}</Typography>
-          ) : null}
+          {description ? <Typography className="text-sm text-subtle">{description}</Typography> : null}
         </View>
         <ControlField.Indicator>
           {/* The bare label: the description below it is read as part of the

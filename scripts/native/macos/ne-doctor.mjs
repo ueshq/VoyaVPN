@@ -1,13 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import {
-  captureSpawned,
-  isCliEntrypoint,
-  repoRootFromScript,
-  requireDarwin,
-  run,
-  runCli,
-} from "../../lib/common.mjs";
+import { captureSpawned, isCliEntrypoint, repoRootFromScript, requireDarwin, run, runCli } from "../../lib/common.mjs";
 import { parseArgs } from "../../lib/args.mjs";
 import { defaultIsProcessRunning, voyaRuntimeExecutables } from "./local-runtime.mjs";
 import {
@@ -182,25 +175,28 @@ function classify(matches, legalApps) {
   const activeSet = new Set(matches.active);
   const all = [...new Set([...matches.all, ...matches.active])].sort();
 
-  const pluginkitEntries = all.map((path) => ({
-    type: "appex",
-    path,
-    appBundle: appBundleForAppex(path),
-    exists: existsSync(path),
-    elected: activeSet.has(path),
-    legal: mode === "app-extension" && legalProviderPaths.has(path),
-    state: "",
-  })).map((entry) => ({
-    ...entry,
-    stale: !entry.exists || !entry.legal,
-  }));
+  const pluginkitEntries = all
+    .map((path) => ({
+      type: "appex",
+      path,
+      appBundle: appBundleForAppex(path),
+      exists: existsSync(path),
+      elected: activeSet.has(path),
+      legal: mode === "app-extension" && legalProviderPaths.has(path),
+      state: "",
+    }))
+    .map((entry) => ({
+      ...entry,
+      stale: !entry.exists || !entry.legal,
+    }));
 
   if (mode !== "system-extension") {
     return pluginkitEntries;
   }
 
   const systemEntries = collectSystemExtensionMatches().map((entry) => {
-    const path = selectedProviders.find((provider) => provider.mode === "system-extension")?.path ?? sysexForApp(legalApps[0]);
+    const path =
+      selectedProviders.find((provider) => provider.mode === "system-extension")?.path ?? sysexForApp(legalApps[0]);
     const activated = entry.state.includes("activated") && entry.state.includes("enabled");
     return {
       type: "systemextension",
@@ -215,7 +211,8 @@ function classify(matches, legalApps) {
   });
 
   if (systemEntries.length === 0) {
-    const path = selectedProviders.find((provider) => provider.mode === "system-extension")?.path ?? sysexForApp(legalApps[0]);
+    const path =
+      selectedProviders.find((provider) => provider.mode === "system-extension")?.path ?? sysexForApp(legalApps[0]);
     systemEntries.push({
       type: "systemextension",
       path,
@@ -261,7 +258,9 @@ function printReport(entries, legalApps) {
   console.log("VPN profile check:");
   console.log('  scutil --nc list | grep -F "VoyaVPN"');
   console.log("");
-  console.log("The doctor does not remove VPN profiles. If stale registrations created a broken profile, remove it from System Settings > VPN.");
+  console.log(
+    "The doctor does not remove VPN profiles. If stale registrations created a broken profile, remove it from System Settings > VPN.",
+  );
 }
 
 function health(entries) {
@@ -317,7 +316,9 @@ function registerLegalApp(appBundle) {
       stdio: "inherit",
     });
   } else {
-    console.log("System Extension activation is requested by the app when TUN starts; the doctor only refreshes LaunchServices.");
+    console.log(
+      "System Extension activation is requested by the app when TUN starts; the doctor only refreshes LaunchServices.",
+    );
   }
 }
 
@@ -338,26 +339,26 @@ export function planPacketTunnelFix(
 ) {
   if (!providerExists) {
     throw new Error(
-      `Legal PacketTunnel provider is missing: ${providerPath}. `
-        + "Pass --app <path to a built VoyaVPN.app> (add --dev for the repo release bundle); "
-        + "nothing was unregistered.",
+      `Legal PacketTunnel provider is missing: ${providerPath}. ` +
+        "Pass --app <path to a built VoyaVPN.app> (add --dev for the repo release bundle); " +
+        "nothing was unregistered.",
     );
   }
 
   if (runningExecutables.length > 0) {
     throw new Error(
-      `VoyaVPN is still running (${runningExecutables.join(", ")}). `
-        + "Quit VoyaVPN before --fix so registrations are not torn down under a live provider; "
-        + "nothing was unregistered.",
+      `VoyaVPN is still running (${runningExecutables.join(", ")}). ` +
+        "Quit VoyaVPN before --fix so registrations are not torn down under a live provider; " +
+        "nothing was unregistered.",
     );
   }
 
   const stale = entries.filter((entry) => entry.stale && entry.type === "appex");
   if (stale.length > 1 && !assumeYes) {
     throw new Error(
-      `--fix would unregister ${stale.length} PacketTunnel registrations:\n`
-        + stale.map((entry) => `  ${entry.path}`).join("\n")
-        + "\nRe-run with --yes to confirm; nothing was unregistered.",
+      `--fix would unregister ${stale.length} PacketTunnel registrations:\n` +
+        stale.map((entry) => `  ${entry.path}`).join("\n") +
+        "\nRe-run with --yes to confirm; nothing was unregistered.",
     );
   }
 

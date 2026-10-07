@@ -4,7 +4,6 @@ const ipcMocks = installFakeCommands({
   decodeQrImage: vi.fn(),
 });
 
-
 import { bytesToBase64, fitWithin, rgbaToLuma, scanQrBlob } from "./qr-scanner";
 import { installFakeCommands } from "@voya/features/test/backend";
 
@@ -25,9 +24,7 @@ beforeEach(() => {
       data: new Uint8ClampedArray(width * height * 4).fill(255),
     })),
   };
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
-    context as unknown as CanvasRenderingContext2D,
-  );
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(context as unknown as CanvasRenderingContext2D);
 });
 
 afterEach(() => {

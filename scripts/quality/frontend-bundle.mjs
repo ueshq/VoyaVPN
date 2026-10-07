@@ -193,7 +193,9 @@ export function checkStartupBudget(scripts, sizeOf, { startupKiB = startupBudget
   }
   if (actualKiB > startupKiB) {
     return {
-      failures: [`startup JavaScript (${scripts.length} files) is ${actualKiB.toFixed(1)} KiB; budget is ${startupKiB} KiB`],
+      failures: [
+        `startup JavaScript (${scripts.length} files) is ${actualKiB.toFixed(1)} KiB; budget is ${startupKiB} KiB`,
+      ],
       report: [],
     };
   }

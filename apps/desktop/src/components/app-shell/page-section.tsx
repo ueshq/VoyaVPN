@@ -39,26 +39,17 @@ function PageTitle({
   }, [focusTitle]);
   return (
     <div
-      className={cn(
-        "flex min-w-0 shrink-0 items-center gap-3 px-4 py-4 min-[1100px]:px-page",
-        className,
-      )}
+      className={cn("flex min-w-0 shrink-0 items-center gap-3 px-4 py-4 min-[1100px]:px-page", className)}
       data-slot="page-title"
       // macOS pages have no titlebar strip: the title row shares the traffic
       // lights' line and drags the window, while its controls stay clickable.
       data-tauri-drag-region={windowChrome === "macos" ? "deep" : undefined}
       {...props}
     >
-      <h1
-        ref={titleRef}
-        tabIndex={-1}
-        className="min-w-0 shrink-0 text-page font-semibold tracking-tight outline-none"
-      >
+      <h1 ref={titleRef} tabIndex={-1} className="min-w-0 shrink-0 text-page font-semibold tracking-tight outline-none">
         {title}
       </h1>
-      {actions ? (
-        <PageHeaderActions className="min-h-9">{actions}</PageHeaderActions>
-      ) : null}
+      {actions ? <PageHeaderActions className="min-h-9">{actions}</PageHeaderActions> : null}
     </div>
   );
 }
@@ -77,13 +68,7 @@ function PageContent({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 function PageSurface({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      className={cn(pageSurfaceClassName, "min-h-0 min-w-0", className)}
-      data-slot="page-surface"
-      {...props}
-    />
-  );
+  return <div className={cn(pageSurfaceClassName, "min-h-0 min-w-0", className)} data-slot="page-surface" {...props} />;
 }
 
 // A toolbar inside a content panel: padding stays local to the panel rather
@@ -91,10 +76,7 @@ function PageSurface({ className, ...props }: React.ComponentProps<"div">) {
 function PageHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn(
-        "flex min-h-12 shrink-0 flex-wrap items-center gap-2 bg-surface-raised px-4 py-2",
-        className,
-      )}
+      className={cn("flex min-h-12 shrink-0 flex-wrap items-center gap-2 bg-surface-raised px-4 py-2", className)}
       data-slot="page-header"
       {...props}
     />
@@ -103,10 +85,7 @@ function PageHeader({ className, ...props }: React.ComponentProps<"div">) {
 
 // Trailing toolbar cluster: parks controls against the header's end edge with the
 // canonical `ms-auto` push so screens stop re-deriving it inline.
-function PageHeaderActions({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+function PageHeaderActions({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn("ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2", className)}

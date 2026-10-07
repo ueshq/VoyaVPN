@@ -18,20 +18,10 @@ const metadata: SubscriptionMetadata = {
 describe("SubscriptionMetaLine", () => {
   it("shows reported usage and hides absent server metadata", () => {
     const { rerender, container } = render(
-      <SubscriptionMetaLine
-        language="en"
-        t={i18next.t.bind(i18next)}
-        metadata={metadata}
-      />,
+      <SubscriptionMetaLine language="en" t={i18next.t.bind(i18next)} metadata={metadata} />,
     );
     expect(screen.getByText(/1.*KB/)).toBeInTheDocument();
-    rerender(
-      <SubscriptionMetaLine
-        language="en"
-        t={i18next.t.bind(i18next)}
-        metadata={null}
-      />,
-    );
+    rerender(<SubscriptionMetaLine language="en" t={i18next.t.bind(i18next)} metadata={null} />);
     expect(container).toBeEmptyDOMElement();
   });
   it("identifies expired sources in words and shows their update time", () => {

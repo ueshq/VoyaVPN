@@ -54,25 +54,17 @@ export function resetSettingsBackend() {
     action: "none",
     connected: false,
   });
-  settingsIpc.loadAppSettings.mockImplementation(async () =>
-    cloneJson(settings),
-  );
-  settingsIpc.saveAppSettings.mockImplementation(
-    async (next: AppSettings) => {
-      settings = cloneJson(next);
-      return cloneJson(settings);
-    },
-  );
-  settingsIpc.loadDnsSettings.mockImplementation(async () =>
-    cloneJson(settings.dns),
-  );
+  settingsIpc.loadAppSettings.mockImplementation(async () => cloneJson(settings));
+  settingsIpc.saveAppSettings.mockImplementation(async (next: AppSettings) => {
+    settings = cloneJson(next);
+    return cloneJson(settings);
+  });
+  settingsIpc.loadDnsSettings.mockImplementation(async () => cloneJson(settings.dns));
   settingsIpc.saveDnsSettings.mockImplementation(async (dns: DnsSettings) => {
     settings = { ...settings, dns: cloneJson(dns) };
     return cloneJson(dns);
   });
-  settingsIpc.loadUiPreferences.mockImplementation(
-    async () => settings.appearance,
-  );
+  settingsIpc.loadUiPreferences.mockImplementation(async () => settings.appearance);
   settingsIpc.appUpdateStatus.mockResolvedValue({
     currentVersion: "0.1.0",
     message: null,

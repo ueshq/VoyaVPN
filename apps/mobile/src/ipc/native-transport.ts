@@ -51,9 +51,7 @@ export type VoyaApplicationDataResetter = {
  * Resets the application data through the native module and reports a failure
  * as the typed `AppError` the reset rejects with, like every command.
  */
-async function resetBackendApplicationData(
-  resetter: VoyaApplicationDataResetter,
-): Promise<void> {
+async function resetBackendApplicationData(resetter: VoyaApplicationDataResetter): Promise<void> {
   try {
     await resetter.resetApplicationData();
   } catch (error) {
@@ -102,11 +100,7 @@ function nativeCommands(native: VoyaCommandInvoker): VoyaCommands {
   return Object.fromEntries(entries) as VoyaCommands;
 }
 
-async function invoke(
-  native: VoyaCommandInvoker,
-  name: string,
-  named: Record<string, unknown>,
-): Promise<string> {
+async function invoke(native: VoyaCommandInvoker, name: string, named: Record<string, unknown>): Promise<string> {
   try {
     return await native.invoke(name, JSON.stringify(named));
   } catch (error) {
@@ -185,10 +179,7 @@ export function createNativeTransport(
   return {
     commands: nativeCommands(native),
     resetApplicationData: () => resetBackendApplicationData(native),
-    on: <Name extends VoyaEventName>(
-      name: Name,
-      listener: (payload: VoyaEventPayload<Name>) => void,
-    ) => {
+    on: <Name extends VoyaEventName>(name: Name, listener: (payload: VoyaEventPayload<Name>) => void) => {
       const channel = VOYA_EVENT_CHANNELS[name];
       const subscription = events.addListener(NATIVE_EVENT, (event) => {
         if (event.channel !== channel) return;

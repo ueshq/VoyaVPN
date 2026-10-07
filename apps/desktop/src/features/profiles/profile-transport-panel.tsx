@@ -20,12 +20,7 @@ export function TransportPanel(panel: ProfilePanelProps) {
     );
 
   return (
-    <Panel
-      collapsible
-      defaultOpen={hasSettings}
-      icon={Waypoints}
-      title={t("panes.profiles.panels.transport")}
-    >
+    <Panel collapsible defaultOpen={hasSettings} icon={Waypoints} title={t("panes.profiles.panels.transport")}>
       <div className="grid gap-3 lg:grid-cols-4">
         <SelectField
           label={t("panes.profiles.fields.network")}
@@ -48,12 +43,7 @@ export function TransportPanel(panel: ProfilePanelProps) {
           </>
         )}
         {transport === "tcp" ? (
-          <DraftTextField
-            {...panel}
-            label={t("panes.profiles.fields.rawHeader")}
-            name="header"
-            placeholder="none"
-          />
+          <DraftTextField {...panel} label={t("panes.profiles.fields.rawHeader")} name="header" placeholder="none" />
         ) : null}
       </div>
     </Panel>

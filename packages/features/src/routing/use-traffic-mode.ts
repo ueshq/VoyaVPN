@@ -38,9 +38,7 @@ export function useTrafficMode() {
       // An invalidation read may still be in flight when the command returns.
       await client.cancelQueries({ exact: true, queryKey: queryKeys.appSettings });
       client.setQueryData<AppSettings>(queryKeys.appSettings, (current) =>
-        current
-          ? { ...current, proxy: { ...current.proxy, trafficMode: mode } }
-          : current,
+        current ? { ...current, proxy: { ...current.proxy, trafficMode: mode } } : current,
       );
     },
     onSettled: async () => {
@@ -60,11 +58,7 @@ export function useTrafficMode() {
   const disabled = !ready || busy || mode === undefined || error !== null;
   // A disabled button cannot say why, so the switcher shows this on hover.
   const disabledReason: TranslationKey | null =
-    error !== null
-      ? "panes.routing.trafficModeUnavailable"
-      : !ready || busy
-        ? "common.waitForConnection"
-        : null;
+    error !== null ? "panes.routing.trafficModeUnavailable" : !ready || busy ? "common.waitForConnection" : null;
 
   function selectMode(mode: TrafficMode) {
     if (disabled || runtimeActionPending()) return;

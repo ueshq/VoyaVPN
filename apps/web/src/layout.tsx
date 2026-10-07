@@ -40,12 +40,7 @@ export function Document({ locale, page, title, description, css, children }: Do
           <>
             <link rel="canonical" href={urlFor({ locale, page })} />
             {LOCALES.map((other) => (
-              <link
-                key={other}
-                rel="alternate"
-                hrefLang={HTML_LANG[other]}
-                href={urlFor({ locale: other, page })}
-              />
+              <link key={other} rel="alternate" hrefLang={HTML_LANG[other]} href={urlFor({ locale: other, page })} />
             ))}
             <link rel="alternate" hrefLang="x-default" href={urlFor({ locale: "en", page })} />
             <meta property="og:type" content="website" />

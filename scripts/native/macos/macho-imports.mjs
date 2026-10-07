@@ -41,14 +41,7 @@ const allowedLinkedLibraryPatterns = Object.freeze([
   /^\/usr\/lib\/swift\//u,
 ]);
 
-const machOMagics = new Set([
-  "feedface",
-  "feedfacf",
-  "cefaedfe",
-  "cffaedfe",
-  "cafebabe",
-  "bebafeca",
-]);
+const machOMagics = new Set(["feedface", "feedfacf", "cefaedfe", "cffaedfe", "cafebabe", "bebafeca"]);
 
 /** True when the first four bytes are a thin or fat Mach-O magic. */
 export function isMachOHeader(bytes) {

@@ -52,22 +52,11 @@ export function SettingsApplyStatus({
   if (!needsApply && !working && !error && !query.error) {
     if (!saving && (!saved || failed)) return null;
     return (
-      <p
-        className="inline-flex shrink-0 items-center gap-2 px-4 text-xs text-muted-foreground"
-        role="status"
-      >
-        {saving ? (
-          <Spinner className="size-3.5" />
-        ) : (
-          <Check aria-hidden="true" className="size-3.5" />
-        )}
+      <p className="inline-flex shrink-0 items-center gap-2 px-4 text-xs text-muted-foreground" role="status">
+        {saving ? <Spinner className="size-3.5" /> : <Check aria-hidden="true" className="size-3.5" />}
         {saving
           ? t("settings.saveStatus.saving")
-          : t(
-              status?.connected
-                ? "settings.saveStatus.saved"
-                : "settings.saveStatus.savedOffline",
-            )}
+          : t(status?.connected ? "settings.saveStatus.saved" : "settings.saveStatus.savedOffline")}
       </p>
     );
   }
@@ -80,33 +69,17 @@ export function SettingsApplyStatus({
           {t("settings.apply.working")}
         </span>
       ) : needsApply ? (
-        <span className="text-xs text-muted-foreground">
-          {t("settings.apply.pending")}
-        </span>
+        <span className="text-xs text-muted-foreground">{t("settings.apply.pending")}</span>
       ) : null}
       {needsApply ? (
-        <Button
-          className="ms-auto"
-          size="sm"
-          disabled={saving || working || failed}
-          onClick={() => void apply()}
-        >
+        <Button className="ms-auto" size="sm" disabled={saving || working || failed} onClick={() => void apply()}>
           <RotateCcw aria-hidden="true" className="size-4" />
-          {t(
-            status.action === "reconnect"
-              ? "settings.apply.reconnect"
-              : "settings.apply.proxy",
-          )}
+          {t(status.action === "reconnect" ? "settings.apply.reconnect" : "settings.apply.proxy")}
         </Button>
       ) : null}
       {error || query.error ? (
-        <div
-          className="flex w-full items-center gap-3 text-sm text-danger"
-          role="alert"
-        >
-          <span className="min-w-0 break-words">
-            {error || redactOperationalError(query.error)}
-          </span>
+        <div className="flex w-full items-center gap-3 text-sm text-danger" role="alert">
+          <span className="min-w-0 break-words">{error || redactOperationalError(query.error)}</span>
           <Button
             size="sm"
             variant="outline"

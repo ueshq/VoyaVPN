@@ -29,7 +29,17 @@ export function useUnsavedChanges(dirty: boolean, saving: boolean, save: () => P
       { text: t("mobile.discard"), style: "destructive", onPress: () => navigation.dispatch(data.action) },
       // A save that rejects is one that did not save: the page stays, and its
       // own error line says why. Left unhandled it would be a red screen.
-      { text: t("actions.save"), onPress: () => { void save().then((saved) => { if (saved) setLeaving(data.action); }, () => undefined); } },
+      {
+        text: t("actions.save"),
+        onPress: () => {
+          void save().then(
+            (saved) => {
+              if (saved) setLeaving(data.action);
+            },
+            () => undefined,
+          );
+        },
+      },
     ]);
   });
 

@@ -86,7 +86,11 @@ async function main(argv = []) {
     throw new Error("Downloadable core assets are not supported; sing-box is bundled with the application");
   }
 
-  const generatedAt = requiredNonPlaceholderString(fixture.generatedAt ?? "1970-01-01T00:00:00.000Z", "generatedAt", "fixture");
+  const generatedAt = requiredNonPlaceholderString(
+    fixture.generatedAt ?? "1970-01-01T00:00:00.000Z",
+    "generatedAt",
+    "fixture",
+  );
   const manifest = {
     productName: options.product,
     manifestVersion: 1,

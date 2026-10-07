@@ -51,8 +51,6 @@ export function connectionRuleText(
       .split(/[\s[\]=,()"'>·]+/)
       .filter(Boolean),
   );
-  const matched = rules?.find(
-    (item) => item.enabled && matcherTokens(item).some((token) => words.has(token)),
-  );
+  const matched = rules?.find((item) => item.enabled && matcherTokens(item).some((token) => words.has(token)));
   return matched ? `${ruleDisplayName(matched, t)}\n${raw}` : raw;
 }

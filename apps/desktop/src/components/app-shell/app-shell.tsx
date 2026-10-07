@@ -171,8 +171,6 @@ function useProxyMonitorLifecycle(activeTab: ShellTab) {
   }, [reportErrorRef]);
 
   useEffect(() => {
-    controllerRef.current?.setWanted(
-      coreConnected && activeTab === "connections" && tableShown && visible,
-    );
+    controllerRef.current?.setWanted(coreConnected && activeTab === "connections" && tableShown && visible);
   }, [activeTab, coreConnected, tableShown, visible]);
 }

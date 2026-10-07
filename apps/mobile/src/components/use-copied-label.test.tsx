@@ -44,7 +44,9 @@ it("re-arms when copied again inside the window", async () => {
   // A second copy before the first expires restarts the hold, so the label
   // cannot flicker back to IDLE between two quick copies.
   await user.press(screen.getByTestId("mark"));
-  await new Promise<void>((resolve) => { setTimeout(resolve, 60); });
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 60);
+  });
   expect(screen.getByText("COPIED")).toBeOnTheScreen();
 
   await waitFor(() => expect(screen.getByText("IDLE")).toBeOnTheScreen(), { timeout: 2000 });

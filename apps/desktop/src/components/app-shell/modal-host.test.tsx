@@ -15,7 +15,6 @@ const ipcMocks = installFakeCommands({
   installCoreSeed: vi.fn(),
 });
 
-
 function seedInstallResult(status: CoreSeedInstallStatus) {
   return { status };
 }

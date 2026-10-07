@@ -26,10 +26,7 @@ beforeEach(async () => {
 afterEach(cleanup);
 function mount() {
   const client = createTestQueryClient();
-  const hook = renderHookWithQuery(
-    () => ({ app: useAppSettings(), dns: useDnsSettings() }),
-    { queryClient: client },
-  );
+  const hook = renderHookWithQuery(() => ({ app: useAppSettings(), dns: useDnsSettings() }), { queryClient: client });
   return {
     ...hook,
     client,
@@ -49,9 +46,7 @@ describe("automatic app settings", () => {
     );
     await settle();
     expect(serverSettings().core.logLevel).toBe("debug");
-    expect(client.getQueryData(queryKeys.appSettings)).toEqual(
-      serverSettings(),
-    );
+    expect(client.getQueryData(queryKeys.appSettings)).toEqual(serverSettings());
     act(() => result.current.app.update((s) => ({ ...s })));
     await settle();
     expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1);
@@ -92,16 +87,13 @@ describe("automatic app settings", () => {
           })),
         );
       update("debug");
-      await waitFor(() =>
-        expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1),
-      );
+      await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
       update("trace");
       update("error");
       expect(result.current.app.settings?.core.logLevel).toBe("error");
       expect(result.current.app.working).toBe(false);
       await act(async () => {
-        if (outcome === "success")
-          pending.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]);
+        if (outcome === "success") pending.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]);
         else pending.reject(new Error("old write failed"));
       });
       await settle();
@@ -163,15 +155,11 @@ describe("automatic app settings", () => {
         core: { ...s.core, logLevel: "trace" },
       })),
     );
-    await waitFor(() =>
-      expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
     unmount();
     pending.reject(new Error("save unavailable"));
     await settle();
-    expect(useToastStore.getState().toasts.at(-1)?.description).toBe(
-      "save unavailable",
-    );
+    expect(useToastStore.getState().toasts.at(-1)?.description).toBe("save unavailable");
     const next = renderHookWithQuery(useAppSettings, { queryClient: client });
     await waitFor(() => expect(next.result.current.working).toBe(false));
     expect(next.result.current.settings?.core.logLevel).toBe("trace");
@@ -186,9 +174,7 @@ describe("automatic app settings", () => {
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     const pending = deferred<AppSettings>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
-    act(() =>
-      result.current.app.setAppearance({ language: "en", theme: "dark" }),
-    );
+    act(() => result.current.app.setAppearance({ language: "en", theme: "dark" }));
     expect(usePreferencesStore.getState().themePreview).toBe("dark");
     await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalled());
     pending.reject(new Error("appearance failed"));
@@ -204,9 +190,7 @@ describe("automatic app settings", () => {
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     const pending = deferred<AppSettings>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
-    act(() =>
-      result.current.app.setAppearance({ language: "en", theme: "dark" }),
-    );
+    act(() => result.current.app.setAppearance({ language: "en", theme: "dark" }));
     await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalled());
     const toasts = useToastStore.getState().toasts.length;
 
@@ -228,9 +212,7 @@ describe("automatic app settings", () => {
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     const pending = deferred<AppSettings>();
     settingsIpc.saveAppSettings.mockReturnValueOnce(pending.promise);
-    act(() =>
-      result.current.app.setAppearance({ language: "en", theme: "dark" }),
-    );
+    act(() => result.current.app.setAppearance({ language: "en", theme: "dark" }));
     await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalled());
 
     unmount();
@@ -240,9 +222,7 @@ describe("automatic app settings", () => {
     expect(usePreferencesStore.getState().themePreview).toBeNull();
     expect(usePreferencesStore.getState().themeMode).toBe("system");
     // One failure, one notice: the detached draft's.
-    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toEqual([
-      "Could not save changes",
-    ]);
+    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toEqual(["Could not save changes"]);
   });
 
   it("keeps the latest preview while an older appearance save completes", async () => {
@@ -250,24 +230,14 @@ describe("automatic app settings", () => {
     await waitFor(() => expect(result.current.app.settings).not.toBeNull());
     const first = deferred<AppSettings>();
     const second = deferred<AppSettings>();
-    settingsIpc.saveAppSettings
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise);
-    act(() =>
-      result.current.app.setAppearance({ language: "en", theme: "dark" }),
-    );
-    await waitFor(() =>
-      expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1),
-    );
-    act(() =>
-      result.current.app.setAppearance({ language: "en", theme: "light" }),
-    );
+    settingsIpc.saveAppSettings.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    act(() => result.current.app.setAppearance({ language: "en", theme: "dark" }));
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(1));
+    act(() => result.current.app.setAppearance({ language: "en", theme: "light" }));
     await act(async () => {
       first.resolve(settingsIpc.saveAppSettings.mock.calls[0][0]);
     });
-    await waitFor(() =>
-      expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(2),
-    );
+    await waitFor(() => expect(settingsIpc.saveAppSettings).toHaveBeenCalledTimes(2));
     expect(usePreferencesStore.getState().themePreview).toBe("light");
     expect(result.current.app.settings?.appearance.theme).toBe("light");
     await act(async () => {

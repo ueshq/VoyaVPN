@@ -17,20 +17,43 @@ export function ConnectionOptions() {
   const [installed, setInstalled] = useState(false);
   const [busy, setBusy] = useState(false);
   async function install() {
-    setBusy(true); setError(null); setInstalled(false);
+    setBusy(true);
+    setError(null);
+    setInstalled(false);
     try {
       await deviceActions().setConnectionShortcuts(t("actions.connect"), t("actions.disconnect"));
       setInstalled(true);
-    } catch (failure) { setError(failure); }
-    finally { setBusy(false); }
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
   }
-  return <>
-    <ListGroup><SwitchRow last label={t("daily.autoConnect")} description={t("daily.autoConnectHint")} value={autoConnect} onChange={(enabled) => useConnectionPreferences.getState().setAutoConnect(enabled)} /></ListGroup>
-    {Platform.OS !== "android" || Number(Platform.Version) >= 25 ? <Disclosure title={t("daily.shortcuts")}>
-      <Typography className="text-base text-subtle">{t("daily.shortcutsHint")}</Typography>
-      <ErrorNotice error={error} />
-      <Button variant="secondary" isDisabled={busy} onPress={() => void install()}><Button.Label>{t("daily.shortcutsInstall")}</Button.Label></Button>
-      {installed ? <Typography accessibilityLiveRegion="polite" className="text-sm text-connected">{t("daily.shortcutsReady")}</Typography> : null}
-    </Disclosure> : null}
-  </>;
+  return (
+    <>
+      <ListGroup>
+        <SwitchRow
+          last
+          label={t("daily.autoConnect")}
+          description={t("daily.autoConnectHint")}
+          value={autoConnect}
+          onChange={(enabled) => useConnectionPreferences.getState().setAutoConnect(enabled)}
+        />
+      </ListGroup>
+      {Platform.OS !== "android" || Number(Platform.Version) >= 25 ? (
+        <Disclosure title={t("daily.shortcuts")}>
+          <Typography className="text-base text-subtle">{t("daily.shortcutsHint")}</Typography>
+          <ErrorNotice error={error} />
+          <Button variant="secondary" isDisabled={busy} onPress={() => void install()}>
+            <Button.Label>{t("daily.shortcutsInstall")}</Button.Label>
+          </Button>
+          {installed ? (
+            <Typography accessibilityLiveRegion="polite" className="text-sm text-connected">
+              {t("daily.shortcutsReady")}
+            </Typography>
+          ) : null}
+        </Disclosure>
+      ) : null}
+    </>
+  );
 }

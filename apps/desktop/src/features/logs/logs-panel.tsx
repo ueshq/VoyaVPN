@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ArrowDownToLine,
-  ClipboardCopy,
-  FileDown,
-  ScrollText,
-  Search,
-  Trash2,
-} from "lucide-react";
+import { ArrowDownToLine, ClipboardCopy, FileDown, ScrollText, Search, Trash2 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { Badge } from "@voya/ui/components/badge";
@@ -23,13 +16,7 @@ import { EmptyState } from "@voya/ui/components/empty-state";
 import { SearchInput } from "@voya/ui/components/search-input";
 import { MenubarItem } from "@voya/ui/components/menubar";
 import { MoreMenu } from "@voya/ui/components/row-menus";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@voya/ui/components/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@voya/ui/components/select";
 import { useI18n } from "@voya/i18n/use-i18n";
 
 import { voyaCommands } from "@voya/client/transport";
@@ -71,10 +58,7 @@ export function LogsPanel({
   const returnFocusRef = useRef<HTMLButtonElement | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const needle = search.trim().toLowerCase();
-  const resolved = useMemo(
-    () => logLines.map((line) => resolveLogLine(t, line)),
-    [logLines, t],
-  );
+  const resolved = useMemo(() => logLines.map((line) => resolveLogLine(t, line)), [logLines, t]);
   const filtered = useMemo(
     () =>
       resolved.filter((line) => {
@@ -83,9 +67,7 @@ export function LogsPanel({
           line.level === "warn" ||
           line.level === "error" ||
           (filter === "standard" && line.level === "info");
-        return (
-          included && (!needle || line.searchText.includes(needle))
-        );
+        return included && (!needle || line.searchText.includes(needle));
       }),
     [filter, needle, resolved],
   );
@@ -141,9 +123,7 @@ export function LogsPanel({
   function handleScroll() {
     const element = viewportRef.current;
     if (!element) return;
-    const next =
-      element.scrollHeight - element.scrollTop - element.clientHeight <=
-      STICK_THRESHOLD;
+    const next = element.scrollHeight - element.scrollTop - element.clientHeight <= STICK_THRESHOLD;
     atBottomRef.current = next;
     setAtBottom(next);
   }
@@ -159,21 +139,12 @@ export function LogsPanel({
   function scrollToLatest() {
     atBottomRef.current = true;
     setAtBottom(true);
-    if (filtered.length > 0)
-      virtualizer.scrollToIndex(filtered.length - 1, { align: "end" });
+    if (filtered.length > 0) virtualizer.scrollToIndex(filtered.length - 1, { align: "end" });
   }
-  const renderedRows = firstPaintVirtualItems(
-    virtualizer.getVirtualItems(),
-    filtered.length,
-    ROW_HEIGHT,
-    50,
-  );
+  const renderedRows = firstPaintVirtualItems(virtualizer.getVirtualItems(), filtered.length, ROW_HEIGHT, 50);
 
   return (
-    <section
-      aria-label={t("tabs.logs")}
-      className="flex h-full min-h-0 min-w-0 flex-col"
-    >
+    <section aria-label={t("tabs.logs")} className="flex h-full min-h-0 min-w-0 flex-col">
       <PageHeader>
         <SearchInput
           className="sm:max-w-sm"
@@ -187,14 +158,10 @@ export function LogsPanel({
         <Select
           value={filter}
           onValueChange={(value) => {
-            if (value === "standard" || value === "issues" || value === "all")
-              onFilterChange(value);
+            if (value === "standard" || value === "issues" || value === "all") onFilterChange(value);
           }}
         >
-          <SelectTrigger
-            className="h-9 min-w-28 shrink-0"
-            aria-label={t("panes.logs.levelFilterLabel")}
-          >
+          <SelectTrigger className="h-9 min-w-28 shrink-0" aria-label={t("panes.logs.levelFilterLabel")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -204,17 +171,11 @@ export function LogsPanel({
           </SelectContent>
         </Select>
         <MoreMenu className="ms-auto" label={t("proxy.moreActions")} title={t("proxy.moreActions")}>
-          <MenubarItem
-            disabled={!filtered.length}
-            onSelect={() => void copyShown()}
-          >
+          <MenubarItem disabled={!filtered.length} onSelect={() => void copyShown()}>
             <ClipboardCopy className="size-4" aria-hidden="true" />
             {t("panes.logs.copy")}
           </MenubarItem>
-          <MenubarItem
-            disabled={!filtered.length}
-            onSelect={() => void exportShown()}
-          >
+          <MenubarItem disabled={!filtered.length} onSelect={() => void exportShown()}>
             <FileDown className="size-4" aria-hidden="true" />
             {t("panes.logs.export")}
           </MenubarItem>
@@ -225,18 +186,9 @@ export function LogsPanel({
         </MoreMenu>
       </PageHeader>
       <div className="relative min-h-0 flex-1">
-        <div
-          className="h-full overflow-y-auto"
-          onScroll={handleScroll}
-          ref={viewportRef}
-          data-testid="logs-viewport"
-        >
+        <div className="h-full overflow-y-auto" onScroll={handleScroll} ref={viewportRef} data-testid="logs-viewport">
           {!logLines.length ? (
-            <EmptyState
-              className="h-full content-center"
-              icon={ScrollText}
-              title={t("panes.logs.empty")}
-            />
+            <EmptyState className="h-full content-center" icon={ScrollText} title={t("panes.logs.empty")} />
           ) : !filtered.length ? (
             <EmptyState
               className="h-full content-center"
@@ -271,9 +223,7 @@ export function LogsPanel({
                         setSelected(line);
                       }}
                     >
-                      <time className="tabular-nums text-muted-foreground">
-                        {line.time}
-                      </time>
+                      <time className="tabular-nums text-muted-foreground">{line.time}</time>
                       <Badge
                         className={cn(
                           "h-5 justify-center rounded-sm px-1.5 font-normal",
@@ -283,9 +233,7 @@ export function LogsPanel({
                       >
                         {levels[line.level]}
                       </Badge>
-                      <span className="truncate font-mono text-foreground">
-                        {line.text}
-                      </span>
+                      <span className="truncate font-mono text-foreground">{line.text}</span>
                     </button>
                   </li>
                 );
@@ -327,11 +275,7 @@ export function LogsPanel({
         >
           <DialogHeader>
             <DialogTitle>{t("panes.logs.details")}</DialogTitle>
-            <DialogDescription>
-              {selected
-                ? `${selected.time} · ${levels[selected.level]}`
-                : ""}
-            </DialogDescription>
+            <DialogDescription>{selected ? `${selected.time} · ${levels[selected.level]}` : ""}</DialogDescription>
           </DialogHeader>
           <DialogBody className="select-text whitespace-pre-wrap font-mono text-sm [overflow-wrap:anywhere]">
             {selected?.text ?? ""}

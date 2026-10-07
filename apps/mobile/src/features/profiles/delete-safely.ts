@@ -12,12 +12,16 @@ export async function deleteSafely(ids: string[], remove: () => Promise<unknown>
     const status = await voyaCommands().runtimeStatus();
     if (isRuntimeTransitioning(status.state)) throw new Error("Runtime transition in progress");
     const groups = await voyaCommands().listPolicyGroups();
-    const affected = ids.includes(status.activeProfileId ?? "") || groups.entries.some((entry) => entry.isActive && entry.members.some((member) => ids.includes(member.profileId)));
+    const affected =
+      ids.includes(status.activeProfileId ?? "") ||
+      groups.entries.some((entry) => entry.isActive && entry.members.some((member) => ids.includes(member.profileId)));
     if (status.state !== "disconnected" && (affected || status.state === "cleanupPending")) {
       const stopped = await voyaCommands().disconnectCore();
       useRuntimeEventStore.getState().setCoreState(stopped);
       if (stopped.state !== "disconnected") throw new Error("Tunnel has not disconnected");
     }
     await remove();
-  } finally { store.finishAction(); }
+  } finally {
+    store.finishAction();
+  }
 }

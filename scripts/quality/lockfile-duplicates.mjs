@@ -43,11 +43,7 @@ const singleVersionScopes = ["@radix-ui/"];
  * `snapshots:` block. Full YAML parsing is not worth a dependency here: the
  * keys we need are the only two-space-indented quoted entries in that block.
  */
-export function resolvedVersions(
-  lockfileText,
-  packageNames = singleVersionPackages,
-  scopes = singleVersionScopes,
-) {
+export function resolvedVersions(lockfileText, packageNames = singleVersionPackages, scopes = singleVersionScopes) {
   const wanted = new Set(packageNames);
   const found = new Map(packageNames.map((name) => [name, new Set()]));
 
@@ -66,11 +62,7 @@ export function resolvedVersions(
   return found;
 }
 
-export function checkLockfile(
-  lockfileText,
-  packageNames = singleVersionPackages,
-  scopes = singleVersionScopes,
-) {
+export function checkLockfile(lockfileText, packageNames = singleVersionPackages, scopes = singleVersionScopes) {
   const failures = [];
   const report = [];
 

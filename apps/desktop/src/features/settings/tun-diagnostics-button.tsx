@@ -46,11 +46,7 @@ export function TunDiagnosticsButton() {
       type="button"
       variant="outline"
     >
-      {copying ? (
-        <Spinner className="size-4" />
-      ) : (
-        <ClipboardCopy className="size-4" aria-hidden="true" />
-      )}
+      {copying ? <Spinner className="size-4" /> : <ClipboardCopy className="size-4" aria-hidden="true" />}
       {label}
     </Button>
   );

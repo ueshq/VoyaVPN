@@ -12,7 +12,11 @@ const saveEdits = jest.fn<Promise<boolean>, []>();
 
 function List() {
   const navigation = useNavigation();
-  return <Pressable onPress={() => navigation.navigate("editor" as never)}><Text>Open editor</Text></Pressable>;
+  return (
+    <Pressable onPress={() => navigation.navigate("editor" as never)}>
+      <Text>Open editor</Text>
+    </Pressable>
+  );
 }
 
 /** An editor in the shape the real ones have: a busy guard around a save that clears the edit. */
@@ -31,8 +35,12 @@ function Editor() {
   return (
     <>
       <Text>Editor</Text>
-      <Pressable onPress={() => setDirty(true)}><Text>Edit</Text></Pressable>
-      <Pressable onPress={() => navigation.goBack()}><Text>Back</Text></Pressable>
+      <Pressable onPress={() => setDirty(true)}>
+        <Text>Edit</Text>
+      </Pressable>
+      <Pressable onPress={() => navigation.goBack()}>
+        <Text>Back</Text>
+      </Pressable>
     </>
   );
 }

@@ -73,11 +73,7 @@ function SelectContent({
   );
 }
 
-function SelectItem({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Item>) {
+function SelectItem({ className, children, ...props }: React.ComponentProps<typeof SelectPrimitive.Item>) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
@@ -97,10 +93,7 @@ function SelectItem({
   );
 }
 
-function SelectScrollUpButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
+function SelectScrollUpButton({ className, ...props }: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
   return (
     <SelectPrimitive.ScrollUpButton
       data-slot="select-scroll-up-button"
@@ -127,10 +120,4 @@ function SelectScrollDownButton({
   );
 }
 
-export {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-};
+export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue };

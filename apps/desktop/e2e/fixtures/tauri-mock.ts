@@ -53,10 +53,7 @@ export function smokeCalls(page: Page, command?: string): Promise<SmokeCall[]> {
   }, command);
 }
 
-export async function installTauriSmokeMock(
-  page: Page,
-  titleBarLayout: WindowChromeConfig["titleBarLayout"] = "none",
-) {
+export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowChromeConfig["titleBarLayout"] = "none") {
   await page.addInitScript((titleBarLayout) => {
     type CommandArgs = Record<string, unknown>;
     type Profile = Record<string, unknown>;
@@ -95,11 +92,7 @@ export async function installTauriSmokeMock(
       appliedTrafficMode: TrafficMode;
       selfHost: SelfHostState;
     };
-    type Callback = (event: {
-      id: number;
-      event: string;
-      payload: unknown;
-    }) => void;
+    type Callback = (event: { id: number; event: string; payload: unknown }) => void;
     type Listener = { eventId: number; eventName: string; handlerId: number };
 
     const callbacks = new Map<number, Callback>();
@@ -198,12 +191,7 @@ export async function installTauriSmokeMock(
       proxy_set_traffic_mode: [...proxyRuntimeScopes, "appSettings"],
       run_speedtest: profileScopes,
       apply_pending_settings: ["appSettings"],
-      save_app_settings: [
-        "appSettings",
-        "uiPreferences",
-        "dns",
-        "connectionMode",
-      ],
+      save_app_settings: ["appSettings", "uiPreferences", "dns", "connectionMode"],
       save_dns_settings: ["dns", "appSettings"],
       save_profile: profileScopes,
       save_routing: routingScopes,
@@ -263,21 +251,17 @@ export async function installTauriSmokeMock(
         return Promise.reject(new Error("Simulated failure"));
       }
 
-      const manualIds = command === "delete_profiles"
-        ? readStringArray(args, "indexIds")
-        : command === "save_profile"
-          ? [String(readRecord(args, "profile").id ?? "")]
-          : command === "move_profile"
-            ? [String(args.indexId ?? "")]
-            : [];
+      const manualIds =
+        command === "delete_profiles"
+          ? readStringArray(args, "indexIds")
+          : command === "save_profile"
+            ? [String(readRecord(args, "profile").id ?? "")]
+            : command === "move_profile"
+              ? [String(args.indexId ?? "")]
+              : [];
       if (
-        state.profiles.some(
-          (row) =>
-            manualIds.includes(String(row.profile.id)) &&
-            row.profile.subscriptionId,
-        ) ||
-        (command === "save_profile" &&
-          readRecord(args, "profile").subscriptionId) ||
+        state.profiles.some((row) => manualIds.includes(String(row.profile.id)) && row.profile.subscriptionId) ||
+        (command === "save_profile" && readRecord(args, "profile").subscriptionId) ||
         (command === "import_profiles_from_text" && args.subscriptionId)
       )
         return Promise.reject(new Error("Subscription nodes are read-only"));
@@ -296,9 +280,7 @@ export async function installTauriSmokeMock(
           return Promise.resolve(eventId);
         }
         case "plugin:event|unlisten": {
-          const index = listeners.findIndex(
-            (listener) => listener.eventId === Number(args.eventId ?? -1),
-          );
+          const index = listeners.findIndex((listener) => listener.eventId === Number(args.eventId ?? -1));
           if (index >= 0) {
             listeners.splice(index, 1);
           }
@@ -372,8 +354,7 @@ export async function installTauriSmokeMock(
             ? "none"
             : JSON.stringify(currentCore) !== JSON.stringify(applied)
               ? "reconnect"
-              : JSON.stringify(state.settings.network.systemProxy) !==
-                  JSON.stringify(applied.network.systemProxy)
+              : JSON.stringify(state.settings.network.systemProxy) !== JSON.stringify(applied.network.systemProxy)
                 ? "reapplyProxy"
                 : "none";
           return Promise.resolve({ action, connected });
@@ -393,10 +374,7 @@ export async function installTauriSmokeMock(
           return Promise.resolve(clone(state.runtime));
         case "connect_active_profile": {
           state.appliedSettings = clone(state.settings);
-          const active =
-            state.profiles.find((row) => row.isActive) ??
-            state.profiles[0] ??
-            null;
+          const active = state.profiles.find((row) => row.isActive) ?? state.profiles[0] ?? null;
           state.runtime = {
             activeProfileId: active ? String(active.profile.id) : null,
             mainPid: 4242,
@@ -461,7 +439,11 @@ export async function installTauriSmokeMock(
         case "get_profile": {
           const row = state.profiles.find((item) => item.profile.id === String(args.indexId ?? ""));
           if (!row) {
-            throw { kind: { entity: "profile", id: String(args.indexId ?? ""), type: "notFound" }, message: "node not found", subsystem: "profile" } satisfies AppError;
+            throw {
+              kind: { entity: "profile", id: String(args.indexId ?? ""), type: "notFound" },
+              message: "node not found",
+              subsystem: "profile",
+            } satisfies AppError;
           }
           return Promise.resolve(clone(row));
         }
@@ -475,13 +457,8 @@ export async function installTauriSmokeMock(
         }
         case "delete_profiles": {
           const ids = readStringArray(args, "indexIds");
-          state.profiles = state.profiles.filter(
-            (row) => !ids.includes(String(row.profile.id)),
-          );
-          if (
-            state.runtime.activeProfileId &&
-            ids.includes(state.runtime.activeProfileId)
-          )
+          state.profiles = state.profiles.filter((row) => !ids.includes(String(row.profile.id)));
+          if (state.runtime.activeProfileId && ids.includes(state.runtime.activeProfileId))
             void dispatch("disconnect_core", {});
           return Promise.resolve(ids.length);
         }
@@ -496,10 +473,7 @@ export async function installTauriSmokeMock(
         case "save_subscription": {
           const source = cloneRecord(args.item) as Subscription;
           source.id ||= `sub-${state.subscriptions.length + 1}`;
-          state.subscriptions = [
-            ...state.subscriptions.filter((item) => item.id !== source.id),
-            source,
-          ];
+          state.subscriptions = [...state.subscriptions.filter((item) => item.id !== source.id), source];
           return Promise.resolve(clone(source));
         }
         case "delete_subscriptions": {
@@ -507,16 +481,9 @@ export async function installTauriSmokeMock(
           const removed = state.profiles
             .filter((row) => ids.includes(String(row.profile.subscriptionId)))
             .map((row) => String(row.profile.id));
-          state.subscriptions = state.subscriptions.filter(
-            (item) => !ids.includes(item.id),
-          );
-          state.profiles = state.profiles.filter(
-            (row) => !removed.includes(String(row.profile.id)),
-          );
-          if (
-            state.runtime.activeProfileId &&
-            removed.includes(state.runtime.activeProfileId)
-          ) {
+          state.subscriptions = state.subscriptions.filter((item) => !ids.includes(item.id));
+          state.profiles = state.profiles.filter((row) => !removed.includes(String(row.profile.id)));
+          if (state.runtime.activeProfileId && removed.includes(state.runtime.activeProfileId)) {
             void dispatch("disconnect_core", {});
             emitEvent("transient-stream-event", {
               kind: "coreState",
@@ -528,9 +495,7 @@ export async function installTauriSmokeMock(
         case "export_profile_share_links": {
           const indexIds = readStringArray(args, "indexIds");
           const links = indexIds.map((indexId) => {
-            const profile = state.profiles.find(
-              (item) => item.profile.id === indexId,
-            )?.profile;
+            const profile = state.profiles.find((item) => item.profile.id === indexId)?.profile;
             if (!profile) {
               throw new Error(`missing profile ${indexId}`);
             }
@@ -570,24 +535,17 @@ export async function installTauriSmokeMock(
         case "update_subscriptions": {
           // A null id is "update all", exactly as the backend reads it.
           const sources = state.subscriptions.filter(
-            (item) =>
-              args.subscriptionId == null || item.id === args.subscriptionId,
+            (item) => args.subscriptionId == null || item.id === args.subscriptionId,
           );
           for (const source of sources) {
-            const previous = state.profiles.find(
-              (row) => row.profile.subscriptionId === source.id,
-            );
+            const previous = state.profiles.find((row) => row.profile.subscriptionId === source.id);
             if (!previous)
               upsertProfile({
-                ...importedProfile(
-                  "trojan://secret@source.test:443#Subscription%20node",
-                ),
+                ...importedProfile("trojan://secret@source.test:443#Subscription%20node"),
                 subscriptionId: source.id,
               });
             state.subscriptionMetadata = [
-              ...state.subscriptionMetadata.filter(
-                (item) => item.subscriptionId !== source.id,
-              ),
+              ...state.subscriptionMetadata.filter((item) => item.subscriptionId !== source.id),
               {
                 subscriptionId: source.id,
                 lastUpdateAt: Math.floor(Date.now() / 1000),
@@ -604,7 +562,14 @@ export async function installTauriSmokeMock(
           }
           return Promise.resolve({
             imported: sources.length,
-            outcomes: sources.map((source) => ({ subscriptionId: source.id, status: "success", reason: "updated", imported: 1, removedExisting: 0, diagnostic: null })),
+            outcomes: sources.map((source) => ({
+              subscriptionId: source.id,
+              status: "success",
+              reason: "updated",
+              imported: 1,
+              removedExisting: 0,
+              diagnostic: null,
+            })),
             messages: [],
             removedExisting: 0,
             skipped: 0,
@@ -625,26 +590,19 @@ export async function installTauriSmokeMock(
             ...input,
             id: input.id || `policy-group-smoke-${nextPolicyGroupId++}`,
           };
-          state.policyGroups = [
-            ...state.policyGroups.filter((group) => group.id !== saved.id),
-            saved,
-          ];
+          state.policyGroups = [...state.policyGroups.filter((group) => group.id !== saved.id), saved];
           return Promise.resolve(clone(saved));
         }
         case "delete_policy_groups": {
           const ids = readStringArray(args, "ids");
           const before = state.policyGroups.length;
-          state.policyGroups = state.policyGroups.filter(
-            (group) => !ids.includes(group.id),
-          );
-          if (state.activePolicyGroupId && ids.includes(state.activePolicyGroupId))
-            state.activePolicyGroupId = null;
+          state.policyGroups = state.policyGroups.filter((group) => !ids.includes(group.id));
+          if (state.activePolicyGroupId && ids.includes(state.activePolicyGroupId)) state.activePolicyGroupId = null;
           return Promise.resolve(before - state.policyGroups.length);
         }
         case "set_active_policy_group": {
           const group = state.policyGroups.find((item) => item.id === args.id);
-          if (!group)
-            return Promise.reject(new Error(`Unknown policy group ${String(args.id)}`));
+          if (!group) return Promise.reject(new Error(`Unknown policy group ${String(args.id)}`));
           state.activePolicyGroupId = group.id;
           state.policyGroupDelaysTested = false;
           setActiveProfile("");
@@ -652,10 +610,7 @@ export async function installTauriSmokeMock(
         }
         case "select_policy_group_member": {
           const group = state.policyGroups.find((item) => item.id === args.groupId);
-          if (!group)
-            return Promise.reject(
-              new Error(`Unknown policy group ${String(args.groupId)}`),
-            );
+          if (!group) return Promise.reject(new Error(`Unknown policy group ${String(args.groupId)}`));
           group.selectedProfileId = String(args.profileId ?? "");
           return Promise.resolve(clone(group));
         }
@@ -691,28 +646,17 @@ export async function installTauriSmokeMock(
             ...routing,
             isActive: routing.id === args.id,
           }));
-          return Promise.resolve(
-            clone(
-              state.routings.find((routing) => routing.id === args.id) ??
-                state.routings[0],
-            ),
-          );
+          return Promise.resolve(clone(state.routings.find((routing) => routing.id === args.id) ?? state.routings[0]));
         }
         case "delete_routings": {
           const ids = readStringArray(args, "ids");
-          state.routings = state.routings.filter(
-            (routing) => !ids.includes(routing.id),
-          );
+          state.routings = state.routings.filter((routing) => !ids.includes(routing.id));
           return Promise.resolve(ids.length);
         }
         case "save_routing_rule": {
-          const routing =
-            state.routings.find((item) => item.id === args.routingId) ??
-            state.routings[0];
+          const routing = state.routings.find((item) => item.id === args.routingId) ?? state.routings[0];
           const rule = normalizeRule(readRecord(args, "rule"));
-          const existingIndex = routing.rules.findIndex(
-            (item) => item.id === rule.id,
-          );
+          const existingIndex = routing.rules.findIndex((item) => item.id === rule.id);
           routing.rules =
             existingIndex >= 0
               ? routing.rules.map((item) => (item.id === rule.id ? rule : item))
@@ -720,19 +664,13 @@ export async function installTauriSmokeMock(
           return Promise.resolve(clone(routing));
         }
         case "delete_routing_rules": {
-          const routing =
-            state.routings.find((item) => item.id === args.routingId) ??
-            state.routings[0];
+          const routing = state.routings.find((item) => item.id === args.routingId) ?? state.routings[0];
           const ids = readStringArray(args, "ruleIds");
-          routing.rules = routing.rules.filter(
-            (rule) => !ids.includes(rule.id),
-          );
+          routing.rules = routing.rules.filter((rule) => !ids.includes(rule.id));
           return Promise.resolve(clone(routing));
         }
         case "move_routing_rule": {
-          const routing =
-            state.routings.find((item) => item.id === args.routingId) ??
-            state.routings[0];
+          const routing = state.routings.find((item) => item.id === args.routingId) ?? state.routings[0];
           // Mirrors `voya_app::routing::moved_index`: the target is an
           // insertion slot in the list as it was before the move.
           const index = routing.rules.findIndex((rule) => rule.id === args.ruleId);
@@ -752,13 +690,9 @@ export async function installTauriSmokeMock(
           return Promise.resolve(clone(routing));
         }
         case "reset_routing_rules": {
-          const routing =
-            state.routings.find((item) => item.id === args.routingId) ??
-            state.routings[0];
+          const routing = state.routings.find((item) => item.id === args.routingId) ?? state.routings[0];
           routing.rules = [
-            ...routing.rules.filter(
-              (rule) => rule.remarks === "voya:per-app-proxy",
-            ),
+            ...routing.rules.filter((rule) => rule.remarks === "voya:per-app-proxy"),
             ...defaultSeedRules(),
           ];
           return Promise.resolve(clone(routing));
@@ -775,22 +709,14 @@ export async function installTauriSmokeMock(
           state.connections.connections =
             args.connectionId == null
               ? []
-              : state.connections.connections.filter(
-                  (connection) => connection.id !== args.connectionId,
-                );
+              : state.connections.connections.filter((connection) => connection.id !== args.connectionId);
           return Promise.resolve(clone(state.connections));
         case "proxy_set_traffic_mode":
-          state.settings.proxy.trafficMode = String(
-            args.mode ?? "rule",
-          ) as TrafficMode;
-          if (
-            state.runtime.state === "connected" &&
-            state.settings.proxy.trafficMode !== "unchanged"
-          ) {
+          state.settings.proxy.trafficMode = String(args.mode ?? "rule") as TrafficMode;
+          if (state.runtime.state === "connected" && state.settings.proxy.trafficMode !== "unchanged") {
             const failure = state.trafficModeFailure;
             state.trafficModeFailure = null;
-            if (failure !== "apply")
-              state.appliedTrafficMode = state.settings.proxy.trafficMode;
+            if (failure !== "apply") state.appliedTrafficMode = state.settings.proxy.trafficMode;
             if (failure) {
               return Promise.reject({
                 kind: { type: "network" },
@@ -823,12 +749,19 @@ export async function installTauriSmokeMock(
         case "scan_screen_qr":
           return Promise.resolve({
             texts: ["vless://00000000-0000-0000-0000-000000000001@screen.example.test:443#Screen%20node"],
-            status: "found", source: "screen", message: null, failureReason: null,
+            status: "found",
+            source: "screen",
+            message: null,
+            failureReason: null,
           } satisfies QrScanResult);
         // The smoke's picked image holds no code; the mock cannot run the decoder.
         case "decode_qr_image":
           return Promise.resolve({
-            texts: [], status: "notFound", source: "image", message: null, failureReason: null,
+            texts: [],
+            status: "notFound",
+            source: "image",
+            message: null,
+            failureReason: null,
           } satisfies QrScanResult);
         case "export_logs":
           return Promise.resolve(true);
@@ -871,9 +804,7 @@ export async function installTauriSmokeMock(
             uploadTotalBytes: 1024 * 1024,
           } satisfies SelfHostStats);
         case "run_self_host_environment_check":
-          state.selfHost.environment = makeSelfHostEnvironment(
-            state.selfHost.runtime.status === "running",
-          );
+          state.selfHost.environment = makeSelfHostEnvironment(state.selfHost.runtime.status === "running");
           state.selfHost.shareLinks = selfHostLinks(state.selfHost, 1);
           return Promise.resolve(clone(state.selfHost) satisfies SelfHostState);
         case "apply_self_host_firewall_rule":
@@ -891,9 +822,7 @@ export async function installTauriSmokeMock(
             state: "ready",
           } satisfies AppUpdaterStatus);
         case "update_srs_assets":
-          return Promise.resolve([
-            { bytes: 512, name: "rules.srs", usedProxy: false },
-          ] satisfies ResourceUpdateFile[]);
+          return Promise.resolve([{ bytes: 512, name: "rules.srs", usedProxy: false }] satisfies ResourceUpdateFile[]);
         default:
           state.unhandled.push(command);
           throw {
@@ -940,11 +869,8 @@ export async function installTauriSmokeMock(
 
     function upsertProfile(input: Record<string, unknown>) {
       const profile = normalizeProfile(input);
-      const existingIndex = state.profiles.findIndex(
-        (row) => row.profile.id === profile.id,
-      );
-      const existing =
-        existingIndex >= 0 ? state.profiles[existingIndex] : null;
+      const existingIndex = state.profiles.findIndex((row) => row.profile.id === profile.id);
+      const existing = existingIndex >= 0 ? state.profiles[existingIndex] : null;
       const row = {
         isActive: existing?.isActive ?? false,
         profile,
@@ -990,9 +916,7 @@ export async function installTauriSmokeMock(
     }
 
     function runningPolicyGroup(tested: boolean): PolicyGroupRuntime | null {
-      const group = state.policyGroups.find(
-        (item) => item.id === state.activePolicyGroupId,
-      );
+      const group = state.policyGroups.find((item) => item.id === state.activePolicyGroupId);
       if (!group || state.runtime.state !== "connected") return null;
       const members = policyGroupMembers(group);
       return {
@@ -1010,8 +934,7 @@ export async function installTauriSmokeMock(
         ...row,
         isActive: row.profile.id === indexId,
       }));
-      const row =
-        state.profiles.find((item) => item.profile.id === indexId) ?? null;
+      const row = state.profiles.find((item) => item.profile.id === indexId) ?? null;
       return row;
     }
 
@@ -1033,19 +956,13 @@ export async function installTauriSmokeMock(
               },
         remarks: String(input.remarks ?? "Smoke profile"),
         subscriptionId: nullableString(input.subscriptionId),
-        tls:
-          input.tls && typeof input.tls === "object" ? clone(input.tls) : null,
-        transport:
-          input.transport && typeof input.transport === "object"
-            ? clone(input.transport)
-            : null,
+        tls: input.tls && typeof input.tls === "object" ? clone(input.tls) : null,
+        transport: input.transport && typeof input.transport === "object" ? clone(input.transport) : null,
       };
     }
 
     function importedProfile(text: string): Profile {
-      const remark = decodeURIComponent(
-        text.split("#")[1] ?? "Smoke Imported VLESS",
-      ).replaceAll("+", " ");
+      const remark = decodeURIComponent(text.split("#")[1] ?? "Smoke Imported VLESS").replaceAll("+", " ");
       const addressMatch = text.match(/@([^:/?#]+)(?::(\d+))?/u);
 
       return normalizeProfile({
@@ -1058,9 +975,7 @@ export async function installTauriSmokeMock(
             address: addressMatch?.[1] ?? "imported.example.test",
             port: Number(addressMatch?.[2] ?? 443),
           },
-          uuid:
-            text.match(/^vless:\/\/([^@]+)/u)?.[1] ??
-            "00000000-0000-4000-8000-000000000002",
+          uuid: text.match(/^vless:\/\/([^@]+)/u)?.[1] ?? "00000000-0000-4000-8000-000000000002",
         },
         tls: text.includes("security=tls")
           ? {
@@ -1098,11 +1013,8 @@ export async function installTauriSmokeMock(
 
     function upsertRouting(input: Record<string, unknown>): Routing {
       const id = String(input.id ?? `routing-smoke-${nextRoutingId++}`);
-      const existingIndex = state.routings.findIndex(
-        (routing) => routing.id === id,
-      );
-      const existing =
-        existingIndex >= 0 ? state.routings[existingIndex] : null;
+      const existingIndex = state.routings.findIndex((routing) => routing.id === id);
+      const existing = existingIndex >= 0 ? state.routings[existingIndex] : null;
       const routing = {
         id,
         isActive: Boolean(existing?.isActive ?? state.routings.length === 0),
@@ -1142,19 +1054,27 @@ export async function installTauriSmokeMock(
     function defaultSeedRules(): Rule[] {
       return [
         { remarks: "voya:ai-services", outbound: "proxy", scope: "all", domain: ["domain:openai.com"] },
-        { remarks: "voya:block-ads", outbound: "block", scope: "all", domain: ["geosite:category-ads-all"], enabled: false },
+        {
+          remarks: "voya:block-ads",
+          outbound: "block",
+          scope: "all",
+          domain: ["geosite:category-ads-all"],
+          enabled: false,
+        },
         { remarks: "voya:cn-dns", outbound: "direct", scope: "all", ip: ["119.29.29.29"] },
-        { remarks: "voya:bypass-lan", outbound: "direct", scope: "all", ip: ["geoip:private"], domain: ["geosite:private"] },
+        {
+          remarks: "voya:bypass-lan",
+          outbound: "direct",
+          scope: "all",
+          ip: ["geoip:private"],
+          domain: ["geosite:private"],
+        },
         { remarks: "voya:cn-direct", outbound: "direct", scope: "all", ip: ["geoip:cn"], domain: ["geosite:cn"] },
         { remarks: "voya:block-quic", outbound: "block", scope: "routing", network: "udp", port: "443" },
       ].map((rule) => normalizeRule(rule));
     }
 
-    function makeRouting(
-      id: string,
-      remarks: string,
-      active: boolean,
-    ): Routing {
+    function makeRouting(id: string, remarks: string, active: boolean): Routing {
       return {
         id,
         isActive: active,
@@ -1293,9 +1213,7 @@ export async function installTauriSmokeMock(
           nat: "nat",
           publicAddress: "203.0.113.7",
           reachability: running ? "reachable" : "needsPortForward",
-          reasons: running
-            ? ["behindNat", "portMapped", "probeReachable"]
-            : ["behindNat"],
+          reasons: running ? ["behindNat", "portMapped", "probeReachable"] : ["behindNat"],
           verifiedByProbe: running,
         },
         ipv6: {
@@ -1319,9 +1237,7 @@ export async function installTauriSmokeMock(
           status: running ? "mapped" : "disabled",
         },
         probeAvailable: true,
-        selfTest: running
-          ? { shadowsocks: "passed", vless: "passed" }
-          : { shadowsocks: "skipped", vless: "skipped" },
+        selfTest: running ? { shadowsocks: "passed", vless: "passed" } : { shadowsocks: "skipped", vless: "skipped" },
       };
     }
 
@@ -1368,15 +1284,10 @@ export async function installTauriSmokeMock(
     }
 
     function cloneRecord(value: unknown) {
-      return value && typeof value === "object"
-        ? clone(value as Record<string, unknown>)
-        : {};
+      return value && typeof value === "object" ? clone(value as Record<string, unknown>) : {};
     }
 
-    function mergeDeep<T extends Record<string, unknown>>(
-      target: T,
-      patch: Record<string, unknown>,
-    ): T {
+    function mergeDeep<T extends Record<string, unknown>>(target: T, patch: Record<string, unknown>): T {
       const next = clone(target) as Record<string, unknown>;
       Object.entries(patch).forEach(([key, value]) => {
         if (
@@ -1387,10 +1298,7 @@ export async function installTauriSmokeMock(
           typeof next[key] === "object" &&
           !Array.isArray(next[key])
         ) {
-          next[key] = mergeDeep(
-            next[key] as Record<string, unknown>,
-            value as Record<string, unknown>,
-          );
+          next[key] = mergeDeep(next[key] as Record<string, unknown>, value as Record<string, unknown>);
         } else {
           next[key] = value;
         }
@@ -1400,9 +1308,7 @@ export async function installTauriSmokeMock(
 
     function readRecord(args: CommandArgs, key: string) {
       const value = args[key];
-      return value && typeof value === "object"
-        ? (value as Record<string, unknown>)
-        : {};
+      return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
     }
 
     function readArray(args: CommandArgs, key: string) {
@@ -1439,10 +1345,7 @@ export async function installTauriSmokeMock(
       return readArray(args, key).map(String);
     }
 
-    function readNullableStringArray(
-      input: Record<string, unknown>,
-      key: string,
-    ) {
+    function readNullableStringArray(input: Record<string, unknown>, key: string) {
       const value = input[key];
       if (!Array.isArray(value)) {
         return null;
@@ -1462,22 +1365,13 @@ export async function installTauriSmokeMock(
 declare global {
   interface Window {
     __TAURI_INTERNALS__: {
-      invoke: (
-        command: string,
-        args?: Record<string, unknown>,
-      ) => Promise<unknown>;
+      invoke: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
       metadata: {
         currentWindow: {
           label: string;
         };
       };
-      transformCallback: (
-        callback: (event: {
-          id: number;
-          event: string;
-          payload: unknown;
-        }) => void,
-      ) => number;
+      transformCallback: (callback: (event: { id: number; event: string; payload: unknown }) => void) => number;
       unregisterCallback: (id: number) => void;
     };
     __VOYA_SMOKE__: {

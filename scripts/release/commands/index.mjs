@@ -216,8 +216,12 @@ async function loadArtifactEntries(inputDir, options, baseUrl) {
           options.version,
           context,
         ),
-        target: normalizeTarget(explicitTarget) ?? explicitTarget ?? inferTarget(sourceTarget, artifact.originalName, artifact.name),
-        arch: normalizeArch(explicitArch) ?? explicitArch ?? inferArch(sourceTarget, artifact.originalName, artifact.name),
+        target:
+          normalizeTarget(explicitTarget) ??
+          explicitTarget ??
+          inferTarget(sourceTarget, artifact.originalName, artifact.name),
+        arch:
+          normalizeArch(explicitArch) ?? explicitArch ?? inferArch(sourceTarget, artifact.originalName, artifact.name),
         kind: requiredString(artifact.kind, "kind", context),
         url: joinUrl(baseUrl, artifactPath),
         bytes: requiredBytes(artifact.bytes, context),
@@ -253,13 +257,14 @@ async function loadArtifactEntries(inputDir, options, baseUrl) {
     });
   }
 
-  artifacts.sort((left, right) =>
-    [
-      left.target.localeCompare(right.target),
-      left.arch.localeCompare(right.arch),
-      left.kind.localeCompare(right.kind),
-      left.name.localeCompare(right.name),
-    ].find((comparison) => comparison !== 0) ?? 0,
+  artifacts.sort(
+    (left, right) =>
+      [
+        left.target.localeCompare(right.target),
+        left.arch.localeCompare(right.arch),
+        left.kind.localeCompare(right.kind),
+        left.name.localeCompare(right.name),
+      ].find((comparison) => comparison !== 0) ?? 0,
   );
 
   return { artifacts, sourceManifests };

@@ -4,4 +4,3 @@ export function connectionLinkAction(url: string | null | undefined): "connect" 
   if (url === "voyavpn://disconnect") return "disconnect";
   return null;
 }
-

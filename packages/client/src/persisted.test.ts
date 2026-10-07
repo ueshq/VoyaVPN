@@ -4,9 +4,7 @@ import { mergeValidated } from "./persisted";
 
 type State = { count: number; label: string };
 
-const merge = mergeValidated<State>((stored) =>
-  typeof stored.count === "number" ? { count: stored.count } : {},
-);
+const merge = mergeValidated<State>((stored) => (typeof stored.count === "number" ? { count: stored.count } : {}));
 
 describe("mergeValidated", () => {
   const current: State = { count: 0, label: "default" };

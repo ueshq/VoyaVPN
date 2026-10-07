@@ -36,12 +36,7 @@ export function EdgeFade({
       className={className}
       style={down ? { height: size } : undefined}
     >
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox={down ? `0 0 1 ${size}` : `0 0 ${size} 1`}
-        preserveAspectRatio="none"
-      >
+      <Svg width="100%" height="100%" viewBox={down ? `0 0 1 ${size}` : `0 0 ${size} 1`} preserveAspectRatio="none">
         <Defs>
           <LinearGradient
             id={id}

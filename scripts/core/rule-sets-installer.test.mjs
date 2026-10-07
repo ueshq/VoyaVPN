@@ -57,7 +57,9 @@ describe("rule-set seeds", () => {
     for (const pin of RULE_SET_PINS) {
       expect(pin.commit).toMatch(/^[0-9a-f]{40}$/);
       expect(pin.sha256).toMatch(/^[0-9a-f]{64}$/);
-      expect(ruleSetUrl(pin)).toBe(`https://raw.githubusercontent.com/2dust/sing-box-rules/${pin.commit}/${pin.tag}.srs`);
+      expect(ruleSetUrl(pin)).toBe(
+        `https://raw.githubusercontent.com/2dust/sing-box-rules/${pin.commit}/${pin.tag}.srs`,
+      );
     }
   });
 
@@ -83,18 +85,22 @@ describe("rule-set seeds", () => {
     const repoRoot = await tempRoot();
     const [pin] = pinsFor(["geosite-cn"]);
 
-    await expect(fetchAndStageRuleSets({
-      fetchImpl: fetchServing(new Map([[ruleSetUrl(pin), Buffer.from("<html>rate limited</html>")]])),
-      logger: quiet,
-      pins: [pin],
-      repoRoot,
-    })).rejects.toThrow(/not a sing-box binary rule set/);
-    await expect(fetchAndStageRuleSets({
-      fetchImpl: fetchServing(new Map([[ruleSetUrl(pin), Buffer.from("SRS other bytes")]])),
-      logger: quiet,
-      pins: [pin],
-      repoRoot,
-    })).rejects.toThrow(/SHA-256 mismatch/);
+    await expect(
+      fetchAndStageRuleSets({
+        fetchImpl: fetchServing(new Map([[ruleSetUrl(pin), Buffer.from("<html>rate limited</html>")]])),
+        logger: quiet,
+        pins: [pin],
+        repoRoot,
+      }),
+    ).rejects.toThrow(/not a sing-box binary rule set/);
+    await expect(
+      fetchAndStageRuleSets({
+        fetchImpl: fetchServing(new Map([[ruleSetUrl(pin), Buffer.from("SRS other bytes")]])),
+        logger: quiet,
+        pins: [pin],
+        repoRoot,
+      }),
+    ).rejects.toThrow(/SHA-256 mismatch/);
     expect(existsSync(join(ruleSetSeedDir(repoRoot), "geosite-cn.srs"))).toBe(false);
   });
 
@@ -108,10 +114,12 @@ describe("rule-set seeds", () => {
 
   it("skips postinstall on CI unless asked, and when told to", async () => {
     expect(shouldSkipRuleSetInstall({ env: { CI: "true" }, postinstall: true }).skip).toBe(true);
-    expect(shouldSkipRuleSetInstall({
-      env: { CI: "true", VOYAVPN_FETCH_RULE_SETS_ON_INSTALL: "1" },
-      postinstall: true,
-    }).skip).toBe(false);
+    expect(
+      shouldSkipRuleSetInstall({
+        env: { CI: "true", VOYAVPN_FETCH_RULE_SETS_ON_INSTALL: "1" },
+        postinstall: true,
+      }).skip,
+    ).toBe(false);
     expect(shouldSkipRuleSetInstall({ env: { VOYAVPN_SKIP_RULE_SETS_POSTINSTALL: "1" } }).skip).toBe(true);
     expect(shouldSkipRuleSetInstall({ env: {} }).skip).toBe(false);
 

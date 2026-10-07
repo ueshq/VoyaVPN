@@ -6,11 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { hasExpectedSingBoxExecutable } from "../core/sing-box-installer.mjs";
 import { capture, repoRootFromScript } from "../lib/common.mjs";
-import {
-  coreSeedBundleResources,
-  requiredBundleResources,
-  writeOptionalCoreSeedOverlay,
-} from "./core-seeds.mjs";
+import { coreSeedBundleResources, requiredBundleResources, writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 

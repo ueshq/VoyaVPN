@@ -488,16 +488,23 @@ describe("validateProvisioningProfile", () => {
 describe("inferDistribution", () => {
   const appContents = "/bundle/VoyaVPN.app/Contents";
   const appProfile = join(appContents, "embedded.provisionprofile");
-  const systemExtension = join(appContents, "Library", "SystemExtensions", "app.voyavpn.desktop.PacketTunnel.systemextension");
+  const systemExtension = join(
+    appContents,
+    "Library",
+    "SystemExtensions",
+    "app.voyavpn.desktop.PacketTunnel.systemextension",
+  );
 
   it("honours an explicit VOYAVPN_MACOS_DISTRIBUTION without reading the bundle", () => {
     const decodeProfile = () => {
       throw new Error("should not decode");
     };
-    expect(inferDistribution({ appContents, env: { VOYAVPN_MACOS_DISTRIBUTION: "dmg" }, exists: () => true, decodeProfile }))
-      .toBe("developer-id");
-    expect(inferDistribution({ appContents, env: { VOYAVPN_MACOS_DISTRIBUTION: "mas" }, exists: () => true, decodeProfile }))
-      .toBe("app-store");
+    expect(
+      inferDistribution({ appContents, env: { VOYAVPN_MACOS_DISTRIBUTION: "dmg" }, exists: () => true, decodeProfile }),
+    ).toBe("developer-id");
+    expect(
+      inferDistribution({ appContents, env: { VOYAVPN_MACOS_DISTRIBUTION: "mas" }, exists: () => true, decodeProfile }),
+    ).toBe("app-store");
   });
 
   // The embedded profile is the authority: it exists before signing (so it
@@ -532,8 +539,9 @@ describe("inferDistribution", () => {
     const decodeProfile = () => {
       throw new Error("no profile to decode");
     };
-    expect(inferDistribution({ appContents, env: {}, exists: (path) => path === systemExtension, decodeProfile }))
-      .toBe("developer-id");
+    expect(inferDistribution({ appContents, env: {}, exists: (path) => path === systemExtension, decodeProfile })).toBe(
+      "developer-id",
+    );
     expect(inferDistribution({ appContents, env: {}, exists: () => false, decodeProfile })).toBe("app-store");
   });
 });

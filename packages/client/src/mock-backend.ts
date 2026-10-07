@@ -15,13 +15,7 @@ import type {
 import { VOYA_COMMAND_WIRE } from "@voya/contracts/commands";
 
 import { IpcCommandError } from "./errors";
-import {
-  makeMockSeed,
-  makeProfileEntry,
-  makeSubscription,
-  makeSubscriptionMetadata,
-  type MockSeed,
-} from "./mock-seed";
+import { makeMockSeed, makeProfileEntry, makeSubscription, makeSubscriptionMetadata, type MockSeed } from "./mock-seed";
 
 /** What the mock keeps between commands; reached as `MockBackend["state"]`. */
 type MockState = MockSeed & {
@@ -36,10 +30,7 @@ export type MockBackend = {
   /** The whole `VoyaCommands` surface; unimplemented commands reject as `unsupported`. */
   commands: VoyaCommands;
   /** Subscribes to one of the three backend channels. Returns an unsubscribe. */
-  on: <Name extends VoyaEventName>(
-    name: Name,
-    listener: (payload: VoyaEventPayload<Name>) => void,
-  ) => () => void;
+  on: <Name extends VoyaEventName>(name: Name, listener: (payload: VoyaEventPayload<Name>) => void) => () => void;
   /** Publishes on a channel, the way the backend would. */
   emit: <Name extends VoyaEventName>(name: Name, payload: VoyaEventPayload<Name>) => void;
   state: MockState;
@@ -68,10 +59,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
 
   const listeners = new Map<VoyaEventName, Set<(payload: never) => void>>();
 
-  function on<Name extends VoyaEventName>(
-    name: Name,
-    listener: (payload: VoyaEventPayload<Name>) => void,
-  ) {
+  function on<Name extends VoyaEventName>(name: Name, listener: (payload: VoyaEventPayload<Name>) => void) {
     const forChannel = listeners.get(name) ?? new Set();
     listeners.set(name, forChannel);
     forChannel.add(listener as (payload: never) => void);
@@ -173,10 +161,20 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
 
     previewImportProfiles: (text) => {
       const links = text.split(/\s+/).filter((line) => line.includes("://"));
-      return resolve(record("previewImportProfiles", [text], {
-        nodes: links.filter((link) => !/^https?:/.test(link)).map((link) => ({ name: profileNameFromShareLink(link) ?? "Imported", protocol: link.split(":")[0], address: "example.test" })),
-        subscriptionUrls: links.filter((link) => /^https?:/.test(link)), failed: 0, lineIssues: [],
-      }));
+      return resolve(
+        record("previewImportProfiles", [text], {
+          nodes: links
+            .filter((link) => !/^https?:/.test(link))
+            .map((link) => ({
+              name: profileNameFromShareLink(link) ?? "Imported",
+              protocol: link.split(":")[0],
+              address: "example.test",
+            })),
+          subscriptionUrls: links.filter((link) => /^https?:/.test(link)),
+          failed: 0,
+          lineIssues: [],
+        }),
+      );
     },
     importProfilesFromText: (text, subscriptionId) => {
       const links = text
@@ -187,10 +185,14 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       const shareLinks = links.filter((link) => !/^https?:\/\//.test(link));
 
       const importedProfileIds = shareLinks.map((link, offset) => {
-        const entry = makeProfileEntry(state.profiles.length + offset, {
-          remarks: profileNameFromShareLink(link) ?? `Imported ${state.profiles.length + offset}`,
-          subscriptionId,
-        }, false);
+        const entry = makeProfileEntry(
+          state.profiles.length + offset,
+          {
+            remarks: profileNameFromShareLink(link) ?? `Imported ${state.profiles.length + offset}`,
+            subscriptionId,
+          },
+          false,
+        );
         state.profiles.push(entry);
         return entry.profile.id;
       });
@@ -227,9 +229,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
     exportProfileShareLinks: (indexIds) => {
       const links = indexIds.flatMap((indexId) => {
         const entry = state.profiles.find((item) => item.profile.id === indexId);
-        return entry
-          ? [`vless://token@${entry.profile.address}:${entry.profile.port}#${entry.profile.remarks}`]
-          : [];
+        return entry ? [`vless://token@${entry.profile.address}:${entry.profile.port}#${entry.profile.remarks}`] : [];
       });
 
       return resolve(
@@ -262,8 +262,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
         }),
       ),
 
-    listPolicyGroups: () =>
-      resolve(record("listPolicyGroups", [], { entries: state.policyGroups })),
+    listPolicyGroups: () => resolve(record("listPolicyGroups", [], { entries: state.policyGroups })),
 
     setActivePolicyGroup: (id) => {
       const entry = state.policyGroups.find((item) => item.group.id === id);
@@ -277,7 +276,6 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       invalidate("setActivePolicyGroup", "policyGroups", "profiles");
       return resolve(record("setActivePolicyGroup", [id], entry.group));
     },
-
 
     listRoutings: () => resolve(record("listRoutings", [], state.routings)),
 
@@ -296,14 +294,11 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       return resolve(record("saveAppSettings", [settings], settings));
     },
 
-    getSettingsApplyStatus: () =>
-      resolve(record("getSettingsApplyStatus", [], settingsApplyStatus())),
+    getSettingsApplyStatus: () => resolve(record("getSettingsApplyStatus", [], settingsApplyStatus())),
 
-    applyPendingSettings: () =>
-      resolve(record("applyPendingSettings", [], settingsApplyStatus())),
+    applyPendingSettings: () => resolve(record("applyPendingSettings", [], settingsApplyStatus())),
 
-    connectionModeStatus: () =>
-      resolve(record("connectionModeStatus", [], connectionMode())),
+    connectionModeStatus: () => resolve(record("connectionModeStatus", [], connectionMode())),
 
     saveRouting: (item) => {
       // `Routing_Deserialize` in, `Routing_Serialize` out: the active flag is
@@ -311,9 +306,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       const saved = {
         ...item,
         id: item.id || `routing-${state.routings.length}`,
-        isActive: state.routings.some(
-          (routing) => routing.isActive && routing.id === item.id,
-        ),
+        isActive: state.routings.some((routing) => routing.isActive && routing.id === item.id),
       };
       state.routings = upsert(state.routings, saved);
       invalidate("saveRouting", "routings", "appSettings");
@@ -365,17 +358,14 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       return resolve(record("deleteRoutingRules", [routingId, ruleIds], updated));
     },
 
-    proxyListConnections: () =>
-      resolve(record("proxyListConnections", [], state.connections)),
+    proxyListConnections: () => resolve(record("proxyListConnections", [], state.connections)),
 
     // A null id is the command's own "all of them", the same as the backend.
     proxyCloseConnection: (connectionId) => {
       state.connections = {
         ...state.connections,
         connections:
-          connectionId === null
-            ? []
-            : state.connections.connections.filter((item) => item.id !== connectionId),
+          connectionId === null ? [] : state.connections.connections.filter((item) => item.id !== connectionId),
       };
       invalidate("proxyCloseConnection", "proxyConnections");
       return resolve(record("proxyCloseConnection", [connectionId], state.connections));
@@ -479,8 +469,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
         }),
       ),
 
-    listSubscriptionMetadata: () =>
-      resolve(record("listSubscriptionMetadata", [], state.subscriptionMetadata)),
+    listSubscriptionMetadata: () => resolve(record("listSubscriptionMetadata", [], state.subscriptionMetadata)),
 
     listSubscriptions: () => resolve(record("listSubscriptions", [], state.subscriptions)),
     saveSubscription: (source) => {
@@ -501,8 +490,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
 
     loadAppSettings: () => resolve(record("loadAppSettings", [], state.settings)),
 
-    loadUiPreferences: () =>
-      resolve(record("loadUiPreferences", [], state.settings.appearance)),
+    loadUiPreferences: () => resolve(record("loadUiPreferences", [], state.settings.appearance)),
 
     policyGroupRuntime: () => {
       const active = state.policyGroups.find((entry) => entry.isActive);
@@ -559,8 +547,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
       return resolve(record("setLogStreaming", [enabled], null));
     },
 
-    speedtestStatus: () =>
-      resolve(record("speedtestStatus", [], { running: state.speedtestRunning })),
+    speedtestStatus: () => resolve(record("speedtestStatus", [], { running: state.speedtestRunning })),
 
     /**
      * Measures every selected node at once, the way a very fast backend would.
@@ -599,9 +586,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
     },
 
     updateSrsAssets: () =>
-      resolve(
-        record("updateSrsAssets", [], [{ bytes: 131_072, name: "geosite-cn.srs", usedProxy: false }]),
-      ),
+      resolve(record("updateSrsAssets", [], [{ bytes: 131_072, name: "geosite-cn.srs", usedProxy: false }])),
 
     cancelSpeedtest: () => {
       state.speedtestRunning = false;
@@ -613,9 +598,7 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
     tunStatus: () => resolve(record("tunStatus", [], state.tun)),
 
     updateSubscriptions: (subscriptionId) => {
-      const targets = subscriptionId === null
-        ? state.subscriptions.map((item) => item.id)
-        : [subscriptionId];
+      const targets = subscriptionId === null ? state.subscriptions.map((item) => item.id) : [subscriptionId];
       const imported = targets.flatMap((subscriptionId) => {
         if (!state.subscriptions.some((item) => item.id === subscriptionId)) return [];
         const entry = makeProfileEntry(state.profiles.length, { subscriptionId }, false);
@@ -635,7 +618,14 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
 
       const result: SubscriptionUpdateResult = {
         imported: imported.length,
-        outcomes: targets.map((id) => ({ subscriptionId: id, status: "success", reason: "updated", imported: 1, removedExisting: 0, diagnostic: null })),
+        outcomes: targets.map((id) => ({
+          subscriptionId: id,
+          status: "success",
+          reason: "updated",
+          imported: 1,
+          removedExisting: 0,
+          diagnostic: null,
+        })),
         messages: [],
         removedExisting: 0,
         skipped: targets.length - imported.length,

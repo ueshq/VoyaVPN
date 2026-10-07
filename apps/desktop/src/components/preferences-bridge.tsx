@@ -35,8 +35,7 @@ function useThemeEffects(themeMode: ThemeMode) {
     const media = window.matchMedia?.("(prefers-color-scheme: dark)");
 
     const applyTheme = () => {
-      const resolvedTheme =
-        themeMode === "system" ? (media?.matches ? "dark" : "light") : themeMode;
+      const resolvedTheme = themeMode === "system" ? (media?.matches ? "dark" : "light") : themeMode;
 
       root.classList.toggle("dark", resolvedTheme === "dark");
       root.style.colorScheme = resolvedTheme;

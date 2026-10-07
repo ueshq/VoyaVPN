@@ -2,11 +2,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { capture, repoRootFromScript, requireDarwin, runCli } from "../../lib/common.mjs";
 import { defaultIsProcessRunning, voyaRuntimeExecutables } from "./local-runtime.mjs";
-import {
-  appBundleIdentifier,
-  libboxBinaryPath,
-  packetTunnelBundleIdentifier,
-} from "./tunnel-layout.mjs";
+import { appBundleIdentifier, libboxBinaryPath, packetTunnelBundleIdentifier } from "./tunnel-layout.mjs";
 import {
   defaultProvisioningProfileDir,
   findMatchingIdentities,
@@ -148,7 +144,9 @@ function checkProfile(identity, udid, bundleIdentifier, explicitEnvName, label) 
     return;
   }
   if (!profile.networkExtensions.includes("packet-tunnel-provider")) {
-    fail(`${label} profile ${profile.name || profile.path} does not include the packet-tunnel-provider Network Extension capability.`);
+    fail(
+      `${label} profile ${profile.name || profile.path} does not include the packet-tunnel-provider Network Extension capability.`,
+    );
     return;
   }
   if (profile.expirationDate) {
@@ -156,7 +154,9 @@ function checkProfile(identity, udid, bundleIdentifier, explicitEnvName, label) 
     if (!Number.isNaN(expires.getTime())) {
       const daysLeft = Math.floor((expires.getTime() - Date.now()) / 86_400_000);
       if (daysLeft < 7) {
-        warn(`${label} profile ${profile.name || profile.path} expires in ${daysLeft} day(s) (${profile.expirationDate}).`);
+        warn(
+          `${label} profile ${profile.name || profile.path} expires in ${daysLeft} day(s) (${profile.expirationDate}).`,
+        );
       }
     }
   }

@@ -2,11 +2,7 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { changeLocale } from "@voya/i18n";
 
-import {
-  deferred,
-  installSettingsBackend,
-  settingsIpc,
-} from "@voya/features/settings/settings-backend.test-fixture";
+import { deferred, installSettingsBackend, settingsIpc } from "@voya/features/settings/settings-backend.test-fixture";
 import type { AppSettings } from "@voya/contracts";
 import { renderWithQuery } from "@voya/features/test/render";
 

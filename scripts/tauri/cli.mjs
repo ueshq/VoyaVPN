@@ -7,11 +7,7 @@ import { requestedSingBoxSeedOrigin } from "../core/sing-box-installer.mjs";
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
 import { writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
 import { macAppStoreFeature, requestedMacAppStoreBuild, writeMacAppStoreOverlay } from "./mac-app-store-config.mjs";
-import {
-  normalizeCiEnv,
-  requestedStableUpdaterConfig,
-  writeStableUpdaterOverlay,
-} from "./stable-updater-config.mjs";
+import { normalizeCiEnv, requestedStableUpdaterConfig, writeStableUpdaterOverlay } from "./stable-updater-config.mjs";
 
 const rustTargetPlatforms = {
   "apple-darwin": "darwin",
@@ -111,8 +107,8 @@ export async function prepareTauriInvocation(
   const stableUpdater = operation === "build" && requestedStableUpdaterConfig(env);
   if (macAppStore && stableUpdater) {
     throw new Error(
-      "VOYAVPN_MAC_APP_STORE builds cannot enable the stable updater: the Mac App Store delivers updates. "
-        + "Unset VOYAVPN_RELEASE_CHANNEL=stable / VOYAVPN_TAURI_UPDATER_CONFIG for this build.",
+      "VOYAVPN_MAC_APP_STORE builds cannot enable the stable updater: the Mac App Store delivers updates. " +
+        "Unset VOYAVPN_RELEASE_CHANNEL=stable / VOYAVPN_TAURI_UPDATER_CONFIG for this build.",
     );
   }
 

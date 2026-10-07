@@ -58,7 +58,9 @@ function topLevelBlock(text, key) {
     return [];
   }
   const end = lines.findIndex((line, index) => index > start && /^[A-Za-z]/.test(line));
-  return lines.slice(start + 1, end < 0 ? undefined : end).filter((line) => line.trim() && !line.trim().startsWith("#"));
+  return lines
+    .slice(start + 1, end < 0 ? undefined : end)
+    .filter((line) => line.trim() && !line.trim().startsWith("#"));
 }
 
 function workflowFiles() {
@@ -85,13 +87,13 @@ function invokesToolchain(body) {
 }
 
 function installsToolchain(body) {
-  return body.some((line) => toolchainSetupPattern.test(line) || /uses:\s*\.\/\.github\/actions\/setup-vp\b/.test(line));
+  return body.some(
+    (line) => toolchainSetupPattern.test(line) || /uses:\s*\.\/\.github\/actions\/setup-vp\b/.test(line),
+  );
 }
 
 function jobsInvokingToolchain(name) {
-  return [...workflowJobs(readWorkflow(name))]
-    .filter(([, body]) => invokesToolchain(body))
-    .map(([job]) => job);
+  return [...workflowJobs(readWorkflow(name))].filter(([, body]) => invokesToolchain(body)).map(([job]) => job);
 }
 
 describe("GitHub Actions workflows", () => {
@@ -148,7 +150,13 @@ describe("GitHub Actions workflows", () => {
 
     expect(buildStep).not.toBe("");
     // Apple material never reaches the Windows and Linux package runners.
-    for (const secret of ["APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID"]) {
+    for (const secret of [
+      "APPLE_CERTIFICATE",
+      "APPLE_CERTIFICATE_PASSWORD",
+      "APPLE_ID",
+      "APPLE_PASSWORD",
+      "APPLE_TEAM_ID",
+    ]) {
       expect(buildStep, secret).toContain(`${secret}: \${{ runner.os == 'macOS' && secrets.${secret} || '' }}`);
     }
     // Nothing on the vp run tauri:build path consumes the Windows certificate.
@@ -254,7 +262,9 @@ describe("GitHub Actions workflows", () => {
 
     const ci = readWorkflow("ci.yml");
     for (const tool of ["cargo-deny", "cargo-machete", "tauri-driver"]) {
-      expect(ci, tool).toMatch(new RegExp(`uses:\\s*taiki-e/install-action@[0-9a-f]{40}\\b[\\s\\S]{0,200}tool:\\s*${tool}@`, "u"));
+      expect(ci, tool).toMatch(
+        new RegExp(`uses:\\s*taiki-e/install-action@[0-9a-f]{40}\\b[\\s\\S]{0,200}tool:\\s*${tool}@`, "u"),
+      );
     }
   });
 

@@ -101,8 +101,8 @@ for (const path of rustFiles) {
   // The escape hatch from the typed message contract lives in exactly two
   // files: the contract that declares it, and the one mapper that uses it.
   if (
-    !path.endsWith("/crates/voya-app/src/contract_map/errors.rs")
-    && !path.endsWith("/crates/voya-contracts/src/messages.rs")
+    !path.endsWith("/crates/voya-app/src/contract_map/errors.rs") &&
+    !path.endsWith("/crates/voya-contracts/src/messages.rs")
   ) {
     applyRules(path, source, production, [untranslatedMessageRule]);
   }
@@ -110,10 +110,7 @@ for (const path of rustFiles) {
 
 applyManifestRules(
   "apps/desktop/src-tauri/Cargo.toml",
-  manifestDependencyRules(
-    "voya-(?:core|db)",
-    "the Tauri shell must not depend directly on voya-core or voya-db",
-  ),
+  manifestDependencyRules("voya-(?:core|db)", "the Tauri shell must not depend directly on voya-core or voya-db"),
 );
 applyManifestRules(
   "crates/voya-app/Cargo.toml",
@@ -123,10 +120,7 @@ applyManifestRules(
 // reached into voya-core or voya-db would fork the decisions voya-app owns.
 applyManifestRules(
   "crates/voya-mobile-ffi/Cargo.toml",
-  manifestDependencyRules(
-    "voya-(?:core|db)",
-    "the mobile host must not depend directly on voya-core or voya-db",
-  ),
+  manifestDependencyRules("voya-(?:core|db)", "the mobile host must not depend directly on voya-core or voya-db"),
 );
 // The uniffi surface is an envelope, not a model (ADR 0012): the contract is
 // `@voya/contracts`, generated from specta in voya-contracts, and a second
@@ -139,10 +133,7 @@ applyManifestRules(
 // (`http = { package = "reqwest" }`) would slip past them; ban the edge itself.
 applyManifestRules(
   "crates/voya-app/Cargo.toml",
-  manifestDependencyRules(
-    "(?:reqwest|tokio-tungstenite)",
-    "voya-app must reach the network through voya-net",
-  ),
+  manifestDependencyRules("(?:reqwest|tokio-tungstenite)", "voya-app must reach the network through voya-net"),
 );
 
 checkReleaseVersionAlignment();

@@ -15,15 +15,25 @@ export function SessionDetailsScreen() {
   const { t } = useI18n();
   const runtime = useHomeRuntime();
   const duration = useConnectedDurationMs();
-  return <DetailScreen>
-    {runtime.connected ? <>
-      <WorldMap marker={runtime.marker} />
-      <ListGroup>
-        <ListRow title={t("home.duration")} description={formatDurationMs(duration ?? 0)} />
-        <ListRow last title={t("home.exitIp")} description={exitIpLabel(runtime.exitIp, t)} />
-      </ListGroup>
-      <Button variant="secondary" onPress={() => openPage("activity")}><Button.Label>{t("tabs.connections")}</Button.Label></Button>
-    </> : <Typography className="text-base text-subtle">{t("status.disconnected")}</Typography>}
-    <Button variant="secondary" onPress={() => openPage("logs")}><Button.Label>{t("mobile.diagnostics")}</Button.Label></Button>
-  </DetailScreen>;
+  return (
+    <DetailScreen>
+      {runtime.connected ? (
+        <>
+          <WorldMap marker={runtime.marker} />
+          <ListGroup>
+            <ListRow title={t("home.duration")} description={formatDurationMs(duration ?? 0)} />
+            <ListRow last title={t("home.exitIp")} description={exitIpLabel(runtime.exitIp, t)} />
+          </ListGroup>
+          <Button variant="secondary" onPress={() => openPage("activity")}>
+            <Button.Label>{t("tabs.connections")}</Button.Label>
+          </Button>
+        </>
+      ) : (
+        <Typography className="text-base text-subtle">{t("status.disconnected")}</Typography>
+      )}
+      <Button variant="secondary" onPress={() => openPage("logs")}>
+        <Button.Label>{t("mobile.diagnostics")}</Button.Label>
+      </Button>
+    </DetailScreen>
+  );
 }

@@ -38,7 +38,9 @@ const localBuildEnvNames = [
 ];
 
 function trimWindowsPath(value) {
-  const trimmed = String(value ?? "").trim().replace(/^"|"$/g, "");
+  const trimmed = String(value ?? "")
+    .trim()
+    .replace(/^"|"$/g, "");
   return trimmed ? win32.normalize(trimmed).replace(/[\\/]+$/, "") : "";
 }
 
@@ -151,13 +153,7 @@ export function windowsPnpmInvocation({
   fileExists = existsSync,
 } = {}) {
   const npmExecPath = environmentValue(env, "npm_execpath");
-  const bundledCorepack = win32.join(
-    win32.dirname(nodeExecutable),
-    "node_modules",
-    "corepack",
-    "dist",
-    "pnpm.js",
-  );
+  const bundledCorepack = win32.join(win32.dirname(nodeExecutable), "node_modules", "corepack", "dist", "pnpm.js");
   const cliPath = [npmExecPath, bundledCorepack]
     .filter((path) => /\.[cm]?js$/i.test(path))
     .find((path) => fileExists(path));
@@ -182,9 +178,9 @@ export function assertSafeExistingInstalls(entries, expectedAppPath) {
   for (const entry of entries ?? []) {
     const location = installLocationFromEntry(entry);
     const isExpectedNsis =
-      String(entry.scope).toUpperCase() === "HKCU"
-      && !entry.windowsInstaller
-      && location.toLowerCase() === expectedDirectory.toLowerCase();
+      String(entry.scope).toUpperCase() === "HKCU" &&
+      !entry.windowsInstaller &&
+      location.toLowerCase() === expectedDirectory.toLowerCase();
     if (!isExpectedNsis) {
       const label = location || entry.key || "unknown location";
       throw new Error(
@@ -197,11 +193,16 @@ export function assertSafeExistingInstalls(entries, expectedAppPath) {
 export function readExistingWindowsInstalls({ env = process.env, captureCommand = capture } = {}) {
   const executable = powershellExecutable(env);
   const args = ["-NoProfile", "-NonInteractive", "-Command", powershellJsonScript()];
-  const result = checkedCapture(executable, args, {
-    env,
-    encoding: "utf8",
-    windowsHide: true,
-  }, captureCommand);
+  const result = checkedCapture(
+    executable,
+    args,
+    {
+      env,
+      encoding: "utf8",
+      windowsHide: true,
+    },
+    captureCommand,
+  );
   const output = String(result.stdout ?? "").trim();
   if (!output) {
     return [];
@@ -221,7 +222,11 @@ export function assertWindowsGuiStopped({ env = process.env, captureCommand = ca
     { env, encoding: "utf8", windowsHide: true },
     captureCommand,
   );
-  if (String(result.stdout ?? "").split(/\r?\n/).some((line) => /^"voyavpn\.exe"/i.test(line.trim()))) {
+  if (
+    String(result.stdout ?? "")
+      .split(/\r?\n/)
+      .some((line) => /^"voyavpn\.exe"/i.test(line.trim()))
+  ) {
     throw new Error(
       "VoyaVPN is still running. Quit the app and disable TUN before pnpm build:windows:local replaces it.",
     );
@@ -246,9 +251,9 @@ function selectArtifact(paths, { version, artifactArch, extension, label }) {
   const prefix = `_${version}_`;
   const matches = paths.filter((path) => {
     const name = win32.basename(path).toLowerCase();
-    return name.endsWith(extension)
-      && name.includes(prefix.toLowerCase())
-      && name.includes(`_${artifactArch.toLowerCase()}`);
+    return (
+      name.endsWith(extension) && name.includes(prefix.toLowerCase()) && name.includes(`_${artifactArch.toLowerCase()}`)
+    );
   });
   if (matches.length !== 1) {
     throw new Error(
@@ -268,10 +273,12 @@ export function discoverWindowsArtifacts({
   fileStat = statSync,
 } = {}) {
   const bundleRoot = resolve(repoRoot, "target", rustTarget, "release", "bundle");
-  const nsis = selectArtifact(
-    artifactFiles(resolve(bundleRoot, "nsis"), fileExists, readDirectory, fileStat),
-    { version, artifactArch, extension: ".exe", label: "NSIS" },
-  );
+  const nsis = selectArtifact(artifactFiles(resolve(bundleRoot, "nsis"), fileExists, readDirectory, fileStat), {
+    version,
+    artifactArch,
+    extension: ".exe",
+    label: "NSIS",
+  });
   return { nsis };
 }
 
@@ -314,14 +321,24 @@ export function elevateTunnelServiceInstall({
   if (result.status !== 0) {
     const messages = new Map([
       [1223, () => "Windows service installation was cancelled at the UAC prompt."],
-      [WINDOWS_TUN_EXIT_STOP_TIMEOUT, () => "Timed out waiting for VoyaVPNTunnelService to stop. Disable TUN and retry."],
-      [WINDOWS_TUN_EXIT_COPY_FAILED, () => `Unable to stage the protected tunnel service binary at ${managedTunnelServicePath(env)} or the sing-box core at ${managedSingBoxPath(env)}. Run pnpm core:sing-box:install, then check Program Files permissions and antivirus logs.`],
-      [WINDOWS_TUN_EXIT_REGISTRATION_FAILED, () => "VoyaVPNTunnelService registration or verification failed. Inspect sc.exe query and sc.exe qc output, then retry."],
+      [
+        WINDOWS_TUN_EXIT_STOP_TIMEOUT,
+        () => "Timed out waiting for VoyaVPNTunnelService to stop. Disable TUN and retry.",
+      ],
+      [
+        WINDOWS_TUN_EXIT_COPY_FAILED,
+        () =>
+          `Unable to stage the protected tunnel service binary at ${managedTunnelServicePath(env)} or the sing-box core at ${managedSingBoxPath(env)}. Run pnpm core:sing-box:install, then check Program Files permissions and antivirus logs.`,
+      ],
+      [
+        WINDOWS_TUN_EXIT_REGISTRATION_FAILED,
+        () =>
+          "VoyaVPNTunnelService registration or verification failed. Inspect sc.exe query and sc.exe qc output, then retry.",
+      ],
     ]);
     const message = messages.get(result.status);
     throw new Error(
-      message?.()
-        ?? `Elevated Windows service installation failed with status ${result.status ?? "unknown"}.`,
+      message?.() ?? `Elevated Windows service installation failed with status ${result.status ?? "unknown"}.`,
     );
   }
 }
@@ -336,15 +353,7 @@ export function buildWindowsInstallers({
   try {
     return runCommand(
       packageManager.program,
-      [
-        ...packageManager.prefixArgs,
-        "tauri:build",
-        "--no-sign",
-        "--target",
-        rustTarget,
-        "--bundles",
-        "nsis",
-      ],
+      [...packageManager.prefixArgs, "tauri:build", "--no-sign", "--target", rustTarget, "--bundles", "nsis"],
       {
         cwd: repoRoot,
         env,
@@ -352,10 +361,9 @@ export function buildWindowsInstallers({
       },
     );
   } catch (error) {
-    throw new Error(
-      "Windows NSIS build failed. Inspect the Tauri bundler output above for the underlying error.",
-      { cause: error },
-    );
+    throw new Error("Windows NSIS build failed. Inspect the Tauri bundler output above for the underlying error.", {
+      cause: error,
+    });
   }
 }
 

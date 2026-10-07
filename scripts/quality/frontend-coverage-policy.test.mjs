@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import {
-  criticalModules,
-  evaluateCoverage,
-  globalMinimums,
-  runtimeModules,
-} from "./frontend-coverage-policy.mjs";
+import { criticalModules, evaluateCoverage, globalMinimums, runtimeModules } from "./frontend-coverage-policy.mjs";
 
 function metrics(lines, branches = lines, functions = lines, statements = lines) {
   return {
@@ -44,9 +39,7 @@ describe("frontend coverage policy", () => {
   // runtime module was absorbed by the global average.
   it("fails a runtime module that regresses below its ratchet floor", () => {
     const module = runtimeModules.find((entry) => entry.path === "apps/desktop/src/ipc/event-bridge.tsx");
-    const { failures } = evaluate(
-      healthySummary({ [module.path]: metrics(100, module.branches - 1, 100, 100) }),
-    );
+    const { failures } = evaluate(healthySummary({ [module.path]: metrics(100, module.branches - 1, 100, 100) }));
 
     expect(failures).toEqual([
       `${module.path}: branches ${module.branches - 1}% < ${module.branches}% (runtime floor)`,

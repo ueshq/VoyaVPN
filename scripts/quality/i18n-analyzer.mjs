@@ -166,11 +166,7 @@ export function inspectI18nSource({ path, source, knownKeys = new Set() }) {
       } else if (node.initializer && ts.isJsxExpression(node.initializer) && node.initializer.expression) {
         inspectVisibleExpression(node.initializer.expression);
       }
-    } else if (
-      ts.isJsxExpression(node)
-      && node.expression
-      && !ts.isJsxAttribute(node.parent)
-    ) {
+    } else if (ts.isJsxExpression(node) && node.expression && !ts.isJsxAttribute(node.parent)) {
       inspectVisibleExpression(node.expression);
     } else if (ts.isPropertyAssignment(node) && propertyName(node.name)) {
       if (VISIBLE_OBJECT_PROPERTIES.has(propertyName(node.name))) {
@@ -214,9 +210,7 @@ export const EXTERNAL_KEY_NAMESPACES = [
  */
 export function unusedTranslationKeys({ keys, literals, externalPrefixes = [] }) {
   return keys.filter(
-    (key) =>
-      !literals.has(pluralBaseKey(key) ?? key) &&
-      !externalPrefixes.some((prefix) => key.startsWith(prefix)),
+    (key) => !literals.has(pluralBaseKey(key) ?? key) && !externalPrefixes.some((prefix) => key.startsWith(prefix)),
   );
 }
 
@@ -253,9 +247,7 @@ function isUiHelperReturn(node) {
     }
     if (ts.isArrowFunction(current) || ts.isFunctionExpression(current)) {
       const parent = current.parent;
-      return ts.isVariableDeclaration(parent)
-        && ts.isIdentifier(parent.name)
-        && UI_HELPER_NAME.test(parent.name.text);
+      return ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name) && UI_HELPER_NAME.test(parent.name.text);
     }
     current = current.parent;
   }
@@ -277,12 +269,17 @@ function isTextLiteral(node) {
 }
 
 function isTranslationCall(expression) {
-  return (ts.isIdentifier(expression) && expression.text === "t")
-    || (ts.isPropertyAccessExpression(expression) && expression.name.text === "t");
+  return (
+    (ts.isIdentifier(expression) && expression.text === "t") ||
+    (ts.isPropertyAccessExpression(expression) && expression.name.text === "t")
+  );
 }
 
 function normalizeText(value) {
-  return String(value).replace(/^["'`]|["'`]$/gu, "").replace(/\s+/gu, " ").trim();
+  return String(value)
+    .replace(/^["'`]|["'`]$/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 function propertyName(node) {

@@ -65,8 +65,10 @@ export function verifyStagedRuleSets({ repoRoot, pins = RULE_SET_PINS }) {
 
 /** Whether `dir` holds any staged rule set, which is what the bundle needs. */
 export function hasStagedRuleSets(dir) {
-  return existsSync(dir)
-    && readdirSync(dir, { withFileTypes: true }).some((entry) => entry.isFile() && entry.name.endsWith(".srs"));
+  return (
+    existsSync(dir) &&
+    readdirSync(dir, { withFileTypes: true }).some((entry) => entry.isFile() && entry.name.endsWith(".srs"))
+  );
 }
 
 function assertPinnedRuleSet(pin, buffer, url) {
@@ -79,12 +81,7 @@ function assertPinnedRuleSet(pin, buffer, url) {
   }
 }
 
-export async function fetchAndStageRuleSets({
-  fetchImpl = fetch,
-  logger = console,
-  pins = RULE_SET_PINS,
-  repoRoot,
-}) {
+export async function fetchAndStageRuleSets({ fetchImpl = fetch, logger = console, pins = RULE_SET_PINS, repoRoot }) {
   const dir = ruleSetSeedDir(repoRoot);
   mkdirSync(dir, { recursive: true });
   // Download and check everything before replacing anything, so a failed
@@ -117,11 +114,7 @@ export async function fetchAndStageRuleSets({
 }
 
 /** Stages the pinned rule sets for a package build unless they already are. */
-export async function ensureRuleSetSeedsForBuild({
-  logger = console,
-  repoRoot,
-  stage = fetchAndStageRuleSets,
-}) {
+export async function ensureRuleSetSeedsForBuild({ logger = console, repoRoot, stage = fetchAndStageRuleSets }) {
   const verification = verifyStagedRuleSets({ repoRoot });
   if (verification.ok) {
     return { dir: ruleSetSeedDir(repoRoot), status: "already-staged" };

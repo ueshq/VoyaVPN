@@ -43,7 +43,8 @@ describe("findQuarantined", () => {
       writeFileSync(join(contents, "Info.plist"), "plist");
       const quarantine = "0281;6a46dacf;;D5853559-011B-43DD-B861-15287EBF3D57";
       expect(
-        capture("xattr", ["-w", "com.apple.quarantine", quarantine, join(contents, "embedded.provisionprofile")]).status,
+        capture("xattr", ["-w", "com.apple.quarantine", quarantine, join(contents, "embedded.provisionprofile")])
+          .status,
       ).toBe(0);
 
       expect(findQuarantined(root)).toEqual(["Probe.app/Contents/embedded.provisionprofile"]);

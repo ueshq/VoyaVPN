@@ -40,9 +40,7 @@ export function activeCaptureMode(state: RuntimeEventState): ConnectionMode | "i
  */
 export function useCaptureMode() {
   const { t } = useI18n();
-  const available = useRuntimeEventStore(
-    (state) => state.sysProxy?.management === "automatic",
-  );
+  const available = useRuntimeEventStore((state) => state.sysProxy?.management === "automatic");
   const mode = useRuntimeEventStore(savedCaptureMode);
   const modePending = useRuntimeActionStore((state) => state.modePending);
   const [error, setError] = useState<string | null>(null);

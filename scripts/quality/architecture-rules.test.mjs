@@ -42,8 +42,8 @@ describe("voya-core OS independence", () => {
 
   it.each([
     ["use std::fs::File;", "core-os-api"],
-    ["let value = std::env::var(\"HOME\");", "core-os-api"],
-    ["std::process::Command::new(\"sing-box\")", "core-os-api"],
+    ['let value = std::env::var("HOME");', "core-os-api"],
+    ['std::process::Command::new("sing-box")', "core-os-api"],
     ["let listener = std::net::TcpListener::bind(addr)?;", "core-os-api"],
     // Grouped and module-relative socket imports never spell `std::net::TcpStream`.
     ["use std::net::{TcpStream, UdpSocket};", "core-os-api"],
@@ -81,7 +81,7 @@ describe("voya-app adapter boundary", () => {
   it.each([
     ["use reqwest::Client;", "app-io-adapters"],
     ["use tokio::net::TcpStream;", "app-io-adapters"],
-    ["std::process::Command::new(\"sudo\")", "app-io-adapters"],
+    ['std::process::Command::new("sudo")', "app-io-adapters"],
     ["use tokio::process::Command;", "app-io-adapters"],
     // The grouped form: `use std::{fs, io};` contains no `std::fs` substring.
     ["use std::{fs, io};", "app-io-adapters-grouped"],
@@ -93,8 +93,8 @@ describe("voya-app adapter boundary", () => {
     ["use std::{io, process::Command};", "app-io-adapters-process-import"],
     ["use std::{\n    io,\n    process::{Command, Stdio},\n};", "app-io-adapters-process-import"],
     ["use std::process::Command as Spawn;", "app-io-adapters-process-import"],
-    ["use std::process;\nprocess::Command::new(\"sudo\")", "app-io-adapters-process-import"],
-    ["use std::{process, io};\nprocess::Command::new(\"sudo\")", "app-io-adapters-process-import"],
+    ['use std::process;\nprocess::Command::new("sudo")', "app-io-adapters-process-import"],
+    ['use std::{process, io};\nprocess::Command::new("sudo")', "app-io-adapters-process-import"],
     ["use std::{io, process};", "app-io-adapters-process-import"],
     ["use std::{io::{self, Write}, process};", "app-io-adapters-process-import"],
     ["use std::process::{self, ExitCode};", "app-io-adapters-process-import"],
@@ -242,7 +242,7 @@ describe("manifest dependency rules", () => {
     ["  voya-core.workspace = true", "manifest-direct"],
     // A renamed dependency hides the crate name from a line-anchored match.
     ['domain = { package = "voya-core", path = "../../../crates/voya-core" }', "manifest-renamed"],
-    ["[dependencies.voya-core]\npath = \"../../../crates/voya-core\"", "manifest-table"],
+    ['[dependencies.voya-core]\npath = "../../../crates/voya-core"', "manifest-table"],
     ["[dev-dependencies.voya-db]", "manifest-table"],
     ["[target.'cfg(windows)'.dependencies.voya-core]", "manifest-table"],
   ])("rejects %s", (source, id) => {
@@ -267,9 +267,7 @@ describe("manifest dependency rules", () => {
     );
     expect(violates(networkRules, 'reqwest = { version = "0.12" }')).toContain("manifest-direct");
     // Renamed, the source rules would only ever see `http::Client`.
-    expect(violates(networkRules, 'http = { package = "reqwest", version = "0.12" }')).toContain(
-      "manifest-renamed",
-    );
+    expect(violates(networkRules, 'http = { package = "reqwest", version = "0.12" }')).toContain("manifest-renamed");
     expect(violates(networkRules, "[dependencies.tokio-tungstenite]")).toContain("manifest-table");
     expect(violates(networkRules, "voya-net.workspace = true")).toEqual([]);
   });
@@ -299,22 +297,40 @@ describe("release version alignment", () => {
     expect(cargoPackageVersion('[package]\nname = "voyavpn"\nversion.workspace = true\n', workspaceManifest)).toBe(
       "0.4.0",
     );
-    expect(cargoPackageVersion('[package]\nversion = { workspace = true }\n', workspaceManifest)).toBe("0.4.0");
+    expect(cargoPackageVersion("[package]\nversion = { workspace = true }\n", workspaceManifest)).toBe("0.4.0");
     expect(cargoPackageVersion('[package]\nname = "voyavpn"\nversion = "0.3.9"\n', workspaceManifest)).toBe("0.3.9");
     // A dependency's `version` is not the package's.
-    expect(cargoPackageVersion('[package]\nname = "x"\n\n[dependencies]\nserde = { version = "1" }\nversion = "9"\n', workspaceManifest))
-      .toBeUndefined();
+    expect(
+      cargoPackageVersion(
+        '[package]\nname = "x"\n\n[dependencies]\nserde = { version = "1" }\nversion = "9"\n',
+        workspaceManifest,
+      ),
+    ).toBeUndefined();
   });
 
   it("accepts one version everywhere", () => {
-    expect(versionAlignmentProblem([["package.json", "0.4.0"], ["tauri.conf.json", "0.4.0"], ["Cargo", "0.4.0"]])).toBeNull();
+    expect(
+      versionAlignmentProblem([
+        ["package.json", "0.4.0"],
+        ["tauri.conf.json", "0.4.0"],
+        ["Cargo", "0.4.0"],
+      ]),
+    ).toBeNull();
   });
 
   it("names every location when one of them drifts or is missing", () => {
-    const drift = versionAlignmentProblem([["package.json", "0.4.0"], ["tauri.conf.json", "0.3.9"]]);
+    const drift = versionAlignmentProblem([
+      ["package.json", "0.4.0"],
+      ["tauri.conf.json", "0.3.9"],
+    ]);
     expect(drift).toContain("package.json = 0.4.0");
     expect(drift).toContain("tauri.conf.json = 0.3.9");
-    expect(versionAlignmentProblem([["package.json", "0.4.0"], ["Cargo", undefined]])).toContain("Cargo = missing");
+    expect(
+      versionAlignmentProblem([
+        ["package.json", "0.4.0"],
+        ["Cargo", undefined],
+      ]),
+    ).toContain("Cargo = missing");
     expect(versionAlignmentProblem([["package.json", undefined]])).toContain("missing");
   });
 
@@ -348,7 +364,7 @@ describe("release version alignment", () => {
 
     expect(gradleVersionName(gradle)).toBe("0.4.0");
     // A comment mentioning it is not a declaration of it.
-    expect(gradleVersionName("// versionName \"0.4.0\"")).toBeUndefined();
+    expect(gradleVersionName('// versionName "0.4.0"')).toBeUndefined();
   });
 });
 
@@ -362,10 +378,7 @@ describe("SAFETY comment requirement", () => {
   });
 
   // Blocks and impls are clippy's `undocumented_unsafe_blocks` job.
-  it.each([
-    "unsafe { ptr.read() }",
-    "unsafe impl Send for Handle {}",
-  ])("leaves %s to clippy", (line) => {
+  it.each(["unsafe { ptr.read() }", "unsafe impl Send for Handle {}"])("leaves %s to clippy", (line) => {
     expect(findUndocumentedUnsafe(line)).toEqual([]);
   });
 

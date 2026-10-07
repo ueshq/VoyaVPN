@@ -70,8 +70,7 @@ export const en: SiteCopy = {
       },
     },
     protocolsHeadline: "Works with the protocols you already use",
-    protocolsBody:
-      "VoyaVPN is built on sing-box. Paste a link in any of these formats and it is ready to connect.",
+    protocolsBody: "VoyaVPN is built on sing-box. Paste a link in any of these formats and it is ready to connect.",
     downloadHeadline: "Download",
     downloadBody:
       "VoyaVPN is coming to the App Store and to the other platforms. Links appear here as each one goes live.",
@@ -205,9 +204,7 @@ export const en: SiteCopy = {
       },
       {
         heading: "Sharing",
-        body: [
-          "We do not sell or share data with anyone. We have none to share.",
-        ],
+        body: ["We do not sell or share data with anyone. We have none to share."],
       },
       {
         heading: "Deleting your data",
@@ -223,9 +220,7 @@ export const en: SiteCopy = {
       },
       {
         heading: "Changes",
-        body: [
-          "If this policy changes, we will update this page and its effective date.",
-        ],
+        body: ["If this policy changes, we will update this page and its effective date."],
       },
     ],
     contactHeading: "Contact",

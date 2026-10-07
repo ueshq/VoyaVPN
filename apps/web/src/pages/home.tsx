@@ -156,10 +156,7 @@ export function HomePage({ locale }: { locale: Locale }) {
           </div>
           <ul className="flex flex-wrap content-start gap-2 lg:col-span-7">
             {PROTOCOLS.map((name) => (
-              <li
-                key={name}
-                className="rounded-md border border-line bg-canvas px-3 py-1.5 font-mono text-sm"
-              >
+              <li key={name} className="rounded-md border border-line bg-canvas px-3 py-1.5 font-mono text-sm">
                 {name}
               </li>
             ))}
@@ -183,7 +180,10 @@ export function HomePage({ locale }: { locale: Locale }) {
                   <Icon {...ICON} size={22} className="text-fg-muted" />
                   <span className="me-auto font-medium md:me-0">{copy.platforms[id]}</span>
                   {url ? (
-                    <a href={url} className="inline-flex items-center gap-1 text-sm font-medium text-accent-fg hover:underline">
+                    <a
+                      href={url}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-accent-fg hover:underline"
+                    >
                       {copy.getIt}
                       <ArrowRight {...ICON} size={14} />
                     </a>

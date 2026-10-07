@@ -2,10 +2,7 @@ import { useState } from "react";
 import { voyaCommands } from "@voya/client/transport";
 import { clipboard } from "@voya/client/platform";
 import { profilesByNodeGroup, type NodeSourceKey } from "./node-list-rows";
-import {
-  supportsShareLinkExport,
-  type ProfileExportDestination,
-} from "./server-table-actions";
+import { supportsShareLinkExport, type ProfileExportDestination } from "./server-table-actions";
 import type { TranslationFunction } from "@voya/i18n/core";
 import type { NodeOperation } from "./use-node-operation";
 
@@ -14,10 +11,7 @@ export function useNodeExport(
   t: TranslationFunction,
 ) {
   const [shareQrContent, setShareQrContent] = useState<string | null>(null);
-  async function performExport(
-    indexIds: string[],
-    destination: ProfileExportDestination,
-  ) {
+  async function performExport(indexIds: string[], destination: ProfileExportDestination) {
     const result = await voyaCommands().exportProfileShareLinks(indexIds);
     if (destination === "qr") {
       setShareQrContent(result.text);
@@ -25,22 +19,14 @@ export function useNodeExport(
     }
 
     await clipboard().writeText(result.text);
-    setOperationMessage(
-      t("panes.profiles.export.copied", { count: result.count }),
-    );
+    setOperationMessage(t("panes.profiles.export.copied", { count: result.count }));
   }
 
-  async function handleExport(
-    indexIds: string[],
-    destination: ProfileExportDestination = "clipboard",
-  ) {
+  async function handleExport(indexIds: string[], destination: ProfileExportDestination = "clipboard") {
     await runOperation(() => performExport(indexIds, destination));
   }
 
-  async function handleGroupExport(
-    groupKey: NodeSourceKey,
-    destination: ProfileExportDestination = "clipboard",
-  ) {
+  async function handleGroupExport(groupKey: NodeSourceKey, destination: ProfileExportDestination = "clipboard") {
     await runOperation(async () => {
       // Read afresh on purpose, not from the list cache: what is exported is
       // the group's complete membership as it is now, and a group deleted or
@@ -48,9 +34,7 @@ export function useNodeExport(
       // the screen last showed.
       const listing = await voyaCommands().listProfileSummaries();
       const entries = profilesByNodeGroup(listing.entries).get(groupKey) ?? [];
-      const exportable = entries.filter((item) =>
-        supportsShareLinkExport(item.profile.kind),
-      );
+      const exportable = entries.filter((item) => supportsShareLinkExport(item.profile.kind));
       if (!exportable.length) {
         setOperationError(t("panes.profiles.export.noProfiles"));
         return;
@@ -60,10 +44,7 @@ export function useNodeExport(
         destination,
       );
       const skipped = entries.length - exportable.length;
-      if (skipped > 0)
-        setOperationMessage(
-          t("panes.profiles.export.skippedUnsupported", { count: skipped }),
-        );
+      if (skipped > 0) setOperationMessage(t("panes.profiles.export.skippedUnsupported", { count: skipped }));
     });
   }
 

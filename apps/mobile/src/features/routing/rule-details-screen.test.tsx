@@ -7,12 +7,24 @@ import { localeReady } from "~/native/platform-boot";
 import { makeTestQueryClient, TestProviders } from "~/test/providers";
 import { RuleDetailsScreen } from "./rule-details-screen";
 
-beforeAll(async () => { await localeReady; });
+beforeAll(async () => {
+  await localeReady;
+});
 
 const RULE: RoutingRule = {
-  id: "rule-1", kind: null, port: null, network: null, inboundTags: null,
-  outbound: "proxy", ip: null, domain: ["openai.com"], protocol: null, process: null,
-  enabled: true, remarks: "AI services", scope: "routing",
+  id: "rule-1",
+  kind: null,
+  port: null,
+  network: null,
+  inboundTags: null,
+  outbound: "proxy",
+  ip: null,
+  domain: ["openai.com"],
+  protocol: null,
+  process: null,
+  enabled: true,
+  remarks: "AI services",
+  scope: "routing",
 };
 
 /** What the page shows and copies: the rule's behaviour, without the storage
@@ -36,7 +48,9 @@ async function renderScreen() {
   const props = {
     route: { key: "ruleDetails", name: "ruleDetails", params: { rule: RULE, target: "proxy" } },
   } as unknown as NativeStackScreenProps<RootRoutes, "ruleDetails">;
-  const rendered = await render(<RuleDetailsScreen {...props} />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const rendered = await render(<RuleDetailsScreen {...props} />, {
+    wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders>,
+  });
   return { rendered, writeText, client, user: userEvent.setup() };
 }
 
@@ -53,7 +67,8 @@ test("the page shows the rule's settings, not its storage fields", async () => {
   expect(screen.queryByText(/inboundTags/)).toBeNull();
   expect(screen.queryByText(/"port"/)).toBeNull();
 
-  await rendered.unmount(); client.clear();
+  await rendered.unmount();
+  client.clear();
 });
 
 test("the copy button reaches for exactly what the page shows", async () => {
@@ -64,7 +79,8 @@ test("the copy button reaches for exactly what the page shows", async () => {
   expect(writeText).toHaveBeenCalledWith(DISPLAYED_JSON);
   expect(await screen.findByText("Copied")).toBeOnTheScreen();
 
-  await rendered.unmount(); client.clear();
+  await rendered.unmount();
+  client.clear();
 });
 
 test("a refused clipboard says Copy failed instead of staying silent", async () => {
@@ -75,5 +91,6 @@ test("a refused clipboard says Copy failed instead of staying silent", async () 
   await user.press(screen.getByText("Copy JSON"));
   expect(await screen.findByText("Copy failed")).toBeOnTheScreen();
 
-  await rendered.unmount(); client.clear();
+  await rendered.unmount();
+  client.clear();
 });

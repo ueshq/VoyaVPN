@@ -35,8 +35,6 @@ describe("writeClipboard", () => {
   it("names an unavailable clipboard instead of failing with a TypeError", async () => {
     setClipboard(undefined);
 
-    await expect(writeClipboard("vless://node")).rejects.toThrow(
-      "Clipboard write is unavailable in this context.",
-    );
+    await expect(writeClipboard("vless://node")).rejects.toThrow("Clipboard write is unavailable in this context.");
   });
 });

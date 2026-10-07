@@ -37,19 +37,13 @@ export function useConnectionsTable(filter: string, t: TranslationFunction) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [sort, setSort] = useState<ConnectionSort | null>(null);
   const connected = coreState?.state === "connected";
-  const {
-    query: connectionsQuery,
-    setProxyConnections,
-    snapshot: storeSnapshot,
-  } = useConnectionsSnapshot(connected);
+  const { query: connectionsQuery, setProxyConnections, snapshot: storeSnapshot } = useConnectionsSnapshot(connected);
   // The store drops its snapshot when the core disconnects, so a reconnect
   // starts from an empty table rather than the previous session's rows.
   const snapshot = storeSnapshot ?? emptySnapshot;
   const hasSnapshot = storeSnapshot !== null;
   const updateFailed =
-    connectionsQuery.isError ||
-    monitor.state === "failed" ||
-    (hasSnapshot && monitor.state === "stopped");
+    connectionsQuery.isError || monitor.state === "failed" || (hasSnapshot && monitor.state === "stopped");
   const stale = hasSnapshot && (monitor.stale || updateFailed);
   const needle = filter.trim().toLowerCase();
   const searching = needle.length > 0;
@@ -63,9 +57,7 @@ export function useConnectionsTable(filter: string, t: TranslationFunction) {
   );
   const routeTexts = useMemo(
     () =>
-      sortingByRoute
-        ? snapshot.connections.map((connection) => routeLabel(connectionRoute(connection), t))
-        : null,
+      sortingByRoute ? snapshot.connections.map((connection) => routeLabel(connectionRoute(connection), t)) : null,
     [snapshot.connections, sortingByRoute, t],
   );
   const rows = useMemo(
@@ -84,10 +76,7 @@ export function useConnectionsTable(filter: string, t: TranslationFunction) {
   // string built for every item scanned.
   const selectedKey = selection ? connectionKey(selection.connection) : null;
   const current = useMemo(
-    () =>
-      selectedKey === null
-        ? undefined
-        : snapshot.connections.find((item) => connectionKey(item) === selectedKey),
+    () => (selectedKey === null ? undefined : snapshot.connections.find((item) => connectionKey(item) === selectedKey)),
     [snapshot.connections, selectedKey],
   );
   if (selection && !selection.ended) {

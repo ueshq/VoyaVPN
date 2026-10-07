@@ -47,7 +47,10 @@ describe("Mac App Store package", () => {
 
   it("selects one installer identity even when the keychain lists it twice", () => {
     const identities = [
-      { sha1: applicationSha1, name: "3rd Party Mac Developer Application: Beijing Wangcai Technology Co., Ltd. (4LUKJ56532)" },
+      {
+        sha1: applicationSha1,
+        name: "3rd Party Mac Developer Application: Beijing Wangcai Technology Co., Ltd. (4LUKJ56532)",
+      },
       { sha1: installerSha1, name: installerName },
       { sha1: installerSha1, name: installerName },
     ];

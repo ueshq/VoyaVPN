@@ -52,19 +52,19 @@ export function EventBridge() {
     const unlisteners: RegisteredUnlisten[] = [];
 
     registerEventListener("invalidateEvent", () =>
-        events.invalidateEvent.listen((event) => {
-          router.onInvalidate(event.payload);
-        }),
+      events.invalidateEvent.listen((event) => {
+        router.onInvalidate(event.payload);
+      }),
     );
     registerEventListener("appEvent", () =>
-        events.appEvent.listen((event) => {
-          router.onAppEvent(event.payload);
-        }),
+      events.appEvent.listen((event) => {
+        router.onAppEvent(event.payload);
+      }),
     );
     registerEventListener("transientStreamEvent", () =>
-        events.transientStreamEvent.listen((event) => {
-          router.onTransient(event.payload);
-        }),
+      events.transientStreamEvent.listen((event) => {
+        router.onTransient(event.payload);
+      }),
     );
 
     function registerEventListener(eventName: string, listen: () => Promise<Unlisten>) {
@@ -103,7 +103,6 @@ export function EventBridge() {
 
   return null;
 }
-
 
 function safeUnlisten(eventName: string, unlisten: Unlisten) {
   try {

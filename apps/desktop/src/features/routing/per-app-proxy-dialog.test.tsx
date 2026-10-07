@@ -18,7 +18,6 @@ const ipcMocks = installFakeCommands({
   saveRoutingRule: vi.fn(),
 });
 
-
 const queryClients = new Set<QueryClient>();
 
 function renderDialog(onOpenChange: (open: boolean) => void = vi.fn()) {
@@ -83,10 +82,7 @@ describe("PerAppProxyDialog", () => {
       processRulesEffective: true,
       vpnAvailable: true,
     });
-    ipcMocks.listProcessCandidates.mockResolvedValue([
-      candidate("chrome.exe", "Google Chrome"),
-      candidate("steam"),
-    ]);
+    ipcMocks.listProcessCandidates.mockResolvedValue([candidate("chrome.exe", "Google Chrome"), candidate("steam")]);
     ipcMocks.listRoutings.mockResolvedValue([routing()]);
     ipcMocks.moveRoutingRule.mockResolvedValue(routing());
     ipcMocks.saveRoutingRule.mockResolvedValue(routing());
@@ -217,9 +213,7 @@ describe("PerAppProxyDialog", () => {
     await user.click(screen.getByRole("button", { name: "Off" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("routing-1", ["rule-9"]),
-    );
+    await waitFor(() => expect(ipcMocks.deleteRoutingRules).toHaveBeenCalledWith("routing-1", ["rule-9"]));
     expect(ipcMocks.saveRoutingRule).not.toHaveBeenCalled();
   });
 
@@ -232,9 +226,7 @@ describe("PerAppProxyDialog", () => {
 
     renderDialog();
 
-    expect(
-      await screen.findByText("App-based rules only take effect in VPN mode."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("App-based rules only take effect in VPN mode.")).toBeInTheDocument();
   });
 
   it("explains when no active routing profile exists", async () => {
@@ -242,9 +234,7 @@ describe("PerAppProxyDialog", () => {
 
     renderDialog();
 
-    expect(
-      await screen.findByText("No rule set is active, so per-app rules cannot be saved."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No rule set is active, so per-app rules cannot be saved.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
   it("will not save a per-app rule without any app", async () => {

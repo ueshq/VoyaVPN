@@ -1,14 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
-import {
-  checkedCapture,
-  isCliEntrypoint,
-  repoRootFromScript,
-  requireDarwin,
-  run,
-  runCli,
-} from "../../lib/common.mjs";
+import { checkedCapture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, runCli } from "../../lib/common.mjs";
 import { ensureSingBoxSource, installLibboxTools, singBoxSourceDir } from "../sing-box-source.mjs";
 
 /**
@@ -54,11 +47,9 @@ const targetXCFramework = resolve(
 function buildLibbox() {
   rmSync(resolve(sourceDir, XCFRAMEWORK_NAME), { force: true, recursive: true });
   installLibboxTools(sourceDir);
-  run(
-    "go",
-    ["run", "./cmd/internal/build_libbox", "-target", "apple", "-platform", APPLE_PLATFORMS],
-    { cwd: sourceDir },
-  );
+  run("go", ["run", "./cmd/internal/build_libbox", "-target", "apple", "-platform", APPLE_PLATFORMS], {
+    cwd: sourceDir,
+  });
 }
 
 /**
@@ -134,8 +125,7 @@ export function stageLibboxXCFramework({
  * decide, not this script's.
  */
 const plutil = {
-  read: (path, keyPath) =>
-    checkedCapture("plutil", ["-extract", keyPath, "raw", "-o", "-", path]).stdout.trim(),
+  read: (path, keyPath) => checkedCapture("plutil", ["-extract", keyPath, "raw", "-o", "-", path]).stdout.trim(),
   remove: (path, keyPath) => {
     checkedCapture("plutil", ["-remove", keyPath, path]);
   },

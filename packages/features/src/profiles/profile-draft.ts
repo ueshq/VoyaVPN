@@ -1,13 +1,6 @@
 import { z } from "zod";
 
-import type {
-  Profile,
-  ProfileKind,
-  ProfileProtocol,
-  ProfileTransport,
-  TlsMode,
-  TlsSettings,
-} from "@voya/contracts";
+import type { Profile, ProfileKind, ProfileProtocol, ProfileTransport, TlsMode, TlsSettings } from "@voya/contracts";
 import { splitList, trimToNull } from "@voya/utils/text";
 
 import { isTlsModeOption, isTransportKind } from "./profile-constants";
@@ -242,10 +235,7 @@ const verbatim = z.string();
 /** Trimmed; blank is `null`, which the contract reads as "not set". */
 const optionalText = z.string().transform(trimToNull);
 const list = z.string().transform(splitList);
-const secret = z
-  .string()
-  .trim()
-  .min(1, "panes.profiles.validation.credentialRequired");
+const secret = z.string().trim().min(1, "panes.profiles.validation.credentialRequired");
 
 const port = z.string().transform((value, context) => {
   const number = value.trim() === "" ? null : wholeNumber(value);
@@ -276,14 +266,8 @@ const nodeFields = z.object({
   id: z.string(),
   subscriptionId: z.string().nullable().transform(trimToNull),
   displayLog: z.boolean(),
-  remarks: z
-    .string()
-    .trim()
-    .min(1, "panes.profiles.validation.remarksRequired"),
-  address: z
-    .string()
-    .trim()
-    .min(1, "panes.profiles.validation.addressRequired"),
+  remarks: z.string().trim().min(1, "panes.profiles.validation.remarksRequired"),
+  address: z.string().trim().min(1, "panes.profiles.validation.addressRequired"),
   port,
   tlsMode: z.custom<ProfileDraft["tlsMode"]>(isTlsModeOption),
   serverName: optionalText,
@@ -381,9 +365,7 @@ type ParsedProfileDraft = z.output<typeof profileDraftSchema>;
 
 /** Validate the draft; the compiler checks it carries every field a variant reads. */
 export function parseProfileDraft(draft: ProfileDraft) {
-  return profileDraftSchema.safeParse(
-    draft satisfies z.input<typeof profileDraftSchema>,
-  );
+  return profileDraftSchema.safeParse(draft satisfies z.input<typeof profileDraftSchema>);
 }
 
 export function profileFromDraft(parsed: ParsedProfileDraft): Profile {
@@ -479,9 +461,7 @@ function protocolFromDraft(parsed: ParsedProfileDraft): ProfileProtocol {
   }
 }
 
-function transportFromDraft(
-  parsed: z.output<typeof transportFields>,
-): ProfileTransport {
+function transportFromDraft(parsed: z.output<typeof transportFields>): ProfileTransport {
   const { host, path } = parsed;
   switch (parsed.transport) {
     case "tcp":

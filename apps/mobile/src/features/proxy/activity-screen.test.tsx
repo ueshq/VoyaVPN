@@ -37,7 +37,6 @@ beforeEach(() => {
   useRuntimeEventStore.setState(useRuntimeEventStore.getInitialState());
 });
 
-
 describe("ActivityScreen", () => {
   it("asks for a connection rather than an empty list while disconnected", async () => {
     await renderActivity();
@@ -51,9 +50,7 @@ describe("ActivityScreen", () => {
     connect();
     const { unmount } = await renderActivity();
 
-    await waitFor(() =>
-      expect(mockBackend().state.calls.map((call) => call.command)).toContain("proxyStartMonitor"),
-    );
+    await waitFor(() => expect(mockBackend().state.calls.map((call) => call.command)).toContain("proxyStartMonitor"));
     await unmount();
 
     await waitFor(() => expect(mockBackend().state.proxyMonitorRunning).toBe(false));
@@ -77,11 +74,9 @@ describe("ActivityScreen", () => {
 
     await act(async () => release());
     await waitFor(() =>
-      expect(
-        backend.state.calls
-          .map((call) => call.command)
-          .filter((command) => command.startsWith("proxyS")),
-      ).toEqual(["proxyStartMonitor", "proxyStopMonitor"]),
+      expect(backend.state.calls.map((call) => call.command).filter((command) => command.startsWith("proxyS"))).toEqual(
+        ["proxyStartMonitor", "proxyStopMonitor"],
+      ),
     );
     expect(backend.state.proxyMonitorRunning).toBe(false);
   });
@@ -122,19 +117,14 @@ describe("ActivityScreen", () => {
 
   it("narrows the list by search and says so when nothing matches", async () => {
     mockBackend().state.connections = {
-      connections: [
-        makeConnection(0, { host: "news.example" }),
-        makeConnection(1, { host: "mail.example" }),
-      ],
+      connections: [makeConnection(0, { host: "news.example" }), makeConnection(1, { host: "mail.example" })],
       downloadTotal: 0,
       uploadTotal: 0,
     };
     connect();
     await renderActivity();
     const user = userEvent.setup();
-    const search = await screen.findByPlaceholderText(
-      "Search domains, IPs or applications",
-    );
+    const search = await screen.findByPlaceholderText("Search domains, IPs or applications");
 
     await user.type(search, "mail");
     expect(await screen.findByText("1 of 2 connections")).toBeOnTheScreen();
@@ -147,7 +137,11 @@ describe("ActivityScreen", () => {
 
   it("opening a row never closes a connection and close-all requires confirmation", async () => {
     const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
-    mockBackend().state.connections = { connections: [makeConnection(0, { host: "news.example" })], downloadTotal: 0, uploadTotal: 0 };
+    mockBackend().state.connections = {
+      connections: [makeConnection(0, { host: "news.example" })],
+      downloadTotal: 0,
+      uploadTotal: 0,
+    };
     connect();
     await renderActivity();
     const user = userEvent.setup();
@@ -155,8 +149,15 @@ describe("ActivityScreen", () => {
     expect(mockBackend().state.calls.some((call) => call.command === "proxyCloseConnection")).toBe(false);
     await user.press(screen.getByText("Disconnect all connections"));
     expect(mockBackend().state.calls.some((call) => call.command === "proxyCloseConnection")).toBe(false);
-    await act(() => alert.mock.calls.at(-1)?.[2]?.find((button) => button.style === "destructive")?.onPress?.());
-    await waitFor(() => expect(mockBackend().state.calls.find((call) => call.command === "proxyCloseConnection")?.args).toEqual([null]));
+    await act(() =>
+      alert.mock.calls
+        .at(-1)?.[2]
+        ?.find((button) => button.style === "destructive")
+        ?.onPress?.(),
+    );
+    await waitFor(() =>
+      expect(mockBackend().state.calls.find((call) => call.command === "proxyCloseConnection")?.args).toEqual([null]),
+    );
     alert.mockRestore();
   });
 });

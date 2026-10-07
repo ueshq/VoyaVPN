@@ -15,9 +15,7 @@ import svg from "../../assets/world-map.svg?raw";
  */
 describe("world map asset", () => {
   it("is drawn in the box the projection places markers in", () => {
-    expect(svg).toContain(
-      `viewBox="0 0 ${WORLD_MAP_BOX.width} ${WORLD_MAP_BOX.height}"`,
-    );
+    expect(svg).toContain(`viewBox="0 0 ${WORLD_MAP_BOX.width} ${WORLD_MAP_BOX.height}"`);
   });
 
   it("holds exactly the land the shared path draws", () => {

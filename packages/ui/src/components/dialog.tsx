@@ -44,22 +44,15 @@ const scrollableDialogContentVariants = cva("", {
   },
 });
 
-function Dialog({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Root>) {
+function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
-function DialogPortal({
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Portal>) {
+function DialogPortal({ ...props }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
 }
 
-function DialogOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
+function DialogOverlay({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
@@ -110,16 +103,12 @@ function DialogContent({
   );
 }
 
-type DialogContentProps = React.ComponentProps<
-  typeof DialogPrimitive.Content
-> & {
+type DialogContentProps = React.ComponentProps<typeof DialogPrimitive.Content> & {
   closeLabel: string;
   showCloseButton?: boolean;
 };
 
-type ScrollableDialogContentVariants = VariantProps<
-  typeof scrollableDialogContentVariants
->;
+type ScrollableDialogContentVariants = VariantProps<typeof scrollableDialogContentVariants>;
 
 function ScrollableDialogContent({
   className,
@@ -127,16 +116,9 @@ function ScrollableDialogContent({
   rows,
   width,
   ...props
-}: Omit<DialogContentProps, keyof ScrollableDialogContentVariants> &
-  ScrollableDialogContentVariants) {
+}: Omit<DialogContentProps, keyof ScrollableDialogContentVariants> & ScrollableDialogContentVariants) {
   return (
-    <DialogContent
-      className={cn(
-        scrollableDialogContentVariants({ height, rows, width }),
-        className,
-      )}
-      {...props}
-    />
+    <DialogContent className={cn(scrollableDialogContentVariants({ height, rows, width }), className)} {...props} />
   );
 }
 
@@ -147,30 +129,17 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn(
-        "flex flex-col gap-2 border-b px-6 pb-4 pt-6 text-center sm:text-start",
-        className,
-      )}
+      className={cn("flex flex-col gap-2 border-b px-6 pb-4 pt-6 text-center sm:text-start", className)}
       {...props}
     />
   );
 }
 
 function DialogBody({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="dialog-body"
-      className={cn("min-h-0 overflow-y-auto p-dialog", className)}
-      {...props}
-    />
-  );
+  return <div data-slot="dialog-body" className={cn("min-h-0 overflow-y-auto p-dialog", className)} {...props} />;
 }
 
-function DialogFooter({
-  children,
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+function DialogFooter({ children, className, ...props }: React.ComponentProps<"div">) {
   // A childless footer (several dialogs render `<DialogFooter />` purely for the
   // grid slot) must not paint an orphan top divider, so collapse it to nothing.
   if (React.Children.toArray(children).length === 0) {
@@ -180,10 +149,7 @@ function DialogFooter({
   return (
     <div
       data-slot="dialog-footer"
-      className={cn(
-        "flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:justify-end",
-        className,
-      )}
+      className={cn("flex flex-col-reverse gap-2 border-t px-6 py-4 sm:flex-row sm:justify-end", className)}
       {...props}
     >
       {children}
@@ -191,23 +157,13 @@ function DialogFooter({
   );
 }
 
-function DialogTitle({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Title>) {
+function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
   return (
-    <DialogPrimitive.Title
-      data-slot="dialog-title"
-      className={cn("text-dialog font-semibold", className)}
-      {...props}
-    />
+    <DialogPrimitive.Title data-slot="dialog-title" className={cn("text-dialog font-semibold", className)} {...props} />
   );
 }
 
-function DialogDescription({
-  className,
-  ...props
-}: React.ComponentProps<typeof DialogPrimitive.Description>) {
+function DialogDescription({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"

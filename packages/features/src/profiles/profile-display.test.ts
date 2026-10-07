@@ -43,12 +43,9 @@ describe("profile display projections", () => {
     [{ delayMs: 0, outcome: "waiting" }, "unknown"],
     [{ delayMs: 0, outcome: "skipped" }, "unknown"],
     [{ delayMs: 0, outcome: "reconnectRequired" }, "unknown"],
-  ] as Array<[Partial<ProfileSummaryEntry["metrics"]>, string]>)(
-    "bands %j as %s",
-    (metrics, expected) => {
-      expect(profileLatencyTone(withMetrics(metrics))).toBe(expected);
-    },
-  );
+  ] as Array<[Partial<ProfileSummaryEntry["metrics"]>, string]>)("bands %j as %s", (metrics, expected) => {
+    expect(profileLatencyTone(withMetrics(metrics))).toBe(expected);
+  });
 
   it.each([
     ["🇯🇵 Tokyo", "Tokyo"],
@@ -78,5 +75,4 @@ describe("profile display projections", () => {
     expect(entryCountry({ ...entry, metrics: { ...entry.metrics, countryCode: null } })).toBe("JP");
     expect(entryCountry(null)).toBeNull();
   });
-
 });

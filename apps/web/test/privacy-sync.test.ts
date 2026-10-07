@@ -31,9 +31,7 @@ describe("in-app data notice", () => {
 
 describe("privacy policy", () => {
   it("finds the hosts in the review notes", () => {
-    expect(hosts).toEqual(
-      expect.arrayContaining(["raw.githubusercontent.com", "probe.voyavpn.app", "ipwho.is"]),
-    );
+    expect(hosts).toEqual(expect.arrayContaining(["raw.githubusercontent.com", "probe.voyavpn.app", "ipwho.is"]));
   });
 
   it.each(LOCALES)("names every host from the VPN answers in %s", (locale) => {

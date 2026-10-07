@@ -64,15 +64,17 @@ describe("release index", () => {
   });
 
   it("fails closed for an example stable host", async () => {
-    await expect(main([
-      "--input",
-      resolve(repoRoot, "tests/fixtures/release/artifacts"),
-      "--out",
-      resolve(repoRoot, "target/test-release-index.json"),
-      "--base-url",
-      "https://cdn.example.com/stable",
-      "--channel",
-      "stable",
-    ])).rejects.toThrow(/example|production/i);
+    await expect(
+      main([
+        "--input",
+        resolve(repoRoot, "tests/fixtures/release/artifacts"),
+        "--out",
+        resolve(repoRoot, "target/test-release-index.json"),
+        "--base-url",
+        "https://cdn.example.com/stable",
+        "--channel",
+        "stable",
+      ]),
+    ).rejects.toThrow(/example|production/i);
   });
 });

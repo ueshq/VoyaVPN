@@ -54,7 +54,10 @@ describe("App", () => {
 
     // One entry per tab, checked by the type; `selfHost` is deliberately
     // absent, because a phone is not an exit node.
-    const labels = { home: "Home", profiles: "Nodes", rules: "Rules", settings: "Settings" } satisfies Record<ShellTab, string>;
+    const labels = { home: "Home", profiles: "Nodes", rules: "Rules", settings: "Settings" } satisfies Record<
+      ShellTab,
+      string
+    >;
 
     // The bar derives both the visible label and the VoiceOver name from the
     // screen's title; nothing sets them separately.

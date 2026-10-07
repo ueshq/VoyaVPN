@@ -51,11 +51,4 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   );
 }
 
-export {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-};
+export { Table, TableBody, TableCell, TableHead, TableHeader, TableRow };

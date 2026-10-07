@@ -2,16 +2,10 @@ import { isRecord } from "@voya/utils/guards";
 
 export type SettingsChange = { path: string; value: unknown };
 
-export function changedFields(
-  before: unknown,
-  after: unknown,
-  path = "",
-): SettingsChange[] {
+export function changedFields(before: unknown, after: unknown, path = ""): SettingsChange[] {
   if (JSON.stringify(before) === JSON.stringify(after)) return [];
   if (isRecord(before) && isRecord(after)) {
-    return Object.keys(after).flatMap((key) =>
-      changedFields(before[key], after[key], path ? `${path}.${key}` : key),
-    );
+    return Object.keys(after).flatMap((key) => changedFields(before[key], after[key], path ? `${path}.${key}` : key));
   }
   return [{ path, value: after }];
 }
@@ -129,8 +123,7 @@ export class SettingsDraft<T> {
     this.options.enqueue(key, async () => {
       try {
         await this.write(edit);
-        if (this.edits.get(edit.path)?.revision === edit.revision)
-          this.edits.delete(edit.path);
+        if (this.edits.get(edit.path)?.revision === edit.revision) this.edits.delete(edit.path);
         this.publish(this.snapshot.failures, true);
       } catch (error) {
         const failure = this.options.failure(error);
@@ -138,10 +131,7 @@ export class SettingsDraft<T> {
           this.options.report(failure);
         }
         if (this.edits.get(edit.path)?.revision === edit.revision) {
-          this.publish(
-            { ...this.snapshot.failures, [edit.path]: failure },
-            false,
-          );
+          this.publish({ ...this.snapshot.failures, [edit.path]: failure }, false);
         }
       }
     });

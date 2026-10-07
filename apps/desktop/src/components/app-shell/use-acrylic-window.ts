@@ -22,7 +22,9 @@ export function useAcrylicWindow(enabled: boolean): void {
     root.classList.add(ACRYLIC_SCOPE_CLASS);
 
     const syncTheme = () => {
-      void voyaCommands().setWindowAcrylic(root.classList.contains("dark")).catch(() => undefined);
+      void voyaCommands()
+        .setWindowAcrylic(root.classList.contains("dark"))
+        .catch(() => undefined);
     };
     syncTheme();
 

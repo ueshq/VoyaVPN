@@ -2,12 +2,7 @@ import { queries } from "@voya/client/queries";
 import { Badge } from "@voya/ui/components/badge";
 import { Button } from "@voya/ui/components/button";
 import { Disclosure } from "@voya/ui/components/disclosure";
-import {
-  SelectField,
-  SwitchField,
-  TextAreaField,
-  TextField,
-} from "@voya/ui/components/form-fields";
+import { SelectField, SwitchField, TextAreaField, TextField } from "@voya/ui/components/form-fields";
 import { cn } from "@voya/ui/lib/utils";
 import type { TranslationKey } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -41,12 +36,7 @@ export function DnsPane({ controller }: { controller: ReturnType<typeof useDnsSe
   return (
     <section aria-label={t("panes.dns.title")} className="grid gap-4">
       {form ? (
-        <SimpleDnsForm
-          errors={fieldErrors}
-          issueCount={issueCount}
-          settings={form}
-          updateSimple={updateSimple}
-        />
+        <SimpleDnsForm errors={fieldErrors} issueCount={issueCount} settings={form} updateSimple={updateSimple} />
       ) : (
         <p className="text-sm text-muted-foreground">{t("panes.dns.loading")}</p>
       )}
@@ -69,9 +59,7 @@ function SimpleDnsForm({
   // The strategies below only apply once IPv6 is allowed; while the master
   // switch is off the generator forces every path to `ipv4_only`.
   const settingsQuery = useQuery(queries.appSettings);
-  const ipv6Off = settingsQuery.data
-    ? !settingsQuery.data.network.tun.ipv6Enabled
-    : false;
+  const ipv6Off = settingsQuery.data ? !settingsQuery.data.network.tun.ipv6Enabled : false;
   const strategyLabels: Record<DnsStrategy, string> = {
     preferIpv4: t("panes.dns.strategyIpv4"),
     preferIpv6: t("panes.dns.strategyIpv6"),
@@ -162,9 +150,7 @@ function SimpleDnsForm({
           checked={Boolean(settings.blockBindingQuery)}
           description={t("panes.dns.blockBindingQueryHint")}
           label={t("panes.dns.blockBindingQuery")}
-          onChange={(blockBindingQuery) =>
-            updateSimple({ blockBindingQuery })
-          }
+          onChange={(blockBindingQuery) => updateSimple({ blockBindingQuery })}
         />
         <SwitchField
           checked={Boolean(settings.fakeIp)}
@@ -180,10 +166,7 @@ function SimpleDnsForm({
           onChange={(globalFakeIp) => updateSimple({ globalFakeIp })}
         />
       </SettingsGroup>
-      <Disclosure
-        title={t("common.advanced")}
-        invalid={!!errors.hosts || !!errors.directExpectedIps}
-      >
+      <Disclosure title={t("common.advanced")} invalid={!!errors.hosts || !!errors.directExpectedIps}>
         <SettingsGroup title={t("settings.sections.dnsHosts")}>
           <TextAreaField
             commitOnBlur
@@ -199,9 +182,7 @@ function SimpleDnsForm({
             description={t("panes.dns.expectedHint")}
             label={t("panes.dns.expectedIps")}
             layout="row"
-            onChange={(directExpectedIps) =>
-              updateSimple({ directExpectedIps })
-            }
+            onChange={(directExpectedIps) => updateSimple({ directExpectedIps })}
             value={settings.directExpectedIps ?? ""}
           />
         </SettingsGroup>
@@ -231,8 +212,7 @@ function DnsPresets({
           <Button
             aria-pressed={selected}
             className={cn(
-              selected &&
-                "border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand",
+              selected && "border-primary bg-accent-blue-light text-brand hover:bg-accent-blue-light hover:text-brand",
             )}
             key={preset.value}
             onClick={() => onPick(preset.value)}

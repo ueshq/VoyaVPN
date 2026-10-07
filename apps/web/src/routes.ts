@@ -45,6 +45,4 @@ export function notFoundFileFor(locale: Locale): string {
   return locale === "en" ? "404.html" : `${locale}/404.html`;
 }
 
-export const ROUTES: Route[] = LOCALES.flatMap((locale) =>
-  PAGES.map((page) => ({ locale, page })),
-);
+export const ROUTES: Route[] = LOCALES.flatMap((locale) => PAGES.map((page) => ({ locale, page })));

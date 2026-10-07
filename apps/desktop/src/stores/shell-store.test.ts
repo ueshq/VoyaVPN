@@ -7,7 +7,11 @@ describe("shell navigation", () => {
     useShellStore.getState().setConnectionsView("proxies");
     useShellStore.getState().toggleSidebar();
     useShellStore.getState().setActiveTab("profiles");
-    expect(useShellStore.getState()).toMatchObject({ activeTab: "profiles", sidebarCollapsed: true, connectionsView: "proxies" });
+    expect(useShellStore.getState()).toMatchObject({
+      activeTab: "profiles",
+      sidebarCollapsed: true,
+      connectionsView: "proxies",
+    });
     useShellStore.getState().setActiveTab("connections");
     expect(useShellStore.getState().activeTab).toBe("connections");
   });
@@ -16,7 +20,10 @@ describe("shell navigation", () => {
     useShellStore.setState({ activeTab: "home", settingsTab: "general", focusPageTitle: false });
     useShellStore.getState().openSettings("advanced");
     expect(useShellStore.getState()).toMatchObject({
-      activeTab: "settings", settingsTab: "advanced", focusPageTitle: true, profilesAddMenuOpen: false,
+      activeTab: "settings",
+      settingsTab: "advanced",
+      focusPageTitle: true,
+      profilesAddMenuOpen: false,
     });
   });
 
@@ -24,12 +31,16 @@ describe("shell navigation", () => {
     useShellStore.getState().setActiveTab("home", true);
     useShellStore.getState().openProfilesAddMenu();
     expect(useShellStore.getState()).toMatchObject({
-      activeTab: "profiles", profilesAddMenuOpen: true, focusPageTitle: false,
+      activeTab: "profiles",
+      profilesAddMenuOpen: true,
+      focusPageTitle: false,
     });
     useShellStore.getState().setActiveTab("settings");
     useShellStore.getState().setActiveTab("profiles", true);
     expect(useShellStore.getState()).toMatchObject({
-      activeTab: "profiles", profilesAddMenuOpen: false, focusPageTitle: true,
+      activeTab: "profiles",
+      profilesAddMenuOpen: false,
+      focusPageTitle: true,
     });
   });
 
@@ -43,7 +54,11 @@ describe("shell navigation", () => {
     useShellStore.getState().setActiveTab("rules", true);
     expect(useShellStore.getState().focusPageTitle).toBe(true);
     useShellStore.getState().consumeFocusPageTitle();
-    expect(useShellStore.getState()).toMatchObject({ activeTab: "rules", focusPageTitle: false, profilesAddMenuOpen: false });
+    expect(useShellStore.getState()).toMatchObject({
+      activeTab: "rules",
+      focusPageTitle: false,
+      profilesAddMenuOpen: false,
+    });
   });
 
   it("keeps the Network activity search while switching pages", () => {

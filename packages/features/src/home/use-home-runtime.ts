@@ -10,11 +10,7 @@ import { useActivePolicyGroup } from "../profiles/use-policy-group-runtime";
 import { homeMapMarker } from "./map-marker";
 import { useConnectionIp } from "./use-connection-ip";
 
-import {
-  isRuntimeTransitioning,
-  runRuntimeAction,
-  useRuntimeBusy,
-} from "@voya/client/runtime-action";
+import { isRuntimeTransitioning, runRuntimeAction, useRuntimeBusy } from "@voya/client/runtime-action";
 import { tunProviderLabel, tunProviderPathMismatchDescription } from "../shell/tun-provider-text";
 
 /**
@@ -39,34 +35,28 @@ export function useHomeRuntime() {
   const busy = useRuntimeBusy();
   const inProgress = isRuntimeTransitioning(state);
 
-  const activeProfile =
-    profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
+  const activeProfile = profilesQuery.data?.entries.find((item) => item.isActive) ?? null;
   // Connection details follow the running node rather than the saved selection.
   const runningId = runningProfileId(coreState);
   const tunEnabled = tun?.enabled ?? false;
 
   const runningEntry = runningId
-    ? (profilesQuery.data?.entries.find(
-        (item) => item.profile.id === runningId,
-      ) ?? null)
+    ? (profilesQuery.data?.entries.find((item) => item.profile.id === runningId) ?? null)
     : null;
   const nodeEntry = connected ? runningEntry : activeProfile;
   // Shares the node page's query, so activating a group there shows up here.
   const { activeGroup, policyGroupsQuery, runtime: groupRuntime } = useActivePolicyGroup();
   // The member the running group sends traffic through, and its node.
   const groupNow = activeGroup
-    ? (groupRuntime?.members.find(
-        (member) => member.profileId === groupRuntime.nowProfileId,
-      ) ?? null)
+    ? (groupRuntime?.members.find((member) => member.profileId === groupRuntime.nowProfileId) ?? null)
     : null;
   const groupNowEntry = groupNow
-    ? (profilesQuery.data?.entries.find(
-        (entry) => entry.profile.id === groupNow.profileId,
-      ) ?? null)
+    ? (profilesQuery.data?.entries.find((entry) => entry.profile.id === groupNow.profileId) ?? null)
     : null;
   const exitIp = useConnectionIp();
 
-  const ready = profilesQuery.isSuccess && policyGroupsQuery.isSuccess && (activeProfile !== null || activeGroup !== null);
+  const ready =
+    profilesQuery.isSuccess && policyGroupsQuery.isSuccess && (activeProfile !== null || activeGroup !== null);
 
   function handlePrimaryAction() {
     if (!connected && state !== "cleanupPending" && !ready) return;
@@ -124,7 +114,10 @@ export function useHomeRuntime() {
     profilesError: profilesQuery.error ?? policyGroupsQuery.error,
     restart,
     retryLastAction,
-    retryProfiles: () => { void profilesQuery.refetch(); void policyGroupsQuery.refetch(); },
+    retryProfiles: () => {
+      void profilesQuery.refetch();
+      void policyGroupsQuery.refetch();
+    },
     runningId,
     state,
     tunIssue: homeTunIssue(tun, t, { ready }),
@@ -181,7 +174,6 @@ export function homeTunIssue(
     return t(VPN_ERROR_KEYS[tun.backend as keyof typeof VPN_ERROR_KEYS]);
   }
   const needsAttention =
-    ["error", "permissionRequired", "missingComponent"].includes(tun.providerState) ||
-    tun.lastProviderError;
+    ["error", "permissionRequired", "missingComponent"].includes(tun.providerState) || tun.lastProviderError;
   return needsAttention ? tunProviderLabel(tun, t, options) : null;
 }

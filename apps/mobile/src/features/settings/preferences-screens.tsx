@@ -50,43 +50,43 @@ export function GeneralScreen() {
       {app.working ? <Spinner size="sm" /> : null}
       <ErrorNotice error={app.error} retry={app.retry} />
 
-      {settings ? <>
-        <View>
-          <SectionHeader title={t("settings.sections.appearance")} />
-          <Card className="gap-3 p-4">
-            <Typography className="text-sm font-medium text-subtle">{t("modal.theme")}</Typography>
-            <SegmentedControl
-              options={THEME_MODES.map(({ labelKey, value }) => ({ label: t(labelKey), value }))}
-              value={settings.appearance.theme}
-              onChange={(theme) => app.setAppearance({ ...settings.appearance, theme })}
-            />
-          </Card>
-        </View>
+      {settings ? (
+        <>
+          <View>
+            <SectionHeader title={t("settings.sections.appearance")} />
+            <Card className="gap-3 p-4">
+              <Typography className="text-sm font-medium text-subtle">{t("modal.theme")}</Typography>
+              <SegmentedControl
+                options={THEME_MODES.map(({ labelKey, value }) => ({ label: t(labelKey), value }))}
+                value={settings.appearance.theme}
+                onChange={(theme) => app.setAppearance({ ...settings.appearance, theme })}
+              />
+            </Card>
+          </View>
 
-        <View>
-          <SectionHeader title={t("modal.language")} />
-          {/* Theme and language are the same kind of choice, so they go through
+          <View>
+            <SectionHeader title={t("modal.language")} />
+            {/* Theme and language are the same kind of choice, so they go through
               the same write: `setAppearance` previews at once and persists on
               the backend's acknowledgement. */}
-          <ListGroup>
-            {localeOptions.map((locale, index) => {
-              const selected = settings.appearance.language === locale.code;
-              return (
-                <ListRow
-                  key={locale.code}
-                  last={index === localeOptions.length - 1}
-                  title={locale.nativeName}
-                  trailing={selected ? <Check size={20} color={checkColor} accessible={false} /> : null}
-                  onPress={() => app.setAppearance({ ...settings.appearance, language: locale.code })}
-                  accessibilityState={{ selected }}
-                />
-              );
-            })}
-          </ListGroup>
-        </View>
-
-
-      </> : null}
+            <ListGroup>
+              {localeOptions.map((locale, index) => {
+                const selected = settings.appearance.language === locale.code;
+                return (
+                  <ListRow
+                    key={locale.code}
+                    last={index === localeOptions.length - 1}
+                    title={locale.nativeName}
+                    trailing={selected ? <Check size={20} color={checkColor} accessible={false} /> : null}
+                    onPress={() => app.setAppearance({ ...settings.appearance, language: locale.code })}
+                    accessibilityState={{ selected }}
+                  />
+                );
+              })}
+            </ListGroup>
+          </View>
+        </>
+      ) : null}
     </DetailScreen>
   );
 }
@@ -109,7 +109,11 @@ export function MaintenanceScreen() {
       <Card className="gap-4 p-5">
         <IconBadge icon={Database} />
         <View className="gap-1">
-          <Typography accessibilityRole="header" maxFontSizeMultiplier={2} className="text-lg font-semibold text-foreground">
+          <Typography
+            accessibilityRole="header"
+            maxFontSizeMultiplier={2}
+            className="text-lg font-semibold text-foreground"
+          >
             {t("updates.ruleLibraryTitle")}
           </Typography>
           <Typography className="text-base text-subtle">{t("updates.ruleLibraryDescription")}</Typography>
@@ -144,12 +148,24 @@ export function MaintenanceScreen() {
           data this app keeps current — so they present the same way, and the
           logs card names where the lines live rather than being a lone list
           row under a feature card. */}
-      <ListGroup><ListRow last chevron testID="maintenance-activity" title={t("tabs.connections")} onPress={() => openPage("activity")} /></ListGroup>
+      <ListGroup>
+        <ListRow
+          last
+          chevron
+          testID="maintenance-activity"
+          title={t("tabs.connections")}
+          onPress={() => openPage("activity")}
+        />
+      </ListGroup>
       <CoreLogOption />
       <Card className="gap-4 p-5">
         <IconBadge icon={ScrollText} />
         <View className="gap-1">
-          <Typography accessibilityRole="header" maxFontSizeMultiplier={2} className="text-lg font-semibold text-foreground">
+          <Typography
+            accessibilityRole="header"
+            maxFontSizeMultiplier={2}
+            className="text-lg font-semibold text-foreground"
+          >
             {t("tabs.logs")}
           </Typography>
           {/* The lines themselves get a screen of their own; this says whether
@@ -160,11 +176,7 @@ export function MaintenanceScreen() {
             {t(coreLog.data ? "settings.logs.coreLogOn" : "settings.logs.coreLogOff")}
           </Typography>
         </View>
-        <Button
-          testID="maintenance-logs"
-          variant="secondary"
-          onPress={() => openPage("logs")}
-        >
+        <Button testID="maintenance-logs" variant="secondary" onPress={() => openPage("logs")}>
           <Button.Label>{t("mobile.openLogs")}</Button.Label>
         </Button>
       </Card>

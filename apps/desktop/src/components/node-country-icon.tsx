@@ -5,10 +5,11 @@ import { Globe2 } from "lucide-react";
 // subdivision flags (`gb-eng`, `es-ct`, …). Globbing just those, instead of
 // importing the flag-icons stylesheet, keeps the ~290 other SVGs out of the
 // package and the flag rules out of the startup CSS.
-const flagUrls = import.meta.glob<string>(
-  ["/node_modules/flag-icons/flags/4x3/??.svg", "!**/xx.svg"],
-  { eager: true, import: "default", query: "?url" },
-);
+const flagUrls = import.meta.glob<string>(["/node_modules/flag-icons/flags/4x3/??.svg", "!**/xx.svg"], {
+  eager: true,
+  import: "default",
+  query: "?url",
+});
 
 const flagUrlByCode = new Map(
   Object.entries(flagUrls).map(([path, url]) => [path.slice(-"xx.svg".length, -".svg".length), url]),
@@ -21,13 +22,13 @@ const flagUrlByCode = new Map(
 export function NodeCountryIcon({ countryCode }: { countryCode: string | null | undefined }) {
   const code = countryCode?.trim().toLowerCase();
   const flagUrl = code ? flagUrlByCode.get(code) : undefined;
-  return flagUrl
-    ? (
-      <span
-        aria-hidden="true"
-        className={`fi fi-${code} node-country-flag`}
-        style={{ backgroundImage: `url("${flagUrl}")` }}
-      />
-    )
-    : <Globe2 aria-hidden="true" className="size-6" strokeWidth={1.5} />;
+  return flagUrl ? (
+    <span
+      aria-hidden="true"
+      className={`fi fi-${code} node-country-flag`}
+      style={{ backgroundImage: `url("${flagUrl}")` }}
+    />
+  ) : (
+    <Globe2 aria-hidden="true" className="size-6" strokeWidth={1.5} />
+  );
 }

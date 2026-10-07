@@ -14,8 +14,35 @@ const ipc = installFakeCommands({
   updateSubscriptions: vi.fn(),
 });
 
-const source: Subscription = { id: "source", remarks: "Source", url: "https://example.test/sub", additionalUrl: "", userAgent: "", enabled: true, sort: 0, filter: null, converterTarget: null, autoUpdateIntervalMinutes: null };
-const success: SubscriptionUpdateResult = { imported: 2, updated: 1, skipped: 0, removedExisting: 0, messages: ["Source->imported 2 nodes"], outcomes: [{ subscriptionId: "source", status: "success", reason: "updated", imported: 2, removedExisting: 0, diagnostic: null }] };
+const source: Subscription = {
+  id: "source",
+  remarks: "Source",
+  url: "https://example.test/sub",
+  additionalUrl: "",
+  userAgent: "",
+  enabled: true,
+  sort: 0,
+  filter: null,
+  converterTarget: null,
+  autoUpdateIntervalMinutes: null,
+};
+const success: SubscriptionUpdateResult = {
+  imported: 2,
+  updated: 1,
+  skipped: 0,
+  removedExisting: 0,
+  messages: ["Source->imported 2 nodes"],
+  outcomes: [
+    {
+      subscriptionId: "source",
+      status: "success",
+      reason: "updated",
+      imported: 2,
+      removedExisting: 0,
+      diagnostic: null,
+    },
+  ],
+};
 function setup() {
   return renderHook(() => {
     const operation = useNodeOperation();
@@ -45,20 +72,38 @@ it("carries whatever the caller wants focus returned to, and forgets it otherwis
 
 it("deduplicates an in-flight source update and releases it after completion", async () => {
   let finish!: (value: SubscriptionUpdateResult) => void;
-  ipc.updateSubscriptions.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  ipc.updateSubscriptions.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
   const { result } = setup();
   let pending!: Promise<void>;
-  act(() => { pending = result.current.updateSubscription(source.id); });
+  act(() => {
+    pending = result.current.updateSubscription(source.id);
+  });
   expect(result.current.updatingSubscriptions.has(source.id)).toBe(true);
   await act(() => result.current.updateSubscription(source.id));
   expect(ipc.updateSubscriptions).toHaveBeenCalledTimes(1);
-  await act(async () => { finish(success); await pending; });
+  await act(async () => {
+    finish(success);
+    await pending;
+  });
   expect(result.current.updatingSubscriptions.size).toBe(0);
   expect(result.current.operationMessage).toBeTruthy();
 });
 
 it("reports a failed source update and permits a retry", async () => {
-  ipc.updateSubscriptions.mockResolvedValueOnce({ ...success, imported: 0, updated: 0, skipped: 1, outcomes: [{ ...success.outcomes[0], status: "failed", reason: "downloadFailed" }], messages: ["download failed"] }).mockResolvedValueOnce(success);
+  ipc.updateSubscriptions
+    .mockResolvedValueOnce({
+      ...success,
+      imported: 0,
+      updated: 0,
+      skipped: 1,
+      outcomes: [{ ...success.outcomes[0], status: "failed", reason: "downloadFailed" }],
+      messages: ["download failed"],
+    })
+    .mockResolvedValueOnce(success);
   const { result } = setup();
   await act(() => result.current.updateSubscription(source.id));
   expect(result.current.operationError).toBe(i18next.t("mobile.updateFailed"));
@@ -68,7 +113,13 @@ it("reports a failed source update and permits a retry", async () => {
 });
 
 it("explains a skipped update even when the backend supplied no message", async () => {
-  ipc.updateSubscriptions.mockResolvedValue({ ...success, imported: 0, updated: 0, skipped: 1, outcomes: [{ ...success.outcomes[0], status: "failed", reason: "emptyContent" }] });
+  ipc.updateSubscriptions.mockResolvedValue({
+    ...success,
+    imported: 0,
+    updated: 0,
+    skipped: 1,
+    outcomes: [{ ...success.outcomes[0], status: "failed", reason: "emptyContent" }],
+  });
   const { result } = setup();
   await act(() => result.current.updateSubscription(source.id));
   expect(result.current.operationError).toBeTruthy();
@@ -90,38 +141,64 @@ it("keeps a failed deletion open and closes it only after a successful retry", a
 
 it("guards deletion against a second click before the first one resolves", async () => {
   let finish!: (count: number) => void;
-  ipc.deleteSubscriptions.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  ipc.deleteSubscriptions.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
   const { result } = setup();
   act(() => result.current.confirmSubscriptionDeletion(source, "delete-button"));
   let pending!: Promise<void>;
-  act(() => { pending = result.current.removeSubscription(); });
+  act(() => {
+    pending = result.current.removeSubscription();
+  });
   expect(result.current.deletingSubscriptionPending).toBe(true);
   await act(() => result.current.removeSubscription());
   expect(ipc.deleteSubscriptions).toHaveBeenCalledTimes(1);
-  await act(async () => { finish(1); await pending; });
+  await act(async () => {
+    finish(1);
+    await pending;
+  });
   expect(result.current.deletingSubscriptionPending).toBe(false);
   expect(result.current.deletingSubscription).toBeNull();
 });
 
 it("updates every subscription at once and ignores a second request while running", async () => {
   let finish!: (value: SubscriptionUpdateResult) => void;
-  ipc.updateSubscriptions.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  ipc.updateSubscriptions.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
   const { result } = setup();
   let pending!: Promise<void>;
-  act(() => { pending = result.current.updateAllSubscriptions(); });
+  act(() => {
+    pending = result.current.updateAllSubscriptions();
+  });
   expect(result.current.updatingAllSubscriptions).toBe(true);
   await act(() => result.current.updateAllSubscriptions());
   expect(ipc.updateSubscriptions).toHaveBeenCalledOnce();
   expect(ipc.updateSubscriptions).toHaveBeenCalledWith(null);
-  await act(async () => { finish(success); await pending; });
+  await act(async () => {
+    finish(success);
+    await pending;
+  });
   expect(result.current.updatingAllSubscriptions).toBe(false);
   expect(result.current.operationMessage).toBeTruthy();
 });
 
 it("updates only newly imported sources once, aggregates success and preserves every failure", async () => {
-  ipc.updateSubscriptions.mockResolvedValueOnce(success)
+  ipc.updateSubscriptions
+    .mockResolvedValueOnce(success)
     .mockRejectedValueOnce(new Error("failed https://secret.example/sub?token=hidden"))
-    .mockResolvedValueOnce({ ...success, imported: 0, updated: 0, skipped: 1, outcomes: [{ ...success.outcomes[0], status: "failed", reason: "downloadFailed" }], messages: ["timed out"] })
+    .mockResolvedValueOnce({
+      ...success,
+      imported: 0,
+      updated: 0,
+      skipped: 1,
+      outcomes: [{ ...success.outcomes[0], status: "failed", reason: "downloadFailed" }],
+      messages: ["timed out"],
+    })
     .mockResolvedValueOnce(success);
   const { result } = setup();
   await act(() => result.current.updateImportedSubscriptions(["a", "b", "a", "c", "d"], () => true));
@@ -141,10 +218,16 @@ it("does not update ordinary node imports or imports whose owner has left", asyn
 
 it("blocks duplicate manual updates during import and stops adding work after unmount", async () => {
   let finish!: (value: SubscriptionUpdateResult) => void;
-  ipc.updateSubscriptions.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  ipc.updateSubscriptions.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
   const { result, unmount } = setup();
   let pending!: Promise<void>;
-  act(() => { pending = result.current.updateImportedSubscriptions(["a", "b"], () => true); });
+  act(() => {
+    pending = result.current.updateImportedSubscriptions(["a", "b"], () => true);
+  });
   expect(result.current.operationMessage).toContain("Updating");
   await act(async () => {
     await result.current.updateSubscription("a");

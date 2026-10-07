@@ -70,11 +70,15 @@ export function loginItemPlistProblems({ fileName, plist, executableName }) {
   const problems = [];
   const label = fileName.replace(/\.plist$/u, "");
   if (plist?.Label !== label) {
-    problems.push(`Label is ${JSON.stringify(plist?.Label)}, expected "${label}": SMAppService finds the job by its file name`);
+    problems.push(
+      `Label is ${JSON.stringify(plist?.Label)}, expected "${label}": SMAppService finds the job by its file name`,
+    );
   }
   const program = `Contents/MacOS/${executableName}`;
   if (plist?.BundleProgram !== program) {
-    problems.push(`BundleProgram is ${JSON.stringify(plist?.BundleProgram)}, expected "${program}" (CFBundleExecutable)`);
+    problems.push(
+      `BundleProgram is ${JSON.stringify(plist?.BundleProgram)}, expected "${program}" (CFBundleExecutable)`,
+    );
   }
   const argumentsAfterProgram = Array.isArray(plist?.ProgramArguments) ? plist.ProgramArguments.slice(1) : [];
   if (!argumentsAfterProgram.includes(autostartArgument)) {
@@ -89,7 +93,12 @@ export function verifyLoginItemPlist(appContents, { log = false } = {}) {
   requirePath(path, "Launch-at-login agent plist", { log });
   const plist = JSON.parse(checkedCapture("plutil", ["-convert", "json", "-o", "-", path]).stdout);
   const executableName = checkedCapture("plutil", [
-    "-extract", "CFBundleExecutable", "raw", "-o", "-", resolve(appContents, "Info.plist"),
+    "-extract",
+    "CFBundleExecutable",
+    "raw",
+    "-o",
+    "-",
+    resolve(appContents, "Info.plist"),
   ]).stdout.trim();
   const problems = loginItemPlistProblems({ fileName: loginItemPlistName, plist, executableName });
   if (problems.length > 0) {
@@ -128,7 +137,9 @@ export function codesignEntitlements(path) {
 }
 
 export function normalizeDistribution(value) {
-  const normalized = String(value ?? "").trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
   if (!normalized || normalized === "auto") {
     return "auto";
   }
@@ -176,8 +187,8 @@ export function resolvePacketTunnelVersions({ appShortVersion, appBundleVersion,
   const marketing = text(appShortVersion) || text(packageVersion);
   if (!marketing) {
     throw new Error(
-      "Unable to resolve a PacketTunnel version: the app Info.plist has no CFBundleShortVersionString "
-        + "and package.json has no version.",
+      "Unable to resolve a PacketTunnel version: the app Info.plist has no CFBundleShortVersionString " +
+        "and package.json has no version.",
     );
   }
 
@@ -246,14 +257,19 @@ export function compareMacosVersions(left, right) {
  * the provider for macOS 26 inside an app that declared 10.15. Apple Silicon
  * has no release before macOS 11, so an arm64 build is raised to at least 11.0.
  */
-export function resolvePacketTunnelDeploymentTarget({ appMinimumSystemVersion, fallbackMinimumSystemVersion, hostArch = process.arch }) {
+export function resolvePacketTunnelDeploymentTarget({
+  appMinimumSystemVersion,
+  fallbackMinimumSystemVersion,
+  hostArch = process.arch,
+}) {
   const declared = text(appMinimumSystemVersion) || text(fallbackMinimumSystemVersion);
   if (!declared) {
-    throw new Error("Unable to resolve the PacketTunnel deployment target: the app declares no LSMinimumSystemVersion.");
+    throw new Error(
+      "Unable to resolve the PacketTunnel deployment target: the app declares no LSMinimumSystemVersion.",
+    );
   }
   const arch = hostArch === "arm64" ? "arm64" : "x86_64";
-  const minimumSystemVersion =
-    arch === "arm64" && compareMacosVersions(declared, "11.0") < 0 ? "11.0" : declared;
+  const minimumSystemVersion = arch === "arm64" && compareMacosVersions(declared, "11.0") < 0 ? "11.0" : declared;
   return { minimumSystemVersion, target: `${arch}-apple-macos${minimumSystemVersion}` };
 }
 

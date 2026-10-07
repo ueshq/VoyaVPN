@@ -6,9 +6,16 @@ import { useToastStore } from "@voya/client/toast-store";
 
 describe("settings form", () => {
   it("associates row labels and groups with accessible controls", () => {
-    render(<SettingsGroup title="Startup"><SettingsRow htmlFor="field" label="Name"><Input id="field" /></SettingsRow>
-      <SettingsFields errors={{ autostart: "Not allowed" }}><SettingsSwitch field="autostart" checked label="Autostart" onCheckedChange={vi.fn()} /></SettingsFields>
-    </SettingsGroup>);
+    render(
+      <SettingsGroup title="Startup">
+        <SettingsRow htmlFor="field" label="Name">
+          <Input id="field" />
+        </SettingsRow>
+        <SettingsFields errors={{ autostart: "Not allowed" }}>
+          <SettingsSwitch field="autostart" checked label="Autostart" onCheckedChange={vi.fn()} />
+        </SettingsFields>
+      </SettingsGroup>,
+    );
     expect(screen.getByRole("region", { name: "Startup" })).toBeInTheDocument();
     expect(screen.getByLabelText("Name")).toHaveAttribute("id", "field");
     expect(screen.getByRole("switch", { name: "Autostart" })).toHaveAccessibleDescription("Not allowed");
@@ -36,7 +43,9 @@ describe("settings form", () => {
   it("clears nullable numbers and keeps a typing mistake out of the toasts", () => {
     useToastStore.setState({ toasts: [] });
     const onChange = vi.fn();
-    const { unmount } = render(<NumberField field="pageSize" label="Batch size" nullable value={10} onChange={onChange} />);
+    const { unmount } = render(
+      <NumberField field="pageSize" label="Batch size" nullable value={10} onChange={onChange} />,
+    );
     fireEvent.change(screen.getByLabelText("Batch size"), { target: { value: "" } });
     fireEvent.blur(screen.getByLabelText("Batch size"));
     expect(onChange).toHaveBeenCalledWith(null);

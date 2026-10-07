@@ -74,16 +74,26 @@ describe("arrangeConnections", () => {
     const connections = [alpha, beta];
     const hays = connections.map(connectionSearchHay);
 
-    expect(arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "updater" }, sort: null })).toEqual([beta]);
-    expect(arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "alpha" }, sort: null })).toEqual([alpha]);
-    expect(arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "tokyo" }, sort: null })).toEqual([]);
+    expect(
+      arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "updater" }, sort: null }),
+    ).toEqual([beta]);
+    expect(
+      arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "alpha" }, sort: null }),
+    ).toEqual([alpha]);
+    expect(
+      arrangeConnections(connections, { routeTexts: null, search: { hays, needle: "tokyo" }, sort: null }),
+    ).toEqual([]);
   });
 
   it("sorts by the precomputed route text and combined traffic in both directions", () => {
     const connections = [alpha, beta];
     const routeTexts = ["Alpha", "Direct"];
 
-    const byRoute = arrangeConnections(connections, { routeTexts, search: null, sort: { column: "route", ascending: true } });
+    const byRoute = arrangeConnections(connections, {
+      routeTexts,
+      search: null,
+      sort: { column: "route", ascending: true },
+    });
     const byTraffic = arrangeConnections(connections, {
       routeTexts: null,
       search: null,
@@ -119,9 +129,12 @@ describe("arrangeConnections", () => {
     const tied = { ...alpha, id: "alpha-copy" };
     const connections = [beta, alpha, tied, unknown];
     const before = [...connections];
-    const sortBy = (column: "host" | "process", ascending: boolean) => arrangeConnections(connections, {
-      routeTexts: null, search: null, sort: { column, ascending },
-    }).map(({ id }) => id);
+    const sortBy = (column: "host" | "process", ascending: boolean) =>
+      arrangeConnections(connections, {
+        routeTexts: null,
+        search: null,
+        sort: { column, ascending },
+      }).map(({ id }) => id);
 
     expect(sortBy("host", true)).toEqual(["alpha", "alpha-copy", "beta", "unknown"]);
     expect(sortBy("host", false)).toEqual(["unknown", "beta", "alpha", "alpha-copy"]);
@@ -135,7 +148,9 @@ describe("arrangeConnections", () => {
     const zero = makeConnection({ id: "zero", upload: 0, download: null });
     const connections = [beta, unknown, alpha, zero];
     const rows = arrangeConnections(connections, {
-      routeTexts: null, search: null, sort: { column: "traffic", ascending: true },
+      routeTexts: null,
+      search: null,
+      sort: { column: "traffic", ascending: true },
     });
 
     expect(rows.map(({ id }) => id)).toEqual(["unknown", "zero", "alpha", "beta"]);

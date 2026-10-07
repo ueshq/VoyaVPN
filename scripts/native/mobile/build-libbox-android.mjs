@@ -39,11 +39,9 @@ function buildLibbox() {
   // it out, so one from an earlier build would satisfy the "was it produced"
   // check after a build that produced nothing.
   rmSync(resolve(sourceDir, BUILT_AAR), { force: true });
-  run(
-    "go",
-    ["run", "./cmd/internal/build_libbox", "-target", "android", "-platform", ANDROID_PLATFORMS],
-    { cwd: sourceDir },
-  );
+  run("go", ["run", "./cmd/internal/build_libbox", "-target", "android", "-platform", ANDROID_PLATFORMS], {
+    cwd: sourceDir,
+  });
 }
 
 /** Copies the archive into the app, where Gradle's `libs` fileTree finds it. */

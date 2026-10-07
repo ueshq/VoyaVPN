@@ -31,12 +31,7 @@ export const subscriptionFormSchema = z
       return;
     }
     const hours = Number(value.hours);
-    if (
-      !value.hours.trim() ||
-      !Number.isFinite(hours) ||
-      hours <= 0 ||
-      hours * 60 > MAX_INTERVAL_MINUTES
-    ) {
+    if (!value.hours.trim() || !Number.isFinite(hours) || hours <= 0 || hours * 60 > MAX_INTERVAL_MINUTES) {
       context.addIssue({
         code: "custom",
         path: ["hours"],

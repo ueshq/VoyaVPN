@@ -33,9 +33,7 @@ describe("lockfile duplicate gate", () => {
   it("fails when a package resolves to more than one version", () => {
     const { failures } = checkLockfile(lockfile, ["@radix-ui/react-dialog"], []);
 
-    expect(failures).toEqual([
-      "@radix-ui/react-dialog resolves to 2 versions: 1.1.15, 1.1.17",
-    ]);
+    expect(failures).toEqual(["@radix-ui/react-dialog resolves to 2 versions: 1.1.15, 1.1.17"]);
   });
 
   it("passes an unscoped package that resolves once", () => {
@@ -49,16 +47,12 @@ describe("lockfile duplicate gate", () => {
     // The copies that broke the app were transitive ones nobody had listed.
     const { failures } = checkLockfile(lockfile, [], ["@radix-ui/"]);
 
-    expect(failures).toEqual([
-      "@radix-ui/react-dialog resolves to 2 versions: 1.1.15, 1.1.17",
-    ]);
+    expect(failures).toEqual(["@radix-ui/react-dialog resolves to 2 versions: 1.1.15, 1.1.17"]);
   });
 
   it("fails loudly when a listed package left the lockfile", () => {
     const { failures } = checkLockfile(lockfile, ["preact"], []);
 
-    expect(failures).toEqual([
-      "preact is not in the lockfile; drop it from the list or restore the dependency",
-    ]);
+    expect(failures).toEqual(["preact is not in the lockfile; drop it from the list or restore the dependency"]);
   });
 });

@@ -36,18 +36,30 @@ export function HomeModeSummary() {
 
   return (
     <div className="home-mode-summary">
-      {core && captureKnown ? <Button
-        className="h-auto min-h-8 whitespace-normal"
-        size="sm" variant="ghost"
-        onClick={() => useShellStore.getState().openSettings("connection")}
-      >{t(connected ? "home.mode.current" : "home.mode.next", { mode: t(captureKey) })}</Button> : null}
-      <Button className="home-mode-chip h-auto min-h-8 whitespace-normal" size="sm" variant="ghost" onClick={() => useShellStore.getState().setActiveTab("rules", true)}>
+      {core && captureKnown ? (
+        <Button
+          className="h-auto min-h-8 whitespace-normal"
+          size="sm"
+          variant="ghost"
+          onClick={() => useShellStore.getState().openSettings("connection")}
+        >
+          {t(connected ? "home.mode.current" : "home.mode.next", { mode: t(captureKey) })}
+        </Button>
+      ) : null}
+      <Button
+        className="home-mode-chip h-auto min-h-8 whitespace-normal"
+        size="sm"
+        variant="ghost"
+        onClick={() => useShellStore.getState().setActiveTab("rules", true)}
+      >
         {traffic.mode
           ? t("home.mode.routing", { mode: t(traffic.mode === "global" ? "home.globalModeChip" : "home.mode.rule") })
           : t("panes.routing.trafficModeUnavailable")}
       </Button>
       {pending || (connected && apply.data?.action !== undefined && apply.data.action !== "none") ? (
-        <p className="w-full text-center text-xs text-warning" role="status">{t(pending ? "home.modePendingReason" : "settings.apply.pending")}</p>
+        <p className="w-full text-center text-xs text-warning" role="status">
+          {t(pending ? "home.modePendingReason" : "settings.apply.pending")}
+        </p>
       ) : null}
     </div>
   );

@@ -2,12 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { repoRootFromScript } from "../lib/common.mjs";
 import { readJson, walkFilesSync } from "../lib/fs.mjs";
-import {
-  EXTERNAL_KEY_NAMESPACES,
-  inspectI18nSource,
-  pluralBaseKey,
-  unusedTranslationKeys,
-} from "./i18n-analyzer.mjs";
+import { EXTERNAL_KEY_NAMESPACES, inspectI18nSource, pluralBaseKey, unusedTranslationKeys } from "./i18n-analyzer.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const localesDir = resolve(repoRoot, "packages/i18n/src/locales");
@@ -162,10 +157,7 @@ function formatList(items) {
 function productionSourceFiles(root) {
   return walkFilesSync(root, {
     matchDirectory: (name) => !["__tests__", "test", "tests"].includes(name),
-    match: (name) =>
-      /\.(ts|tsx)$/.test(name)
-      && !/\.(test|spec)\.(ts|tsx)$/.test(name)
-      && name !== "bindings.ts",
+    match: (name) => /\.(ts|tsx)$/.test(name) && !/\.(test|spec)\.(ts|tsx)$/.test(name) && name !== "bindings.ts",
   });
 }
 

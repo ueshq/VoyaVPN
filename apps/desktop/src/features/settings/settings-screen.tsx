@@ -5,12 +5,7 @@ import { PageContent, PageSection, PageTitle } from "@/components/app-shell/page
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { Button } from "@voya/ui/components/button";
 import { Skeleton } from "@voya/ui/components/skeleton";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@voya/ui/components/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@voya/ui/components/tabs";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { TranslationKey } from "@voya/i18n";
 import { DnsPane } from "@/features/dns/dns-pane";
@@ -38,9 +33,7 @@ export function SettingsScreen() {
   const { t } = useI18n();
   const controller = useAppSettings();
   const tab = useShellStore((state) => state.settingsTab);
-  const [visited, setVisited] = useState<ReadonlySet<SettingsTab>>(
-    () => new Set([tab]),
-  );
+  const [visited, setVisited] = useState<ReadonlySet<SettingsTab>>(() => new Set([tab]));
   if (!visited.has(tab)) setVisited(new Set(visited).add(tab));
   const dns = useDnsSettings(visited.has("connection"));
   // App settings and DNS share one save queue, so either controller reports both.
@@ -50,10 +43,7 @@ export function SettingsScreen() {
   function changeTab(value: string) {
     const next = tabs.find((item) => item.value === value)?.value;
     if (!next) return;
-    if (
-      document.activeElement instanceof HTMLInputElement ||
-      document.activeElement instanceof HTMLTextAreaElement
-    )
+    if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement)
       document.activeElement.blur();
     // The render above marks the tab visited once the store reports it.
     useShellStore.getState().setSettingsTab(next);
@@ -61,11 +51,7 @@ export function SettingsScreen() {
 
   return (
     <PageSection aria-label={t("modal.settings")}>
-      <Tabs
-        className="flex min-h-0 flex-1 flex-col gap-0"
-        value={tab}
-        onValueChange={changeTab}
-      >
+      <Tabs className="flex min-h-0 flex-1 flex-col gap-0" value={tab} onValueChange={changeTab}>
         <PageTitle
           actions={
             <TabsList aria-label={t("settings.categories")}>
@@ -79,11 +65,7 @@ export function SettingsScreen() {
           title={t("modal.settings")}
         />
         <PageContent>
-          <SettingsApplyStatus
-            failed={!!error}
-            saved={controller.saved || dns.saved}
-            saving={saving}
-          />
+          <SettingsApplyStatus failed={!!error} saved={controller.saved || dns.saved} saving={saving} />
           {error ? (
             <InlinePageError>
               <span>{error}</span>
@@ -114,11 +96,7 @@ export function SettingsScreen() {
                   {!visited.has(item.value) ? null : item.value === "updates" ? (
                     <UpdatesPanel />
                   ) : (
-                    <AppSettingsPane
-                      controller={controller}
-                      dns={dns}
-                      tab={item.value}
-                    />
+                    <AppSettingsPane controller={controller} dns={dns} tab={item.value} />
                   )}
                 </TabsContent>
               ))}

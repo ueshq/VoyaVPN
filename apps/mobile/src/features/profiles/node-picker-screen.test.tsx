@@ -9,7 +9,9 @@ import { renderScreen } from "~/test/providers";
 import * as navigation from "~/app/navigation";
 import { NodePickerScreen } from "./node-picker-screen";
 
-beforeAll(async () => { await localeReady; });
+beforeAll(async () => {
+  await localeReady;
+});
 beforeEach(() => {
   registerMobileBackend(mockTransport());
   useRuntimeEventStore.setState(useRuntimeEventStore.getInitialState());
@@ -19,7 +21,9 @@ beforeEach(() => {
 afterEach(() => jest.restoreAllMocks());
 it("chooses without connecting while stopped and offers no management actions", async () => {
   const backend = mockBackend();
-  backend.state.profiles.forEach((entry) => { entry.isActive = false; });
+  backend.state.profiles.forEach((entry) => {
+    entry.isActive = false;
+  });
   const navigate = jest.spyOn(navigation, "navigateToTab").mockImplementation(() => {});
   await renderScreen(<NodePickerScreen />);
   const row = await screen.findByText("🇯🇵 Tokyo");
@@ -41,7 +45,11 @@ it("searches without testing nodes and filters deleted recent ids", async () => 
 it("keeps a failed live switch on screen and reports it only inline", async () => {
   const backend = mockBackend();
   const next = backend.state.profiles.find((entry) => !entry.isActive)!;
-  backend.state.runtime = { ...backend.state.runtime, state: "connected", activeProfileId: backend.state.profiles.find((entry) => entry.isActive)!.profile.id };
+  backend.state.runtime = {
+    ...backend.state.runtime,
+    state: "connected",
+    activeProfileId: backend.state.profiles.find((entry) => entry.isActive)!.profile.id,
+  };
   useRuntimeEventStore.setState({ coreState: backend.state.runtime });
   const restart = jest.spyOn(backend.commands, "restartCore").mockRejectedValue(new Error("could not switch"));
   const navigate = jest.spyOn(navigation, "navigateToTab").mockImplementation(() => {});

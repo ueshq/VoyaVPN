@@ -336,9 +336,9 @@ describe("runtime event store", () => {
   ])("drops the previous session's connections when %s says the core disconnected", async (_source, apply) => {
     vi.useFakeTimers();
     apply(coreStatus("connected"));
-    useRuntimeEventStore.getState().setProxyConnections(
-      makeConnectionsSnapshot("connection-1", "old.example.com:443", 200, 100),
-    );
+    useRuntimeEventStore
+      .getState()
+      .setProxyConnections(makeConnectionsSnapshot("connection-1", "old.example.com:443", 200, 100));
     // A push still queued for the old core must not land after the disconnect.
     useRuntimeEventStore.getState().pushTransientEvent({
       kind: "proxyConnections",

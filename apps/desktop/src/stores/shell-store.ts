@@ -3,18 +3,10 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import { mergeValidated } from "@voya/client/persisted";
 
-export type ShellTab =
-  "home" | "profiles" | "settings" | "connections" | "rules" | "selfHost";
+export type ShellTab = "home" | "profiles" | "settings" | "connections" | "rules" | "selfHost";
 
 /** The pages in sidebar order, which is also the order of the number shortcuts. */
-export const SHELL_TABS: readonly ShellTab[] = [
-  "home",
-  "profiles",
-  "rules",
-  "connections",
-  "selfHost",
-  "settings",
-];
+export const SHELL_TABS: readonly ShellTab[] = ["home", "profiles", "rules", "connections", "selfHost", "settings"];
 
 /**
  * Sub-view of the Connections page: the live connection table or the running
@@ -59,14 +51,12 @@ export const useShellStore = create<ShellState>()(
   persist(
     (set) => ({
       sidebarCollapsed: false,
-      toggleSidebar: () =>
-        set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       activeTab: "home",
       focusPageTitle: false,
       consumeFocusPageTitle: () => set({ focusPageTitle: false }),
       profilesAddMenuOpen: false,
-      openProfilesAddMenu: () =>
-        set({ activeTab: "profiles", focusPageTitle: false, profilesAddMenuOpen: true }),
+      openProfilesAddMenu: () => set({ activeTab: "profiles", focusPageTitle: false, profilesAddMenuOpen: true }),
       setProfilesAddMenuOpen: (profilesAddMenuOpen) => set({ profilesAddMenuOpen }),
       settingsTab: "general",
       settingsTarget: null,

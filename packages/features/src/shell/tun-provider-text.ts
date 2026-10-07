@@ -31,10 +31,7 @@ export function tunProviderErrorDescription(tun: TunStatus, t: TranslationFuncti
 
 /** The explanation this app words itself, or `null` when only the provider's text exists. */
 function translatedProviderDescription(tun: TunStatus, t: TranslationFunction) {
-  if (
-    tun.backend === "macosPacketTunnel" &&
-    tun.providerState === "missingComponent"
-  ) {
+  if (tun.backend === "macosPacketTunnel" && tun.providerState === "missingComponent") {
     return t("status.macosTunnelMissing");
   }
 
@@ -66,10 +63,7 @@ function tunBackendLabel(backend: TunStatus["backend"], t: TranslationFunction) 
   }
 }
 
-function tunProviderStateLabel(
-  state: TunStatus["providerState"],
-  t: TranslationFunction,
-) {
+function tunProviderStateLabel(state: TunStatus["providerState"], t: TranslationFunction) {
   switch (state) {
     case "running":
       return t("status.tunProviderRunning");

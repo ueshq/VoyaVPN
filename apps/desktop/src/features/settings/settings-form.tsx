@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useId,
-  type ComponentProps,
-  type ReactNode,
-  type Ref,
-} from "react";
+import { createContext, useContext, useId, type ComponentProps, type ReactNode, type Ref } from "react";
 
 import {
   FieldLayout,
@@ -20,13 +13,7 @@ import { pageSurfaceClassName } from "@/components/app-shell/page-section";
 
 const FieldErrors = createContext<Record<string, string>>({});
 
-export function SettingsFields({
-  children,
-  errors,
-}: {
-  children: ReactNode;
-  errors: Record<string, string>;
-}) {
+export function SettingsFields({ children, errors }: { children: ReactNode; errors: Record<string, string> }) {
   return <FieldErrors value={errors}>{children}</FieldErrors>;
 }
 
@@ -45,27 +32,21 @@ export function SettingsGroup({
 }) {
   const id = useId();
   return (
-    <section
-      aria-labelledby={id}
-      className={cn(
-        pageSurfaceClassName,
-        "@container",
-        className,
-      )}
-    >
+    <section aria-labelledby={id} className={cn(pageSurfaceClassName, "@container", className)}>
       <div className="flex min-h-11 flex-wrap items-end gap-2 px-4 pt-3">
-        <h2 className="text-section font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" id={id} ref={headingRef} tabIndex={headingRef ? -1 : undefined}>
+        <h2
+          className="text-section font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          id={id}
+          ref={headingRef}
+          tabIndex={headingRef ? -1 : undefined}
+        >
           {title}
         </h2>
-        {actions ? (
-          <div className="ms-auto flex items-center gap-2">{actions}</div>
-        ) : null}
+        {actions ? <div className="ms-auto flex items-center gap-2">{actions}</div> : null}
       </div>
       {/* One setting per row, divided by hairlines, so every control reads
           with its own label in one shared control column. */}
-      <div className="grid divide-y divide-border-subtle px-4 pb-1 [&>*]:py-3">
-        {children}
-      </div>
+      <div className="grid divide-y divide-border-subtle px-4 pb-1 [&>*]:py-3">{children}</div>
     </section>
   );
 }
@@ -111,30 +92,14 @@ export function SettingsSwitch({
   onCheckedChange: (checked: boolean) => void;
 }) {
   const errors = useContext(FieldErrors);
-  return (
-    <SwitchField
-      {...props}
-      error={field ? errors[field] : undefined}
-      onChange={onCheckedChange}
-    />
-  );
+  return <SwitchField {...props} error={field ? errors[field] : undefined} onChange={onCheckedChange} />;
 }
 
-type TextProps = Omit<
-  ComponentProps<typeof SharedTextField>,
-  "layout" | "commitOnBlur"
-> & { field: string };
+type TextProps = Omit<ComponentProps<typeof SharedTextField>, "layout" | "commitOnBlur"> & { field: string };
 
 export function TextField({ field, ...props }: TextProps) {
   const errors = useContext(FieldErrors);
-  return (
-    <SharedTextField
-      {...props}
-      commitOnBlur
-      error={errors[field]}
-      layout="row"
-    />
-  );
+  return <SharedTextField {...props} commitOnBlur error={errors[field]} layout="row" />;
 }
 
 export function NumberField({
@@ -156,9 +121,7 @@ export function NumberField({
   const hint =
     defaultValue === undefined
       ? description
-      : [description, t("settings.defaultValue", { value: defaultValue })]
-          .filter(Boolean)
-          .join(" ");
+      : [description, t("settings.defaultValue", { value: defaultValue })].filter(Boolean).join(" ");
   // A typing mistake stays next to the field; it is not a failed save, so it
   // never raises a toast.
   return (
@@ -167,18 +130,11 @@ export function NumberField({
       description={hint}
       inputClassName="w-36 max-w-full"
       inputMode="numeric"
-      onChange={(text) =>
-        onChange(text.trim() ? Number(text) : (defaultValue ?? null))
-      }
+      onChange={(text) => onChange(text.trim() ? Number(text) : (defaultValue ?? null))}
       validate={(text) => {
-        if (!text.trim())
-          return nullable || defaultValue !== undefined
-            ? undefined
-            : t("validation.textRequired");
+        if (!text.trim()) return nullable || defaultValue !== undefined ? undefined : t("validation.textRequired");
         const number = Number(text);
-        return Number.isInteger(number) &&
-          number >= -2147483648 &&
-          number <= 2147483647
+        return Number.isInteger(number) && number >= -2147483648 && number <= 2147483647
           ? undefined
           : t("validation.invalid");
       }}
@@ -195,9 +151,7 @@ export function SelectField({
 }: Omit<ComponentProps<typeof SharedSelectField>, "options" | "layout"> & {
   field: string;
   /** A label per value, or a record of translation keys keyed by value. */
-  optionLabel?:
-    | ((value: string) => string)
-    | Partial<Record<string, TranslationKey>>;
+  optionLabel?: ((value: string) => string) | Partial<Record<string, TranslationKey>>;
   options: readonly string[];
 }) {
   const { t } = useI18n();

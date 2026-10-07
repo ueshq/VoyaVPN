@@ -11,9 +11,11 @@ describe("macOS DMG signing", () => {
   });
 
   it("omits the timestamp when timestamping is disabled for offline signing", () => {
-    expect(
-      dmgSigningPlan({ distribution: "developer-id", identity: "1A2B3C", disableTimestamp: true }).args,
-    ).toEqual(["--force", "--sign", "1A2B3C"]);
+    expect(dmgSigningPlan({ distribution: "developer-id", identity: "1A2B3C", disableTimestamp: true }).args).toEqual([
+      "--force",
+      "--sign",
+      "1A2B3C",
+    ]);
   });
 
   it("skips signing for App Store distribution, which ships through App Store Connect", () => {

@@ -32,11 +32,7 @@ describe("LogsPanel", () => {
   });
 
   it("renders each line with a level badge and a timestamp", () => {
-    showLines([
-      line(1, "info", "core started"),
-      line(2, "warn", "slow handshake"),
-      line(3, "error", "tunnel closed"),
-    ]);
+    showLines([line(1, "info", "core started"), line(2, "warn", "slow handshake"), line(3, "error", "tunnel closed")]);
 
     render(<Harness />);
 

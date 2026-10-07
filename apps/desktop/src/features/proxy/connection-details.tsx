@@ -54,11 +54,8 @@ export function ConnectionDetails({
     enabled: connection !== null,
     ...queries.routings,
   });
-  const activeRules =
-    routingsQuery.data?.find((routing) => routing.isActive)?.rules ?? null;
-  const startedAt = connection?.start
-    ? formatDateTime(connection.start, language)
-    : connection?.start;
+  const activeRules = routingsQuery.data?.find((routing) => routing.isActive)?.rules ?? null;
+  const startedAt = connection?.start ? formatDateTime(connection.start, language) : connection?.start;
   // What it is, where it went, how it got there, and how much went through.
   const groups: Field[][] = connection
     ? [
@@ -119,11 +116,7 @@ export function ConnectionDetails({
           </DialogTitle>
           {/* A live connection needs no subtitle; an ended or stale one says so. */}
           <DialogDescription className={ended || stale ? undefined : "sr-only"}>
-            {ended
-              ? t("activity.ended")
-              : stale
-                ? t("activity.previousData")
-                : t("activity.liveConnections")}
+            {ended ? t("activity.ended") : stale ? t("activity.previousData") : t("activity.liveConnections")}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
@@ -134,9 +127,7 @@ export function ConnectionDetails({
                   className={cn(
                     "grid grid-cols-[7rem_minmax(0,1fr)] gap-4",
                     // Each group after the first starts under a hairline.
-                    groupIndex > 0 &&
-                      fieldIndex === 0 &&
-                      "mt-1 border-t border-border-subtle pt-4",
+                    groupIndex > 0 && fieldIndex === 0 && "mt-1 border-t border-border-subtle pt-4",
                   )}
                   key={field.label}
                 >

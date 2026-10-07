@@ -44,13 +44,7 @@ describe("RoutingRuleList", () => {
   it("shows each rule's name, conditions and outbound", () => {
     renderList();
 
-    expect(rowNames()).toEqual([
-      "AI services via proxy",
-      "Block QUIC (UDP 443)",
-      "Office",
-      "Untitled",
-      "Empty",
-    ]);
+    expect(rowNames()).toEqual(["AI services via proxy", "Block QUIC (UDP 443)", "Office", "Untitled", "Empty"]);
     const [ai, quic, office, untitled, empty] = bodyRows();
     expect(within(ai).getByText("Default")).toHaveAttribute("title", expect.stringMatching(/^Default rule/));
     expect(within(ai).getByText("domain:openai.com")).toBeInTheDocument();
@@ -142,23 +136,12 @@ describe("RoutingRuleList", () => {
 
     act(() => drop("rule-office", "rule-ai"));
     expect(handlers.onReorder).toHaveBeenCalledWith("rule-office", 2, 0);
-    expect(rowNames().slice(0, 3)).toEqual([
-      "Office",
-      "AI services via proxy",
-      "Block QUIC (UDP 443)",
-    ]);
+    expect(rowNames().slice(0, 3)).toEqual(["Office", "AI services via proxy", "Block QUIC (UDP 443)"]);
     // One move at a time: the next one waits for this order to be committed.
-    expect(screen.getByRole("button", { name: "Reorder Office" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Reorder Office" })).toHaveAttribute("aria-disabled", "true");
 
     await act(async () => answer(false));
-    expect(rowNames().slice(0, 3)).toEqual([
-      "AI services via proxy",
-      "Block QUIC (UDP 443)",
-      "Office",
-    ]);
+    expect(rowNames().slice(0, 3)).toEqual(["AI services via proxy", "Block QUIC (UDP 443)", "Office"]);
   });
 
   it("shows the committed order once the backend returns it", async () => {
@@ -171,10 +154,7 @@ describe("RoutingRuleList", () => {
     const [ai, quic, ...rest] = rules();
     rerender(<RoutingRuleList {...listProps()} rules={[quic, ai, ...rest]} />);
     expect(rowNames().slice(0, 2)).toEqual(["Block QUIC (UDP 443)", "AI services via proxy"]);
-    expect(screen.getByRole("button", { name: "Reorder Office" })).not.toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(screen.getByRole("button", { name: "Reorder Office" })).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it("ignores drops that do not move a rule", () => {
@@ -197,20 +177,14 @@ describe("RoutingRuleList", () => {
       ({ active: { id: active }, over: over === null ? null : { id: over } }) as never;
 
     expect(accessibility?.screenReaderInstructions?.draggable).toMatch(/Space or Enter/);
-    expect(announcements?.onDragStart(event("rule-ai", null))).toBe(
-      "Picked up AI services via proxy.",
-    );
-    expect(announcements?.onDragOver(event("rule-ai", "rule-quic"))).toBe(
-      "AI services via proxy is over position 2.",
-    );
+    expect(announcements?.onDragStart(event("rule-ai", null))).toBe("Picked up AI services via proxy.");
+    expect(announcements?.onDragOver(event("rule-ai", "rule-quic"))).toBe("AI services via proxy is over position 2.");
     expect(announcements?.onDragOver(event("rule-ai", null))).toBeUndefined();
     expect(announcements?.onDragEnd(event("rule-ai", "rule-office"))).toBe(
       "AI services via proxy dropped at position 3.",
     );
     expect(announcements?.onDragEnd(event("rule-ai", null))).toBeUndefined();
-    expect(announcements?.onDragCancel(event("rule-unknown", null))).toBe(
-      "Reordering rule-unknown was cancelled.",
-    );
+    expect(announcements?.onDragCancel(event("rule-unknown", null))).toBe("Reordering rule-unknown was cancelled.");
 
     const [lockAxis] = dnd.props?.modifiers ?? [];
     expect(lockAxis?.({ transform: { scaleX: 1, scaleY: 1, x: 12, y: 30 } } as never)).toEqual({
@@ -226,9 +200,7 @@ describe("RoutingRuleList", () => {
 
     const untitled = bodyRows()[3];
     expect(
-      within(untitled).getByTitle(
-        "App conditions are not supported on this platform and are skipped.",
-      ),
+      within(untitled).getByTitle("App conditions are not supported on this platform and are skipped."),
     ).toHaveTextContent("curl");
     expect(within(bodyRows()[2]).getByTitle("IP")).toHaveTextContent("10.0.0.0/8");
   });
@@ -265,10 +237,7 @@ describe("RoutingRuleList", () => {
 
     const [office, gone] = bodyRows();
     expect(within(office).getByRole("switch", { name: "Enable Office" })).toBeDisabled();
-    expect(within(office).getByRole("button", { name: "Reorder Office" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(within(office).getByRole("button", { name: "Reorder Office" })).toHaveAttribute("aria-disabled", "true");
     expect(within(office).getByRole("menuitem", { name: "Actions for Office" })).toBeDisabled();
     expect(within(gone).getByRole("button", { name: "Use proxy instead" })).toBeDisabled();
     // An enabled rule reads as locked too, not only its controls.
@@ -318,9 +287,7 @@ function bodyRows() {
 }
 
 function rowNames() {
-  return bodyRows().map(
-    (row) => within(row).getAllByRole("cell")[2].querySelector(".font-medium")?.textContent,
-  );
+  return bodyRows().map((row) => within(row).getAllByRole("cell")[2].querySelector(".font-medium")?.textContent);
 }
 
 async function openRowMenu(user: ReturnType<typeof userEvent.setup>, name: string) {

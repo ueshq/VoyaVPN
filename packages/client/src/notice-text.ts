@@ -23,8 +23,7 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   nodeIpv6Restored: "notices.nodeIpv6Restored",
   nodeIpv6Unsupported: "notices.nodeIpv6Unsupported",
   profileRefreshFailed: "notices.profileRefreshFailed",
-  proxyModeSavedRuntimeUpdateFailed:
-    "notices.proxyModeSavedRuntimeUpdateFailed",
+  proxyModeSavedRuntimeUpdateFailed: "notices.proxyModeSavedRuntimeUpdateFailed",
   proxyViewRefreshFailed: "notices.proxyViewRefreshFailed",
   routingDeletedRestartFailed: "notices.routingDeletedRestartFailed",
   routingRefreshFailed: "notices.routingRefreshFailed",
@@ -38,8 +37,7 @@ export const NOTICE_KEYS: Record<NoticeCode["code"], TranslationKey> = {
   selfHostGaveUp: "notices.selfHostGaveUp",
   selfHostRefreshFailed: "notices.selfHostRefreshFailed",
   settingsRefreshFailed: "notices.settingsRefreshFailed",
-  settingsSavedSystemProxyUpdateFailed:
-    "notices.settingsSavedSystemProxyUpdateFailed",
+  settingsSavedSystemProxyUpdateFailed: "notices.settingsSavedSystemProxyUpdateFailed",
   subscriptionAutoUpdateFailed: "notices.subscriptionAutoUpdateFailed",
   subscriptionRefreshFailed: "notices.subscriptionRefreshFailed",
   systemProxyRestoreFailed: "notices.systemProxyRestoreFailed",

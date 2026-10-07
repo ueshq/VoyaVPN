@@ -43,7 +43,7 @@ function fakePlist(slices) {
     read: (_path, keyPath) =>
       keyPath === "AvailableLibraries"
         ? String(slices.length)
-        : slices[Number(keyPath.match(/AvailableLibraries\.(\d+)\./)?.[1] ?? -1)] ?? "",
+        : (slices[Number(keyPath.match(/AvailableLibraries\.(\d+)\./)?.[1] ?? -1)] ?? ""),
     remove: (_path, keyPath) => removed.push(keyPath),
   };
 }
@@ -72,12 +72,8 @@ describe("Libbox iOS staging", () => {
       "ios-arm64",
       "ios-arm64_x86_64-simulator",
     ]);
-    expect(
-      await readFile(join(destination, "ios-arm64", "Libbox.framework", "Libbox"), "utf8"),
-    ).toBe("ios-arm64");
-    await expect(
-      readFile(join(destination, "macos-arm64_x86_64", "Libbox.framework", "Libbox")),
-    ).rejects.toThrow();
+    expect(await readFile(join(destination, "ios-arm64", "Libbox.framework", "Libbox"), "utf8")).toBe("ios-arm64");
+    await expect(readFile(join(destination, "macos-arm64_x86_64", "Libbox.framework", "Libbox"))).rejects.toThrow();
     // Back to front, or removing entry 0 would renumber the rest under it.
     expect(plist.removed).toEqual(["AvailableLibraries.3", "AvailableLibraries.0"]);
     // The generated xcframework is a build artifact, not something to keep.
@@ -111,8 +107,8 @@ describe("Libbox Android staging", () => {
   it("names the missing archive rather than failing on the copy", async () => {
     const root = await temporaryRoot("voyavpn-libbox-android-missing-");
 
-    expect(() =>
-      stageLibboxAar({ builtAar: join(root, "libbox.aar"), destination: join(root, "out.aar") }),
-    ).toThrow(/was not produced/);
+    expect(() => stageLibboxAar({ builtAar: join(root, "libbox.aar"), destination: join(root, "out.aar") })).toThrow(
+      /was not produced/,
+    );
   });
 });

@@ -42,16 +42,16 @@ export function makeTestQueryClient() {
  * Pass the test's own query client so `afterEach` can clear its timers —
  * `render`'s `wrapper` closes over it.
  */
-export function TestProviders({
-  children,
-  queryClient,
-}: {
-  children: ReactNode;
-  queryClient: QueryClient;
-}) {
+export function TestProviders({ children, queryClient }: { children: ReactNode; queryClient: QueryClient }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <HeroUINativeProvider config={TEST_HEROUI_CONFIG}><NavigationContainer><Stack.Navigator screenOptions={{ headerShown: false, animation: "none" }}><Stack.Screen name="test">{() => children}</Stack.Screen></Stack.Navigator></NavigationContainer></HeroUINativeProvider>
+      <HeroUINativeProvider config={TEST_HEROUI_CONFIG}>
+        <NavigationContainer>
+          <Stack.Navigator screenOptions={{ headerShown: false, animation: "none" }}>
+            <Stack.Screen name="test">{() => children}</Stack.Screen>
+          </Stack.Navigator>
+        </NavigationContainer>
+      </HeroUINativeProvider>
     </QueryClientProvider>
   );
 }

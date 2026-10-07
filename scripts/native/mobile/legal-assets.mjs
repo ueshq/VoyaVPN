@@ -7,10 +7,14 @@ const root = repoRootFromScript(import.meta.url);
 const target = resolve(root, "apps/mobile/src/generated/legal-notices.json");
 
 function legalNotices() {
-  return `${JSON.stringify({
-    license: readFileSync(resolve(root, "LICENSE"), "utf8"),
-    thirdParty: readFileSync(resolve(root, "docs/release/THIRD_PARTY_NOTICES.md"), "utf8"),
-  }, null, 2)}\n`;
+  return `${JSON.stringify(
+    {
+      license: readFileSync(resolve(root, "LICENSE"), "utf8"),
+      thirdParty: readFileSync(resolve(root, "docs/release/THIRD_PARTY_NOTICES.md"), "utf8"),
+    },
+    null,
+    2,
+  )}\n`;
 }
 
 /** Throws when the generated mobile notices lag LICENSE or the third-party notices. */

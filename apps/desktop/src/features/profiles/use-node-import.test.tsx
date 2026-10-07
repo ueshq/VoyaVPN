@@ -15,22 +15,50 @@ setVoyaCommands(ipc as unknown as VoyaCommands);
 setClipboard({ readText: () => ipc.readClipboardText(), writeText: vi.fn() });
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => { resolve = done; });
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
   return { promise, resolve };
 }
 function imported(ids: string[], overrides: Partial<ImportProfilesResult> = {}): ImportProfilesResult {
   return {
-    imported: ids.length, updated: 0, skipped: 0, parsed: ids.length, filtered: 0,
-    deduped: 0, failed: 0, removedExisting: 0, removedDuplicates: 0, discardedNodeOverrides: 0,
-    subscriptionId: null, importedProfileIds: ids, updatedProfileIds: [], lineIssues: [], addedSubscriptionIds: [], ...overrides,
+    imported: ids.length,
+    updated: 0,
+    skipped: 0,
+    parsed: ids.length,
+    filtered: 0,
+    deduped: 0,
+    failed: 0,
+    removedExisting: 0,
+    removedDuplicates: 0,
+    discardedNodeOverrides: 0,
+    subscriptionId: null,
+    importedProfileIds: ids,
+    updatedProfileIds: [],
+    lineIssues: [],
+    addedSubscriptionIds: [],
+    ...overrides,
   };
 }
 function scan(overrides: Partial<QrScanResult> = {}): QrScanResult {
-  return { texts: ["vless://one"], status: "found", source: "screen", message: null, failureReason: null, ...overrides };
+  return {
+    texts: ["vless://one"],
+    status: "found",
+    source: "screen",
+    message: null,
+    failureReason: null,
+    ...overrides,
+  };
 }
 function setup() {
   const onImported = vi.fn().mockResolvedValue(undefined);
-  const operation = { operationError: null, operationMessage: null, setOperationError: vi.fn(), setOperationMessage: vi.fn(), runOperation: vi.fn() };
+  const operation = {
+    operationError: null,
+    operationMessage: null,
+    setOperationError: vi.fn(),
+    setOperationMessage: vi.fn(),
+    runOperation: vi.fn(),
+  };
   const hook = renderHook(() => useNodeImport(operation, onImported, useI18n().t));
   return { ...hook, operation, onImported };
 }
@@ -58,7 +86,9 @@ describe("direct node import", () => {
     const { result, onImported } = setup();
     onImported.mockReturnValueOnce(refresh.promise);
     let running!: Promise<void>;
-    act(() => { running = result.current.handleDirectImport("clipboard"); });
+    act(() => {
+      running = result.current.handleDirectImport("clipboard");
+    });
     expect(result.current.directImportPending).toBe("clipboard");
     await act(() => result.current.handleDirectImport("qrScreen"));
     expect(ipc.scanScreenQr).not.toHaveBeenCalled();
@@ -69,7 +99,10 @@ describe("direct node import", () => {
     await act(async () => save.resolve(imported(["one"])));
     await act(() => result.current.handleDirectImport("clipboard"));
     expect(ipc.readClipboardText).toHaveBeenCalledOnce();
-    await act(async () => { refresh.resolve(); await running; });
+    await act(async () => {
+      refresh.resolve();
+      await running;
+    });
     expect(result.current.directImportPending).toBeNull();
     await act(() => result.current.handleDirectImport("clipboard"));
     expect(ipc.readClipboardText).toHaveBeenCalledTimes(2);
@@ -83,33 +116,60 @@ describe("direct node import", () => {
       .mockResolvedValueOnce(imported(["one"]))
       .mockResolvedValueOnce(imported(["one", "two"], { updated: 1, updatedProfileIds: ["one"] }))
       .mockRejectedValueOnce(new Error("Unsupported payload"))
-      .mockResolvedValueOnce(imported(["three"], { lineIssues: [{ line: 1, code: { code: "parseFailed", detail: "bad link" } }], skipped: 1 }));
+      .mockResolvedValueOnce(
+        imported(["three"], {
+          lineIssues: [{ line: 1, code: { code: "parseFailed", detail: "bad link" } }],
+          skipped: 1,
+        }),
+      );
     const { result, onImported, operation } = setup();
     await act(() => result.current.handleDirectImport("qrScreen"));
     expect(ipc.scanScreenQr).toHaveBeenCalledOnce();
-    expect(ipc.importProfilesFromText.mock.calls).toEqual([["vless://one", null], [base64, null], ["invalid", null], [json, null]]);
-    expect(onImported).toHaveBeenCalledWith(expect.objectContaining({
-      imported: 3, updated: 0, deduped: 1, skipped: 2, failed: 1,
-      importedProfileIds: ["one", "two", "three"],
-    }), expect.any(Function));
-    expect(reportedError(operation)).toEqual("Unsupported payload\nLine 1 was skipped: the link is not in a format VoyaVPN can read.");
+    expect(ipc.importProfilesFromText.mock.calls).toEqual([
+      ["vless://one", null],
+      [base64, null],
+      ["invalid", null],
+      [json, null],
+    ]);
+    expect(onImported).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imported: 3,
+        updated: 0,
+        deduped: 1,
+        skipped: 2,
+        failed: 1,
+        importedProfileIds: ["one", "two", "three"],
+      }),
+      expect.any(Function),
+    );
+    expect(reportedError(operation)).toEqual(
+      "Unsupported payload\nLine 1 was skipped: the link is not in a format VoyaVPN can read.",
+    );
   });
 
   it("does not report a successfully added subscription source as an error", async () => {
-    ipc.importProfilesFromText.mockResolvedValue(imported([], {
-      addedSubscriptionIds: ["source"], lineIssues: [{ line: 1, code: { code: "subscriptionSourceAdded" } }],
-    }));
+    ipc.importProfilesFromText.mockResolvedValue(
+      imported([], {
+        addedSubscriptionIds: ["source"],
+        lineIssues: [{ line: 1, code: { code: "subscriptionSourceAdded" } }],
+      }),
+    );
     const { result, operation } = setup();
     await act(() => result.current.handleDirectImport("clipboard"));
     expect(reportedError(operation)).toBeNull();
   });
 
   it("keeps subscription refresh failures beside rejected input lines", async () => {
-    ipc.importProfilesFromText.mockResolvedValue(imported(["one"], {
-      addedSubscriptionIds: ["source"], lineIssues: [{ line: 2, code: { code: "parseFailed", detail: "bad" } }],
-    }));
+    ipc.importProfilesFromText.mockResolvedValue(
+      imported(["one"], {
+        addedSubscriptionIds: ["source"],
+        lineIssues: [{ line: 2, code: { code: "parseFailed", detail: "bad" } }],
+      }),
+    );
     const { result, operation, onImported } = setup();
-    onImported.mockImplementation(async () => { operation.setOperationError("Subscription timed out"); });
+    onImported.mockImplementation(async () => {
+      operation.setOperationError("Subscription timed out");
+    });
     await act(() => result.current.handleDirectImport("clipboard"));
     expect(reportedError(operation)).toContain("Subscription timed out");
     expect(reportedError(operation)).toContain("Line 2 was skipped");
@@ -177,9 +237,14 @@ describe("direct node import", () => {
     ipc.scanScreenQr.mockReturnValue(pending.promise);
     const { result, unmount, onImported } = setup();
     let running!: Promise<void>;
-    act(() => { running = result.current.handleDirectImport(method); });
+    act(() => {
+      running = result.current.handleDirectImport(method);
+    });
     unmount();
-    await act(async () => { pending.resolve((method === "clipboard" ? "vless://one" : scan()) as never); await running; });
+    await act(async () => {
+      pending.resolve((method === "clipboard" ? "vless://one" : scan()) as never);
+      await running;
+    });
     expect(ipc.importProfilesFromText).not.toHaveBeenCalled();
     expect(onImported).not.toHaveBeenCalled();
   });
@@ -190,10 +255,15 @@ describe("direct node import", () => {
     ipc.importProfilesFromText.mockReturnValue(pending.promise);
     const { result, unmount, onImported } = setup();
     let running!: Promise<void>;
-    await act(async () => { running = result.current.handleDirectImport("qrScreen"); });
+    await act(async () => {
+      running = result.current.handleDirectImport("qrScreen");
+    });
     expect(ipc.importProfilesFromText).toHaveBeenCalledOnce();
     unmount();
-    await act(async () => { pending.resolve(imported(["one"])); await running; });
+    await act(async () => {
+      pending.resolve(imported(["one"]));
+      await running;
+    });
     expect(ipc.importProfilesFromText).toHaveBeenCalledOnce();
     expect(onImported).not.toHaveBeenCalled();
   });

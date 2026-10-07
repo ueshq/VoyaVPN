@@ -16,9 +16,10 @@ const PROFILE_PROTOCOL_LABELS = {
 } satisfies Record<ProfileKind, string>;
 
 /** The protocol picker's options, in picker order. */
-export const PROFILE_PROTOCOL_OPTIONS = (
-  Object.keys(PROFILE_PROTOCOL_LABELS) as ProfileKind[]
-).map((value) => ({ label: PROFILE_PROTOCOL_LABELS[value], value }));
+export const PROFILE_PROTOCOL_OPTIONS = (Object.keys(PROFILE_PROTOCOL_LABELS) as ProfileKind[]).map((value) => ({
+  label: PROFILE_PROTOCOL_LABELS[value],
+  value,
+}));
 
 export function isProfileKind(value: unknown): value is ProfileKind {
   return typeof value === "string" && Object.hasOwn(PROFILE_PROTOCOL_LABELS, value);
@@ -34,9 +35,7 @@ const TRANSPORT_LABELS = {
   quic: "QUIC",
 } satisfies Record<ProfileTransport["kind"], string>;
 
-export const TRANSPORT_OPTIONS = Object.entries(TRANSPORT_LABELS).map(
-  ([value, label]) => ({ label, value }),
-);
+export const TRANSPORT_OPTIONS = Object.entries(TRANSPORT_LABELS).map(([value, label]) => ({ label, value }));
 
 export function isTransportKind(value: unknown): value is ProfileTransport["kind"] {
   return typeof value === "string" && Object.hasOwn(TRANSPORT_LABELS, value);
@@ -48,15 +47,10 @@ const TLS_MODE_LABELS = {
   reality: "REALITY",
 } satisfies Record<TlsMode, string>;
 
-export const TLS_MODE_OPTIONS = Object.entries(TLS_MODE_LABELS).map(
-  ([value, label]) => ({ label, value }),
-);
+export const TLS_MODE_OPTIONS = Object.entries(TLS_MODE_LABELS).map(([value, label]) => ({ label, value }));
 
 export function isTlsModeOption(value: unknown): value is TlsMode | "none" {
-  return (
-    value === "none"
-    || (typeof value === "string" && Object.hasOwn(TLS_MODE_LABELS, value))
-  );
+  return value === "none" || (typeof value === "string" && Object.hasOwn(TLS_MODE_LABELS, value));
 }
 
 export function getTransportLabel(kind: ProfileTransport["kind"]) {

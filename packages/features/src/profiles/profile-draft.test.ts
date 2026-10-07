@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type {
-  Profile,
-  ProfileKind,
-  ProfileProtocol,
-  ProfileTransport,
-  TlsSettings,
-} from "@voya/contracts";
+import type { Profile, ProfileKind, ProfileProtocol, ProfileTransport, TlsSettings } from "@voya/contracts";
 import { translateFieldErrors, zodIssuesToErrorMap } from "@voya/features/forms/zod-errors";
 
 import {
@@ -53,9 +47,7 @@ describe("profile draft", () => {
     expect(save(draft).protocol.kind).toBe("vmess");
     // The hidden drafts stay in the editor for when the user switches back.
     expect(draft).toMatchObject({ mtu: "1.5", insecureConcurrency: "2.5" });
-    expect(parseProfileDraft({ ...draft, kind: "naive" }).error?.issues[0].path).toEqual([
-      "insecureConcurrency",
-    ]);
+    expect(parseProfileDraft({ ...draft, kind: "naive" }).error?.issues[0].path).toEqual(["insecureConcurrency"]);
     expect(errors({ ...draft, kind: "wireGuard", privateKey: "key" })).toEqual({
       mtu: "validation.integer",
     });
@@ -81,32 +73,29 @@ describe("profile draft", () => {
     expect(saved.transport).toBeNull();
   });
 
-  it.each(["socks", "http", "naive"] as const)(
-    "saves an unauthenticated %s proxy with omitted credentials",
-    (kind) => {
-      const saved = save({
-        ...createDefaultDraft(kind),
-        remarks: "Local proxy",
-        address: "127.0.0.1",
-        port: "1080",
-      });
+  it.each(["socks", "http", "naive"] as const)("saves an unauthenticated %s proxy with omitted credentials", (kind) => {
+    const saved = save({
+      ...createDefaultDraft(kind),
+      remarks: "Local proxy",
+      address: "127.0.0.1",
+      port: "1080",
+    });
 
-      expect(saved).toMatchObject({
-        id: "",
-        subscriptionId: null,
-        displayLog: true,
-        protocol: {
-          kind,
-          server: { address: "127.0.0.1", port: 1080 },
-          username: "",
-          password: "",
-        },
-        transport: { kind: "tcp", header: null, host: null, path: null },
-        tls: null,
-      });
-      expect(save(draftFromProfile(saved))).toEqual(saved);
-    },
-  );
+    expect(saved).toMatchObject({
+      id: "",
+      subscriptionId: null,
+      displayLog: true,
+      protocol: {
+        kind,
+        server: { address: "127.0.0.1", port: 1080 },
+        username: "",
+        password: "",
+      },
+      transport: { kind: "tcp", header: null, host: null, path: null },
+      tls: null,
+    });
+    expect(save(draftFromProfile(saved))).toEqual(saved);
+  });
 
   it("preserves TLS when every optional field is unset", () => {
     const tls: TlsSettings = {
@@ -143,9 +132,9 @@ describe("profile draft", () => {
     const original = { ...profile(vmessProtocol(), tcpTransport()), tls };
 
     expect(save(draftFromProfile(original))).toEqual(original);
-    expect(
-      save({ ...draftFromProfile(original), alpn: " h2 ,\nhttp/1.1, ", echConfig: "ech-a\n\nech-b" }).tls,
-    ).toEqual(tls);
+    expect(save({ ...draftFromProfile(original), alpn: " h2 ,\nhttp/1.1, ", echConfig: "ech-a\n\nech-b" }).tls).toEqual(
+      tls,
+    );
   });
 
   it("creates a blank draft for the chosen protocol", () => {
@@ -251,10 +240,7 @@ describe("profile draft", () => {
   });
 });
 
-function profile(
-  protocol: ProfileProtocol,
-  transport: ProfileTransport | null,
-): Profile {
+function profile(protocol: ProfileProtocol, transport: ProfileTransport | null): Profile {
   return {
     displayLog: true,
     id: "profile-a",

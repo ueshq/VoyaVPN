@@ -24,9 +24,7 @@ export type RuleGroupOutbound = { id: string; name: string };
 
 type BuiltinOutbound = keyof typeof OUTBOUND_LABEL_KEYS;
 
-type OutboundTarget =
-  | { kind: BuiltinOutbound }
-  | { kind: "group" | "missing" | "missingGroup" | "node"; name: string };
+type OutboundTarget = { kind: BuiltinOutbound } | { kind: "group" | "missing" | "missingGroup" | "node"; name: string };
 
 function isBuiltinOutbound(value: string): value is BuiltinOutbound {
   return Object.hasOwn(OUTBOUND_LABEL_KEYS, value);
@@ -100,9 +98,7 @@ export function describeOutbound(
     return group ? { kind: "group", name: group.name } : { kind: "missingGroup", name: id };
   }
 
-  return nodeNames === null || nodeNames.has(value)
-    ? { kind: "node", name: value }
-    : { kind: "missing", name: value };
+  return nodeNames === null || nodeNames.has(value) ? { kind: "node", name: value } : { kind: "missing", name: value };
 }
 
 /** Adds a rule-set line to a matcher list, once. */

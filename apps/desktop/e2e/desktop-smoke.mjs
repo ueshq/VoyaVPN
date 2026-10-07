@@ -36,18 +36,12 @@ try {
   const capabilities = new Capabilities();
   capabilities.setBrowserName("wry");
   capabilities.set("tauri:options", { application });
-  driver = await new Builder()
-    .usingServer("http://127.0.0.1:4444/")
-    .withCapabilities(capabilities)
-    .build();
+  driver = await new Builder().usingServer("http://127.0.0.1:4444/").withCapabilities(capabilities).build();
 
   // The shell has rendered once the sidebar footer is on screen. Home has no
   // page heading, and visible text depends on the locale, so neither is a
   // stable readiness signal; the document title comes from index.html.
-  const sidebarFooter = await driver.wait(
-    until.elementLocated(By.css('[data-testid="sidebar-footer"]')),
-    30_000,
-  );
+  const sidebarFooter = await driver.wait(until.elementLocated(By.css('[data-testid="sidebar-footer"]')), 30_000);
   await driver.wait(until.elementIsVisible(sidebarFooter), 30_000);
   assert.equal(await driver.getTitle(), "VoyaVPN");
 
@@ -67,8 +61,7 @@ try {
   const emptyConnect = await invoke("connect_active_profile");
   assert.equal(emptyConnect.ok, false, "connecting without a profile must fail");
 
-  const shareLink =
-    "vless://00000000-0000-4000-8000-000000000001@127.0.0.1:1?security=none&type=tcp#Desktop%20Smoke";
+  const shareLink = "vless://00000000-0000-4000-8000-000000000001@127.0.0.1:1?security=none&type=tcp#Desktop%20Smoke";
   const imported = await invoke("import_profiles_from_text", {
     subscriptionId: null,
     text: shareLink,

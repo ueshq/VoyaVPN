@@ -65,9 +65,7 @@ test("reopening the editor right after a save shows what was saved", async () =>
   await user.clear(name);
   await user.type(name, "Renamed node");
   await user.press(screen.getByText("Save"));
-  await waitFor(() =>
-    expect(backend.state.profiles[0].profile.remarks).toBe("Renamed node"),
-  );
+  await waitFor(() => expect(backend.state.profiles[0].profile.remarks).toBe("Renamed node"));
   await first.unmount();
 
   const second = await render(<ProfileEditorScreen {...editorProps(entry.profile.id)} />, { wrapper });

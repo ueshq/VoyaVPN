@@ -39,9 +39,7 @@ describe("PerAppSummaryCard", () => {
 
     expect(screen.getByText("Off")).toBeInTheDocument();
     expect(screen.queryByText("steam")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Route specific applications through or around the proxy."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Route specific applications through or around the proxy.")).toBeInTheDocument();
   });
 
   it("locks editing while global mode skips the rules", () => {

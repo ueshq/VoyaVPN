@@ -21,7 +21,9 @@ test("keeps native controls and Uniwind in sync and releases both overrides for 
   // RN's Jest platform omits the version; Uniwind uses the legacy reset value.
   // The simulator regression verifies RN 0.87's real system-theme reset.
   expect(setColorScheme).toHaveBeenLastCalledWith(undefined);
-  await unmount(); setTheme.mockRestore(); setColorScheme.mockRestore();
+  await unmount();
+  setTheme.mockRestore();
+  setColorScheme.mockRestore();
 });
 
 test("Android delegates native appearance to Uniwind without duplicate configuration updates", async () => {
@@ -33,5 +35,8 @@ test("Android delegates native appearance to Uniwind without duplicate configura
   await act(() => usePreferencesStore.setState({ themeMode: "dark" }));
   expect(setTheme).toHaveBeenLastCalledWith("dark");
   expect(setColorScheme.mock.calls).toEqual([["light"], ["dark"]]);
-  await unmount(); setTheme.mockRestore(); setColorScheme.mockRestore(); platform.restore();
+  await unmount();
+  setTheme.mockRestore();
+  setColorScheme.mockRestore();
+  platform.restore();
 });

@@ -17,7 +17,9 @@ async function readJson(path) {
 
 describe("release updater metadata", () => {
   it("verifies every stable updater .sig before writing latest.json", async () => {
-    const updaterPublicKey = (await readFile(resolve(repoRoot, "tests/fixtures/release/updater-signing/public.key"), "utf8")).trim();
+    const updaterPublicKey = (
+      await readFile(resolve(repoRoot, "tests/fixtures/release/updater-signing/public.key"), "utf8")
+    ).trim();
     const workDir = await mkdtemp(join(tmpdir(), "voyavpn-updater-metadata-"));
     const latestPath = join(workDir, "latest.json");
 
@@ -64,8 +66,7 @@ describe("release updater metadata", () => {
   it("emits placeholder metadata for the dry-run channel and refuses it for stable", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "voyavpn-updater-placeholder-"));
     const latestPath = join(workDir, "latest.json");
-    const run = (args) =>
-      capture(process.execPath, ["scripts/release/cli.mjs", "updater", ...args], { cwd: repoRoot });
+    const run = (args) => capture(process.execPath, ["scripts/release/cli.mjs", "updater", ...args], { cwd: repoRoot });
 
     try {
       await run([
@@ -85,9 +86,7 @@ describe("release updater metadata", () => {
       const latest = await readJson(latestPath);
       const evidence = await readJson(join(workDir, "latest.evidence.json"));
       expect(Object.keys(latest.platforms).sort()).toEqual(["darwin-x86_64", "windows-x86_64"]);
-      expect(latest.platforms["darwin-x86_64"].signature).toBe(
-        "VOYAVPN_UPDATER_SIGNATURE_PLACEHOLDER_DARWIN_X86_64",
-      );
+      expect(latest.platforms["darwin-x86_64"].signature).toBe("VOYAVPN_UPDATER_SIGNATURE_PLACEHOLDER_DARWIN_X86_64");
       expect(latest.platforms["darwin-x86_64"].url).toBe(
         "https://cdn.voyavpn.test/beta/updater/0.1.0/voyavpn-0.1.0-beta-darwin-x86_64-updater.zip",
       );

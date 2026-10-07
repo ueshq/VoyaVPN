@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 // `ipcCommands` is built from `Object.keys(bindings.commands)`, so the fake
 // binding must be a plain enumerable object — a get-only Proxy would wrap zero
 // commands and leave every `ipcCommands.*` call undefined.
-const commandMocks = vi.hoisted(() => ({} as Record<string, ReturnType<typeof vi.fn>>));
+const commandMocks = vi.hoisted(() => ({}) as Record<string, ReturnType<typeof vi.fn>>);
 
 vi.mock("@/ipc/bindings", async () => {
   const { VOYA_COMMAND_WIRE } = await import("@voya/contracts/commands");

@@ -86,11 +86,11 @@ export function profileMatchesDistribution(profile, distribution, allowDevelopme
   if (distribution === "app-store") {
     return profile.developerCertificateSubjects.some(
       (subject) =>
-        subject.includes("CN=3rd Party Mac Developer Application:")
-        || subject.includes("CN=Apple Distribution:")
-        || subject.includes("CN=iPhone Distribution:")
-        || (allowDevelopmentProvisioning
-          && (subject.includes("CN=Apple Development:") || subject.includes("CN=Mac Developer:"))),
+        subject.includes("CN=3rd Party Mac Developer Application:") ||
+        subject.includes("CN=Apple Distribution:") ||
+        subject.includes("CN=iPhone Distribution:") ||
+        (allowDevelopmentProvisioning &&
+          (subject.includes("CN=Apple Development:") || subject.includes("CN=Mac Developer:"))),
     );
   }
   return true;
@@ -113,9 +113,7 @@ export function isStoreDistributionProfile(profile) {
  * Development and Developer ID signing keep the profile's full list.
  */
 export function signedNetworkExtensions(profile) {
-  return isStoreDistributionProfile(profile)
-    ? [requiredNetworkExtensionValue("app-store")]
-    : profile.networkExtensions;
+  return isStoreDistributionProfile(profile) ? [requiredNetworkExtensionValue("app-store")] : profile.networkExtensions;
 }
 
 export function distributionProfileLabel(distribution) {
@@ -123,7 +121,9 @@ export function distributionProfileLabel(distribution) {
 }
 
 export function profileContainsCertificate(profile, identitySha1) {
-  const target = String(identitySha1 ?? "").trim().toUpperCase();
+  const target = String(identitySha1 ?? "")
+    .trim()
+    .toUpperCase();
   if (!target) {
     return false;
   }
@@ -139,7 +139,9 @@ export function profileDeviceCoverage(profile, udid) {
   if (!Array.isArray(profile.provisionedDevices)) {
     return "no-device-list";
   }
-  const target = String(udid ?? "").trim().toUpperCase();
+  const target = String(udid ?? "")
+    .trim()
+    .toUpperCase();
   if (!target) {
     return "unknown";
   }
@@ -239,8 +241,8 @@ export function validateProvisioningProfile(profile, label, bundleIdentifier, cr
 /** The distribution a decoded profile was issued for: Developer ID, or the store/development lane. */
 function profileDistribution(profile) {
   if (
-    profile.developerCertificateSubjects?.some((subject) => subject.includes("CN=Developer ID Application:"))
-    || profile.networkExtensions.includes("packet-tunnel-provider-systemextension")
+    profile.developerCertificateSubjects?.some((subject) => subject.includes("CN=Developer ID Application:")) ||
+    profile.networkExtensions.includes("packet-tunnel-provider-systemextension")
   ) {
     return "developer-id";
   }
@@ -293,7 +295,9 @@ export function formatProfileSelectionError(label, bundleIdentifier, rejections,
 }
 
 export function listCodesigningIdentities() {
-  return parseCodesigningIdentities(checkedCapture("security", ["find-identity", "-v", "-p", "codesigning"], { cwd: repoRoot }).stdout);
+  return parseCodesigningIdentities(
+    checkedCapture("security", ["find-identity", "-v", "-p", "codesigning"], { cwd: repoRoot }).stdout,
+  );
 }
 
 export function resolveSigningIdentity(spec, label = "codesigning") {
@@ -409,13 +413,16 @@ export function decodeProvisioningProfile(profilePath, decodedDir = defaultDecod
   // `application-identifier`. Both kinds sit in the same folders, so a profile
   // of the other platform must decode here and be rejected by bundle id
   // rather than abort the scan.
-  const applicationIdentifier = plistBuddy(plistPath, ":Entitlements:com.apple.application-identifier", true)
-    || plistBuddy(plistPath, ":Entitlements:application-identifier");
-  const teamIdentifier = plistBuddy(plistPath, ":Entitlements:com.apple.developer.team-identifier", true)
-    || plistBuddy(plistPath, ":TeamIdentifier:0", true);
-  const bundleIdentifier = teamIdentifier && applicationIdentifier.startsWith(`${teamIdentifier}.`)
-    ? applicationIdentifier.slice(teamIdentifier.length + 1)
-    : applicationIdentifier.replace(/^[^.]+\./, "");
+  const applicationIdentifier =
+    plistBuddy(plistPath, ":Entitlements:com.apple.application-identifier", true) ||
+    plistBuddy(plistPath, ":Entitlements:application-identifier");
+  const teamIdentifier =
+    plistBuddy(plistPath, ":Entitlements:com.apple.developer.team-identifier", true) ||
+    plistBuddy(plistPath, ":TeamIdentifier:0", true);
+  const bundleIdentifier =
+    teamIdentifier && applicationIdentifier.startsWith(`${teamIdentifier}.`)
+      ? applicationIdentifier.slice(teamIdentifier.length + 1)
+      : applicationIdentifier.replace(/^[^.]+\./, "");
   const certificates = developerCertificates(plistPath);
 
   return {
@@ -435,11 +442,8 @@ export function decodeProvisioningProfile(profilePath, decodedDir = defaultDecod
     networkExtensions: parsePlistArray(
       plistBuddy(plistPath, ":Entitlements:com.apple.developer.networking.networkextension", true),
     ),
-    systemExtensionInstall: plistBuddy(
-      plistPath,
-      ":Entitlements:com.apple.developer.system-extension.install",
-      true,
-    ) === "true",
+    systemExtensionInstall:
+      plistBuddy(plistPath, ":Entitlements:com.apple.developer.system-extension.install", true) === "true",
     // Debuggable builds only; a store profile never grants it.
     getTaskAllow: plistBuddy(plistPath, ":Entitlements:get-task-allow", true) === "true",
     provisionsAllDevices: plistBuddy(plistPath, ":ProvisionsAllDevices", true) === "true",

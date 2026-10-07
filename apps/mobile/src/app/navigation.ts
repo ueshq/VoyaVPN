@@ -24,8 +24,11 @@ export function navigateToTab(tab: ShellTab) {
   if (navigationRef.isReady()) navigationRef.dispatch(StackActions.popTo("main", { screen: tab }));
 }
 /** Opens a stack page; a tab is reached with `navigateToTab` instead. */
-export function openPage<Route extends Exclude<keyof RootRoutes, "main">>(...args: undefined extends RootRoutes[Route]
-  ? [name: Route, params?: RootRoutes[Route]] : [name: Route, params: RootRoutes[Route]]) {
+export function openPage<Route extends Exclude<keyof RootRoutes, "main">>(
+  ...args: undefined extends RootRoutes[Route]
+    ? [name: Route, params?: RootRoutes[Route]]
+    : [name: Route, params: RootRoutes[Route]]
+) {
   if (navigationRef.isReady()) {
     // navigate's conditional tuple overload cannot retain this correlated generic;
     // dispatch keeps the strongly typed public boundary above.

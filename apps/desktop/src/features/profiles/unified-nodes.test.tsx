@@ -1,21 +1,10 @@
-import {
-  act,
-  cleanup,
-  fireEvent,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { createAppQueryClient } from "@voya/client/query-client";
 import { renderWithQuery } from "@voya/features/test/render";
-import type {
-  ProfileSummaryEntry,
-  Subscription,
-  RuntimeStatusResponse,
-} from "@voya/contracts";
+import type { ProfileSummaryEntry, Subscription, RuntimeStatusResponse } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
@@ -43,19 +32,24 @@ const profiles = [
   makeProfileFixture(3, { remarks: "Osaka", subscriptionId: "a" }),
 ];
 function source(id: string, remarks: string, sort: number): Subscription {
-  return { id, remarks, sort, additionalUrl: "", autoUpdateIntervalMinutes: null,
-    converterTarget: null, enabled: true, filter: null, url: "https://example.test/sub", userAgent: "" };
+  return {
+    id,
+    remarks,
+    sort,
+    additionalUrl: "",
+    autoUpdateIntervalMinutes: null,
+    converterTarget: null,
+    enabled: true,
+    filter: null,
+    url: "https://example.test/sub",
+    userAgent: "",
+  };
 }
 const subscriptions = [source("b", "Backup", 1), source("a", "Asia", 0)];
 const clients = new Set<QueryClient>();
-const clipboardDescriptor = Object.getOwnPropertyDescriptor(
-  navigator,
-  "clipboard",
-);
+const clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, "clipboard");
 const writeText = vi.fn();
-function core(
-  state: RuntimeStatusResponse["state"] = "disconnected",
-): RuntimeStatusResponse {
+function core(state: RuntimeStatusResponse["state"] = "disconnected"): RuntimeStatusResponse {
   return {
     state,
     mainPid: state === "connected" ? 42 : null,
@@ -70,10 +64,7 @@ function renderScreen() {
   return { ...renderWithQuery(<ProfilesScreen />, { queryClient: client }), client };
 }
 function changed() {
-  clients.forEach(
-    (client) =>
-      void client.invalidateQueries({ queryKey: queryKeys.profiles }),
-  );
+  clients.forEach((client) => void client.invalidateQueries({ queryKey: queryKeys.profiles }));
 }
 function card(name: string) {
   return screen.getByRole("article", { name });
@@ -116,8 +107,7 @@ beforeEach(() => {
   mocks.restartCore.mockResolvedValue(core("connected"));
 });
 afterEach(() => {
-  if (clipboardDescriptor)
-    Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
+  if (clipboardDescriptor) Object.defineProperty(navigator, "clipboard", clipboardDescriptor);
   else Reflect.deleteProperty(navigator, "clipboard");
   cleanup();
   clients.forEach((c) => c.clear());
@@ -126,7 +116,13 @@ afterEach(() => {
 
 describe("source-derived node groups", () => {
   it("orders subscriptions by source and puts all local nodes last with continuous boundaries", () => {
-    const rows = nodeListRows(profiles, new Set(), "Local nodes", [...subscriptions, source("empty", "Empty", 2)], "Unknown");
+    const rows = nodeListRows(
+      profiles,
+      new Set(),
+      "Local nodes",
+      [...subscriptions, source("empty", "Empty", 2)],
+      "Unknown",
+    );
     expect(rows.map((row) => [row.key, row.groupKey, row.last])).toEqual([
       ["subscription:a", "subscription:a", false],
       ["profile:profile-0", "subscription:a", false],
@@ -137,21 +133,43 @@ describe("source-derived node groups", () => {
       ["local", "local", false],
       ["profile:profile-2", "local", true],
     ]);
-    const collapsed = nodeListRows(profiles, new Set(["subscription:a", "subscription:b", LOCAL_GROUP_KEY]), "Local nodes", subscriptions, "Unknown");
+    const collapsed = nodeListRows(
+      profiles,
+      new Set(["subscription:a", "subscription:b", LOCAL_GROUP_KEY]),
+      "Local nodes",
+      subscriptions,
+      "Unknown",
+    );
     expect(collapsed).toHaveLength(3);
     expect(collapsed.every((row) => row.kind === "group" && row.last && !row.expanded)).toBe(true);
   });
 
   it("keeps same-name and unavailable subscriptions distinct from local nodes", () => {
-    const rows = nodeListRows(profiles, new Set(), "Local nodes", [source("a", "Same", 0), source("b", "Same", 0)], "Unknown");
+    const rows = nodeListRows(
+      profiles,
+      new Set(),
+      "Local nodes",
+      [source("a", "Same", 0), source("b", "Same", 0)],
+      "Unknown",
+    );
     expect(rows.filter((row) => row.kind === "group").map((row) => [row.key, row.name])).toEqual([
-      ["subscription:a", "Same"], ["subscription:b", "Same"], ["local", "Local nodes"],
+      ["subscription:a", "Same"],
+      ["subscription:b", "Same"],
+      ["local", "Local nodes"],
     ]);
     const unavailable = nodeListRows(profiles, new Set(), "Local nodes", [], "Unknown");
-    expect(unavailable.filter((row) => row.kind === "group").map((row) => [row.key, row.name, row.members.length])).toEqual([
-      ["subscription:a", "Unknown", 2], ["subscription:b", "Unknown", 1], ["local", "Local nodes", 1],
+    expect(
+      unavailable.filter((row) => row.kind === "group").map((row) => [row.key, row.name, row.members.length]),
+    ).toEqual([
+      ["subscription:a", "Unknown", 2],
+      ["subscription:b", "Unknown", 1],
+      ["local", "Local nodes", 1],
     ]);
-    expect(nodeListRows([], new Set(), "Local nodes", [source("empty", "", 0)], "Unknown")[0]).toMatchObject({ name: "Unknown", members: [], last: true });
+    expect(nodeListRows([], new Set(), "Local nodes", [source("empty", "", 0)], "Unknown")[0]).toMatchObject({
+      name: "Unknown",
+      members: [],
+      last: true,
+    });
   });
 
   it("shows only populated local groups and retains empty subscriptions", async () => {
@@ -186,7 +204,10 @@ describe("source-derived node groups", () => {
   it("hides the local group when its final node is removed", async () => {
     renderScreen();
     await screen.findByRole("button", { name: "Local nodes" });
-    mocks.listProfileSummaries.mockResolvedValue({ entries: profiles.filter((p) => p.profile.subscriptionId), undecodableProfiles: 0 });
+    mocks.listProfileSummaries.mockResolvedValue({
+      entries: profiles.filter((p) => p.profile.subscriptionId),
+      undecodableProfiles: 0,
+    });
     await act(async () => changed());
     await waitFor(() => expect(screen.queryByRole("button", { name: "Local nodes" })).not.toBeInTheDocument());
     expect(screen.getAllByTestId("node-group-card")).toHaveLength(2);
@@ -196,7 +217,9 @@ describe("source-derived node groups", () => {
     const { client } = renderScreen();
     await userEvent.click(await screen.findByRole("button", { name: "Asia" }));
     mocks.listSubscriptions.mockResolvedValue([source("a", "Renamed", 0), subscriptions[0]]);
-    await act(async () => { await client.invalidateQueries({ queryKey: queryKeys.subscriptions }); });
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: queryKeys.subscriptions });
+    });
     expect(await screen.findByRole("button", { name: "Renamed" })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "Asia" })).not.toBeInTheDocument();
   });
@@ -228,7 +251,9 @@ describe("source-derived node groups", () => {
     renderScreen();
     await userEvent.click(await screen.findByRole("button", { name: "Asia" }));
     await userEvent.click(within(card("Asia")).getByRole("button", { name: "Test group" }));
-    expect(mocks.runSpeedtest).toHaveBeenCalledWith(expect.objectContaining({ target: { scope: "profiles", profileIds: ["profile-0", "profile-3"] } }));
+    expect(mocks.runSpeedtest).toHaveBeenCalledWith(
+      expect.objectContaining({ target: { scope: "profiles", profileIds: ["profile-0", "profile-3"] } }),
+    );
     expect(mocks.setActiveProfile).not.toHaveBeenCalled();
     expect(mocks.connectActiveProfile).not.toHaveBeenCalled();
   });
@@ -254,14 +279,15 @@ describe("group panels and scoped export", () => {
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
     await userEvent.click(screen.getByRole("button", { name: "Asia" }));
-    mocks.listProfileSummaries.mockResolvedValue({ entries: profiles.map((p) => p.profile.id === "profile-2" ? { ...p, profile: { ...p.profile, subscriptionId: "a" } } : p), undecodableProfiles: 0 });
+    mocks.listProfileSummaries.mockResolvedValue({
+      entries: profiles.map((p) =>
+        p.profile.id === "profile-2" ? { ...p, profile: { ...p.profile, subscriptionId: "a" } } : p,
+      ),
+      undecodableProfiles: 0,
+    });
     await exportGroup("Asia", "Share links");
     await waitFor(() =>
-      expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith([
-        "profile-0",
-        "profile-2",
-        "profile-3",
-      ]),
+      expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-0", "profile-2", "profile-3"]),
     );
     expect(writeText).toHaveBeenCalledWith("profile-0\nprofile-2\nprofile-3");
     expect(mocks.setActiveProfile).not.toHaveBeenCalled();
@@ -271,36 +297,24 @@ describe("group panels and scoped export", () => {
   it("exports only local nodes and keeps removed export formats absent", async () => {
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
-    await userEvent.click(
-      screen.getByRole("menuitem", { name: "More actions for Local nodes" }),
-    );
+    await userEvent.click(screen.getByRole("menuitem", { name: "More actions for Local nodes" }));
     expect(
       within(screen.getByRole("menu"))
         .getAllByRole("menuitem")
         .map((item) => item.textContent),
     ).toEqual(["Share links", "Show QR"]);
-    await userEvent.click(
-      screen.getByRole("menuitem", { name: "Share links" }),
-    );
-    await waitFor(() =>
-      expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-2"]),
-    );
+    await userEvent.click(screen.getByRole("menuitem", { name: "Share links" }));
+    await waitFor(() => expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-2"]));
   });
 
   it("shows group QR export and retains text if the QR is too large", async () => {
-    mocks.generateQrCode.mockRejectedValue(
-      new Error("QR content is too large"),
-    );
+    mocks.generateQrCode.mockRejectedValue(new Error("QR content is too large"));
     renderScreen();
     await screen.findByRole("button", { name: "Asia" });
     await exportGroup("Asia", "Show QR");
     const dialog = await screen.findByRole("dialog", { name: "Show QR" });
-    expect(
-      await within(dialog).findByText("QR content is too large"),
-    ).toBeInTheDocument();
-    expect(within(dialog).getByLabelText("Content")).toHaveValue(
-      "profile-0\nprofile-3",
-    );
+    expect(await within(dialog).findByText("QR content is too large")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Content")).toHaveValue("profile-0\nprofile-3");
   });
 
   it.each(["deleted", "load failed", "empty"])(
@@ -308,9 +322,12 @@ describe("group panels and scoped export", () => {
     async (failure) => {
       renderScreen();
       await screen.findByRole("button", { name: "Asia" });
-      if (failure === "load failed")
-        mocks.listProfileSummaries.mockRejectedValue(new Error("Profiles unavailable"));
-      else mocks.listProfileSummaries.mockResolvedValue({ entries: profiles.filter((p) => p.profile.subscriptionId !== "a"), undecodableProfiles: 0 });
+      if (failure === "load failed") mocks.listProfileSummaries.mockRejectedValue(new Error("Profiles unavailable"));
+      else
+        mocks.listProfileSummaries.mockResolvedValue({
+          entries: profiles.filter((p) => p.profile.subscriptionId !== "a"),
+          undecodableProfiles: 0,
+        });
       await exportGroup("Asia", "Share links");
       expect(await screen.findByRole("alert")).toBeInTheDocument();
       expect(mocks.exportProfileShareLinks).not.toHaveBeenCalled();
@@ -335,12 +352,8 @@ describe("group panels and scoped export", () => {
     await screen.findByRole("button", { name: "Asia" });
     await exportGroup("Asia", "Share links");
     expect(await screen.findByText(/Skipped 1/)).toBeInTheDocument();
-    expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith([
-      "profile-0",
-      "profile-3",
-    ]);
+    expect(mocks.exportProfileShareLinks).toHaveBeenCalledWith(["profile-0", "profile-3"]);
   });
-
 
   it("searches node names, addresses and subscriptions without changing saved collapse state", async () => {
     useNodeListStore.setState({ collapsedGroups: ["subscription:a"], hideUnreachable: false });
@@ -365,7 +378,11 @@ describe("group panels and scoped export", () => {
   });
 
   it("sorts measured nodes by latency and hides unreachable ones on request", () => {
-    const measured = (id: string, delayMs: number, outcome: NonNullable<ProfileSummaryEntry["metrics"]["outcome"]> | null) =>
+    const measured = (
+      id: string,
+      delayMs: number,
+      outcome: NonNullable<ProfileSummaryEntry["metrics"]["outcome"]> | null,
+    ) =>
       ({
         isActive: false,
         metrics: { countryCode: null, delayMs, ipInfo: null, outcome, sort: 0 },
@@ -382,12 +399,7 @@ describe("group panels and scoped export", () => {
         .filter((row) => row.kind === "profile")
         .map((row) => row.key);
 
-    expect(ids({ sortByLatency: true })).toEqual([
-      "profile:fast",
-      "profile:slow",
-      "profile:untested",
-      "profile:down",
-    ]);
+    expect(ids({ sortByLatency: true })).toEqual(["profile:fast", "profile:slow", "profile:untested", "profile:down"]);
     expect(ids({ hideUnreachable: true })).toEqual(["profile:slow", "profile:untested", "profile:fast"]);
     const [group] = nodeListRows(nodes, new Set(), "Local nodes", [], "Unknown", { hideUnreachable: true });
     expect(group).toMatchObject({ kind: "group" });
@@ -395,10 +407,7 @@ describe("group panels and scoped export", () => {
   });
 
   it("searches names and addresses from precomputed text, or a whole group by its name", () => {
-    const nodes = [
-      makeProfileFixture(0, { remarks: "Tokyo Edge" }),
-      makeProfileFixture(1, { remarks: "Osaka" }),
-    ];
+    const nodes = [makeProfileFixture(0, { remarks: "Tokyo Edge" }), makeProfileFixture(1, { remarks: "Osaka" })];
     const hays = new Map(nodes.map((item) => [item.profile.id, nodeSearchText(item)]));
     const ids = (search: string, searchHays?: ReadonlyMap<string, string>) =>
       nodeListRows(nodes, new Set(), "Local nodes", [], "Unknown", { search, searchHays })

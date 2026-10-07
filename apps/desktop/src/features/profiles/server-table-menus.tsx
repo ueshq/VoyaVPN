@@ -18,16 +18,8 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@voya/ui/components/button";
 import { MoreMenu, RowContextMenu } from "@voya/ui/components/row-menus";
 import { DisabledReason } from "@/components/disabled-reason";
-import {
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
-} from "@voya/ui/components/context-menu";
-import {
-  MenubarSub,
-  MenubarSubTrigger,
-  MenubarSubContent,
-} from "@voya/ui/components/menubar";
+import { ContextMenuSub, ContextMenuSubContent, ContextMenuSubTrigger } from "@voya/ui/components/context-menu";
+import { MenubarSub, MenubarSubTrigger, MenubarSubContent } from "@voya/ui/components/menubar";
 import {
   CONTEXT_MENU_PRIMITIVES,
   MENUBAR_PRIMITIVES,
@@ -91,9 +83,7 @@ export function SpeedtestButton({
   const blockedElsewhere = !running && Boolean(busyElsewhere);
 
   return (
-    <DisabledReason
-      reason={blockedElsewhere ? t("panes.profiles.speedtest.runningElsewhere") : undefined}
-    >
+    <DisabledReason reason={blockedElsewhere ? t("panes.profiles.speedtest.runningElsewhere") : undefined}>
       <Button
         disabled={blockedElsewhere || (!running && disabled)}
         onClick={() => void (running ? onCancel() : onRun())}
@@ -102,11 +92,7 @@ export function SpeedtestButton({
         type="button"
         variant={variant}
       >
-        {running ? (
-          <Square className="size-4" aria-hidden="true" />
-        ) : (
-          <Zap className="size-4" aria-hidden="true" />
-        )}
+        {running ? <Square className="size-4" aria-hidden="true" /> : <Zap className="size-4" aria-hidden="true" />}
         <span data-slot="button-label">
           {running
             ? progress
@@ -130,13 +116,7 @@ export function ProfileRowContextMenu({
 }) {
   return (
     <RowContextMenu
-      content={
-        <ProfileMenuItems
-          controller={controller}
-          item={item}
-          primitives={CONTEXT_ACTION_PRIMITIVES}
-        />
-      }
+      content={<ProfileMenuItems controller={controller} item={item} primitives={CONTEXT_ACTION_PRIMITIVES} />}
       label={controller.t("panes.profiles.menu.actionsFor", {
         name: item.profile.remarks || item.profile.id,
       })}
@@ -178,11 +158,7 @@ export function ProfileCardMenu({
       })}
       triggerSize="icon"
     >
-      <ProfileMenuItems
-        controller={controller}
-        item={item}
-        primitives={MENUBAR_ACTION_PRIMITIVES}
-      />
+      <ProfileMenuItems controller={controller} item={item} primitives={MENUBAR_ACTION_PRIMITIVES} />
     </MoreMenu>
   );
 }
@@ -196,15 +172,7 @@ function ProfileMenuItems({
   item: ProfileSummaryEntry;
   primitives: ActionMenuPrimitives;
 }) {
-  const {
-    handleExport,
-    handleSpeedtest,
-    requestDelete,
-    openEditor,
-    runOperation,
-    speedtestRunning,
-    t,
-  } = controller;
+  const { handleExport, handleSpeedtest, requestDelete, openEditor, runOperation, speedtestRunning, t } = controller;
   const indexId = item.profile.id;
   const manual = !item.profile.subscriptionId;
   const target: SpeedtestTarget = { scope: "profiles", profileIds: [indexId] };
@@ -212,9 +180,7 @@ function ProfileMenuItems({
     <>
       {manual ? (
         <>
-          <Item
-            onSelect={() => void openEditor(indexId)}
-          >
+          <Item onSelect={() => void openEditor(indexId)}>
             <Pencil className="size-4" aria-hidden="true" />
             {t("panes.profiles.toolbar.edit")}
           </Item>
@@ -230,10 +196,7 @@ function ProfileMenuItems({
           <Separator />
         </>
       )}
-      <Item
-        disabled={speedtestRunning}
-        onSelect={() => void handleSpeedtest(target, `node:${indexId}`)}
-      >
+      <Item disabled={speedtestRunning} onSelect={() => void handleSpeedtest(target, `node:${indexId}`)}>
         <Zap className="size-4" aria-hidden="true" />
         {t("panes.profiles.menu.speedtest")}
       </Item>
@@ -247,11 +210,7 @@ function ProfileMenuItems({
             {MOVE_ITEMS.map(({ action, icon: Icon, labelKey }) => (
               <Item
                 key={action}
-                onSelect={() =>
-                  void runOperation(() =>
-                    voyaCommands().moveProfile(indexId, action, null),
-                  )
-                }
+                onSelect={() => void runOperation(() => voyaCommands().moveProfile(indexId, action, null))}
               >
                 <Icon className="size-4" aria-hidden="true" />
                 {t(labelKey)}

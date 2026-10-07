@@ -25,7 +25,8 @@ describe("homeTunIssue", () => {
 
   // Each system words its first-connection prompt differently; the hint names the right button.
   it("explains the system's VPN prompt on every platform that has one", () => {
-    const hint = (backend: TunStatus["backend"]) => homeTunIssue(tun({ backend, providerState: "permissionRequired" }), t());
+    const hint = (backend: TunStatus["backend"]) =>
+      homeTunIssue(tun({ backend, providerState: "permissionRequired" }), t());
 
     expect(hint("macosPacketTunnel")).toBe(i18next.t("home.vpnPermissionHint"));
     expect(hint("iosPacketTunnel")).toBe(i18next.t("home.vpnPermissionHintIos"));
@@ -53,9 +54,15 @@ describe("homeTunIssue", () => {
     const failed = (backend: TunStatus["backend"]) =>
       tun({ backend, lastProviderError: "the tunnel did not come up within 60s", providerState: "error" });
 
-    expect(homeTunIssue(failed("iosPacketTunnel"), t(), { includeProviderError: false })).toBe(i18next.t("home.vpnErrorIos"));
-    expect(homeTunIssue(failed("androidVpnService"), t(), { includeProviderError: false })).toBe(i18next.t("home.vpnErrorAndroid"));
-    expect(homeTunIssue(failed("iosPacketTunnel"), t())).toBe("iOS PacketTunnel: Error: the tunnel did not come up within 60s");
+    expect(homeTunIssue(failed("iosPacketTunnel"), t(), { includeProviderError: false })).toBe(
+      i18next.t("home.vpnErrorIos"),
+    );
+    expect(homeTunIssue(failed("androidVpnService"), t(), { includeProviderError: false })).toBe(
+      i18next.t("home.vpnErrorAndroid"),
+    );
+    expect(homeTunIssue(failed("iosPacketTunnel"), t())).toBe(
+      "iOS PacketTunnel: Error: the tunnel did not come up within 60s",
+    );
   });
 
   it("reports a provider running from another copy of the app first", () => {

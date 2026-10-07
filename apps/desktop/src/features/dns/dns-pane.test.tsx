@@ -13,10 +13,15 @@ import {
 import { DnsPane } from "./dns-pane";
 import { useDnsSettings } from "@/features/dns/use-dns-settings";
 
-beforeEach(async () => { installSettingsBackend(); await changeLocale("en"); });
+beforeEach(async () => {
+  installSettingsBackend();
+  await changeLocale("en");
+});
 afterEach(cleanup);
 function mount() {
-  function Pane() { return <DnsPane controller={useDnsSettings()} />; }
+  function Pane() {
+    return <DnsPane controller={useDnsSettings()} />;
+  }
   return renderWithQuery(<Pane />);
 }
 /** Puts `dns` in the fake backend before the pane loads it. */
@@ -41,7 +46,11 @@ describe("DNS fields", () => {
     fireEvent.change(input, { target: { value: "https://dns.google/dns-query" } });
     expect(settingsIpc.saveDnsSettings).not.toHaveBeenCalled();
     fireEvent.blur(input);
-    await waitFor(() => expect(settingsIpc.saveDnsSettings).toHaveBeenCalledWith(expect.objectContaining({ remote: "https://dns.google/dns-query" })));
+    await waitFor(() =>
+      expect(settingsIpc.saveDnsSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ remote: "https://dns.google/dns-query" }),
+      ),
+    );
     expect(screen.queryByRole("button", { name: /Save|Reload/ })).not.toBeInTheDocument();
   });
 
@@ -62,7 +71,9 @@ describe("DNS fields", () => {
     const fakeIp = await screen.findByLabelText("FakeIP");
     expect(screen.getByLabelText("Global FakeIP")).toBeDisabled();
     fireEvent.click(fakeIp);
-    await waitFor(() => expect(settingsIpc.saveDnsSettings).toHaveBeenCalledWith(expect.objectContaining({ fakeIp: true })));
+    await waitFor(() =>
+      expect(settingsIpc.saveDnsSettings).toHaveBeenCalledWith(expect.objectContaining({ fakeIp: true })),
+    );
     expect(screen.getByLabelText("Global FakeIP")).toBeEnabled();
   });
 
@@ -119,7 +130,11 @@ describe("DNS fields", () => {
     await user.click(directStrategy);
     const options = within(await screen.findByRole("listbox")).getAllByRole("option");
     expect(options.map((option) => option.textContent)).toEqual([
-      "Default", "Prefer IPv4", "Prefer IPv6", "IPv4 only", "IPv6 only",
+      "Default",
+      "Prefer IPv4",
+      "Prefer IPv6",
+      "IPv4 only",
+      "IPv6 only",
     ]);
     await user.click(screen.getByRole("option", { name: "IPv4 only" }));
     await waitFor(() => expect(lastSaved()?.directStrategy).toBe("ipv4Only"));
@@ -163,9 +178,11 @@ describe("DNS fields", () => {
     expect(screen.queryByText(/errors$/)).not.toBeInTheDocument();
 
     const expected = await commit("Expected IPs", "10.0.0.0/8, 1.1.1.1 2.2.2.2");
-    await waitFor(() => expect(expected).toHaveAccessibleDescription(
-      "For direct DNS: use these IP ranges to check whether a response should be accepted. Expected IPs must be comma-separated without embedded whitespace",
-    ));
+    await waitFor(() =>
+      expect(expected).toHaveAccessibleDescription(
+        "For direct DNS: use these IP ranges to check whether a response should be accepted. Expected IPs must be comma-separated without embedded whitespace",
+      ),
+    );
     expect(screen.getByText("1 errors")).toBeInTheDocument();
     expect(advanced).toHaveAttribute("open");
     await commit("Hosts", "missing-answer");

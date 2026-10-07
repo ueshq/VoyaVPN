@@ -312,7 +312,7 @@ describe("release readiness core seed pinning", () => {
 });
 
 describe("release readiness dry-run gate", () => {
-    const repoRoot = repoRootFromScript(import.meta.url);
+  const repoRoot = repoRootFromScript(import.meta.url);
   const workDirs = [];
 
   afterEach(async () => {

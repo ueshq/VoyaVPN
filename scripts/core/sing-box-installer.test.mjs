@@ -358,7 +358,8 @@ describe("sing-box seed integrity pinning", () => {
       const current = readSingBoxSeedManifest(seedDir);
       const manifestPath = join(seedDir, "sing-box.seed.json");
       for (const env of [{}, { [ALLOW_UNPINNED_SING_BOX_ENV]: "1" }]) {
-        const verify = () => verifyStagedSingBoxSeed({ arch: "x64", env, platform: "win32", repoRoot, version: pinnedVersion });
+        const verify = () =>
+          verifyStagedSingBoxSeed({ arch: "x64", env, platform: "win32", repoRoot, version: pinnedVersion });
         await rm(manifestPath, { force: true });
         expect(verify()).toMatchObject({ code: "manifest-missing", ok: false });
         for (const missing of ["sha256", "executableSha256"]) {
@@ -429,7 +430,8 @@ describe("sing-box seed integrity pinning", () => {
       const seedDir = singBoxSeedDir(repoRoot);
       const body = Buffer.alloc(2.5 * 1024 * 1024, "sing-box");
       await writeStagedWindowsSeed(seedDir, body);
-      const verify = () => verifyStagedSingBoxSeed({ arch: "x64", env: {}, platform: "win32", repoRoot, version: pinnedVersion });
+      const verify = () =>
+        verifyStagedSingBoxSeed({ arch: "x64", env: {}, platform: "win32", repoRoot, version: pinnedVersion });
 
       expect(verify()).toMatchObject({ code: "verified", ok: true });
 
@@ -469,8 +471,9 @@ describe("sing-box seed origin", () => {
     expect(requestedSingBoxSeedOrigin({})).toBe("upstream");
     expect(requestedSingBoxSeedOrigin({ [SING_BOX_SEED_ORIGIN_ENV]: "Source" })).toBe("source");
     expect(requestedSingBoxSeedOrigin({ VOYAVPN_MAC_APP_STORE: "1" })).toBe("source");
-    expect(() => requestedSingBoxSeedOrigin({ VOYAVPN_MAC_APP_STORE: "1", [SING_BOX_SEED_ORIGIN_ENV]: "upstream" }))
-      .toThrow(/Mac App Store/);
+    expect(() =>
+      requestedSingBoxSeedOrigin({ VOYAVPN_MAC_APP_STORE: "1", [SING_BOX_SEED_ORIGIN_ENV]: "upstream" }),
+    ).toThrow(/Mac App Store/);
     expect(() => requestedSingBoxSeedOrigin({ [SING_BOX_SEED_ORIGIN_ENV]: "cdn" })).toThrow(/upstream" or "source/);
   });
 
@@ -480,14 +483,29 @@ describe("sing-box seed origin", () => {
       const repoRoot = join(workDir, "repo");
       const seedDir = singBoxSeedDir(repoRoot);
       await writeStagedSourceSeed(seedDir);
-      expect(verifyStagedSingBoxSeed({ ...darwin, env: {}, origin: "source", repoRoot }))
-        .toMatchObject({ code: "verified", ok: true, origin: "source", pinned: true });
-      expect(verifyStagedSingBoxSeed({ ...darwin, env: {}, repoRoot }))
-        .toMatchObject({ code: "origin-mismatch", ok: false, staged: true });
+      expect(verifyStagedSingBoxSeed({ ...darwin, env: {}, origin: "source", repoRoot })).toMatchObject({
+        code: "verified",
+        ok: true,
+        origin: "source",
+        pinned: true,
+      });
+      expect(verifyStagedSingBoxSeed({ ...darwin, env: {}, repoRoot })).toMatchObject({
+        code: "origin-mismatch",
+        ok: false,
+        staged: true,
+      });
 
       await writeStagedWindowsSeed(seedDir);
-      expect(verifyStagedSingBoxSeed({ arch: "x64", env: {}, origin: "source", platform: "win32", repoRoot, version: DEFAULT_SING_BOX_VERSION }))
-        .toMatchObject({ code: "origin-mismatch", ok: false });
+      expect(
+        verifyStagedSingBoxSeed({
+          arch: "x64",
+          env: {},
+          origin: "source",
+          platform: "win32",
+          repoRoot,
+          version: DEFAULT_SING_BOX_VERSION,
+        }),
+      ).toMatchObject({ code: "origin-mismatch", ok: false });
     } finally {
       await rm(workDir, { force: true, recursive: true });
     }
@@ -530,18 +548,23 @@ describe("sing-box seed origin", () => {
       const buildSeed = vi.fn(async () => ({ seedDir }));
       const common = { ...darwin, buildSeed, logger: { log() {} }, repoRoot, stageSeed };
 
-      await expect(ensureSingBoxSeedForBuild({ ...common, env: { VOYAVPN_MAC_APP_STORE: "1" } }))
-        .resolves.toMatchObject({ origin: "source", status: "already-staged" });
+      await expect(
+        ensureSingBoxSeedForBuild({ ...common, env: { VOYAVPN_MAC_APP_STORE: "1" } }),
+      ).resolves.toMatchObject({ origin: "source", status: "already-staged" });
       expect(buildSeed).not.toHaveBeenCalled();
 
-      await expect(ensureSingBoxSeedForBuild({ ...common, env: {} }))
-        .resolves.toMatchObject({ origin: "upstream", status: "staged" });
+      await expect(ensureSingBoxSeedForBuild({ ...common, env: {} })).resolves.toMatchObject({
+        origin: "upstream",
+        status: "staged",
+      });
       expect(stageSeed).toHaveBeenCalledTimes(1);
       expect(buildSeed).not.toHaveBeenCalled();
 
       await writeStagedWindowsSeed(seedDir);
-      await expect(ensureSingBoxSeedForBuild({ ...common, env: {}, origin: "source" }))
-        .resolves.toMatchObject({ origin: "source", status: "staged" });
+      await expect(ensureSingBoxSeedForBuild({ ...common, env: {}, origin: "source" })).resolves.toMatchObject({
+        origin: "source",
+        status: "staged",
+      });
       expect(buildSeed).toHaveBeenCalledTimes(1);
     } finally {
       await rm(workDir, { force: true, recursive: true });

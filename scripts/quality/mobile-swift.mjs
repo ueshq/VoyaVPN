@@ -1,13 +1,7 @@
 import { readdirSync } from "node:fs";
 import { resolve } from "node:path";
 
-import {
-  captureSpawned,
-  checkedCapture,
-  isCliEntrypoint,
-  repoRootFromScript,
-  runCli,
-} from "../lib/common.mjs";
+import { captureSpawned, checkedCapture, isCliEntrypoint, repoRootFromScript, runCli } from "../lib/common.mjs";
 import { packetTunnelSources } from "../native/macos/tunnel-layout.mjs";
 
 /**

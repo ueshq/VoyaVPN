@@ -26,11 +26,7 @@ export function SectionHeader({
   const heading = (
     <View className="min-w-0 flex-1 flex-row items-center gap-1.5">
       {onToggle ? <ExpandChevron expanded={expanded} /> : null}
-      <Typography
-        numberOfLines={2}
-        maxFontSizeMultiplier={2}
-        className="shrink text-xl font-semibold text-foreground"
-      >
+      <Typography numberOfLines={2} maxFontSizeMultiplier={2} className="shrink text-xl font-semibold text-foreground">
         {title}
       </Typography>
       {detail ? (

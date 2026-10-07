@@ -28,11 +28,7 @@ describe("i18n locales", () => {
   });
 
   it("registers the full product locale set", () => {
-    expect(localeOptions.map((locale) => locale.code)).toEqual([
-      "en",
-      "zh-Hans",
-      "zh-Hant",
-    ]);
+    expect(localeOptions.map((locale) => locale.code)).toEqual(["en", "zh-Hans", "zh-Hant"]);
   });
 
   it.each(["de", "fa", "fr", "hu", "ru"])("ignores removed %s preferences and browser languages", (locale) => {
@@ -202,10 +198,10 @@ function visitSourceDir(sourceRoot: string, modules: Array<[string, string]>, di
     if (entry.isDirectory()) {
       visitSourceDir(sourceRoot, modules, path);
     } else if (
-      entry.isFile()
-      && /\.(ts|tsx)$/.test(entry.name)
-      && !/\.(test|spec)\.(ts|tsx)$/.test(entry.name)
-      && entry.name !== "bindings.ts"
+      entry.isFile() &&
+      /\.(ts|tsx)$/.test(entry.name) &&
+      !/\.(test|spec)\.(ts|tsx)$/.test(entry.name) &&
+      entry.name !== "bindings.ts"
     ) {
       modules.push([relative(sourceRoot, path).replaceAll("\\", "/"), readFileSync(path, "utf8")]);
     }

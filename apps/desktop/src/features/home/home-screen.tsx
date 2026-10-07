@@ -33,15 +33,12 @@ const ACTION_FAILED_KEYS = {
 export function HomeScreen() {
   const { t } = useI18n();
   const home = useHomeRuntime();
-  const navigateToNodes = () =>
-    useShellStore.getState().setActiveTab("profiles", true);
+  const navigateToNodes = () => useShellStore.getState().setActiveTab("profiles", true);
   const openLogs = () => useShellStore.getState().openSettings("advanced", "logs");
-  const runtimeActionAvailable =
-    home.connected || home.state === "cleanupPending";
+  const runtimeActionAvailable = home.connected || home.state === "cleanupPending";
   const noNodes = !home.hasNodes;
   const group = home.activeGroup;
-  const needsSelection =
-    !runtimeActionAvailable && !home.nodeEntry && !group && !noNodes;
+  const needsSelection = !runtimeActionAvailable && !home.nodeEntry && !group && !noNodes;
   const profile = home.nodeEntry?.profile;
   const groupNow = home.groupNow;
   const groupVia = groupNow
@@ -54,9 +51,7 @@ export function HomeScreen() {
     profile?.remarks ||
     profile?.id ||
     home.runningId ||
-    (needsSelection && !home.profilesPending && !home.profilesError
-      ? t("home.noSelection")
-      : "—");
+    (needsSelection && !home.profilesPending && !home.profilesError ? t("home.noSelection") : "—");
   const name = profileNameWithoutFlag(rawName);
   const delayMs = group
     ? (groupNow?.delayMs ?? null)
@@ -64,30 +59,33 @@ export function HomeScreen() {
       ? home.nodeEntry.metrics.delayMs
       : null;
   const marker = home.marker;
-  const recoveryLabel = home.lastError?.reason === "notFound" ? "home.chooseNode" : home.lastError?.reason === "elevationRequired" ? "mobile.authorizeAgain" : "actions.retry";
+  const recoveryLabel =
+    home.lastError?.reason === "notFound"
+      ? "home.chooseNode"
+      : home.lastError?.reason === "elevationRequired"
+        ? "mobile.authorizeAgain"
+        : "actions.retry";
 
   return (
-    <section
-      aria-label={t("home.aria")}
-      className="home-screen"
-      data-testid="home-screen"
-    >
+    <section aria-label={t("home.aria")} className="home-screen" data-testid="home-screen">
       <HomeWorldMap marker={marker} />
       <div className="home-content">
         <div className="home-hero">
           {/* A mode switch needs words as well as a progress indicator. */}
-          <DisabledReason
-            reason={home.modePending && !home.inProgress ? t("home.modePendingReason") : undefined}
-          >
+          <DisabledReason reason={home.modePending && !home.inProgress ? t("home.modePendingReason") : undefined}>
             <ConnectButton
               icon={noNodes ? Plus : needsSelection ? Server : Power}
               label={noNodes ? t("panes.profiles.toolbar.addNode") : needsSelection ? t("home.chooseNode") : undefined}
               busy={home.busy || (!runtimeActionAvailable && home.profilesPending)}
               connected={home.connected}
               inProgress={home.inProgress}
-              onPrimaryAction={noNodes
-                ? () => useShellStore.getState().openProfilesAddMenu()
-                : needsSelection ? navigateToNodes : home.handlePrimaryAction}
+              onPrimaryAction={
+                noNodes
+                  ? () => useShellStore.getState().openProfilesAddMenu()
+                  : needsSelection
+                    ? navigateToNodes
+                    : home.handlePrimaryAction
+              }
               t={t}
               cleanupPending={home.state === "cleanupPending"}
             />
@@ -114,7 +112,12 @@ export function HomeScreen() {
                 })}
               </p>
               <div className="home-error-actions">
-                <Button onClick={home.lastError.reason === "notFound" ? navigateToNodes : home.retryLastAction} size="sm" type="button" variant="outline">
+                <Button
+                  onClick={home.lastError.reason === "notFound" ? navigateToNodes : home.retryLastAction}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
                   {t(recoveryLabel)}
                 </Button>
                 <Button onClick={openLogs} size="sm" type="button" variant="ghost">
@@ -143,11 +146,7 @@ export function HomeScreen() {
           <div className="node-card-surface home-node-card">
             <div aria-hidden="true" className="home-node-icon">
               {/* A group has no country, so its icon says it is a group. */}
-              {group ? (
-                <Layers className="size-5" />
-              ) : (
-                <NodeCountryIcon countryCode={entryCountry(home.nodeEntry)} />
-              )}
+              {group ? <Layers className="size-5" /> : <NodeCountryIcon countryCode={entryCountry(home.nodeEntry)} />}
             </div>
             <div className="home-node-content">
               <p className="home-node-label home-node-label-row">
@@ -167,48 +166,30 @@ export function HomeScreen() {
               <div className="home-node-meta">
                 {group ? (
                   <>
-                    <span
-                      className="home-node-address"
-                      title={groupVia ?? undefined}
-                    >
+                    <span className="home-node-address" title={groupVia ?? undefined}>
                       {groupVia ?? t("nodeGroups.membersCount", { count: group.members.length })}
                     </span>
                     <span>{t(POLICY_GROUP_STRATEGY_KEYS[group.group.strategy])}</span>
                   </>
                 ) : (
                   <>
-                    <span
-                      className="home-node-address"
-                      title={profile ? profile.address : undefined}
-                    >
+                    <span className="home-node-address" title={profile ? profile.address : undefined}>
                       {profile ? profile.address || "—" : "—"}
                     </span>
-                    <span>
-                      {profile ? getProtocolLabel(profile.kind) : "—"}
-                    </span>
+                    <span>{profile ? getProtocolLabel(profile.kind) : "—"}</span>
                   </>
                 )}
                 {/* Restarting is rare, so it is a quiet link on the card
                     rather than a dialog of technical details. */}
                 {home.connected ? (
-                  <button
-                    className="home-details-button"
-                    disabled={home.busy}
-                    onClick={home.restart}
-                    type="button"
-                  >
+                  <button className="home-details-button" disabled={home.busy} onClick={home.restart} type="button">
                     {t("home.reconnect")}
                     <RotateCcw aria-hidden="true" className="size-3" />
                   </button>
                 ) : null}
               </div>
             </div>
-            <Button
-              className="shrink-0"
-              onClick={navigateToNodes}
-              type="button"
-              variant="outline"
-            >
+            <Button className="shrink-0" onClick={navigateToNodes} type="button" variant="outline">
               {t("home.switchNode")}
               <ArrowRight aria-hidden="true" className="size-4" />
             </Button>
@@ -250,22 +231,13 @@ function ConnectButton({
   t: TranslationFunction;
 }) {
   const action =
-    label ??
-    (cleanupPending
-      ? t("home.retryDisconnect")
-      : connected
-        ? t("actions.disconnect")
-        : t("actions.connect"));
+    label ?? (cleanupPending ? t("home.retryDisconnect") : connected ? t("actions.disconnect") : t("actions.connect"));
   return (
     <button
       aria-busy={busy || undefined}
       aria-label={action}
       aria-pressed={connected}
-      className={cn(
-        "home-power",
-        connected && "home-power-connected",
-        cleanupPending && "home-power-cleanup",
-      )}
+      className={cn("home-power", connected && "home-power-connected", cleanupPending && "home-power-cleanup")}
       data-testid="home-connect-button"
       disabled={busy}
       onClick={onPrimaryAction}
@@ -273,13 +245,9 @@ function ConnectButton({
       title={label ? undefined : t("home.shortcutHint", { shortcut: connectionShortcutLabel(t) })}
       type="button"
     >
-      {inProgress || busy ? (
-        <span aria-hidden="true" className="home-power-progress" />
-      ) : null}
+      {inProgress || busy ? <span aria-hidden="true" className="home-power-progress" /> : null}
       <Icon aria-hidden="true" className="size-11" strokeWidth={1.9} />
-      <span>
-        {connected && !cleanupPending ? t("home.disconnectLabel") : action}
-      </span>
+      <span>{connected && !cleanupPending ? t("home.disconnectLabel") : action}</span>
     </button>
   );
 }

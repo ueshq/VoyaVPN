@@ -30,9 +30,7 @@ describe("unwrapCommandResult", () => {
 
 describe("appErrorOfKind", () => {
   it("narrows a matching error to its kind", () => {
-    const error = new IpcCommandError(
-      appError({ type: "notFound", entity: "profile", id: "node-1" }),
-    );
+    const error = new IpcCommandError(appError({ type: "notFound", entity: "profile", id: "node-1" }));
 
     const matched = appErrorOfKind(error, "notFound");
 

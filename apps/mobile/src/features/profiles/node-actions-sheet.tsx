@@ -15,7 +15,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "heroui-native/button";
 import { ListGroup } from "heroui-native/list-group";
 import { Typography } from "heroui-native/text";
-import { AccessibilityInfo, Alert, Modal, Pressable, ScrollView, Share, findNodeHandle, View, useWindowDimensions, type Text } from "react-native";
+import {
+  AccessibilityInfo,
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  Share,
+  findNodeHandle,
+  View,
+  useWindowDimensions,
+  type Text,
+} from "react-native";
 import { Pencil, QrCode, Copy, Gauge, Share2, Trash2, type LucideIcon } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -125,119 +136,175 @@ export function NodeActionsSheet({
   const subscriptionReadOnly = t("panes.profiles.menu.subscriptionReadOnly");
 
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={close} onShow={focusTitle} onDismiss={onClosed}>
+    <Modal
+      visible={open}
+      transparent
+      animationType="fade"
+      onRequestClose={close}
+      onShow={focusTitle}
+      onDismiss={onClosed}
+    >
       <View style={{ flex: 1, justifyContent: "flex-end", paddingTop: insets.top + 16 }}>
         <Pressable accessible={false} className="absolute inset-0 bg-backdrop" onPress={close} />
-        <View accessibilityViewIsModal className="rounded-t-3xl bg-canvas" style={[{ maxHeight: height - insets.top - 16 }, column]}>
-          <ScrollView key={share ? "qr" : "actions"} style={{ flexGrow: 0 }} contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 16 }}>
-              {share ? (
-                <View className="items-center gap-4">
-                  <Typography ref={titleRef} onLayout={focusTitleOnce} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground">{qrTitle}</Typography>
-                  <Typography className="text-base text-foreground">{title}</Typography>
-                  <Typography className="text-sm text-subtle">{getProtocolLabel(entry?.profile.kind)} · {entry?.profile.address}</Typography>
-                  {qrQuery.data ? (
-                    <View
-                      // `accessible` is what turns the label into something a
-                      // screen reader can land on: a bare View carrying an
-                      // `accessibilityLabel` is not an accessibility element in
-                      // React Native, so the label would be dropped on the floor.
-                      accessible
-                      accessibilityRole="image"
-                      className="aspect-square w-full max-w-72 rounded-3xl bg-white p-4 shadow-surface"
-                      accessibilityLabel={qrAlt}
-                    >
-                      <SvgXml xml={qrQuery.data.svg} width="100%" height="100%" />
-                    </View>
-                  ) : (
-                    <Typography className="text-sm text-subtle">
-                      {qrQuery.error ? failedLabel : loadingLabel}
-                    </Typography>
-                  )}
-                </View>
-              ) : entry ? (
-                <>
-                  <View className="gap-1 px-1">
-                    <Typography ref={titleRef} onLayout={focusTitleOnce} accessibilityRole="header" maxFontSizeMultiplier={2} className="text-xl font-semibold text-foreground" numberOfLines={2}>
-                      {title}
-                    </Typography>
-                    <Typography className="text-sm text-subtle" numberOfLines={1}>{entry.profile.address}</Typography>
+        <View
+          accessibilityViewIsModal
+          className="rounded-t-3xl bg-canvas"
+          style={[{ maxHeight: height - insets.top - 16 }, column]}
+        >
+          <ScrollView
+            key={share ? "qr" : "actions"}
+            style={{ flexGrow: 0 }}
+            contentContainerStyle={{ padding: 20, paddingBottom: Math.max(20, insets.bottom), gap: 16 }}
+          >
+            {share ? (
+              <View className="items-center gap-4">
+                <Typography
+                  ref={titleRef}
+                  onLayout={focusTitleOnce}
+                  accessibilityRole="header"
+                  maxFontSizeMultiplier={2}
+                  className="text-xl font-semibold text-foreground"
+                >
+                  {qrTitle}
+                </Typography>
+                <Typography className="text-base text-foreground">{title}</Typography>
+                <Typography className="text-sm text-subtle">
+                  {getProtocolLabel(entry?.profile.kind)} · {entry?.profile.address}
+                </Typography>
+                {qrQuery.data ? (
+                  <View
+                    // `accessible` is what turns the label into something a
+                    // screen reader can land on: a bare View carrying an
+                    // `accessibilityLabel` is not an accessibility element in
+                    // React Native, so the label would be dropped on the floor.
+                    accessible
+                    accessibilityRole="image"
+                    className="aspect-square w-full max-w-72 rounded-3xl bg-white p-4 shadow-surface"
+                    accessibilityLabel={qrAlt}
+                  >
+                    <SvgXml xml={qrQuery.data.svg} width="100%" height="100%" />
                   </View>
-                  <ErrorNotice error={failure} />
-                  <ListGroup>
-                    {entry.profile.subscriptionId === null ? (
+                ) : (
+                  <Typography className="text-sm text-subtle">{qrQuery.error ? failedLabel : loadingLabel}</Typography>
+                )}
+              </View>
+            ) : entry ? (
+              <>
+                <View className="gap-1 px-1">
+                  <Typography
+                    ref={titleRef}
+                    onLayout={focusTitleOnce}
+                    accessibilityRole="header"
+                    maxFontSizeMultiplier={2}
+                    className="text-xl font-semibold text-foreground"
+                    numberOfLines={2}
+                  >
+                    {title}
+                  </Typography>
+                  <Typography className="text-sm text-subtle" numberOfLines={1}>
+                    {entry.profile.address}
+                  </Typography>
+                </View>
+                <ErrorNotice error={failure} />
+                <ListGroup>
+                  {entry.profile.subscriptionId === null ? (
+                    <SheetAction
+                      icon={Pencil}
+                      color={actionColor}
+                      label={t("mobile.editNode")}
+                      onPress={() => {
+                        const id = entry.profile.id;
+                        close();
+                        openPage("editProfile", { id });
+                      }}
+                    />
+                  ) : null}
+                  {exportable ? (
+                    <>
                       <SheetAction
-                        icon={Pencil}
+                        icon={Copy}
                         color={actionColor}
-                        label={t("mobile.editNode")}
+                        label={shareLabel}
                         onPress={() => {
-                          const id = entry.profile.id;
+                          void exports.handleExport([entry.profile.id]);
                           close();
-                          openPage("editProfile", { id });
                         }}
                       />
-                    ) : null}
-                    {exportable ? (
-                      <>
-                        <SheetAction
-                          icon={Copy}
-                          color={actionColor}
-                          label={shareLabel}
-                          onPress={() => {
-                            void exports.handleExport([entry.profile.id]);
-                            close();
-                          }}
-                        />
-                        <SheetAction icon={Share2} color={actionColor} label={t("mobile.share")} onPress={() => void attempt(async () => {
-                          const result = await voyaCommands().exportProfileShareLinks([entry.profile.id]);
-                          await Share.share({ message: result.text });
-                        })} />
-                      </>
-                    ) : null}
-                    <SheetAction icon={Gauge} color={actionColor} label={t("mobile.testNode")} last={owned && !exportable} onPress={() => { onTest(entry.profile.id); close(); }} />
-                    {exportable ? (
                       <SheetAction
-                        icon={QrCode}
+                        icon={Share2}
                         color={actionColor}
-                        label={qrTitle}
-                        last={owned}
-                        // Asked for here rather than through the list's export:
-                        // its failure banner sits behind this sheet.
-                        onPress={() => void attempt(async () => {
+                        label={t("mobile.share")}
+                        onPress={() =>
+                          void attempt(async () => {
+                            const result = await voyaCommands().exportProfileShareLinks([entry.profile.id]);
+                            await Share.share({ message: result.text });
+                          })
+                        }
+                      />
+                    </>
+                  ) : null}
+                  <SheetAction
+                    icon={Gauge}
+                    color={actionColor}
+                    label={t("mobile.testNode")}
+                    last={owned && !exportable}
+                    onPress={() => {
+                      onTest(entry.profile.id);
+                      close();
+                    }}
+                  />
+                  {exportable ? (
+                    <SheetAction
+                      icon={QrCode}
+                      color={actionColor}
+                      label={qrTitle}
+                      last={owned}
+                      // Asked for here rather than through the list's export:
+                      // its failure banner sits behind this sheet.
+                      onPress={() =>
+                        void attempt(async () => {
                           const result = await voyaCommands().exportProfileShareLinks([entry.profile.id]);
                           exports.setShareQrContent(result.text);
-                        })}
-                      />
-                    ) : null}
-                    {entry.profile.subscriptionId === null ? (
-                      <SheetAction
-                        destructive
-                        icon={Trash2}
-                        color={dangerColor}
-                        label={deleteLabel}
-                        last
-                        onPress={() => Alert.alert(t("mobile.deleteConfirm"), t("mobile.deleteNodeHint"), [
+                        })
+                      }
+                    />
+                  ) : null}
+                  {entry.profile.subscriptionId === null ? (
+                    <SheetAction
+                      destructive
+                      icon={Trash2}
+                      color={dangerColor}
+                      label={deleteLabel}
+                      last
+                      onPress={() =>
+                        Alert.alert(t("mobile.deleteConfirm"), t("mobile.deleteNodeHint"), [
                           { text: t("actions.cancel"), style: "cancel" },
                           { text: deleteLabel, style: "destructive", onPress: () => void remove(entry.profile.id) },
-                        ])}
-                      />
-                    ) : null}
-                  </ListGroup>
-                  {entry.profile.subscriptionId === null ? null : (
-                    <View className="gap-2">
-                      <Typography className="px-1 text-sm text-subtle">{subscriptionReadOnly}</Typography>
-                      <Button variant="secondary" onPress={() => { const id = entry.profile.subscriptionId; close(); if (id) openPage("subscription", { id }); }}><Button.Label>{t("mobile.subscriptions")}</Button.Label></Button>
-                    </View>
-                  )}
-                </>
-              ) : null}
-              <Button
-                className="py-3"
-                variant="tertiary"
-                onPress={close}
-                accessibilityRole="button"
-              >
-                <Button.Label>{closeLabel}</Button.Label>
-              </Button>
+                        ])
+                      }
+                    />
+                  ) : null}
+                </ListGroup>
+                {entry.profile.subscriptionId === null ? null : (
+                  <View className="gap-2">
+                    <Typography className="px-1 text-sm text-subtle">{subscriptionReadOnly}</Typography>
+                    <Button
+                      variant="secondary"
+                      onPress={() => {
+                        const id = entry.profile.subscriptionId;
+                        close();
+                        if (id) openPage("subscription", { id });
+                      }}
+                    >
+                      <Button.Label>{t("mobile.subscriptions")}</Button.Label>
+                    </Button>
+                  </View>
+                )}
+              </>
+            ) : null}
+            <Button className="py-3" variant="tertiary" onPress={close} accessibilityRole="button">
+              <Button.Label>{closeLabel}</Button.Label>
+            </Button>
           </ScrollView>
         </View>
       </View>

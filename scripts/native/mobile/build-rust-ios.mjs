@@ -1,22 +1,8 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
-import {
-  checkedCapture,
-  isCliEntrypoint,
-  repoRootFromScript,
-  requireDarwin,
-  run,
-} from "../../lib/common.mjs";
+import { checkedCapture, isCliEntrypoint, repoRootFromScript, requireDarwin, run } from "../../lib/common.mjs";
 import { parseArgs } from "../../lib/args.mjs";
 import { generateUniffiBindings, rustProfile } from "./uniffi-bindings.mjs";
 
@@ -82,9 +68,7 @@ function ensureTargets(targets) {
   const missing = missingTargets(installed, targets);
 
   if (missing.length > 0) {
-    throw new Error(
-      `Missing Rust targets: ${missing.join(", ")}. Run: rustup target add ${missing.join(" ")}`,
-    );
+    throw new Error(`Missing Rust targets: ${missing.join(", ")}. Run: rustup target add ${missing.join(" ")}`);
   }
 }
 

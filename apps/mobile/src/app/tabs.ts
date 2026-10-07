@@ -21,32 +21,27 @@ import { SettingsScreen } from "~/features/settings/settings-screen";
 export const SHELL_TABS = {
   home: {
     titleKey: "tabs.home",
-    icon: Platform.OS === "ios"
-      ? { sfSymbol: "house" }
-      : { uri: "voya_tab_home" },
+    icon: Platform.OS === "ios" ? { sfSymbol: "house" } : { uri: "voya_tab_home" },
     component: HomeScreen,
   },
   profiles: {
     titleKey: "tabs.profiles",
-    icon: Platform.OS === "ios"
-      ? { sfSymbol: "server.rack" }
-      : { uri: "voya_tab_nodes" },
+    icon: Platform.OS === "ios" ? { sfSymbol: "server.rack" } : { uri: "voya_tab_nodes" },
     component: NodesScreen,
   },
   rules: {
     titleKey: "tabs.rules",
-    icon: Platform.OS === "ios"
-      ? { sfSymbol: "point.3.connected.trianglepath.dotted" }
-      : { uri: "voya_tab_rules" },
+    icon: Platform.OS === "ios" ? { sfSymbol: "point.3.connected.trianglepath.dotted" } : { uri: "voya_tab_rules" },
     component: RulesScreen,
   },
   settings: {
     titleKey: "tabs.settings",
-    icon: Platform.OS === "ios"
-      ? { sfSymbol: "gearshape" }
-      : { uri: "voya_tab_settings" },
+    icon: Platform.OS === "ios" ? { sfSymbol: "gearshape" } : { uri: "voya_tab_settings" },
     component: SettingsScreen,
   },
-} as const satisfies Record<string, { titleKey: TranslationKey; icon: AppleIcon | ImageSourcePropType; component: ComponentType }>;
+} as const satisfies Record<
+  string,
+  { titleKey: TranslationKey; icon: AppleIcon | ImageSourcePropType; component: ComponentType }
+>;
 
 export type ShellTab = keyof typeof SHELL_TABS;

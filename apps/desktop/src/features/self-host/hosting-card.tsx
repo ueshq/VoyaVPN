@@ -39,9 +39,8 @@ export function HostingCard({
   const { runtime } = state;
   const { stats } = controller;
   const tone = statusTone(runtime.status);
-  const hintKey = runtime.status === "running" || runtime.status === "stopped"
-    ? STATUS_HINT_KEYS[runtime.status]
-    : null;
+  const hintKey =
+    runtime.status === "running" || runtime.status === "stopped" ? STATUS_HINT_KEYS[runtime.status] : null;
   // Both problems are fixed in the settings dialog, so the way there is offered.
   const fixedInSettings = runtime.problem === "noProtocol" || runtime.problem === "portInUse";
 
@@ -59,9 +58,7 @@ export function HostingCard({
               data-state={tone}
             />
             <span className="font-medium">{t(STATUS_KEYS[runtime.status])}</span>
-            {hintKey && !runtime.problem ? (
-              <span className="text-muted-foreground">{t(hintKey)}</span>
-            ) : null}
+            {hintKey && !runtime.problem ? <span className="text-muted-foreground">{t(hintKey)}</span> : null}
           </p>
         </div>
         <Switch

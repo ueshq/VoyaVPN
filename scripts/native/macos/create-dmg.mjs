@@ -1,13 +1,6 @@
 import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import {
-  isCliEntrypoint,
-  repoRootFromScript,
-  requireDarwin,
-  run,
-  runCli,
-  truthy,
-} from "../../lib/common.mjs";
+import { isCliEntrypoint, repoRootFromScript, requireDarwin, run, runCli, truthy } from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
 import { inferDistribution } from "./provisioning.mjs";
 import { initializeTunnelLayout, packetTunnelLayout, requirePath, resolveDmgPath } from "./tunnel-layout.mjs";
@@ -64,21 +57,25 @@ function createStagingDirectory() {
 function createDmg(outputPath) {
   mkdirSync(dirname(outputPath), { recursive: true });
   rmSync(outputPath, { force: true });
-  run("hdiutil", [
-    "create",
-    "-volname",
-    "VoyaVPN",
-    "-srcfolder",
-    stagingRoot,
-    "-fs",
-    "HFS+",
-    "-ov",
-    // LZMA: the payload is almost entirely Mach-O, which it packs noticeably
-    // tighter than zlib (UDZO). Mountable from macOS 10.15, the app's minimum.
-    "-format",
-    "ULMO",
-    outputPath,
-  ], { cwd: repoRoot });
+  run(
+    "hdiutil",
+    [
+      "create",
+      "-volname",
+      "VoyaVPN",
+      "-srcfolder",
+      stagingRoot,
+      "-fs",
+      "HFS+",
+      "-ov",
+      // LZMA: the payload is almost entirely Mach-O, which it packs noticeably
+      // tighter than zlib (UDZO). Mountable from macOS 10.15, the app's minimum.
+      "-format",
+      "ULMO",
+      outputPath,
+    ],
+    { cwd: repoRoot },
+  );
 }
 
 /**

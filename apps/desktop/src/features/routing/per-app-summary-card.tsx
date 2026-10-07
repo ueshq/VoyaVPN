@@ -33,12 +33,7 @@ export function PerAppSummaryCard(props: PerAppSummaryCardProps) {
   return useProcessRulesSupported() ? <SupportedPerAppSummaryCard {...props} /> : null;
 }
 
-function SupportedPerAppSummaryCard({
-  locked = false,
-  onEdit,
-  routing,
-}: PerAppSummaryCardProps) {
-
+function SupportedPerAppSummaryCard({ locked = false, onEdit, routing }: PerAppSummaryCardProps) {
   const { t } = useI18n();
   const { mode, processes } = readPerAppRule(routing);
   const statusQuery = useQuery(queries.connectionMode);
@@ -52,9 +47,7 @@ function SupportedPerAppSummaryCard({
       <div className={cn("grid min-w-0 flex-1 gap-1.5", locked && "opacity-55")}>
         <div className="flex flex-wrap items-baseline gap-x-2">
           <h2 className="text-sm font-semibold">{t("panes.routing.perAppTitle")}</h2>
-          <span className="text-sm text-muted-foreground">
-            {t(PER_APP_MODE_LABEL_KEYS[mode])}
-          </span>
+          <span className="text-sm text-muted-foreground">{t(PER_APP_MODE_LABEL_KEYS[mode])}</span>
         </div>
         {on ? (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -64,9 +57,7 @@ function SupportedPerAppSummaryCard({
               </Badge>
             ))}
             {hidden > 0 ? (
-              <span className="text-xs text-muted-foreground">
-                {t("panes.routing.matchMore", { count: hidden })}
-              </span>
+              <span className="text-xs text-muted-foreground">{t("panes.routing.matchMore", { count: hidden })}</span>
             ) : null}
           </div>
         ) : null}
