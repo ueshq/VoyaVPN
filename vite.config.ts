@@ -10,6 +10,10 @@ const hermesMessage =
   "Hermes does not implement every ES2023 copying method. Copy the array, then mutate the copy.";
 
 export default defineConfig({
+  // Bare `vp dev` / `vp build` / `vp preview` at the root mean the desktop
+  // renderer: every package has a vite.config.ts for its tests, so without
+  // this vp would ask which one. Read statically, so it must stay a literal.
+  defaultPackage: "./apps/desktop",
   lint: {
     plugins: ["eslint", "typescript", "react", "oxc"],
     jsPlugins: [{ name: "vite-plus", specifier: "vite-plus/oxlint-plugin" }, "./scripts/lint/voya-plugin.mjs"],

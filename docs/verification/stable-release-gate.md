@@ -21,7 +21,7 @@ Every external checkpoint must attach owner, system, verification, rollback or s
 
 | Gate | Owner | System | Verification | Rollback or stop condition |
 | --- | --- | --- | --- | --- |
-| Automated regression gate | Release engineer | Local workstation and GitHub Actions `Release` workflow | `pnpm run verify:local`, `pnpm run build`, package jobs, `SHA256SUMS`, artifact manifests, CDN release-index evidence, updater metadata evidence, and core manifest evidence are recorded for the frozen commit. | Stop release, fix the failing check, and rerun from the frozen commit. |
+| Automated regression gate | Release engineer | Local workstation and GitHub Actions `Release` workflow | `vp run verify:local`, `vp run build`, package jobs, `SHA256SUMS`, artifact manifests, CDN release-index evidence, updater metadata evidence, and core manifest evidence are recorded for the frozen commit. | Stop release, fix the failing check, and rerun from the frozen commit. |
 | CDN staging | CDN owner | VoyaVPN CDN immutable versioned paths | App artifacts, updater payloads, `latest.json`, manual release index, core manifest, geo/SRS manifests, checksums, signatures, notices, and evidence resolve from the approved CDN and match SHA-256 evidence. | Stop pointer promotion, purge accidental public cache, and quarantine bad staged artifacts with hashes. |
 | Stable pointer promotion | Release owner and CDN owner | VoyaVPN CDN stable pointers | Manual release-index pointer, app updater `latest.json` pointer, core manifest pointer, geo/SRS pointers, checksum pointers, and notices are promoted only after all gates pass; before/after pointer hashes are recorded. | Roll back pointers to the previous known-good release index, `latest.json`, core manifest, and geo/SRS manifests. |
 | Signing and notarization | Security owner, macOS owner, Windows owner, Linux owner | Approved signing systems, Apple Developer ID, Authenticode signer, package repository signing when used | macOS x64/arm64 signatures, notarization, and stapling pass; Windows x64/arm64 signatures pass; Linux package metadata and optional repository signatures pass. | Hold affected platform assets, rebuild from clean artifacts, re-sign, re-notarize, and rerun smoke. |
@@ -39,7 +39,7 @@ Production stable may be exposed only when:
 
 - Release workflow and docs define CDN staging, pointer promotion, updater smoke, manual download smoke, core smoke, legal approval, rollback, and monitoring.
 - Windows, macOS, and Linux coverage includes x64 and arm64.
-- Stable Tauri updater config is generated with `pnpm release -- updater-config` into `target/release-config/tauri.updater.stable.generated.json`; the generated overlay enables `bundle.createUpdaterArtifacts`, while the committed `apps/desktop/src-tauri/tauri.conf.json` keeps `createUpdaterArtifacts` false with an empty credential-free updater config.
+- Stable Tauri updater config is generated with `vp run release -- updater-config` into `target/release-config/tauri.updater.stable.generated.json`; the generated overlay enables `bundle.createUpdaterArtifacts`, while the committed `apps/desktop/src-tauri/tauri.conf.json` keeps `createUpdaterArtifacts` false with an empty credential-free updater config.
 - Rollback docs cover app updater pointer rollback, manual index rollback, core manifest rollback, and bad artifact quarantine.
 - The stable external evidence checklist has matching owner, system, required evidence, stop or rollback condition, and artifact/hash fields for each stable gate entry.
 - Generated evidence contains no `voyavpn.example`, placeholder updater signatures, placeholder public keys, or production GitHub download URLs.
@@ -55,24 +55,24 @@ Prepared release shell sequence:
 
 ```sh
 export VOYAVPN_RELEASE_CHANNEL=stable
-pnpm release -- updater-config
-pnpm release -- readiness --mode stable
+vp run release -- updater-config
+vp run release -- readiness --mode stable
 ```
 
 Expected unprepared-shell failures are missing external inputs, not repository blockers. A normal local shell may fail immediately on missing `VOYAVPN_CDN_BASE_URL`, missing `VOYAVPN_UPDATES_BASE_URL`, missing `VOYAVPN_UPDATER_PUBLIC_KEY`, missing `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`, missing platform signing inputs, missing real stable artifacts, fixture artifact paths in stable mode, placeholder updater signatures, or forbidden production URLs.
 
-Expected prepared-environment pass criteria: `pnpm release -- updater-config` generates `target/release-config/tauri.updater.stable.generated.json`, the overlay enables `bundle.createUpdaterArtifacts`, updater metadata is signed and CDN-derived, app/core metadata use approved CDN production URLs, and `pnpm release -- readiness --mode stable` exits successfully with zero failures. Stable pointer promotion must not start until that check passes.
+Expected prepared-environment pass criteria: `vp run release -- updater-config` generates `target/release-config/tauri.updater.stable.generated.json`, the overlay enables `bundle.createUpdaterArtifacts`, updater metadata is signed and CDN-derived, app/core metadata use approved CDN production URLs, and `vp run release -- readiness --mode stable` exits successfully with zero failures. Stable pointer promotion must not start until that check passes.
 
 ## Repository-Owned Checks
 
 Before handing a frozen commit to external release owners, run:
 
 ```sh
-pnpm run verify:local
-pnpm run build
-pnpm run check:frontend:smoke:mock
-pnpm run check:desktop:smoke
-pnpm release -- readiness --mode dry-run
+vp run verify:local
+vp run build
+vp run check:frontend:smoke:mock
+vp run check:desktop:smoke
+vp run release -- readiness --mode dry-run
 ```
 
 These checks prove local regression, packaging metadata shape, and dry-run release readiness. They do not prove CDN publication, signing, notarization, external smoke, legal approval, stable pointer promotion, rollback drills, or monitoring readiness.

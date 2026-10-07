@@ -4,7 +4,7 @@ The sing-box core is not built by VoyaVPN. It is downloaded from an upstream
 GitHub release, extracted into
 `apps/desktop/src-tauri/resources/core-seeds/sing_box/`, executed on developer
 machines by the `postinstall` probe, and bundled into every package that
-`pnpm tauri:build` produces. Because a GitHub release tag is mutable, that
+`vp run tauri:build` produces. Because a GitHub release tag is mutable, that
 archive is pinned by SHA-256 in the repository.
 
 ## Where the pin lives
@@ -57,7 +57,7 @@ is interpolated into a URL or a PowerShell command line.
 4. Re-stage locally and confirm the seed manifest reports the new version:
 
    ```sh
-   pnpm core:sing-box:install --force-fetch
+   vp run core:sing-box:install --force-fetch
    cat apps/desktop/src-tauri/resources/core-seeds/sing_box/sing-box.seed.json
    ```
 
@@ -77,7 +77,7 @@ is interpolated into a URL or a PowerShell command line.
    Record the commit in `SING_BOX_SOURCE_COMMITS`. Compare the tag list with
    `SING_BOX_SOURCE_BUILD_TAGS`; if upstream changed it, review the change
    before copying it, and never add `with_naive_outbound`. Then run
-   `pnpm core:sing-box:build` on a Mac and check that it passes its own
+   `vp run core:sing-box:build` on a Mac and check that it passes its own
    public-API scan.
 
 ## From-source seed (Mac App Store lane)
@@ -93,7 +93,7 @@ So the store lane builds the seed from source instead:
 
 - **Switch.** `VOYAVPN_SING_BOX_SEED_ORIGIN` is `upstream` (default) or
   `source`. `VOYAVPN_MAC_APP_STORE=1` implies `source`, and asking that build
-  for `upstream` is refused. `pnpm install` stages the upstream seed and never
+  for `upstream` is refused. `vp install` stages the upstream seed and never
   needs Go.
 - **Pin.** `SING_BOX_SOURCE_COMMITS` maps each tag to the commit it must
   resolve to, since a tag can move. `SING_BOX_SOURCE_BUILD_TAGS` is upstream's
@@ -104,7 +104,7 @@ So the store lane builds the seed from source instead:
   `target/native/sing-box` (the checkout the Libbox builds share) and runs
   `go build -trimpath` with upstream's `release/LDFLAGS`. It then checks the
   tags and revision the binary reports and, on macOS, runs the public-API scan
-  from `scripts/native/macos/macho-imports.mjs`. `pnpm core:sing-box:build`
+  from `scripts/native/macos/macho-imports.mjs`. `vp run core:sing-box:build`
   runs it by hand; the Tauri build wrapper runs it when the staged seed does
   not verify.
 - **Manifest.** `sing-box.seed.json` records `origin: "source"`, `version`,
@@ -116,7 +116,7 @@ So the store lane builds the seed from source instead:
   (`origin-mismatch`), so the next build re-stages instead of bundling it. That
   keeps a source seed out of a Developer ID package and the upstream binary out
   of the store package. A source seed must also match the pinned commit, the
-  exact tag list, the target, and its recorded executable digest. `pnpm release
+  exact tag list, the target, and its recorded executable digest. `vp run release
   -- readiness` fails on a wrong commit or tag list.
 - **Runtime.** The app reads `tags` from the bundled manifest. A node whose
   outbound type needs a tag the seed lacks is reported as `protocolUnsupported`
@@ -140,7 +140,7 @@ including with this variable; they require re-staging.
 It never accepts a digest that disagrees: a mismatching archive or a staged
 binary that no longer matches its manifest is refused with or without the
 variable. It must not be set in CI or for a release build — the resulting
-`sing-box.seed.json` records `"pinned": false`, and `pnpm release -- readiness`
+`sing-box.seed.json` records `"pinned": false`, and `vp run release -- readiness`
 reports the seed as unverified (a stable blocker).
 
 A missing or incomplete manifest requires re-staging and verification regardless
@@ -166,11 +166,11 @@ and one SHA-256 per file. Upstream (`2dust/sing-box-rules`) publishes them on
 the `rule-set-geosite` and `rule-set-geoip` branches and has no release tags,
 so a branch name alone would change under the build every day.
 
-`pnpm install` stages them into
+`vp install` stages them into
 `apps/desktop/src-tauri/resources/core-seeds/rule_sets/` (skipped on CI unless
 `VOYAVPN_FETCH_RULE_SETS_ON_INSTALL=1`, and whenever
 `VOYAVPN_SKIP_RULE_SETS_POSTINSTALL=1`), and every `tauri build` re-stages any
-file that is missing or does not match its pin. `pnpm core:rule-sets:install`
+file that is missing or does not match its pin. `vp run core:rule-sets:install`
 forces a fresh download. At startup the desktop app copies any bundled file
 that app data `bin/srss/` lacks; it never replaces one, because a rule-library
 update may have put a newer file there.
@@ -183,5 +183,5 @@ To bump them:
    `https://raw.githubusercontent.com/2dust/sing-box-rules/<commit>/<tag>.srs`,
    check that it starts with `SRS`, and record its SHA-256.
 3. Update `RULE_SET_PINS` in one commit, then run
-   `pnpm core:rule-sets:install` and `pnpm release -- readiness --dry-run`.
+   `vp run core:rule-sets:install` and `vp run release -- readiness --dry-run`.
 

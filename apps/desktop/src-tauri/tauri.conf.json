@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "app.voyavpn.desktop",
   "build": {
-    "beforeDevCommand": "pnpm dev:web",
-    "beforeBuildCommand": "pnpm build",
+    "beforeDevCommand": "vp dev",
+    "beforeBuildCommand": "vp build",
     "devUrl": "http://127.0.0.1:1420",
     "frontendDist": "../dist",
     "removeUnusedCommands": true

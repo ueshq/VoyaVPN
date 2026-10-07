@@ -11,5 +11,25 @@
   "search.exclude": {
     "**/target/**": true
   },
-  "vitest.filesWatcherInclude": "{apps/*/src,apps/*/e2e,packages/*/src,scripts}/**/*.{ts,tsx,js,jsx,mjs,cjs}"
+  "vitest.filesWatcherInclude": "{apps/*/src,apps/*/e2e,packages/*/src,scripts}/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "[javascript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "oxc.disableNestedConfig": true,
+  "oxc.fmt.disableNestedConfig": true,
+  "editor.formatOnSaveMode": "file",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.oxc": "explicit"
+  },
+  "npm.scriptRunner": "vp"
 }

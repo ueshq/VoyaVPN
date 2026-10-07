@@ -1,6 +1,6 @@
 # Windows Local TUN Testing
 
-`pnpm build:windows:local` produces an unsigned release-profile Windows client
+`vp run build:windows:local` produces an unsigned release-profile Windows client
 for local TUN testing. It builds an NSIS package for the machine's native x64
 or arm64 architecture, silently installs it for the current user, and uses one
 UAC prompt to install the native tunnel service.
@@ -12,7 +12,8 @@ launch VoyaVPN automatically.
 ## Prerequisites
 
 - Windows 10 or Windows 11 on x64 or arm64.
-- Node.js 22 with the repository-pinned pnpm 11.5.0.
+- The Vite+ CLI (`irm https://vite.plus/ps1 | iex`), which provides Node.js and
+  the repository-pinned pnpm 11.5.0.
 - Rust 1.96.0 with the native MSVC-hosted toolchain selected for this
   repository. For Windows x64:
 
@@ -39,9 +40,7 @@ built and tested on the prepared Windows release host.
 Install the repository dependencies from a normal PowerShell first:
 
 ```powershell
-corepack enable
-corepack prepare pnpm@11.5.0 --activate
-pnpm install --frozen-lockfile
+vp install --frozen-lockfile
 ```
 
 ## Build And Install
@@ -50,7 +49,7 @@ Quit the VoyaVPN GUI and disable TUN, then run from a normal, non-elevated
 PowerShell:
 
 ```powershell
-pnpm build:windows:local
+vp run build:windows:local
 ```
 
 The command performs these steps:
@@ -97,7 +96,7 @@ After enabling TUN in VoyaVPN:
 4. Disable TUN and verify the service stops, Wintun routes disappear, DNS is
    restored, and no sing-box process remains.
 
-Re-running `pnpm build:windows:local` updates the same local NSIS installation
+Re-running `vp run build:windows:local` updates the same local NSIS installation
 and replaces the protected service binary without starting the service.
 
 ## Troubleshooting
@@ -112,7 +111,7 @@ and replaces the protected service binary without starting the service.
 - **Service stop timed out** — disable TUN, inspect
   `sc.exe query VoyaVPNTunnelService`, then retry. The script will not overwrite
   a running service executable.
-- **Missing sing-box seed** — run `pnpm core:sing-box:install` and rebuild.
+- **Missing sing-box seed** — run `vp run core:sing-box:install` and rebuild.
 
 ## Teardown
 
@@ -120,7 +119,7 @@ Disable TUN and quit VoyaVPN. In an elevated PowerShell, unregister the service
 and remove only its managed executable:
 
 ```powershell
-pnpm native:windows:tunnel:uninstall
+vp run native:windows:tunnel:uninstall
 ```
 
 The service helper does not recursively delete `%ProgramFiles%\VoyaVPN`; it

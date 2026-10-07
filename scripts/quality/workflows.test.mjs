@@ -6,8 +6,10 @@ import { repoRootFromScript } from "../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const workflowDir = resolve(repoRoot, ".github", "workflows");
-const pnpmInvocationPattern = /(?:^|[\s"'(&|;])pnpm(?:\s|$)/;
-const pnpmSetupPattern = /uses:\s*pnpm\/action-setup@[0-9a-f]{40}\b/;
+// `vp` and the pnpm it manages both need the Vite+ setup; a job that calls
+// either without it fails on a missing command.
+const toolchainInvocationPattern = /(?:^|[\s"'(&|;])(?:vp|pnpm)(?:\s|$)/;
+const toolchainSetupPattern = /uses:\s*voidzero-dev\/setup-vp@[0-9a-f]{40}\b/;
 const actionPinPattern = /^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)/;
 const jobHeaderPattern = /^ {2}([A-Za-z0-9_-]+):\s*$/;
 const jobBodyPattern = /^ {4}(?:steps|uses):/;
@@ -69,26 +71,26 @@ function readWorkflow(name) {
   return readFileSync(resolve(workflowDir, name), "utf8");
 }
 
-function invokesPnpm(body) {
+function invokesToolchain(body) {
   return body.some((line) => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) {
       return false;
     }
-    if (/uses:|cache:\s*pnpm/.test(trimmed)) {
+    if (/uses:/.test(trimmed)) {
       return false;
     }
-    return pnpmInvocationPattern.test(trimmed);
+    return toolchainInvocationPattern.test(trimmed);
   });
 }
 
-function installsPnpm(body) {
-  return body.some((line) => pnpmSetupPattern.test(line) || /uses:\s*\.\/\.github\/actions\/setup-node-pnpm\b/.test(line));
+function installsToolchain(body) {
+  return body.some((line) => toolchainSetupPattern.test(line) || /uses:\s*\.\/\.github\/actions\/setup-vp\b/.test(line));
 }
 
-function jobsInvokingPnpm(name) {
+function jobsInvokingToolchain(name) {
   return [...workflowJobs(readWorkflow(name))]
-    .filter(([, body]) => invokesPnpm(body))
+    .filter(([, body]) => invokesToolchain(body))
     .map(([job]) => job);
 }
 
@@ -101,11 +103,11 @@ describe("GitHub Actions workflows", () => {
     }
   });
 
-  it("installs pnpm in every job that runs pnpm", () => {
+  it("sets up Vite+ in every job that runs vp or pnpm", () => {
     const missing = [];
     for (const file of workflowFiles()) {
       for (const [job, body] of workflowJobs(readWorkflow(file))) {
-        if (invokesPnpm(body) && !installsPnpm(body)) {
+        if (invokesToolchain(body) && !installsToolchain(body)) {
           missing.push(`${file}:${job}`);
         }
       }
@@ -114,8 +116,8 @@ describe("GitHub Actions workflows", () => {
     expect(missing).toEqual([]);
   });
 
-  it("covers the release metadata jobs that run the release CLI through pnpm", () => {
-    expect(jobsInvokingPnpm("release.yml")).toEqual(
+  it("covers the release metadata jobs that run the release CLI through vp", () => {
+    expect(jobsInvokingToolchain("release.yml")).toEqual(
       expect.arrayContaining(["core-staging-metadata", "final-stable-readiness"]),
     );
   });
@@ -149,7 +151,7 @@ describe("GitHub Actions workflows", () => {
     for (const secret of ["APPLE_CERTIFICATE", "APPLE_CERTIFICATE_PASSWORD", "APPLE_ID", "APPLE_PASSWORD", "APPLE_TEAM_ID"]) {
       expect(buildStep, secret).toContain(`${secret}: \${{ runner.os == 'macOS' && secrets.${secret} || '' }}`);
     }
-    // Nothing on the pnpm tauri:build path consumes the Windows certificate.
+    // Nothing on the vp run tauri:build path consumes the Windows certificate.
     expect(buildStep).not.toContain("WINDOWS_CERTIFICATE_BASE64");
     expect(buildStep).not.toContain("WINDOWS_CERTIFICATE_PASSWORD");
   });

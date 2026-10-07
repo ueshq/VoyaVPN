@@ -1,15 +1,15 @@
 # Mac App Store Package
 
-`pnpm build:mac:appstore` produces the signed installer package that is
+`vp run build:mac:appstore` produces the signed installer package that is
 uploaded to App Store Connect for TestFlight and Mac App Store review:
 
 ```text
 target/release/bundle/pkg/VoyaVPN_<version>_<build>_aarch64.pkg
 ```
 
-It is the third macOS lane beside `pnpm build:mac` (notarized Developer ID
+It is the third macOS lane beside `vp run build:mac` (notarized Developer ID
 DMG, see [signing-notarization.md](signing-notarization.md)) and
-`pnpm build:mac:local` (this-Mac-only TUN testing, see
+`vp run build:mac:local` (this-Mac-only TUN testing, see
 [macos-local-tun-testing.md](macos-local-tun-testing.md)). The package is
 **arm64 only** and requires **macOS 26** or later. App Store Connect needs at
 least 12.0 for an arm64-only package (ITMS-90869), and the sing-box seed is
@@ -94,7 +94,7 @@ has the naive outbound.
 4. **App Store Connect.** The app record for bundle id `app.voyavpn.desktop`
    must exist before the first upload.
 5. **Libbox.** `apps/desktop/src-tauri/native/macos/Frameworks/Libbox.framework`
-   must exist; build it with `pnpm native:macos:libbox` if not.
+   must exist; build it with `vp run native:macos:libbox` if not.
 6. **Go.** The lane compiles the sing-box seed, so `go` must be on `PATH`
    (`brew install go`). The first build downloads Go modules and takes a few
    minutes; later builds reuse the module and build caches. The installed
@@ -106,7 +106,7 @@ has the naive outbound.
 Run on an Apple Silicon Mac. The script refuses to run on Intel.
 
 ```sh
-pnpm build:mac:appstore
+vp run build:mac:appstore
 ```
 
 The script runs these steps:
@@ -114,7 +114,7 @@ The script runs these steps:
 1. `tauri:build --bundles app` with the store overlay and the
    `mac-app-store` feature. The build wrapper stages the source-built seed
    (`VOYAVPN_SING_BOX_SEED_ORIGIN=source`), compiling it only when the staged
-   one is missing or does not match the pin. `pnpm core:sing-box:build`
+   one is missing or does not match the pin. `vp run core:sing-box:build`
    builds it on its own.
 2. `native:macos:tunnel` to build and sign the PacketTunnel appex.
 3. `native:macos:app:sign`.
@@ -178,7 +178,7 @@ to upload the same commit twice, or to build from a branch whose commit count
 is lower than an earlier upload's:
 
 ```sh
-VOYAVPN_MACOS_BUILD_NUMBER=412 pnpm build:mac:appstore
+VOYAVPN_MACOS_BUILD_NUMBER=412 vp run build:mac:appstore
 ```
 
 It takes one to three period-separated integers. The PacketTunnel copies both
@@ -219,8 +219,8 @@ order:
 1. Reply in the App Store Connect message thread with the
    [Resolution Center reply](app-store-review-notes.md#resolution-center-reply-for-build-405).
    An unanswered thread stays attached to the version.
-2. Run `pnpm run verify:local` on the commit to ship.
-3. Run `pnpm build:mac:appstore`. The build number is the commit count, so it
+2. Run `vp run verify:local` on the commit to ship.
+3. Run `vp run build:mac:appstore`. The build number is the commit count, so it
    is already above 405; set `VOYAVPN_MACOS_BUILD_NUMBER` only to upload the
    same commit twice. Confirm `native:macos:pkg` printed the public-API,
    privilege-escalation and launch-at-login lines.

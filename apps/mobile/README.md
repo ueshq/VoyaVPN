@@ -58,16 +58,16 @@ Neither host is built from this directory. The artifacts they need are
 gitignored build outputs:
 
 ```sh
-pnpm native:mobile:libbox:ios       # Libbox.xcframework
-pnpm native:mobile:libbox:android   # libbox.aar
-pnpm native:mobile:rust:ios         # VoyaMobile.xcframework + Swift bindings
-pnpm native:mobile:rust:android     # jniLibs + Kotlin bindings
+vp run native:mobile:libbox:ios       # Libbox.xcframework
+vp run native:mobile:libbox:android   # libbox.aar
+vp run native:mobile:rust:ios         # VoyaMobile.xcframework + Swift bindings
+vp run native:mobile:rust:android     # jniLibs + Kotlin bindings
 ```
 
 The Xcode project that consumes them is wired up by a script, not by hand:
 
 ```sh
-pnpm run native:mobile:ios:project  # app sources + PacketTunnel appex + UI tests
+vp run native:mobile:ios:project  # app sources + PacketTunnel appex + UI tests
 ```
 
 It is idempotent, and it has to be re-run after `pod install` or a React Native
@@ -86,17 +86,17 @@ only a device can.
 ## Commands
 
 ```sh
-pnpm --filter @voya/mobile start          # Metro
-pnpm --filter @voya/mobile ios            # run on the iOS simulator
-pnpm --filter @voya/mobile android        # run on an Android device/emulator
-pnpm --filter @voya/mobile typecheck      # also covered by check:frontend:typecheck
-pnpm run check:mobile:test                # Jest + @testing-library/react-native
-pnpm run check:mobile:bundle              # Metro bundle for both platforms
-pnpm run check:mobile:swift               # parse the iOS app + UI test Swift (macOS only)
+vp run --filter @voya/mobile start        # Metro
+vp run --filter @voya/mobile ios          # run on the iOS simulator
+vp run --filter @voya/mobile android      # run on an Android device/emulator
+vp check                                # types and lint, mobile included (check:frontend:static)
+vp run check:mobile:test                # Jest + @testing-library/react-native
+vp run check:mobile:bundle              # Metro bundle for both platforms
+vp run check:mobile:swift               # parse the iOS app + UI test Swift (macOS only)
 ```
 
 The XCUITest suite is not one of these: it needs a booted simulator and a
-Release build, takes about four minutes, and runs as `pnpm check:mobile:ios:smoke`
+Release build, takes about four minutes, and runs as `vp run check:mobile:ios:smoke`
 locally and in the `ios-simulator` workflow. It is
 what proves the screens are driving the real Rust backend rather than the
 in-memory mock.

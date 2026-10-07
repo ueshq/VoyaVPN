@@ -20,16 +20,18 @@ TypeScript, Tailwind v4, and shadcn/ui foundations.
 - `crates/voya-net`: downloads, updates, subscriptions, Clash API, and ruleset clients.
 - `crates/voya-app`: application orchestration, including the product-level proxy runtime backed by the sing-box Clash-compatible API.
 
-The root `package.json` `version` is the release-artifact version read by `pnpm release -- artifacts`; keep app, Tauri, and Cargo versions aligned when intentionally bumping releases.
+The root `package.json` `version` is the release-artifact version read by `vp run release -- artifacts`; keep app, Tauri, and Cargo versions aligned when intentionally bumping releases.
 
 ## Setup
 
-Install the pinned frontend toolchain and dependencies:
+The frontend toolchain is [Vite+](https://viteplus.dev) (`vp`): Vite, Vitest,
+Oxlint, Oxfmt and type checking behind one CLI, configured in the root
+`vite.config.ts`. Install the global CLI once, then the dependencies; `vp`
+picks up the pinned pnpm (11.5.0) and Vite+ (catalog) versions itself:
 
 ```sh
-corepack enable
-corepack prepare pnpm@11.5.0 --activate
-pnpm install --frozen-lockfile
+curl -fsSL https://vite.plus | bash
+vp install --frozen-lockfile
 ```
 
 The full local verification suite also requires the pinned Rust dependency
@@ -44,7 +46,7 @@ cargo install cargo-machete --locked --version 0.9.2
 Run the full Tauri app in development:
 
 ```sh
-pnpm dev
+vp run dev
 ```
 
 Development runs keep their database, settings, logs, and runtime files in the
@@ -57,15 +59,14 @@ parent directory; packaged builds (including debug packages) use that parent.
 Run the frontend-only Vite dev server:
 
 ```sh
-pnpm dev:web
-pnpm --filter @voya/desktop dev:web
+vp run dev:web
 ```
 
 Regenerate Rust-to-TypeScript IPC bindings after command or event type changes:
 
 ```sh
-pnpm generate:bindings
-pnpm check:bindings
+vp run generate:bindings
+vp run check:bindings
 ```
 
 ## Build Commands
@@ -73,21 +74,20 @@ pnpm check:bindings
 Build the frontend bundle:
 
 ```sh
-pnpm build
-pnpm --filter @voya/desktop build
+vp run build
 ```
 
 Build unsigned debug Tauri packages without signing credentials:
 
 ```sh
-pnpm tauri:build --debug
+vp run tauri:build --debug
 ```
 
 On Windows, build and install an unsigned release-profile client plus the
 protected TUN service for local testing (the service step opens one UAC prompt):
 
 ```powershell
-pnpm build:windows:local
+vp run build:windows:local
 ```
 
 This generates and installs a current-user NSIS artifact, then leaves the
@@ -99,7 +99,7 @@ toolchain. See
 Build release-profile Tauri packages in a prepared signing environment:
 
 ```sh
-pnpm tauri:build
+vp run tauri:build
 ```
 
 ## Test And Verification Commands
@@ -107,7 +107,7 @@ pnpm tauri:build
 Run the complete local CI parity suite:
 
 ```sh
-pnpm run verify:local
+vp run verify:local
 ```
 
 Run the final gate checks individually. `scripts/quality/verify-local.mjs` is the
@@ -115,37 +115,40 @@ source of truth for this list and its order; CI's parallel `baseline-fast`,
 `baseline-rust` and `baseline-frontend` jobs together run the same steps:
 
 ```sh
-pnpm run check:architecture
-pnpm run check:lockfile
-pnpm run check:rust:fmt
-pnpm run check:rust:clippy
-pnpm run check:rust:deps
-pnpm run check:rust:test
-pnpm run check:frontend:typecheck
-pnpm run check:frontend:coverage
-pnpm run check:frontend:lint
-pnpm run check:frontend:bundle
-pnpm run check:frontend:smoke:mock
-pnpm run check:dead-code
-pnpm run check:sing-box
-pnpm run check:bindings
-pnpm run check:i18n
+vp run check:architecture
+vp run check:lockfile
+vp run check:rust:fmt
+vp run check:rust:clippy
+vp run check:rust:deps
+vp run check:rust:test
+vp run check:frontend:static
+vp run check:frontend:coverage
+vp run check:frontend:bundle
+vp run check:frontend:smoke:mock
+vp run check:dead-code
+vp run check:sing-box
+vp run check:bindings
+vp run check:i18n
 ```
 
-`pnpm run check:frontend:test` runs the same suite without the coverage gate, and
-`pnpm run check:desktop:smoke` (packaged shell through `tauri-driver`) runs in its
+`vp run check:frontend:test` runs the same suite without the coverage gate, and
+`vp run check:desktop:smoke` (packaged shell through `tauri-driver`) runs in its
 own Linux CI job rather than in `verify:local`.
 
-Run one desktop frontend test file:
+`vp run check:frontend:static` is `vp check`: Oxfmt formatting, Oxlint (with
+the type-aware rules) and TypeScript diagnostics for every workspace project.
+`vp check --fix` formats and applies the autofixes.
+
+Run one frontend test file (`vp test watch` keeps watching):
 
 ```sh
-pnpm --filter @voya/desktop test --run src/features/profiles/server-table.test.tsx
+vp test apps/desktop/src/features/profiles/server-table.test.tsx
 ```
 
-`pnpm run check:rust:test` runs workspace all-target tests while excluding the Tauri shell library harness, then builds the shell binary test target. The shell library target keeps its lib test harness disabled because shell-level coverage lives in workspace crates and frontend tests; this avoids Windows WebView/Wry loader failures from an otherwise empty harness. Do not use bare `cargo test --workspace --all-targets` on Windows, because Cargo still forces explicitly disabled targets when `--all-targets` is passed.
+`vp run check:rust:test` runs workspace all-target tests while excluding the Tauri shell library harness, then builds the shell binary test target. The shell library target keeps its lib test harness disabled because shell-level coverage lives in workspace crates and frontend tests; this avoids Windows WebView/Wry loader failures from an otherwise empty harness. Do not use bare `cargo test --workspace --all-targets` on Windows, because Cargo still forces explicitly disabled targets when `--all-targets` is passed.
 
-`pnpm run check:dead-code` runs both the workspace-wide Knip scan and a strict
-production-entry scan. `pnpm run check:rust:deps` runs cargo-machete against
+`vp run check:dead-code` runs both the workspace-wide Knip scan and a strict
+production-entry scan. `vp run check:rust:deps` runs cargo-machete against
 direct Cargo dependencies.
 
 Linux CI installs Tauri build prerequisites before compiling the Rust workspace. Local Linux machines need the same Tauri system libraries.
@@ -155,10 +158,10 @@ Linux CI installs Tauri build prerequisites before compiling the Rust workspace.
 Run the credential-free release workflow equivalent locally:
 
 ```sh
-pnpm run verify:local
-pnpm tauri:build --debug
-pnpm release -- artifacts --input target/debug/bundle --output dist/release/local --target local-debug --channel beta --allow-empty
-pnpm release -- updater --input dist/release --out dist/updater/latest.json --target darwin-aarch64,darwin-x86_64,linux-aarch64,linux-x86_64,windows-aarch64,windows-x86_64 --placeholder-signatures
+vp run verify:local
+vp run tauri:build --debug
+vp run release -- artifacts --input target/debug/bundle --output dist/release/local --target local-debug --channel beta --allow-empty
+vp run release -- updater --input dist/release --out dist/updater/latest.json --target darwin-aarch64,darwin-x86_64,linux-aarch64,linux-x86_64,windows-aarch64,windows-x86_64 --placeholder-signatures
 ```
 
 The GitHub release workflow is manual-only:
@@ -171,8 +174,8 @@ workflow_dispatch inputs: channel, build_profile, dry_run, updater_metadata
 Generate release-owner evidence scaffolding and validate staged metadata:
 
 ```sh
-pnpm release -- readiness --mode dry-run
-pnpm release -- check-hosts
+vp run release -- readiness --mode dry-run
+vp run release -- check-hosts
 ```
 
 Production stable publication still requires external signing identities, notarization credentials, updater private keys, CDN publication control, platform smoke machines, and rollback readiness. The release runbooks live under `docs/release/`, and the stable gate report is `docs/verification/stable-release-gate.md`.

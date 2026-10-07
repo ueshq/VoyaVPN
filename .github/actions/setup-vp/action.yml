@@ -1,0 +1,28 @@
+name: Setup Vite+
+description: Install the Vite+ CLI (vp) with Node.js and pnpm, then the workspace dependencies.
+inputs:
+  node-version:
+    description: Node.js version to install.
+    required: false
+    default: "22"
+  install:
+    description: Whether to run `vp install --frozen-lockfile`.
+    required: false
+    default: "true"
+runs:
+  using: composite
+  steps:
+    # The Vite+ version comes from the pnpm catalog and pnpm's from the root
+    # package.json `packageManager` field; both are put on PATH, so scripts that
+    # spawn `pnpm` keep working.
+    - uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
+      with:
+        node-version: ${{ inputs.node-version }}
+        # A job that installs nothing has no use for the restored store.
+        cache: ${{ inputs.install == 'true' && 'true' || 'false' }}
+        run-install: "false"
+
+    - name: Install workspace dependencies
+      if: ${{ inputs.install == 'true' }}
+      shell: bash
+      run: vp install --frozen-lockfile

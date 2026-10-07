@@ -6,7 +6,7 @@ an existing VPN merely to run automated repository checks.
 
 ## Automated checks (no system network writes)
 
-Run `pnpm run verify:local`. On macOS its Rust-test step also compiles and runs
+Run `vp run verify:local`. On macOS its Rust-test step also compiles and runs
 `scripts/native/macos/test-bridge.mjs`: it injects statuses and a monotonic clock
 into the same waiter as the native bridge. Its ten reconnect cycles are
 simulations, not signed-package or real-traffic acceptance.
@@ -21,7 +21,7 @@ channel's existing NetworkExtension entitlements. Use only the installed copy.
 
 Before testing, record HTTP/HTTPS/SOCKS/PAC settings for all network services so
 the tester can restore their original settings manually. Do not disclose proxy
-credentials in evidence. Perform external `pnpm native:macos:ne:doctor` checks
+credentials in evidence. Perform external `vp run native:macos:ne:doctor` checks
 when registration evidence is needed; sandbox discovery-unavailable output in
 the app is not proof of a registration defect.
 
@@ -53,7 +53,7 @@ the app is not proof of a registration defect.
 
 After copying, launching or testing any `.app` with the production PacketTunnel
 appex, quit the test app and follow the existing NE hygiene flow:
-`pnpm native:macos:ne:doctor --fix` (`--app <path>` for a non-default bundle,
+`vp run native:macos:ne:doctor --fix` (`--app <path>` for a non-default bundle,
 `--dev` for the repository release bundle). Do this before deleting entitlement
 fixtures. Do not add the mutating doctor command to CI or broad verification.
 

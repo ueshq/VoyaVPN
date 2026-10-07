@@ -31,13 +31,13 @@ into or embedded with the PacketTunnel extension.
 Build commands:
 
 ```sh
-pnpm native:macos:libbox
-pnpm native:macos:tunnel
-pnpm native:macos:tunnel:verify
-pnpm native:macos:dmg
+vp run native:macos:libbox
+vp run native:macos:tunnel
+vp run native:macos:tunnel:verify
+vp run native:macos:dmg
 ```
 
-`pnpm native:macos:libbox` clones the pinned sing-box source tag, builds the
+`vp run native:macos:libbox` clones the pinned sing-box source tag, builds the
 Apple XCFramework for the macOS platform alone, validates its universal slice,
 and stages `src-tauri/native/macos/Frameworks/Libbox.framework`. Override the
 source or destination with:
@@ -48,7 +48,7 @@ source or destination with:
 - `VOYAVPN_SING_BOX_SOURCE_DIR`: local sing-box source checkout.
 - `VOYAVPN_LIBBOX_FRAMEWORK`: existing or target universal macOS `Libbox.framework` path.
 
-`pnpm native:macos:tunnel` stages one PacketTunnel provider shape:
+`vp run native:macos:tunnel` stages one PacketTunnel provider shape:
 
 - Developer ID direct distribution:
   `VoyaVPN.app/Contents/Library/SystemExtensions/app.voyavpn.desktop.PacketTunnel.systemextension`
@@ -67,19 +67,19 @@ bundle, set:
 
 ```sh
 export VOYAVPN_MACOS_APP_BUNDLE="$PWD/target/release/bundle/macos/VoyaVPN.app"
-pnpm native:macos:tunnel
+vp run native:macos:tunnel
 ```
 
 For release or local TUN-test packaging, build the Tauri macOS bundle with
-`pnpm tauri:build --bundles app`, then run the tunnel staging, signing, and
-`pnpm native:macos:dmg`. The DMG helper copies the final signed `.app` into the
+`vp run tauri:build --bundles app`, then run the tunnel staging, signing, and
+`vp run native:macos:dmg`. The DMG helper copies the final signed `.app` into the
 image and mounts it to verify that the selected PacketTunnel provider bundle
 and `VoyaPacketTunnel` are present before the DMG is accepted.
 
-Local TUN testing: `pnpm build:mac:local` runs the whole chain without Apple
+Local TUN testing: `vp run build:mac:local` runs the whole chain without Apple
 notarization — Apple Development signing, development provisioning profiles,
 `.appex` packaging, install into `/Applications`, and PlugInKit repair. Run
-`pnpm native:macos:preflight` first; the full runbook is
+`vp run native:macos:preflight` first; the full runbook is
 [docs/release/macos-local-tun-testing.md](../../../../../docs/release/macos-local-tun-testing.md).
 
 Set `VOYAVPN_CODESIGN_IDENTITY` to codesign the staged dynamic Libbox framework
@@ -94,7 +94,7 @@ individual profiles with:
 - `VOYAVPN_MACOS_APP_PROVISIONING_PROFILE`
 - `VOYAVPN_PACKET_TUNNEL_PROVISIONING_PROFILE`
 
-When profiles are present, `pnpm native:macos:tunnel` embeds them as
+When profiles are present, `vp run native:macos:tunnel` embeds them as
 `Contents/embedded.provisionprofile` in the containing app and PacketTunnel
 extension and generates signing entitlements from the profile app identifiers.
 Set `VOYAVPN_REQUIRE_PROVISIONING=1` in App Store/TestFlight lanes so missing or
@@ -103,8 +103,8 @@ mismatched profiles fail the build.
 Release signing and notarization helpers:
 
 ```sh
-pnpm native:macos:app:sign
-pnpm native:macos:app:notarize
+vp run native:macos:app:sign
+vp run native:macos:app:notarize
 ```
 
 `native:macos:app:notarize` uses `VOYAVPN_NOTARY_KEYCHAIN_PROFILE` when set.
@@ -133,7 +133,7 @@ Provisioning requirements:
   for Developer ID direct distribution, or `packet-tunnel-provider` for App
   Store/TestFlight and unsigned development.
 
-`pnpm native:macos:tunnel:verify` checks the staged app and PacketTunnel
+`vp run native:macos:tunnel:verify` checks the staged app and PacketTunnel
 extension, either static Libbox symbols or an embedded dynamic
 `Libbox.framework`, embedded provisioning profiles when present, code
 signatures, and required entitlement strings. Set `VOYAVPN_REQUIRE_LIBBOX=1`,
@@ -156,20 +156,20 @@ activated.
 Check the elected provider with:
 
 ```sh
-pnpm native:macos:ne:doctor
+vp run native:macos:ne:doctor
 ```
 
 After launching local app bundles with the PacketTunnel provider, quit VoyaVPN
 and repair registration state with:
 
 ```sh
-pnpm native:macos:ne:doctor --fix
+vp run native:macos:ne:doctor --fix
 ```
 
 For repo release-bundle tests:
 
 ```sh
-pnpm native:macos:ne:doctor --fix --app "$PWD/target/release/bundle/macos/VoyaVPN.app" --dev
+vp run native:macos:ne:doctor --fix --app "$PWD/target/release/bundle/macos/VoyaVPN.app" --dev
 ```
 
 Fixtures that do not exercise NetworkExtension should remove both

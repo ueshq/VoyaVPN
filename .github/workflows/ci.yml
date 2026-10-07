@@ -33,9 +33,9 @@ jobs:
         with:
           cache: "false"
 
-      # `pnpm audit` reads the lockfile and cargo-deny reads Cargo metadata;
+      # The audit reads the lockfile and cargo-deny reads Cargo metadata;
       # neither needs the workspace installed.
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
         with:
           install: "false"
 
@@ -50,8 +50,8 @@ jobs:
       - name: Run cargo-deny
         run: cargo deny -L error --locked --all-features check advisories bans licenses sources
 
-      - name: Run pnpm audit
-        run: pnpm audit --prod --audit-level high
+      - name: Audit npm dependencies
+        run: vp pm audit --production --level high
 
   # verify:local's gates, split across three parallel jobs so the Rust compile
   # and the frontend build/Playwright run no longer wait on each other.
@@ -63,16 +63,16 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
 
       - name: Check architecture boundaries
-        run: pnpm run check:architecture
+        run: vp run check:architecture
 
       - name: Check lockfile single versions
-        run: pnpm run check:lockfile
+        run: vp run check:lockfile
 
       - name: Check i18n locale drift
-        run: pnpm run check:i18n
+        run: vp run check:i18n
 
   baseline-rust:
     runs-on: ubuntu-latest
@@ -88,7 +88,7 @@ jobs:
 
       # Every script this job runs imports Node built-ins only, and nothing in
       # the Rust build reads node_modules, so the workspace is not installed.
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
         with:
           install: "false"
 
@@ -103,22 +103,22 @@ jobs:
           rule-sets: "false"
 
       - name: Check Rust formatting
-        run: pnpm run check:rust:fmt
+        run: vp run check:rust:fmt
 
       - name: Lint Rust
-        run: pnpm run check:rust:clippy
+        run: vp run check:rust:clippy
 
       - name: Check Rust dependency usage
-        run: pnpm run check:rust:deps
+        run: vp run check:rust:deps
 
       - name: Run Rust tests
-        run: pnpm run check:rust:test
+        run: vp run check:rust:test
 
       - name: Validate generated configs with sing-box
-        run: pnpm run check:sing-box
+        run: vp run check:sing-box
 
       - name: Check generated IPC binding drift
-        run: pnpm run check:bindings
+        run: vp run check:bindings
 
   baseline-frontend:
     runs-on: ubuntu-latest
@@ -126,26 +126,23 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
 
-      - name: Typecheck frontend
-        run: pnpm run check:frontend:typecheck
+      - name: Check frontend formatting, lint and types
+        run: vp run check:frontend:static
 
       - name: Run frontend tests with coverage thresholds
-        run: pnpm run check:frontend:coverage
-
-      - name: Lint frontend
-        run: pnpm run check:frontend:lint
+        run: vp run check:frontend:coverage
 
       - name: Build frontend and enforce bundle budgets
-        run: pnpm run check:frontend:bundle
+        run: vp run check:frontend:bundle
 
       # Playwright pins its browser builds per release, so the resolved
       # @playwright/test version is the cache key.
       - name: Resolve Playwright version
         id: playwright
         run: |
-          version="$(pnpm --filter @voya/desktop exec playwright --version)"
+          version="$(vp exec --filter @voya/desktop playwright --version)"
           version="${version#Version }"
           test -n "$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -159,19 +156,19 @@ jobs:
 
       - name: Install Chromium
         if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
-        run: pnpm --filter @voya/desktop exec playwright install --with-deps chromium
+        run: vp exec --filter @voya/desktop playwright install --with-deps chromium
 
       # The cache holds only the browser download; the system libraries
       # Chromium links against still have to be installed on every runner.
       - name: Install Chromium system dependencies
         if: ${{ steps.playwright-cache.outputs.cache-hit == 'true' }}
-        run: pnpm --filter @voya/desktop exec playwright install-deps chromium
+        run: vp exec --filter @voya/desktop playwright install-deps chromium
 
       - name: Run frontend mock smoke tests
-        run: pnpm run check:frontend:smoke:mock
+        run: vp run check:frontend:smoke:mock
 
       - name: Check dead code and dependency usage
-        run: pnpm run check:dead-code
+        run: vp run check:dead-code
 
   # The React Native app's own gates. They are deliberately outside
   # `verify:local`: Jest and a Metro bundle are a separate toolchain from the
@@ -182,22 +179,22 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
 
       - name: Run mobile tests
-        run: pnpm run check:mobile:test
+        run: vp run check:mobile:test
 
       # What App Store Connect reads from the checked-in iOS inputs: opaque
       # icons, translated purpose strings, one App Group across app and tunnel.
       - name: Check the iOS bundle inputs
-        run: pnpm run check:mobile:ios:assets
+        run: vp run check:mobile:ios:assets
 
       # Typecheck and lint resolve modules the Node way; the app is built by
       # Metro, whose resolver is configured separately. This is the only gate
       # that exercises it, and a workspace package that imports fine in an
       # editor can still fail to bundle for a device.
       - name: Bundle the mobile app for both platforms
-        run: pnpm run check:mobile:bundle
+        run: vp run check:mobile:bundle
 
   # The mobile host has to *cross-compile*, which the Linux baseline cannot
   # prove: `baseline-rust` builds for the host, and every blocker this job
@@ -242,7 +239,7 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
 
       - name: Install tauri-driver
         uses: taiki-e/install-action@e407f7bafb71fd004bc5c2da3032e5470cbb6ef0 # v2
@@ -252,7 +249,7 @@ jobs:
       - uses: ./.github/actions/setup-core-seeds
 
       - name: Run real desktop smoke
-        run: xvfb-run -a pnpm run check:desktop:smoke
+        run: xvfb-run -a vp run check:desktop:smoke
 
   # MSRV is a dispatch/release gate only: clippy.toml's `msrv = "1.94"` already
   # makes `incompatible_msrv` reject newer std APIs on every PR, so re-checking

@@ -30,8 +30,8 @@ Recapture them when the Home or Nodes page changes visibly.
 ## Build and preview
 
 ```sh
-pnpm --filter @voya/web run build   # writes apps/web/dist
-pnpm --filter @voya/web run dev     # build, then serve dist with wrangler dev
+vp run --filter @voya/web build   # writes apps/web/dist
+vp run --filter @voya/web dev     # build, then serve dist with wrangler dev
 ```
 
 `wrangler dev` applies the same asset rules as production:
@@ -49,10 +49,11 @@ certificate.
 
 ```sh
 npx wrangler@4 whoami                  # confirm the account that owns wangc.ai
-pnpm --filter @voya/web run deploy     # build, then wrangler deploy
+vp run --filter @voya/web deploy     # build, then wrangler deploy
 ```
 
-Use `run deploy`, not `deploy`: `pnpm deploy` is a built-in pnpm command.
+Keep `run`: a bare `pnpm deploy` would be pnpm's built-in command, not this
+script.
 `workers_dev` stays `false`, because `*.workers.dev` is unreachable from
 mainland China.
 

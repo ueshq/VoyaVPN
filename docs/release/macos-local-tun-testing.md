@@ -1,12 +1,12 @@
 # macOS Local TUN Testing Without Notarization
 
-`pnpm build:mac:local` produces a locally runnable `VoyaVPN.app` that can test
+`vp run build:mac:local` produces a locally runnable `VoyaVPN.app` that can test
 TUN mode on this Mac without Apple notarization. It signs with an **Apple
 Development** certificate, packages the PacketTunnel provider as an
 App-Store-shaped `.appex` (`Contents/PlugIns/`), embeds **macOS App
 Development** provisioning profiles, installs the app into `/Applications`, and
 repairs PlugInKit registrations. The artifact runs only on Macs listed in the
-development profiles and must never be distributed; `pnpm build:mac` remains
+development profiles and must never be distributed; `vp run build:mac` remains
 the notarized Developer ID lane described in
 [signing-notarization.md](signing-notarization.md).
 
@@ -48,7 +48,7 @@ PlugInKit app extension, not a system extension.
 ## Preflight
 
 ```sh
-pnpm native:macos:preflight
+vp run native:macos:preflight
 ```
 
 | Check | Fix when it fails |
@@ -57,7 +57,7 @@ pnpm native:macos:preflight
 | Apple Development signing identity | Portal step 1 above; or set `VOYAVPN_CODESIGN_IDENTITY`. |
 | Provisioning UDID readable | Set `VOYAVPN_PROVISIONING_UDID` if `system_profiler` cannot report it. |
 | Development profile per bundle id | Portal step 4; the report lists why each candidate profile was rejected. |
-| Universal macOS `Libbox.framework` with arm64 and x86_64 | `pnpm native:macos:libbox`. |
+| Universal macOS `Libbox.framework` with arm64 and x86_64 | `vp run native:macos:libbox`. |
 
 The profile checks mirror the exact selection criteria the build uses
 (bundle id, certificate fingerprint, device coverage, expiry), so a green
@@ -66,7 +66,7 @@ preflight means the signed app will pass AMFI at launch.
 ## Build and install
 
 ```sh
-pnpm build:mac:local
+vp run build:mac:local
 ```
 
 The script runs preflight, then: `tauri:build --bundles app` →
@@ -115,30 +115,30 @@ open -n /Applications/VoyaVPN.app
 - **App is killed instantly at launch** — check the VoyaVPN report in
   `~/Library/Logs/DiagnosticReports/`. An AMFI/code-signing rejection points to
   a signature, profile, or device mismatch; re-run
-  `pnpm native:macos:preflight` for the failing profile and reason.
+  `vp run native:macos:preflight` for the failing profile and reason.
 - **Startup crashes with `SIGABRT` / Rust panic** — run
   `RUST_BACKTRACE=1 /Applications/VoyaVPN.app/Contents/MacOS/voyavpn` in a
   terminal to capture the original panic. `EventRegistry not found in Tauri
   state` identifies an older build that forwarded startup warnings to the log
-  panel before mounting typed events. Rebuild with `pnpm build:mac:local`.
+  panel before mounting typed events. Rebuild with `vp run build:mac:local`.
   The macOS “reopen windows” alert is a consequence of the crash, not its cause.
 - **TUN fails with `ProviderPathMismatch`** — another copy of the appex is
   elected. Quit VoyaVPN and run
-  `pnpm native:macos:ne:doctor --fix` (defaults to `/Applications/VoyaVPN.app`).
+  `vp run native:macos:ne:doctor --fix` (defaults to `/Applications/VoyaVPN.app`).
 - **TUN fails with `command.sock: bind: invalid argument`** — the libbox
   command-socket path exceeds the macOS 104-byte `sun_path` limit; this is a
   stale provider built before the libbox base dir moved to `PT/` at the App
-  Group container root. Rebuild with `pnpm build:mac:local`.
+  Group container root. Rebuild with `vp run build:mac:local`.
 - **TUN fails with `listen tcp 127.0.0.1:<port>: bind: operation not
   permitted`** — the bundle was signed without the
   `com.apple.security.network.server` entitlement, so the sandboxed provider
   cannot open the local mixed/socks inbound. Rebuild with
-  `pnpm build:mac:local`.
+  `vp run build:mac:local`.
 - Deeper NetworkExtension issues:
   [macos-networkextension-troubleshooting.md](macos-networkextension-troubleshooting.md).
 - **Teardown** — disable TUN, quit the app, remove the VPN configuration from
   System Settings → VPN if desired, delete `/Applications/VoyaVPN.app`, and run
-  `pnpm native:macos:ne:doctor --fix` to clear the registration.
+  `vp run native:macos:ne:doctor --fix` to clear the registration.
 
 ## VPN and manual proxy release acceptance
 

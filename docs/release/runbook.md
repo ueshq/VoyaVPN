@@ -25,7 +25,7 @@ Production stable download, updater, core, geo, SRS, checksum, and signature URL
 
 | Mode | Purpose | Allowed artifacts | Publication status |
 | --- | --- | --- | --- |
-| Local debug packaging | Validate bundle config and artifact collection without credentials. | Unsigned debug bundles from `pnpm tauri:build --debug`. | Never publish to beta users or update channels. |
+| Local debug packaging | Validate bundle config and artifact collection without credentials. | Unsigned debug bundles from `vp run tauri:build --debug`. | Never publish to beta users or update channels. |
 | Release CI dry run | Validate tests, package jobs, artifact normalization, checksums, and dry-run updater metadata. | Workflow artifacts with non-publishable updater signatures. | Never publish to beta users or update channels. |
 | Production stable CI staging | Validate the six-target stable workflow, stable readiness checker, CDN release-index staging, signed updater metadata generation, and package artifact uploads. | Workflow artifacts for `darwin-aarch64`, `darwin-x86_64`, `linux-aarch64`, `linux-x86_64`, `windows-aarch64`, and `windows-x86_64`. | Never publish automatically; CDN publication is an external approved step. |
 | Production stable publication | Publish the approved stable app, updater metadata, and bundled sing-box seed asset through own CDN only. | Signed app artifacts, signed Tauri updater payloads, approved sing-box seed asset, empty core manifest, checksums, source references, and release evidence. | Publish only after every stable checkpoint, including legal/source approval, is complete. |
@@ -33,22 +33,22 @@ Production stable download, updater, core, geo, SRS, checksum, and signature URL
 
 ## Release Readiness Checker
 
-`pnpm release -- readiness` is the local fail-closed gate for release metadata shape, required docs, bundled notices, Tauri updater config, and production-blocking placeholders.
+`vp run release -- readiness` is the local fail-closed gate for release metadata shape, required docs, bundled notices, Tauri updater config, and production-blocking placeholders.
 
 Dry-run mode uses repository fixtures and does not require signing secrets:
 
 ```sh
-pnpm release -- readiness --mode dry-run --cdn-base-url https://cdn.voyavpn.test/stable
+vp run release -- readiness --mode dry-run --cdn-base-url https://cdn.voyavpn.test/stable
 ```
 
 Stable mode is intended for a prepared release environment:
 
 ```sh
-pnpm release -- updater-config
-pnpm release -- readiness --mode stable
+vp run release -- updater-config
+vp run release -- readiness --mode stable
 ```
 
-Stable mode scans the generated overlay `target/release-config/tauri.updater.stable.generated.json` by default, so `pnpm release -- updater-config` must run first (or the overlay must be passed with `--tauri-config <file>`, which is what the release workflow does with the copy packaged next to the artifacts). Readiness stops with that instruction when the overlay is missing, because the committed `apps/desktop/src-tauri/tauri.conf.json` is deliberately credential-free and could never satisfy the stable updater checks.
+Stable mode scans the generated overlay `target/release-config/tauri.updater.stable.generated.json` by default, so `vp run release -- updater-config` must run first (or the overlay must be passed with `--tauri-config <file>`, which is what the release workflow does with the copy packaged next to the artifacts). Readiness stops with that instruction when the overlay is missing, because the committed `apps/desktop/src-tauri/tauri.conf.json` is deliberately credential-free and could never satisfy the stable updater checks.
 
 Stable mode requires `VOYAVPN_CDN_BASE_URL` or `--cdn-base-url`, signed updater artifacts, real Tauri updater signing input through `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`, platform signing env names for macOS and Windows, a non-placeholder updater public key in the generated overlay, updater artifacts enabled, and no forbidden example, dry-run updater, or GitHub release/download URLs in production surfaces.
 
@@ -69,30 +69,30 @@ Required prepared names:
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` | macOS signing and notarization inputs required for stable readiness. |
 | `WINDOWS_CERTIFICATE_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD` | Windows signing inputs required for stable readiness. |
 | `VOYAVPN_RELEASE_ARTIFACTS_DIR`, `VOYAVPN_SIGNED_UPDATER_DIR`, `VOYAVPN_CORE_ASSETS_FILE` | Optional stable artifact input paths when the prepared environment does not use the default `dist/release/...` paths. |
-| `VOYAVPN_STABLE_UPDATER_CONFIG_PATH` | Optional path of the stable updater overlay `pnpm release -- artifacts` copies beside the manifest, when it is not at the generated default `target/release-config/tauri.updater.stable.generated.json`. |
+| `VOYAVPN_STABLE_UPDATER_CONFIG_PATH` | Optional path of the stable updater overlay `vp run release -- artifacts` copies beside the manifest, when it is not at the generated default `target/release-config/tauri.updater.stable.generated.json`. |
 
 Prepared release shell command sequence:
 
 ```sh
 export VOYAVPN_RELEASE_CHANNEL=stable
-pnpm release -- updater-config
-pnpm release -- readiness --mode stable
+vp run release -- updater-config
+vp run release -- readiness --mode stable
 ```
 
-`pnpm release -- updater-config` writes `target/release-config/tauri.updater.stable.generated.json`. `pnpm release -- readiness --mode stable` then scans that overlay merged over `apps/desktop/src-tauri/tauri.conf.json` and validates stable environment inputs, generated release index input, signed updater input, core asset source input, and production URL blockers.
+`vp run release -- updater-config` writes `target/release-config/tauri.updater.stable.generated.json`. `vp run release -- readiness --mode stable` then scans that overlay merged over `apps/desktop/src-tauri/tauri.conf.json` and validates stable environment inputs, generated release index input, signed updater input, core asset source input, and production URL blockers.
 
 Expected failures in an unprepared local shell are environment-only skips, not repository blockers: missing `VOYAVPN_CDN_BASE_URL`, missing `VOYAVPN_UPDATES_BASE_URL`, missing `VOYAVPN_UPDATER_PUBLIC_KEY`, missing `TAURI_SIGNING_PRIVATE_KEY` or `TAURI_SIGNING_PRIVATE_KEY_PATH`, missing Apple or Windows signing inputs, missing real stable artifact directories, fixture paths used in stable mode, placeholder updater signatures, or forbidden example, `.test`, localhost, placeholder, or GitHub production download URLs.
 
-Expected pass criteria in a prepared stable environment: the overlay exists at `target/release-config/tauri.updater.stable.generated.json`, it enables `bundle.createUpdaterArtifacts`, updater metadata uses the approved HTTPS updater CDN and real signatures, release/core metadata use only approved CDN-derived production URLs, stable artifact inputs are not fixtures, and `pnpm release -- readiness --mode stable` exits successfully with zero failures. Stable pointer promotion must not begin until this prepared-environment check passes.
+Expected pass criteria in a prepared stable environment: the overlay exists at `target/release-config/tauri.updater.stable.generated.json`, it enables `bundle.createUpdaterArtifacts`, updater metadata uses the approved HTTPS updater CDN and real signatures, release/core metadata use only approved CDN-derived production URLs, stable artifact inputs are not fixtures, and `vp run release -- readiness --mode stable` exits successfully with zero failures. Stable pointer promotion must not begin until this prepared-environment check passes.
 
 Generate the stable Tauri updater overlay before stable readiness when inspecting the overlay directly from a prepared shell:
 
 ```sh
 export VOYAVPN_RELEASE_CHANNEL=stable
-pnpm release -- updater-config
+vp run release -- updater-config
 ```
 
-The generated overlay path is `target/release-config/tauri.updater.stable.generated.json`. `pnpm release -- readiness --mode stable` scans that overlay merged over `apps/desktop/src-tauri/tauri.conf.json`.
+The generated overlay path is `target/release-config/tauri.updater.stable.generated.json`. `vp run release -- readiness --mode stable` scans that overlay merged over `apps/desktop/src-tauri/tauri.conf.json`.
 
 The committed Tauri config intentionally keeps `bundle.createUpdaterArtifacts` disabled and leaves `plugins.updater` empty so repository-controlled builds do not contain updater credentials, endpoints, or generated release state. The stable overlay is the only release path that enables `createUpdaterArtifacts`; it is generated from environment variables, used by the package job through `--config`, and left uncommitted.
 
@@ -110,15 +110,15 @@ The checker writes generated release index, updater metadata, core manifest, and
 
 ### Release Readiness Checklist
 
-`pnpm release -- readiness` is the gate that replaced the old `record` and
+`vp run release -- readiness` is the gate that replaced the old `record` and
 `verify-staging` helpers (retired: they were never on CI and 0.1.0 has not
 shipped a stable). Before external signing and smoke work starts, and again
 before stable pointer promotion, confirm each item below — locally in dry-run
 mode, and in the workflow's `final-stable-readiness` job for a real stable run:
 
 ```sh
-pnpm release -- readiness --mode dry-run
-pnpm release -- readiness --mode stable \
+vp run release -- readiness --mode dry-run
+vp run release -- readiness --mode stable \
   --cdn-base-url "$VOYAVPN_CDN_BASE_URL" \
   --updates-base-url "$VOYAVPN_UPDATES_BASE_URL" \
   --release-artifacts dist/release/packages \
@@ -141,7 +141,7 @@ the command's inputs):
    `scripts/core/sing-box-installer.mjs`.
 4. **Stable env inputs** — `VOYAVPN_CDN_BASE_URL`, `VOYAVPN_UPDATES_BASE_URL`,
    updater public key, and every signing input (`TAURI_SIGNING_*`, Apple, and
-   Windows) — are present. `pnpm release -- check-hosts` additionally rejects
+   Windows) — are present. `vp run release -- check-hosts` additionally rejects
    placeholder URLs/hosts and undecodable updater keys.
 5. **Tauri updater overlay** carries the approved HTTPS endpoints, a
    non-placeholder public key, and `createUpdaterArtifacts` enabled.
@@ -165,16 +165,16 @@ notarize apps, or approve external release gates.
 
 Owner: release engineer.
 
-System: local workstation with repo prerequisites, Tauri toolchain, Rust, Node, and pnpm.
+System: local workstation with repo prerequisites, Tauri toolchain, Rust, Node, and the Vite+ CLI (`vp`).
 
 Run:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run verify:local
-pnpm tauri:build --debug
-pnpm release -- artifacts --input target/debug/bundle --output dist/release/local --target local-debug --channel beta --allow-empty
-pnpm release -- updater --input dist/release --out dist/updater/latest.json --target darwin-aarch64,darwin-x86_64,linux-aarch64,linux-x86_64,windows-aarch64,windows-x86_64 --placeholder-signatures
+vp install --frozen-lockfile
+vp run verify:local
+vp run tauri:build --debug
+vp run release -- artifacts --input target/debug/bundle --output dist/release/local --target local-debug --channel beta --allow-empty
+vp run release -- updater --input dist/release --out dist/updater/latest.json --target darwin-aarch64,darwin-x86_64,linux-aarch64,linux-x86_64,windows-aarch64,windows-x86_64 --placeholder-signatures
 ```
 
 Verification: packages build or fail with a concrete local prerequisite error, `dist/release/local/SHA256SUMS` exists when artifacts are present, and dry-run updater metadata remains clearly non-publishable.
@@ -190,7 +190,7 @@ System: GitHub Actions `Release` workflow for evidence, approved signing systems
 Stable publication follows this order:
 
 1. Freeze the commit, version, channel, and target matrix. Record the commit SHA, tag, workflow dispatch inputs, and planned stable version.
-2. Run local automated gates from the frozen commit: `pnpm run verify:local`, `pnpm run build`, and local debug packaging when required by release policy.
+2. Run local automated gates from the frozen commit: `vp run verify:local`, `vp run build`, and local debug packaging when required by release policy.
 3. Dispatch the `Release` workflow with `channel=stable`, `build_profile=release`, `dry_run=false`, and updater metadata enabled. The workflow must produce six package artifacts, `SHA256SUMS`, artifact manifests, updater metadata evidence, CDN release-index evidence, and core manifest evidence. It must not publish externally.
 4. Complete signing, notarization, updater key, legal redistribution, and platform package checks from the ledger below.
 5. Stage immutable CDN paths for the approved version: manual download artifacts and `release-index.json`, Tauri updater payloads and `latest.json`, the empty core manifest, geo/SRS assets and manifests, checksums, signatures, notices, and evidence JSON. The sing-box seed is part of the signed application package, not a core update CDN asset.
@@ -232,7 +232,7 @@ Every publication checkpoint must have an owner, system, verification, and rollb
 | macOS signing and notarization | macOS release owner | Apple Developer ID, `codesign`, `notarytool`, DMG/App bundle | `codesign --verify`, notarization accepted, `stapler validate`, quarantine launch, and macOS smoke evidence pass. | Do not publish macOS assets. Revoke bad artifacts, rebuild, re-sign, and re-notarize. |
 | Windows signing | Windows release owner | Authenticode certificate or signing service, NSIS, MSI | Signature validates, installer trust prompt is expected, install/uninstall smoke passes on Windows 11 and Windows 10 targets. | Do not publish Windows assets. Remove uploaded installers, rebuild, and re-sign. |
 | Linux package verification | Linux release owner | `.deb`, `.rpm`, `.AppImage`, checksum and optional repository signing system | Package metadata, install/uninstall, desktop entry, execute bit, and AppImage launch pass on clean distributions. | Do not publish Linux assets. Remove packages from staging or repo and rebuild. |
-| Updater metadata signing | Release engineer | `pnpm release -- updater`, signed updater artifacts, stable updater CDN staging path | Real `latest.json` has no dry-run signatures, URLs point at the approved CDN base URL, and an older signed build detects the exact target update. | Stop pointer promotion. Restore the previous stable `latest.json` pointer or remove the channel metadata document. Keep packages available only for direct CDN download if approved. |
+| Updater metadata signing | Release engineer | `vp run release -- updater`, signed updater artifacts, stable updater CDN staging path | Real `latest.json` has no dry-run signatures, URLs point at the approved CDN base URL, and an older signed build detects the exact target update. | Stop pointer promotion. Restore the previous stable `latest.json` pointer or remove the channel metadata document. Keep packages available only for direct CDN download if approved. |
 | CDN staging | CDN owner | VoyaVPN CDN immutable versioned paths for app, updater, core, geo, SRS, checksums, signatures, notices, and evidence | Staged objects resolve from the approved CDN host, byte sizes and SHA-256 values match generated evidence, cache headers match release policy, and no stable URL points to GitHub, an example host, or a fixture host. | Stop pointer promotion. Remove public reachability if exposed accidentally, purge stale caches, and quarantine bad staged objects with hashes. |
 | Stable pointer promotion | Release owner and CDN owner | VoyaVPN CDN mutable stable pointers for release index, updater metadata, core manifest, geo/SRS manifests, checksums, and notices | Before and after pointer object hashes are recorded; clients resolve the promoted stable version only after all gate evidence is complete. | Roll back pointers to the previous known-good release index, `latest.json`, core manifest, and geo/SRS manifests, then purge or bypass caches. |
 | Manual download smoke | Platform owners | Stable CDN release index and signed platform packages | Each x64 and arm64 platform downloads from the CDN release index, validates SHA-256 and signature/notarization evidence, installs or launches, and records clean-machine smoke. | Hold or roll back the affected manual release-index entries and remove bad package exposure. |

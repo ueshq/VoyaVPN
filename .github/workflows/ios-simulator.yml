@@ -37,7 +37,7 @@ jobs:
       VOYA_IOS_QA_OUTPUT: .agents/docs/ios-ci
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
       - uses: ./.github/actions/setup-rust
         with:
           targets: aarch64-apple-ios-sim
@@ -46,10 +46,10 @@ jobs:
       # prerequisites and builds both frameworks from this checkout's pins.
       - name: Critical native flows
         if: ${{ !inputs.full }}
-        run: pnpm check:mobile:ios:smoke
+        run: vp run check:mobile:ios:smoke
       - name: Full release matrix
         if: ${{ inputs.full }}
-        run: pnpm check:mobile:ios:full
+        run: vp run check:mobile:ios:full
       - name: Preserve XCTest, screenshots, accessibility trees and native logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

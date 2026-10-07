@@ -7,7 +7,6 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "start": "react-native start",
-    "typecheck": "tsc -p tsconfig.json --pretty false",
     "test": "jest"
   },
   "dependencies": {

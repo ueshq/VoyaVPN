@@ -5,10 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:web": "vp dev --host 127.0.0.1 --port 1420",
+    "dev:web": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
-    "typecheck": "tsc -b --pretty false",
     "test": "vp test"
   },
   "dependencies": {
@@ -39,7 +38,6 @@
     "@rolldown/plugin-babel": "^0.2.4",
     "@tailwindcss/vite": "^4.3.0",
     "@tauri-apps/cli": "^2.11.2",
-    "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@testing-library/user-event": "^14.6.1",
     "@types/babel__core": "^7.20.5",
@@ -52,7 +50,6 @@
     "selenium-webdriver": "^4.47.0",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plus": "catalog:",
-    "vitest": "catalog:"
+    "vite-plus": "catalog:"
   }
 }

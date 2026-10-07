@@ -7,7 +7,7 @@ what puts the Clash API on plain loopback with nothing in between (ADR 0013).
 > **Status.** The Kotlin host under
 > `apps/mobile/android/app/src/main/java/app/voyavpn/mobile/host/` has never
 > been compiled: it is written against the `libbox.aar` that
-> `pnpm native:mobile:libbox:android` stages, and there is no host-side build
+> `vp run native:mobile:libbox:android` stages, and there is no host-side build
 > that typechecks it. Expect to reconcile the `PlatformInterface` members with
 > the pinned archive on the first Gradle build; the macOS implementation in
 > `native/apple/PacketTunnel/PacketTunnelPlatform.swift` is the reference for
@@ -35,15 +35,15 @@ cargo install cargo-ndk
 
 Plus a JDK 17+, the Android SDK, and the NDK version `build.gradle` pins. Go
 and gomobile come from sing-box's own `make lib_install`, which
-`pnpm native:mobile:libbox:android` runs.
+`vp run native:mobile:libbox:android` runs.
 
 ## Build the native artifacts
 
 Both are gitignored build outputs, and a Gradle build needs both:
 
 ```sh
-pnpm native:mobile:libbox:android   # libbox.aar  → apps/mobile/android/app/libs/
-pnpm native:mobile:rust:android     # .so files   → apps/mobile/android/app/src/main/jniLibs/
+vp run native:mobile:libbox:android   # libbox.aar  → apps/mobile/android/app/libs/
+vp run native:mobile:rust:android     # .so files   → apps/mobile/android/app/src/main/jniLibs/
                                     # + Kotlin bindings → app/src/main/java/uniffi/
 ```
 
@@ -57,7 +57,7 @@ staged, so add the Rust target and rebuild before widening it.
 ## Running
 
 ```sh
-pnpm --filter @voya/mobile android
+vp run --filter @voya/mobile android
 ```
 
 The emulator *can* run a `VpnService`, which makes Android the cheaper platform
@@ -98,7 +98,7 @@ configuration. For a real release:
 3. Add a `release` signing config that reads them and point the `release` build
    type at it.
 
-Set the version from the repo's release version — `pnpm run check:architecture`
+Set the version from the repo's release version — `vp run check:architecture`
 fails when `build.gradle` and the root `package.json` disagree.
 
 Libbox is GPL-3.0-or-later, so any APK or AAB handed to a third party carries

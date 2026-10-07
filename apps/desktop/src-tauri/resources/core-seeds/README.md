@@ -19,7 +19,7 @@ OS-resolved name (`sing-box.exe` on Windows, `sing-box` on Unix).
 ## Populating it
 
 Binaries are **not** committed (large, separately licensed). A normal local
-`pnpm install` runs the root `postinstall` hook, which fetches the pinned
+`vp install` runs the root `postinstall` hook, which fetches the pinned
 sing-box release for the host platform, stages it here, and copies it into the
 local app data `bin/sing_box/` directory so development builds can connect
 immediately.
@@ -28,7 +28,7 @@ If install scripts were skipped, or you need to repair the local app data copy,
 run:
 
 ```
-pnpm core:sing-box:install
+vp run core:sing-box:install
 ```
 
 Set `VOYAVPN_SKIP_SING_BOX_POSTINSTALL=1` to skip the postinstall fetch. CI
@@ -50,9 +50,9 @@ sing-box updates are delivered by shipping a new app package.
 
 `rule_sets/` holds the sing-box rule sets the default routing profile names
 (`geosite-cn.srs`, `geoip-cn.srs`, `geosite-private.srs`) and their
-`rule-sets.seed.json` manifest. They are not committed either: `pnpm install`
+`rule-sets.seed.json` manifest. They are not committed either: `vp install`
 and every package build stage them from the commits and SHA-256 values pinned in
-`scripts/core/rule-sets-installer.mjs` (`pnpm core:rule-sets:install` forces a
+`scripts/core/rule-sets-installer.mjs` (`vp run core:rule-sets:install` forces a
 fresh download). The package carries only the `.srs` files, and on every OS the
 app copies any of them that app data `bin/srss/` lacks at startup
 (`voya_app::updates::install_seed_rule_sets`). See

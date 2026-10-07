@@ -63,9 +63,9 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      # `pnpm release -- …` imports only Node's own modules, so the release
+      # `vp run release -- …` imports only Node's own modules, so the release
       # jobs that run nothing else skip the workspace install.
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
         with:
           install: "false"
 
@@ -101,7 +101,7 @@ jobs:
       # This step only checks that signing material exists, so it receives
       # presence booleans instead of the secrets themselves: nothing here can
       # leak a certificate or password it never held. Host/placeholder/updater
-      # key rules live in `pnpm release -- check-hosts` so the workflow does
+      # key rules live in `vp run release -- check-hosts` so the workflow does
       # not re-implement scripts/release/validation.mjs inline.
       - name: Validate stable release prerequisites
         if: ${{ inputs.channel == 'stable' && inputs.dry_run == false }}
@@ -120,8 +120,8 @@ jobs:
           HAS_WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 != '' }}
           HAS_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD != '' }}
         run: |
-          pnpm release -- check-hosts
-          pnpm release -- updater-config
+          vp run release -- check-hosts
+          vp run release -- updater-config
 
   package:
     name: Package ${{ matrix.release_target }}
@@ -168,7 +168,7 @@ jobs:
           targets: ${{ matrix.rust_target }}
           cache: "false"
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
 
       # The pinned core and rule sets, re-verified against their digests when
       # restored. Small next to a target/ tree, so the budget argument above
@@ -186,7 +186,7 @@ jobs:
           TAURI_TARGET: ${{ matrix.rust_target }}
           # The updater signing key is needed on every runner; Apple signing and
           # notarization material only on macOS. WINDOWS_CERTIFICATE_* is not
-          # passed at all: nothing on the `pnpm tauri:build` path reads it (only
+          # passed at all: nothing on the `vp run tauri:build` path reads it (only
           # scripts/native/windows/build-app.mjs does, which this workflow never
           # invokes), so exporting it here would hand a code-signing certificate
           # to six runners that cannot use it.
@@ -204,7 +204,7 @@ jobs:
             build_args+=(--debug)
           fi
 
-          pnpm tauri:build "${build_args[@]}"
+          vp run tauri:build "${build_args[@]}"
 
           bundle_dir="target/${TAURI_TARGET}/${RELEASE_PROFILE}/bundle"
           if [ ! -d "$bundle_dir" ]; then
@@ -216,11 +216,11 @@ jobs:
           fi
           echo "BUNDLE_DIR=$bundle_dir" >> "$GITHUB_ENV"
           # Informational: sizes land in the job summary, nothing is gated yet.
-          pnpm size:report --target "$TAURI_TARGET" --profile "$RELEASE_PROFILE" || true
+          vp run size:report --target "$TAURI_TARGET" --profile "$RELEASE_PROFILE" || true
 
       - name: Normalize artifacts and write checksums
         run: |
-          pnpm release -- artifacts \
+          vp run release -- artifacts \
             --input "$BUNDLE_DIR" \
             --output "dist/release/${{ matrix.release_target }}" \
             --target "${{ matrix.release_target }}" \
@@ -241,7 +241,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
         with:
           install: "false"
 
@@ -256,7 +256,7 @@ jobs:
           VOYAVPN_CDN_BASE_URL: ${{ vars.VOYAVPN_CDN_BASE_URL }}
         run: |
           base_url="${VOYAVPN_CDN_BASE_URL:-https://cdn.voyavpn.test/${CHANNEL}}"
-          pnpm release -- index \
+          vp run release -- index \
             --input dist/downloaded-release-artifacts \
             --out dist/cdn-staging/release-index.json \
             --channel "$CHANNEL" \
@@ -278,7 +278,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
         with:
           install: "false"
 
@@ -299,7 +299,7 @@ jobs:
             placeholder_flag="--placeholder-signatures"
           fi
 
-          pnpm release -- updater \
+          vp run release -- updater \
             --input dist/downloaded-release-artifacts \
             --out dist/updater/latest.json \
             --channel "$CHANNEL" \
@@ -321,7 +321,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
         with:
           install: "false"
 
@@ -344,7 +344,7 @@ jobs:
           fi
 
           base_url="${VOYAVPN_CDN_BASE_URL:-https://cdn.voyavpn.test/${CHANNEL}}"
-          pnpm release -- core-assets \
+          vp run release -- core-assets \
             --fixture dist/core-staging/source-core-assets.json \
             --out dist/core-staging/core-assets.json \
             --channel "$CHANNEL" \
@@ -370,7 +370,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: ./.github/actions/setup-node-pnpm
+      - uses: ./.github/actions/setup-vp
         with:
           install: "false"
 
@@ -424,7 +424,7 @@ jobs:
             cp -R "$dir"/. "$dest"/
           done
 
-          pnpm release -- readiness \
+          vp run release -- readiness \
             --mode stable \
             --cdn-base-url "$VOYAVPN_CDN_BASE_URL" \
             --updates-base-url "$VOYAVPN_UPDATES_BASE_URL" \

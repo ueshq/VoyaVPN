@@ -9,9 +9,9 @@ That makes three artifacts from one checkout:
 
 | Platform | Artifact | Built by | Staged into |
 | --- | --- | --- | --- |
-| macOS | `Libbox.framework` (universal) | `pnpm native:macos:libbox` | `apps/desktop/src-tauri/native/macos/Frameworks/` |
-| iOS | `Libbox.xcframework` (device + simulator) | `pnpm native:mobile:libbox:ios` | `apps/mobile/ios/Frameworks/` |
-| Android | `libbox.aar` | `pnpm native:mobile:libbox:android` | `apps/mobile/android/app/libs/` |
+| macOS | `Libbox.framework` (universal) | `vp run native:macos:libbox` | `apps/desktop/src-tauri/native/macos/Frameworks/` |
+| iOS | `Libbox.xcframework` (device + simulator) | `vp run native:mobile:libbox:ios` | `apps/mobile/ios/Frameworks/` |
+| Android | `libbox.aar` | `vp run native:mobile:libbox:android` | `apps/mobile/android/app/libs/` |
 
 None of them is committed. They are build outputs of a pinned source tag, so a
 committed copy could only ever be a stale one — see `.gitignore`.
@@ -78,16 +78,16 @@ photo-picker, share-sheet and VPN data-plane checks remain part of the
 release device matrix.
 
 ```sh
-pnpm native:mobile:libbox:ios       # Libbox.xcframework  → apps/mobile/ios/Frameworks/
-pnpm native:mobile:libbox:android   # libbox.aar          → apps/mobile/android/app/libs/
+vp run native:mobile:libbox:ios       # Libbox.xcframework  → apps/mobile/ios/Frameworks/
+vp run native:mobile:libbox:android   # libbox.aar          → apps/mobile/android/app/libs/
 ```
 
 Run the Rust host build beside it — the two are independent, and an Xcode or
 Gradle build needs both:
 
 ```sh
-pnpm native:mobile:rust:ios         # VoyaMobile.xcframework + Swift bindings
-pnpm native:mobile:rust:android     # jniLibs + Kotlin bindings
+vp run native:mobile:rust:ios         # VoyaMobile.xcframework + Swift bindings
+vp run native:mobile:rust:android     # jniLibs + Kotlin bindings
 ```
 
 Overrides, when the artifact belongs somewhere else:
@@ -120,7 +120,7 @@ loads:
 1. Bump `DEFAULT_SING_BOX_VERSION` per
    [sing-box-seed-pinning.md](sing-box-seed-pinning.md).
 2. Rebuild all three Libbox artifacts.
-3. Run `pnpm check:native:macos:bridge` — it typechecks the shared PacketTunnel
+3. Run `vp run check:native:macos:bridge` — it typechecks the shared PacketTunnel
    sources against the staged framework, which is where an API change in Libbox
    surfaces first.
 4. Run the device checks in [os-smoke-matrix.md](os-smoke-matrix.md). A core

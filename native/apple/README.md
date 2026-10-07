@@ -41,5 +41,5 @@ reaching into another app's group.
   default-interface callbacks, shared with the iOS app's probe core.
 - `PacketTunnelTests.swift` — a `@main` binary, not XCTest: it runs the runtime
   and diagnostics in a temporary directory without loading a NetworkExtension.
-  `pnpm check:native:macos:bridge` compiles and runs it, and `check:rust:test`
+  `vp run check:native:macos:bridge` compiles and runs it, and `check:rust:test`
   runs that on macOS.

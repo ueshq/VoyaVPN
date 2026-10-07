@@ -4,32 +4,31 @@ import { isCliEntrypoint, runOrExit } from "../lib/common.mjs";
  * The canonical gate list. AGENTS.md and README.md mirror this array, the CI
  * `baseline-*` jobs split it between them and together run each gate once, and
  * scripts/quality/verify-local.test.mjs fails when any of them drifts from it.
+ * `vp run` executes the package scripts, so it has to be on PATH: the global
+ * Vite+ CLI locally, `voidzero-dev/setup-vp` in CI.
  */
 export const steps = [
-  ["Architecture boundaries", "pnpm", ["run", "check:architecture"]],
-  ["Lockfile single versions", "pnpm", ["run", "check:lockfile"]],
-  ["Rust formatting", "pnpm", ["run", "check:rust:fmt"]],
-  ["Rust Clippy", "pnpm", ["run", "check:rust:clippy"]],
-  ["Rust dependency usage", "pnpm", ["run", "check:rust:deps"]],
-  ["Rust tests", "pnpm", ["run", "check:rust:test"]],
-  ["Frontend typecheck", "pnpm", ["run", "check:frontend:typecheck"]],
-  ["Frontend tests and coverage", "pnpm", ["run", "check:frontend:coverage"]],
-  ["Frontend lint", "pnpm", ["run", "check:frontend:lint"]],
-  ["Frontend production bundle", "pnpm", ["run", "check:frontend:bundle"]],
-  ["Frontend mock smoke tests", "pnpm", ["run", "check:frontend:smoke:mock"]],
-  ["Dead code and dependency usage", "pnpm", ["run", "check:dead-code"]],
-  ["sing-box config acceptance", "pnpm", ["run", "check:sing-box"]],
-  ["Generated binding drift", "pnpm", ["run", "check:bindings"]],
-  ["i18n locale drift", "pnpm", ["run", "check:i18n"]],
+  ["Architecture boundaries", "vp", ["run", "check:architecture"]],
+  ["Lockfile single versions", "vp", ["run", "check:lockfile"]],
+  ["Rust formatting", "vp", ["run", "check:rust:fmt"]],
+  ["Rust Clippy", "vp", ["run", "check:rust:clippy"]],
+  ["Rust dependency usage", "vp", ["run", "check:rust:deps"]],
+  ["Rust tests", "vp", ["run", "check:rust:test"]],
+  ["Frontend format, lint and typecheck", "vp", ["run", "check:frontend:static"]],
+  ["Frontend tests and coverage", "vp", ["run", "check:frontend:coverage"]],
+  ["Frontend production bundle", "vp", ["run", "check:frontend:bundle"]],
+  ["Frontend mock smoke tests", "vp", ["run", "check:frontend:smoke:mock"]],
+  ["Dead code and dependency usage", "vp", ["run", "check:dead-code"]],
+  ["sing-box config acceptance", "vp", ["run", "check:sing-box"]],
+  ["Generated binding drift", "vp", ["run", "check:bindings"]],
+  ["i18n locale drift", "vp", ["run", "check:i18n"]],
 ];
 
 if (isCliEntrypoint(import.meta.url)) {
   for (const [name, command, args] of steps) {
     console.log(`\n==> ${name}`);
     console.log(`$ ${[command, ...args].join(" ")}`);
-    const invocation = executable(command, args);
-
-    runOrExit(invocation.file, invocation.args, {
+    runOrExit(command, args, {
       env: { ...process.env, CI: process.env.CI ?? "true" },
       // Printed above, as the command a reader would type.
       log: false,
@@ -37,12 +36,4 @@ if (isCliEntrypoint(import.meta.url)) {
   }
 
   console.log("\nLocal verification checks passed.");
-}
-
-function executable(command, args) {
-  if (command === "pnpm" && process.env.npm_execpath) {
-    return { file: process.execPath, args: [process.env.npm_execpath, ...args] };
-  }
-
-  return { file: command, args };
 }

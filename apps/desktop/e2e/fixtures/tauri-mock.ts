@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 // `tsconfig.e2e.json` pulls `src/ipc/bindings.ts` into this project purely so
 // the mock can be checked against the generated contract: every `satisfies`
 // below is erased at runtime, but a backend DTO that gains, loses or retypes a
-// field now fails `pnpm --filter @voya/desktop typecheck` instead of failing a
+// field now fails `vp check` instead of failing a
 // smoke assertion with a confusing message.
 import type {
   AppError,

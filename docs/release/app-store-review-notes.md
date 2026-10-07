@@ -293,6 +293,6 @@ Review notes.
 | No privilege escalation on macOS | `crates/voya-platform/src/privilege/linux_installer.rs` (compiled for Linux only), [ADR 0004](../adr/0004-platform-boundaries.md), `scripts/native/macos/macho-imports.mjs` |
 | Launch at login | `crates/voya-platform/native/macos_login_item.m`, `apps/desktop/src-tauri/native/macos/LaunchAgents/app.voyavpn.desktop.autostart.plist` |
 | In-app data declaration (Guideline 5.4) | `apps/mobile/src/features/settings/privacy-notice.ts` and `privacy-notice-screen.tsx`, `packages/i18n/src/locales/*.json` (`mobile.privacyNotice*`) |
-| iOS permissions | `apps/mobile/ios/VoyaVPN/Info.plist`, `apps/mobile/ios/VoyaVPN/VoyaVPN.entitlements`; checked by `pnpm check:mobile:ios:assets` |
+| iOS permissions | `apps/mobile/ios/VoyaVPN/Info.plist`, `apps/mobile/ios/VoyaVPN/VoyaVPN.entitlements`; checked by `vp run check:mobile:ios:assets` |
 | Privacy Policy page | `apps/web/src/content/*.ts`, checked against this page by `apps/web/test/privacy-sync.test.ts` |
 | iOS privacy manifest | `apps/mobile/ios/VoyaVPN/PrivacyInfo.xcprivacy` (no collected data types, no tracking) |

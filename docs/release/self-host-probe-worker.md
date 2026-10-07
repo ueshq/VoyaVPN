@@ -40,7 +40,7 @@ Worker tests and `crates/voya-net/src/probe/reachability.rs` read.
 
    ```sh
    npx wrangler login
-   pnpm --filter @voya/probe deploy
+   vp run --filter @voya/probe deploy
    ```
 
 5. Verify from a machine with a known open port:
