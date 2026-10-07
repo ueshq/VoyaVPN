@@ -28,6 +28,14 @@ final class VoyaDeviceActions: NSObject, PHPickerViewControllerDelegate {
         if let code { reject?(code, code, nil) } else { resolve?(values) }
     }
 
+    @objc func setConnectionShortcuts(_ connectLabel: String, disconnectLabel: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+        UIApplication.shared.shortcutItems = [
+            UIApplicationShortcutItem(type: "voyavpn.connect", localizedTitle: connectLabel, localizedSubtitle: nil, icon: UIApplicationShortcutIcon(systemImageName: "power"), userInfo: nil),
+            UIApplicationShortcutItem(type: "voyavpn.disconnect", localizedTitle: disconnectLabel, localizedSubtitle: nil, icon: UIApplicationShortcutIcon(systemImageName: "stop.circle"), userInfo: nil)
+        ]
+        resolve(nil)
+    }
+
     @objc func scanQr(_ cancelLabel: String, resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
         guard claim(resolve, reject) else { return }
         AVCaptureDevice.requestAccess(for: .video) { [weak self] granted in

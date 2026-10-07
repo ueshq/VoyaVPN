@@ -639,7 +639,8 @@ export function createMockBackend(seed: Partial<MockSeed> = {}): MockBackend {
         messages: [],
         removedExisting: 0,
         skipped: targets.length - imported.length,
-        updated: 0,
+        // As the backend counts it: subscriptions updated, not nodes.
+        updated: targets.length,
       };
 
       invalidate("updateSubscriptions", "profiles", "subscriptions", "subscriptionMetadata");

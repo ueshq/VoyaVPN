@@ -4,7 +4,7 @@ import { useScreenInsets } from "./use-screen-insets";
 
 /**
  * The scrolling page every non-list screen is: canvas, page margins, and the
- * insets that clear the status bar and the floating tab bar. The keyboard
+ * spacing inside its navigation-managed safe area. The keyboard
  * props matter only on a screen with a field and change nothing elsewhere.
  */
 export function DetailScreen({

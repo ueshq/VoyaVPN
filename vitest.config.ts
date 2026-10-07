@@ -4,6 +4,10 @@ import { globalMinimums } from "./scripts/quality/frontend-coverage-policy.mjs";
 
 export default defineConfig({
   test: {
+    // Coverage instruments every workspace project. Limit concurrent workers
+    // so jsdom renders and their async assertions are not starved by a full
+    // machine-wide worker pool on high-core development hosts.
+    maxWorkers: 4,
     // Coverage is a root-level concern in a multi-project run, and the
     // thresholds live here rather than in the `check:frontend:coverage` script
     // string so that a plain `pnpm test --coverage` enforces the same floors a

@@ -1,3 +1,4 @@
+import { ruleMatchSummary } from "@voya/features/routing/rule-summary";
 import { useState, type MouseEvent } from "react";
 import {
   DndContext,
@@ -397,7 +398,7 @@ function RuleMatch({
   }
 
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
+    <span className="flex min-w-0 items-center gap-1.5" title={ruleMatchSummary(rule, t).join("\n")}>
       {ruleMatchChips(rule).map((chip) => (
         <MatchChipView
           chip={chip}

@@ -1,6 +1,6 @@
 import { act } from "@testing-library/react-native";
-import { Alert, View, type MeasureOnSuccessCallback } from "react-native";
-import { fireEvent, screen, userEvent, waitFor } from "@testing-library/react-native";
+import { Alert } from "react-native";
+import { screen, userEvent, waitFor } from "@testing-library/react-native";
 import { makePolicyGroupEntry } from "@voya/client/mock-seed";
 import { useNodeListStore } from "@voya/client/node-list-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
@@ -121,6 +121,27 @@ describe("NodesScreen", () => {
     expect(mockBackend().state.calls.filter((call) => call.command === "listProfileSummaries")).toHaveLength(1);
   });
 
+  it("keeps a node under test quiet, and a failed one's reason under its name", async () => {
+    await renderNodes();
+    await screen.findByText("🇯🇵 Tokyo");
+
+    await act(async () => {
+      useRuntimeEventStore.getState().pushTransientEvent({
+        kind: "speedtestResults",
+        payload: [
+          { countryCode: null, delay: 0, detail: null, indexId: "profile-0", ipInfo: null, outcome: "testing" },
+          { countryCode: null, delay: 0, detail: null, indexId: "profile-1", ipInfo: null, outcome: "proxyConnectFailed" },
+        ],
+      });
+    });
+
+    // In the pill's place, not on a red line of its own: the review read a
+    // node being tested as a broken one.
+    expect(await screen.findByText("Testing")).toBeOnTheScreen();
+    expect(screen.getByText("Test failed")).toBeOnTheScreen();
+    expect(screen.getByText("Proxy connection failed")).toBeOnTheScreen();
+  });
+
   it("still measures every node with its group collapsed", async () => {
     await renderNodes();
     const user = userEvent.setup();
@@ -147,22 +168,11 @@ describe("NodesScreen", () => {
     const trigger = screen.getByLabelText("Sort order");
     expect(trigger).toHaveAccessibilityValue({ text: "Default order" });
 
-    // The popover positions itself off two native layouts a test renderer
-    // never produces: it mounts once its trigger measures, and takes touches
-    // once its own content has laid out below the top of the screen. Fixed
-    // frames stand in for both.
-    const measure = jest
-      .spyOn(View.prototype as { measure: (callback: MeasureOnSuccessCallback) => void }, "measure")
-      .mockImplementation((callback) => callback(0, 0, 48, 48, 280, 80));
-    try {
-      await user.press(trigger);
-      await fireEvent(await screen.findByText("Sort order"), "layout", {
-        nativeEvent: { layout: { x: 108, y: 137, width: 220, height: 120 } },
-      });
-      await user.press(screen.getByText("Lowest latency"));
-    } finally {
-      measure.mockRestore();
-    }
+    // Each order is a button in the sheet, with its mark as selected state:
+    // in HeroUI's popover the items never reached the accessibility tree.
+    await user.press(trigger);
+    expect(await screen.findByRole("button", { name: "Default order", selected: true })).toBeOnTheScreen();
+    await user.press(screen.getByRole("button", { name: "Lowest latency", selected: false }));
 
     expect(useNodeListStore.getState().sortByLatency).toBe(true);
     await waitFor(() =>
@@ -170,7 +180,7 @@ describe("NodesScreen", () => {
     );
   });
 
-  it("uses a policy group instead of the selected node", async () => {
+  it("only remembers a policy group chosen while disconnected", async () => {
     const backendInstance = mockBackend();
     backendInstance.state.policyGroups = [
       makePolicyGroupEntry(0, { name: "Fastest" }),
@@ -185,6 +195,10 @@ describe("NodesScreen", () => {
       expect(backendInstance.state.calls.map((call) => call.command)).toContain(
         "setActivePolicyGroup",
       ),
+    );
+    // The same as tapping a node: connecting is the Home button's job.
+    expect(backendInstance.state.calls.map((call) => call.command)).not.toContain(
+      "connectActiveProfile",
     );
   });
 

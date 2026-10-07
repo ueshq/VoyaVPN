@@ -1,5 +1,5 @@
 import type { TranslationFunction } from "@voya/i18n/core";
-import type { PolicyGroupRuntime, ProfileSummaryEntry } from "@voya/contracts";
+import type { PolicyGroupRuntime, ProfileSummaryEntry, SpeedtestOutcome } from "@voya/contracts";
 import { speedtestOutcomeText } from "@voya/client/messages";
 import { formatDelay } from "@voya/utils/formatting";
 
@@ -10,10 +10,31 @@ export function profileLatency(item: ProfileSummaryEntry, t: TranslationFunction
 
 type LatencyTone = "good" | "fair" | "poor" | "unknown";
 
+/**
+ * Outcomes that say a node has no measurement yet, not that it failed one: a
+ * probe queued or running, a run that ended first, or one that needs the
+ * connection. Shown in red, a node under test read as a broken one.
+ */
+const UNMEASURED_OUTCOMES: ReadonlySet<string> = new Set<SpeedtestOutcome>([
+  "waiting",
+  "testing",
+  "cancelled",
+  "skipped",
+  "protocolUnsupported",
+  "reconnectRequired",
+]);
+
+/** Whether the node's last test failed, as opposed to finishing or not having run. */
+export function profileLatencyFailed(item: ProfileSummaryEntry) {
+  const { outcome } = item.metrics;
+  return !!outcome && outcome !== "completed" && !UNMEASURED_OUTCOMES.has(outcome);
+}
+
 /** Slow but reachable nodes are a warning; only failed tests use danger. */
 export function profileLatencyTone(item: ProfileSummaryEntry): LatencyTone {
   const { delayMs, outcome } = item.metrics;
-  if (outcome && outcome !== "completed") return "poor";
+  if (profileLatencyFailed(item)) return "poor";
+  if (outcome && outcome !== "completed") return "unknown";
   if (!delayMs || delayMs <= 0) return "unknown";
   return delayMs < 150 ? "good" : "fair";
 }

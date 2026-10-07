@@ -41,9 +41,12 @@ async function renderScreen() {
 }
 
 test("the page shows the rule's settings, not its storage fields", async () => {
-  const { rendered, client } = await renderScreen();
+  const { rendered, client, user } = await renderScreen();
 
   expect(screen.getByText("AI services")).toBeOnTheScreen();
+  expect(screen.queryByText(/"outbound": "proxy"/)).toBeNull();
+  expect(screen.getByText("Domain: openai.com")).toBeOnTheScreen();
+  await user.press(screen.getByText("Technical details"));
   // Behaviour fields render; the internal identity and unset keys do not.
   expect(screen.getByText(/"outbound": "proxy"/)).toBeOnTheScreen();
   expect(screen.queryByText(/rule-1/)).toBeNull();
@@ -56,6 +59,7 @@ test("the page shows the rule's settings, not its storage fields", async () => {
 test("the copy button reaches for exactly what the page shows", async () => {
   const { rendered, writeText, client, user } = await renderScreen();
 
+  await user.press(screen.getByText("Technical details"));
   await user.press(screen.getByText("Copy JSON"));
   expect(writeText).toHaveBeenCalledWith(DISPLAYED_JSON);
   expect(await screen.findByText("Copied")).toBeOnTheScreen();
@@ -67,6 +71,7 @@ test("a refused clipboard says Copy failed instead of staying silent", async () 
   const { rendered, writeText, client, user } = await renderScreen();
   writeText.mockRejectedValue(new Error("clipboard refused"));
 
+  await user.press(screen.getByText("Technical details"));
   await user.press(screen.getByText("Copy JSON"));
   expect(await screen.findByText("Copy failed")).toBeOnTheScreen();
 

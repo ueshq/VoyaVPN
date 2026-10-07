@@ -4,7 +4,7 @@ import { MoreHorizontal } from "lucide-react-native";
 import { useProfileActivation } from "@voya/client/runtime-action";
 import type { NodeListRow } from "@voya/features/profiles/node-list-rows";
 import type { ProfileSummaryEntry } from "@voya/contracts";
-import { profileLatency, profileLatencyTone, profileTitle } from "@voya/features/profiles/profile-display";
+import { profileLatency, profileLatencyFailed, profileLatencyTone, profileTitle } from "@voya/features/profiles/profile-display";
 import { overlaySpeedtestResult, useNodeListData } from "@voya/features/profiles/use-node-list-data";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";
 import { useNodeSpeedtest } from "@voya/features/profiles/use-node-speedtest";
@@ -18,10 +18,9 @@ import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 import { Button } from "heroui-native/button";
 import { Chip } from "heroui-native/chip";
 import { ListGroup } from "heroui-native/list-group";
-import { Menu } from "heroui-native/menu";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
-import { Circle, CircleCheck, ClipboardPaste, Gauge, LayoutArrowDown, Server } from "lucide-react-native";
+import { ClipboardPaste, Gauge, Server } from "lucide-react-native";
 import { useLatestRef } from "@voya/utils/use-latest-ref";
 import { type RefObject, memo, useCallback, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, findNodeHandle, FlatList, View, useWindowDimensions } from "react-native";
@@ -30,12 +29,14 @@ import { Banner } from "~/components/banner";
 import { Disclosure } from "~/components/disclosure";
 import { EmptyState } from "~/components/empty-state";
 import { ListRow } from "~/components/list-row";
+import { SelectionMark } from "~/components/selection-mark";
 import { PageHeader } from "~/components/page-header";
 import { SectionHeader } from "~/components/section-header";
 import { useClassColor, useToneColor } from "~/components/tone";
 import { useScreenInsets } from "~/components/use-screen-insets";
 
 import { NodeActionsSheet } from "./node-actions-sheet";
+import { NodeSortMenu } from "./node-sort-sheet";
 import { useNodeSelection } from "@voya/features/profiles/use-node-selection";
 
 /**
@@ -187,13 +188,14 @@ export function NodesScreen() {
             <Button
               ref={importRef}
               className="py-3"
-              variant="primary"
+              variant={testableIds.length ? "secondary" : "primary"}
               accessibilityLabel={t("mobile.add")}
               onPress={() => openPage("import")}
             >
-              <ClipboardPaste size={18} color={onAccent} />
+              <ClipboardPaste size={18} color={testableIds.length ? accentForeground : onAccent} />
               <Button.Label>{t("mobile.add")}</Button.Label>
             </Button>
+            <ListGroup><ListRow last chevron title={t("mobile.subscriptions")} onPress={() => openPage("subscriptions")} /></ListGroup>
             {operation.operationMessage ? (
               <Banner status="info" liveRegion message={operation.operationMessage} />
             ) : null}
@@ -221,7 +223,11 @@ export function NodesScreen() {
                         </Typography>
                       ) : null}
                       isDisabled={groups.switchingPolicyGroupId !== null}
-                      onPress={() => void groups.activatePolicyGroup(entry.group.id)}
+                      // Like a node row: a stopped core only remembers the
+                      // group; connecting stays the Home button's job.
+                      onPress={() =>
+                        void operation.runOperation(() => groups.selectPolicyGroup(entry.group.id))
+                      }
                       accessibilityState={{ selected: entry.isActive }}
                     />
                   ))}
@@ -274,76 +280,6 @@ const LATENCY_COLOR = {
 } as const satisfies Record<ReturnType<typeof profileLatencyTone>, "danger" | "default" | "success" | "warning">;
 
 /**
- * The radio mark before a choosable row: a tap on the row selects it, and the
- * mark says which one is. Decoration only — the row's own text says it too.
- */
-function SelectionMark({ state }: { state: "inUse" | "none" | "selected" }) {
-  const tone = state === "inUse" ? "connected" : state === "selected" ? "brand" : "neutral";
-  const color = useToneColor(tone);
-
-  return state === "none"
-    ? <Circle size={22} color={color} strokeWidth={1.5} accessible={false} />
-    : <CircleCheck size={22} color={color} strokeWidth={2} accessible={false} />;
-}
-
-/**
- * The list's order, behind an icon: a popover anchored to the button, with a
- * check on the order in effect. The choice is the shared persisted one, so the
- * desktop's "Sort by latency" and this agree.
- */
-function NodeSortMenu({
-  color,
-  setSortByLatency,
-  sortByLatency,
-}: {
-  color: string | undefined;
-  setSortByLatency: (sortByLatency: boolean) => void;
-  sortByLatency: boolean;
-}) {
-  const { t } = useI18n();
-  const label = t("mobile.sortOrder");
-
-  return (
-    <Menu>
-      <Menu.Trigger asChild>
-        <Button
-          isIconOnly
-          className="h-12 w-12 rounded-full bg-accent-soft"
-          variant="secondary"
-          accessibilityLabel={label}
-          accessibilityValue={{ text: t(sortByLatency ? "mobile.sortLatency" : "mobile.sortDefault") }}
-        >
-          <LayoutArrowDown size={18} color={color} accessible={false} />
-        </Button>
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Overlay />
-        <Menu.Content presentation="popover" placement="bottom" align="end" width={220}>
-          <Menu.Label>{label}</Menu.Label>
-          {/* A second tap on the order in effect must not clear the group and
-              silently fall back to the other one. */}
-          <Menu.Group
-            selectionMode="single"
-            disallowEmptySelection
-            selectedKeys={[sortByLatency ? "latency" : "default"]}
-            onSelectionChange={(keys) => setSortByLatency(keys.has("latency"))}
-          >
-            <Menu.Item id="default">
-              <Menu.ItemIndicator />
-              <Menu.ItemTitle>{t("mobile.sortDefault")}</Menu.ItemTitle>
-            </Menu.Item>
-            <Menu.Item id="latency">
-              <Menu.ItemIndicator />
-              <Menu.ItemTitle>{t("mobile.sortLatency")}</Menu.ItemTitle>
-            </Menu.Item>
-          </Menu.Group>
-        </Menu.Content>
-      </Menu.Portal>
-    </Menu>
-  );
-}
-
-/**
  * One node's row.
  *
  * A component rather than part of the list's renderer so that it can read its
@@ -382,6 +318,10 @@ const NodeRow = memo(function NodeRow({
     (state) => state.speedtestResultsByProfileId[stored.profile.id],
   );
   const entry = overlaySpeedtestResult(stored, result);
+  // The pill always holds the latency column's place. A failure's reason is
+  // too long for it, so the pill says it failed and the reason gets a line.
+  const failed = profileLatencyFailed(entry);
+  const latencyText = profileLatency(entry, t);
 
   return (
     <ListRow
@@ -402,17 +342,17 @@ const NodeRow = memo(function NodeRow({
         />
       }
       trailingInteractive
-      accessibilityLabel={`${profileTitle(entry.profile.remarks, t)}, ${getProtocolLabel(entry.profile.kind)}, ${entry.profile.address}, ${profileLatency(entry, t)}`}
+      accessibilityLabel={`${profileTitle(entry.profile.remarks, t)}, ${getProtocolLabel(entry.profile.kind)}, ${entry.profile.address}, ${latencyText}`}
       trailing={
         <View className={`gap-1 ${stackedActions ? "flex-row items-center" : "items-end"}`}>
           <Button isIconOnly className="h-12 w-12" variant="ghost" accessibilityLabel={actionsLabel(entry, t)} onPress={() => openActions(entry)}>
             <MoreHorizontal size={20} color={accentForeground} />
           </Button>
-          {(!entry.metrics.outcome || entry.metrics.outcome === "completed") ? (
-            <Chip size="sm" variant="soft" color={LATENCY_COLOR[profileLatencyTone(entry)]}>
-              <Chip.Label className="tabular-nums">{profileLatency(entry, t)}</Chip.Label>
-            </Chip>
-          ) : null}
+          <Chip size="sm" variant="soft" color={LATENCY_COLOR[profileLatencyTone(entry)]}>
+            <Chip.Label className="tabular-nums">
+              {failed ? t("speedtest.outcome.failed") : latencyText}
+            </Chip.Label>
+          </Chip>
           {runningId === entry.profile.id ? (
             <Typography className="text-sm font-medium text-connected">
               {t("panes.profiles.card.using")}
@@ -442,8 +382,8 @@ const NodeRow = memo(function NodeRow({
       }}
       accessibilityActions={[{ label: actionsLabel(entry, t), name: "longpress" }]}
     >
-      {entry.metrics.outcome && entry.metrics.outcome !== "completed" ? (
-        <Typography className="text-sm text-danger" numberOfLines={2}>{profileLatency(entry, t)}</Typography>
+      {failed && entry.metrics.outcome !== "failed" ? (
+        <Typography className="text-sm text-danger" numberOfLines={2}>{latencyText}</Typography>
       ) : null}
     </ListRow>
   );

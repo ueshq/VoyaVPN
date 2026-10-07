@@ -64,6 +64,7 @@ export function HomeScreen() {
       ? home.nodeEntry.metrics.delayMs
       : null;
   const marker = home.marker;
+  const recoveryLabel = home.lastError?.reason === "notFound" ? "home.chooseNode" : home.lastError?.reason === "elevationRequired" ? "mobile.authorizeAgain" : "actions.retry";
 
   return (
     <section
@@ -113,8 +114,8 @@ export function HomeScreen() {
                 })}
               </p>
               <div className="home-error-actions">
-                <Button onClick={home.retryLastAction} size="sm" type="button" variant="outline">
-                  {t("actions.retry")}
+                <Button onClick={home.lastError.reason === "notFound" ? navigateToNodes : home.retryLastAction} size="sm" type="button" variant="outline">
+                  {t(recoveryLabel)}
                 </Button>
                 <Button onClick={openLogs} size="sm" type="button" variant="ghost">
                   {t("home.viewLogs")}

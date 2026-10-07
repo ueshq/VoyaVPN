@@ -143,6 +143,16 @@ const VPN_PERMISSION_HINT_KEYS = {
   macosPacketTunnel: "home.vpnPermissionHint",
 } as const satisfies Partial<Record<TunStatus["backend"], string>>;
 
+/**
+ * What a phone's failed tunnel means to its user. The state alone ("iOS
+ * PacketTunnel: Error") names a component, not a next step; the provider's
+ * own text stays behind the diagnostics disclosure.
+ */
+const VPN_ERROR_KEYS = {
+  androidVpnService: "home.vpnErrorAndroid",
+  iosPacketTunnel: "home.vpnErrorIos",
+} as const satisfies Partial<Record<TunStatus["backend"], string>>;
+
 /** A line under the mode card when the tunnel needs attention, or `null`. */
 export function homeTunIssue(
   tun: TunStatus | null,
@@ -162,6 +172,13 @@ export function homeTunIssue(
   // The first connection asks to add a VPN configuration; say what to choose.
   if (tun.providerState === "permissionRequired" && Object.hasOwn(VPN_PERMISSION_HINT_KEYS, tun.backend)) {
     return t(VPN_PERMISSION_HINT_KEYS[tun.backend as keyof typeof VPN_PERMISSION_HINT_KEYS]);
+  }
+  if (
+    options?.includeProviderError === false &&
+    tun.providerState === "error" &&
+    Object.hasOwn(VPN_ERROR_KEYS, tun.backend)
+  ) {
+    return t(VPN_ERROR_KEYS[tun.backend as keyof typeof VPN_ERROR_KEYS]);
   }
   const needsAttention =
     ["error", "permissionRequired", "missingComponent"].includes(tun.providerState) ||

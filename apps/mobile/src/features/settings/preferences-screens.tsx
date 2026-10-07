@@ -1,3 +1,4 @@
+import { CoreLogOption } from "./core-log-option";
 import { ErrorNotice } from "~/components/error-notice";
 import { openPage } from "~/app/navigation";
 import { useAppSettings } from "@voya/features/settings/use-app-settings";
@@ -20,7 +21,6 @@ import { IconBadge } from "~/components/icon-badge";
 import { ListRow } from "~/components/list-row";
 import { SectionHeader } from "~/components/section-header";
 import { SegmentedControl } from "~/components/segmented-control";
-import { SwitchRow } from "~/components/switch-row";
 import { useToneColor } from "~/components/tone";
 
 import { useCoreLogEnabled } from "./use-core-log-enabled";
@@ -85,22 +85,7 @@ export function GeneralScreen() {
           </ListGroup>
         </View>
 
-        <View>
-          <SectionHeader title={t("settings.sections.behavior")} />
-          <ListGroup>
-            <SwitchRow
-              last
-              label={t("settings.core.logEnabled")}
-              value={settings.core.logEnabled}
-              onChange={(logEnabled) =>
-                app.update((current) => ({
-                  ...current,
-                  core: { ...current.core, logEnabled },
-                }))
-              }
-            />
-          </ListGroup>
-        </View>
+
       </> : null}
     </DetailScreen>
   );
@@ -159,6 +144,8 @@ export function MaintenanceScreen() {
           data this app keeps current — so they present the same way, and the
           logs card names where the lines live rather than being a lone list
           row under a feature card. */}
+      <ListGroup><ListRow last chevron testID="maintenance-activity" title={t("tabs.connections")} onPress={() => openPage("activity")} /></ListGroup>
+      <CoreLogOption />
       <Card className="gap-4 p-5">
         <IconBadge icon={ScrollText} />
         <View className="gap-1">

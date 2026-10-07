@@ -7,6 +7,7 @@ type DeviceActions = TurboModule & {
   pickQr(): Promise<string[] | null>;
   shareDiagnostics(text: string): Promise<void>;
   appVersion(): Promise<string>;
+  setConnectionShortcuts(connectLabel: string, disconnectLabel: string): Promise<void>;
 };
 
 /**

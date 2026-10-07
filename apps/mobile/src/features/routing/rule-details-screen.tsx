@@ -1,3 +1,6 @@
+import { ruleMatchSummary } from "@voya/features/routing/rule-summary";
+import { useSavedTrafficMode } from "@voya/features/routing/use-traffic-mode";
+import { Disclosure } from "~/components/disclosure";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { clipboard } from "@voya/client/platform";
 import { useI18n } from "@voya/i18n/use-i18n";
@@ -37,6 +40,8 @@ export function RuleDetailsScreen({ route }: NativeStackScreenProps<RootRoutes, 
   const { t } = useI18n();
   const { rule, target } = route.params;
   const json = displayRuleJson(rule);
+  const mode = useSavedTrafficMode();
+  const scopeLabel = rule.scope === "dns" ? "daily.ruleScopeDns" : rule.scope === "routing" ? "daily.ruleScopeRouting" : "daily.ruleScopeAll";
   const { copied, failed, markCopied, markFailed } = useCopiedLabel();
   // Nested ternary kept out of the `t()` call: the i18n check reads one
   // conditional level, not two.
@@ -49,6 +54,13 @@ export function RuleDetailsScreen({ route }: NativeStackScreenProps<RootRoutes, 
     <Typography className="text-xl font-semibold text-foreground">{ruleDisplayName(rule, t)}</Typography>
     <Typography className="text-base text-subtle">{t("mobile.ruleEffect", { target })}</Typography>
     {rule.remarks === SENTINEL_BLOCK_QUIC ? <Typography className="text-sm text-subtle">{t("mobile.quicHint")}</Typography> : null}
+    {!rule.enabled ? <Typography className="text-base text-subtle">{t("daily.ruleDisabled")}</Typography> : null}
+    {mode.mode === "global" && rule.scope !== "dns" ? <Typography className="text-base text-subtle">{t("daily.globalRuleInactive")}</Typography> : null}
+    <Typography className="text-base text-subtle">{t(scopeLabel)}</Typography>
+    <Typography accessibilityRole="header" className="text-lg font-semibold text-foreground">{t("daily.ruleConditions")}</Typography>
+    {ruleMatchSummary(rule, t).map((line) => <Typography key={line} selectable className="text-base text-foreground">{line}</Typography>)}
+    {rule.process?.length ? <Typography className="text-base text-warning">{t("panes.routing.processUnsupported")}</Typography> : null}
+    <Disclosure title={t("mobile.details")}>
     {/* Raw JSON on a card in a mono face, so structure reads as code rather
         than as prose that happens to have braces in it. One Text per line,
         each refusing to wrap, inside a horizontal panner: a wrapping Text
@@ -79,5 +91,6 @@ export function RuleDetailsScreen({ route }: NativeStackScreenProps<RootRoutes, 
     <Button variant="secondary" onPress={() => void clipboard().writeText(json).then(markCopied).catch(markFailed)}>
       <Button.Label>{t(copyLabelKey)}</Button.Label>
     </Button>
+    </Disclosure>
   </DetailScreen>;
 }

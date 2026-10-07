@@ -1,4 +1,5 @@
-import { act, render, userEvent, waitFor } from "@testing-library/react-native";
+import { act, cleanup, render, userEvent, waitFor } from "@testing-library/react-native";
+import { createAppQueryClient } from "@voya/client/query-client";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 import { IpcCommandError } from "@voya/client/errors";
 import { Alert, Linking } from "react-native";
@@ -15,6 +16,21 @@ import { mockTransport } from "~/test/mock-transport";
 
 import { App } from "./App";
 import type { ShellTab } from "./tabs";
+import { navigateToTab } from "./navigation";
+
+// Keep the real cache and error handling, but retain the app-owned client so
+// each test can release it after all query observers have unmounted.
+jest.mock("@voya/client/query-client", () => {
+  const actual = jest.requireActual("@voya/client/query-client");
+  return { ...actual, createAppQueryClient: jest.fn(actual.createAppQueryClient) };
+});
+
+afterEach(async () => {
+  await cleanup();
+  for (const result of jest.mocked(createAppQueryClient).mock.results) {
+    if (result.type === "return") result.value.clear();
+  }
+});
 
 beforeEach(() => {
   registerMobileBackend(mockTransport());
@@ -42,25 +58,34 @@ describe("App", () => {
 
     // The bar derives both the visible label and the VoiceOver name from the
     // screen's title; nothing sets them separately.
-    for (const [tab, label] of Object.entries(labels)) {
-      expect(view.getByTestId(`tab-${tab}`)).toHaveProp("accessibilityLabel", label);
+    for (const label of Object.values(labels)) {
+      expect(view.getByRole("tab", { name: label })).toHaveProp("accessibilityLabel", label);
       expect(view.getAllByText(label).length).toBeGreaterThan(0);
     }
   });
 
-  it("marks the current tab selected on the floating bar, the state XCUITest reads", async () => {
+  it("marks the current tab selected through the native selection event", async () => {
     await localeReady;
     const view = await render(<App />);
 
-    expect(view.getByTestId("tab-home")).toBeSelected();
-    expect(view.getByTestId("tab-settings")).not.toBeSelected();
+    expect(view.getByRole("tab", { name: "Home" })).toBeSelected();
+    expect(view.getByRole("tab", { name: "Settings" })).not.toBeSelected();
 
-    await userEvent.setup().press(view.getByTestId("tab-settings"));
+    await userEvent.setup().press(view.getByRole("tab", { name: "Settings" }));
 
-    expect(view.getByTestId("tab-settings")).toBeSelected();
-    expect(view.getByTestId("tab-home")).not.toBeSelected();
+    expect(view.getByRole("tab", { name: "Settings" })).toBeSelected();
+    expect(view.getByRole("tab", { name: "Home" })).not.toBeSelected();
     // The tab keeps its full title for VoiceOver even where the label is short.
-    expect(view.queryByTestId("tab-connections")).toBeNull();
+    expect(view.queryByRole("tab", { name: "Network activity" })).toBeNull();
+  });
+
+  it("updates native selection on a programmatic tab jump", async () => {
+    await localeReady;
+    const view = await render(<App />);
+
+    await act(() => navigateToTab("rules"));
+    expect(view.getByRole("tab", { name: "Rules" })).toBeSelected();
+    expect(view.getByRole("tab", { name: "Home" })).not.toBeSelected();
   });
 
   it("reaches the subscription list from Settings", async () => {
@@ -68,7 +93,7 @@ describe("App", () => {
     const view = await render(<App />);
     const user = userEvent.setup();
 
-    await user.press(view.getByTestId("tab-settings"));
+    await user.press(view.getByRole("tab", { name: "Settings" }));
     await user.press(view.getByTestId("settings-subscriptions"));
 
     expect(await view.findByText("Update all subscriptions")).toBeOnTheScreen();
@@ -79,7 +104,7 @@ describe("App", () => {
     const view = await render(<App />);
     const user = userEvent.setup();
 
-    await user.press(view.getByTestId("tab-settings"));
+    await user.press(view.getByRole("tab", { name: "Settings" }));
     await user.press(view.getByTestId("settings-subscriptions"));
     await view.findByText("Update all subscriptions");
 
@@ -88,7 +113,8 @@ describe("App", () => {
     await user.press(await view.findByLabelText("Back"));
 
     await waitFor(() => expect(view.queryByText("Update all subscriptions")).toBeNull());
-    expect(view.getByTestId("tab-home")).toBeOnTheScreen();
+    expect(view.getByRole("tab", { name: "Home" })).toBeOnTheScreen();
+    expect(view.getByRole("tab", { name: "Settings" })).toBeSelected();
   });
 });
 
@@ -103,11 +129,11 @@ describe("first-run data notice", () => {
     expect(view.getByText(/It collects no data/)).toBeOnTheScreen();
     expect(view.getByText(/raw\.githubusercontent\.com/)).toBeOnTheScreen();
     // Nothing of the app is reachable behind it.
-    expect(view.queryByTestId("tab-home")).toBeNull();
+    expect(view.queryByRole("tab", { name: "Home" })).toBeNull();
 
     await userEvent.setup().press(view.getByTestId("privacy-continue"));
 
-    expect(view.getByTestId("tab-home")).toBeOnTheScreen();
+    expect(view.getByRole("tab", { name: "Home" })).toBeOnTheScreen();
     expect(view.queryByText("Before you start")).toBeNull();
     expect(usePreferencesStore.getState().privacyNoticeVersion).toBe(PRIVACY_NOTICE_VERSION);
   });
@@ -148,7 +174,7 @@ describe("first-run data notice", () => {
     const user = userEvent.setup();
 
     // Nothing else can run: navigation is replaced, not covered.
-    expect(view.queryByTestId("tab-home")).toBeNull();
+    expect(view.queryByRole("tab", { name: "Home" })).toBeNull();
     expect(view.getByText("VoyaVPN could not start")).toBeOnTheScreen();
 
     // Two steps before the destructive action.
@@ -189,7 +215,7 @@ describe("first-run data notice", () => {
     const loadsBeforeReset = loads;
     await user.press(view.getByTestId("startup-reset-confirm"));
 
-    await waitFor(() => expect(view.getByTestId("tab-home")).toBeOnTheScreen());
+    await waitFor(() => expect(view.getByRole("tab", { name: "Home" })).toBeOnTheScreen());
     // One read for the retry: the shell reads the answer the gate already has.
     expect(loads).toBe(loadsBeforeReset + 1);
   });
@@ -230,7 +256,7 @@ describe("first-run data notice", () => {
     const view = await render(<App />);
     const user = userEvent.setup();
 
-    await user.press(view.getByTestId("tab-settings"));
+    await user.press(view.getByRole("tab", { name: "Settings" }));
     await user.press(view.getByTestId("settings-subscriptions"));
     await user.press(await view.findByText("Example provider"));
     await user.press(await view.findByText("Delete"));

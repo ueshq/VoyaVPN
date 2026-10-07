@@ -56,7 +56,7 @@ function arrangeMembers(members: ProfileSummaryEntry[], view: NodeListView) {
     ? members.filter((item) => !UNREACHABLE_OUTCOMES.has(item.metrics.outcome ?? ""))
     : members;
   if (!view.sortByLatency) return shown;
-  return shown.toSorted((a, b) => {
+  return [...shown].sort((a, b) => {
     const left = measuredLatency(a);
     const right = measuredLatency(b);
     return left === right ? 0 : left - right;

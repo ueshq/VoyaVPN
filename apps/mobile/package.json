@@ -11,8 +11,8 @@
     "test": "jest"
   },
   "dependencies": {
+    "@bottom-tabs/react-navigation": "1.4.0",
     "@react-native-clipboard/clipboard": "^1.16.3",
-    "@react-navigation/bottom-tabs": "^7.19.2",
     "@react-navigation/native": "^7.4.1",
     "@react-navigation/native-stack": "^7.19.2",
     "@tanstack/react-query": "catalog:",
@@ -25,6 +25,7 @@
     "lucide-react-native": "^1.45.0",
     "react": "catalog:",
     "react-native": "0.87.1",
+    "react-native-bottom-tabs": "1.4.0",
     "react-native-gesture-handler": "^2.33.0",
     "react-native-mmkv": "^4.3.2",
     "react-native-nitro-modules": "^0.37.1",

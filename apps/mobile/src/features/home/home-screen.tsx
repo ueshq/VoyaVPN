@@ -2,7 +2,6 @@ import { profileTitle } from "@voya/features/profiles/profile-display";
 import { exitIpLabel } from "@voya/features/home/exit-ip-label";
 import { useHomeRuntime } from "@voya/features/home/use-home-runtime";
 import { useI18n } from "@voya/i18n/use-i18n";
-import { formatDurationMs } from "@voya/utils/formatting";
 import type { CoreState } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n/core";
 import { Button } from "heroui-native/button";
@@ -12,7 +11,6 @@ import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
 import {
   ChevronRight,
-  Clock,
   Globe,
   Server,
   type LucideIcon,
@@ -29,17 +27,13 @@ import { DetailScreen } from "~/components/detail-screen";
 import { PageHeader } from "~/components/page-header";
 import { useToneColor } from "~/components/tone";
 
-import { useConnectedDurationMs } from "./use-connected-duration";
-import { WorldMap } from "./world-map";
-
 /**
  * The connection screen.
  *
  * Every decision it makes — which action the button runs, whether it is busy,
  * what the tunnel is complaining about — comes from `useHomeRuntime`, the same
  * controller the desktop's Home screen uses. What is rewritten here is the
- * view: one column, with the map a band above the state rather than a layer
- * behind it, because a phone has no room for text over a map.
+ * view: one connection action, a quick selection entry, and secondary session details.
  */
 export function HomeScreen() {
   const { t } = useI18n();
@@ -47,19 +41,21 @@ export function HomeScreen() {
   const trafficMode = useSavedTrafficMode();
   const subtleColor = useToneColor("neutral");
   const primary = primaryAction(runtime);
+  if (runtime.ready && runtime.lastError && !runtime.inProgress) {
+    primary.labelKey = runtime.lastError.reason === "notFound" ? "home.chooseNode" : runtime.lastError.reason === "elevationRequired" ? "mobile.authorizeAgain" : "actions.retry";
+    primary.run = runtime.lastError.reason === "notFound" ? () => openPage("nodePicker") : runtime.retryLastAction;
+  }
   const ipQuery = runtime.exitIp;
 
   const nodeName = runtime.nodeEntry
     ? profileTitle(runtime.nodeEntry.profile.remarks, t)
     : null;
-  const marker = runtime.marker;
 
   return (
     <DetailScreen accessibilityLabel={t("home.aria")}>
       <PageHeader title={t("tabs.home")} />
 
       <Card className="gap-5 p-5">
-        {runtime.hasNodes ? <WorldMap marker={marker} /> : null}
 
         {/* With no nodes at all the empty-state card below is the message —
             a second "No nodes" line above the CTA would only repeat it. */}
@@ -79,7 +75,7 @@ export function HomeScreen() {
             </View>
             <LinkButton
               className="min-h-12 max-w-full"
-              onPress={() => navigateToTab("profiles")}
+              onPress={() => openPage("nodePicker")}
             >
               <LinkButton.Label className="text-center text-accent">
                 {runtime.activeGroup
@@ -153,21 +149,12 @@ export function HomeScreen() {
             message={
               runtime.lastError.reason === "elevationRequired"
                 ? t("home.authorizationDeclined")
-                : undefined
-            }
-            retryLabel={
-              runtime.lastError.reason === "notFound"
-                ? t("home.chooseNode")
-                : runtime.lastError.reason === "elevationRequired"
-                  ? t("mobile.authorizeAgain")
-                  : undefined
-            }
-            retry={
-              runtime.lastError.reason === "notFound"
-                ? () => navigateToTab("profiles")
-                : runtime.retryLastAction
+                : runtime.lastError.reason === "notFound"
+                  ? t("daily.missingNode")
+                  : runtime.lastError.action !== "disconnect" ? t("daily.connectionFailed") : undefined
             }
           />
+          {runtime.lastError.action !== "disconnect" && runtime.lastError.reason !== "notFound" && runtime.lastError.reason !== "elevationRequired" ? <Button variant="secondary" onPress={() => openPage("nodePicker")}><Button.Label>{t("home.switchNode")}</Button.Label></Button> : null}
         </Failure>
       ) : runtime.ready && runtime.tunIssue ? (
         <Failure>
@@ -184,7 +171,6 @@ export function HomeScreen() {
           two figures could only ever read zero. */}
       {runtime.connected ? (
         <Card className="gap-4 p-5">
-          <DurationFact label={t("home.duration")} />
           <Fact
             icon={Globe}
             label={t("home.exitIp")}
@@ -193,13 +179,13 @@ export function HomeScreen() {
           />
         </Card>
       ) : null}
-      <Button
-        testID="home-activity"
+      {runtime.connected ? <Button
+        testID="home-details"
         variant="secondary"
-        onPress={() => openPage("activity")}
+        onPress={() => openPage("sessionDetails")}
       >
-        <Button.Label>{t("tabs.connections")}</Button.Label>
-      </Button>
+        <Button.Label>{t("activity.connectionDetails")}</Button.Label>
+      </Button> : null}
 
       {/* The same shape as the two error blocks above (`Failure`), so every
           failure on this screen offers its retry, its technical details and
@@ -219,7 +205,7 @@ export function HomeScreen() {
         <EmptyState
           icons={[Server]}
           title={t("panes.profiles.empty")}
-          description={t("home.emptyGuide")}
+          description={t("daily.importNeedsSource")}
         />
       )}
     </DetailScreen>
@@ -293,16 +279,6 @@ function Fact({
   );
 }
 
-/**
- * The connection time. Its own component so the once-a-second tick re-renders
- * this one row and not the screen around it.
- */
-function DurationFact({ label }: { label: string }) {
-  const elapsed = useConnectedDurationMs();
-
-  return <Fact icon={Clock} label={label} value={formatDurationMs(elapsed ?? 0)} />;
-}
-
 /** A failure's notice with the way to the log under it. */
 function Failure({ children }: { children: ReactNode }) {
   const { t } = useI18n();
@@ -326,14 +302,17 @@ function primaryAction(runtime: ReturnType<typeof useHomeRuntime>): {
   labelKey: TranslationKey;
   run: () => void;
 } {
+  if (runtime.state === "connecting" || runtime.state === "disconnecting") {
+    return { labelKey: runtime.state === "connecting" ? "status.connecting" : "status.disconnecting", run: runtime.handlePrimaryAction };
+  }
   if (runtime.connected || runtime.state === "cleanupPending") {
-    return { labelKey: "actions.disconnect", run: runtime.handlePrimaryAction };
+    return { labelKey: runtime.state === "cleanupPending" ? "home.retryDisconnect" : "actions.disconnect", run: runtime.handlePrimaryAction };
   }
   if (!runtime.hasNodes) {
     return { labelKey: "mobile.add", run: () => openPage("import") };
   }
   if (!runtime.ready) {
-    return { labelKey: "home.chooseNode", run: () => navigateToTab("profiles") };
+    return { labelKey: "home.chooseNode", run: () => openPage("nodePicker") };
   }
 
   return { labelKey: "actions.connect", run: runtime.handlePrimaryAction };

@@ -1,4 +1,4 @@
-import { queries } from "@voya/client/queries";
+import { queries, refreshQueries } from "@voya/client/queries";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -9,7 +9,7 @@ import { queryKeys } from "@voya/client/query-keys";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { useRuntimeActionStore } from "@voya/client/runtime-action-store";
 import { useToastStore } from "@voya/client/toast-store";
-import { activateSelection } from "@voya/client/runtime-action";
+import { activateSelection, chooseSelection } from "@voya/client/runtime-action";
 
 import { useBusyAction } from "../forms/use-busy-action";
 import { profileMemberName } from "./profile-display";
@@ -27,7 +27,7 @@ export function usePolicyGroups(
   operation: Pick<NodeOperation, "runOperation" | "setOperationError">,
   t: TranslationFunction,
   /** See [`useActivePolicyGroup`]: whether the running group's state is read. */
-  { live = true }: { live?: boolean } = {},
+  { live = true, inline = false }: { live?: boolean; inline?: boolean } = {},
 ) {
   const queryClient = useQueryClient();
   const coreConnected = useRuntimeEventStore(
@@ -57,7 +57,7 @@ export function usePolicyGroups(
     setPolicyGroupEditorOpen(true);
   }
 
-  /** The same two steps as choosing a node: make it active, then connect or restart. */
+  /** Makes the group active, then connects, or restarts a running core, with it. */
   function activatePolicyGroup(id: string) {
     return activateSelection(`${GROUP_SWITCH_PREFIX}${id}`, t, async () => {
       // A group replaces a node used on its own; say which one it set aside.
@@ -76,7 +76,23 @@ export function usePolicyGroups(
           title: t("policyGroups.switchedTitle"),
         });
       }
-    });
+    }, { inline });
+  }
+
+  /**
+   * The phone's tap on a group, matching its tap on a node: a running core
+   * switches to the group, a stopped one only remembers it.
+   */
+  function selectPolicyGroup(id: string) {
+    return chooseSelection(
+      `${GROUP_SWITCH_PREFIX}${id}`,
+      () => activatePolicyGroup(id),
+      async () => {
+        await voyaCommands().setActivePolicyGroup(id);
+        // Groups and nodes both carry the active marker; both sit under this root.
+        await refreshQueries(queryClient, queryKeys.profiles);
+      },
+    );
   }
 
   async function choosePolicyGroupMember(groupId: string, profileId: string) {
@@ -106,9 +122,12 @@ export function usePolicyGroups(
     openGroupEditor,
     policyGroupEditorOpen,
     policyGroupEntries,
+    policyGroupsError: policyGroupsQuery.error,
+    retryPolicyGroups: () => void policyGroupsQuery.refetch(),
     policyGroupRuntimeState,
     policyGroupSubscriptions: subscriptionsQuery.data ?? [],
     removePolicyGroup,
+    selectPolicyGroup,
     setDeletingPolicyGroup,
     setPolicyGroupEditorOpen,
     switchingPolicyGroupId: switchingId?.startsWith(GROUP_SWITCH_PREFIX)

@@ -64,15 +64,21 @@ export function arrangeConnections(
   }));
   const filtered = search ? derived.filter((row) => row.hay.includes(search.needle)) : derived;
   if (!sort) return filtered.map((row) => row.connection);
+  // Choose and compute the key once per row, not for every sort comparison.
+  // The arrays below are local copies, so sorting them never mutates a snapshot.
+  const direction = sort.ascending ? 1 : -1;
+  if (sort.column === "traffic") {
+    return filtered
+      .map(({ connection }) => ({ connection, bytes: (connection.upload ?? 0) + (connection.download ?? 0) }))
+      .sort((a, b) => direction * (a.bytes - b.bytes))
+      .map(({ connection }) => connection);
+  }
+  const column = sort.column;
   return filtered
-    .toSorted((a, b) => {
-      const comparison =
-        sort.column === "traffic"
-          ? (a.connection.upload ?? 0) + (a.connection.download ?? 0) - (b.connection.upload ?? 0) - (b.connection.download ?? 0)
-          : sort.column === "route"
-            ? a.routeText.localeCompare(b.routeText)
-            : (a.connection[sort.column] ?? "").localeCompare(b.connection[sort.column] ?? "");
-      return sort.ascending ? comparison : -comparison;
-    })
-    .map((row) => row.connection);
+    .map(({ connection, routeText }) => ({
+      connection,
+      text: column === "route" ? routeText : connection[column] ?? "",
+    }))
+    .sort((a, b) => direction * a.text.localeCompare(b.text))
+    .map(({ connection }) => connection);
 }

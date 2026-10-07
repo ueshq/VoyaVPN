@@ -71,6 +71,7 @@ export async function activateSelection(
   switchingId: string,
   t: TranslationFunction,
   select: () => Promise<void>,
+  { inline = false }: { inline?: boolean } = {},
 ): Promise<boolean> {
   const state = coreStateOf(useRuntimeEventStore.getState().coreState);
   if (switchBusy(state)) {
@@ -85,7 +86,7 @@ export async function activateSelection(
     const status = await executeRuntimeAction(action);
     return status.state === "connected";
   } catch (error) {
-    reportRuntimeActionError(error, action, t);
+    reportRuntimeActionError(error, action, t, { inline });
     return false;
   } finally {
     try {
@@ -97,7 +98,7 @@ export async function activateSelection(
 }
 
 /** Makes a node the active selection, then connects or restarts with it. */
-function activateProfile(id: string, t: TranslationFunction, queryClient: QueryClient) {
+function activateProfile(id: string, t: TranslationFunction, queryClient: QueryClient, options: { inline?: boolean } = {}) {
   return activateSelection(id, t, async () => {
     // A node replaces the policy group in use; say which one it set aside.
     const replacedGroup = queryClient
@@ -111,36 +112,52 @@ function activateProfile(id: string, t: TranslationFunction, queryClient: QueryC
         title: t("policyGroups.switchedTitle"),
       });
     }
-  });
+  }, options);
 }
 
 /**
- * Makes a node the active one without starting the core: a running core
- * switches to it, a stopped one only remembers the choice. A failure while
- * stopped is the caller's to show; a switch reports its own.
+ * Makes a node or policy group the active selection without starting the core:
+ * a running core switches to it through `activate`, a stopped one only runs
+ * `remember`. A failure while stopped is the caller's to show; a switch
+ * reports its own.
  */
-export async function selectProfile(id: string, t: TranslationFunction, queryClient: QueryClient) {
+export async function chooseSelection(
+  switchingId: string,
+  activate: () => Promise<boolean>,
+  remember: () => Promise<void>,
+) {
   const state = coreStateOf(useRuntimeEventStore.getState().coreState);
   if (state === "connected") {
-    return activateProfile(id, t, queryClient);
+    return activate();
   }
   if (switchBusy(state)) {
     return false;
   }
   const store = useRuntimeActionStore.getState();
-  store.startSwitch(id);
+  store.startSwitch(switchingId);
   try {
-    await voyaCommands().setActiveProfile(id);
-    // The node list carries the active marker; nothing else changed.
-    await refreshQueries(queryClient, queryKeys.profiles);
+    await remember();
     return true;
   } finally {
     store.finishSwitch();
   }
 }
 
+/** [`chooseSelection`] for a node. */
+export function selectProfile(id: string, t: TranslationFunction, queryClient: QueryClient, options: { inline?: boolean } = {}) {
+  return chooseSelection(
+    id,
+    () => activateProfile(id, t, queryClient, options),
+    async () => {
+      await voyaCommands().setActiveProfile(id);
+      // The node list carries the active marker; nothing else changed.
+      await refreshQueries(queryClient, queryKeys.profiles);
+    },
+  );
+}
+
 /** Choosing a node to use: the shared runtime guard, the running node and the two ways to pick one. */
-export function useProfileActivation(t: TranslationFunction) {
+export function useProfileActivation(t: TranslationFunction, options: { inline?: boolean } = {}) {
   const queryClient = useQueryClient();
   // The id alone: the core state is replaced on every status read and event,
   // and the node lists this feeds would re-render for each of them.
@@ -149,10 +166,10 @@ export function useProfileActivation(t: TranslationFunction) {
   const busy = useSwitchBusy();
 
   return {
-    activateProfile: (id: string) => activateProfile(id, t, queryClient),
+    activateProfile: (id: string) => activateProfile(id, t, queryClient, options),
     busy,
     runningId,
-    selectProfile: (id: string) => selectProfile(id, t, queryClient),
+    selectProfile: (id: string) => selectProfile(id, t, queryClient, options),
     switchingId,
   };
 }

@@ -5,6 +5,8 @@ import type { ShellTab } from "./tabs";
 export type RootRoutes = {
   main: NavigatorScreenParams<Record<ShellTab, undefined>>;
   activity: undefined;
+  nodePicker: undefined;
+  sessionDetails: undefined;
   connectionDetails: { connection: ProxyConnectionItem };
   import: undefined;
   subscriptions: undefined;

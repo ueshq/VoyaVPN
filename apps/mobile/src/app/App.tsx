@@ -1,3 +1,6 @@
+import { ConnectionLaunch } from "~/features/connection/connection-launch";
+import { NodePickerScreen } from "~/features/profiles/node-picker-screen";
+import { SessionDetailsScreen } from "~/features/home/session-details-screen";
 import { ImportScreen } from "~/features/profiles/import-screen";
 import { ProfileEditorScreen } from "~/features/profiles/profile-editor-screen";
 import { SubscriptionsScreen, SubscriptionScreen } from "~/features/profiles/subscriptions-screen";
@@ -17,7 +20,7 @@ import {
   useIsFocused,
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createNativeBottomTabNavigator } from "@bottom-tabs/react-navigation";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { AppError } from "@voya/contracts";
@@ -27,10 +30,12 @@ import type { HeroUINativeConfig } from "heroui-native/provider";
 import { HeroUINativeProvider } from "heroui-native/provider";
 import { type ComponentType, Suspense, useCallback, use, useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { FloatingTabBar } from "~/components/floating-tab-bar";
+import { SafeAreaView as NativeSafeAreaView } from "react-native-screens/experimental";
+import { NativeTabSafeAreaContext } from "~/components/use-screen-insets";
+import { useClassColor, useToneColor } from "~/components/tone";
 import { StackBackButton } from "~/components/stack-back-button";
 
 import { ActivityScreen } from "~/features/proxy/activity-screen";
@@ -50,7 +55,7 @@ import { ScreenActiveContext } from "@voya/features/shell/screen-active";
 import { useRuntimeStatusSeed } from "@voya/features/shell/use-runtime-status-seed";
 import { useTheme } from "./use-theme";
 
-const Tab = createBottomTabNavigator();
+const Tab = createNativeBottomTabNavigator<Record<ShellTab, undefined>>();
 const Stack = createNativeStackNavigator<RootRoutes>();
 const queryClient = createAppQueryClient();
 
@@ -62,13 +67,20 @@ const queryClient = createAppQueryClient();
  * looking. Built once: a component made per render would remount its tab.
  */
 function focusAware(Screen: ComponentType): ComponentType {
-  return guarded(function TabScreen() {
+  const GuardedScreen = guarded(Screen);
+  return function TabScreen() {
     return (
-      <ScreenActiveContext value={useIsFocused()}>
-        <Screen />
-      </ScreenActiveContext>
+      // Android lays scenes above its bar, which also consumes the system bottom inset.
+      // iOS scenes extend behind the native bar, so its safe area owns that edge.
+      <NativeSafeAreaView edges={{ top: true, bottom: Platform.OS === "ios", left: true, right: true }}>
+        <NativeTabSafeAreaContext value={true}>
+          <ScreenActiveContext value={useIsFocused()}>
+            <GuardedScreen />
+          </ScreenActiveContext>
+        </NativeTabSafeAreaContext>
+      </NativeSafeAreaView>
     );
-  });
+  };
 }
 
 const TAB_SCREENS: Record<ShellTab, ComponentType> = {
@@ -84,6 +96,8 @@ const TAB_SCREENS: Record<ShellTab, ComponentType> = {
  * Wrapped once, here — a component made per render would remount its page.
  */
 const PAGES = {
+  nodePicker: guarded(NodePickerScreen),
+  sessionDetails: guarded(SessionDetailsScreen),
   about: guarded(AboutScreen),
   activity: guarded(ActivityScreen),
   connectionDetails: guarded(ConnectionDetailsScreen),
@@ -100,16 +114,28 @@ const PAGES = {
 
 function MainTabs() {
   const { t } = useI18n();
+  const activeColor = useToneColor("brand");
+  const inactiveColor = useToneColor("neutral");
+  const surfaceColor = useClassColor("bg-surface", "backgroundColor");
+  const indicatorColor = useClassColor("bg-brand-tint", "backgroundColor");
   return (
-    <Tab.Navigator tabBar={(props) => <FloatingTabBar {...props} />} screenOptions={{ headerShown: false }}>
+    <Tab.Navigator
+      labeled
+      tabBarActiveTintColor={activeColor}
+      // Material caches its native theme while this navigator is covered by a
+      // settings page. Keep its colors in sync with the app's live preference.
+      tabBarInactiveTintColor={Platform.OS === "android" ? inactiveColor : undefined}
+      tabBarStyle={Platform.OS === "android" ? { backgroundColor: surfaceColor } : undefined}
+      activeIndicatorColor={Platform.OS === "android" ? indicatorColor : undefined}
+      minimizeBehavior="never"
+    >
       {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => {
-        const { icon: Icon, titleKey } = SHELL_TABS[tab];
+        const { icon, titleKey } = SHELL_TABS[tab];
         return (
           <Tab.Screen key={tab} name={tab} component={TAB_SCREENS[tab]} options={{
-            // The floating bar derives the tab's label and VoiceOver name from this.
+            // UIKit and Android derive the accessible tab name from its title.
             title: t(titleKey),
-            tabBarButtonTestID: `tab-${tab}`,
-            tabBarIcon: ({ color, size }) => <Icon color={color} size={size} accessible={false} />,
+            tabBarIcon: () => icon,
           }} />
         );
       })}
@@ -122,8 +148,14 @@ function Shell() {
   const { t } = useI18n();
   const scheme = useTheme();
   const insets = useSafeAreaInsets();
-  const navigationTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
+  const baseTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
+  const canvas = useClassColor("bg-canvas", "backgroundColor");
+  const navigationTheme = {
+    ...baseTheme,
+    colors: { ...baseTheme.colors, background: canvas ?? baseTheme.colors.background },
+  };
   useRuntimeStatusSeed();
+  const [navigationReady, setNavigationReady] = useState(false);
   const noticeAccepted = usePreferencesStore((state) => isPrivacyNoticeAccepted(state.privacyNoticeVersion));
 
   // Before first use the app shows what data it handles (App Store Guideline
@@ -132,11 +164,12 @@ function Shell() {
   if (!noticeAccepted) return <PrivacyNoticeScreen />;
 
   return (
-    <NavigationContainer ref={navigationRef} theme={navigationTheme}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme} onReady={() => setNavigationReady(true)}>
+      {navigationReady ? <ConnectionLaunch /> : null}
       <EventBridge />
       <NoticeHost />
-      {/* The tab bar floats over the content; stack pages show the navigation
-          bar with their translated title, and a page that needs a scrolling
+      {/* Stack pages cover the native tabs and show the navigation bar with
+          their translated title, and a page that needs a scrolling
           large title draws one itself. The back chevron is `StackBackButton`:
           the native one is invisible to React Native accessibility, so the
           header draws a labelled button instead. */}
@@ -148,17 +181,19 @@ function Shell() {
         statusBarStyle: scheme === "dark" ? "light" : "dark",
       })}>
         <Stack.Screen name="main" component={MainTabs} options={{ headerShown: false, title: "VoyaVPN" }} />
+        <Stack.Screen name="nodePicker" component={PAGES.nodePicker} options={{ title: t("home.chooseNode"), presentation: "modal" }} />
+        <Stack.Screen name="sessionDetails" component={PAGES.sessionDetails} options={{ title: t("activity.connectionDetails") }} />
         <Stack.Screen name="activity" component={PAGES.activity} options={{ title: t("tabs.connections") }} />
         <Stack.Screen name="connectionDetails" component={PAGES.connectionDetails} options={{ title: t("activity.connectionDetails") }} />
         <Stack.Screen name="import" component={PAGES.import} options={{ title: t("mobile.add") }} />
         <Stack.Screen name="subscriptions" component={PAGES.subscriptions} options={{ title: t("mobile.subscriptions") }} />
         <Stack.Screen name="subscription" component={PAGES.subscription} options={{ title: t("mobile.subscription") }} />
         <Stack.Screen name="editProfile" component={PAGES.editProfile} options={{ title: t("mobile.editNode") }} />
-        <Stack.Screen name="general" component={PAGES.general} options={{ title: t("settings.tabGeneral") }} />
+        <Stack.Screen name="general" component={PAGES.general} options={{ title: t("daily.appearance") }} />
         <Stack.Screen name="dns" component={PAGES.dns} options={{ title: t("mobile.connection") }} />
-        <Stack.Screen name="maintenance" component={PAGES.maintenance} options={{ title: t("mobile.maintenance") }} />
+        <Stack.Screen name="maintenance" component={PAGES.maintenance} options={{ title: t("daily.diagnostics") }} />
         <Stack.Screen name="logs" component={PAGES.logs} options={{ title: t("tabs.logs") }} />
-        <Stack.Screen name="about" component={PAGES.about} options={{ title: t("mobile.about") }} />
+        <Stack.Screen name="about" component={PAGES.about} options={{ title: t("daily.about") }} />
         <Stack.Screen name="ruleDetails" component={PAGES.ruleDetails} options={{ title: t("mobile.ruleDetails") }} />
       </Stack.Navigator>
       {/* Without a navigation bar nothing covers the status bar, so content
@@ -192,13 +227,12 @@ const HEROUI_CONFIG: HeroUINativeConfig = {
  * recognised, and HeroUI's press feedback is one.
  *
  * `HeroUINativeProvider` sits outside `Suspense` because it renders the portal
- * host that HeroUI's overlays — the node list's sort menu — mount into:
- * inside, every suspension of `Shell` would unmount the host along with
- * whatever was open in it. It sits inside `QueryClientProvider` because portal
- * content renders at the host, not where it was declared — so an overlay can
- * read the query client, but not navigation, which lives in `Shell`. The node
- * actions sheet is a React Native `Modal`, not a portal, so none of this
- * applies to it.
+ * host that HeroUI's overlays mount into: inside, every suspension of `Shell`
+ * would unmount the host along with whatever was open in it. It sits inside
+ * `QueryClientProvider` because portal content renders at the host, not where
+ * it was declared — so an overlay can read the query client, but not
+ * navigation, which lives in `Shell`. The node sort and actions sheets are
+ * React Native `Modal`s, not portals, so none of this applies to them.
  */
 export function App() {
   return (

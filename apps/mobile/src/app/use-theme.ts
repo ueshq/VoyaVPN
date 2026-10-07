@@ -29,6 +29,8 @@ function appearanceSnapshot() {
  * Uniwind keeps its own current theme — it is what every `dark:` class resolves
  * against — so the preference is pushed into it as well. Its vocabulary is the
  * same three words, including `system`, so nothing is translated on the way.
+ * Uniwind also synchronizes native Appearance; do not issue a second native
+ * theme update here while stack headers may be transitioning.
  */
 export function useTheme() {
   const themeMode = usePreferencesStore((state) => state.themePreview ?? state.themeMode);

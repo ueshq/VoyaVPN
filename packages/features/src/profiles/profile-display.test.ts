@@ -36,7 +36,13 @@ describe("profile display projections", () => {
     [{ delayMs: 399, outcome: null }, "fair"],
     [{ delayMs: 400, outcome: null }, "fair"],
     [{ delayMs: 0, outcome: null }, "unknown"],
-    [{ delayMs: 0, outcome: "timeout" }, "poor"],
+    [{ delayMs: 0, outcome: "timedOut" }, "poor"],
+    [{ delayMs: 0, outcome: "proxyConnectFailed" }, "poor"],
+    // Not measured is not failed: a node under test must not read as broken.
+    [{ delayMs: 0, outcome: "testing" }, "unknown"],
+    [{ delayMs: 0, outcome: "waiting" }, "unknown"],
+    [{ delayMs: 0, outcome: "skipped" }, "unknown"],
+    [{ delayMs: 0, outcome: "reconnectRequired" }, "unknown"],
   ] as Array<[Partial<ProfileSummaryEntry["metrics"]>, string]>)(
     "bands %j as %s",
     (metrics, expected) => {

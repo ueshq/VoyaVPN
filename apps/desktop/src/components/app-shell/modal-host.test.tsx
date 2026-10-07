@@ -21,15 +21,17 @@ function seedInstallResult(status: CoreSeedInstallStatus) {
 }
 
 /**
- * The sing-box core is not redistributed and is fetched on first run, so this
- * dialog is the onboarding path every user meets.
+ * The sing-box seed ships with the app. This dialog repairs a missing local
+ * component from that bundled seed.
  */
 function openMissingCoreModal() {
   useRuntimeActionStore.getState().showMissingCore({ message: "core missing" });
 }
 
-function renderModalHost() {
-  return renderWithQuery(<ModalHost />, { queryClient: createTestQueryClient({ gcTime: 0 }) });
+async function renderModalHost() {
+  const view = renderWithQuery(<ModalHost />, { queryClient: createTestQueryClient({ gcTime: 0 }) });
+  await act(() => vi.dynamicImportSettled());
+  return view;
 }
 
 describe("ModalHost", () => {
@@ -38,6 +40,7 @@ describe("ModalHost", () => {
     vi.clearAllMocks();
     await changeLocale("en");
     useRuntimeActionStore.setState({ missingCore: null });
+    useShellStore.setState({ closeRequestOpen: false });
     ipcMocks.connectActiveProfile.mockResolvedValue(undefined);
     ipcMocks.installCoreSeed.mockResolvedValue(seedInstallResult("installed"));
   });
@@ -45,20 +48,26 @@ describe("ModalHost", () => {
   afterEach(() => {
     cleanup();
     useRuntimeActionStore.setState({ missingCore: null });
+    useShellStore.setState({ closeRequestOpen: false });
   });
 
-  it("does not expose the retired full config template surface", () => {
-    renderModalHost();
+  it("does not expose the retired full config template surface", async () => {
+    await renderModalHost();
 
     expect(screen.queryByTestId("templates-dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "General" })).not.toBeInTheDocument();
   });
 
   it("loads the close prompt when the shell first asks, and keeps it for the next time", async () => {
-    renderModalHost();
+    await renderModalHost();
     expect(screen.queryByRole("dialog")).toBeNull();
 
-    act(() => useShellStore.getState().setCloseRequestOpen(true));
+    await act(async () => {
+      useShellStore.getState().setCloseRequestOpen(true);
+    });
+    // Wait for the real lazy import, independently of Testing Library's short
+    // element timeout; React still owns the first-load Suspense transition.
+    await act(() => vi.dynamicImportSettled());
     expect(await screen.findByText("Keep running in tray")).toBeInTheDocument();
 
     // Closed by the prompt itself, which stays mounted to play its way out.
@@ -72,7 +81,7 @@ describe("ModalHost", () => {
   it("installs the seeded core, connects, and closes the modal", async () => {
     const user = userEvent.setup();
     openMissingCoreModal();
-    renderModalHost();
+    await renderModalHost();
 
     expect(await screen.findByText("A required component is missing")).toBeInTheDocument();
     expect(screen.getByText(/missing a component it needs to connect \(sing-box\)/)).toBeInTheDocument();
@@ -88,7 +97,7 @@ describe("ModalHost", () => {
     const user = userEvent.setup();
     ipcMocks.installCoreSeed.mockResolvedValue(seedInstallResult("seedMissing"));
     openMissingCoreModal();
-    renderModalHost();
+    await renderModalHost();
 
     await user.click(await screen.findByRole("button", { name: "Repair" }));
 
@@ -107,7 +116,7 @@ describe("ModalHost", () => {
       }),
     );
     openMissingCoreModal();
-    renderModalHost();
+    await renderModalHost();
     await user.click(await screen.findByRole("button", { name: "Repair" }));
 
     await user.keyboard("{Escape}");
@@ -123,7 +132,7 @@ describe("ModalHost", () => {
     const user = userEvent.setup();
     ipcMocks.installCoreSeed.mockRejectedValue(new Error("download failed"));
     openMissingCoreModal();
-    renderModalHost();
+    await renderModalHost();
 
     const install = await screen.findByRole("button", { name: "Repair" });
     await user.click(install);

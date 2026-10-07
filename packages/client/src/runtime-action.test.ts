@@ -335,6 +335,14 @@ describe("activateSelection", () => {
     expect(runtimeStatus.refreshRuntimeStatusAndReport).not.toHaveBeenCalled();
   });
 
+  it("keeps a picker failure inline and releases the switch lock", async () => {
+    const failure = new IpcCommandError(appError({ type: "notFound", entity: "profile", id: "node" }));
+    await expect(activateSelection("node", t, vi.fn().mockRejectedValue(failure), { inline: true })).resolves.toBe(false);
+    expect(useRuntimeActionStore.getState().lastError).toMatchObject({ action: "connect", reason: "notFound" });
+    expect(useRuntimeActionStore.getState().switchingId).toBeNull();
+    expect(useToastStore.getState().toasts).toHaveLength(0);
+  });
+
   it("reports a selection that could not be saved and never starts the core", async () => {
     const select = vi.fn().mockRejectedValue(new Error("node not found"));
 

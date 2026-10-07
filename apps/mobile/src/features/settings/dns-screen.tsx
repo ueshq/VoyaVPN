@@ -1,3 +1,4 @@
+import { ConnectionOptions } from "~/features/connection/connection-options";
 import { queries } from "@voya/client/queries";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { voyaCommands } from "@voya/client/transport";
@@ -91,6 +92,8 @@ export function DnsScreen() {
     } catch (failure) { setError(failure); }
   }
   return <DetailScreen>
+    <ConnectionOptions />
+    <Typography className="text-base text-subtle">{t("daily.dnsHint")}</Typography>
     <ErrorNotice error={query.error} retry={() => void query.refetch()} />
     {form ? <>
       {/* Unsaved edits keep the fields open: collapsing them would hide what is about to be saved. */}
@@ -103,23 +106,14 @@ export function DnsScreen() {
         </TextField>)}
         <ListGroup>{SWITCHES.map(({ key, labelKey, hintKey }, index) => <SwitchRow key={key} last={index === SWITCHES.length - 1} label={t(labelKey)} description={hintKey ? t(hintKey) : undefined} isDisabled={saving} value={form[key] ?? false} onChange={(value) => edit({ [key]: value })} />)}</ListGroup>
       </Disclosure>
-      {advanced || dirty ? null : (
-        // Labeled, and without the bootstrap server when it matches the
-        // direct one: the defaults repeat the address, and "119.29.29.29 ·
-        // 119.29.29.29" reads like a copy-paste slip rather than a summary.
-        <Typography className="text-base text-subtle">
-          {FIELDS.flatMap(({ key, labelKey }) => {
-            if (key === "bootstrap" && form.bootstrap && form.bootstrap === form.direct) return [];
-            return [`${t(labelKey)}: ${form[key] ?? "—"}`];
-          }).join(" · ")}
-        </Typography>
-      )}
       {/* "Saved" only after a real save in this session: a page that opens
           already saying "Saved" teaches the user to ignore the line. */}
       <SaveStatus dirty={dirty} saved={saved} saving={saving} />
       <ErrorNotice error={error} message={t("mobile.saveFailed")} />
+      {advanced || dirty ? <>
       <PrimaryButton label={t("actions.save")} isDisabled={!dirty || saving} onPress={() => void save()} />
       <Button variant="secondary" isDisabled={saving} onPress={() => void defaults()}><Button.Label>{t("mobile.restoreDns")}</Button.Label></Button>
+      </> : null}
     </> : null}
     <ErrorNotice error={apply.error} retry={() => void apply.refetch()} />
     <ErrorNotice error={applyError} message={t("notices.settingsSavedRuntimeUpdateFailed")} />

@@ -31,4 +31,6 @@ optimisticRepeatInstall: false
 # setColorScheme ordering around it; drop it when a uniwind release above
 # 1.12.0 handles `auto`.
 patchedDependencies:
+  # RN 0.87's prebuilt iOS framework requires the qualified React header import.
+  react-native-bottom-tabs@1.4.0: patches/react-native-bottom-tabs@1.4.0.patch
   uniwind@1.12.0: patches/uniwind@1.12.0.patch

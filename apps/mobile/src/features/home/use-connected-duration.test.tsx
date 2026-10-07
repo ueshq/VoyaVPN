@@ -6,6 +6,12 @@ import { createElement } from "react";
 
 import { useConnectedDurationMs } from "./use-connected-duration";
 
+let mockFocused = true;
+jest.mock("@react-navigation/native", () => ({
+  ...jest.requireActual("@react-navigation/native"),
+  useIsFocused: () => mockFocused,
+}));
+
 const connected = {
   activeProfileId: "profile-0",
   activeTunBackend: null,
@@ -22,6 +28,7 @@ describe("useConnectedDurationMs", () => {
     // Fake timers move `performance.now` too, which is the clock the store
     // stamps a sample with and the hook reads.
     jest.useFakeTimers();
+    mockFocused = true;
     visible = true;
     setAppVisibility({
       isVisible: () => visible,
@@ -96,5 +103,18 @@ describe("useConnectedDurationMs", () => {
     });
 
     expect(result.current).toBe(65_000);
+  });
+
+  it("pauses when another stack screen covers the details and catches up on return", async () => {
+    useRuntimeEventStore.getState().setCoreState(connected);
+    const { result, rerender } = await renderHook(() => useConnectedDurationMs());
+    mockFocused = false;
+    await rerender({});
+    await act(async () => { jest.advanceTimersByTime(5000); });
+    expect(result.current).toBe(65_000);
+    mockFocused = true;
+    await rerender({});
+    await act(async () => { jest.advanceTimersByTime(0); });
+    expect(result.current).toBe(70_000);
   });
 });

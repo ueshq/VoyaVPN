@@ -22,12 +22,20 @@ const TEST_HEROUI_CONFIG: HeroUINativeConfig = {
   toast: false,
 };
 
-/**
- * A fresh client per test. Lives beside the wrapper so a suite can clear its
- * timers in `afterEach`; fast refresh never sees this test-only module.
- */
+const testClients = new Set<QueryClient>();
+
+/** Track every client, including multiple screen mounts within one test. */
 export function makeTestQueryClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      // MutationCache.clear() drops entries but leaves their GC timers alive.
+      // Tests dispose these clients explicitly; they need no timed collection.
+      mutations: { gcTime: Infinity },
+    },
+  });
+  testClients.add(client);
+  return client;
 }
 
 /**
@@ -48,8 +56,6 @@ export function TestProviders({
   );
 }
 
-let renderedClient: QueryClient | null = null;
-
 /**
  * Renders a screen under the providers with a fresh query client. The client
  * keeps refetch and garbage-collection timers Jest would wait on, so
@@ -57,7 +63,6 @@ let renderedClient: QueryClient | null = null;
  */
 export async function renderScreen(ui: ReactElement) {
   const queryClient = makeTestQueryClient();
-  renderedClient = queryClient;
   const wrapper = ({ children }: { children: ReactNode }) => (
     <TestProviders queryClient={queryClient}>{children}</TestProviders>
   );
@@ -65,7 +70,7 @@ export async function renderScreen(ui: ReactElement) {
   return { queryClient, ...(await render(ui, { wrapper })) };
 }
 
-export function clearRenderedClient() {
-  renderedClient?.clear();
-  renderedClient = null;
+export function clearTestQueryClients() {
+  for (const client of testClients) client.clear();
+  testClients.clear();
 }

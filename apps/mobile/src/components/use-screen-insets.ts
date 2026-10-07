@@ -1,28 +1,20 @@
-import { BottomTabBarHeightContext } from "@react-navigation/bottom-tabs";
-import { useContext } from "react";
+import { createContext, useContext } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useContentColumn } from "./content-column";
 
+/** Native tab screens already clear the system bars and the native tab bar. */
+export const NativeTabSafeAreaContext = createContext(false);
+
 /**
- * The content-container style of a screen's scrolling content: its vertical
- * padding, and on an iPad the centred column.
- *
- * A tab screen has no navigation header: it draws its own large title, so the
- * content starts under the status bar and the title scrolls away with it. A
- * stack page sits under the navigation bar, which already clears the status
- * bar. The tab bar floats over the bottom of a tab screen, so the content ends
- * above it.
- *
- * The context is read directly rather than through `useBottomTabBarHeight`,
- * which throws outside a tab navigator — and a screen rendered on its own, as
- * every screen test does, simply has no bar to clear.
+ * Scroll-content spacing and the centred iPad column. Native tab screens sit
+ * inside a native SafeAreaView; stack pages already sit below their header
+ * but still need the bottom system inset. Neither needs a measured tab height.
  */
 export function useScreenInsets() {
   const safeArea = useSafeAreaInsets();
-  const tabBar = useContext(BottomTabBarHeightContext) ?? 0;
-
+  const nativeTab = useContext(NativeTabSafeAreaContext);
   const column = useContentColumn();
 
-  return { ...column, paddingBottom: Math.max(tabBar, safeArea.bottom) + 24, paddingTop: tabBar ? safeArea.top : 16 };
+  return { ...column, paddingBottom: (nativeTab ? 0 : safeArea.bottom) + 24, paddingTop: 16 };
 }

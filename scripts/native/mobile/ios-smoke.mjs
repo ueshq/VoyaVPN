@@ -11,7 +11,7 @@ import { lanAddress, startFixtures, unusedPort } from "./ios-fixtures.mjs";
 const root = repoRootFromScript(import.meta.url);
 const ios = resolve(root, "apps/mobile/ios");
 const bundleId = "app.voyavpn.mobile";
-const smokeTests = ["testSecondaryPagesAndImportCancellation", "testLaunchAndAllPages", "testNodeImportShareQrDelete", "testSubscriptionAutoRefreshAndPolicyGroup", "testRealLatencyTimeoutCancelAndRetry", "testRulesAndSettingsPersist", "testDnsValidationAndPersistence", "testSystemThemeAndForegroundRecovery", "testDeclinedConnectOffersAuthorizeAgain"];
+const smokeTests = ["testDailyConnectionNavigation", "testSecondaryPagesAndImportCancellation", "testLaunchAndAllPages", "testNodeImportShareQrDelete", "testSubscriptionAutoRefreshAndPolicyGroup", "testRealLatencyTimeoutCancelAndRetry", "testRulesAndSettingsPersist", "testDnsValidationAndPersistence", "testSystemThemeAndForegroundRecovery", "testDeclinedConnectOffersAuthorizeAgain"];
 
 export function selectRuntime(runtimes) {
   const runtime = runtimes.filter((item) => item.isAvailable && item.identifier.includes(".iOS-"))

@@ -3,15 +3,6 @@ import { useWindowDimensions, type ViewStyle } from "react-native";
 /** From this window width up the content stops growing and is centred. */
 const WIDE_WINDOW_WIDTH = 700;
 const CONTENT_MAX_WIDTH = 640;
-/** The `px-page` margin (`--spacing-page` in global.css), in points. */
-const PAGE_MARGIN = 16;
-/**
- * The width of what sits inside a page column's margins, such as its cards.
- * Something that floats over the page with its own margins, such as the tab
- * bar, takes this width to line up with them.
- */
-export const CONTENT_INNER_WIDTH = CONTENT_MAX_WIDTH - 2 * PAGE_MARGIN;
-
 /** The column style for a window of `width` points, or `undefined` on a phone. */
 export function contentColumn(width: number, maxWidth = CONTENT_MAX_WIDTH): ViewStyle | undefined {
   return width >= WIDE_WINDOW_WIDTH ? { alignSelf: "center", maxWidth, width: "100%" } : undefined;

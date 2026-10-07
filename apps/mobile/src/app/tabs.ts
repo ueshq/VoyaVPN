@@ -1,5 +1,6 @@
 import type { TranslationKey } from "@voya/i18n/core";
-import { House, Route, Server, Settings, type LucideIcon } from "lucide-react-native";
+import type { AppleIcon } from "react-native-bottom-tabs";
+import { Platform, type ImageSourcePropType } from "react-native";
 import type { ComponentType } from "react";
 
 import { HomeScreen } from "~/features/home/home-screen";
@@ -13,12 +14,39 @@ import { SettingsScreen } from "~/features/settings/settings-screen";
  * Deliberately a subset of the desktop's six sections: `selfHost` is dropped
  * because a phone is not an exit node, and the titles reuse the desktop's
  * `tabs.*` keys so both shells name the same section the same way.
+ *
+ * Android uses density-qualified PNG drawables (SVG masters in assets/tab-icons).
+ * iOS resolves SF Symbols itself. Both platforms tint the icons natively.
  */
 export const SHELL_TABS = {
-  home: { titleKey: "tabs.home", icon: House, component: HomeScreen },
-  profiles: { titleKey: "tabs.profiles", icon: Server, component: NodesScreen },
-  rules: { titleKey: "tabs.rules", icon: Route, component: RulesScreen },
-  settings: { titleKey: "tabs.settings", icon: Settings, component: SettingsScreen },
-} as const satisfies Record<string, { titleKey: TranslationKey; icon: LucideIcon; component: ComponentType }>;
+  home: {
+    titleKey: "tabs.home",
+    icon: Platform.OS === "ios"
+      ? { sfSymbol: "house" }
+      : { uri: "voya_tab_home" },
+    component: HomeScreen,
+  },
+  profiles: {
+    titleKey: "tabs.profiles",
+    icon: Platform.OS === "ios"
+      ? { sfSymbol: "server.rack" }
+      : { uri: "voya_tab_nodes" },
+    component: NodesScreen,
+  },
+  rules: {
+    titleKey: "tabs.rules",
+    icon: Platform.OS === "ios"
+      ? { sfSymbol: "point.3.connected.trianglepath.dotted" }
+      : { uri: "voya_tab_rules" },
+    component: RulesScreen,
+  },
+  settings: {
+    titleKey: "tabs.settings",
+    icon: Platform.OS === "ios"
+      ? { sfSymbol: "gearshape" }
+      : { uri: "voya_tab_settings" },
+    component: SettingsScreen,
+  },
+} as const satisfies Record<string, { titleKey: TranslationKey; icon: AppleIcon | ImageSourcePropType; component: ComponentType }>;
 
 export type ShellTab = keyof typeof SHELL_TABS;

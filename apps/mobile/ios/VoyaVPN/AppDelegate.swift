@@ -30,13 +30,36 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     window = UIWindow(frame: UIScreen.main.bounds)
 
+    // Cold quick actions become the initial URL, before JavaScript considers auto-connect.
+    var options = launchOptions
+    let shortcut = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem
+    if let shortcut, let url = connectionShortcutURL(shortcut.type) {
+      options = (options ?? [:]).merging([.url: url]) { _, new in new }
+    }
     factory.startReactNative(
       withModuleName: "VoyaVPN",
       in: window,
-      launchOptions: launchOptions
+      launchOptions: options
     )
 
-    return true
+    return shortcut == nil
+  }
+
+  private func connectionShortcutURL(_ type: String) -> URL? {
+    switch type {
+    case "voyavpn.connect": return URL(string: "voyavpn://connect")
+    case "voyavpn.disconnect": return URL(string: "voyavpn://disconnect")
+    default: return nil
+    }
+  }
+
+  func application(_ application: UIApplication, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
+    guard let url = connectionShortcutURL(shortcutItem.type) else { completionHandler(false); return }
+    completionHandler(RCTLinkingManager.application(application, open: url, options: [:]))
+  }
+
+  func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
+    RCTLinkingManager.application(application, open: url, options: options)
   }
 }
 

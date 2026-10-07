@@ -55,7 +55,7 @@ test("a subscription's downloaded nodes count as imported, and lead on to the no
 
   // The link itself is no node; the node arrives with the subscription's
   // first download, which is part of the same import as far as the user goes.
-  expect(await screen.findByText("Choose a node")).toBeOnTheScreen();
+  expect(await screen.findByText(/^Connect to /)).toBeOnTheScreen();
   expect(screen.getByText(/Imported 1 node/)).toBeOnTheScreen();
   expect(screen.queryByText(/Imported 0 nodes/)).toBeNull();
   await unmount(); client.clear();
@@ -167,9 +167,9 @@ test("after a confirmed import the summary replaces the input form until the use
   expect(screen.queryByText("Read clipboard")).toBeNull();
   expect(screen.queryByText("Preview")).toBeNull();
   expect(screen.getByText("Choose a node")).toBeOnTheScreen();
-  expect(screen.getByText("Add nodes or subscription")).toBeOnTheScreen();
+  expect(screen.getByText("Add more")).toBeOnTheScreen();
 
-  await user.press(screen.getByText("Add nodes or subscription"));
+  await user.press(screen.getByText("Add more"));
   expect(screen.getByText("Read clipboard")).toBeOnTheScreen();
   await unmount(); client.clear();
 });
@@ -199,4 +199,21 @@ test("a summary with no imported nodes offers no node picker", async () => {
   expect(screen.queryByText("Choose a node")).toBeNull();
   expect(screen.getByText("Add nodes or subscription")).toBeOnTheScreen();
   await unmount(); client.clear();
+});
+
+test("a single imported node connects only after the explicit connect action", async () => {
+  registerMobileBackend(mockTransport());
+  const backend = mockBackend();
+  setClipboard({ readText: async () => "vless://token@single.example.test:443#Single", writeText: async () => {} });
+  const client = makeTestQueryClient();
+  await render(<ImportScreen />, { wrapper: ({ children }) => <TestProviders queryClient={client}>{children}</TestProviders> });
+  const user = userEvent.setup();
+  await user.press(screen.getByText("Read clipboard"));
+  await user.press(screen.getByText("Preview"));
+  await user.press(await screen.findByText("Confirm import"));
+  const connect = await screen.findByText("Connect to Single");
+  expect(backend.state.calls.some((c) => c.command === "connectActiveProfile")).toBe(false);
+  await user.press(connect);
+  await waitFor(() => expect(backend.state.calls.some((c) => c.command === "connectActiveProfile")).toBe(true));
+  expect(backend.state.runtime.activeProfileId).toBe(backend.state.profiles.find((p) => p.profile.remarks === "Single")?.profile.id);
 });

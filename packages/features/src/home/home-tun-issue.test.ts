@@ -37,13 +37,25 @@ describe("homeTunIssue", () => {
 
   it("keeps the provider's own error in the line unless asked to leave it out", () => {
     const failed = tun({
-      backend: "iosPacketTunnel",
+      backend: "macosPacketTunnel",
       lastProviderError: "the tunnel did not come up within 60s",
       providerState: "error",
     });
 
-    expect(homeTunIssue(failed, t())).toBe("iOS PacketTunnel: Error: the tunnel did not come up within 60s");
-    expect(homeTunIssue(failed, t(), { includeProviderError: false })).toBe("iOS PacketTunnel: Error");
+    expect(homeTunIssue(failed, t())).toBe("macOS PacketTunnel: Error: the tunnel did not come up within 60s");
+    expect(homeTunIssue(failed, t(), { includeProviderError: false })).toBe("macOS PacketTunnel: Error");
+  });
+
+  // "iOS PacketTunnel: Error" names a component, not what to do; the review
+  // found it on Home after a failed connect. The provider's text stays in
+  // the full line, which the phone tucks behind its diagnostics.
+  it("says what to check when a phone's tunnel fails, leaving the details to diagnostics", () => {
+    const failed = (backend: TunStatus["backend"]) =>
+      tun({ backend, lastProviderError: "the tunnel did not come up within 60s", providerState: "error" });
+
+    expect(homeTunIssue(failed("iosPacketTunnel"), t(), { includeProviderError: false })).toBe(i18next.t("home.vpnErrorIos"));
+    expect(homeTunIssue(failed("androidVpnService"), t(), { includeProviderError: false })).toBe(i18next.t("home.vpnErrorAndroid"));
+    expect(homeTunIssue(failed("iosPacketTunnel"), t())).toBe("iOS PacketTunnel: Error: the tunnel did not come up within 60s");
   });
 
   it("reports a provider running from another copy of the app first", () => {

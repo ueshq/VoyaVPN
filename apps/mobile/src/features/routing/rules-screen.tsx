@@ -116,6 +116,7 @@ export function RulesScreen() {
                 onChange={(value) => trafficMode.selectMode(value)}
                 isDisabled={trafficMode.disabled}
               />
+              <Typography className="text-sm text-subtle">{t(rulesApply ? "daily.ruleHint" : "daily.globalHint")}</Typography>
               {trafficMode.disabledReason ? (
                 <Typography className="text-sm text-subtle">{t(trafficMode.disabledReason)}</Typography>
               ) : null}
@@ -125,9 +126,8 @@ export function RulesScreen() {
           <ErrorNotice error={routing.loadError} />
           <ErrorNotice error={routing.operationError} />
           {rules.length > 0 ? (
-            // Above the list, not below it: as a footer the hint ended up
-            // resting under the floating tab bar whenever the rules filled
-            // the screen, readable only after scrolling.
+            // Explain rule order before the list, so the hint is visible
+            // without scrolling through every rule.
             <Typography className="text-sm text-subtle">
               {t("panes.routing.ruleOrderHint")}
             </Typography>

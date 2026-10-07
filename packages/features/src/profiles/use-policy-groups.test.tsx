@@ -30,8 +30,9 @@ const ipc = installFakeCommands({
 });
 
 // The runtime guard and the connect/restart it drives have their own suite;
-// here a switch runs the selection step and reports a connection.
-const runtimeAction = vi.hoisted(() => ({ activateSelection: vi.fn() }));
+// here a switch runs the selection step and reports a connection, and a choice
+// switches a connected core and only remembers otherwise.
+const runtimeAction = vi.hoisted(() => ({ activateSelection: vi.fn(), chooseSelection: vi.fn() }));
 vi.mock("@voya/client/runtime-action", () => runtimeAction);
 
 const connectedCore: RuntimeStatusResponse = {
@@ -96,6 +97,13 @@ describe("usePolicyGroups", () => {
         await select();
         return true;
       });
+    runtimeAction.chooseSelection
+      .mockReset()
+      .mockImplementation(async (_id: string, activate: () => Promise<boolean>, remember: () => Promise<void>) => {
+        if (useRuntimeEventStore.getState().coreState?.state === "connected") return activate();
+        await remember();
+        return true;
+      });
     useRuntimeEventStore.setState({ coreState: null });
     useRuntimeActionStore.setState({ switchingId: null });
     useToastStore.setState({ toasts: [] });
@@ -111,7 +119,7 @@ describe("usePolicyGroups", () => {
 
     await act(() => result.current.activatePolicyGroup("g1"));
 
-    expect(runtimeAction.activateSelection).toHaveBeenCalledWith("group:g1", expect.any(Function), expect.any(Function));
+    expect(runtimeAction.activateSelection).toHaveBeenCalledWith("group:g1", expect.any(Function), expect.any(Function), { inline: false });
     expect(ipc.setActivePolicyGroup).toHaveBeenCalledWith("g1");
     expect(useToastStore.getState().toasts).toEqual([
       expect.objectContaining({
@@ -134,6 +142,28 @@ describe("usePolicyGroups", () => {
 
     expect(ipc.setActivePolicyGroup).toHaveBeenCalledWith("g1");
     expect(useToastStore.getState().toasts).toEqual([]);
+  });
+
+  it("only remembers a group chosen while the core is stopped", async () => {
+    const { result } = mount([entry("g1", false)]);
+    await waitFor(() => expect(result.current.policyGroupEntries).toHaveLength(1));
+
+    await act(() => result.current.selectPolicyGroup("g1"));
+
+    expect(runtimeAction.chooseSelection).toHaveBeenCalledWith("group:g1", expect.any(Function), expect.any(Function));
+    expect(ipc.setActivePolicyGroup).toHaveBeenCalledWith("g1");
+    expect(runtimeAction.activateSelection).not.toHaveBeenCalled();
+  });
+
+  it("switches a connected core to a chosen group", async () => {
+    useRuntimeEventStore.setState({ coreState: connectedCore });
+    const { result } = mount([entry("g1", false), entry("g2", true)]);
+    await waitFor(() => expect(result.current.policyGroupEntries).toHaveLength(2));
+
+    await act(() => result.current.selectPolicyGroup("g1"));
+
+    expect(runtimeAction.activateSelection).toHaveBeenCalledWith("group:g1", expect.any(Function), expect.any(Function), { inline: false });
+    expect(ipc.setActivePolicyGroup).toHaveBeenCalledWith("g1");
   });
 
   it("chooses a member through the caller's operation and shows it at once", async () => {

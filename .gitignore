@@ -19,6 +19,7 @@ $RECYCLE.BIN/
 *.swo
 *~
 *.code-workspace
+.local/
 
 # Environment and local secrets
 .env

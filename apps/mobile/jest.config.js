@@ -18,8 +18,9 @@ module.exports = {
   // The `@voya/*` packages need no entry: they resolve through a workspace
   // symlink to `packages/*/src`, a path with no `node_modules` in it, so they
   // are never ignored. Reanimated, Worklets and Gesture Handler are covered by
-  // the `react-native` substring already.
+  // the `react-native` substring already. The native tabs adapter and its ESM
+  // color helpers also need Babel; their navigation logic stays real in tests.
   transformIgnorePatterns: [
-    "node_modules/(?!.*(react-native|@react-navigation|test-renderer|uniwind|heroui-native))",
+    "node_modules/(?!.*(react-native|@react-navigation|@bottom-tabs|color(?:-convert|-string|-name)?[\\/]|test-renderer|uniwind|heroui-native))",
   ],
 };

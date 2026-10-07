@@ -4,9 +4,8 @@ import { Svg, Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useClassColor } from "./tone";
 
 /**
- * A strip that dissolves whatever is under it into the surface beside it: the
- * content above the floating tab bar fades into the canvas, and a scrolling
- * card's edge fades into the card.
+ * A strip that dissolves whatever is under it into the surface beside it,
+ * such as a scrolling card's edge fading into the card.
  *
  * `colorClassName` is the background class of that surface, written out at
  * the call site (see `useClassColor`). The strip fills the box its parent or

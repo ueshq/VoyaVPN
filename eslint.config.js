@@ -166,6 +166,24 @@ export default tseslint.config(
     },
   },
   {
+    // Everything Metro bundles runs on Hermes, which lags the ES2023 `lib` the
+    // workspace typechecks against. Jest runs on Node, so a missing method
+    // passes every test and throws `undefined is not a function` on a device.
+    files: [
+      "apps/mobile/src/**/*.{ts,tsx}",
+      "packages/{client,contracts,features,i18n,utils}/src/**/*.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...["toSorted", "toReversed", "toSpliced"].map((property) => ({
+          property,
+          message: "Hermes does not implement every ES2023 copying method. Copy the array, then mutate the copy.",
+        })),
+      ],
+    },
+  },
+  {
     // Plain browser scripts Vite copies as-is, such as the pre-render theme boot.
     files: ["apps/desktop/public/**/*.js"],
     languageOptions: {

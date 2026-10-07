@@ -35,6 +35,27 @@ final class VoyaVPNUITests: XCTestCase {
         app.terminate()
     }
 
+    func testDailyConnectionNavigation() throws {
+        open("profiles")
+        try importText("vless://33333333-3333-3333-3333-333333333333@daily.example.test:443?security=tls#Daily%20Node")
+        row("Daily Node").tap()
+        open("home")
+        tap("Daily Node")
+        XCTAssertTrue(app.searchFields["Search nodes"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.buttons["Test all"].exists)
+        XCTAssertFalse(app.buttons["Add nodes or subscription"].exists)
+        captureStable("daily-node-picker")
+        row("Daily Node").tap()
+        XCTAssertTrue(app.buttons["Connect"].waitForExistence(timeout: timeout))
+        XCTAssertFalse(app.buttons["Connection details"].exists)
+        open("dns")
+        XCTAssertTrue(app.switches["Connect when the app starts"].exists)
+        tap("Connection shortcuts")
+        tap("Set up shortcuts")
+        XCTAssertTrue(app.staticTexts["Shortcuts are ready."].waitForExistence(timeout: timeout))
+        captureStable("daily-connection-options")
+    }
+
     func testLaunchAndAllPages() {
         open("profiles")
         XCTAssertFalse(row("🇯🇵 Tokyo").exists, "the mock backend must not be installed")
@@ -48,10 +69,13 @@ final class VoyaVPNUITests: XCTestCase {
             // restoring the window. Wait for the rendered page to settle
             // before a subsequent tab tap can be treated as an app action.
             captureStable("restored-\(page)")
-            XCTAssertTrue(wait { self.app.buttons["tab-" + page].isSelected })
+            XCTAssertTrue(wait { self.tabButton(page).isSelected })
         }
         open("connections")
         XCTAssertTrue(app.staticTexts["Connect to view network activity"].exists)
+        XCTAssertFalse(tabButton("home").isHittable)
+        open("home")
+        XCTAssertTrue(tabButton("home").isSelected)
     }
 
     func testNodeImportShareQrDelete() throws {
@@ -88,7 +112,7 @@ final class VoyaVPNUITests: XCTestCase {
         // as a declined authorization — which Home answers with a way to ask
         // again, and no diagnostic that would only repeat the sentence above it.
         XCTAssertTrue(app.buttons["Authorize again"].waitForExistence(timeout: timeout))
-        tap("Connect")
+        tap("Authorize again")
         XCTAssertTrue(app.staticTexts["Disconnected"].exists)
         open("profiles")
         row(title).press(forDuration: 1.2)
@@ -173,7 +197,7 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Global"].isSelected)
         tap("Rule")
         for (label, value) in values { XCTAssertEqual(visible(app.switches[label]).value as? String, value) }
-        open("general")
+        open("maintenance")
         let label = "Record detailed connection log"
         let control = visible(app.switches[label])
         let before = control.value as? String
@@ -181,8 +205,9 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertTrue(wait { control.value as? String != before })
         let expected = control.value as? String
         relaunch()
-        open("general")
+        open("maintenance")
         XCTAssertEqual(visible(app.switches[label]).value as? String, expected)
+        open("general")
         tap("Dark")
         relaunch()
         open("general")
@@ -214,7 +239,7 @@ final class VoyaVPNUITests: XCTestCase {
         for page in ["subscriptions", "connections", "dns", "maintenance", "logs", "about"] {
             open(page)
             captureStable(page)
-            XCTAssertFalse(app.buttons["tab-home"].isHittable)
+            XCTAssertFalse(tabButton("home").isHittable)
         }
         open("profiles")
         // Through the clipboard, like every other import here: XCUITest does
@@ -268,7 +293,7 @@ final class VoyaVPNUITests: XCTestCase {
             XCTAssertTrue(wait { (self.app.frame.width > self.app.frame.height) == landscape })
             for page in ["home", "profiles", "rules", "settings"] {
                 open(page)
-                XCTAssertTrue(app.buttons["tab-" + page].isHittable)
+                XCTAssertTrue(tabButton(page).isHittable)
                 captureStable("ipad-\(orientation.rawValue)-\(page)")
             }
         }
@@ -357,6 +382,7 @@ final class VoyaVPNUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Choose a node"].waitForExistence(timeout: timeout))
         captureStable("09-import-choose-node")
         tap("Choose a node")
+        tap("Manage nodes")
         _ = row("Tokyo Edge 01").waitForExistence(timeout: timeout)
         captureStable("10-profiles-populated")
 
@@ -370,6 +396,7 @@ final class VoyaVPNUITests: XCTestCase {
         if app.buttons["Choose a node"].waitForExistence(timeout: timeout) {
             captureStable("11b-subscription-choose-node")
             app.buttons["Choose a node"].tap()
+            tap("Manage nodes")
         }
         _ = row("QA Subscription A").waitForExistence(timeout: timeout)
         captureStable("12-profiles-with-subscription")
@@ -384,13 +411,23 @@ final class VoyaVPNUITests: XCTestCase {
         }
         tap("Policy groups")
 
-        // --- Sort menu ---
+        // --- Sort sheet ---
         let sort = app.buttons["Sort order"]
         if ready(sort) {
             sort.tap()
             capture("15-sort-menu")
+            // The orders are buttons to VoiceOver, so a missing one is a
+            // failure, not a step to skip; and choosing the latency order
+            // must not take the screen down (Hermes once lacked `toSorted`).
             let latency = app.buttons["Lowest latency"]
-            if latency.exists { latency.tap() }
+            XCTAssertTrue(latency.waitForExistence(timeout: 5), "sort orders are not exposed as buttons")
+            latency.tap()
+            XCTAssertFalse(app.descendants(matching: .any)["screen-error-fallback"].waitForExistence(timeout: 2), "sorting by latency crashed the Nodes screen")
+            XCTAssertTrue(ready(sort), "the sort sheet did not close")
+            sort.tap()
+            let defaultOrder = app.buttons["Default order"]
+            XCTAssertTrue(defaultOrder.waitForExistence(timeout: 5))
+            defaultOrder.tap()
         }
 
         // --- Latency test via the fixture probe ---
@@ -471,7 +508,7 @@ final class VoyaVPNUITests: XCTestCase {
                 app.alerts.buttons["Discard changes"].tap()
                 // The screen pop the discard triggers outlives the alert; a
                 // navigation-bar snapshot taken mid-pop is already stale.
-                _ = wait { self.app.buttons["tab-home"].isHittable }
+                _ = wait { self.tabButton("home").isHittable }
             } else {
                 open("dns")
             }
@@ -636,8 +673,11 @@ final class VoyaVPNUITests: XCTestCase {
         if value == "not-a-node" { return }
         XCTAssertTrue(app.buttons["Confirm import"].waitForExistence(timeout: timeout))
         tap("Confirm import")
-        XCTAssertTrue(app.buttons["Choose a node"].waitForExistence(timeout: timeout))
-        tap("Choose a node")
+        XCTAssertTrue(wait {
+            self.app.buttons["Choose a node"].exists || self.app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Connect to '")).firstMatch.exists
+        })
+        // Import never connects by itself. Management tests continue at the full list.
+        open("profiles")
     }
 
     private func exportedLink(containing host: String) throws -> String {
@@ -659,22 +699,37 @@ final class VoyaVPNUITests: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", name)).firstMatch
     }
 
+    /// The system owns the tab buttons: identify them inside its bar by the
+    /// app's translated titles, including while the visual matrix changes locale.
+    private func tabButton(_ page: String) -> XCUIElement {
+        let labels = [
+            "home": ["Home", "主页", "主頁"],
+            "profiles": ["Nodes", "节点", "節點"],
+            "rules": ["Rules", "规则", "規則"],
+            "settings": ["Settings", "设置", "設定"],
+        ]
+        // iPadOS 26 exposes its top tab strip as ordinary nested buttons,
+        // without a TabBar ancestor. Their titles remain the same native labels.
+        let buttons = UIDevice.current.userInterfaceIdiom == .pad ? app.buttons : app.tabBars.buttons
+        return buttons.matching(NSPredicate(format: "label IN %@", labels[page] ?? [page])).firstMatch
+    }
+
     private func open(_ page: String) {
         for _ in 0..<5 {
-            if app.buttons["tab-home"].isHittable { break }
+            if tabButton("home").isHittable { break }
             let back = app.navigationBars.buttons.firstMatch
             if back.exists { back.tap() }
             if app.alerts.buttons["Discard changes"].exists { app.alerts.buttons["Discard changes"].tap() }
         }
         let settingsPages = ["subscriptions", "general", "dns", "maintenance", "about"]
         let target = settingsPages.contains(page) || page == "logs" ? "settings" : page == "connections" ? "home" : page
-        let tab = app.buttons["tab-" + target]
+        let tab = tabButton(target)
         XCTAssertTrue(tab.exists || tab.waitForExistence(timeout: timeout))
         XCTAssertTrue(ready(tab))
         tab.tap()
         XCTAssertTrue(wait { tab.isSelected })
         if settingsPages.contains(page) { visible(app.buttons["settings-" + page]).tap() }
-        if page == "connections" { visible(app.buttons["home-activity"]).tap() }
+        if page == "connections" { visible(tabButton("settings")).tap(); visible(app.buttons["settings-maintenance"]).tap(); visible(app.buttons["maintenance-activity"]).tap() }
         if page == "logs" { visible(app.buttons["settings-maintenance"]).tap(); visible(app.buttons["maintenance-logs"]).tap() }
     }
 
@@ -695,7 +750,7 @@ final class VoyaVPNUITests: XCTestCase {
     private func launch() {
         app.launch()
         let accept = app.buttons["privacy-continue"]
-        let tabs = app.buttons["tab-home"]
+        let tabs = tabButton("home")
         XCTAssertTrue(wait(seconds: timeout) { accept.exists || tabs.exists })
         if accept.exists {
             capture("privacy-notice")

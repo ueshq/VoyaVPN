@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
+import androidx.test.uiautomator.BySelector
+import java.util.regex.Pattern
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import androidx.test.uiautomator.UiScrollable
@@ -22,10 +24,10 @@ class MobileSmokeTest {
     private fun returnToTabs() {
         val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         repeat(6) {
-            if (device.hasObject(By.res("tab-home"))) return
+            if (device.hasObject(tabSelector("home"))) return
             if (device.currentPackageName != InstrumentationRegistry.getInstrumentation().targetContext.packageName) return
             device.pressBack()
-            device.wait(Until.hasObject(By.res("tab-home")), 1000)
+            device.wait(Until.hasObject(tabSelector("home")), 1000)
         }
     }
     @get:Rule val failureEvidence = object : TestWatcher() {
@@ -41,7 +43,8 @@ class MobileSmokeTest {
         val context = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
         context.startActivity(context.packageManager.getLaunchIntentForPackage(context.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-        assertTrue(device.wait(Until.hasObject(By.res("tab-settings")), 30000))
+        acceptPrivacyNoticeIfNeeded(device)
+        assertTrue(device.wait(Until.hasObject(tabSelector("settings")), 30000))
         val languages = listOf(
             listOf("English", "Light", "Dark", "Home", "Nodes", "Rules", "Settings"),
             listOf("简体中文", "浅色", "深色", "主页", "节点", "规则", "设置"),
@@ -53,7 +56,7 @@ class MobileSmokeTest {
             for (theme in 1..2) {
                 clickLabel(device, words[theme])
                 device.pressBack()
-                assertTrue("Return from appearance settings", device.wait(Until.hasObject(By.res("tab-home")), 10000))
+                assertTrue("Return from appearance settings", device.wait(Until.hasObject(tabSelector("home")), 10000))
                 for ((index, tab) in listOf("home", "profiles", "rules", "settings").withIndex()) {
                     clickResource(device, "tab-$tab")
                     assertTrue(device.wait(Until.hasObject(By.res("page-title").text(words[index + 3])), 10000))
@@ -72,12 +75,12 @@ class MobileSmokeTest {
         val context = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
         context.startActivity(context.packageManager.getLaunchIntentForPackage(context.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-        assertTrue(device.wait(Until.hasObject(By.res("tab-profiles")), 30000))
+        assertTrue(device.wait(Until.hasObject(tabSelector("profiles")), 30000))
         val before = profileIds()
         clickResource(device, "tab-profiles")
         assertTrue(device.wait(Until.hasObject(By.res("page-title").text("Nodes")), 10000))
         clickLabel(device, "Add nodes or subscription")
-        assertTrue("Import is a secondary page", device.wait(Until.gone(By.res("tab-profiles")), 10000))
+        assertTrue("Import is a secondary page", device.wait(Until.gone(tabSelector("profiles")), 10000))
         UiScrollable(UiSelector().className("android.widget.ScrollView").scrollable(true)).setSwipeDeadZonePercentage(0.25)
             .scrollIntoView(UiSelector().className("android.widget.EditText"))
         val input = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10000)
@@ -97,7 +100,7 @@ class MobileSmokeTest {
         assertTrue(revealLabel(device, "Confirm import").isEnabled)
         capture(device, "import-preview-cancel")
         device.pressBack()
-        assertTrue(device.wait(Until.hasObject(By.res("tab-profiles")), 10000))
+        assertTrue(device.wait(Until.hasObject(tabSelector("profiles")), 10000))
         assertEquals("Preview and cancellation must not write profiles, including offscreen rows", before, profileIds())
     }
 
@@ -107,7 +110,7 @@ class MobileSmokeTest {
         val device = UiDevice.getInstance(instrumentation)
         device.executeShellCommand("appops set ${context.packageName} ACTIVATE_VPN ignore")
         context.startActivity(context.packageManager.getLaunchIntentForPackage(context.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        assertTrue(device.wait(Until.hasObject(By.res("tab-home")), 30000))
+        assertTrue(device.wait(Until.hasObject(tabSelector("home")), 30000))
         val react = (context.applicationContext as MainApplication).reactHost.currentReactContext as com.facebook.react.bridge.ReactApplicationContext
         val module = app.voyavpn.mobile.host.VoyaDeviceActions(react)
         try {
@@ -172,28 +175,32 @@ class MobileSmokeTest {
         val device = UiDevice.getInstance(instrumentation)
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)!!
         context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-        assertTrue("Home tab must be reachable", device.wait(Until.hasObject(By.res("tab-home")), 30000))
+        acceptPrivacyNoticeIfNeeded(device)
+        assertTrue("Home tab must be reachable", device.wait(Until.hasObject(tabSelector("home")), 30000))
         for ((tab, title) in listOf("profiles" to "Nodes", "rules" to "Rules", "settings" to "Settings", "home" to "Home")) {
-            val element = device.findObject(By.res("tab-$tab"))
+            val element = device.findObject(tabSelector(tab))
             assertNotNull("Missing tab $tab", element)
             element.click()
             assertTrue("Tab $tab must render its page", device.wait(Until.hasObject(By.res("page-title").text(title)), 10000))
             capture(device, "primary-$tab")
         }
-        device.findObject(By.res("tab-settings")).click()
+        device.findObject(tabSelector("settings")).click()
         for (page in listOf("general", "dns", "maintenance", "about")) {
             clickResource(device, "settings-$page")
-            assertTrue("Secondary pages hide tabs", device.wait(Until.gone(By.res("tab-home")), 5000))
+            assertTrue("Secondary pages hide tabs", device.wait(Until.gone(tabSelector("home")), 5000))
             capture(device, "secondary-$page")
             device.pressBack()
-            assertTrue(device.wait(Until.hasObject(By.res("tab-home")), 5000))
+            assertTrue(device.wait(Until.hasObject(tabSelector("home")), 5000))
         }
-        device.findObject(By.res("tab-home")).click()
-        clickResource(device, "home-activity")
+        device.findObject(tabSelector("home")).click()
+        device.findObject(tabSelector("settings")).click()
+        clickResource(device, "settings-maintenance")
+        clickResource(device, "maintenance-activity")
         capture(device, "network-activity")
-        assertTrue(device.wait(Until.gone(By.res("tab-home")), 5000))
+        assertTrue(device.wait(Until.gone(tabSelector("home")), 5000))
         device.pressBack()
-        assertTrue(device.wait(Until.hasObject(By.res("tab-home")), 5000))
+        device.pressBack()
+        assertTrue(device.wait(Until.hasObject(tabSelector("home")), 5000))
     }
 
     @Test fun nodeActionsReopenAndSystemBackDismissesQr() {
@@ -201,7 +208,7 @@ class MobileSmokeTest {
         val context = instrumentation.targetContext
         val device = UiDevice.getInstance(instrumentation)
         context.startActivity(context.packageManager.getLaunchIntentForPackage(context.packageName)!!.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK))
-        assertTrue(device.wait(Until.hasObject(By.res("tab-profiles")), 30000))
+        assertTrue(device.wait(Until.hasObject(tabSelector("profiles")), 30000))
         val before = profileIds()
         val name = "QA Modal long international node name for accessibility"
         val link = "trojan://test@modal.example.test:443#" + android.net.Uri.encode(name)
@@ -226,7 +233,7 @@ class MobileSmokeTest {
                 assertTrue("Back dismisses the modal", device.wait(Until.gone(By.desc("Generated QR code")), 10000))
                 // The list remains scrolled to its node, so its page title
                 // may be outside the accessibility viewport at large sizes.
-                assertTrue("Back keeps the node list open", device.hasObject(By.res("tab-profiles").selected(true)))
+                assertTrue("Back keeps the node list open", device.hasObject(tabSelector("profiles").selected(true)))
             }
         } finally {
             invokeNative("delete_profiles", org.json.JSONObject().put("indexIds", org.json.JSONArray(created)).toString())
@@ -253,23 +260,44 @@ class MobileSmokeTest {
         return (0 until entries.length()).map { entries.getJSONObject(it).getJSONObject("profile").getString("id") }.sorted()
     }
 
+    // Navigation regressions also run against a clean install, before consent is saved.
+    private fun acceptPrivacyNoticeIfNeeded(device: UiDevice) {
+        val consent = device.wait(Until.findObject(By.res("privacy-continue")), 5000)
+        consent?.click()
+    }
+
+    private fun tabSelector(tab: String): BySelector {
+        val labels = when (tab) {
+            "home" -> listOf("Home", "主页", "主頁")
+            "profiles" -> listOf("Nodes", "节点", "節點")
+            "rules" -> listOf("Rules", "规则", "規則")
+            "settings" -> listOf("Settings", "设置", "設定")
+            else -> error("Unknown tab $tab")
+        }
+        // Material's item owns the localized content description and selected
+        // state; its generated native resource id is not an application testID.
+        return By.desc(Pattern.compile(labels.joinToString("|", "^(?:", ")$") { Pattern.quote(it) }))
+            .clazz("android.widget.FrameLayout")
+    }
+
     private fun clickResource(device: UiDevice, id: String) {
+        val selector = if (id.startsWith("tab-")) tabSelector(id.removePrefix("tab-")) else By.res(id)
         if (!id.startsWith("tab-") && device.hasObject(By.scrollable(true))) {
             val scroll = UiScrollable(UiSelector().className("android.widget.ScrollView").scrollable(true)).setMaxSearchSwipes(20)
             scroll.setSwipeDeadZonePercentage(0.25)
             scroll.scrollToBeginning(20)
             scroll.scrollIntoView(UiSelector().resourceId(id))
         }
-        var element = device.findObject(By.res(id))
+        var element = device.findObject(selector)
         // An accessibility node can exist while its center is covered by the
-        // floating tabs. Scroll content actions above that bar before tapping.
+        // native tabs. Scroll content actions above that bar before tapping.
         for (attempt in 0..10) {
-            val tabTop = device.findObject(By.res("tab-home"))?.visibleBounds?.top ?: break
+            val tabTop = device.findObject(tabSelector("home"))?.visibleBounds?.top ?: break
             if (id.startsWith("tab-") || element == null || element.visibleBounds.bottom < tabTop) break
-            // Start above the floating surface, otherwise it consumes the
+            // Start above the tab bar, otherwise it consumes the
             // swipe on small screens with very large text.
             device.swipe(device.displayWidth / 2, tabTop - 64, device.displayWidth / 2, device.displayHeight / 3, 30)
-            element = device.findObject(By.res(id))
+            element = device.findObject(selector)
         }
         assertNotNull("Missing action $id", element)
         val title = element.contentDescription
@@ -280,7 +308,7 @@ class MobileSmokeTest {
                 device.wait(Until.hasObject(By.res("page-title").text(title)), 10000))
         } else if (id.startsWith("settings-")) {
             assertTrue("Settings navigation must finish before a system Back",
-                device.wait(Until.gone(By.res("tab-home")), 10000))
+                device.wait(Until.gone(tabSelector("home")), 10000))
         }
     }
 
@@ -294,7 +322,7 @@ class MobileSmokeTest {
         var element = findLabel()
         fun reachable(): Boolean {
             val bounds = element?.visibleBounds ?: return false
-            val tabTop = device.findObject(By.res("tab-home"))?.visibleBounds?.top ?: device.displayHeight
+            val tabTop = device.findObject(tabSelector("home"))?.visibleBounds?.top ?: device.displayHeight
             val systemBarTop = device.findObject(By.res("com.android.systemui:id/home"))?.visibleBounds?.top ?: device.displayHeight
             val contentTop = device.findObject(By.clazz("android.widget.ScrollView"))?.visibleBounds?.top ?: 0
             // Edge-to-edge accessibility bounds include the system's three

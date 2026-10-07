@@ -51,6 +51,25 @@ class VoyaDeviceActions(private val context: ReactApplicationContext) : ReactCon
             } catch (error: Exception) { vpnPermission = null; promise.reject("authorizationFailed", error) }
         }
     }
+    @ReactMethod fun setConnectionShortcuts(connectLabel: String, disconnectLabel: String, promise: Promise) {
+        if (android.os.Build.VERSION.SDK_INT < 25) {
+            promise.reject("unsupported", "App shortcuts require Android 7.1 or later")
+            return
+        }
+        try {
+            val manager = context.getSystemService(android.content.pm.ShortcutManager::class.java)
+            val shortcuts = listOf("connect" to connectLabel, "disconnect" to disconnectLabel).map { (action, label) ->
+                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("voyavpn://$action"), context, app.voyavpn.mobile.MainActivity::class.java)
+                android.content.pm.ShortcutInfo.Builder(context, "voyavpn.$action")
+                    .setShortLabel(label)
+                    .setIntent(intent)
+                    .build()
+            }
+            if (manager == null || !manager.setDynamicShortcuts(shortcuts)) {
+                promise.reject("unavailable", "Connection shortcuts could not be registered")
+            } else promise.resolve(null)
+        } catch (error: Exception) { promise.reject("unavailable", error) }
+    }
     @ReactMethod fun scanQr(cancelLabel: String, promise: Promise) = launch(false, cancelLabel, promise)
     @ReactMethod fun pickQr(promise: Promise) = launch(true, "", promise)
     private fun launch(image: Boolean, cancelLabel: String, promise: Promise) {

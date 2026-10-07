@@ -1,9 +1,11 @@
+import { useProfileActivation } from "@voya/client/runtime-action";
+import { profileTitle } from "@voya/features/profiles/profile-display";
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { IpcCommandError } from "@voya/client/errors";
 import { importLineText, isImportLineNotice } from "@voya/client/messages";
 import { clipboard } from "@voya/client/platform";
-import { refreshQueries } from "@voya/client/queries";
+import { queries, refreshQueries } from "@voya/client/queries";
 import { subscriptionRefreshRoots } from "@voya/client/query-keys";
 import { voyaCommands } from "@voya/client/transport";
 import type { ImportPreview } from "@voya/contracts";
@@ -18,7 +20,7 @@ import { Label } from "heroui-native/label";
 import { TextField } from "heroui-native/text-field";
 import { Typography } from "heroui-native/text";
 import { Keyboard, Linking, View, useWindowDimensions } from "react-native";
-import { navigateToTab } from "~/app/navigation";
+import { navigateToTab, openPage } from "~/app/navigation";
 import { Banner } from "~/components/banner";
 import { DetailScreen } from "~/components/detail-screen";
 import { ErrorNotice } from "~/components/error-notice";
@@ -42,6 +44,12 @@ function nothingImportable(failure: unknown) {
 export function ImportScreen() {
   const { t } = useI18n();
   const client = useQueryClient();
+  const activation = useProfileActivation(t, { inline: true });
+  const profiles = useQuery(queries.profileList);
+  const [importedIds, setImportedIds] = useState<string[]>([]);
+  const [sourceIds, setSourceIds] = useState<string[]>([]);
+  const candidates = (profiles.data?.entries ?? []).filter(({ profile }) => importedIds.includes(profile.id) || (profile.subscriptionId !== null && sourceIds.includes(profile.subscriptionId)));
+  const single = candidates.length === 1 ? candidates[0] : null;
   const { fontScale } = useWindowDimensions();
   const previewLimit = fontScale > 1.2 ? 1 : 3;
   const [text, setText] = useState("");
@@ -78,7 +86,8 @@ export function ImportScreen() {
       try {
         const result = await voyaCommands().updateSubscriptions(id);
         if (result.outcomes.some((outcome) => outcome.status === "failed")) failed.push(id);
-        nodes += result.imported + result.updated;
+        // `updated` counts subscriptions, not nodes.
+        nodes += result.imported;
         const reason = subscriptionUpdateMessages(result, t);
         if (reason) notes.push(reason);
       } catch { failed.push(id); notes.push(t("mobile.updateFailed")); }
@@ -97,6 +106,8 @@ export function ImportScreen() {
   async function commit() {
     if (!preview || preview.text !== text) return;
     const result = await voyaCommands().importProfilesFromText(preview.text, null);
+    setImportedIds([...result.importedProfileIds, ...result.updatedProfileIds]);
+    setSourceIds(result.addedSubscriptionIds);
     const added = new Set(result.addedSubscriptionIds);
     // The import is committed by now. A name that cannot be applied leaves
     // the subscription under its default one, to be renamed from its own
@@ -125,7 +136,7 @@ export function ImportScreen() {
   return <DetailScreen key={preview ? "preview" : message ? "summary" : "input"}>
     <ErrorNotice error={error} message={errorMessage} />
     {!preview && !message ? <>
-    <Typography className="text-base text-subtle">{t("mobile.importHelp")}</Typography>
+    <Typography className="text-base text-subtle">{t("daily.importNeedsSource")}</Typography>
     <Input multiline scrollEnabled style={{ maxHeight: 240 }} className="min-h-32 h-auto" accessibilityLabel={t("mobile.add")} placeholder={t("panes.profiles.importDialog.placeholder")} value={text} onChangeText={edit} editable={!busy} autoCapitalize="none" autoCorrect={false} />
     <View className="flex-row flex-wrap gap-2">
       <Button variant="secondary" isDisabled={busy} onPress={() => void run(async () => edit(await clipboard().readText()))}><Button.Label>{t("mobile.paste")}</Button.Label></Button>
@@ -158,10 +169,16 @@ export function ImportScreen() {
       <Banner status={failedIds.length ? "warning" : "info"} message={message} liveRegion />
       {/* One primary action, by what the user most plausibly does next: retry
           what failed, go pick from what imported, or import something else. */}
-      {failedIds.length ? <PrimaryButton label={t("mobile.retryFailed")} isDisabled={busy} onPress={() => void run(retryFailed)} /> : null}
-      {importedCount > 0 ? <Button onPress={() => navigateToTab("profiles")}><Button.Label>{t("home.chooseNode")}</Button.Label></Button> : null}
-      <Button variant={failedIds.length || importedCount > 0 ? "secondary" : undefined} isDisabled={busy} className={busy && !(failedIds.length || importedCount > 0) ? "button--primary-disabled" : undefined} onPress={() => { setMessage(null); setFailedIds([]); }}>
-        <Button.Label className={busy && !(failedIds.length || importedCount > 0) ? "text-subtle" : undefined}>{t("mobile.add")}</Button.Label>
+      {failedIds.length ? <Button variant={importedCount > 0 ? "secondary" : "primary"} isDisabled={busy} onPress={() => void run(retryFailed)}><Button.Label>{t("mobile.retryFailed")}</Button.Label></Button> : null}
+      {importedCount > 0 || candidates.length > 0 ? <Button isDisabled={busy || activation.busy || profiles.isPending} onPress={() => {
+        if (!single) { openPage("nodePicker"); return; }
+        void run(async () => {
+          if (await activation.activateProfile(single.profile.id)) navigateToTab("home");
+          else setError(t("daily.connectionFailed"));
+        });
+      }}><Button.Label>{single ? t("daily.connectTo", { name: profileTitle(single.profile.remarks, t) }) : t("home.chooseNode")}</Button.Label></Button> : null}
+      <Button variant={failedIds.length || importedCount > 0 ? "secondary" : undefined} isDisabled={busy} className={busy && !(failedIds.length || importedCount > 0) ? "button--primary-disabled" : undefined} onPress={() => { setMessage(null); setFailedIds([]); setImportedIds([]); setSourceIds([]); }}>
+        <Button.Label className={busy && !(failedIds.length || importedCount > 0) ? "text-subtle" : undefined}>{t(importedCount > 0 ? "daily.importMore" : "mobile.add")}</Button.Label>
       </Button>
     </> : null}
   </DetailScreen>;

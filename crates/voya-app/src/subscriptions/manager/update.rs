@@ -256,7 +256,7 @@ async fn prepare_subscription_snapshot(
             record_failed_fetch(
                 &mut result,
                 &mut failed_attempts,
-                &item.id,
+                &item,
                 SubscriptionUpdateReason::InvalidSource,
                 "subscription URL is empty or not an http(s) link",
                 None,
@@ -310,7 +310,7 @@ async fn prepare_subscription_snapshot(
                 record_failed_fetch(
                     &mut result,
                     &mut failed_attempts,
-                    &item.id,
+                    &item,
                     SubscriptionUpdateReason::EmptyContent,
                     EMPTY_FETCH_MESSAGE,
                     None,
@@ -328,7 +328,7 @@ async fn prepare_subscription_snapshot(
                 record_failed_fetch(
                     &mut result,
                     &mut failed_attempts,
-                    &item.id,
+                    &item,
                     if error.is_empty_response() {
                         SubscriptionUpdateReason::EmptyContent
                     } else {
@@ -352,15 +352,25 @@ async fn prepare_subscription_snapshot(
 }
 
 /// The bookkeeping every subscription that brought nothing shares: a failed
-/// outcome, the attempt to persist against it, and one more skipped.
+/// outcome, the attempt to persist against it, one more skipped, and a line in
+/// the app's logs, which otherwise had nothing to show for a failed update.
+///
+/// `error` is already free of URLs; the subscription's own URL carries its
+/// access token in the query, which the log layers' userinfo redaction keeps.
 fn record_failed_fetch(
     result: &mut SubscriptionUpdateResult,
     failed_attempts: &mut Vec<FailedSubscriptionAttempt>,
-    id: &str,
+    item: &SubItem,
     reason: SubscriptionUpdateReason,
     error: &str,
     diagnostic: Option<String>,
 ) {
+    tracing::warn!(
+        subscription = %redact_urls(&item.remarks),
+        error = %error,
+        "subscription update failed"
+    );
+    let id = item.id.as_str();
     result.skipped = result.skipped.saturating_add(1);
     result.outcomes.push(SubscriptionUpdateOutcome {
         subscription_id: id.to_string(),
@@ -587,6 +597,57 @@ mod tests {
         };
         assert_ne!(fetch_failure_message(&refused), EMPTY_FETCH_MESSAGE);
         assert!(fetch_failure_message(&refused).contains("connection refused"));
+    }
+
+    /// A failed update reaches the logs page, named by the subscription and
+    /// with the redacted diagnostic only: the URL's query holds the token.
+    #[test]
+    fn a_failed_fetch_is_logged_without_the_subscription_url() {
+        use std::sync::{Arc, Mutex};
+        use tracing_subscriber::layer::SubscriberExt as _;
+        use voya_contracts::{LogLevel, LogLineBody};
+
+        use crate::logging::LogPanelLayer;
+
+        let queued: Arc<Mutex<Vec<(LogLevel, LogLineBody)>>> = Arc::default();
+        let subscriber = tracing_subscriber::registry().with(LogPanelLayer::new({
+            let queued = Arc::clone(&queued);
+            move |level, body| queued.lock().expect("queue lock").push((level, body))
+        }));
+        let item = SubItem {
+            id: "sub-1".to_string(),
+            remarks: "MySub".to_string(),
+            url: "https://sub.example.test/link?token=abc123".to_string(),
+            ..SubItem::default()
+        };
+        let diagnostic = redact_urls(
+            "download failed for https://sub.example.test/link?token=abc123: timed out",
+        );
+        let mut result = SubscriptionUpdateResult::default();
+        let mut failed_attempts = Vec::new();
+
+        tracing::subscriber::with_default(subscriber, || {
+            record_failed_fetch(
+                &mut result,
+                &mut failed_attempts,
+                &item,
+                SubscriptionUpdateReason::DownloadFailed,
+                &diagnostic,
+                Some(diagnostic.clone()),
+            );
+        });
+
+        let queued = queued.lock().expect("queue lock");
+        assert_eq!(queued.len(), 1);
+        assert_eq!(queued[0].0, LogLevel::Warn);
+        let LogLineBody::Diagnostic { line } = &queued[0].1 else {
+            panic!("expected a diagnostic line, got {:?}", queued[0].1);
+        };
+        assert!(line.contains("subscription update failed"), "{line}");
+        assert!(line.contains("MySub"), "{line}");
+        assert!(!line.contains("token=abc123"), "{line}");
+        assert!(!line.contains("sub.example.test"), "{line}");
+        assert_eq!(failed_attempts.len(), 1);
     }
 
     #[test]

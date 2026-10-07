@@ -114,6 +114,34 @@ describe("arrangeConnections", () => {
     expect(rows.map((connection) => connection.id)).toEqual(["alpha", "beta", "gamma"]);
   });
 
+  it("sorts text columns in either direction without changing the snapshot or tie order", () => {
+    const unknown = makeConnection({ id: "unknown", process: null });
+    const tied = { ...alpha, id: "alpha-copy" };
+    const connections = [beta, alpha, tied, unknown];
+    const before = [...connections];
+    const sortBy = (column: "host" | "process", ascending: boolean) => arrangeConnections(connections, {
+      routeTexts: null, search: null, sort: { column, ascending },
+    }).map(({ id }) => id);
+
+    expect(sortBy("host", true)).toEqual(["alpha", "alpha-copy", "beta", "unknown"]);
+    expect(sortBy("host", false)).toEqual(["unknown", "beta", "alpha", "alpha-copy"]);
+    expect(sortBy("process", true)).toEqual(["unknown", "alpha", "alpha-copy", "beta"]);
+    expect(sortBy("process", false)).toEqual(["beta", "alpha", "alpha-copy", "unknown"]);
+    expect(connections).toEqual(before);
+  });
+
+  it("treats missing traffic as zero and preserves tied rows", () => {
+    const unknown = makeConnection({ id: "unknown", upload: null, download: null });
+    const zero = makeConnection({ id: "zero", upload: 0, download: null });
+    const connections = [beta, unknown, alpha, zero];
+    const rows = arrangeConnections(connections, {
+      routeTexts: null, search: null, sort: { column: "traffic", ascending: true },
+    });
+
+    expect(rows.map(({ id }) => id)).toEqual(["unknown", "zero", "alpha", "beta"]);
+    expect(connections.map(({ id }) => id)).toEqual(["beta", "unknown", "alpha", "zero"]);
+  });
+
   it("keeps a ten-thousand row search-plus-route sort inside the per-second push budget", () => {
     // The whole table re-arranges on every ~1s websocket push. Guard the
     // precomputed-key shape: re-deriving route labels per comparison would push

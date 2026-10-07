@@ -1,8 +1,9 @@
 // @testing-library/react-native v14 registers its matchers itself; there is
 // nothing to import here for them.
-import { clearRenderedClient } from "./providers";
+import { NativeTabsMock as mockNativeTabs } from "./native-tabs-mock";
+import { clearTestQueryClients } from "./providers";
 
-afterEach(clearRenderedClient);
+afterEach(clearTestQueryClients);
 
 // SafeAreaProvider measures the real window before it renders children, so in a
 // test it renders nothing at all. The package ships this mock for exactly that.
@@ -54,3 +55,16 @@ jest.mock("react-native-worklets", () => require("react-native-worklets/lib/modu
 // local stub covers the public surface HeroUI reads.
 jest.mock("react-native-reanimated", () => require("~/test/reanimated-mock"));
 
+
+// Keep React Navigation and the stack implementation real; Jest has no native
+// tab controller to deliver selection events or expose its accessible buttons.
+jest.mock("react-native/Libraries/NativeComponent/NativeComponentRegistry", () => {
+  const actual = jest.requireActual("react-native/Libraries/NativeComponent/NativeComponentRegistry");
+  return {
+    ...actual,
+    get: (name: string, config: () => unknown) => name === "RNCTabView" ? mockNativeTabs : actual.get(name, config),
+  };
+});
+jest.mock("react-native-screens/experimental", () => ({
+  SafeAreaView: require("react-native").View,
+}));

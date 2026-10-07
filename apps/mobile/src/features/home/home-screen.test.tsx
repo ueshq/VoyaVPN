@@ -52,7 +52,9 @@ describe("HomeScreen", () => {
     });
     await renderHome();
 
-    expect(await screen.findByText("iOS PacketTunnel: Error")).toBeOnTheScreen();
+    // What to check, not "iOS PacketTunnel: Error", which names a component.
+    expect(await screen.findByText(/The VPN did not start\. Check that VoyaVPN is turned on in Settings → VPN/)).toBeOnTheScreen();
+    expect(screen.queryByText("iOS PacketTunnel: Error")).toBeNull();
     // Collapsed details are not mounted, so the untranslated text is not on screen.
     expect(screen.queryByText(/did not come up/)).toBeNull();
     expect(screen.getByText("View diagnostics")).toBeOnTheScreen();
@@ -90,13 +92,13 @@ describe("HomeScreen", () => {
     ).toContain("connectActiveProfile");
   });
 
-  it("shows the connection time and no transfer rates once connected", async () => {
+  it("keeps session details behind an explicit entry and shows no transfer rates", async () => {
     await renderHome();
     await userEvent.setup().press(await screen.findByText("Connect"));
     await screen.findByText("Connected");
 
-    expect(screen.getByText("Connection time")).toBeOnTheScreen();
-    expect(screen.getByText(/^\d\d:\d\d:\d\d$/)).toBeOnTheScreen();
+    expect(screen.queryByText("Connection time")).toBeNull();
+    expect(screen.getByText("Connection details")).toBeOnTheScreen();
     // The host has no statistics sampler, so there are no rates to show.
     expect(screen.queryByText(/\/s$/)).toBeNull();
   });

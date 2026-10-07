@@ -66,8 +66,8 @@ describe("SettingsScreen", () => {
     await waitFor(() => expect(i18nHost().getInitialLocale()).toBe("zh-Hans"));
   });
 
-  it("saves a behaviour switch through the backend", async () => {
-    await renderSettings();
+  it("saves the diagnostic log switch from maintenance", async () => {
+    await renderSettings("maintenance");
     const user = userEvent.setup();
 
     // HeroUI's Switch is a Pressable; a press is the toggle.
@@ -113,6 +113,7 @@ describe("SettingsScreen", () => {
     mockBackend().state.settings.dns.remote = "9.9.9.9";
     await renderSettings("dns");
     const user = userEvent.setup();
+    await user.press(await screen.findByText("Custom & advanced"));
     await user.press(await screen.findByText("Restore DNS defaults"));
     expect(mockBackend().state.settings.dns.remote).toBe("9.9.9.9");
     await user.press(screen.getByText("Save"));

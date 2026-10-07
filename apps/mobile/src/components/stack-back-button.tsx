@@ -11,8 +11,7 @@ import { useToneColor } from "./tone";
  * react-native-screens' UIKit back button is a native element no React Native
  * accessibility prop can reach, and it never showed up in the simulator's
  * accessibility tree at all — so VoiceOver coverage could not be tested or
- * guaranteed. Drawing the button keeps it a plain `Pressable` with a label,
- * the same trade the floating tab bar makes when it replaces the stock bar.
+ * guaranteed. Drawing the button keeps it a plain `Pressable` with a label.
  * The edge-swipe back gesture and `usePreventRemove` both stay, because they
  * hook navigation events rather than this button.
  */
