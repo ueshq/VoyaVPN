@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { collectSizes, formatBytes, markdownTable, parseArgs } from "./package-size.mjs";
 

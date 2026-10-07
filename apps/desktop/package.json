@@ -5,11 +5,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:web": "vite --host 127.0.0.1 --port 1420",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev:web": "vp dev --host 127.0.0.1 --port 1420",
+    "build": "vp build",
+    "preview": "vp preview",
     "typecheck": "tsc -b --pretty false",
-    "test": "vitest"
+    "test": "vp test"
   },
   "dependencies": {
     "@dnd-kit/core": "6.3.1",
@@ -51,7 +51,8 @@
     "jsdom": "catalog:",
     "selenium-webdriver": "^4.47.0",
     "typescript": "catalog:",
-    "vite": "^8.0.14",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
     "vitest": "catalog:"
   }
 }

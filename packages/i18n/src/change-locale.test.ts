@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { expect, it, vi } from "vite-plus/test";
 
 import { createI18nHost, i18next, type Locale } from "./core";
 

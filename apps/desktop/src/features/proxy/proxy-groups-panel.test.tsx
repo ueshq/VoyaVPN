@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { changeLocale } from "@voya/i18n";
 import type { PolicyGroupEntry, RuntimeStatusResponse } from "@voya/contracts";

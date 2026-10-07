@@ -2,7 +2,7 @@ import { useShellStore } from "@/stores/shell-store";
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { changeLocale } from "@voya/i18n";
 import type {

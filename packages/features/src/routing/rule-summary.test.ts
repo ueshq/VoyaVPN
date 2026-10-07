@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it } from "vite-plus/test";
 import type { RoutingRule } from "@voya/contracts";
 import { i18next } from "@voya/i18n";
 import { ruleMatchSummary } from "./rule-summary";

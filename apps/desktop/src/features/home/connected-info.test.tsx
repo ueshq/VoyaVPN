@@ -1,5 +1,5 @@
 import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { useI18n } from "@voya/i18n/use-i18n";
 import { changeLocale } from "@voya/i18n";

@@ -1,7 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vite-plus/test";
 import { queryKeys } from "@voya/client/query-keys";
 import { SettingsApplyStatus } from "./settings-apply-status";
 import { useSettingsApplyStatus } from "@voya/features/settings/use-settings-apply-status";

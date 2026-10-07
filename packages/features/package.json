@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --pretty false",
-    "test": "vitest"
+    "test": "vp test"
   },
   "dependencies": {
     "@voya/client": "workspace:*",
@@ -32,6 +32,6 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vite-plus": "catalog:"
   }
 }

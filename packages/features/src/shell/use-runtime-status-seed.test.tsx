@@ -1,5 +1,5 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { setAppVisibility, type AppVisibilityAdapter } from "@voya/client/platform";
 

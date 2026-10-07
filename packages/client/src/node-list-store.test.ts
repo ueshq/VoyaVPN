@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { useNodeListStore } from "./node-list-store";
 import { installTestStorage } from "./test-storage";

@@ -1,3 +1,3 @@
-import "@testing-library/jest-dom/vitest";
+import "./jest-dom";
 
 import "./setup-dom";

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { ALLOW_UNPINNED_SING_BOX_ENV, DEFAULT_SING_BOX_VERSION } from "../core/sing-box-installer.mjs";
 import { ensureSingBoxSource } from "./sing-box-source.mjs";

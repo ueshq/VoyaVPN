@@ -1,4 +1,4 @@
-import { vi, type Mock } from "vitest";
+import { vi, type Mock } from "vite-plus/test";
 import type { AppSettings, DnsSettings } from "@voya/contracts";
 import { appErrorOfKind, IpcCommandError } from "@voya/client/errors";
 

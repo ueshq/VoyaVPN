@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { capture, repoRootFromScript } from "../lib/common.mjs";
 import { releaseCommandNames, runReleaseCli } from "./cli.mjs";

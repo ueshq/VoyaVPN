@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { changeLocale, i18next } from "@voya/i18n";
 import type { SubscriptionUpdateOutcome, SubscriptionUpdateResult } from "@voya/contracts";
 import { assertSubscriptionUpdated, formatSubscriptionUpdateSummary, isSubscriptionUpdateFailure, subscriptionUpdateMessages } from "./subscription-update-result";

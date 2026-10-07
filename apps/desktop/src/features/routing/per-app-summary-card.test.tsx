@@ -1,7 +1,7 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { RoutingRule, Routing_Serialize, TunStatus } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { RoutingRule, Routing_Serialize } from "@voya/contracts";
 import { installFakeCommands } from "@voya/features/test/backend";

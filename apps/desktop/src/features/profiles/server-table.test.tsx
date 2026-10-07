@@ -9,7 +9,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
 import { createTestQueryClient, renderHookWithQuery, renderWithQuery } from "@voya/features/test/render";
-import { afterEach, vi } from "vitest";
+import { afterEach, vi } from "vite-plus/test";
 
 import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";

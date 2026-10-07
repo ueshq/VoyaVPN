@@ -1,5 +1,5 @@
 import { act } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { PolicyGroupEntry, PolicyGroupListing, PolicyGroupRuntime } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";

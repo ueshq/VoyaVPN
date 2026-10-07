@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vite-plus/test";
 
 import { changeLocale, i18next, type Locale, type TranslationFunction } from "@voya/i18n";
 import { localeOptions } from "@voya/i18n/core";

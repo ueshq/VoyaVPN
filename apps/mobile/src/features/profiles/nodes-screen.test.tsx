@@ -95,7 +95,8 @@ describe("NodesScreen", () => {
 
     const backend = mockBackend();
     const run = backend.state.calls.find((call) => call.command === "runSpeedtest");
-    const target = (run?.args[0] as { target: { profileIds: string[]; scope: string } }).target;
+    if (!run) throw new Error("runSpeedtest was not called");
+    const target = (run.args[0] as { target: { profileIds: string[]; scope: string } }).target;
     expect(target.scope).toBe("profiles");
     expect([...target.profileIds].sort()).toEqual(["profile-0", "profile-1", "profile-2"]);
     // The measurement lands on the row it belongs to.
@@ -156,7 +157,8 @@ describe("NodesScreen", () => {
 
     const backend = mockBackend();
     const run = backend.state.calls.find((call) => call.command === "runSpeedtest");
-    const target = (run?.args[0] as { target: { profileIds: string[]; scope: string } }).target;
+    if (!run) throw new Error("runSpeedtest was not called");
+    const target = (run.args[0] as { target: { profileIds: string[]; scope: string } }).target;
     expect([...target.profileIds].sort()).toEqual(["profile-0", "profile-1", "profile-2"]);
   });
 

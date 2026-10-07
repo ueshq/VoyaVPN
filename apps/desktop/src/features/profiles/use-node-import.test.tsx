@@ -1,6 +1,6 @@
 import type { SetStateAction } from "react";
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { changeLocale } from "@voya/i18n";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { ImportProfilesResult, QrScanResult } from "@voya/contracts";

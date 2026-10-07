@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { parsePluginkitMatches, planPacketTunnelFix } from "./ne-doctor.mjs";
 import { legacyPacketTunnelAppexName, packetTunnelBundleIdentifier } from "./tunnel-layout.mjs";

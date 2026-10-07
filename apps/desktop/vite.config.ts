@@ -2,7 +2,7 @@ import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
-import { configDefaults, defineConfig } from "vitest/config";
+import { configDefaults, defineConfig, lazyPlugins } from "vite-plus";
 
 type ModuleGraph = {
   getModuleInfo(id: string): { importers: readonly string[]; isEntry: boolean } | null;
@@ -56,12 +56,12 @@ export default defineConfig({
   // written: Babel's on-demand transform pushed lazy screens past Testing
   // Library's timeouts, and several suites drive non-reactive store mocks that
   // rely on whole-tree re-renders. The renderer smoke runs compiled code, and
-  // `eslint-plugin-react-hooks` enforces the compiler's rules on the source.
-  plugins: [
+  // Oxlint enforces the compiler's rules on the source.
+  plugins: lazyPlugins(() => [
     react(),
     ...(process.env.VITEST ? [] : [babel({ presets: [reactCompilerPreset()] })]),
     tailwindcss(),
-  ],
+  ]),
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
@@ -75,7 +75,8 @@ export default defineConfig({
   build: {
     // Flags stay separate files: inlined, all ~250 would ride in the chunk that
     // imports them (node-country-icon.tsx) although a screen shows a handful.
-    assetsInlineLimit: (filePath) => (/[\\/]flag-icons[\\/]flags[\\/]/.test(filePath) ? false : undefined),
+    assetsInlineLimit: (filePath) =>
+      /[\\/]flag-icons[\\/]flags[\\/]/.test(filePath) ? false : undefined,
     rolldownOptions: {
       output: {
         codeSplitting: {
@@ -89,6 +90,7 @@ export default defineConfig({
               // What the shell itself renders: the toast primitives. Dialogs
               // and the checkbox load with whatever opens them.
               name: startupGroup("vendor-radix"),
+              debugName: "vendor-radix",
               priority: 34,
               test: /node_modules[\\/]@radix-ui[\\/]/,
             },
@@ -108,6 +110,7 @@ export default defineConfig({
             },
             {
               name: startupGroup("vendor-icons"),
+              debugName: "vendor-icons",
               priority: 33,
               test: /node_modules[\\/]lucide-react[\\/]/,
             },
@@ -123,6 +126,7 @@ export default defineConfig({
             },
             {
               name: startupGroup("vendor-data"),
+              debugName: "vendor-data",
               priority: 20,
               test: /node_modules[\\/](@tanstack|i18next|zustand)[\\/]/,
             },
@@ -134,6 +138,7 @@ export default defineConfig({
             },
             {
               name: startupGroup("vendor"),
+              debugName: "vendor",
               priority: 10,
               test: /node_modules[\\/]/,
             },

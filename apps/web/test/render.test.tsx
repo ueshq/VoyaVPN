@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { COPY } from "../src/content";
 import { renderSite } from "../src/render";
 import { LOCALES, ROUTES, fileFor, pathFor, urlFor } from "../src/routes";

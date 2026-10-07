@@ -1,6 +1,6 @@
 import { act, cleanup, waitFor } from "@testing-library/react";
 import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { EventBridge } from "@/ipc/event-bridge";
 

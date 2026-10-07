@@ -7,7 +7,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import type { QueryClient } from "@tanstack/react-query";
 import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { changeLocale } from "@voya/i18n";
 import type { ImportProfilesResult } from "@voya/contracts";

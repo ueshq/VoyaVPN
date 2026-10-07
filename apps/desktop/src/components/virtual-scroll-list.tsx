@@ -30,7 +30,7 @@ export function VirtualScrollList<T>({
   ...props
 }: VirtualScrollListProps<T>) {
   const viewportRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual exposes scroll helpers that React Compiler cannot memoize safely.
+  // oxlint-disable-next-line react/incompatible-library -- TanStack Virtual exposes scroll helpers that React Compiler cannot memoize safely.
   const virtualizer = useVirtualizer({
     count: items.length,
     estimateSize: () => estimateSize,

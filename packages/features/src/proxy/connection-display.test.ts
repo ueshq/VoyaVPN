@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { ProxyConnectionItem } from "@voya/contracts";
 import { arrangeConnections, connectionSearchHay } from "./connection-display";

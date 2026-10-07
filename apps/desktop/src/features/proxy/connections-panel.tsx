@@ -77,7 +77,7 @@ export function ConnectionsPanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
 
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual exposes scroll helpers that React Compiler cannot memoize safely.
+  // oxlint-disable-next-line react/incompatible-library -- TanStack Virtual exposes scroll helpers that React Compiler cannot memoize safely.
   const virtualizer = useVirtualizer({
     count: rows.length,
     estimateSize: () => ROW_HEIGHT,

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import type { LogLevel } from "@voya/contracts";
 import { useRuntimeEventStore, type StoredLogLine } from "@voya/client/runtime-event-store";

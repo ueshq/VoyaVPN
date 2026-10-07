@@ -1,7 +1,7 @@
 import { act, waitFor } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { createTestQueryClient, renderHookWithQuery } from "../test/render";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { ProfileSummaryEntry, RoutingRule, Routing_Serialize, ValidationIssue } from "@voya/contracts";
 import { IpcCommandError } from "@voya/client/errors";

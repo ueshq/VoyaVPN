@@ -1,5 +1,5 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { i18next } from "@voya/i18n";
 import type { Subscription, SubscriptionUpdateResult } from "@voya/contracts";
 import { useNodeOperation } from "@voya/features/profiles/use-node-operation";

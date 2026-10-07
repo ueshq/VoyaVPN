@@ -13,7 +13,7 @@ export function useNodeListVirtual(rows: NodeListRow[], search: string) {
   useEffect(() => {
     if (viewportRef.current) viewportRef.current.scrollTop = 0;
   }, [search]);
-  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual exposes scroll helpers that React Compiler cannot memoize safely.
+  // oxlint-disable-next-line react/incompatible-library -- TanStack Virtual exposes scroll helpers that React Compiler cannot memoize safely.
   const rowVirtualizer = useVirtualizer({
     count: rows.length,
     // Compact rows are about 56 px and group headers a little taller.

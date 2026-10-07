@@ -1,6 +1,6 @@
 import { makeProfileEntry } from "@voya/client/mock-seed";
 import type { ProfileSummaryEntry } from "@voya/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { homeMapMarker } from "./map-marker";
 

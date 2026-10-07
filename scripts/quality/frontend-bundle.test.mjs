@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { checkBundleBudgets, checkDistBudgets, checkStartupBudget, startupScripts } from "./frontend-bundle.mjs";
 

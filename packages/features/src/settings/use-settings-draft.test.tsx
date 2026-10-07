@@ -1,5 +1,5 @@
 import { act } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { saveQueue } from "@voya/features/forms/save-queue";
 import { createTestQueryClient, renderHookWithQuery } from "../test/render";

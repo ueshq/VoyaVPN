@@ -1,5 +1,5 @@
 import { act, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { changeLocale, i18next } from "@voya/i18n";
 import type {

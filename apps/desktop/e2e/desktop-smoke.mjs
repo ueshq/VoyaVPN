@@ -99,7 +99,6 @@ try {
 async function invoke(command, args = {}) {
   return driver.executeAsyncScript(
     function executeTauriCommand(targetCommand, targetArgs, done) {
-      // eslint-disable-next-line no-undef -- this function executes in the webview.
       window.__TAURI_INTERNALS__.invoke(targetCommand, targetArgs).then(
         (value) => done({ ok: true, value }),
         (error) =>

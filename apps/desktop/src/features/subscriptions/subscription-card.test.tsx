@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { i18next } from "@voya/i18n";
 import { SubscriptionMetaLine } from "./subscription-card";
 import type { SubscriptionMetadata } from "@voya/contracts";

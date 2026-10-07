@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 // The desktop Vitest project runs under jsdom, where `import.meta.url` is an
 // http:// URL and `fileURLToPath` throws. Resolve the capability file from the

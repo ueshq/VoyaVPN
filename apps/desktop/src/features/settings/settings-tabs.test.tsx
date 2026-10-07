@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import type { AppSettings, AppearanceSettings, TunStatus } from "@voya/contracts";

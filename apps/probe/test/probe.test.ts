@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 import { addressFamily, isPublicAddress } from "../src/address";
 import { handleRequest, parsePorts, type Dialer, type ProbeOutcome } from "../src/probe";

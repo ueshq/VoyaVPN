@@ -2,7 +2,7 @@
  * The same fixtures the Rust client decodes (`crates/voya-net`), so a field
  * renamed on either side fails both suites.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import errorFixture from "../../../tests/probe-contract/error.json";
 import requestFixture from "../../../tests/probe-contract/probe.request.json";

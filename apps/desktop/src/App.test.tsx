@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithQuery } from "@voya/features/test/render";
-import { afterEach, beforeAll, vi } from "vitest";
+import { afterEach, beforeAll, vi } from "vite-plus/test";
 
 import { App } from "./App";
 import { changeLocale } from "@voya/i18n";

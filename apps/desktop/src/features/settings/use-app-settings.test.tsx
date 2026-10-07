@@ -1,6 +1,6 @@
 import { act, cleanup, waitFor } from "@testing-library/react";
 import { createTestQueryClient, renderHookWithQuery } from "@voya/features/test/render";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { changeLocale } from "@voya/i18n";
 import { queryKeys } from "@voya/client/query-keys";
 import type { AppSettings } from "@voya/contracts";

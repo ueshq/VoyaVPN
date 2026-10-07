@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { makeMockSeed } from "@voya/client/mock-seed";
 import type { TunStatus } from "@voya/contracts";

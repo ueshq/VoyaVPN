@@ -7,7 +7,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vite-plus/client", "vite-plus/test/globals"]
   },
   "include": ["src"]
 }

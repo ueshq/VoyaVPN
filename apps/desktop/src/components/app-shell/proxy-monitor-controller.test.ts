@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { ProxyMonitorStatus } from "@voya/contracts";
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { installFakeCommands } from "@voya/features/test/backend";

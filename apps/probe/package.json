@@ -6,13 +6,13 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --pretty false",
-    "test": "vitest",
+    "test": "vp test",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260917.1",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vite-plus": "catalog:"
   }
 }

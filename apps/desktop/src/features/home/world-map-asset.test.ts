@@ -1,6 +1,6 @@
 import { WORLD_MAP_BOX } from "@voya/features/home/country-positions";
 import { WORLD_MAP_LAND } from "@voya/features/home/world-map-land";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import svg from "../../assets/world-map.svg?raw";
 

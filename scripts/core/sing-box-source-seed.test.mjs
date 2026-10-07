@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { SING_BOX_SOURCE_BUILD_TAGS } from "./sing-box-installer.mjs";
 import {

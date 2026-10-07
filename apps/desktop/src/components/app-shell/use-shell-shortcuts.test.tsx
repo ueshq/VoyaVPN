@@ -2,7 +2,7 @@ import { act, cleanup, waitFor } from "@testing-library/react";
 import { createTestQueryClient, renderHookWithQuery } from "@voya/features/test/render";
 
 import { i18next } from "@voya/i18n";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { ProfileSummaryListing, RuntimeStatusResponse } from "@voya/contracts";
 import { queryKeys } from "@voya/client/query-keys";

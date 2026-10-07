@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { SubscriptionsDialog } from "./subscriptions-dialog";
 import type { Subscription } from "@voya/contracts";
 import { installFakeCommands } from "@voya/features/test/backend";

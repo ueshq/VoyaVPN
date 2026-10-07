@@ -116,3 +116,4 @@ __pycache__/
 .agents/
 .claude/
 .zcode/
+.vitest/

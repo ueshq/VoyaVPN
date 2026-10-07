@@ -2,7 +2,7 @@ import { readFileSync, statSync, utimesSync } from "node:fs";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, resolve, sep } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { hasExpectedSingBoxExecutable } from "../core/sing-box-installer.mjs";
 import { capture, repoRootFromScript } from "../lib/common.mjs";

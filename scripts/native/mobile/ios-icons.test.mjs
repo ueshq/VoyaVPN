@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { repoRootFromScript } from "../../lib/common.mjs";
 import { iconProblems, pngInfo, readIconSet } from "./ios-icons.mjs";

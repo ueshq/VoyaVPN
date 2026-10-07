@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
-import { test } from "vitest";
+import { test } from "vite-plus/test";
 import { lanAddress, startFixtures } from "./ios-fixtures.mjs";
 import { assertKnownArguments, executedTestCount, selectRuntime } from "./ios-smoke.mjs";
 

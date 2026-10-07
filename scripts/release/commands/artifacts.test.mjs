@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { capture, repoRootFromScript } from "../../lib/common.mjs";
 import { classifyArtifact, main, selectUpdaterPayloadPath, updaterPayloadPlatform } from "./artifacts.mjs";

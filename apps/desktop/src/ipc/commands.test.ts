@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 // `ipcCommands` is built from `Object.keys(bindings.commands)`, so the fake
 // binding must be a plain enumerable object — a get-only Proxy would wrap zero

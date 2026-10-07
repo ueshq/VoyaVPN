@@ -1,7 +1,7 @@
 import { createTestQueryClient, renderWithQuery } from "@voya/features/test/render";
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { saveQueue } from "@voya/features/forms/save-queue";
 import { UpdatesPanel } from "@/features/updates/updates-panel";

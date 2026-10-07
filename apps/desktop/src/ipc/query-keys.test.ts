@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { InvalidationScope } from "@voya/contracts";
 import { queries } from "@voya/client/queries";
