@@ -329,7 +329,7 @@ fn a_rejected_database_reports_its_kind_and_the_reset_recovers_it() {
 
     start().expect("the host starts on an empty directory");
     // Forge a database from a different build: the same version recorded with
-    // another checksum is exactly what an edited-in-place baseline produces.
+    // another checksum.
     let database_path = dir.path().join(voya_app::startup::DATABASE_NAME);
     tokio::runtime::Runtime::new()
         .expect("test runtime")

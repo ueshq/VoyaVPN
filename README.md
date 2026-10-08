@@ -15,7 +15,7 @@ TypeScript, Tailwind v4, and shadcn/ui foundations.
 - `packages/utils`: source-only shared formatting, redaction, mounted-ref, and error helpers.
 - `crates/voya-contracts`: versioned camelCase IPC and persistence DTOs; the only crate that derives `specta::Type`.
 - `crates/voya-core`: pure domain logic and golden-tested sing-box config generation.
-- `crates/voya-db`: SQLite repositories and migrations.
+- `crates/voya-db`: SQLite repositories and the single schema baseline.
 - `crates/voya-platform`: OS-specific paths, process, proxy, TUN, and autostart adapters.
 - `crates/voya-net`: downloads, updates, subscriptions, Clash API, and ruleset clients.
 - `crates/voya-app`: application orchestration, including the product-level proxy runtime backed by the sing-box Clash-compatible API.

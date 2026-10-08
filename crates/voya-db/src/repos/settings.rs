@@ -6,8 +6,7 @@ use crate::{
     AppStateRecord, DbError, Result,
 };
 
-/// Stores the current IPC settings DTO verbatim. Database initialization rejects
-/// historical baselines, and this repository strictly reads the current payload:
+/// Stores the current IPC settings DTO verbatim and reads it back strictly:
 /// nothing converts retired keys. Missing settings use the current defaults.
 #[derive(Debug, Clone, Copy)]
 pub struct SettingsRepository<'executor> {

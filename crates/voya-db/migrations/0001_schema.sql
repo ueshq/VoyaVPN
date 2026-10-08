@@ -1,12 +1,10 @@
--- Current VoyaVPN database baseline. Historical databases are not upgraded.
+-- The VoyaVPN database schema: one baseline, no upgrade path. Startup accepts
+-- an empty database or one whose single migration record carries this file's
+-- version and checksum; anything else is refused and offered a reset.
 --
--- Editing this file's content ALWAYS requires renaming its version prefix
--- (0012 → 0013 → …): the validator accepts only a database whose single
--- migration record matches this file's name-derived version AND checksum.
--- An in-place edit keeps both at the old version, so every existing database
--- is rejected at startup — which is what commit e26f46e did to 0011.
---
--- This is meant to be the last baseline. Once 1.0 ships it is frozen, and
+-- Editing this file therefore ALWAYS means renaming its version prefix. An
+-- in-place edit keeps the version and changes the checksum, so every existing
+-- database is refused at startup. Once 1.0 ships this baseline is frozen and
 -- later schema changes become incremental migrations on top of it (ADR 0001).
 --
 -- `created_at` columns are set by SQLite on insert and never written by an

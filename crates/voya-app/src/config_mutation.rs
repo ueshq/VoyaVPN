@@ -368,9 +368,10 @@ mod tests {
                         ..voya_core::SubItem::default()
                     })
                     .await?;
-                Err::<(), _>(ConfigMutationError::Database(DbError::InvalidEnum {
-                    enum_name: "ProfileProtocol",
-                    value: "unknown".to_string(),
+                Err::<(), _>(ConfigMutationError::Database(DbError::Json {
+                    path: "app_settings.payload".into(),
+                    source: serde_json::from_str::<serde_json::Value>("{")
+                        .expect_err("invalid JSON"),
                 }))
             })
             .await;

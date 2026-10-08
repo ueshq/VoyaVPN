@@ -55,67 +55,51 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
     let database = Database::connect_in_memory()
         .await
         .expect("database test operation should succeed");
-    let rows = sqlx::query("PRAGMA table_info(profile_items)")
-        .fetch_all(database.pool())
-        .await
-        .expect("database test operation should succeed");
-    let columns = rows
-        .iter()
-        .map(|row| row.get::<String, _>("name"))
-        .collect::<Vec<_>>();
-
-    for obsolete in [
-        "config_version",
-        "is_sub",
-        "pre_socks_port",
-        "header_type",
-        "request_host",
-        "path",
-        "extra",
-        "ports",
-        "alter_id",
-        "flow",
-        "id",
-        "security",
-        "core_type",
-        "allow_insecure",
-        "fingerprint",
-        "mux_enabled",
+    // Exact column lists rather than a list of forbidden ones: any column a
+    // change adds, including a retired v2rayN field, has to show up here.
+    for (query, expected) in [
+        (
+            "PRAGMA table_xinfo(profile_items)",
+            &[
+                "index_id",
+                "config_type",
+                "subscription_id",
+                "display_log",
+                "remarks",
+                "protocol",
+                "transport",
+                "tls",
+                "sort",
+                "created_at",
+            ][..],
+        ),
+        (
+            "PRAGMA table_xinfo(subscriptions)",
+            &[
+                "id",
+                "remarks",
+                "url",
+                "more_url",
+                "enabled",
+                "user_agent",
+                "sort",
+                "filter",
+                "convert_target",
+                "auto_update_interval_minutes",
+                "created_at",
+            ][..],
+        ),
     ] {
-        assert!(
-            !columns.iter().any(|column| column == obsolete),
-            "{obsolete} should be absent"
-        );
+        // `table_xinfo` also lists the generated `config_type` column.
+        let columns = sqlx::query(query)
+            .fetch_all(database.pool())
+            .await
+            .expect("table schema should be readable")
+            .iter()
+            .map(|row| row.get::<String, _>("name"))
+            .collect::<Vec<_>>();
+        assert_eq!(columns, expected, "{query}");
     }
-
-    assert!(columns.iter().any(|column| column == "protocol"));
-    assert!(columns.iter().any(|column| column == "transport"));
-    assert!(columns.iter().any(|column| column == "tls"));
-    assert!(columns.iter().any(|column| column == "subscription_id"));
-
-    let subscription_columns = sqlx::query("PRAGMA table_info(subscriptions)")
-        .fetch_all(database.pool())
-        .await
-        .expect("subscription schema should be readable")
-        .into_iter()
-        .map(|row| row.get::<String, _>("name"))
-        .collect::<Vec<_>>();
-    for retired in [
-        "auto_update_interval",
-        "update_time",
-        "memo",
-        "pre_socks_port",
-    ] {
-        assert!(!subscription_columns.iter().any(|column| column == retired));
-    }
-
-    let retired_tables: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('dns_items', 'full_config_template_items')",
-    )
-    .fetch_one(database.pool())
-    .await
-    .expect("table catalog should be readable");
-    assert_eq!(retired_tables, 0);
 
     let tables = sqlx::query_scalar::<_, String>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name != '_sqlx_migrations' ORDER BY name",
@@ -303,7 +287,7 @@ async fn file_database_persists_profile_across_pool_restart() {
 }
 
 #[tokio::test]
-async fn profile_repository_orders_by_profile_ex_sort() {
+async fn profile_repository_orders_by_sort() {
     let database = Database::connect_in_memory()
         .await
         .expect("database test operation should succeed");
@@ -1161,8 +1145,8 @@ async fn unit_of_work_commit_failure_rolls_back_rows_settings_and_state() {
 }
 
 #[tokio::test]
-async fn existing_legacy_database_is_rejected_without_modification() {
-    let fixture = TempDatabase::new("legacy.sqlite");
+async fn a_foreign_database_is_rejected_without_modification() {
+    let fixture = TempDatabase::new("foreign.sqlite");
     let path = fixture.path();
     let options = SqliteConnectOptions::new()
         .filename(path)
@@ -1171,33 +1155,33 @@ async fn existing_legacy_database_is_rejected_without_modification() {
         .max_connections(1)
         .connect_with(options)
         .await
-        .expect("legacy fixture should open");
-    sqlx::query("CREATE TABLE legacy_settings (payload TEXT NOT NULL)")
+        .expect("foreign fixture should open");
+    sqlx::query("CREATE TABLE foreign_table (payload TEXT NOT NULL)")
         .execute(&pool)
         .await
-        .expect("legacy fixture should be created");
-    sqlx::query("INSERT INTO legacy_settings (payload) VALUES ('unchanged')")
+        .expect("foreign fixture should be created");
+    sqlx::query("INSERT INTO foreign_table (payload) VALUES ('unchanged')")
         .execute(&pool)
         .await
-        .expect("legacy fixture should contain data");
+        .expect("foreign fixture should contain data");
     pool.close().await;
-    let before = fs::read(path).expect("legacy database should be readable");
+    let before = fs::read(path).expect("foreign database should be readable");
 
     let error = Database::connect(path)
         .await
-        .expect_err("legacy database must be rejected");
+        .expect_err("foreign database must be rejected");
     match &error {
         DbError::UnsupportedDatabaseSchema {
-            found, expected, ..
+            expected, reason, ..
         } => {
-            assert_eq!(*found, None);
+            assert!(matches!(reason, SchemaRejectionReason::Unrecognized));
             assert_eq!(*expected, latest_migration_version());
         }
         other => panic!("unexpected error: {other}"),
     }
     assert!(error.to_string().contains("migration bookkeeping"));
     assert_eq!(
-        fs::read(path).expect("legacy database should remain readable"),
+        fs::read(path).expect("foreign database should remain readable"),
         before
     );
 }
@@ -1845,26 +1829,6 @@ async fn current_settings_payload_matches_the_pinned_shape() {
         json_shape(&current),
         "the current settings fixture must match the DTO layout"
     );
-}
-
-#[tokio::test]
-async fn settings_payload_with_an_unknown_key_is_still_rejected() {
-    let database = Database::connect_in_memory()
-        .await
-        .expect("database test operation should succeed");
-    let mut payload: serde_json::Value =
-        serde_json::from_str(PINNED_SETTINGS_PAYLOAD).expect("the pinned payload should be JSON");
-    payload["dns"]["neverAContractKey"] = serde_json::json!(true);
-    sqlx::query("INSERT INTO app_settings (id, payload) VALUES (1, ?)")
-        .bind(payload.to_string())
-        .execute(database.pool())
-        .await
-        .expect("the tampered payload should be storable");
-
-    assert!(matches!(
-        database.settings().load().await,
-        Err(DbError::Json { .. })
-    ));
 }
 
 /// Typed settings enums use the current persisted vocabulary.

@@ -6,7 +6,7 @@ async fn rejecting_an_old_database_does_not_checkpoint_its_unrecovered_wal() {
     let database = Database::connect(source.path())
         .await
         .expect("source database");
-    sqlx::query("UPDATE _sqlx_migrations SET version = 8")
+    sqlx::query("UPDATE _sqlx_migrations SET version = 2")
         .execute(database.pool())
         .await
         .expect("old schema record in WAL");
@@ -24,7 +24,10 @@ async fn rejecting_an_old_database_does_not_checkpoint_its_unrecovered_wal() {
     let before_wal = fs::read(&wal).expect("WAL bytes");
     assert!(matches!(
         Database::connect(fixture.path()).await,
-        Err(DbError::UnsupportedDatabaseSchema { found: Some(8), .. })
+        Err(DbError::UnsupportedDatabaseSchema {
+            reason: SchemaRejectionReason::Version { found: 2, .. },
+            ..
+        })
     ));
     assert_eq!(fs::read(fixture.path()).expect("database bytes"), before);
     assert_eq!(fs::read(&wal).expect("WAL remains"), before_wal);
@@ -39,7 +42,7 @@ async fn current_baseline_is_the_only_initialization_record() {
             .await
             .expect("records");
     assert_eq!(records.len(), 1);
-    assert_eq!((records[0].0, records[0].1), (13, 1));
+    assert_eq!((records[0].0, records[0].1), (1, 1));
     assert_eq!(MIGRATOR.iter().count(), 1);
     assert_eq!(
         records[0].2,
@@ -55,18 +58,13 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
         "UPDATE _sqlx_migrations SET success = 0",
         "UPDATE _sqlx_migrations SET success = 2",
         "UPDATE _sqlx_migrations SET checksum = X'00'",
-        "UPDATE _sqlx_migrations SET version = 14",
-        "INSERT INTO _sqlx_migrations SELECT 8, description, installed_on, success, checksum, execution_time FROM _sqlx_migrations",
+        "UPDATE _sqlx_migrations SET version = 0",
+        "UPDATE _sqlx_migrations SET version = 2",
+        "INSERT INTO _sqlx_migrations SELECT 2, description, installed_on, success, checksum, execution_time FROM _sqlx_migrations",
         "ALTER TABLE _sqlx_migrations DROP COLUMN checksum",
         "UPDATE _sqlx_migrations SET version = 'invalid'",
     ];
-    let old_versions =
-        (1..=12).map(|version| ("UPDATE _sqlx_migrations SET version = ?", Some(version)));
-    for (mutation, version) in mutations
-        .into_iter()
-        .map(|sql| (sql, None))
-        .chain(old_versions)
-    {
+    for mutation in mutations {
         let fixture = TempDatabase::new("unsupported-baseline.sqlite");
         let database = Database::connect(fixture.path())
             .await
@@ -76,13 +74,10 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
             .upsert(&sample_profile())
             .await
             .expect("user data");
-        let query = sqlx::query(mutation);
-        let query = if let Some(version) = version {
-            query.bind(version)
-        } else {
-            query
-        };
-        query.execute(database.pool()).await.expect("alter fixture");
+        sqlx::query(mutation)
+            .execute(database.pool())
+            .await
+            .expect("alter fixture");
         database.close().await;
 
         // DELETE journal mode lets this test detect an accidental WAL switch
@@ -104,7 +99,7 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
         assert!(
             matches!(
                 error,
-                DbError::UnsupportedDatabaseSchema { expected: 13, .. }
+                DbError::UnsupportedDatabaseSchema { expected: 1, .. }
             ),
             "{mutation}: {error}"
         );
@@ -124,10 +119,9 @@ async fn unsupported_baseline_records_are_rejected_before_any_write() {
     }
 }
 
-/// The 2026-10 incident: commit e26f46e edited the baseline file in place, so
-/// databases created by either side of that edit record the same version with
-/// different checksums. The refusal must name the checksum, not print the
-/// absurd "found version Some(11), expected version 11".
+/// A baseline edited in place records the same version with another checksum.
+/// The refusal must name the checksum, not report a version mismatch between
+/// two equal versions.
 #[tokio::test]
 async fn a_same_version_stale_checksum_baseline_names_the_checksum() {
     let fixture = TempDatabase::new("stale-checksum.sqlite");
@@ -173,7 +167,7 @@ async fn bookkeeping_without_application_tables_is_not_a_completed_database() {
         .await
         .expect("fixture");
     sqlx::raw_sql("CREATE TABLE _sqlx_migrations (version BIGINT PRIMARY KEY, description TEXT NOT NULL, installed_on TEXT NOT NULL, success BOOLEAN NOT NULL, checksum BLOB NOT NULL, execution_time BIGINT NOT NULL);
-        INSERT INTO _sqlx_migrations VALUES (8, 'old', '', 1, X'00', 0);")
+        INSERT INTO _sqlx_migrations VALUES (2, 'other', '', 1, X'00', 0);")
         .execute(&pool).await.expect("bookkeeping");
     pool.close().await;
     let before = fs::read(fixture.path()).expect("fixture bytes");
@@ -184,24 +178,12 @@ async fn bookkeeping_without_application_tables_is_not_a_completed_database() {
     assert_eq!(fs::read(fixture.path()).expect("unchanged bytes"), before);
 }
 
+/// Settings decode strictly: an unknown key, at the top level or in a section,
+/// fails the load and the stored payload is left exactly as it was.
 #[tokio::test]
-async fn retired_settings_are_rejected_without_conversion_or_rewrite() {
+async fn settings_with_an_unknown_key_are_rejected_without_rewrite() {
     let database = Database::connect_in_memory().await.expect("database");
-    for (section, key) in [
-        ("", "sources"),
-        ("", "shortcuts"),
-        ("dns", "useSystemHosts"),
-        ("dns", "serveStale"),
-        ("dns", "parallelQuery"),
-        ("speedTest", "downloadUrl"),
-        ("speedTest", "udpTarget"),
-        ("speedTest", "delayIntervalMs"),
-        ("proxy", "nodeSorting"),
-        ("speedTest", "proxyDelayConcurrency"),
-        ("speedTest", "mixedConcurrency"),
-        ("core", "fragmentEnabled"),
-        ("behavior", "statistics"),
-    ] {
+    for (section, key) in [("", "neverAContractKey"), ("dns", "neverAContractKey")] {
         let mut payload = serde_json::to_value(AppSettings::default()).expect("settings");
         let target = if section.is_empty() {
             &mut payload

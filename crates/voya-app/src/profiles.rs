@@ -682,7 +682,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn local_sorting_ignores_retired_memberships() {
+    async fn move_to_top_reorders_local_nodes() {
         let database = Database::connect_in_memory()
             .await
             .expect("profile manager test operation should succeed");

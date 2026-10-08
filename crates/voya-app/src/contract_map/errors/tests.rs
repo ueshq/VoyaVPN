@@ -69,10 +69,10 @@ where
 }
 
 fn db_row_error() -> DbError {
-    DbError::InvalidEnum {
-        enum_name: "ProfileProtocol",
-        value: "unknown".to_string(),
-    }
+    DbError::Blob(voya_db::BlobError::Deserialize {
+        type_name: "ProfileProtocol",
+        source: serde_json::from_str::<serde_json::Value>("{").expect_err("invalid JSON"),
+    })
 }
 
 fn io_error() -> io::Error {
@@ -94,7 +94,6 @@ fn download_error() -> DownloadError {
 fn database_failures_keep_their_code_and_reset_hint() {
     let schema = DbError::UnsupportedDatabaseSchema {
         path: PathBuf::from("/tmp/voyavpn.sqlite"),
-        found: Some(2),
         expected: 1,
         reason: voya_db::SchemaRejectionReason::Version {
             found: 2,

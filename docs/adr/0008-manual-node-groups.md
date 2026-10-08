@@ -55,14 +55,10 @@ group commands, DTOs, repositories and invalidation scope, as well as the saved
 node copy command, are removed. The UI derives groups from the existing profiles
 and subscriptions queries and their invalidation events.
 
-The `0009_current_schema.sql` baseline and its checksum remain unchanged, so
-current databases continue opening without a reset. The `node_groups` and
-`node_group_memberships` tables remain inert baseline storage; application code
-no longer reads or writes them. Existing locally owned nodes automatically appear
-under Local nodes without changing their IDs, content or selection. SQLite's
-existing foreign-key cleanup remains in effect when a node is deleted. Earlier
-historical databases remain rejected unchanged under ADR 0001; no migration or
-legacy compatibility layer is added.
+The `node_groups` and `node_group_memberships` tables are gone from the schema
+(ADR 0001). Locally owned nodes appear under Local nodes without changing their
+IDs, content or selection, and SQLite's foreign-key cleanup applies when a node
+is deleted. No migration or compatibility layer exists.
 
 ## Retired capabilities
 

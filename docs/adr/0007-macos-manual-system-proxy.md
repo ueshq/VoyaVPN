@@ -32,9 +32,9 @@ ADR 0004's automatic system-proxy restoration requirement for macOS only.
   config reload retain their separate mode-application behavior.
   Manual proxy addresses, observation, recheck and system-settings actions
   live in Settings → Network; Home retains the factual connection status.
-  Current-baseline settings using the removed direct traffic mode are
-  normalized to rule before loading, without changing other preferences.
-  Invalid settings and historical database baselines remain rejected. Fresh
+  Settings are decoded strictly: a payload that still holds the removed
+  `direct` traffic mode is rejected, not converted, like any other invalid
+  settings payload (ADR 0001). Fresh
   installs default to system proxy. Automatic OS proxy setup still
   waits for a connected core. The selected mode is
   separate from observed system settings. A running local core is described as

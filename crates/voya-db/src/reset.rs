@@ -214,7 +214,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_database_from_an_older_baseline_is_replaced_by_a_fresh_one() {
+    async fn a_refused_database_is_replaced_by_a_fresh_one() {
         let dir = TempDir::new("stale");
         let path = dir.0.join(DATABASE_NAME);
         let pool = SqlitePoolOptions::new()
@@ -243,15 +243,15 @@ mod tests {
         .expect("bookkeeping table should be created");
         sqlx::query(
             "INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time) \
-             VALUES (9, 'current schema', 1, X'00', 0)",
+             VALUES (2, 'other schema', 1, X'00', 0)",
         )
         .execute(&pool)
         .await
-        .expect("older baseline should be recorded");
+        .expect("another baseline should be recorded");
         pool.close().await;
         assert!(matches!(
             Database::connect(&path).await,
-            Err(DbError::UnsupportedDatabaseSchema { found: Some(9), .. })
+            Err(DbError::UnsupportedDatabaseSchema { .. })
         ));
 
         let backup = move_database_aside(&path, 1)

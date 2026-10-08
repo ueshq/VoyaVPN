@@ -263,11 +263,10 @@ mod tests {
     fn schema_and_unreadable_database_failures_offer_a_reset() {
         let schema = boxed(DbError::UnsupportedDatabaseSchema {
             path: PathBuf::from("voyavpn.sqlite"),
-            found: Some(10),
-            expected: 11,
+            expected: 1,
             reason: voya_db::SchemaRejectionReason::Version {
-                found: 10,
-                expected: 11,
+                found: 2,
+                expected: 1,
             },
             manual_reset_command: "rm -f -- voyavpn.sqlite".to_string(),
         });

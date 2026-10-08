@@ -235,9 +235,8 @@ async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> 
     .fetch_one(pool)
     .await?;
     let expected = latest_migration_version();
-    let unsupported = |found, reason| DbError::UnsupportedDatabaseSchema {
+    let unsupported = |reason| DbError::UnsupportedDatabaseSchema {
         path: path.to_path_buf(),
-        found,
         expected,
         reason,
         manual_reset_command: manual_database_reset_command(path),
@@ -251,7 +250,7 @@ async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> 
         return if user_table_count == 0 {
             Ok(())
         } else {
-            Err(unsupported(None, SchemaRejectionReason::Unrecognized))
+            Err(unsupported(SchemaRejectionReason::Unrecognized))
         };
     }
 
@@ -272,7 +271,7 @@ async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> 
             .iter()
             .any(|row| row.get::<String, _>("name") == *name)
     }) {
-        return Err(unsupported(None, SchemaRejectionReason::Unrecognized));
+        return Err(unsupported(SchemaRejectionReason::Unrecognized));
     }
     let rows =
         sqlx::query("SELECT version, success, checksum FROM _sqlx_migrations ORDER BY version")
@@ -283,47 +282,40 @@ async fn validate_existing_schema(pool: &SqlitePool, path: &Path) -> Result<()> 
     if rows.is_empty() && user_table_count == 0 {
         return Ok(());
     }
-    let found = rows
-        .last()
-        .and_then(|row| row.try_get::<i64, _>("version").ok());
     if rows.len() != 1 {
-        return Err(unsupported(
-            found,
-            SchemaRejectionReason::MigrationRecords { count: rows.len() },
-        ));
+        return Err(unsupported(SchemaRejectionReason::MigrationRecords {
+            count: rows.len(),
+        }));
     }
     if user_table_count == 0 {
-        return Err(unsupported(found, SchemaRejectionReason::Unrecognized));
+        return Err(unsupported(SchemaRejectionReason::Unrecognized));
     }
     let row = &rows[0];
+    let found_version: i64 = row
+        .try_get("version")
+        .map_err(|_| unsupported(SchemaRejectionReason::Unrecognized))?;
     let success: i64 = row
         .try_get("success")
-        .map_err(|_| unsupported(found, SchemaRejectionReason::Unrecognized))?;
+        .map_err(|_| unsupported(SchemaRejectionReason::Unrecognized))?;
     let checksum: Vec<u8> = row
         .try_get("checksum")
-        .map_err(|_| unsupported(found, SchemaRejectionReason::Unrecognized))?;
+        .map_err(|_| unsupported(SchemaRejectionReason::Unrecognized))?;
     if success != 1 {
-        return Err(unsupported(found, SchemaRejectionReason::Incomplete));
+        return Err(unsupported(SchemaRejectionReason::Incomplete));
     }
-    let Some(found_version) = found else {
-        return Err(unsupported(found, SchemaRejectionReason::Unrecognized));
-    };
     if !MIGRATOR
         .iter()
         .any(|baseline| baseline.version == found_version)
     {
-        return Err(unsupported(
-            found,
-            SchemaRejectionReason::Version {
-                found: found_version,
-                expected,
-            },
-        ));
+        return Err(unsupported(SchemaRejectionReason::Version {
+            found: found_version,
+            expected,
+        }));
     }
     if !MIGRATOR.iter().any(|baseline| {
         baseline.version == found_version && baseline.checksum.as_ref() == checksum.as_slice()
     }) {
-        return Err(unsupported(found, SchemaRejectionReason::ChecksumMismatch));
+        return Err(unsupported(SchemaRejectionReason::ChecksumMismatch));
     }
     Ok(())
 }

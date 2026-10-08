@@ -6,11 +6,9 @@ use voya_contracts::DatabaseErrorCode;
 
 pub type Result<T> = std::result::Result<T, DbError>;
 
-/// Why [`DbError::UnsupportedDatabaseSchema`] refused a database.
-///
-/// The refusal message used to print only `found`/`expected` versions, so a
-/// checksum mismatch read as the absurd "found Some(11), expected version 11".
-/// Each variant names the check that actually failed.
+/// Why [`DbError::UnsupportedDatabaseSchema`] refused a database: each variant
+/// names the check that failed, so a same-version checksum mismatch never reads
+/// as a version mismatch.
 #[derive(Debug, Error)]
 pub enum SchemaRejectionReason {
     #[error("it holds {count} migration records where exactly one is expected")]
@@ -33,15 +31,9 @@ pub enum DbError {
     Migrate(#[from] MigrateError),
     #[error(transparent)]
     Blob(#[from] crate::blob::BlobError),
-    #[error("invalid {enum_name} value `{value}` in database")]
-    InvalidEnum {
-        enum_name: &'static str,
-        value: String,
-    },
     #[error("unsupported Voya database schema at {path}: {reason} (this build's baseline is version {expected})")]
     UnsupportedDatabaseSchema {
         path: PathBuf,
-        found: Option<i64>,
         expected: i64,
         reason: SchemaRejectionReason,
         manual_reset_command: String,
@@ -73,7 +65,7 @@ impl DbError {
     /// closed pool) is a whole-database fault and must keep propagating.
     #[must_use]
     pub fn is_row_payload(&self) -> bool {
-        matches!(self, Self::Blob(_) | Self::InvalidEnum { .. })
+        matches!(self, Self::Blob(_))
     }
 
     /// Classifies the failure for the IPC contract.
@@ -94,9 +86,7 @@ impl DbError {
             Self::UnsupportedDatabaseSchema { .. } | Self::Migrate(_) => {
                 DatabaseErrorCode::SchemaUnsupported
             }
-            Self::Blob(_) | Self::InvalidEnum { .. } | Self::Json { .. } => {
-                DatabaseErrorCode::Corrupt
-            }
+            Self::Blob(_) | Self::Json { .. } => DatabaseErrorCode::Corrupt,
             Self::Io { .. } => DatabaseErrorCode::Io,
             Self::Sqlx(error) => sqlx_code(error),
         }
@@ -169,7 +159,6 @@ mod tests {
     fn schema_and_migration_failures_ask_for_a_reset() {
         let schema = DbError::UnsupportedDatabaseSchema {
             path: PathBuf::from("/tmp/voyavpn.sqlite"),
-            found: Some(9),
             expected: 1,
             reason: SchemaRejectionReason::Version {
                 found: 9,
@@ -189,14 +178,14 @@ mod tests {
 
     #[test]
     fn row_payload_failures_report_corruption_and_no_reset_command() {
-        let invalid_enum = DbError::InvalidEnum {
-            enum_name: "ProfileProtocol",
-            value: "unknown".to_string(),
-        };
+        let blob = DbError::Blob(crate::blob::BlobError::Deserialize {
+            type_name: "ProfileProtocol",
+            source: serde_json::from_str::<serde_json::Value>("{").expect_err("invalid JSON"),
+        });
 
-        assert!(invalid_enum.is_row_payload());
-        assert_eq!(invalid_enum.code(), DatabaseErrorCode::Corrupt);
-        assert_eq!(invalid_enum.reset_command(), None);
+        assert!(blob.is_row_payload());
+        assert_eq!(blob.code(), DatabaseErrorCode::Corrupt);
+        assert_eq!(blob.reset_command(), None);
     }
 
     #[test]
