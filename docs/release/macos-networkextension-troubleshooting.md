@@ -28,7 +28,7 @@ development builds keep the `.appex` shape and use `packet-tunnel-provider`.
   missing VPN extension message) means the running copy has no PacketTunnel
   provider. Quit VoyaVPN and open `/Applications/VoyaVPN.app`. Local builds
   intentionally remove the extension from leftover `target/` app copies after
-  installation to prevent them from winning PlugInKit election. `vp run dev` also
+  installation to prevent them from winning PlugInKit election. `vp run tauri dev` also
   runs without a bundled provider and cannot be used for macOS VPN testing.
   If the installed copy is incomplete, reinstall a complete VPN-capable package;
   developers can rebuild and install it with `vp run build:mac:local`. Verify the

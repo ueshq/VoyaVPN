@@ -190,7 +190,7 @@ System: GitHub Actions `Release` workflow for evidence, approved signing systems
 Stable publication follows this order:
 
 1. Freeze the commit, version, channel, and target matrix. Record the commit SHA, tag, workflow dispatch inputs, and planned stable version.
-2. Run local automated gates from the frozen commit: `vp run verify:local`, `vp run build`, and local debug packaging when required by release policy.
+2. Run local automated gates from the frozen commit: `vp run verify:local`, `vp build`, and local debug packaging when required by release policy.
 3. Dispatch the `Release` workflow with `channel=stable`, `build_profile=release`, `dry_run=false`, and updater metadata enabled. The workflow must produce six package artifacts, `SHA256SUMS`, artifact manifests, updater metadata evidence, CDN release-index evidence, and core manifest evidence. It must not publish externally.
 4. Complete signing, notarization, updater key, legal redistribution, and platform package checks from the ledger below.
 5. Stage immutable CDN paths for the approved version: manual download artifacts and `release-index.json`, Tauri updater payloads and `latest.json`, the empty core manifest, geo/SRS assets and manifests, checksums, signatures, notices, and evidence JSON. The sing-box seed is part of the signed application package, not a core update CDN asset.

@@ -78,12 +78,12 @@ export function resolveTauriConfig(options, { configExists = (path) => existsSyn
 
   throw new Error(
     `Stable readiness needs the generated stable updater overlay (${generatedStableUpdaterConfig}). ` +
-      "Run `pnpm release -- updater-config` first, or pass --tauri-config <overlay>.",
+      "Run `vp run release -- updater-config` first, or pass --tauri-config <overlay>.",
   );
 }
 
 function printHelp() {
-  console.log(`Usage: pnpm release -- readiness [options]
+  console.log(`Usage: vp run release -- readiness [options]
 
 Runs local release readiness checks for CDN release metadata, updater metadata,
 core manifests, release docs, Tauri updater config, and stable-only env inputs.

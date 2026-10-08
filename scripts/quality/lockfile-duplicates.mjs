@@ -90,7 +90,7 @@ if (isCliEntrypoint(import.meta.url)) {
     for (const failure of failures) console.error(`- ${failure}`);
     console.error(
       "\nPin the package in packages/ui/package.json and add an entry under" +
-        "\n`overrides:` in pnpm-workspace.yaml, then run `pnpm install`.",
+        "\n`overrides:` in pnpm-workspace.yaml, then run `vp install`.",
     );
     process.exit(1);
   }

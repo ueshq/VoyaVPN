@@ -18,7 +18,7 @@ export function parseInstallArgs(argv) {
  *
  * `install` receives whether this is a postinstall run and the repo root and
  * returns a line to print, or nothing. A postinstall failure is a warning that
- * names the manual retry command, because `pnpm install` must not fail on an
+ * names the manual retry command, because `vp install` must not fail on an
  * offline machine; a direct run of the same script exits non-zero.
  */
 export async function runSeedInstall({ label, retry, install, env = process.env }) {

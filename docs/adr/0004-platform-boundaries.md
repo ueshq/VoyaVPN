@@ -73,7 +73,7 @@ The original decision described core acquisition as "download-on-first-run".
 That is not what the code does and never was on this branch:
 
 - `scripts/core/install-sing-box.mjs` (the root `postinstall`) fetches the
-  SHA-256-pinned upstream sing-box archive at `pnpm install` time into
+  SHA-256-pinned upstream sing-box archive at `vp install` time into
   `resources/core-seeds/sing_box/` and copies it into the per-user app-data
   directory. It is skipped by `VOYAVPN_SKIP_SING_BOX_POSTINSTALL`, and skipped
   by default on CI unless `VOYAVPN_FETCH_SING_BOX_ON_INSTALL=1`.
@@ -103,7 +103,7 @@ runtime hands the PacketTunnel a config without resolving any executable, and
 the speedtest measures nodes through the running core's Clash API against
 unrouted per-node probe outbounds (`voya_core::latency_probe_tag`). Latency
 tests on macOS therefore need an active connection. The pinned darwin archives
-stay in the installer for developer tooling (`pnpm check:sing-box`); they are
+stay in the installer for developer tooling (`vp run check:sing-box`); they are
 never bundled. The GPL obligations are unchanged, since Libbox is sing-box.
 
 ### Follow-up (2026-09-18, later): The macOS Seed Returns for Disconnected Speedtests

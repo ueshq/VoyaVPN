@@ -638,7 +638,7 @@ final class VoyaVPNUITests: XCTestCase {
 
     private func required(_ key: String) -> String {
         let value = ProcessInfo.processInfo.environment[key] ?? ""
-        XCTAssertFalse(value.isEmpty, "Run pnpm check:mobile:ios:smoke; missing \(key)")
+        XCTAssertFalse(value.isEmpty, "Run vp run check:mobile:ios:smoke; missing \(key)")
         return value
     }
 

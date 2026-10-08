@@ -544,7 +544,7 @@ impl From<AutostartManagerError> for AppError {
     fn from(error: AutostartManagerError) -> Self {
         match error {
             AutostartManagerError::CurrentExe(ref source) => io(Sub::Autostart, source),
-            // `pnpm dev` or `cargo run`: no .app bundle holds the login item.
+            // `vp run tauri dev` or `cargo run`: no .app bundle holds the login item.
             AutostartManagerError::Autostart(AutostartError::LoginItemUnavailable { .. }) => {
                 AppError::new(Sub::Autostart, AppErrorKind::Unsupported, error.to_string())
             }

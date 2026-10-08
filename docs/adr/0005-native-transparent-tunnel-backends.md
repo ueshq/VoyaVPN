@@ -50,7 +50,7 @@ shared through `voya-core`.
   a misleading connected state.
 - macOS PacketTunnel registration health must be checked when local `.app`
   bundles or test fixtures are launched, because PlugInKit elects providers by
-  extension bundle id globally. Use `pnpm native:macos:ne:doctor`; see
+  extension bundle id globally. Use `vp run native:macos:ne:doctor`; see
   `docs/release/macos-networkextension-troubleshooting.md`.
 - The temporary system-proxy fallback is only used for the process TUN backend.
   Native backends are expected to capture terminal and app traffic at the OS

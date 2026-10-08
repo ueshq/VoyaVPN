@@ -81,7 +81,7 @@ function profileRequiredEntitlements(profile) {
 function verifyNoIncompatibleTunnelBundle() {
   if (existsSync(tunnel.incompatibleBundle)) {
     throw new Error(
-      `Incompatible PacketTunnel bundle is present for ${tunnel.distribution}: ${tunnel.incompatibleBundle}. Re-run pnpm native:macos:tunnel to stage only ${tunnel.layout.label}.`,
+      `Incompatible PacketTunnel bundle is present for ${tunnel.distribution}: ${tunnel.incompatibleBundle}. Re-run vp run native:macos:tunnel to stage only ${tunnel.layout.label}.`,
     );
   }
 }

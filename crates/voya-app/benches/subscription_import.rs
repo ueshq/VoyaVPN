@@ -1,6 +1,6 @@
 //! Importing a subscription-sized batch of share links: the first import into
 //! an empty database, and the steady state of an update, where every parsed
-//! node matches a stored one. Run with `pnpm bench:rust`.
+//! node matches a stored one. Run with `vp run bench:rust`.
 
 #![allow(
     clippy::panic,

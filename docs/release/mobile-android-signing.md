@@ -57,8 +57,12 @@ staged, so add the Rust target and rebuild before widening it.
 ## Running
 
 ```sh
-vp run --filter @voya/mobile android
+vp run dev:android                  # add --rebuild-rust after a Rust change
 ```
+
+It builds the native artifacts above when they are missing (the Rust backend
+with the faster `mobile-smoke` profile), then runs `react-native run-android`
+with any other arguments.
 
 The emulator *can* run a `VpnService`, which makes Android the cheaper platform
 to develop the tunnel on. The first connection raises the system's VPN
@@ -85,21 +89,45 @@ rather than as an error.
 Steps 5 to 7 are Android's own: they are the ways a tunnel can end without the
 app being asked, and each one is a state the UI has to land on correctly.
 
-## Signing
+## Production APK
 
-The template's `release` build type is signed with the checked-in debug
-keystore, which is fine for a local build and is **not** a release
-configuration. For a real release:
+`vp run build:android` builds the APK distributed outside Google Play:
 
-1. Generate an upload keystore and keep it out of the repository.
-2. Put its credentials in `~/.gradle/gradle.properties` (never in the repo) as
-   `VOYA_UPLOAD_STORE_FILE`, `VOYA_UPLOAD_STORE_PASSWORD`,
-   `VOYA_UPLOAD_KEY_ALIAS`, `VOYA_UPLOAD_KEY_PASSWORD`.
-3. Add a `release` signing config that reads them and point the `release` build
-   type at it.
+```sh
+vp run build:android                  # Rust (release profile), Libbox, Gradle, checks
+vp run build:android --reuse-libbox   # keep the staged libbox.aar
+vp run build:android --skip-native    # link the staged Rust and Libbox as they are
+```
 
-Set the version from the repo's release version — `vp run check:architecture`
-fails when `build.gradle` and the root `package.json` disagree.
+It signs with the release key, read from four environment variables that
+`app/build.gradle` passes to Gradle's `release` signing config:
+
+| Variable | |
+| --- | --- |
+| `VOYAVPN_ANDROID_KEYSTORE` | Path to the keystore, kept out of the repository |
+| `VOYAVPN_ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `VOYAVPN_ANDROID_KEY_ALIAS` | Alias of the signing key |
+| `VOYAVPN_ANDROID_KEY_PASSWORD` | Key password |
+
+Without them the `release` build type falls back to the checked-in debug
+keystore, which is only for local runs, so the lane refuses to start. Every
+user's installed copy only accepts updates signed by the same key: lose it and
+the app cannot be updated in place. Generate it once:
+
+```sh
+keytool -genkeypair -v -keystore voyavpn-release.jks -alias voyavpn -keyalg RSA -keysize 4096 -validity 10000
+```
+
+`versionName` is the repo's release version — `vp run check:architecture`
+fails when `build.gradle` and the root `package.json` disagree. `versionCode`
+is `VOYAVPN_ANDROID_VERSION_CODE`, or the commit count when unset, so a build
+from a later commit always installs over an earlier one.
+
+Before it copies the APK out, the lane checks with `aapt2` and `apksigner`
+that the package id, `versionName` and `versionCode` are the expected ones, the
+build is not debuggable, the signer is the release key's certificate, and both
+ABIs carry the Rust host and Libbox. The result is
+`target/release/bundle/android/VoyaVPN_<version>_<versionCode>.apk`.
 
 Libbox is GPL-3.0-or-later, so any APK or AAB handed to a third party carries
 the obligations in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

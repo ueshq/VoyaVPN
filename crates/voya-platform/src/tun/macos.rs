@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn macos_status_reports_a_packaging_error_before_probing_the_bridge() {
         let probe = FakeProbe {
-            packaging_error: Some("re-run pnpm native:macos:tunnel"),
+            packaging_error: Some("re-run vp run native:macos:tunnel"),
             ..FakeProbe::ready(FakeBridgeStatus::Output("running"))
         };
 
@@ -639,7 +639,7 @@ mod tests {
         );
         assert_eq!(
             status.message.as_deref(),
-            Some("re-run pnpm native:macos:tunnel")
+            Some("re-run vp run native:macos:tunnel")
         );
         assert_eq!(probe.calls(), ["component_present", "packaging_error"]);
     }

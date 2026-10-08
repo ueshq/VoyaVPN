@@ -52,7 +52,7 @@ function parseOptions(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: pnpm release -- index --input <artifact-manifest-dir> --out <release-index.json> [options]
+  console.log(`Usage: vp run release -- index --input <artifact-manifest-dir> --out <release-index.json> [options]
 
 Generates a CDN release index from artifact-manifest.json files written by the release artifacts command.
 All artifact URLs are derived from --base-url or VOYAVPN_CDN_BASE_URL; manifest URL fields are not trusted.

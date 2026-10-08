@@ -16,7 +16,7 @@ caller. The start argument is a *selector* only:
 - The sing-box executable is always `<service dir>\sing_box\sing-box.exe`,
   resolved from `std::env::current_exe()`. In a normal install that is
   `%ProgramFiles%\VoyaVPN\sing_box\sing-box.exe`, staged and hash-verified by
-  `pnpm native:windows:tunnel:install` under the same elevation that registers
+  `vp run native:windows:tunnel:install` under the same elevation that registers
   the service. Its integrity rests on the `%ProgramFiles%` ACL; the service
   never runs the user-writable core in `%APPDATA%\app.voyavpn.desktop\bin`.
 - The accepted config roots are fixed inside the service binary and are never

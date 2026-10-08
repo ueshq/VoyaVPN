@@ -99,7 +99,7 @@ export function nativeWindowsTarget(arch = process.arch) {
   if (arch === "arm64") {
     return { artifactArch: "arm64", rustTarget: "aarch64-pc-windows-msvc" };
   }
-  throw new Error(`pnpm build:windows:local supports only native Windows x64 and arm64, not ${arch}.`);
+  throw new Error(`vp run build:windows:local supports only native Windows x64 and arm64, not ${arch}.`);
 }
 
 function rustMsvcPrerequisiteMessage(rustTarget) {
@@ -147,22 +147,13 @@ export function localWindowsBuildEnv(sourceEnv = process.env) {
   return env;
 }
 
-export function windowsPnpmInvocation({
-  env = process.env,
-  nodeExecutable = process.execPath,
-  fileExists = existsSync,
-} = {}) {
-  const npmExecPath = environmentValue(env, "npm_execpath");
-  const bundledCorepack = win32.join(win32.dirname(nodeExecutable), "node_modules", "corepack", "dist", "pnpm.js");
-  const cliPath = [npmExecPath, bundledCorepack]
-    .filter((path) => /\.[cm]?js$/i.test(path))
-    .find((path) => fileExists(path));
-  if (!cliPath) {
-    throw new Error(
-      "Unable to locate Corepack's pnpm.js beside the current Node.js executable. Install Node.js with Corepack and retry.",
-    );
-  }
-  return { prefixArgs: [cliPath], program: nodeExecutable };
+/**
+ * `vp` is a native executable on Windows too, so it spawns without a shell.
+ * Under `vp run` it names its own path in `VP_CLI_BIN`; otherwise it is
+ * looked up on PATH.
+ */
+export function windowsVpInvocation({ env = process.env } = {}) {
+  return { prefixArgs: ["run"], program: environmentValue(env, "VP_CLI_BIN") || "vp" };
 }
 
 export function installedWindowsAppPath(env = process.env) {
@@ -184,7 +175,7 @@ export function assertSafeExistingInstalls(entries, expectedAppPath) {
     if (!isExpectedNsis) {
       const label = location || entry.key || "unknown location";
       throw new Error(
-        `Refusing to replace an existing VoyaVPN MSI or non-local installation at ${label}. Uninstall it explicitly before running pnpm build:windows:local.`,
+        `Refusing to replace an existing VoyaVPN MSI or non-local installation at ${label}. Uninstall it explicitly before running vp run build:windows:local.`,
       );
     }
   }
@@ -228,7 +219,7 @@ export function assertWindowsGuiStopped({ env = process.env, captureCommand = ca
       .some((line) => /^"voyavpn\.exe"/i.test(line.trim()))
   ) {
     throw new Error(
-      "VoyaVPN is still running. Quit the app and disable TUN before pnpm build:windows:local replaces it.",
+      "VoyaVPN is still running. Quit the app and disable TUN before vp run build:windows:local replaces it.",
     );
   }
 }
@@ -328,7 +319,7 @@ export function elevateTunnelServiceInstall({
       [
         WINDOWS_TUN_EXIT_COPY_FAILED,
         () =>
-          `Unable to stage the protected tunnel service binary at ${managedTunnelServicePath(env)} or the sing-box core at ${managedSingBoxPath(env)}. Run pnpm core:sing-box:install, then check Program Files permissions and antivirus logs.`,
+          `Unable to stage the protected tunnel service binary at ${managedTunnelServicePath(env)} or the sing-box core at ${managedSingBoxPath(env)}. Run vp run core:sing-box:install, then check Program Files permissions and antivirus logs.`,
       ],
       [
         WINDOWS_TUN_EXIT_REGISTRATION_FAILED,
@@ -348,12 +339,12 @@ export function buildWindowsInstallers({
   rustTarget,
   repoRoot = defaultRepoRoot,
   runCommand = run,
-  packageManager = windowsPnpmInvocation({ env }),
+  taskRunner = windowsVpInvocation({ env }),
 } = {}) {
   try {
     return runCommand(
-      packageManager.program,
-      [...packageManager.prefixArgs, "tauri:build", "--no-sign", "--target", rustTarget, "--bundles", "nsis"],
+      taskRunner.program,
+      [...taskRunner.prefixArgs, "tauri:build", "--no-sign", "--target", rustTarget, "--bundles", "nsis"],
       {
         cwd: repoRoot,
         env,
@@ -380,11 +371,11 @@ export function buildWindowsLocal({
   discoverArtifacts = discoverWindowsArtifacts,
   elevateServiceInstall = elevateTunnelServiceInstall,
   ensureRustTarget = assertRustTargetInstalled,
-  resolvePackageManager = windowsPnpmInvocation,
+  resolveTaskRunner = windowsVpInvocation,
   logger = console,
 } = {}) {
   if (platform !== "win32") {
-    throw new Error("pnpm build:windows:local must run on Windows.");
+    throw new Error("vp run build:windows:local must run on Windows.");
   }
   const target = nativeWindowsTarget(arch);
   const env = {
@@ -392,7 +383,7 @@ export function buildWindowsLocal({
     CARGO_BUILD_TARGET: target.rustTarget,
   };
   const appPath = installedWindowsAppPath(env);
-  const packageManager = resolvePackageManager({ env });
+  const taskRunner = resolveTaskRunner({ env });
 
   ensureRustTarget({ env, rustTarget: target.rustTarget });
   ensureGuiStopped({ env });
@@ -404,9 +395,9 @@ export function buildWindowsLocal({
     rustTarget: target.rustTarget,
     repoRoot,
     runCommand,
-    packageManager,
+    taskRunner,
   });
-  runCommand(packageManager.program, [...packageManager.prefixArgs, "native:windows:tunnel:build"], {
+  runCommand(taskRunner.program, [...taskRunner.prefixArgs, "native:windows:tunnel:build"], {
     cwd: repoRoot,
     env,
     shell: false,
@@ -457,7 +448,7 @@ export function buildWindowsLocal({
   logger.log(`  Start-Process ${powershellQuoted(appPath)}`);
   logger.log("");
   logger.log("This build is unsigned and intended only for local testing. Do not distribute it.");
-  logger.log("Do not use pnpm dev for Windows TUN testing; it does not ensure the service is installed.");
+  logger.log("Do not use vp run tauri dev for Windows TUN testing; it does not ensure the service is installed.");
 
   return { appPath, servicePath, singBoxPath, ...artifacts };
 }

@@ -1036,7 +1036,7 @@ fn golden_core_acceptance_checks_are_opt_in() {
         return;
     }
 
-    // Opted in, nothing may be skipped: `pnpm check:sing-box` only proves the
+    // Opted in, nothing may be skipped: `vp run check:sing-box` only proves the
     // configs are accepted if every one of them reached the core.
     let binary = find_binary("VOYA_SINGBOX_BIN", "sing-box").unwrap_or_else(|| {
         panic!("VOYA_GOLDEN_ACCEPTANCE is set but sing-box was not found; set VOYA_SINGBOX_BIN")

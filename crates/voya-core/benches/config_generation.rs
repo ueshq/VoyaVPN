@@ -1,6 +1,6 @@
 //! sing-box config generation as the node count grows: the macOS connect
 //! config (one latency probe outbound per node), a policy group spanning a
-//! whole subscription, and a speedtest page. Run with `pnpm bench:rust`.
+//! whole subscription, and a speedtest page. Run with `vp run bench:rust`.
 
 use std::hint::black_box;
 

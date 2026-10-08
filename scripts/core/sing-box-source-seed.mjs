@@ -264,7 +264,7 @@ export async function buildAndStageSingBoxSeed({
   }
 }
 
-// `pnpm core:sing-box:build`: stage the source seed by hand, e.g. to inspect
+// `vp run core:sing-box:build`: stage the source seed by hand, e.g. to inspect
 // it before a store build (which builds it on its own when it is missing).
 if (isCliEntrypoint(import.meta.url)) {
   try {

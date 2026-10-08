@@ -40,7 +40,7 @@ Three prior facts shaped the answer:
 owns a tokio runtime, calls `AppServices::connect`, injects its dependencies,
 and turns the sinks into events. It depends on `voya-app`, `voya-contracts` and
 `voya-platform` and never on `voya-core` or `voya-db`, which is the discipline
-the shell already follows and which `pnpm run check:architecture` enforces for
+the shell already follows and which `vp run check:architecture` enforces for
 both.
 
 Nothing in `voya-app` learns that a phone exists beyond the `TargetOs::Ios` and

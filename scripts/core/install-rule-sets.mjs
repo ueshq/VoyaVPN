@@ -5,7 +5,7 @@ import { installRuleSetSeeds } from "./rule-sets-installer.mjs";
 if (isCliEntrypoint(import.meta.url)) {
   await runSeedInstall({
     label: "rule-set",
-    retry: "Run `pnpm core:rule-sets:install` to retry manually; package builds stage them too.",
+    retry: "Run `vp run core:rule-sets:install` to retry manually; package builds stage them too.",
     install: async ({ postinstall, repoRoot }) => {
       const { forceFetch, forceInstall } = parseInstallArgs(process.argv.slice(2));
       const result = await installRuleSetSeeds({

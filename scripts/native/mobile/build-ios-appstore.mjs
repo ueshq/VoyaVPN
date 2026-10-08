@@ -32,7 +32,7 @@ import { checkIosBundleInputs, IOS_DEPLOYMENT_TARGET, parsePlist } from "./ios-b
 import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
 
 /**
- * `pnpm build:ios:appstore`: the `.ipa` that Transporter uploads to App Store
+ * `vp run build:ios:appstore`: the `.ipa` that Transporter uploads to App Store
  * Connect for TestFlight and App Review.
  *
  *   --unsigned      Archive without signing and skip the export. Runs every
@@ -364,7 +364,7 @@ export function main(argv = process.argv.slice(2)) {
       }),
     );
     throwProblems(
-      "--skip-native needs the device builds of both frameworks; run without it, or `pnpm native:mobile:rust:ios --slice device` and `pnpm native:mobile:libbox:ios`",
+      "--skip-native needs the device builds of both frameworks; run without it, or `vp run native:mobile:rust:ios --slice device` and `vp run native:mobile:libbox:ios`",
       deviceSliceProblems(slices),
     );
   }
@@ -397,17 +397,17 @@ export function main(argv = process.argv.slice(2)) {
     // Always the release profile: a `VOYAVPN_RUST_PROFILE` left exported from
     // an iteration loop would otherwise archive a debug backend, and nothing
     // after this step can tell.
-    runLogged("rust-host", "pnpm", ["native:mobile:rust:ios", "--slice", "device"], {
+    runLogged("rust-host", "vp", ["run", "native:mobile:rust:ios", "--slice", "device"], {
       env: { ...process.env, VOYAVPN_RUST_PROFILE: "release" },
     });
     if (!reuseLibbox || !existsSync(resolve(ios, "Frameworks/Libbox.xcframework"))) {
-      runLogged("libbox", "pnpm", ["native:mobile:libbox:ios"]);
+      runLogged("libbox", "vp", ["run", "native:mobile:libbox:ios"]);
     }
     if (!podsUpToDate(root)) {
       runLogged("pod-install", "pod", ["install"], { cwd: ios });
       recordInstalledPods(root);
     }
-    runLogged("xcode-project", "pnpm", ["native:mobile:ios:project"]);
+    runLogged("xcode-project", "vp", ["run", "native:mobile:ios:project"]);
   }
 
   // --- 3. archive -------------------------------------------------------------

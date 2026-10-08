@@ -289,7 +289,7 @@ function isSignatureArtifact(artifact) {
 /**
  * Picks the single artifact the in-place Tauri 2 updater serves for a target.
  *
- * `pnpm release -- artifacts` marks it explicitly (`updaterPayload: true`),
+ * `vp run release -- artifacts` marks it explicitly (`updaterPayload: true`),
  * because with `createUpdaterArtifacts: true` the signed payload is the
  * installer itself (NSIS `-setup.exe`, `.AppImage`, `.app.tar.gz`) and several
  * artifacts of a target can carry a sibling `.sig`.

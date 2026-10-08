@@ -173,7 +173,7 @@ export function seedOriginProblems(manifest) {
   const problems = [];
   if (manifest.origin !== "source") {
     problems.push(
-      `The bundled sing-box seed is the ${manifest.origin ?? "upstream"} build; the store package needs the source-built one (pnpm core:sing-box:build).`,
+      `The bundled sing-box seed is the ${manifest.origin ?? "upstream"} build; the store package needs the source-built one (vp run core:sing-box:build).`,
     );
   }
   const excluded = (Array.isArray(manifest.tags) ? manifest.tags : []).filter((tag) =>
@@ -245,7 +245,7 @@ function verifySignatures(executables) {
   const details = capture("codesign", ["-dvv", appBundle], { cwd: repoRoot });
   if (!appStoreApplicationAuthority.test(`${details.stdout ?? ""}\n${details.stderr ?? ""}`)) {
     throw new Error(
-      "The app is not signed by a 3rd Party Mac Developer Application or Apple Distribution identity. Re-run pnpm build:mac:appstore.",
+      "The app is not signed by a 3rd Party Mac Developer Application or Apple Distribution identity. Re-run vp run build:mac:appstore.",
     );
   }
   console.log("✓ App is signed by a Mac App Store application identity");

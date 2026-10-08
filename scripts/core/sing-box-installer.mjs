@@ -802,7 +802,7 @@ export async function installSingBoxCore({
 /**
  * The function that stages a seed of `origin`. The source builder is loaded
  * on demand: it needs Go and a sing-box checkout, which an ordinary
- * `pnpm install` or Developer ID build never touches.
+ * `vp install` or Developer ID build never touches.
  */
 async function seedStager({ buildSeed, origin, stageSeed }) {
   if (origin !== "source") {

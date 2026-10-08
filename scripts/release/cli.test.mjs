@@ -26,7 +26,7 @@ describe("release CLI", () => {
     for (const command of releaseCommandNames) expect(stdout.value()).toContain(command);
   });
 
-  it("accepts pnpm's explicit argument separator", async () => {
+  it("accepts the `--` that `vp run release --` passes through", async () => {
     const stdout = stream();
     const exitCode = await runReleaseCli(["--", "--help"], { stdout: stdout.stream });
 

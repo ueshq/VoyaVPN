@@ -86,14 +86,21 @@ only a device can.
 ## Commands
 
 ```sh
-vp run --filter @voya/mobile start        # Metro
-vp run --filter @voya/mobile ios          # run on the iOS simulator
-vp run --filter @voya/mobile android      # run on an Android device/emulator
+vp run dev:ios                          # Debug on the iOS simulator
+vp run dev:android                      # Debug on an Android device/emulator
+vp run build:android                    # production APK, release-key signed
+vp run build:ios:appstore               # App Store .ipa
+vp run --filter @voya/mobile start        # Metro on its own
 vp check                                # types and lint, mobile included (check:frontend:static)
 vp run check:mobile:test                # Jest + @testing-library/react-native
 vp run check:mobile:bundle              # Metro bundle for both platforms
 vp run check:mobile:swift               # parse the iOS app + UI test Swift (macOS only)
 ```
+
+`dev:ios` and `dev:android` build whichever native artifact is missing — the
+Rust backend (`mobile-smoke` profile), Libbox, and on iOS the pods and the
+project wiring — then hand every other argument to `react-native run-ios` /
+`run-android`. `--rebuild-rust` rebuilds the backend after a Rust change.
 
 The XCUITest suite is not one of these: it needs a booted simulator and a
 Release build, takes about four minutes, and runs as `vp run check:mobile:ios:smoke`

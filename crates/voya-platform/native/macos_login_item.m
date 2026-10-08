@@ -45,7 +45,7 @@ static int32_t VoyaLoginItemPrepare(const char *plist_name, char **error, SMAppS
     if (![NSBundle.mainBundle.bundlePath hasSuffix:@".app"]) {
         if (error != NULL) {
             *error = VoyaLoginItemCopy(@"VoyaVPN is not running from an .app bundle, so it has no "
-                                       @"login item to register (pnpm dev or cargo run)");
+                                       @"login item to register (vp run tauri dev or cargo run)");
         }
         return VoyaLoginItemUnavailable;
     }

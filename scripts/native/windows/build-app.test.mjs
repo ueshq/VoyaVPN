@@ -14,7 +14,7 @@ import {
   localWindowsBuildEnv,
   nativeWindowsTarget,
   readExistingWindowsInstalls,
-  windowsPnpmInvocation,
+  windowsVpInvocation,
 } from "./build-app.mjs";
 
 describe("Windows local app build", () => {
@@ -81,7 +81,7 @@ describe("Windows local app build", () => {
           throw new Error("Rust MSVC target is missing");
         },
         ensureGuiStopped,
-        resolvePackageManager: () => ({ prefixArgs: [], program: "pnpm" }),
+        resolveTaskRunner: () => ({ prefixArgs: ["run"], program: "vp" }),
       }),
     ).toThrow(/Rust MSVC target is missing/);
     expect(runCommand).not.toHaveBeenCalled();
@@ -122,17 +122,12 @@ describe("Windows local app build", () => {
     ).toThrow(spawnError);
   });
 
-  it("invokes pnpm through the current Node.js Corepack entrypoint on Windows", () => {
-    expect(
-      windowsPnpmInvocation({
-        env: {},
-        nodeExecutable: "C:\\Node\\node.exe",
-        fileExists: (path) => path === "C:\\Node\\node_modules\\corepack\\dist\\pnpm.js",
-      }),
-    ).toEqual({
-      prefixArgs: ["C:\\Node\\node_modules\\corepack\\dist\\pnpm.js"],
-      program: "C:\\Node\\node.exe",
+  it("runs package scripts through the vp that started this script", () => {
+    expect(windowsVpInvocation({ env: { VP_CLI_BIN: "C:\\Users\\dev\\.vite-plus\\bin\\vp.exe" } })).toEqual({
+      prefixArgs: ["run"],
+      program: "C:\\Users\\dev\\.vite-plus\\bin\\vp.exe",
     });
+    expect(windowsVpInvocation({ env: {} })).toEqual({ prefixArgs: ["run"], program: "vp" });
   });
 
   it("allows only the expected current-user NSIS installation", () => {
@@ -233,7 +228,7 @@ describe("Windows local app build", () => {
     const ensureRustTarget = vi.fn();
     const elevateServiceInstall = vi.fn();
     const discoverArtifacts = vi.fn(() => ({ nsis }));
-    const packageManager = { prefixArgs: [], program: "pnpm" };
+    const taskRunner = { prefixArgs: ["run"], program: "vp" };
     const logger = { log: vi.fn() };
 
     const result = buildWindowsLocal({
@@ -249,15 +244,15 @@ describe("Windows local app build", () => {
       readExistingInstalls: () => [],
       discoverArtifacts,
       elevateServiceInstall,
-      resolvePackageManager: () => packageManager,
+      resolveTaskRunner: () => taskRunner,
       logger,
     });
 
     expect(result).toEqual({ appPath, servicePath, singBoxPath, nsis });
     expect(ensureGuiStopped).toHaveBeenCalledOnce();
     expect(runCommand.mock.calls.map(([program, args]) => [program, args])).toEqual([
-      ["pnpm", ["tauri:build", "--no-sign", "--target", "x86_64-pc-windows-msvc", "--bundles", "nsis"]],
-      ["pnpm", ["native:windows:tunnel:build"]],
+      ["vp", ["run", "tauri:build", "--no-sign", "--target", "x86_64-pc-windows-msvc", "--bundles", "nsis"]],
+      ["vp", ["run", "native:windows:tunnel:build"]],
       [nsis, ["/S"]],
       ["sc.exe", ["query", "VoyaVPNTunnelService"]],
     ]);
@@ -332,7 +327,7 @@ describe("Windows local app build", () => {
         env: {},
         rustTarget: "x86_64-pc-windows-msvc",
         repoRoot: "C:\\repo",
-        packageManager: { prefixArgs: [], program: "pnpm" },
+        taskRunner: { prefixArgs: ["run"], program: "vp" },
         runCommand: () => {
           throw new Error("light.exe failed");
         },

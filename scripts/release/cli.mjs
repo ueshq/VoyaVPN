@@ -13,7 +13,7 @@ const commandLoaders = {
 export const releaseCommandNames = [...Object.keys(commandLoaders), "updater-config"];
 
 export function printHelp(stream = process.stdout) {
-  stream.write(`Usage: pnpm release -- <command> [options]
+  stream.write(`Usage: vp run release -- <command> [options]
 
 Commands:
   artifacts        Normalize bundle artifacts and write artifact-manifest.json
@@ -51,7 +51,7 @@ export async function runReleaseCli(
   try {
     if (command === "updater-config") {
       if (commandArgs.includes("--help") || commandArgs.includes("-h")) {
-        stdout.write("Usage: pnpm release -- updater-config\n");
+        stdout.write("Usage: vp run release -- updater-config\n");
         return 0;
       }
       if (commandArgs.length > 0) {

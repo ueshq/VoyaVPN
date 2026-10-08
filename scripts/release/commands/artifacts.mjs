@@ -51,7 +51,7 @@ function parseOptions(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: pnpm release -- artifacts --input <bundle-dir> --target <platform> [options]
+  console.log(`Usage: vp run release -- artifacts --input <bundle-dir> --target <platform> [options]
 
 Options:
   --output <dir>     Directory for normalized artifacts and manifests. Default: dist/release

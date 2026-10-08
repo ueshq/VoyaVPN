@@ -2,7 +2,7 @@
  * How long one download may take, headers to last byte. The sing-box archive
  * is a few tens of megabytes; this is long enough for a slow link and short
  * enough that a stalled connection fails the install step — whose failure
- * `postinstall` reports and carries on from — instead of hanging `pnpm install`.
+ * `postinstall` reports and carries on from — instead of hanging `vp install`.
  */
 const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 

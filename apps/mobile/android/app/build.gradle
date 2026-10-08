@@ -92,6 +92,13 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+/**
+ * The release key `vp run build:android` signs with. Without it the release
+ * build type keeps the debug keystore, which is for local runs only; that lane
+ * refuses to start without all four variables.
+ */
+def releaseKeystore = System.getenv("VOYAVPN_ANDROID_KEYSTORE")?.trim()
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -104,7 +111,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        versionCode 1
+        // `vp run build:android` passes the commit count; see that script.
+        versionCode((findProperty("voyaVersionCode") ?: "1") as Integer)
         versionName "0.1.0"
 
         // The Rust host and Libbox are built for these two only; a build for
@@ -120,15 +128,21 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (releaseKeystore) {
+            release {
+                storeFile file(releaseKeystore)
+                storePassword System.getenv("VOYAVPN_ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("VOYAVPN_ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("VOYAVPN_ANDROID_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig releaseKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
@@ -147,7 +161,7 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
-    // The sing-box core, from `pnpm native:mobile:libbox:android` at the
+    // The sing-box core, from `vp run native:mobile:libbox:android` at the
     // pinned tag. Not committed — see docs/release/mobile-libbox-pinning.md.
     implementation fileTree(dir: "libs", include: ["*.aar"])
 

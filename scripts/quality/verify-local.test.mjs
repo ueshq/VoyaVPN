@@ -15,12 +15,10 @@ const gates = steps.map(([, , args]) => args[1]);
 const packageScripts = JSON.parse(read("package.json")).scripts;
 
 /**
- * A package-script invocation: `vp run check:x`, and the pnpm spellings pnpm
- * still accepts underneath it (`pnpm run check:x`, `pnpm check:x`). Every
- * spelling counts; otherwise a step written one of the other ways would be
- * invisible to the parity tests below.
+ * A package-script invocation, `vp run check:x`. Workflows never call pnpm
+ * directly (`workflows.test.mjs` rejects it), so this is the one spelling.
  */
-const gateInvocation = /\b(?:vp run|pnpm(?: run)?) (check:[\w:-]+)/gu;
+const gateInvocation = /\bvp run (check:[\w:-]+)/gu;
 
 /** The `check:*` gates one workflow line runs. */
 function gatesInLine(line) {
@@ -53,12 +51,10 @@ const baselineJobs = [...ciGatesByJob()].filter(([job]) => job.startsWith("basel
 describe("CI gate discovery", () => {
   it.each([
     ["        run: vp run check:architecture", ["check:architecture"]],
-    ["        run: pnpm run check:architecture", ["check:architecture"]],
-    ["        run: pnpm check:architecture", ["check:architecture"]],
-    ["        run: vp run check:rust:fmt && pnpm check:rust:clippy", ["check:rust:fmt", "check:rust:clippy"]],
+    ["        run: vp run check:rust:fmt && vp run check:rust:clippy", ["check:rust:fmt", "check:rust:clippy"]],
     ["        run: vp run --filter @voya/desktop build", []],
     ["        run: vp check:architecture", []],
-    ["        run: xpnpm check:architecture", []],
+    ["        run: xvp run check:architecture", []],
   ])("reads the gates of %j", (line, expected) => {
     expect(gatesInLine(line)).toEqual(expected);
   });

@@ -1,5 +1,5 @@
 {
-  // VoyaVPN reachability probe. Deploy with `pnpm --filter @voya/probe deploy`
+  // VoyaVPN reachability probe. Deploy with `vp run --filter @voya/probe deploy`
   // after `npx wrangler login`; see docs/release/self-host-probe-worker.md.
   "name": "voyavpn-probe",
   "main": "src/index.ts",

@@ -9,7 +9,7 @@ import { capture, isCliEntrypoint, repoRootFromScript, requireDarwin, run, runCl
  * The work itself is `ios-project.rb`, because editing a `.pbxproj` by hand is
  * how project files get corrupted and the `xcodeproj` gem is the only sane way
  * to do it. This wrapper exists to find a Ruby that can `require` that gem and
- * to give the script a place in `pnpm run`.
+ * to give the script a place in `vp run`.
  *
  * Re-runnable on purpose: `pod install` and a React Native upgrade both rewrite
  * parts of the project, and this is what puts our half back.

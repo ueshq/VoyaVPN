@@ -344,7 +344,7 @@ describe("release readiness dry-run gate", () => {
       "target/release-config/tauri.updater.stable.generated.json",
     );
     expect(() => resolveTauriConfig(stable, { configExists: () => false })).toThrow(
-      /Run `pnpm release -- updater-config` first/,
+      /Run `vp run release -- updater-config` first/,
     );
 
     // The credential-free committed config is only ever scanned by dry runs.

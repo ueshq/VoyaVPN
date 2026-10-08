@@ -3,7 +3,7 @@ import { hasSigningInput, signingInputNames } from "./readiness/prerequisites.mj
 import { resolveApprovedUpdaterPublicKey } from "../updater-signatures.mjs";
 
 function printHelp() {
-  console.log(`Usage: pnpm release -- check-hosts
+  console.log(`Usage: vp run release -- check-hosts
 
 Validates the stable release host and signing environment the release workflow
 exports before packaging. Reuses the shared validators in scripts/release/

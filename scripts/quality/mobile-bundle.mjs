@@ -20,7 +20,7 @@ const outputDir = mkdtempSync(join(tmpdir(), "voyavpn-mobile-bundle-"));
 try {
   for (const platform of ["ios", "android"]) {
     run(
-      "pnpm",
+      "vp",
       [
         "exec",
         "react-native",

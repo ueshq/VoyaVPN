@@ -80,10 +80,10 @@ function appStoreIdentity() {
 
 /**
  * Three lanes share this script:
- * - `developer-id` (`pnpm build:mac`): notarized DMG with a System Extension.
- * - `local` (`pnpm build:mac:local`): App-Store-shaped appex signed with an
+ * - `developer-id` (`vp run build:mac`): notarized DMG with a System Extension.
+ * - `local` (`vp run build:mac:local`): App-Store-shaped appex signed with an
  *   Apple Development identity, installed into /Applications for TUN testing.
- * - `app-store` (`pnpm build:mac:appstore`): the signed `.pkg` uploaded to App
+ * - `app-store` (`vp run build:mac:appstore`): the signed `.pkg` uploaded to App
  *   Store Connect with Transporter. No DMG, no notarization, no install.
  */
 function buildLane() {
@@ -112,7 +112,7 @@ function requireNotaryCredentials(lane) {
     return;
   }
   throw new Error(
-    "pnpm build:mac now produces notarized artifacts. Set VOYAVPN_NOTARY_KEYCHAIN_PROFILE, or VOYAVPN_NOTARY_APPLE_ID/TEAM_ID/PASSWORD.",
+    "vp run build:mac now produces notarized artifacts. Set VOYAVPN_NOTARY_KEYCHAIN_PROFILE, or VOYAVPN_NOTARY_APPLE_ID/TEAM_ID/PASSWORD.",
   );
 }
 
@@ -138,7 +138,7 @@ function assertInstalledAppGuiNotRunning() {
   const running = runningExecutables(installedAppExecutableNames());
   if (running.length) {
     throw new Error(
-      `VoyaVPN is still running (${running.join(", ")}). Quit the app before pnpm build:mac:local replaces ${installedAppBundle}.`,
+      `VoyaVPN is still running (${running.join(", ")}). Quit the app before vp run build:mac:local replaces ${installedAppBundle}.`,
     );
   }
 }
@@ -150,7 +150,7 @@ function installToApplications() {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(
-      `Unable to replace ${installedAppBundle}: ${message}\nRemove it manually (sudo rm -rf "${installedAppBundle}") and re-run pnpm build:mac:local.`,
+      `Unable to replace ${installedAppBundle}: ${message}\nRemove it manually (sudo rm -rf "${installedAppBundle}") and re-run vp run build:mac:local.`,
       { cause: error },
     );
   }
@@ -196,7 +196,7 @@ function requireAppleSilicon() {
   // PacketTunnel are all built for the host architecture.
   if (process.arch !== "arm64") {
     throw new Error(
-      "pnpm build:mac:appstore builds the arm64-only store package and must run on an Apple Silicon Mac.",
+      "vp run build:mac:appstore builds the arm64-only store package and must run on an Apple Silicon Mac.",
     );
   }
 }
@@ -266,12 +266,12 @@ function buildAppStorePackage() {
   // bundle, so a PlugIns or SystemExtensions copy from another lane would
   // otherwise survive into the store package.
   rmSync(appBundle, { recursive: true, force: true });
-  run("pnpm", ["tauri:build", "--bundles", "app"], commandOptions(commonEnv));
-  run("pnpm", ["native:macos:tunnel"], commandOptions(verifyEnv));
-  run("pnpm", ["native:macos:app:sign"], commandOptions(commonEnv));
+  run("vp", ["run", "tauri:build", "--bundles", "app"], commandOptions(commonEnv));
+  run("vp", ["run", "native:macos:tunnel"], commandOptions(verifyEnv));
+  run("vp", ["run", "native:macos:app:sign"], commandOptions(commonEnv));
   runBridgeTests(verifyEnv);
-  run("pnpm", ["native:macos:tunnel:verify"], commandOptions(verifyEnv));
-  run("pnpm", ["native:macos:pkg"], commandOptions(verifyEnv));
+  run("vp", ["run", "native:macos:tunnel:verify"], commandOptions(verifyEnv));
+  run("vp", ["run", "native:macos:pkg"], commandOptions(verifyEnv));
 
   // The signed .pkg carries its own copy of the app. The target/ bundle cannot
   // launch outside the store anyway, and its appex could win PlugInKit
@@ -282,7 +282,7 @@ function buildAppStorePackage() {
 }
 
 function main() {
-  requireDarwin("pnpm build:mac must run on macOS.");
+  requireDarwin("vp run build:mac must run on macOS.");
   const lane = buildLane();
   if (lane === "app-store") {
     buildAppStorePackage();
@@ -323,15 +323,15 @@ function main() {
   );
   console.log(`Output: ${appBundle}`);
 
-  run("pnpm", ["tauri:build", "--bundles", "app"], commandOptions(commonEnv));
-  run("pnpm", ["native:macos:tunnel"], commandOptions(tunnelEnv));
-  run("pnpm", ["native:macos:app:sign"], commandOptions(commonEnv));
+  run("vp", ["run", "tauri:build", "--bundles", "app"], commandOptions(commonEnv));
+  run("vp", ["run", "native:macos:tunnel"], commandOptions(tunnelEnv));
+  run("vp", ["run", "native:macos:app:sign"], commandOptions(commonEnv));
   runBridgeTests(verifyEnv);
-  run("pnpm", ["native:macos:tunnel:verify"], commandOptions(verifyEnv));
+  run("vp", ["run", "native:macos:tunnel:verify"], commandOptions(verifyEnv));
 
   if (!notarizationSkipped) {
     const appNotarizeEnv = withoutEnv(verifyEnv, ["VOYAVPN_NOTARY_ARTIFACT"]);
-    run("pnpm", ["native:macos:app:notarize"], commandOptions(appNotarizeEnv));
+    run("vp", ["run", "native:macos:app:notarize"], commandOptions(appNotarizeEnv));
     run("spctl", ["--assess", "--type", "execute", "--verbose=4", appBundle], commandOptions(verifyEnv));
   }
 
@@ -340,11 +340,11 @@ function main() {
     ...verifyEnv,
     VOYAVPN_MACOS_DMG_PATH: finalDmgPath,
   };
-  run("pnpm", ["native:macos:dmg"], commandOptions(dmgEnv));
+  run("vp", ["run", "native:macos:dmg"], commandOptions(dmgEnv));
   if (!notarizationSkipped) {
     run(
-      "pnpm",
-      ["native:macos:app:notarize"],
+      "vp",
+      ["run", "native:macos:app:notarize"],
       commandOptions({
         ...dmgEnv,
         VOYAVPN_NOTARY_ARTIFACT: finalDmgPath,
@@ -387,7 +387,7 @@ function main() {
   console.log("Open it with:");
   console.log(`  open -n ${JSON.stringify(launchBundle)}`);
   console.log("");
-  console.log("Do not use pnpm dev for macOS TUN testing; it does not bundle the PacketTunnel provider.");
+  console.log("Do not use vp run tauri dev for macOS TUN testing; it does not bundle the PacketTunnel provider.");
 }
 
 // Guarded like sign-app.mjs: importing this module must not start a build.

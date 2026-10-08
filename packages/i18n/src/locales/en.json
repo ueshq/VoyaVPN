@@ -951,7 +951,7 @@
     "tunProviderError": "Error",
     "tunProviderMissingComponent": "Missing component",
     "tunProviderNotApplicable": "Not applicable",
-    "tunProviderPathMismatch": "macOS is using a stale PacketTunnel provider. Expected: {{expected}}. PlugInKit elected: {{resolved}}. Quit VoyaVPN, run pnpm native:macos:ne:doctor --fix, then launch the /Applications copy.",
+    "tunProviderPathMismatch": "macOS is using a stale PacketTunnel provider. Expected: {{expected}}. PlugInKit elected: {{resolved}}. Quit VoyaVPN, run vp run native:macos:ne:doctor --fix, then launch the /Applications copy.",
     "tunProviderPermissionRequired": "Permission required",
     "tunProviderRunning": "Running",
     "tunProviderStarting": "Starting",

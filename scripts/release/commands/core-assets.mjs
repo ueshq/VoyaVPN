@@ -34,7 +34,7 @@ function parseOptions(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: pnpm release -- core-assets --fixture <core-assets.json> --out <manifest.json> [options]
+  console.log(`Usage: vp run release -- core-assets --fixture <core-assets.json> --out <manifest.json> [options]
 
 Generates a stable CDN core asset manifest. The current stable release does not
 publish downloadable core updates; sing-box is bundled as an application seed.

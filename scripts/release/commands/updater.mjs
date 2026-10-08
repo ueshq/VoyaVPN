@@ -59,7 +59,7 @@ function parseOptions(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: pnpm release -- updater [options]
+  console.log(`Usage: vp run release -- updater [options]
 
 Options:
   --input <dir>                Directory containing artifact-manifest.json files. Default: dist/release

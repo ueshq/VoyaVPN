@@ -41,7 +41,7 @@ pub fn run() {
     let specta_builder = ipc::specta_builder();
 
     // The path is baked in at compile time, so a packaged debug build moved to
-    // another machine would panic before a window exists. `pnpm generate:bindings`
+    // another machine would panic before a window exists. `vp run generate:bindings`
     // (the `export-bindings` example) is the canonical path; this convenience
     // export is limited to `tauri dev` and an explicit opt-in, and never fatal.
     #[cfg(debug_assertions)]

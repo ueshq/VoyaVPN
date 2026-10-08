@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 VoyaVPN is a greenfield rewrite of v2rayN using Tauri 2 (Rust backend) + React 19 / TypeScript / Tailwind v4 / shadcn/ui (frontend). It generates **sing-box** proxy configs and supervises the core process. There is no v2rayN data migration path — the schema and IPC DTOs are a fresh design, and obsolete v2rayN profile fields (`HeaderType`, `RequestHost`, `Path`, `Extra`, `Ports`, `AlterId`, `Flow`, `Id`, `Security`) must never be introduced.
 
-The JS toolchain is **Vite+** (`vp`, `vite-plus` 1.1.0 pinned in the pnpm catalog): Vite, Vitest 5, Oxlint, Oxfmt and type checking (tsgolint) behind one CLI, configured in the root `vite.config.ts` (`lint`, `fmt`, `test` projects and coverage). Install the global CLI (`curl -fsSL https://vite.plus | bash`); CI uses `voidzero-dev/setup-vp`. Underneath, the package manager is still **pnpm 11.5.0** (root `packageManager`), which `vp install` / `vp add` drive, so the lockfile and `pnpm-workspace.yaml` stay pnpm's. `vite` is an alias of `@voidzero-dev/vite-plus-core` and `vitest` is pinned to the Vite+ copy through catalog overrides; the root `package.json` lists `vite` too, because without it pnpm would satisfy Vitest's peer with a real Vite and load a second Vitest. `apps/mobile` stays on Jest, Metro and Babel, which Vite+ does not replace. Rust toolchain is 1.96.0 in CI (workspace MSRV 1.94).
+The JS toolchain is **Vite+** (`vp`, `vite-plus` 1.1.0 pinned in the pnpm catalog): Vite, Vitest 5, Oxlint, Oxfmt and type checking (tsgolint) behind one CLI, configured in the root `vite.config.ts` (`lint`, `fmt`, `test` projects and coverage). Install the global CLI (`curl -fsSL https://vite.plus | bash`); CI uses `voidzero-dev/setup-vp`. Underneath, the package manager is still **pnpm 11.5.0** (root `packageManager`), which `vp install` / `vp add` drive, so the lockfile and `pnpm-workspace.yaml` stay pnpm's. Nothing calls `pnpm` by name: run package scripts with `vp run <script>` and install with `vp install` (`scripts/quality/workflows.test.mjs` rejects a direct `pnpm` call in workflows and root scripts). `vite` is an alias of `@voidzero-dev/vite-plus-core` and `vitest` is pinned to the Vite+ copy through catalog overrides; the root `package.json` lists `vite` too, because without it pnpm would satisfy Vitest's peer with a real Vite and load a second Vitest. `apps/mobile` stays on Jest, Metro and Babel, which Vite+ does not replace. Rust toolchain is 1.96.0 in CI (workspace MSRV 1.94).
 
 ## Monorepo Layout
 
@@ -31,13 +31,16 @@ Version authority: the root `package.json` `version` is the release-artifact ver
 ## Commands
 
 ```sh
-vp run dev                 # Run full Tauri app (backend + frontend) in dev
+vp run tauri dev           # Run full Tauri app (backend + frontend) in dev
 vp run dev:web             # `vp dev`: the @voya/desktop frontend-only dev server (127.0.0.1:1420; root `defaultPackage`)
-vp run build               # `vp build` of @voya/desktop (types are checked by check:frontend:static)
+vp run dev:ios             # Mobile app in Debug on the iOS simulator (builds missing native artifacts; --rebuild-rust)
+vp run dev:android         # Mobile app in Debug on an Android emulator/device (same)
+vp build                   # Production build of @voya/desktop (types are checked by check:frontend:static)
 vp check --fix             # Format with Oxfmt and apply lint autofixes
 vp run tauri:build --debug # Unsigned debug Tauri packages (no signing creds needed)
 vp run build:mac:appstore  # arm64 Mac App Store .pkg (feature mac-app-store drops the updater); docs/release/macos-app-store.md
 vp run build:ios:appstore  # iOS App Store .ipa (--unsigned archives and checks without a certificate); docs/release/mobile-ios-signing.md
+vp run build:android       # Production APK for distribution outside Google Play, release-key signed; docs/release/mobile-android-signing.md
 
 vp run verify:local       # Full local verification suite — run this before declaring work done
 ```
@@ -117,7 +120,7 @@ A Rust workspace of layered crates plus the Tauri desktop shell, React app, and 
 ### Frontend (`apps/desktop/src/` + `packages/`)
 
 - **`apps/desktop/src/ipc/` is the only frontend directory allowed to import `@tauri-apps/api` or Tauri plugins.** Features call typed wrappers (`commands.ts`, `tauri-plugins.ts`) and use the single mounted `event-bridge.tsx`, never raw `invoke`/`listen`. This is an architectural rule (ADR 0002) and is lint-enforced: Oxlint's `no-restricted-imports` for imports, and the local `scripts/lint/voya-plugin.mjs` for `require()` and the `__TAURI*` globals. `ipc/register-backend.ts` puts that binding — plus the clipboard, visibility and elevation adapters — behind the `@voya/client` seams; `platform-boot.ts` calls it at startup; tests register a fake command surface with `installFakeCommands` from `@voya/features/test/backend` instead of mocking modules.
-- **`apps/desktop/src/ipc/bindings.ts` is generated** from Rust `specta`/`tauri-specta` — never edit by hand, never hand-write DTOs mirroring backend types. It is regenerated automatically under `vp run dev` (`run()` exports it when `tauri::is_dev()`, or when `VOYAVPN_EXPORT_BINDINGS` is set); packaged debug builds no longer write it, because the export path is baked in at compile time. After changing any Rust command/event/DTO, run `vp run generate:bindings` and commit; `vp run check:bindings` (a CI gate) fails on drift.
+- **`apps/desktop/src/ipc/bindings.ts` is generated** from Rust `specta`/`tauri-specta` — never edit by hand, never hand-write DTOs mirroring backend types. It is regenerated automatically under `vp run tauri dev` (`run()` exports it when `tauri::is_dev()`, or when `VOYAVPN_EXPORT_BINDINGS` is set); packaged debug builds no longer write it, because the export path is baked in at compile time. After changing any Rust command/event/DTO, run `vp run generate:bindings` and commit; `vp run check:bindings` (a CI gate) fails on drift.
 - `apps/desktop/src/features/<subsystem>/` — desktop feature UIs (profiles, subscriptions, routing, dns, proxy, settings, logs, qr, updates, home).
 - `packages/ui/src/components/` — shared shadcn/ui primitives; `apps/desktop/src/components/app-shell/` — desktop shell. State via Zustand (`apps/desktop/src/stores/`) + TanStack Query.
 - `packages/i18n/src/locales/` — Voya-maintained locale JSON; these files are the only translation source.

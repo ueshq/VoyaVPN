@@ -52,8 +52,7 @@ npx wrangler@4 whoami                  # confirm the account that owns wangc.ai
 vp run --filter @voya/web deploy     # build, then wrangler deploy
 ```
 
-Keep `run`: a bare `pnpm deploy` would be pnpm's built-in command, not this
-script.
+Keep `run`: `deploy` is this package's script, not a `vp` command.
 `workers_dev` stays `false`, because `*.workers.dev` is unreachable from
 mainland China.
 

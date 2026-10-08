@@ -125,7 +125,7 @@ enum PacketTunnelProviderError: LocalizedError {
         case .unsupportedRuntimeConfig(let version):
             return "VoyaVPN PacketTunnel runtime config version \(version) is not supported."
         case .singBoxRuntimeUnavailable:
-            return "VoyaVPN PacketTunnel requires the sing-box Apple/libbox runtime. Build it with `pnpm native:macos:libbox` or set VOYAVPN_LIBBOX_FRAMEWORK."
+            return "VoyaVPN PacketTunnel requires the sing-box Apple/libbox runtime. Build it with `vp run native:macos:libbox` or set VOYAVPN_LIBBOX_FRAMEWORK."
         case .libboxSetupFailed(let message):
             return "VoyaVPN PacketTunnel failed to set up libbox: \(message)"
         case .libboxCommandServerFailed(let message):

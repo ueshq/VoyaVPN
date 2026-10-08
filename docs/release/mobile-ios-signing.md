@@ -162,7 +162,7 @@ large rule set is still the first thing to measure on a device.
 ## Running
 
 ```sh
-vp run --filter @voya/mobile ios        # simulator: UI and every command
+vp run dev:ios                          # simulator: UI and every command
 ```
 
 The simulator cannot start a NetworkExtension tunnel. Everything else works:

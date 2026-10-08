@@ -10,7 +10,7 @@
 # because `pod install` and a React Native upgrade both rewrite parts of this
 # project, and running this again is how our half comes back.
 #
-# Run it through `pnpm run native:mobile:ios:project`, which finds a Ruby that
+# Run it through `vp run native:mobile:ios:project`, which finds a Ruby that
 # can load the `xcodeproj` gem.
 
 require 'json'
@@ -36,7 +36,7 @@ repo_root = Dir.pwd
 # the extension both get it here, so a version bump is "edit package.json, run
 # this". The test bundle deliberately carries none.
 MARKETING_VERSION = JSON.parse(File.read(File.join(repo_root, 'package.json')))['version']
-# The build number stays 1 in the project. `pnpm build:ios:appstore` passes the
+# The build number stays 1 in the project. `vp run build:ios:appstore` passes the
 # real one on the xcodebuild command line, which overrides every target, so the
 # app and the extension always agree (ITMS-90473).
 CURRENT_PROJECT_VERSION = '1'
@@ -178,7 +178,7 @@ if File.directory?(libbox_path)
   # DWARF tables it then emits are what every gomobile consumer ships.
   append_ldflag(app, '-Wl,-no_compact_unwind')
 else
-  warn "Libbox.xcframework is not built; skipping it. Run `pnpm native:mobile:libbox:ios`, then this again."
+  warn "Libbox.xcframework is not built; skipping it. Run `vp run native:mobile:libbox:ios`, then this again."
 end
 
 apply_settings(app, {

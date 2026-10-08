@@ -26,7 +26,7 @@ const NATIVE_MODULE_NAME = "VoyaNative";
 /**
  * The native backend. Both native projects register the module
  * unconditionally, so its absence means the Rust host was not built
- * (`pnpm native:mobile:rust:ios` / `:android`); tests register the shared
+ * (`vp run native:mobile:rust:ios` / `:android`); tests register the shared
  * mock instead and never reach this.
  */
 export function createTransport(): VoyaTransport {

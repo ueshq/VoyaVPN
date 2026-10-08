@@ -76,7 +76,7 @@ try {
       .map(({ path }) => relative(repoRoot, path)),
   ];
   if (stale.length) {
-    console.error(`Out of date: ${stale.join(", ")}. Run \`pnpm generate:bindings\`.`);
+    console.error(`Out of date: ${stale.join(", ")}. Run \`vp run generate:bindings\`.`);
     process.exitCode = 1;
   } else {
     console.log("Generated IPC bindings and @voya/contracts are up to date.");

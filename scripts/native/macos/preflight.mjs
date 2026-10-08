@@ -165,12 +165,12 @@ function checkProfile(identity, udid, bundleIdentifier, explicitEnvName, label) 
 
 function checkLibbox() {
   if (!existsSync(libboxFramework)) {
-    fail(`Libbox.framework is missing: ${libboxFramework}. Build it with pnpm native:macos:libbox.`);
+    fail(`Libbox.framework is missing: ${libboxFramework}. Build it with vp run native:macos:libbox.`);
     return;
   }
   const binary = libboxBinaryPath(libboxFramework);
   if (!existsSync(binary)) {
-    fail(`Libbox.framework binary is missing: ${binary}. Rebuild it with pnpm native:macos:libbox.`);
+    fail(`Libbox.framework binary is missing: ${binary}. Rebuild it with vp run native:macos:libbox.`);
     return;
   }
   const lipo = capture("lipo", ["-archs", binary], { cwd: repoRoot });
@@ -196,7 +196,7 @@ function warnIfInstalledAppRunning() {
 }
 
 function main() {
-  requireDarwin("pnpm native:macos:preflight must run on macOS.");
+  requireDarwin("vp run native:macos:preflight must run on macOS.");
 
   console.log("VoyaVPN macOS local TUN preflight");
   console.log(`Provisioning profile dir: ${provisioningProfileDir}`);
@@ -219,14 +219,14 @@ function main() {
   console.log("");
   if (errors.length) {
     console.error(
-      `Preflight failed with ${errors.length} error(s). Fix them and re-run pnpm native:macos:preflight. See ${runbook}.`,
+      `Preflight failed with ${errors.length} error(s). Fix them and re-run vp run native:macos:preflight. See ${runbook}.`,
     );
     process.exit(1);
   }
   console.log(
     warnings.length
-      ? `Preflight passed with ${warnings.length} warning(s). pnpm build:mac:local is ready to run.`
-      : "Preflight passed. pnpm build:mac:local is ready to run.",
+      ? `Preflight passed with ${warnings.length} warning(s). vp run build:mac:local is ready to run.`
+      : "Preflight passed. vp run build:mac:local is ready to run.",
   );
 }
 

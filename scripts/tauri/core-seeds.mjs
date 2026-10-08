@@ -52,7 +52,7 @@ export function writeOptionalCoreSeedOverlay(repoRoot, overlayPath, options = {}
     },
   };
 
-  // Every `pnpm dev` / `tauri build` regenerates the overlay.
+  // Every `vp run tauri dev` / `tauri build` regenerates the overlay.
   writeJson(overlayPath, overlay, { onlyIfChanged: true });
 
   return overlayPath;

@@ -6,9 +6,12 @@ import { repoRootFromScript } from "../lib/common.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const workflowDir = resolve(repoRoot, ".github", "workflows");
-// `vp` and the pnpm it manages both need the Vite+ setup; a job that calls
-// either without it fails on a missing command.
-const toolchainInvocationPattern = /(?:^|[\s"'(&|;])(?:vp|pnpm)(?:\s|$)/;
+// `vp` needs the Vite+ setup; a job that calls it without that fails on a
+// missing command.
+const toolchainInvocationPattern = /(?:^|[\s"'(&|;])vp(?:\s|$)/;
+// pnpm stays the package manager underneath, but nothing calls it by name:
+// scripts and installs go through `vp run` / `vp install`.
+const pnpmInvocationPattern = /(?:^|[\s"'(&|;`])pnpm(?:\s|$)/;
 const toolchainSetupPattern = /uses:\s*voidzero-dev\/setup-vp@[0-9a-f]{40}\b/;
 const actionPinPattern = /^\s*(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)/;
 const jobHeaderPattern = /^ {2}([A-Za-z0-9_-]+):\s*$/;
@@ -105,7 +108,25 @@ describe("GitHub Actions workflows", () => {
     }
   });
 
-  it("sets up Vite+ in every job that runs vp or pnpm", () => {
+  it("calls pnpm only through vp", () => {
+    const direct = [];
+    for (const file of workflowFiles()) {
+      readWorkflow(file)
+        .split(/\r?\n/)
+        .forEach((line, index) => {
+          if (!line.trim().startsWith("#") && pnpmInvocationPattern.test(line)) direct.push(`${file}:${index + 1}`);
+        });
+    }
+    for (const [name, script] of Object.entries(
+      JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")).scripts,
+    )) {
+      if (pnpmInvocationPattern.test(script)) direct.push(`package.json:${name}`);
+    }
+
+    expect(direct).toEqual([]);
+  });
+
+  it("sets up Vite+ in every job that runs vp", () => {
     const missing = [];
     for (const file of workflowFiles()) {
       for (const [job, body] of workflowJobs(readWorkflow(file))) {

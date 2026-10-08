@@ -46,7 +46,7 @@ cargo install cargo-machete --locked --version 0.9.2
 Run the full Tauri app in development:
 
 ```sh
-vp run dev
+vp run tauri dev
 ```
 
 Development runs keep their database, settings, logs, and runtime files in the
@@ -62,6 +62,14 @@ Run the frontend-only Vite dev server:
 vp run dev:web
 ```
 
+Run the mobile app in Debug (iOS simulator, or an Android emulator/device); the
+first run builds the native artifacts it links:
+
+```sh
+vp run dev:ios
+vp run dev:android
+```
+
 Regenerate Rust-to-TypeScript IPC bindings after command or event type changes:
 
 ```sh
@@ -74,7 +82,7 @@ vp run check:bindings
 Build the frontend bundle:
 
 ```sh
-vp run build
+vp build
 ```
 
 Build unsigned debug Tauri packages without signing credentials:
@@ -95,6 +103,15 @@ demand-start service stopped until TUN is enabled. The command always targets
 the machine's native MSVC Rust triple, regardless of the user's default Rust
 toolchain. See
 [`docs/release/windows-local-tun-testing.md`](docs/release/windows-local-tun-testing.md).
+
+Build the mobile release packages: the App Store `.ipa`, and the production APK
+for distribution outside Google Play (needs the release key; see
+[`docs/release/mobile-android-signing.md`](docs/release/mobile-android-signing.md)):
+
+```sh
+vp run build:ios:appstore
+vp run build:android
+```
 
 Build release-profile Tauri packages in a prepared signing environment:
 
