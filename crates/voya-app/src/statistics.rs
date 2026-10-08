@@ -134,8 +134,8 @@ impl StatisticsManager {
         self.aggregator.shutdown().await;
     }
 
-    async fn initialize_data(database: &Database, date_now: i64) -> Result<()> {
-        database.server_stats().reset_rollover(date_now).await?;
+    async fn initialize_data(database: &Database, day_number: i64) -> Result<()> {
+        database.server_stats().reset_rollover(day_number).await?;
 
         Ok(())
     }
@@ -167,14 +167,14 @@ struct TrafficWriteBuffer {
 }
 
 impl TrafficWriteBuffer {
-    fn targets(&self, index_id: &str, date_now: i64) -> bool {
+    fn targets(&self, index_id: &str, day_number: i64) -> bool {
         self.target
             .as_ref()
-            .is_some_and(|(id, day)| id == index_id && *day == date_now)
+            .is_some_and(|(id, day)| id == index_id && *day == day_number)
     }
 
-    fn push(&mut self, index_id: &str, date_now: i64, sample: ServerSpeedSample) {
-        self.target = Some((index_id.to_string(), date_now));
+    fn push(&mut self, index_id: &str, day_number: i64, sample: ServerSpeedSample) {
+        self.target = Some((index_id.to_string(), day_number));
         self.buffered.add(sample);
     }
 
@@ -206,7 +206,7 @@ impl TrafficWriteBuffer {
 /// switch, day rollover and shutdown costs nothing when there is nothing to
 /// save.
 async fn flush_traffic_buffer(database: &Database, buffer: &mut TrafficWriteBuffer) -> Result<()> {
-    let Some((index_id, date_now)) = buffer.target.clone() else {
+    let Some((index_id, day_number)) = buffer.target.clone() else {
         return Ok(());
     };
     if !buffer.buffered.has_traffic() {
@@ -217,7 +217,7 @@ async fn flush_traffic_buffer(database: &Database, buffer: &mut TrafficWriteBuff
         .server_stats()
         .add_traffic(
             &index_id,
-            date_now,
+            day_number,
             buffer.buffered.proxy_up_bytes,
             buffer.buffered.proxy_down_bytes,
         )
@@ -239,14 +239,14 @@ async fn record_statistics_tick(
     active_profile_id: Option<&str>,
     buffer: &mut TrafficWriteBuffer,
     sample: ServerSpeedSample,
-    date_now: i64,
+    day_number: i64,
     flush_due: bool,
 ) -> Result<StatisticsSnapshot> {
     let Some(index_id) = active_profile_id else {
         flush_traffic_buffer(database, buffer).await?;
         return Ok(snapshot_from_sample(None, sample, None));
     };
-    if !buffer.targets(index_id, date_now) {
+    if !buffer.targets(index_id, day_number) {
         // The buffer moves on to the new row whether or not the old one could
         // be written: holding on to it would pin every later tick to a profile
         // or a day that is no longer current.
@@ -256,7 +256,7 @@ async fn record_statistics_tick(
         *buffer = TrafficWriteBuffer::default();
     }
     if sample.has_traffic() {
-        buffer.push(index_id, date_now, sample);
+        buffer.push(index_id, day_number, sample);
     }
     // The first write after a switch goes straight through: without a baseline
     // row there is nothing to project the running totals from, and the panel
@@ -680,7 +680,7 @@ mod tests {
                 total_down: 200,
                 today_up: 90,
                 today_down: 180,
-                date_now: 1,
+                day_number: 1,
             })
             .await
             .expect("statistics test operation should succeed");
@@ -729,7 +729,7 @@ mod tests {
                     total_down: 200,
                     today_up: 90,
                     today_down: 180,
-                    date_now: 1,
+                    day_number: 1,
                 })
                 .await
                 .expect("statistics test operation should succeed");
@@ -740,7 +740,7 @@ mod tests {
         let idle = stat_row(&database, "idle").await;
         assert_eq!(idle.today_up, 0);
         assert_eq!(idle.today_down, 0);
-        assert_eq!(idle.date_now, 2);
+        assert_eq!(idle.day_number, 2);
         assert_eq!(idle.total_up, 100, "lifetime totals survive the rollover");
         assert_eq!(stat_row(&database, "active").await.today_up, 0);
     }

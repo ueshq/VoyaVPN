@@ -5,7 +5,7 @@ use voya_core::{GroupStrategy, PolicyGroupItem};
 
 use crate::{
     executor::{
-        delete_each, json_id_array, max_sort, repository_constructors, row_exists, run_query,
+        delete_ids, json_id_array, max_sort, repository_constructors, row_exists, run_query,
         RepositoryExecutor,
     },
     Result,
@@ -142,7 +142,12 @@ impl<'executor> PolicyGroupRepository<'executor> {
     }
 
     pub async fn delete_many(&self, ids: &[String]) -> Result<u64> {
-        delete_each(self.executor, "DELETE FROM policy_groups WHERE id = ?", ids).await
+        delete_ids(
+            self.executor,
+            "DELETE FROM policy_groups WHERE id IN (SELECT value FROM json_each(?))",
+            ids,
+        )
+        .await
     }
 
     /// Deletes the groups imports created for these subscriptions. Groups the
@@ -151,9 +156,10 @@ impl<'executor> PolicyGroupRepository<'executor> {
         &self,
         subscription_ids: &[String],
     ) -> Result<u64> {
-        delete_each(
+        delete_ids(
             self.executor,
-            "DELETE FROM policy_groups WHERE auto_created = 1 AND source_subscription_id = ?",
+            "DELETE FROM policy_groups WHERE auto_created = 1 \
+             AND source_subscription_id IN (SELECT value FROM json_each(?))",
             subscription_ids,
         )
         .await

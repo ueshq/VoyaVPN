@@ -438,14 +438,14 @@ fn choose_canonical_match_index(
     let entries = match_indices
         .iter()
         .filter_map(|index| Some((*index, existing_profiles.entry(*index)?)));
-    let (_, (canonical, _)) = entries.min_by_key(|(index, (profile, profile_ex))| {
+    let (_, (canonical, _)) = entries.min_by_key(|(index, (profile, _))| {
         let active_rank = if !active_index_id.is_empty() && profile.index_id == active_index_id {
             0
         } else {
             1
         };
 
-        (active_rank, profile_ex.sort, *index)
+        (active_rank, profile.sort, *index)
     })?;
     Some(canonical.index_id.clone())
 }

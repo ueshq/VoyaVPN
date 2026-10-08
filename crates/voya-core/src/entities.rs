@@ -377,6 +377,8 @@ pub struct ProfileItem {
     pub protocol: ProfileProtocol,
     pub transport: Option<ProfileTransport>,
     pub tls: Option<TlsSettings>,
+    /// Position in the node list; lower sorts first.
+    pub sort: i32,
 }
 
 impl Default for ProfileItem {
@@ -389,6 +391,7 @@ impl Default for ProfileItem {
             protocol: ProfileProtocol::default(),
             transport: None,
             tls: None,
+            sort: 0,
         }
     }
 }
@@ -479,7 +482,7 @@ pub struct SubMetadataItem {
     pub last_update_at: Option<i64>,
     /// When the latest update attempt ran, successful or not. Distinct from
     /// `last_update_at`, which only moves when the fetch produced nodes.
-    pub last_attempt_at_unix: Option<i64>,
+    pub last_attempt_at: Option<i64>,
     pub last_attempt_failed: Option<bool>,
     /// Redacted reason the latest attempt failed; cleared by a success.
     pub last_attempt_error: Option<String>,
@@ -548,7 +551,6 @@ impl Default for RulesItem {
 pub struct ProfileExItem {
     pub index_id: String,
     pub delay: i32,
-    pub sort: i32,
     pub message: Option<String>,
     pub ip_info: Option<String>,
     pub country_code: Option<String>,
@@ -557,7 +559,10 @@ pub struct ProfileExItem {
 impl ProfileExItem {
     /// Forgets what was measured through the node: its delay, the outcome
     /// message, and where its exit was. A node whose connection details changed
-    /// is not the node those were measured on; its place in the list is.
+    /// is not the node those were measured on.
+    ///
+    /// The stored row is cleared by the database itself when the connection
+    /// columns change; this mirrors that on a value the caller already holds.
     pub fn clear_measurements(&mut self) {
         self.country_code = None;
         self.delay = 0;
@@ -586,7 +591,8 @@ pub struct ServerStatItem {
     pub total_down: i64,
     pub today_up: i64,
     pub today_down: i64,
-    pub date_now: i64,
+    /// The local calendar day the `today_*` counters belong to.
+    pub day_number: i64,
 }
 
 #[cfg(test)]

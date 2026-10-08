@@ -116,14 +116,11 @@ impl<'db> SubscriptionManager<'db> {
         crate::policy_groups::PolicyGroupManager::from_session(self.database)
             .delete_auto_groups_for_subscriptions(config, ids)
             .await?;
+        // A subscription's nodes go with it through their foreign key.
         let mut deleted = 0_u32;
         for id in ids {
             if self.database.subscriptions().delete(id).await? {
                 deleted = deleted.saturating_add(1);
-                self.database
-                    .profiles()
-                    .delete_by_subscription_id(id)
-                    .await?;
             }
         }
 
@@ -700,7 +697,7 @@ mod tests {
             .expect("metadata should load")
             .expect("the failed attempt should be persisted");
         assert_eq!(metadata.last_attempt_failed, Some(true));
-        assert!(metadata.last_attempt_at_unix.is_some_and(|at| at > 0));
+        assert!(metadata.last_attempt_at.is_some_and(|at| at > 0));
         assert!(metadata
             .last_attempt_error
             .as_deref()
@@ -1427,12 +1424,12 @@ mod tests {
             .await
             .expect("subscription manager test operation should succeed");
         database
-            .profile_exs()
+            .profiles()
             .set_sort_many(&[(&original_index_id, 10)])
             .await
             .expect("subscription manager test operation should succeed");
         database
-            .profile_exs()
+            .profiles()
             .set_sort_many(&[("active", 20)])
             .await
             .expect("subscription manager test operation should succeed");
@@ -1458,7 +1455,7 @@ mod tests {
         assert_eq!(profiles.len(), 1);
         assert_eq!(profiles[0].0.index_id, "active");
         assert_eq!(profiles[0].0.remarks, "Imported");
-        assert_eq!(profiles[0].1.sort, 20);
+        assert_eq!(profiles[0].0.sort, 20);
     }
 
     fn sample_profile(index_id: &str, remarks: &str) -> ProfileItem {

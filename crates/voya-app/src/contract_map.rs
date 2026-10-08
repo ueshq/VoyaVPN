@@ -241,7 +241,7 @@ pub fn server_stat_to_contract(value: voya_core::ServerStatItem) -> voya_contrac
         total_down: value.total_down,
         today_up: value.today_up,
         today_down: value.today_down,
-        date_now: value.date_now,
+        date_now: value.day_number,
     }
 }
 
@@ -281,10 +281,12 @@ pub const fn profile_kind_to_contract(config_type: ConfigType) -> ProfileKind {
     }
 }
 
-fn metrics_to_contract(profile_ex: ProfileExItem) -> ProfileMetrics {
+/// The contract groups the node's list position with its measurements; the
+/// database keeps the position on the node row.
+fn metrics_to_contract(profile_ex: ProfileExItem, sort: i32) -> ProfileMetrics {
     ProfileMetrics {
         delay_ms: profile_ex.delay,
-        sort: profile_ex.sort,
+        sort,
         outcome: profile_ex
             .message
             .as_deref()
@@ -297,14 +299,14 @@ fn metrics_to_contract(profile_ex: ProfileExItem) -> ProfileMetrics {
 #[must_use]
 pub fn profile_details_to_contract(item: ProfileListItem) -> ProfileDetails {
     ProfileDetails {
+        metrics: metrics_to_contract(item.profile_ex, item.profile.sort),
         profile: profile_to_contract(item.profile),
-        metrics: metrics_to_contract(item.profile_ex),
         traffic: ProfileTraffic {
             total_upload: item.server_stat.total_up,
             total_download: item.server_stat.total_down,
             today_upload: item.server_stat.today_up,
             today_download: item.server_stat.today_down,
-            date: item.server_stat.date_now,
+            date: item.server_stat.day_number,
         },
         is_active: item.is_active,
     }
@@ -313,6 +315,7 @@ pub fn profile_details_to_contract(item: ProfileListItem) -> ProfileDetails {
 #[must_use]
 pub fn profile_summary_to_contract(item: ProfileSummaryItem) -> ProfileSummaryEntry {
     let profile = item.profile;
+    let metrics = metrics_to_contract(item.profile_ex, profile.sort);
     ProfileSummaryEntry {
         profile: ProfileSummary {
             kind: profile_kind_to_contract(profile.config_type()),
@@ -322,7 +325,7 @@ pub fn profile_summary_to_contract(item: ProfileSummaryItem) -> ProfileSummaryEn
             subscription_id: profile.subscription_id,
             remarks: profile.remarks,
         },
-        metrics: metrics_to_contract(item.profile_ex),
+        metrics,
         is_active: item.is_active,
     }
 }

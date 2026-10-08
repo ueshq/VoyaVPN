@@ -150,11 +150,8 @@ async fn fresh_schema_contains_only_current_tables_and_columns() {
         indexes,
         [
             "idx_policy_group_members_profile",
-            "idx_policy_groups_sort",
-            "idx_profile_items_config_type",
+            "idx_profile_items_sort",
             "idx_profile_items_subscription_id",
-            "idx_routing_items_sort",
-            "idx_subscriptions_sort",
         ]
     );
 
@@ -200,7 +197,7 @@ async fn statistics_repository_rolls_over_cleans_orphans_and_accumulates() {
             total_down: 2000,
             today_up: 300,
             today_down: 400,
-            date_now: 1,
+            day_number: 1,
         })
         .await
         .expect("database test operation should succeed");
@@ -219,7 +216,7 @@ async fn statistics_repository_rolls_over_cleans_orphans_and_accumulates() {
     assert_eq!(rolled.today_down, 0);
     assert_eq!(rolled.total_up, 1000);
     assert_eq!(rolled.total_down, 2000);
-    assert_eq!(rolled.date_now, 2);
+    assert_eq!(rolled.day_number, 2);
 
     let updated = database
         .server_stats()
@@ -231,7 +228,7 @@ async fn statistics_repository_rolls_over_cleans_orphans_and_accumulates() {
     assert_eq!(updated.today_down, 70);
     assert_eq!(updated.total_up, 1050);
     assert_eq!(updated.total_down, 2070);
-    assert_eq!(updated.date_now, 3);
+    assert_eq!(updated.day_number, 3);
 }
 
 #[tokio::test]
@@ -326,21 +323,8 @@ async fn profile_repository_orders_by_profile_ex_sort() {
         .await
         .expect("database test operation should succeed");
     database
-        .profile_exs()
-        .upsert(&ProfileExItem {
-            index_id: "first".to_string(),
-            sort: 20,
-            ..ProfileExItem::default()
-        })
-        .await
-        .expect("database test operation should succeed");
-    database
-        .profile_exs()
-        .upsert(&ProfileExItem {
-            index_id: "second".to_string(),
-            sort: 10,
-            ..ProfileExItem::default()
-        })
+        .profiles()
+        .set_sort_many(&[("first", 20), ("second", 10)])
         .await
         .expect("database test operation should succeed");
 
@@ -351,7 +335,7 @@ async fn profile_repository_orders_by_profile_ex_sort() {
         .expect("database test operation should succeed")
         .items;
     assert_eq!(ordered[0].0.index_id, "second");
-    assert_eq!(ordered[0].1.sort, 10);
+    assert_eq!(ordered[0].0.sort, 10);
 
     // The tray's names follow the same order without decoding the payloads.
     let head = database
@@ -518,7 +502,6 @@ async fn profile_ex_repository_cascades_with_profile_deletes() {
         .upsert(&ProfileExItem {
             index_id: profile.index_id.clone(),
             delay: 42,
-            sort: 10,
             ..ProfileExItem::default()
         })
         .await
@@ -662,7 +645,7 @@ async fn subscription_metadata_round_trips_and_cascades_with_subscription_delete
         download_bytes: Some(2048),
         total_bytes: Some(10_737_418_240),
         expire_at: Some(1_924_992_000),
-        last_attempt_at_unix: None,
+        last_attempt_at: None,
         last_attempt_error: None,
         last_attempt_failed: None,
         last_update_at: Some(1_756_800_000),
@@ -1138,12 +1121,10 @@ async fn unit_of_work_commit_failure_rolls_back_rows_settings_and_state() {
             .execute(&mut **transaction)
             .await
             .expect("foreign keys should be deferred");
-        sqlx::query(
-            "INSERT INTO profile_ex_items (index_id, delay, sort) VALUES ('missing-profile', 0, 0)",
-        )
-        .execute(&mut **transaction)
-        .await
-        .expect("deferred foreign key violation should be staged");
+        sqlx::query("INSERT INTO profile_ex_items (index_id, delay) VALUES ('missing-profile', 0)")
+            .execute(&mut **transaction)
+            .await
+            .expect("deferred foreign key violation should be staged");
     }
     let mut settings = AppSettings::default();
     settings.appearance.language = "zh-Hant".to_string();
@@ -1489,46 +1470,44 @@ async fn profile_listings_skip_rows_this_build_cannot_decode() {
     // A protocol tagged with a `kind` this build does not know: what a row
     // written by a newer build looks like after a downgrade.
     sqlx::query(
-        r#"INSERT INTO profile_items (index_id, config_type, remarks, protocol)
-           VALUES ('from-a-newer-build', 'vmess', 'Newer', '{"kind":"quantum","server":{"address":"q.example.com","port":443}}')"#,
+        r#"INSERT INTO profile_items (index_id, remarks, protocol)
+           VALUES ('from-a-newer-build', 'Newer', '{"kind":"quantum","server":{"address":"q.example.com","port":443}}')"#,
     )
     .execute(database.pool())
     .await
     .expect("the raw row should be stored");
     // Current TLS input permits omitted optional fields, including `alpn`.
     sqlx::query(
-        r#"INSERT INTO profile_items (index_id, config_type, remarks, protocol, tls)
-           VALUES ('missing-alpn', 'trojan', 'Missing alpn',
+        r#"INSERT INTO profile_items (index_id, remarks, protocol, tls)
+           VALUES ('missing-alpn', 'Missing alpn',
                    '{"kind":"trojan","server":{"address":"t.example.com","port":443},"password":"secret"}',
                    '{"mode":"tls","serverName":"t.example.com"}')"#,
     )
     .execute(database.pool())
     .await
     .expect("the raw row should be stored");
-    // A `config_type` column that disagrees with its own protocol blob.
-    sqlx::query(
+    // `config_type` is derived from the protocol's own tag, so a row cannot
+    // be stored with the two disagreeing, nor with a protocol that has none.
+    for refused in [
         r#"INSERT INTO profile_items (index_id, config_type, remarks, protocol)
            VALUES ('mislabelled', 'vmess', 'Mislabelled',
                    '{"kind":"trojan","server":{"address":"t.example.com","port":443},"password":"secret"}')"#,
-    )
-    .execute(database.pool())
-    .await
-    .expect("the raw row should be stored");
-    // A `config_type` this build has no enum value for.
-    sqlx::query(
-        r#"INSERT INTO profile_items (index_id, config_type, remarks, protocol)
-           VALUES ('unknown-config-type', 'quantum', 'Unknown type',
-                   '{"kind":"trojan","server":{"address":"t.example.com","port":443},"password":"secret"}')"#,
-    )
-    .execute(database.pool())
-    .await
-    .expect("the raw row should be stored");
+        r#"INSERT INTO profile_items (index_id, remarks, protocol)
+           VALUES ('untagged', 'Untagged', '{"server":{"address":"t.example.com","port":443}}')"#,
+        r#"INSERT INTO profile_items (index_id, remarks, protocol)
+           VALUES ('not-json', 'Not JSON', 'trojan://secret@t.example.com:443')"#,
+    ] {
+        assert!(
+            sqlx::query(refused).execute(database.pool()).await.is_err(),
+            "{refused}"
+        );
+    }
 
     let stored_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM profile_items")
         .fetch_one(database.pool())
         .await
         .expect("the row count should be readable");
-    assert_eq!(stored_rows, 5);
+    assert_eq!(stored_rows, 3);
 
     for listed in [
         database
@@ -1570,8 +1549,8 @@ async fn profile_listings_skip_rows_this_build_cannot_decode() {
             .await
             .expect("one undecodable row must not fail the whole listing")
             .undecodable_rows,
-        3,
-        "the three rows this build cannot decode are counted, the defaulted one is not"
+        1,
+        "the row this build cannot decode is counted, the defaulted one is not"
     );
     // Single-row lookups stay strict, and each failure keeps its own reason.
     assert!(matches!(
@@ -1587,35 +1566,15 @@ async fn profile_listings_skip_rows_this_build_cannot_decode() {
             .is_some(),
         "optional TLS fields must retain their current defaults"
     );
-    assert!(matches!(
-        database.profiles().get("mislabelled").await,
-        Err(DbError::InvalidEnum {
-            enum_name: "ProfileProtocol/config_type",
-            ..
-        })
-    ));
-    assert!(matches!(
-        database.profiles().get("unknown-config-type").await,
-        Err(DbError::InvalidEnum {
-            enum_name: "ConfigType",
-            ..
-        })
-    ));
-
-    // Skipping is not deletion: the rows are still there for a later build.
+    // Skipping is not deletion: the row is still there for a later build.
     assert!(database
         .profiles()
         .delete("from-a-newer-build")
         .await
         .expect("an undecodable row must still be deletable"));
 
-    // Once the unreadable rows are gone the listing has nothing to explain, so
+    // Once the unreadable row is gone the listing has nothing to explain, so
     // the screens fall silent again.
-    database
-        .profiles()
-        .delete_many(&["mislabelled".to_string(), "unknown-config-type".to_string()])
-        .await
-        .expect("the remaining undecodable rows should be deletable");
     let repaired = database
         .profiles()
         .list_with_profile_ex(None)
@@ -2138,6 +2097,7 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
     let subscribed = ProfileItem {
         index_id: "subscribed".to_string(),
         subscription_id: Some("sub-1".to_string()),
+        sort: 5,
         ..sample_profile()
     };
     let manual = ProfileItem {
@@ -2146,20 +2106,20 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
     };
     database
         .profiles()
-        .upsert_with_profile_ex(
-            &subscribed,
-            &ProfileExItem {
-                index_id: "subscribed".to_string(),
-                delay: 42,
-
-                sort: 5,
-                message: Some("measured".to_string()),
-                ip_info: Some("JP".to_string()),
-                country_code: None,
-            },
-        )
+        .upsert(&subscribed)
         .await
-        .expect("the subscribed profile and its extension should persist together");
+        .expect("the subscribed profile should persist");
+    database
+        .profile_exs()
+        .upsert(&ProfileExItem {
+            index_id: "subscribed".to_string(),
+            delay: 42,
+            message: Some("measured".to_string()),
+            ip_info: Some("JP".to_string()),
+            country_code: None,
+        })
+        .await
+        .expect("the subscribed profile's measurements should persist");
     database
         .profiles()
         .upsert(&manual)
@@ -2209,39 +2169,38 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
         .await
         .expect("the joined listing should succeed")
         .items;
-    let subscribed_ex = &joined
+    let (subscribed_profile, subscribed_ex) = joined
         .iter()
         .find(|(profile, _)| profile.index_id == "subscribed")
-        .expect("the subscribed profile should be listed")
-        .1;
+        .expect("the subscribed profile should be listed");
     assert_eq!(subscribed_ex.delay, 42);
-    assert_eq!(subscribed_ex.sort, 5);
+    assert_eq!(subscribed_profile.sort, 5);
     assert_eq!(subscribed_ex.message.as_deref(), Some("measured"));
-    let manual_ex = &joined
+    let (manual_profile, manual_ex) = joined
         .iter()
         .find(|(profile, _)| profile.index_id == "manual")
-        .expect("the manual profile should be listed")
-        .1;
+        .expect("the manual profile should be listed");
     assert_eq!(manual_ex.delay, 0);
-    assert_eq!(manual_ex.sort, 0);
+    assert_eq!(manual_profile.sort, 0);
     assert_eq!(manual_ex.message, None);
 
-    assert_eq!(
-        database
-            .profiles()
-            .delete_by_subscription_id("sub-1")
-            .await
-            .expect("subscription profiles should be deletable"),
-        1
-    );
+    // Deleting the subscription takes its nodes, and their measurements, with
+    // it: nothing else deletes them.
+    assert!(database
+        .subscriptions()
+        .delete("sub-1")
+        .await
+        .expect("the subscription should be deletable"));
     assert_eq!(
         database
             .profiles()
             .list()
             .await
             .expect("the listing should succeed")
-            .len(),
-        1
+            .into_iter()
+            .map(|profile| profile.index_id)
+            .collect::<Vec<_>>(),
+        ["manual".to_string()]
     );
     assert!(
         database
@@ -2255,7 +2214,7 @@ async fn profile_listings_filter_by_subscription_and_join_missing_extensions() {
 }
 
 #[tokio::test]
-async fn profile_ex_set_sort_upserts_without_disturbing_measurements() {
+async fn profile_set_sort_leaves_measurements_alone() {
     let database = Database::connect_in_memory()
         .await
         .expect("database test operation should succeed");
@@ -2265,61 +2224,57 @@ async fn profile_ex_set_sort_upserts_without_disturbing_measurements() {
         .upsert(&profile)
         .await
         .expect("profile should persist");
-
-    database
-        .profile_exs()
-        .set_sort_many(&[(&profile.index_id, 7)])
-        .await
-        .expect("a missing extension row should be created");
-    let created = database
-        .profile_exs()
-        .get(&profile.index_id)
-        .await
-        .expect("the extension lookup should succeed")
-        .expect("the extension row should exist");
-    assert_eq!(created.sort, 7);
-    assert_eq!(created.delay, 0);
-
     database
         .profile_exs()
         .upsert(&ProfileExItem {
             index_id: profile.index_id.clone(),
             delay: 120,
-
-            sort: 7,
             message: Some("measured".to_string()),
             ip_info: Some("JP".to_string()),
             country_code: None,
         })
         .await
         .expect("speedtest results should persist");
-    database
-        .profile_exs()
-        .set_sort_many(&[(&profile.index_id, 1)])
-        .await
-        .expect("an existing extension row should be updated");
 
-    let updated = database
+    database
+        .profiles()
+        .set_sort_many(&[(&profile.index_id, 7), ("no-such-node", 3)])
+        .await
+        .expect("a reorder should persist and ignore an unknown id");
+
+    let stored = database
+        .profiles()
+        .get(&profile.index_id)
+        .await
+        .expect("the lookup should succeed")
+        .expect("the profile should exist");
+    assert_eq!(stored.sort, 7);
+    let measured = database
         .profile_exs()
         .get(&profile.index_id)
         .await
         .expect("the extension lookup should succeed")
         .expect("the extension row should exist");
-    assert_eq!(updated.sort, 1);
     assert_eq!(
-        updated.delay, 120,
+        measured.delay, 120,
         "reordering must not discard speedtest results"
     );
-    assert_eq!(updated.message.as_deref(), Some("measured"));
-    assert_eq!(updated.ip_info.as_deref(), Some("JP"));
+    assert_eq!(measured.message.as_deref(), Some("measured"));
+    assert_eq!(measured.ip_info.as_deref(), Some("JP"));
     assert_eq!(
         database
-            .profile_exs()
+            .profiles()
             .max_sort()
             .await
             .expect("max sort should be readable"),
-        1
+        7
     );
+    assert!(database
+        .profile_exs()
+        .get("no-such-node")
+        .await
+        .expect("the extension lookup should succeed")
+        .is_none());
 }
 
 /// `set_sort_many` exists only so a reorder stops paying one autocommit per
@@ -2327,13 +2282,13 @@ async fn profile_ex_set_sort_upserts_without_disturbing_measurements() {
 /// including on the pool, inside a unit of work, and for rows that already
 /// carry speedtest results a reorder must not clobber.
 #[tokio::test]
-async fn profile_ex_set_sort_many_matches_one_row_at_a_time() {
+async fn profile_set_sort_many_matches_one_row_at_a_time() {
     let ordering = [("sortable-c", 30), ("sortable-a", 10), ("sortable-b", 20)];
 
     let sequential = seeded_sortable_database().await;
     for (index_id, sort) in ordering {
         sequential
-            .profile_exs()
+            .profiles()
             .set_sort_many(&[(index_id, sort)])
             .await
             .expect("a per-row reorder should persist");
@@ -2341,7 +2296,7 @@ async fn profile_ex_set_sort_many_matches_one_row_at_a_time() {
 
     let batched = seeded_sortable_database().await;
     batched
-        .profile_exs()
+        .profiles()
         .set_sort_many(&ordering)
         .await
         .expect("a batched reorder should persist");
@@ -2352,7 +2307,7 @@ async fn profile_ex_set_sort_many_matches_one_row_at_a_time() {
         .await
         .expect("a unit of work should open");
     unit_of_work
-        .profile_exs()
+        .profiles()
         .set_sort_many(&ordering)
         .await
         .expect("a batched reorder should join the caller's transaction");
@@ -2361,45 +2316,45 @@ async fn profile_ex_set_sort_many_matches_one_row_at_a_time() {
         .await
         .expect("the unit of work should commit");
 
-    let expected = sorted_profile_exs(&sequential).await;
+    let expected = sorted_nodes(&sequential).await;
     assert_eq!(
         expected
             .iter()
-            .map(|item| (item.index_id.as_str(), item.sort))
+            .map(|(index_id, sort, _, _)| (index_id.as_str(), *sort))
             .collect::<Vec<_>>(),
         vec![("sortable-a", 10), ("sortable-b", 20), ("sortable-c", 30)]
     );
-    assert_eq!(sorted_profile_exs(&batched).await, expected);
-    assert_eq!(sorted_profile_exs(&transactional).await, expected);
+    assert_eq!(sorted_nodes(&batched).await, expected);
+    assert_eq!(sorted_nodes(&transactional).await, expected);
     assert_eq!(
         expected
             .iter()
-            .find(|item| item.index_id == "sortable-b")
-            .map(|item| (item.delay, item.message.as_deref())),
+            .find(|(index_id, _, _, _)| index_id == "sortable-b")
+            .map(|(_, _, delay, message)| (*delay, message.as_deref())),
         Some((120, Some("measured"))),
         "reordering must not discard speedtest results"
     );
 
     batched
-        .profile_exs()
+        .profiles()
         .set_sort_many(&[])
         .await
         .expect("an empty reorder should be a no-op");
-    assert_eq!(sorted_profile_exs(&batched).await, expected);
+    assert_eq!(sorted_nodes(&batched).await, expected);
 }
 
-/// Three profiles whose extension rows are deliberately uneven: one already
-/// carries speedtest results, one carries only a sort position, and one has no
-/// extension row at all, so a reorder has to both update and insert.
+/// Three profiles left deliberately uneven: one carries speedtest results, one
+/// only a list position, and one neither.
 async fn seeded_sortable_database() -> Database {
     let database = Database::connect_in_memory()
         .await
         .expect("database test operation should succeed");
-    for index_id in ["sortable-a", "sortable-b", "sortable-c"] {
+    for (index_id, sort) in [("sortable-a", 0), ("sortable-b", 99), ("sortable-c", 99)] {
         database
             .profiles()
             .upsert(&ProfileItem {
                 index_id: index_id.to_string(),
+                sort,
                 ..sample_profile()
             })
             .await
@@ -2411,29 +2366,122 @@ async fn seeded_sortable_database() -> Database {
         .upsert(&ProfileExItem {
             index_id: "sortable-b".to_string(),
             delay: 120,
-
-            sort: 99,
             message: Some("measured".to_string()),
             ip_info: Some("JP".to_string()),
             country_code: None,
         })
         .await
         .expect("speedtest results should persist");
-    database
-        .profile_exs()
-        .set_sort_many(&[("sortable-c", 99)])
-        .await
-        .expect("an extension row should be creatable");
 
     database
 }
 
-async fn sorted_profile_exs(database: &Database) -> Vec<ProfileExItem> {
-    database
-        .profile_exs()
-        .list()
+/// `created_at` is set by SQLite when a row first appears and no upsert names
+/// it, so rewriting a row keeps the time it was created.
+#[tokio::test]
+async fn created_at_is_set_on_insert_and_kept_by_upserts() {
+    let database = Database::connect_in_memory()
         .await
-        .expect("the extension rows should be listable")
+        .expect("database test operation should succeed");
+    let subscription = SubItem {
+        id: "sub-1".to_string(),
+        remarks: "Sub".to_string(),
+        ..SubItem::default()
+    };
+    let profile = sample_profile();
+    let routing = RoutingItem {
+        id: "routing-1".to_string(),
+        ..RoutingItem::default()
+    };
+    database
+        .subscriptions()
+        .upsert(&subscription)
+        .await
+        .expect("subscription should persist");
+    database
+        .profiles()
+        .upsert(&profile)
+        .await
+        .expect("profile should persist");
+    database
+        .routings()
+        .upsert(&routing)
+        .await
+        .expect("routing should persist");
+
+    for (read, backdate) in CREATED_AT_TABLES {
+        let created_at: i64 = sqlx::query_scalar(read)
+            .fetch_one(database.pool())
+            .await
+            .expect("created_at should be readable");
+        assert!(created_at > 1_700_000_000, "{read}: {created_at}");
+        sqlx::query(backdate)
+            .execute(database.pool())
+            .await
+            .expect("created_at should be writable by hand");
+    }
+
+    database
+        .subscriptions()
+        .upsert(&SubItem {
+            remarks: "Renamed".to_string(),
+            ..subscription
+        })
+        .await
+        .expect("subscription should be rewritten");
+    database
+        .profiles()
+        .upsert(&ProfileItem {
+            remarks: "Renamed".to_string(),
+            ..profile
+        })
+        .await
+        .expect("profile should be rewritten");
+    database
+        .routings()
+        .upsert(&RoutingItem {
+            remarks: "Renamed".to_string(),
+            ..routing
+        })
+        .await
+        .expect("routing should be rewritten");
+
+    for (read, _) in CREATED_AT_TABLES {
+        let created_at: i64 = sqlx::query_scalar(read)
+            .fetch_one(database.pool())
+            .await
+            .expect("created_at should be readable");
+        assert_eq!(created_at, 1, "{read}: an upsert must keep created_at");
+    }
+}
+
+/// Per table: read the oldest `created_at`, and backdate every row to 1.
+const CREATED_AT_TABLES: [(&str, &str); 3] = [
+    (
+        "SELECT MIN(created_at) FROM subscriptions",
+        "UPDATE subscriptions SET created_at = 1",
+    ),
+    (
+        "SELECT MIN(created_at) FROM profile_items",
+        "UPDATE profile_items SET created_at = 1",
+    ),
+    (
+        "SELECT MIN(created_at) FROM routing_items",
+        "UPDATE routing_items SET created_at = 1",
+    ),
+];
+
+/// Each node's id, position, delay and outcome, in list order.
+async fn sorted_nodes(database: &Database) -> Vec<(String, i32, i32, Option<String>)> {
+    database
+        .profiles()
+        .list_with_profile_ex(None)
+        .await
+        .expect("the nodes should be listable")
+        .items
+        .into_iter()
+        .map(|(profile, ex)| (profile.index_id, profile.sort, ex.delay, ex.message))
+        .collect()
 }
 
 /// Traffic measured just before its node was deleted. The stat row went with
@@ -2485,7 +2533,7 @@ async fn add_traffic_accumulates_totals_and_restarts_the_daily_counters() {
             created.total_down,
             created.today_up,
             created.today_down,
-            created.date_now
+            created.day_number
         ),
         (100, 200, 100, 200, 20_260_907)
     );
@@ -2526,7 +2574,7 @@ async fn add_traffic_accumulates_totals_and_restarts_the_daily_counters() {
             next_day.total_down,
             next_day.today_up,
             next_day.today_down,
-            next_day.date_now
+            next_day.day_number
         ),
         (155, 231, 5, 6, 20_260_908)
     );

@@ -17,12 +17,15 @@ async fn country_measurements_and_metrics_survive_restart() {
     let fixture = TempDatabase::new("country-restart.sqlite");
     let database = Database::connect(fixture.path()).await.expect("database");
     let pool = database.pool();
-    let profile = sample_profile();
+    let profile = ProfileItem {
+        sort: 17,
+        ..sample_profile()
+    };
     ProfileRepository::new(pool)
         .upsert(&profile)
         .await
         .expect("profile");
-    sqlx::query("INSERT INTO profile_ex_items (index_id, delay, sort, message, ip_info) VALUES (?, 23, 17, 'completed', 'US')")
+    sqlx::query("INSERT INTO profile_ex_items (index_id, delay, message, ip_info) VALUES (?, 23, 'completed', 'US')")
         .bind(&profile.index_id).execute(pool).await.expect("measurements");
     database.close().await;
 
@@ -37,7 +40,7 @@ async fn country_measurements_and_metrics_survive_restart() {
         previous.country_code, None,
         "raw IP text is not a measured country"
     );
-    assert_eq!((previous.delay, previous.sort), (23, 17));
+    assert_eq!(previous.delay, 23);
     assert_eq!(previous.ip_info.as_deref(), Some("US"));
     assert!(db
         .profile_exs()
@@ -54,7 +57,7 @@ async fn country_measurements_and_metrics_survive_restart() {
         .expect("list")
         .items;
     assert_eq!(entries[0].1.country_code.as_deref(), Some("JP"));
-    assert_eq!(entries[0].1.sort, 17);
+    assert_eq!(entries[0].0.sort, 17);
     db.close().await;
 }
 
@@ -98,12 +101,19 @@ async fn country_results_clear_on_failure_and_cannot_restore_changed_or_deleted_
         .set_probe_result(&profile, &success)
         .await
         .expect("success");
-    let saved = metrics().await.expect("metrics").expect("row");
+    assert_eq!(
+        metrics()
+            .await
+            .expect("metrics")
+            .expect("row")
+            .country_code
+            .as_deref(),
+        Some("JP")
+    );
     profile.remarks = "Renamed".into();
-    db.profiles()
-        .upsert_with_profile_ex(&profile, &saved)
-        .await
-        .expect("rename");
+    // Only the node row is written: the database decides whether the
+    // measurements still describe it.
+    db.profiles().upsert(&profile).await.expect("rename");
     assert_eq!(
         db.profile_exs()
             .get(&profile.index_id)
@@ -121,7 +131,7 @@ async fn country_results_clear_on_failure_and_cannot_restore_changed_or_deleted_
         path: Some("/new".into()),
     });
     db.profiles()
-        .upsert_with_profile_ex(&profile, &saved)
+        .upsert(&profile)
         .await
         .expect("change connection");
     assert_eq!(

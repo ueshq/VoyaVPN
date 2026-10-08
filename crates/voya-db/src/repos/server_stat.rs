@@ -20,14 +20,14 @@ impl<'executor> ServerStatRepository<'executor> {
             sqlx::query(
                 r#"
             INSERT INTO server_stat_items (
-                index_id, total_up, total_down, today_up, today_down, date_now
+                index_id, total_up, total_down, today_up, today_down, day_number
             ) VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(index_id) DO UPDATE SET
                 total_up = excluded.total_up,
                 total_down = excluded.total_down,
                 today_up = excluded.today_up,
                 today_down = excluded.today_down,
-                date_now = excluded.date_now
+                day_number = excluded.day_number
             "#,
             )
             .bind(&item.index_id)
@@ -35,7 +35,7 @@ impl<'executor> ServerStatRepository<'executor> {
             .bind(item.total_down)
             .bind(item.today_up)
             .bind(item.today_down)
-            .bind(item.date_now),
+            .bind(item.day_number),
             execute
         )?;
 
@@ -52,18 +52,18 @@ impl<'executor> ServerStatRepository<'executor> {
         row.map(row_to_server_stat).transpose()
     }
 
-    pub async fn reset_rollover(&self, date_now: i64) -> Result<u64> {
+    pub async fn reset_rollover(&self, day_number: i64) -> Result<u64> {
         let result = run_query!(
             self.executor,
             sqlx::query(
                 r#"
             UPDATE server_stat_items
-            SET today_up = 0, today_down = 0, date_now = ?
-            WHERE date_now <> ?
+            SET today_up = 0, today_down = 0, day_number = ?
+            WHERE day_number <> ?
             "#,
             )
-            .bind(date_now)
-            .bind(date_now),
+            .bind(day_number)
+            .bind(day_number),
             execute
         )?;
 
@@ -89,7 +89,7 @@ impl<'executor> ServerStatRepository<'executor> {
     pub async fn add_traffic(
         &self,
         index_id: &str,
-        date_now: i64,
+        day_number: i64,
         proxy_up: i64,
         proxy_down: i64,
     ) -> Result<Option<ServerStatItem>> {
@@ -100,7 +100,7 @@ impl<'executor> ServerStatRepository<'executor> {
             sqlx::query(
                 r#"
             INSERT INTO server_stat_items (
-                index_id, total_up, total_down, today_up, today_down, date_now
+                index_id, total_up, total_down, today_up, today_down, day_number
             )
             SELECT ?, ?, ?, ?, ?, ?
             WHERE EXISTS (SELECT 1 FROM profile_items WHERE index_id = ?)
@@ -108,14 +108,14 @@ impl<'executor> ServerStatRepository<'executor> {
                 total_up = total_up + excluded.total_up,
                 total_down = total_down + excluded.total_down,
                 today_up = CASE
-                    WHEN date_now = excluded.date_now THEN today_up + excluded.today_up
+                    WHEN day_number = excluded.day_number THEN today_up + excluded.today_up
                     ELSE excluded.today_up
                 END,
                 today_down = CASE
-                    WHEN date_now = excluded.date_now THEN today_down + excluded.today_down
+                    WHEN day_number = excluded.day_number THEN today_down + excluded.today_down
                     ELSE excluded.today_down
                 END,
-                date_now = excluded.date_now
+                day_number = excluded.day_number
             RETURNING *
             "#,
             )
@@ -124,7 +124,7 @@ impl<'executor> ServerStatRepository<'executor> {
             .bind(down)
             .bind(up)
             .bind(down)
-            .bind(date_now)
+            .bind(day_number)
             .bind(index_id),
             fetch_optional
         )?;
@@ -140,6 +140,6 @@ fn row_to_server_stat(row: SqliteRow) -> Result<ServerStatItem> {
         total_down: row.try_get("total_down")?,
         today_up: row.try_get("today_up")?,
         today_down: row.try_get("today_down")?,
-        date_now: row.try_get("date_now")?,
+        day_number: row.try_get("day_number")?,
     })
 }

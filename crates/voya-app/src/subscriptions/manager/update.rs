@@ -435,7 +435,7 @@ async fn persist_subscription_metadata(
     if let Some(title) = &prepared.profile_title {
         metadata.profile_title = Some(title.clone());
     }
-    metadata.last_attempt_at_unix = Some(prepared.fetched_at_unix);
+    metadata.last_attempt_at = Some(prepared.fetched_at_unix);
     metadata.last_attempt_failed = Some(attempt_error.is_some());
     metadata.last_attempt_error = attempt_error.map(str::to_string);
     if attempt_error.is_none() {
@@ -468,7 +468,7 @@ async fn persist_failed_attempt(
             subscription_id: attempt.subscription_id.clone(),
             ..SubMetadataItem::default()
         });
-    metadata.last_attempt_at_unix = Some(attempt.attempted_at_unix);
+    metadata.last_attempt_at = Some(attempt.attempted_at_unix);
     metadata.last_attempt_failed = Some(true);
     metadata.last_attempt_error = Some(attempt.error.clone());
     repository.upsert(&metadata).await?;

@@ -98,17 +98,27 @@ where
     }
 }
 
-/// Runs one delete statement per id as a single [`with_connection`] batch and
+/// Runs a delete statement whose one parameter is a JSON array of ids, the
+/// statement matching them with `IN (SELECT value FROM json_each(?))`, and
 /// returns how many rows it removed.
-pub(crate) async fn delete_each(
+///
+/// One statement however many ids there are, so it is atomic on its own and
+/// needs no batch transaction.
+pub(crate) async fn delete_ids(
     executor: RepositoryExecutor<'_>,
     statement: &'static str,
     ids: &[String],
 ) -> Result<u64> {
-    with_connection(executor, ids, |connection, ids| {
-        Box::pin(delete_each_on(connection, statement, ids))
-    })
-    .await
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    let result = run_query!(
+        executor,
+        sqlx::query(statement).bind(json_id_array(ids)),
+        execute
+    )?;
+
+    Ok(result.rows_affected())
 }
 
 /// `SELECT MAX(sort) FROM <table>`: the highest sort value, or 0 for an empty
@@ -138,23 +148,6 @@ pub(crate) async fn row_exists(
     let found: i64 = run_query!(executor, sqlx::query_scalar(statement).bind(id), fetch_one)?;
 
     Ok(found != 0)
-}
-
-async fn delete_each_on(
-    connection: &mut SqliteConnection,
-    statement: &'static str,
-    ids: &[String],
-) -> Result<u64> {
-    let mut deleted = 0;
-    for id in ids {
-        let result = sqlx::query(statement)
-            .bind(id)
-            .execute(&mut *connection)
-            .await?;
-        deleted += result.rows_affected();
-    }
-
-    Ok(deleted)
 }
 
 pub(crate) use repository_constructors;

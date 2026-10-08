@@ -1,22 +1,26 @@
-use sqlx::{sqlite::SqliteRow, Row};
-use voya_core::{ConfigType, ProfileExItem, ProfileIdentity, ProfileItem};
+use sqlx::{sqlite::SqliteRow, Row, SqliteConnection};
+use voya_core::{ProfileExItem, ProfileIdentity, ProfileItem};
 
 use super::decode_rows;
 use crate::{
     blob,
     executor::{
-        delete_each, json_id_array, repository_constructors, row_exists, run_query,
-        RepositoryExecutor,
+        delete_ids, json_id_array, max_sort, repository_constructors, row_exists, run_query,
+        with_connection, RepositoryExecutor,
     },
-    DbError, ProfileExRepository, Result,
+    Result,
 };
+
+/// Writes one profile's list position without touching its other columns.
+const SET_SORT_STATEMENT: &str = "UPDATE profile_items SET sort = ? WHERE index_id = ?";
 
 /// The join and sort behind every profile list path, around `$columns` and an
 /// optional `$filter`.
 ///
 /// `list`, `list_by_subscription_id` and `list_with_profile_ex` used to repeat
 /// this join and sort five times, so a sort fix or a new column had to be
-/// applied in five places.
+/// applied in five places. The order is `idx_profile_items_sort`'s, so the
+/// listing reads the index instead of sorting.
 macro_rules! profile_list_query {
     ($columns:literal, $filter:literal) => {
         concat!(
@@ -25,7 +29,7 @@ macro_rules! profile_list_query {
             " FROM profile_items p",
             " LEFT JOIN profile_ex_items e ON p.index_id = e.index_id ",
             $filter,
-            " ORDER BY COALESCE(e.sort, 0), p.index_id"
+            " ORDER BY p.sort, p.index_id"
         )
     };
 }
@@ -35,7 +39,6 @@ macro_rules! profile_list_query {
 const PROFILE_LIST_QUERY: &str = profile_list_query!(
     "p.*, \
      COALESCE(e.delay, 0) AS ex_delay, \
-     COALESCE(e.sort, 0) AS ex_sort, \
      e.message AS ex_message, \
      e.ip_info AS ex_ip_info, \
      e.country_code AS ex_country_code",
@@ -94,6 +97,9 @@ pub struct ProfileRepository<'executor> {
 repository_constructors!(ProfileRepository);
 
 impl<'executor> ProfileRepository<'executor> {
+    /// Writes the node row. Measurements are not part of it: when the
+    /// connection columns change, the database clears them itself
+    /// (`clear_country_on_connection_change`).
     pub async fn upsert(&self, item: &ProfileItem) -> Result<()> {
         let (protocol, transport, tls) = blob::profile_blobs(item)?;
 
@@ -102,63 +108,33 @@ impl<'executor> ProfileRepository<'executor> {
             sqlx::query(
                 r#"
             INSERT INTO profile_items (
-                index_id, config_type, subscription_id,
-                display_log, remarks, protocol, transport, tls
+                index_id, subscription_id,
+                display_log, remarks, protocol, transport, tls, sort
             ) VALUES (
                 ?, ?, ?, ?, ?, ?, ?, ?
             )
             ON CONFLICT(index_id) DO UPDATE SET
-                config_type = excluded.config_type,
                 subscription_id = excluded.subscription_id,
                 display_log = excluded.display_log,
                 remarks = excluded.remarks,
                 protocol = excluded.protocol,
                 transport = excluded.transport,
-                tls = excluded.tls
+                tls = excluded.tls,
+                sort = excluded.sort
             "#,
             )
             .bind(&item.index_id)
-            .bind(item.config_type().as_str())
             .bind(item.subscription_id.as_deref())
             .bind(item.display_log)
             .bind(&item.remarks)
             .bind(protocol)
             .bind(transport)
-            .bind(tls),
+            .bind(tls)
+            .bind(item.sort),
             execute
         )?;
 
         Ok(())
-    }
-
-    pub async fn upsert_with_profile_ex(
-        &self,
-        item: &ProfileItem,
-        profile_ex: &ProfileExItem,
-    ) -> Result<()> {
-        let mut profile_ex = profile_ex.clone();
-        if self
-            .get(&item.index_id)
-            .await?
-            .is_some_and(|previous| !voya_core::profile_items_match(&previous, item))
-        {
-            profile_ex.clear_measurements();
-        }
-        self.upsert_with_checked_profile_ex(item, &profile_ex).await
-    }
-
-    /// [`Self::upsert_with_profile_ex`] for a caller that has already read the
-    /// stored row and cleared `profile_ex`'s measurements if the connection
-    /// changed, so the row is not read a second time.
-    pub async fn upsert_with_checked_profile_ex(
-        &self,
-        item: &ProfileItem,
-        profile_ex: &ProfileExItem,
-    ) -> Result<()> {
-        self.upsert(item).await?;
-        ProfileExRepository::from_executor(self.executor)
-            .upsert(profile_ex)
-            .await
     }
 
     /// Single-row lookup, deliberately strict.
@@ -365,29 +341,64 @@ impl<'executor> ProfileRepository<'executor> {
         Ok(result.rows_affected() > 0)
     }
 
+    /// Deletes the nodes and, through their foreign keys, their
+    /// measurements, traffic and group memberships.
     pub async fn delete_many(&self, index_ids: &[String]) -> Result<u64> {
-        delete_each(
+        delete_ids(
             self.executor,
-            "DELETE FROM profile_items WHERE index_id = ?",
+            "DELETE FROM profile_items WHERE index_id IN (SELECT value FROM json_each(?))",
             index_ids,
         )
         .await
     }
 
-    pub async fn delete_by_subscription_id(&self, subscription_id: &str) -> Result<u64> {
-        let result = run_query!(
-            self.executor,
-            sqlx::query("DELETE FROM profile_items WHERE subscription_id = ?")
-                .bind(subscription_id),
-            execute
-        )?;
+    /// The highest list position, or 0 for an empty list. Reads the end of
+    /// `idx_profile_items_sort`.
+    pub async fn max_sort(&self) -> Result<i32> {
+        max_sort(self.executor, "SELECT MAX(sort) FROM profile_items").await
+    }
 
-        Ok(result.rows_affected())
+    /// Assigns a whole ordering, all-or-nothing, in one transaction.
+    ///
+    /// A reorder rewrites every row that moved, and one statement per row on
+    /// the pool autocommits — and therefore fsyncs — each time, so reordering a
+    /// large subscription paid hundreds of commits for one user gesture.
+    ///
+    /// The batch runs through `executor::with_connection`, so inside a
+    /// [`crate::UnitOfWork`] it joins the caller's transaction: the caller still
+    /// decides when to commit and a mid-batch failure leaves the whole unit to
+    /// roll back.
+    ///
+    /// Entries are applied in the order given, so a caller that lists the same
+    /// profile twice gets the last position it asked for. An id with no node is
+    /// ignored.
+    pub async fn set_sort_many(&self, entries: &[(&str, i32)]) -> Result<()> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        with_connection(self.executor, entries, |connection, entries| {
+            Box::pin(set_sort_on(connection, entries))
+        })
+        .await
     }
 }
 
+async fn set_sort_on(connection: &mut SqliteConnection, entries: &[(&str, i32)]) -> Result<()> {
+    for (index_id, sort) in entries {
+        sqlx::query(SET_SORT_STATEMENT)
+            .bind(*sort)
+            .bind(*index_id)
+            .execute(&mut *connection)
+            .await?;
+    }
+
+    Ok(())
+}
+
+/// `config_type` is not read: the column is generated from the protocol's own
+/// tag, so it cannot disagree with the blob decoded here.
 fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {
-    let config_type_value = row.try_get::<String, _>("config_type")?;
     let subscription_id = row.try_get::<Option<String>, _>("subscription_id")?;
     let protocol = blob::profile_protocol_from_text(&row.try_get::<String, _>("protocol")?)?;
     let transport = row
@@ -400,19 +411,6 @@ fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {
         .as_deref()
         .map(blob::tls_settings_from_text)
         .transpose()?;
-    let Ok(config_type) = config_type_value.parse::<ConfigType>() else {
-        return Err(DbError::InvalidEnum {
-            enum_name: "ConfigType",
-            value: config_type_value,
-        });
-    };
-    if protocol.config_type() != config_type {
-        return Err(DbError::InvalidEnum {
-            enum_name: "ProfileProtocol/config_type",
-            value: config_type_value,
-        });
-    }
-
     Ok(ProfileItem {
         index_id: row.try_get("index_id")?,
         subscription_id,
@@ -421,6 +419,7 @@ fn row_to_profile(row: &SqliteRow) -> Result<ProfileItem> {
         protocol,
         transport,
         tls,
+        sort: row.try_get("sort")?,
     })
 }
 
@@ -428,7 +427,6 @@ fn row_to_profile_ex_joined(row: &SqliteRow) -> Result<ProfileExItem> {
     Ok(ProfileExItem {
         index_id: row.try_get("index_id")?,
         delay: row.try_get("ex_delay")?,
-        sort: row.try_get("ex_sort")?,
         message: row.try_get("ex_message")?,
         ip_info: row.try_get("ex_ip_info")?,
         country_code: row.try_get("ex_country_code")?,

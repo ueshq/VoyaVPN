@@ -5,7 +5,7 @@ use super::decode_rows;
 use crate::{
     blob,
     executor::{
-        delete_each, max_sort, repository_constructors, row_exists, run_query, RepositoryExecutor,
+        delete_ids, max_sort, repository_constructors, row_exists, run_query, RepositoryExecutor,
     },
     Result,
 };
@@ -144,7 +144,12 @@ impl<'executor> RoutingRepository<'executor> {
     }
 
     pub async fn delete_many(&self, ids: &[String]) -> Result<u64> {
-        delete_each(self.executor, "DELETE FROM routing_items WHERE id = ?", ids).await
+        delete_ids(
+            self.executor,
+            "DELETE FROM routing_items WHERE id IN (SELECT value FROM json_each(?))",
+            ids,
+        )
+        .await
     }
 }
 

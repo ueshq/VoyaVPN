@@ -1173,13 +1173,7 @@ mod tests {
         };
         database
             .profiles()
-            .upsert_with_profile_ex(
-                &naive,
-                &ProfileExItem {
-                    index_id: "naive".to_string(),
-                    ..ProfileExItem::default()
-                },
-            )
+            .upsert(&naive)
             .await
             .expect("speedtest test operation should succeed");
         let probe = Arc::new(RecordingProbe::default());
@@ -1484,13 +1478,17 @@ mod tests {
             },
             ..ProfileItem::default()
         };
-        let profile_ex = ProfileExItem {
-            index_id: index_id.to_string(),
-            ..ProfileExItem::default()
-        };
         database
             .profiles()
-            .upsert_with_profile_ex(&profile, &profile_ex)
+            .upsert(&profile)
+            .await
+            .expect("speedtest test operation should succeed");
+        database
+            .profile_exs()
+            .upsert(&ProfileExItem {
+                index_id: index_id.to_string(),
+                ..ProfileExItem::default()
+            })
             .await
             .expect("speedtest test operation should succeed");
     }

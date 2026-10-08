@@ -797,12 +797,12 @@ mod tests {
     #[tokio::test]
     async fn a_member_that_only_exists_as_an_undecodable_row_is_accepted() {
         let database = database_with_nodes(&["a"]).await;
-        // A `config_type` this build has no enum value for, as a row written by
+        // A protocol kind this build has no variant for, as a row written by
         // a newer build would look.
         sqlx::query(
-            r#"INSERT INTO profile_items (index_id, config_type, remarks, protocol)
-               VALUES ('from-the-future', 'quantum', 'From the future',
-                       '{"kind":"trojan","server":{"address":"t.example.com","port":443},"password":"secret"}')"#,
+            r#"INSERT INTO profile_items (index_id, remarks, protocol)
+               VALUES ('from-the-future', 'From the future',
+                       '{"kind":"quantum","server":{"address":"q.example.com","port":443}}')"#,
         )
         .execute(database.pool())
         .await

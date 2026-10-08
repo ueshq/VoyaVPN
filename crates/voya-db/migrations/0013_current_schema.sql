@@ -1,10 +1,16 @@
 -- Current VoyaVPN database baseline. Historical databases are not upgraded.
 --
 -- Editing this file's content ALWAYS requires renaming its version prefix
--- (0011 → 0012 → …): the validator accepts only a database whose single
+-- (0012 → 0013 → …): the validator accepts only a database whose single
 -- migration record matches this file's name-derived version AND checksum.
 -- An in-place edit keeps both at the old version, so every existing database
 -- is rejected at startup — which is what commit e26f46e did to 0011.
+--
+-- This is meant to be the last baseline. Once 1.0 ships it is frozen, and
+-- later schema changes become incremental migrations on top of it (ADR 0001).
+--
+-- `created_at` columns are set by SQLite on insert and never written by an
+-- upsert, so they record when a row first appeared.
 
 CREATE TABLE app_settings (
     id INTEGER PRIMARY KEY NOT NULL CHECK (id = 1),
@@ -27,6 +33,7 @@ CREATE TABLE policy_group_members (
     profile_id TEXT NOT NULL,
     position INTEGER NOT NULL,
     PRIMARY KEY (group_id, profile_id),
+    UNIQUE (group_id, position),
     FOREIGN KEY (group_id) REFERENCES policy_groups(id) ON DELETE CASCADE,
     FOREIGN KEY (profile_id) REFERENCES profile_items(index_id) ON DELETE CASCADE
 );
@@ -42,29 +49,35 @@ CREATE TABLE policy_groups (
     interval_seconds INTEGER,
     tolerance_ms INTEGER,
     sort INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     FOREIGN KEY (source_subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL,
     FOREIGN KEY (selected_profile_id) REFERENCES profile_items(index_id) ON DELETE SET NULL
 );
 
+-- What was last measured through a node. A missing row means "not measured";
+-- the node's list position lives on `profile_items`.
 CREATE TABLE profile_ex_items (
     index_id TEXT PRIMARY KEY NOT NULL,
     delay INTEGER NOT NULL DEFAULT 0,
-    sort INTEGER NOT NULL DEFAULT 0,
     message TEXT,
     ip_info TEXT,
     country_code TEXT,
     FOREIGN KEY (index_id) REFERENCES profile_items(index_id) ON DELETE CASCADE
 );
 
+-- `config_type` is derived from the protocol blob's tag, so the two cannot
+-- disagree, and a protocol that is not JSON with a `kind` cannot be stored.
 CREATE TABLE profile_items (
     index_id TEXT PRIMARY KEY NOT NULL,
-    config_type TEXT NOT NULL,
+    config_type TEXT GENERATED ALWAYS AS (json_extract(protocol, '$.kind')) STORED NOT NULL,
     subscription_id TEXT,
     display_log INTEGER NOT NULL DEFAULT 1 CHECK (display_log IN (0, 1)),
     remarks TEXT NOT NULL DEFAULT '',
     protocol TEXT NOT NULL,
     transport TEXT,
     tls TEXT,
+    sort INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch()),
     FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
 );
 
@@ -72,7 +85,8 @@ CREATE TABLE routing_items (
     id TEXT PRIMARY KEY NOT NULL,
     remarks TEXT NOT NULL DEFAULT '',
     rule_set TEXT NOT NULL DEFAULT '[]',
-    sort INTEGER NOT NULL DEFAULT 0
+    sort INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
 CREATE TABLE self_host (
@@ -80,13 +94,14 @@ CREATE TABLE self_host (
     payload TEXT NOT NULL
 );
 
+-- `day_number` is the local calendar day the `today_*` counters belong to.
 CREATE TABLE server_stat_items (
     index_id TEXT PRIMARY KEY NOT NULL,
     total_up INTEGER NOT NULL DEFAULT 0,
     total_down INTEGER NOT NULL DEFAULT 0,
     today_up INTEGER NOT NULL DEFAULT 0,
     today_down INTEGER NOT NULL DEFAULT 0,
-    date_now INTEGER NOT NULL DEFAULT 0,
+    day_number INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (index_id) REFERENCES profile_items(index_id) ON DELETE CASCADE
 );
 
@@ -97,13 +112,15 @@ CREATE TABLE subscription_metadata (
     total_bytes INTEGER,
     expire_at INTEGER,
     last_update_at INTEGER,
-    last_attempt_at_unix INTEGER,
+    last_attempt_at INTEGER,
     last_attempt_failed INTEGER CHECK (last_attempt_failed IS NULL OR last_attempt_failed IN (0, 1)),
     last_attempt_error TEXT,
     profile_title TEXT,
     FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE
 );
 
+-- `url` is deliberately not unique: two subscriptions may fetch the same URL
+-- with different filters.
 CREATE TABLE subscriptions (
     id TEXT PRIMARY KEY NOT NULL,
     remarks TEXT NOT NULL DEFAULT '',
@@ -114,21 +131,20 @@ CREATE TABLE subscriptions (
     sort INTEGER NOT NULL DEFAULT 0,
     filter TEXT,
     convert_target TEXT,
-    auto_update_interval_minutes INTEGER
+    auto_update_interval_minutes INTEGER,
+    created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
+-- Only the tables that grow with the user's node list are indexed beyond
+-- their keys; the others hold a handful of rows that a scan reads faster.
 CREATE INDEX idx_policy_group_members_profile ON policy_group_members (profile_id);
 
-CREATE INDEX idx_policy_groups_sort ON policy_groups (sort, id);
-
-CREATE INDEX idx_profile_items_config_type ON profile_items (config_type);
+CREATE INDEX idx_profile_items_sort ON profile_items (sort, index_id);
 
 CREATE INDEX idx_profile_items_subscription_id ON profile_items (subscription_id);
 
-CREATE INDEX idx_routing_items_sort ON routing_items (sort);
-
-CREATE INDEX idx_subscriptions_sort ON subscriptions (sort);
-
+-- The only place measurements are cleared: a node whose connection changed is
+-- not the node they were taken on.
 CREATE TRIGGER clear_country_on_connection_change
 AFTER UPDATE OF protocol, transport, tls ON profile_items
 WHEN OLD.protocol IS NOT NEW.protocol OR OLD.transport IS NOT NEW.transport OR OLD.tls IS NOT NEW.tls

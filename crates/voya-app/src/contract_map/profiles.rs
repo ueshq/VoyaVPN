@@ -37,6 +37,9 @@ pub fn profile_from_contract(profile: ProfileContract) -> ProfileItem {
         protocol: protocol_from_contract(profile.protocol),
         transport: profile.transport.map(transport_from_contract),
         tls: profile.tls.map(tls_from_contract),
+        // The contract carries no list position; saving keeps the stored one
+        // or appends a new node at the end.
+        sort: 0,
     }
 }
 

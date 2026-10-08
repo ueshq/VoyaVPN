@@ -171,6 +171,7 @@ fn profile_mapping_round_trips_every_distinct_field() {
         },
         transport: None,
         tls: None,
+        sort: 0,
     };
 
     assert_eq!(
@@ -381,6 +382,7 @@ fn every_protocol_round_trips_through_the_contract() {
             protocol,
             transport: None,
             tls: None,
+            sort: 0,
         };
 
         assert_eq!(
@@ -405,6 +407,7 @@ fn every_transport_round_trips_through_the_contract() {
             },
             transport: Some(transport),
             tls: None,
+            sort: 0,
         };
 
         assert_eq!(
@@ -431,6 +434,7 @@ fn every_tls_mode_round_trips_with_all_eleven_fields_populated() {
             },
             transport: None,
             tls: Some(tls),
+            sort: 0,
         };
 
         assert_eq!(
@@ -456,6 +460,7 @@ fn protocol_transport_and_tls_round_trip_together() {
                     protocol: protocol.clone(),
                     transport: Some(transport.clone()),
                     tls: Some(tls),
+                    sort: 0,
                 };
 
                 assert_eq!(
@@ -606,11 +611,11 @@ fn profile_details_keep_metrics_and_traffic_in_their_own_fields() {
             },
             transport: None,
             tls: None,
+            sort: 333,
         },
         profile_ex: ProfileExItem {
             index_id: "profile-index-id".to_string(),
             delay: 111,
-            sort: 333,
             message: Some("timedOut".to_string()),
             ip_info: Some("metrics-ip-info".to_string()),
             country_code: None,
@@ -621,7 +626,7 @@ fn profile_details_keep_metrics_and_traffic_in_their_own_fields() {
             total_down: 42,
             today_up: 43,
             today_down: 44,
-            date_now: 45,
+            day_number: 45,
         },
         is_active: true,
     });
@@ -655,11 +660,11 @@ fn profile_summaries_carry_kind_address_and_port() {
             },
             transport: None,
             tls: None,
+            sort: 20,
         },
         profile_ex: ProfileExItem {
             index_id: "summary-id".to_string(),
             delay: 77,
-            sort: 20,
             message: Some("completed".to_string()),
             ip_info: None,
             country_code: Some("JP".to_string()),
@@ -709,7 +714,7 @@ fn server_stat_mapping_keeps_each_counter_in_its_own_field() {
         total_down: 52,
         today_up: 53,
         today_down: 54,
-        date_now: 55,
+        day_number: 55,
     });
 
     assert_eq!(contract.total_up, 51);

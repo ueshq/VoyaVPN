@@ -49,11 +49,9 @@ pub enum ProfileManagerError {
 
 /// Hands out sort positions for newly imported profiles.
 ///
-/// A new profile goes after every stored one. `MAX(sort)` has no index to use
-/// (and the single-baseline schema cannot gain one), so reading it per node
-/// scanned the table once per imported node. An import reads it once and
-/// counts up in memory: nothing else assigns sort positions inside the
-/// import's transaction.
+/// A new profile goes after every stored one. An import reads `MAX(sort)` once
+/// and counts up in memory rather than asking again per node: nothing else
+/// assigns sort positions inside the import's transaction.
 #[derive(Debug, Default)]
 pub(crate) struct NewProfileSort {
     last: Option<i32>,
@@ -63,7 +61,7 @@ impl NewProfileSort {
     async fn next(&mut self, database: DatabaseSession<'_>) -> Result<i32> {
         let last = match self.last {
             Some(last) => last,
-            None => database.profile_exs().max_sort().await?,
+            None => database.profiles().max_sort().await?,
         };
         let next = last.saturating_add(DEFAULT_PROFILE_SORT_STEP);
         self.last = Some(next);
@@ -182,14 +180,19 @@ impl<'db> ProfileManager<'db> {
         ))
     }
 
-    /// Writes one imported profile and its extension row, without the active
-    /// profile check or the stats lookup a single save reports back.
+    /// Writes one imported profile, without the active profile check or the
+    /// stats lookup a single save reports back, and returns it with its
+    /// measurements as they now stand.
     ///
     /// A subscription update calls this once per node inside one transaction,
     /// and leaves the final active-profile check to the caller. It already
     /// holds every stored row, so it passes the one `profile` replaces as
     /// `stored`; reading it again cost two queries per node. `None` reads the
     /// stored row, if there is one.
+    ///
+    /// Only the node row is written. A replaced node keeps its list position;
+    /// its measurements are cleared by the database when the connection
+    /// changed, and the returned copy mirrors that without reading them back.
     pub(crate) async fn write_imported_profile(
         &self,
         mut profile: ProfileItem,
@@ -210,12 +213,15 @@ impl<'db> ProfileManager<'db> {
         normalize_profile(&mut profile);
 
         let profile_ex = match previous {
-            None => ProfileExItem {
-                index_id: profile.index_id.clone(),
-                sort: new_sort.next(self.database).await?,
-                ..ProfileExItem::default()
-            },
+            None => {
+                profile.sort = new_sort.next(self.database).await?;
+                ProfileExItem {
+                    index_id: profile.index_id.clone(),
+                    ..ProfileExItem::default()
+                }
+            }
             Some((previous, previous_ex)) => {
+                profile.sort = previous.sort;
                 let mut existing = match previous_ex {
                     Some(previous_ex) => previous_ex,
                     None => self
@@ -233,10 +239,7 @@ impl<'db> ProfileManager<'db> {
             }
         };
 
-        self.database
-            .profiles()
-            .upsert_with_checked_profile_ex(&profile, &profile_ex)
-            .await?;
+        self.database.profiles().upsert(&profile).await?;
         Ok((profile, profile_ex))
     }
 
@@ -323,7 +326,7 @@ impl<'db> ProfileManager<'db> {
         ordered.insert(to, moved);
         let sort_of = members
             .iter()
-            .map(|(_, (p, ex))| (p.index_id.as_str(), ex.sort))
+            .map(|(_, (p, _))| (p.index_id.as_str(), p.sort))
             .collect::<HashMap<_, _>>();
         // Each manual node takes the gap-based key of the slot it lands in, so
         // the list reads `10, 20, 30, …` with subscription nodes keeping theirs.
@@ -341,7 +344,7 @@ impl<'db> ProfileManager<'db> {
                 (sort_of.get(id) != Some(&sort)).then_some((id, sort))
             })
             .collect::<Vec<_>>();
-        self.database.profile_exs().set_sort_many(&updates).await?;
+        self.database.profiles().set_sort_many(&updates).await?;
         Ok(())
     }
 
@@ -618,7 +621,7 @@ mod tests {
 
         assert!(config.active_profile_id.is_empty());
         assert_eq!(first.profile.network(), "raw");
-        assert!(first.profile_ex.sort < second.profile_ex.sort);
+        assert!(first.profile.sort < second.profile.sort);
 
         let listed = manager
             .list_summaries(&config)
@@ -769,13 +772,14 @@ mod tests {
         ));
         assert_eq!(database.profiles().list().await.expect("profiles").len(), 4);
         let outsider_sort = database
-            .profile_exs()
-            .ensure(&outsider.profile.index_id)
+            .profiles()
+            .get(&outsider.profile.index_id)
             .await
             .expect("profile manager test operation should succeed")
+            .expect("the outsider still exists")
             .sort;
         assert_eq!(
-            outsider_sort, outsider.profile_ex.sort,
+            outsider_sort, outsider.profile.sort,
             "profiles outside the scope keep their sort"
         );
     }
@@ -859,7 +863,7 @@ mod tests {
                 .expect("profile manager test operation should succeed")
                 .items
                 .into_iter()
-                .map(|item| (item.profile.remarks, item.profile_ex.sort))
+                .map(|item| (item.profile.remarks, item.profile.sort))
                 .collect::<Vec<_>>()
         };
         let keyed = |order: [&str; 4]| {
@@ -899,6 +903,72 @@ mod tests {
             .await
             .expect("profile manager test operation should succeed");
         assert_eq!(listed().await, keyed(["R4", "R2", "R3", "R1"]));
+    }
+
+    /// Saving writes only the node row. The node keeps its list position
+    /// either way; its measurements survive a rename and are cleared by the
+    /// database when the connection changes, and what the save returns agrees
+    /// with what was stored.
+    #[tokio::test]
+    async fn resaving_a_node_keeps_its_place_and_clears_measurements_only_on_a_new_connection() {
+        let database = Database::connect_in_memory()
+            .await
+            .expect("profile manager test operation should succeed");
+        let manager = ProfileManager::new(&database);
+        let mut config = AppConfig::default();
+        let saved = manager
+            .save_profile(&mut config, sample_profile("node", "Node", 443))
+            .await
+            .expect("profile manager test operation should succeed");
+        let sort = saved.profile.sort;
+        assert!(sort > 0, "a new node is placed after the others");
+        database
+            .profile_exs()
+            .upsert(&ProfileExItem {
+                index_id: "node".to_string(),
+                delay: 88,
+                message: Some("completed".to_string()),
+                ip_info: None,
+                country_code: Some("JP".to_string()),
+            })
+            .await
+            .expect("seed measurement");
+        let stored_delay = || async {
+            database
+                .profile_exs()
+                .get("node")
+                .await
+                .expect("metrics")
+                .expect("row")
+                .delay
+        };
+
+        let renamed = manager
+            .save_profile(&mut config, sample_profile("node", "Renamed", 443))
+            .await
+            .expect("profile manager test operation should succeed");
+        assert_eq!(renamed.profile.sort, sort);
+        assert_eq!(renamed.profile_ex.delay, 88);
+        assert_eq!(stored_delay().await, 88);
+
+        let moved = manager
+            .save_profile(&mut config, sample_profile("node", "Renamed", 8443))
+            .await
+            .expect("profile manager test operation should succeed");
+        assert_eq!(moved.profile.sort, sort);
+        assert_eq!(moved.profile_ex.delay, 0);
+        assert_eq!(moved.profile_ex.country_code, None);
+        assert_eq!(stored_delay().await, 0);
+        assert_eq!(
+            database
+                .profile_exs()
+                .get("node")
+                .await
+                .expect("metrics")
+                .expect("row")
+                .country_code,
+            None
+        );
     }
 
     fn sample_profile(index_id: &str, remarks: &str, port: i32) -> ProfileItem {

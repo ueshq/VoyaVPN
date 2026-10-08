@@ -53,7 +53,7 @@ Shared frontend code lives in source-only `packages/*` modules. Desktop-private 
 
 ## Amendment (2026-09-11): Current Database Baseline Only
 
-VoyaVPN initializes new databases from the single `0011_current_schema.sql`
+VoyaVPN initializes new databases from the single `0013_current_schema.sql`
 baseline. Existing databases must have exactly its successful SQLx record and
 matching checksum. Earlier migration histories, newer schemas and invalid records
 are inspected through a read-only connection and rejected before WAL checkpointing
@@ -62,8 +62,9 @@ the path and a manual reset hint; the application never deletes or upgrades it.
 An empty database, including an empty SQLx bookkeeping table left by interrupted
 initialization, can be initialized normally.
 
-The database baseline identifier is 11 (it moved from 10 when the self-hosted
-node added its `self_host` table, see ADR 0011); settings DTOs and node bundles retain their
+The database baseline identifier is 13 (it moved from 10 when the self-hosted
+node added its `self_host` table, see ADR 0011, and to 13 with the 2026-10-09
+schema review below); settings DTOs and node bundles retain their
 current version 1. Current optional-field defaults remain supported, but there are
 no historical settings conversions. Startup reads settings without rewriting them.
 
@@ -75,3 +76,38 @@ dialog offers Reset Database next to Quit. Reset renames the database and its
 `-wal`/`-shm` sidecars to `voyavpn-reset-<timestamp>.sqlite` in the same folder,
 then relaunches the app, which creates a fresh current-baseline database. A
 locked database or a filesystem error is not offered a reset.
+
+## Amendment (2026-10-09): Schema Review and the Last Baseline
+
+Baseline 0013 folds a schema review into one reset:
+
+- A node's list position is `profile_items.sort`, indexed with `index_id`, so
+  the node list and `MAX(sort)` read the index. `profile_ex_items` holds only
+  what was last measured; a missing row means not measured.
+- `profile_items.config_type` is generated from the protocol blob's `kind`, so
+  the two cannot disagree and a protocol without a tag cannot be stored.
+- Measurements are cleared in one place, the
+  `clear_country_on_connection_change` trigger. Saving a node writes only the
+  node row.
+- `profile_items`, `subscriptions`, `routing_items` and `policy_groups` record
+  `created_at`, set by SQLite on insert and never written by an upsert.
+- `policy_group_members` makes `(group_id, position)` unique.
+- Indexes on tables that hold a handful of rows are dropped.
+- `server_stat_items.date_now` is `day_number`, and
+  `subscription_metadata.last_attempt_at_unix` is `last_attempt_at`. The IPC
+  contract keeps its existing field names.
+- `subscriptions.url` stays non-unique on purpose: two subscriptions may fetch
+  the same URL with different filters.
+
+0013 is intended to be the last baseline. Once 1.0 ships it is frozen, and a
+later schema change is an incremental migration file on top of it. Startup will
+then accept a database whose migration records form an unbroken, successful,
+checksum-matching chain from 0013, and the migrator applies the missing tail.
+A retired settings key is removed in the migration with `json_remove`, since
+the settings payload is decoded strictly. Until that switch, the startup reset
+above stays the only path between baselines.
+
+Stored credentials (node passwords and UUIDs, the self-hosted node's REALITY
+private key, subscription URLs that carry tokens) remain plain JSON in the
+database file. Moving them to the platform keychain is left to a separate
+decision.

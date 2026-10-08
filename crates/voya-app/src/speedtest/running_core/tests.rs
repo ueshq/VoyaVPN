@@ -105,15 +105,19 @@ fn manager(core: FakeCore) -> Harness {
 async fn database_with(profiles: &[ProfileItem]) -> Database {
     let database = Database::connect_in_memory().await.expect("database");
     for profile in profiles {
-        let profile_ex = ProfileExItem {
-            index_id: profile.index_id.clone(),
-            ..ProfileExItem::default()
-        };
         database
             .profiles()
-            .upsert_with_profile_ex(profile, &profile_ex)
+            .upsert(profile)
             .await
             .expect("insert profile");
+        database
+            .profile_exs()
+            .upsert(&ProfileExItem {
+                index_id: profile.index_id.clone(),
+                ..ProfileExItem::default()
+            })
+            .await
+            .expect("insert measurements");
     }
     database
 }

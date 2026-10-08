@@ -21,7 +21,7 @@ impl<'executor> SubscriptionMetadataRepository<'executor> {
                 r#"
             INSERT INTO subscription_metadata (
                 subscription_id, upload_bytes, download_bytes, total_bytes,
-                expire_at, last_update_at, last_attempt_at_unix,
+                expire_at, last_update_at, last_attempt_at,
                 last_attempt_failed, last_attempt_error, profile_title
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(subscription_id) DO UPDATE SET
@@ -30,7 +30,7 @@ impl<'executor> SubscriptionMetadataRepository<'executor> {
                 total_bytes = excluded.total_bytes,
                 expire_at = excluded.expire_at,
                 last_update_at = excluded.last_update_at,
-                last_attempt_at_unix = excluded.last_attempt_at_unix,
+                last_attempt_at = excluded.last_attempt_at,
                 last_attempt_failed = excluded.last_attempt_failed,
                 last_attempt_error = excluded.last_attempt_error,
                 profile_title = excluded.profile_title
@@ -42,7 +42,7 @@ impl<'executor> SubscriptionMetadataRepository<'executor> {
             .bind(item.total_bytes)
             .bind(item.expire_at)
             .bind(item.last_update_at)
-            .bind(item.last_attempt_at_unix)
+            .bind(item.last_attempt_at)
             // SQLite has no BOOLEAN storage class; the CHECK on the column
             // keeps the integer honest.
             .bind(item.last_attempt_failed.map(i64::from))
@@ -84,7 +84,7 @@ fn row_to_metadata(row: SqliteRow) -> Result<SubMetadataItem> {
         total_bytes: row.try_get("total_bytes")?,
         expire_at: row.try_get("expire_at")?,
         last_update_at: row.try_get("last_update_at")?,
-        last_attempt_at_unix: row.try_get("last_attempt_at_unix")?,
+        last_attempt_at: row.try_get("last_attempt_at")?,
         last_attempt_failed: row
             .try_get::<Option<i64>, _>("last_attempt_failed")?
             .map(|failed| failed != 0),

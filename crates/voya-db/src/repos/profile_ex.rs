@@ -1,19 +1,15 @@
-use sqlx::{sqlite::SqliteRow, Row, SqliteConnection};
+use sqlx::{sqlite::SqliteRow, Row};
 use voya_contracts::{SpeedtestOutcome, SpeedtestResult};
 use voya_core::{ProfileExItem, ProfileItem};
 
 use crate::{
     blob,
-    executor::{max_sort, repository_constructors, run_query, with_connection, RepositoryExecutor},
+    executor::{repository_constructors, run_query, RepositoryExecutor},
     Result,
 };
 
-/// Writes one profile's sort position without touching its other columns.
-const SET_SORT_STATEMENT: &str = r#"
-    INSERT INTO profile_ex_items (index_id, sort) VALUES (?, ?)
-    ON CONFLICT(index_id) DO UPDATE SET sort = excluded.sort
-"#;
-
+/// What was last measured through each node. A node with no row has not been
+/// measured.
 #[derive(Debug, Clone, Copy)]
 pub struct ProfileExRepository<'executor> {
     executor: RepositoryExecutor<'executor>,
@@ -22,22 +18,16 @@ pub struct ProfileExRepository<'executor> {
 repository_constructors!(ProfileExRepository);
 
 impl<'executor> ProfileExRepository<'executor> {
-    #[must_use]
-    pub(crate) const fn from_executor(executor: RepositoryExecutor<'executor>) -> Self {
-        Self { executor }
-    }
-
     pub async fn upsert(&self, item: &ProfileExItem) -> Result<()> {
         run_query!(
             self.executor,
             sqlx::query(
                 r#"
             INSERT INTO profile_ex_items (
-                index_id, delay, sort, message, ip_info, country_code
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                index_id, delay, message, ip_info, country_code
+            ) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(index_id) DO UPDATE SET
                 delay = excluded.delay,
-                sort = excluded.sort,
                 message = excluded.message,
                 ip_info = excluded.ip_info,
                 country_code = excluded.country_code
@@ -45,7 +35,6 @@ impl<'executor> ProfileExRepository<'executor> {
             )
             .bind(&item.index_id)
             .bind(item.delay)
-            .bind(item.sort)
             .bind(&item.message)
             .bind(&item.ip_info)
             .bind(&item.country_code),
@@ -116,61 +105,18 @@ impl<'executor> ProfileExRepository<'executor> {
     pub async fn list(&self) -> Result<Vec<ProfileExItem>> {
         let rows = run_query!(
             self.executor,
-            sqlx::query("SELECT * FROM profile_ex_items ORDER BY sort, index_id"),
+            sqlx::query("SELECT * FROM profile_ex_items ORDER BY index_id"),
             fetch_all
         )?;
 
         rows.into_iter().map(row_to_profile_ex).collect()
     }
-
-    pub async fn max_sort(&self) -> Result<i32> {
-        max_sort(self.executor, "SELECT MAX(sort) FROM profile_ex_items").await
-    }
-
-    /// Assigns a whole ordering, all-or-nothing, in one transaction.
-    ///
-    /// A reorder rewrites every row that moved, and one statement per row on
-    /// the pool autocommits — and therefore fsyncs — each time, so reordering a
-    /// large subscription paid hundreds of commits for one user gesture. Each
-    /// row is a single upsert that leaves every other column of an existing
-    /// row untouched.
-    ///
-    /// The batch runs through `executor::with_connection`, so inside a
-    /// [`crate::UnitOfWork`] it joins the caller's transaction: the caller still
-    /// decides when to commit and a mid-batch failure leaves the whole unit to
-    /// roll back.
-    ///
-    /// Entries are applied in the order given, so a caller that lists the same
-    /// profile twice gets the last position it asked for.
-    pub async fn set_sort_many(&self, entries: &[(&str, i32)]) -> Result<()> {
-        if entries.is_empty() {
-            return Ok(());
-        }
-
-        with_connection(self.executor, entries, |connection, entries| {
-            Box::pin(set_sort_on(connection, entries))
-        })
-        .await
-    }
-}
-
-async fn set_sort_on(connection: &mut SqliteConnection, entries: &[(&str, i32)]) -> Result<()> {
-    for (index_id, sort) in entries {
-        sqlx::query(SET_SORT_STATEMENT)
-            .bind(*index_id)
-            .bind(*sort)
-            .execute(&mut *connection)
-            .await?;
-    }
-
-    Ok(())
 }
 
 fn row_to_profile_ex(row: SqliteRow) -> Result<ProfileExItem> {
     Ok(ProfileExItem {
         index_id: row.try_get("index_id")?,
         delay: row.try_get("delay")?,
-        sort: row.try_get("sort")?,
         message: row.try_get("message")?,
         ip_info: row.try_get("ip_info")?,
         country_code: row.try_get("country_code")?,
