@@ -77,7 +77,7 @@ const NATIVE_EVENT = "VoyaBackendEvent";
  * says what every command is called and which arguments it takes, in the order
  * `VoyaCommands` passes them, so seventy hand-written wrappers could only ever
  * drift from it. The generated table is checked against Rust by
- * `vp run check:bindings`, which makes this loop correct by construction.
+ * `vp run check bindings`, which makes this loop correct by construction.
  */
 function nativeCommands(native: VoyaCommandInvoker): VoyaCommands {
   const entries = Object.entries(VOYA_COMMAND_WIRE).map(([method, { name, params }]) => [

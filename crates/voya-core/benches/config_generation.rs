@@ -1,6 +1,6 @@
 //! sing-box config generation as the node count grows: the macOS connect
 //! config (one latency probe outbound per node), a policy group spanning a
-//! whole subscription, and a speedtest page. Run with `vp run bench:rust`.
+//! whole subscription, and a speedtest page. Run with `vp run bench rust`.
 
 use std::hint::black_box;
 
@@ -12,7 +12,7 @@ use voya_core::{
     SpeedtestConfigEntry, TlsMode, TlsSettings,
 };
 
-/// `check:rust:test` runs every bench once in the unoptimized test profile to
+/// `check rust test` runs every bench once in the unoptimized test profile to
 /// keep them compiling; the smallest size is enough there.
 const NODE_COUNTS: &[usize] = if cfg!(debug_assertions) {
     &[100]

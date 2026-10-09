@@ -18,5 +18,5 @@ types that mirror backend types anywhere else.
 - `events.json` — each event channel's wire name and the `kind` values its
   payload can carry, checked against the mobile host's own event enums.
 
-Run `vp run generate:bindings` after changing any Rust command, event or DTO;
-`vp run check:bindings` fails on drift.
+Run `vp run generate bindings` after changing any Rust command, event or DTO;
+`vp run check bindings` fails on drift.

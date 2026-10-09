@@ -7,7 +7,7 @@ import { resolveStoreBuildNumber } from "../../tauri/mac-app-store-config.mjs";
 import { androidArtifactPaths } from "./dev.mjs";
 
 /**
- * `vp run build:android`: the production APK distributed outside Google Play,
+ * `vp run build android`: the production APK distributed outside Google Play,
  * signed with the release key.
  *
  *   --reuse-libbox  Keep the staged libbox.aar instead of rebuilding it.
@@ -127,7 +127,7 @@ export function main(argv = process.argv.slice(2)) {
   const skipNative = argv.includes("--skip-native");
   const reuseLibbox = argv.includes("--reuse-libbox");
   if (process.platform === "win32") {
-    throw new Error("vp run build:android runs on macOS or Linux.");
+    throw new Error("vp run build android runs on macOS or Linux.");
   }
 
   // --- 1. preflight -------------------------------------------------------------
@@ -173,12 +173,12 @@ export function main(argv = process.argv.slice(2)) {
     run("rustup", ["target", "add", "aarch64-linux-android", "x86_64-linux-android"]);
     // Always the release profile: a `VOYAVPN_RUST_PROFILE` left exported from
     // an iteration loop would otherwise ship an unoptimised backend.
-    run("vp", ["run", "native:mobile:rust:android"], {
+    run("vp", ["run", "native", "mobile", "rust", "android"], {
       cwd: root,
       env: { ...process.env, VOYAVPN_RUST_PROFILE: "release" },
     });
     if (!reuseLibbox || artifacts.libbox.some((path) => !existsSync(path))) {
-      run("vp", ["run", "native:mobile:libbox:android"], { cwd: root });
+      run("vp", ["run", "native", "mobile", "libbox", "android"], { cwd: root });
     }
   }
 

@@ -5,7 +5,7 @@ import { isCliEntrypoint, repoRootFromScript, run, runCli } from "../../lib/comm
 import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
 
 /**
- * `vp run dev:ios` / `vp run dev:android`: the mobile app in Debug, on the
+ * `vp run dev ios` / `vp run dev android`: the mobile app in Debug, on the
  * simulator or the Android emulator/device, served by Metro.
  *
  * The Debug build links the same native artifacts a release does, and they are
@@ -13,7 +13,7 @@ import { podsUpToDate, recordInstalledPods } from "./ios-pods-cache.mjs";
  * here only when it is missing: the Rust backend is the one that changes with
  * the code, so `--rebuild-rust` rebuilds it on request; Libbox is pinned and
  * only ever built once. Every other argument goes to `react-native run-ios` /
- * `run-android` (`vp run dev:ios --simulator "iPhone 17"`).
+ * `run-android` (`vp run dev ios --simulator "iPhone 17"`).
  *
  * The Rust backend uses the `mobile-smoke` profile unless `VOYAVPN_RUST_PROFILE`
  * names another: fat LTO is most of a release build's wait, and nothing here
@@ -24,7 +24,7 @@ const OWN_FLAGS = ["--rebuild-rust"];
 
 /** Splits this script's own flags from those passed on to React Native. */
 export function parseDevArgs(argv) {
-  // `vp run dev:ios -- --simulator X` passes the `--` through.
+  // `vp run dev ios -- --simulator X` passes the `--` through.
   const args = argv.filter((arg) => arg !== "--");
   return {
     rebuildRust: args.includes("--rebuild-rust"),
@@ -61,17 +61,17 @@ function rustEnv() {
 
 function devIos(root, { rebuildRust, reactNativeArgs }) {
   if (process.platform !== "darwin") {
-    throw new Error("vp run dev:ios needs macOS with Xcode and CocoaPods.");
+    throw new Error("vp run dev ios needs macOS with Xcode and CocoaPods.");
   }
   const ios = resolve(root, "apps/mobile/ios");
   const frameworks = resolve(ios, "Frameworks");
 
   if (rebuildRust || !hasSimulatorSlice(xcframeworkEntries(resolve(frameworks, "VoyaMobile.xcframework")))) {
     run("rustup", ["target", "add", "aarch64-apple-ios-sim"]);
-    run("vp", ["run", "native:mobile:rust:ios", "--slice", "simulator"], { cwd: root, env: rustEnv() });
+    run("vp", ["run", "native", "mobile", "rust", "ios", "--slice", "simulator"], { cwd: root, env: rustEnv() });
   }
   if (!hasSimulatorSlice(xcframeworkEntries(resolve(frameworks, "Libbox.xcframework")))) {
-    run("vp", ["run", "native:mobile:libbox:ios"], { cwd: root });
+    run("vp", ["run", "native", "mobile", "libbox", "ios"], { cwd: root });
   }
   if (!podsUpToDate(root)) {
     // CocoaPods crashes outright under a non-UTF-8 locale, which an editor's
@@ -81,7 +81,7 @@ function devIos(root, { rebuildRust, reactNativeArgs }) {
   }
   // Idempotent and quick; `pod install` and a pull both rewrite parts of the
   // project it owns.
-  run("vp", ["run", "native:mobile:ios:project"], { cwd: root });
+  run("vp", ["run", "native", "mobile", "ios", "project"], { cwd: root });
   run("vp", ["run", "--filter", "@voya/mobile", "ios", ...reactNativeArgs], { cwd: root });
 }
 
@@ -94,10 +94,10 @@ function devAndroid(root, { rebuildRust, reactNativeArgs }) {
 
   if (rebuildRust || missing(artifacts.rust)) {
     run("rustup", ["target", "add", "aarch64-linux-android", "x86_64-linux-android"]);
-    run("vp", ["run", "native:mobile:rust:android"], { cwd: root, env: rustEnv() });
+    run("vp", ["run", "native", "mobile", "rust", "android"], { cwd: root, env: rustEnv() });
   }
   if (missing(artifacts.libbox)) {
-    run("vp", ["run", "native:mobile:libbox:android"], { cwd: root });
+    run("vp", ["run", "native", "mobile", "libbox", "android"], { cwd: root });
   }
   run("vp", ["run", "--filter", "@voya/mobile", "android", ...reactNativeArgs], { cwd: root });
 }

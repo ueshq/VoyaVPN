@@ -1,15 +1,15 @@
 # Mac App Store Package
 
-`vp run build:mac:appstore` produces the signed installer package that is
+`vp run build mac appstore` produces the signed installer package that is
 uploaded to App Store Connect for TestFlight and Mac App Store review:
 
 ```text
 target/release/bundle/pkg/VoyaVPN_<version>_<build>_aarch64.pkg
 ```
 
-It is the third macOS lane beside `vp run build:mac` (notarized Developer ID
+It is the third macOS lane beside `vp run build mac` (notarized Developer ID
 DMG, see [signing-notarization.md](signing-notarization.md)) and
-`vp run build:mac:local` (this-Mac-only TUN testing, see
+`vp run build mac local` (this-Mac-only TUN testing, see
 [macos-local-tun-testing.md](macos-local-tun-testing.md)). The package is
 **arm64 only** and requires **macOS 26** or later. App Store Connect needs at
 least 12.0 for an arm64-only package (ITMS-90869), and the sing-box seed is
@@ -94,7 +94,7 @@ has the naive outbound.
 4. **App Store Connect.** The app record for bundle id `app.voyavpn.desktop`
    must exist before the first upload.
 5. **Libbox.** `apps/desktop/src-tauri/native/macos/Frameworks/Libbox.framework`
-   must exist; build it with `vp run native:macos:libbox` if not.
+   must exist; build it with `vp run native macos libbox` if not.
 6. **Go.** The lane compiles the sing-box seed, so `go` must be on `PATH`
    (`brew install go`). The first build downloads Go modules and takes a few
    minutes; later builds reuse the module and build caches. The installed
@@ -106,22 +106,22 @@ has the naive outbound.
 Run on an Apple Silicon Mac. The script refuses to run on Intel.
 
 ```sh
-vp run build:mac:appstore
+vp run build mac appstore
 ```
 
 The script runs these steps:
 
-1. `tauri:build --bundles app` with the store overlay and the
+1. `tauri build --bundles app` with the store overlay and the
    `mac-app-store` feature. The build wrapper stages the source-built seed
    (`VOYAVPN_SING_BOX_SEED_ORIGIN=source`), compiling it only when the staged
-   one is missing or does not match the pin. `vp run core:sing-box:build`
+   one is missing or does not match the pin. `vp run core sing-box build`
    builds it on its own.
-2. `native:macos:tunnel` to build and sign the PacketTunnel appex.
-3. `native:macos:app:sign`.
-4. `native:macos:tunnel:verify`.
-5. `native:macos:pkg`.
+2. `native macos tunnel` to build and sign the PacketTunnel appex.
+3. `native macos app sign`.
+4. `native macos tunnel verify`.
+5. `native macos pkg`.
 
-Before it writes the `.pkg`, `native:macos:pkg` checks the following:
+Before it writes the `.pkg`, `native macos pkg` checks the following:
 
 - Both embedded profiles are store distribution profiles.
 - The app is signed by a store application identity.
@@ -151,14 +151,14 @@ Before it writes the `.pkg`, `native:macos:pkg` checks the following:
   `Contents/Library/LaunchAgents/app.voyavpn.desktop.autostart.plist` is
   present, its `Label` is its file name, its `BundleProgram` is
   `Contents/MacOS/<CFBundleExecutable>`, and it passes `--autostart`.
-  `native:macos:tunnel:verify` checks the same in every lane.
+  `native macos tunnel verify` checks the same in every lane.
 - No file carries `com.apple.quarantine` (ITMS-91109). This is checked on the
   bundle, and again on the finished `.pkg` after expanding it, because
   `productbuild` keeps extended attributes in the payload.
 
 Provisioning profiles saved from a browser are quarantined, and build 352
 shipped both embedded profiles with that attribute. The lane now writes
-profiles into the bundle as plain bytes. `native:macos:app:sign` also removes
+profiles into the bundle as plain bytes. `native macos app sign` also removes
 any remaining quarantine before signing, and lists the files it cleaned.
 
 Afterwards the script removes `Contents/PlugIns` from the `target/` app copy.
@@ -178,7 +178,7 @@ to upload the same commit twice, or to build from a branch whose commit count
 is lower than an earlier upload's:
 
 ```sh
-VOYAVPN_MACOS_BUILD_NUMBER=412 vp run build:mac:appstore
+VOYAVPN_MACOS_BUILD_NUMBER=412 vp run build mac appstore
 ```
 
 It takes one to three period-separated integers. The PacketTunnel copies both
@@ -186,7 +186,7 @@ version fields from the app, which avoids ITMS-90473.
 
 ### Output path
 
-`native:macos:pkg` writes `VoyaVPN_<version>_<build>_<arch>.pkg` into
+`native macos pkg` writes `VoyaVPN_<version>_<build>_<arch>.pkg` into
 `VOYAVPN_MACOS_PKG_DIR` (default `target/release/bundle/pkg`); set
 `VOYAVPN_MACOS_PKG_PATH` to name the file itself instead.
 
@@ -219,10 +219,10 @@ order:
 1. Reply in the App Store Connect message thread with the
    [Resolution Center reply](app-store-review-notes.md#resolution-center-reply-for-build-405).
    An unanswered thread stays attached to the version.
-2. Run `vp run verify:local` on the commit to ship.
-3. Run `vp run build:mac:appstore`. The build number is the commit count, so it
+2. Run `vp run verify local` on the commit to ship.
+3. Run `vp run build mac appstore`. The build number is the commit count, so it
    is already above 405; set `VOYAVPN_MACOS_BUILD_NUMBER` only to upload the
-   same commit twice. Confirm `native:macos:pkg` printed the public-API,
+   same commit twice. Confirm `native macos pkg` printed the public-API,
    privilege-escalation and launch-at-login lines.
 4. Upload with Transporter (Verify, then Deliver) and answer export compliance
    for the new build.

@@ -43,6 +43,11 @@ cargo install cargo-machete --locked --version 0.9.2
 
 ## Development Commands
 
+Commands are the words after `vp run`, separated by spaces (`vp run build mac
+local`); `scripts/commands.mjs` lists them all, and `vp run build` with nothing
+after it lists that group. `vp install` also installs a pre-commit hook that
+formats and lints the staged files (`VP_GIT_HOOKS=0` skips it).
+
 Run the full Tauri app in development:
 
 ```sh
@@ -59,22 +64,22 @@ parent directory; packaged builds (including debug packages) use that parent.
 Run the frontend-only Vite dev server:
 
 ```sh
-vp run dev:web
+vp run dev web
 ```
 
 Run the mobile app in Debug (iOS simulator, or an Android emulator/device); the
 first run builds the native artifacts it links:
 
 ```sh
-vp run dev:ios
-vp run dev:android
+vp run dev ios
+vp run dev android
 ```
 
 Regenerate Rust-to-TypeScript IPC bindings after command or event type changes:
 
 ```sh
-vp run generate:bindings
-vp run check:bindings
+vp run generate bindings
+vp run check bindings
 ```
 
 ## Build Commands
@@ -88,14 +93,14 @@ vp build
 Build unsigned debug Tauri packages without signing credentials:
 
 ```sh
-vp run tauri:build --debug
+vp run tauri build --debug
 ```
 
 On Windows, build and install an unsigned release-profile client plus the
 protected TUN service for local testing (the service step opens one UAC prompt):
 
 ```powershell
-vp run build:windows:local
+vp run build windows local
 ```
 
 This generates and installs a current-user NSIS artifact, then leaves the
@@ -109,14 +114,14 @@ for distribution outside Google Play (needs the release key; see
 [`docs/release/mobile-android-signing.md`](docs/release/mobile-android-signing.md)):
 
 ```sh
-vp run build:ios:appstore
-vp run build:android
+vp run build ios appstore
+vp run build android
 ```
 
 Build release-profile Tauri packages in a prepared signing environment:
 
 ```sh
-vp run tauri:build
+vp run tauri build
 ```
 
 ## Test And Verification Commands
@@ -124,7 +129,7 @@ vp run tauri:build
 Run the complete local CI parity suite:
 
 ```sh
-vp run verify:local
+vp run verify local
 ```
 
 Run the final gate checks individually. `scripts/quality/verify-local.mjs` is the
@@ -132,28 +137,28 @@ source of truth for this list and its order; CI's parallel `baseline-fast`,
 `baseline-rust` and `baseline-frontend` jobs together run the same steps:
 
 ```sh
-vp run check:architecture
-vp run check:lockfile
-vp run check:rust:fmt
-vp run check:rust:clippy
-vp run check:rust:deps
-vp run check:rust:test
-vp run check:frontend:static
-vp run check:frontend:coverage
-vp run check:frontend:bundle
-vp run check:frontend:smoke:mock
-vp run check:dead-code
-vp run check:sing-box
-vp run check:bindings
-vp run check:i18n
+vp run check architecture
+vp run check lockfile
+vp run check rust fmt
+vp run check rust clippy
+vp run check rust deps
+vp run check rust test
+vp check
+vp run check frontend coverage
+vp run check frontend bundle
+vp run check frontend smoke mock
+vp run check dead-code
+vp run check sing-box
+vp run check bindings
+vp run check i18n
 ```
 
-`vp run check:frontend:test` runs the same suite without the coverage gate, and
-`vp run check:desktop:smoke` (packaged shell through `tauri-driver`) runs in its
-own Linux CI job rather than in `verify:local`.
+`vp test` runs the same suite without the coverage gate, and
+`vp run check desktop smoke` (packaged shell through `tauri-driver`) runs in its
+own Linux CI job rather than in `verify local`.
 
-`vp run check:frontend:static` is `vp check`: Oxfmt formatting, Oxlint (with
-the type-aware rules) and TypeScript diagnostics for every workspace project.
+`vp check` is Oxfmt formatting, Oxlint (with the type-aware rules) and
+TypeScript diagnostics for every workspace project.
 `vp check --fix` formats and applies the autofixes.
 
 Run one frontend test file (`vp test watch` keeps watching):
@@ -162,10 +167,10 @@ Run one frontend test file (`vp test watch` keeps watching):
 vp test apps/desktop/src/features/profiles/server-table.test.tsx
 ```
 
-`vp run check:rust:test` runs workspace all-target tests while excluding the Tauri shell library harness, then builds the shell binary test target. The shell library target keeps its lib test harness disabled because shell-level coverage lives in workspace crates and frontend tests; this avoids Windows WebView/Wry loader failures from an otherwise empty harness. Do not use bare `cargo test --workspace --all-targets` on Windows, because Cargo still forces explicitly disabled targets when `--all-targets` is passed.
+`vp run check rust test` runs workspace all-target tests while excluding the Tauri shell library harness, then builds the shell binary test target. The shell library target keeps its lib test harness disabled because shell-level coverage lives in workspace crates and frontend tests; this avoids Windows WebView/Wry loader failures from an otherwise empty harness. Do not use bare `cargo test --workspace --all-targets` on Windows, because Cargo still forces explicitly disabled targets when `--all-targets` is passed.
 
-`vp run check:dead-code` runs both the workspace-wide Knip scan and a strict
-production-entry scan. `vp run check:rust:deps` runs cargo-machete against
+`vp run check dead-code` runs both the workspace-wide Knip scan and a strict
+production-entry scan. `vp run check rust deps` runs cargo-machete against
 direct Cargo dependencies.
 
 Linux CI installs Tauri build prerequisites before compiling the Rust workspace. Local Linux machines need the same Tauri system libraries.
@@ -175,8 +180,8 @@ Linux CI installs Tauri build prerequisites before compiling the Rust workspace.
 Run the credential-free release workflow equivalent locally:
 
 ```sh
-vp run verify:local
-vp run tauri:build --debug
+vp run verify local
+vp run tauri build --debug
 vp run release -- artifacts --input target/debug/bundle --output dist/release/local --target local-debug --channel beta --allow-empty
 vp run release -- updater --input dist/release --out dist/updater/latest.json --target darwin-aarch64,darwin-x86_64,linux-aarch64,linux-x86_64,windows-aarch64,windows-x86_64 --placeholder-signatures
 ```

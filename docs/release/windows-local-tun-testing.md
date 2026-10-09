@@ -1,6 +1,6 @@
 # Windows Local TUN Testing
 
-`vp run build:windows:local` produces an unsigned release-profile Windows client
+`vp run build windows local` produces an unsigned release-profile Windows client
 for local TUN testing. It builds an NSIS package for the machine's native x64
 or arm64 architecture, silently installs it for the current user, and uses one
 UAC prompt to install the native tunnel service.
@@ -49,7 +49,7 @@ Quit the VoyaVPN GUI and disable TUN, then run from a normal, non-elevated
 PowerShell:
 
 ```powershell
-vp run build:windows:local
+vp run build windows local
 ```
 
 The command performs these steps:
@@ -96,7 +96,7 @@ After enabling TUN in VoyaVPN:
 4. Disable TUN and verify the service stops, Wintun routes disappear, DNS is
    restored, and no sing-box process remains.
 
-Re-running `vp run build:windows:local` updates the same local NSIS installation
+Re-running `vp run build windows local` updates the same local NSIS installation
 and replaces the protected service binary without starting the service.
 
 ## Troubleshooting
@@ -111,7 +111,7 @@ and replaces the protected service binary without starting the service.
 - **Service stop timed out** — disable TUN, inspect
   `sc.exe query VoyaVPNTunnelService`, then retry. The script will not overwrite
   a running service executable.
-- **Missing sing-box seed** — run `vp run core:sing-box:install` and rebuild.
+- **Missing sing-box seed** — run `node scripts/core/install-sing-box.mjs --force` and rebuild.
 
 ## Teardown
 
@@ -119,7 +119,7 @@ Disable TUN and quit VoyaVPN. In an elevated PowerShell, unregister the service
 and remove only its managed executable:
 
 ```powershell
-vp run native:windows:tunnel:uninstall
+vp run native windows tunnel uninstall
 ```
 
 The service helper does not recursively delete `%ProgramFiles%\VoyaVPN`; it

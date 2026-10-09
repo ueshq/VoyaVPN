@@ -10,8 +10,8 @@ const macAppStoreMinimumSystemVersion = "26.0";
 export const macAppStoreFeature = "mac-app-store";
 
 /**
- * `vp run build:mac:appstore` sets this. It is a separate switch from
- * `VOYAVPN_MACOS_DISTRIBUTION=app-store` on purpose: `vp run build:mac:local`
+ * `vp run build mac appstore` sets this. It is a separate switch from
+ * `VOYAVPN_MACOS_DISTRIBUTION=app-store` on purpose: `vp run build mac local`
  * signs the same App-Store-shaped appex for local TUN testing and must keep
  * its ordinary configuration.
  */

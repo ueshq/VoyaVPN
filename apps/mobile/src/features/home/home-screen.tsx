@@ -184,7 +184,7 @@ export function HomeScreen() {
 /**
  * Every core state's word, stated rather than built.
  *
- * `vp run check:i18n` rejects a key assembled at runtime, and rightly: a template
+ * `vp run check i18n` rejects a key assembled at runtime, and rightly: a template
  * key cannot be checked against the locale files, and a state added in Rust
  * would silently render its own name. Cleanup is a disconnect the user did not
  * ask twice for, so it reads as disconnected.

@@ -4,7 +4,7 @@ The sing-box core is not built by VoyaVPN. It is downloaded from an upstream
 GitHub release, extracted into
 `apps/desktop/src-tauri/resources/core-seeds/sing_box/`, executed on developer
 machines by the `postinstall` probe, and bundled into every package that
-`vp run tauri:build` produces. Because a GitHub release tag is mutable, that
+`vp run tauri build` produces. Because a GitHub release tag is mutable, that
 archive is pinned by SHA-256 in the repository.
 
 ## Where the pin lives
@@ -57,7 +57,7 @@ is interpolated into a URL or a PowerShell command line.
 4. Re-stage locally and confirm the seed manifest reports the new version:
 
    ```sh
-   vp run core:sing-box:install --force-fetch
+   node scripts/core/install-sing-box.mjs --force --force-fetch
    cat apps/desktop/src-tauri/resources/core-seeds/sing_box/sing-box.seed.json
    ```
 
@@ -77,7 +77,7 @@ is interpolated into a URL or a PowerShell command line.
    Record the commit in `SING_BOX_SOURCE_COMMITS`. Compare the tag list with
    `SING_BOX_SOURCE_BUILD_TAGS`; if upstream changed it, review the change
    before copying it, and never add `with_naive_outbound`. Then run
-   `vp run core:sing-box:build` on a Mac and check that it passes its own
+   `vp run core sing-box build` on a Mac and check that it passes its own
    public-API scan.
 
 ## From-source seed (Mac App Store lane)
@@ -104,7 +104,7 @@ So the store lane builds the seed from source instead:
   `target/native/sing-box` (the checkout the Libbox builds share) and runs
   `go build -trimpath` with upstream's `release/LDFLAGS`. It then checks the
   tags and revision the binary reports and, on macOS, runs the public-API scan
-  from `scripts/native/macos/macho-imports.mjs`. `vp run core:sing-box:build`
+  from `scripts/native/macos/macho-imports.mjs`. `vp run core sing-box build`
   runs it by hand; the Tauri build wrapper runs it when the staged seed does
   not verify.
 - **Manifest.** `sing-box.seed.json` records `origin: "source"`, `version`,
@@ -170,7 +170,7 @@ so a branch name alone would change under the build every day.
 `apps/desktop/src-tauri/resources/core-seeds/rule_sets/` (skipped on CI unless
 `VOYAVPN_FETCH_RULE_SETS_ON_INSTALL=1`, and whenever
 `VOYAVPN_SKIP_RULE_SETS_POSTINSTALL=1`), and every `tauri build` re-stages any
-file that is missing or does not match its pin. `vp run core:rule-sets:install`
+file that is missing or does not match its pin. `vp run core rule-sets install`
 forces a fresh download. At startup the desktop app copies any bundled file
 that app data `bin/srss/` lacks; it never replaces one, because a rule-library
 update may have put a newer file there.
@@ -183,5 +183,5 @@ To bump them:
    `https://raw.githubusercontent.com/2dust/sing-box-rules/<commit>/<tag>.srs`,
    check that it starts with `SRS`, and record its SHA-256.
 3. Update `RULE_SET_PINS` in one commit, then run
-   `vp run core:rule-sets:install` and `vp run release -- readiness --dry-run`.
+   `vp run core rule-sets install` and `vp run release -- readiness --dry-run`.
 

@@ -7,7 +7,7 @@ what puts the Clash API on plain loopback with nothing in between (ADR 0013).
 > **Status.** The Kotlin host under
 > `apps/mobile/android/app/src/main/java/app/voyavpn/mobile/host/` has never
 > been compiled: it is written against the `libbox.aar` that
-> `vp run native:mobile:libbox:android` stages, and there is no host-side build
+> `vp run native mobile libbox android` stages, and there is no host-side build
 > that typechecks it. Expect to reconcile the `PlatformInterface` members with
 > the pinned archive on the first Gradle build; the macOS implementation in
 > `native/apple/PacketTunnel/PacketTunnelPlatform.swift` is the reference for
@@ -35,19 +35,19 @@ cargo install cargo-ndk
 
 Plus a JDK 17+, the Android SDK, and the NDK version `build.gradle` pins. Go
 and gomobile come from sing-box's own `make lib_install`, which
-`vp run native:mobile:libbox:android` runs.
+`vp run native mobile libbox android` runs.
 
 ## Build the native artifacts
 
 Both are gitignored build outputs, and a Gradle build needs both:
 
 ```sh
-vp run native:mobile:libbox:android   # libbox.aar  → apps/mobile/android/app/libs/
-vp run native:mobile:rust:android     # .so files   → apps/mobile/android/app/src/main/jniLibs/
+vp run native mobile libbox android   # libbox.aar  → apps/mobile/android/app/libs/
+vp run native mobile rust android     # .so files   → apps/mobile/android/app/src/main/jniLibs/
                                     # + Kotlin bindings → app/src/main/java/uniffi/
 ```
 
-`native:mobile:rust:*` builds the `release` cargo profile; set
+`native mobile rust …` builds the `release` cargo profile; set
 `VOYAVPN_RUST_PROFILE=debug` for a faster unoptimised library while iterating.
 
 `abiFilters` in `app/build.gradle` is `arm64-v8a` and `x86_64` — a device and
@@ -57,7 +57,7 @@ staged, so add the Rust target and rebuild before widening it.
 ## Running
 
 ```sh
-vp run dev:android                  # add --rebuild-rust after a Rust change
+vp run dev android                  # add --rebuild-rust after a Rust change
 ```
 
 It builds the native artifacts above when they are missing (the Rust backend
@@ -91,12 +91,12 @@ app being asked, and each one is a state the UI has to land on correctly.
 
 ## Production APK
 
-`vp run build:android` builds the APK distributed outside Google Play:
+`vp run build android` builds the APK distributed outside Google Play:
 
 ```sh
-vp run build:android                  # Rust (release profile), Libbox, Gradle, checks
-vp run build:android --reuse-libbox   # keep the staged libbox.aar
-vp run build:android --skip-native    # link the staged Rust and Libbox as they are
+vp run build android                  # Rust (release profile), Libbox, Gradle, checks
+vp run build android --reuse-libbox   # keep the staged libbox.aar
+vp run build android --skip-native    # link the staged Rust and Libbox as they are
 ```
 
 It signs with the release key, read from four environment variables that
@@ -118,7 +118,7 @@ the app cannot be updated in place. Generate it once:
 keytool -genkeypair -v -keystore voyavpn-release.jks -alias voyavpn -keyalg RSA -keysize 4096 -validity 10000
 ```
 
-`versionName` is the repo's release version — `vp run check:architecture`
+`versionName` is the repo's release version — `vp run check architecture`
 fails when `build.gradle` and the root `package.json` disagree. `versionCode`
 is `VOYAVPN_ANDROID_VERSION_CODE`, or the commit count when unset, so a build
 from a later commit always installs over an earlier one.

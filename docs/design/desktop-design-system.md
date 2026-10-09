@@ -221,7 +221,7 @@ c981d82, 2cb4ea9 and the batch 6 commit). Each batch passed typecheck, lint,
 the unit suite with the coverage policy, the dead-code and i18n checks, and the
 Playwright renderer smoke run; batch 6 also passed the bundle budgets.
 
-Final `verify:local` on 4f11a13 passed every gate: architecture,
+Final `verify local` on 4f11a13 passed every gate: architecture,
 lockfile, Rust formatting, Clippy and tests, frontend typecheck, 1047 unit tests
 with the coverage policy, lint, bundle budgets, 84 Playwright renderer tests,
 dead code, sing-box config acceptance, IPC binding drift and i18n.

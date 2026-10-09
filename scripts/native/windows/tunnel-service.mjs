@@ -223,7 +223,7 @@ export function installTunnelService({
   }
   if (!fileExists(singBoxSourcePath) || !fileStat(singBoxSourcePath).isFile()) {
     throw new Error(
-      `The sing-box core seed is missing: ${singBoxSourcePath}. Run vp run core:sing-box:install and retry.`,
+      `The sing-box core seed is missing: ${singBoxSourcePath}. Run node scripts/core/install-sing-box.mjs --force and retry.`,
     );
   }
 

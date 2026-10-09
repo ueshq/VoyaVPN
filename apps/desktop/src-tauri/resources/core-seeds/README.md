@@ -28,7 +28,7 @@ If install scripts were skipped, or you need to repair the local app data copy,
 run:
 
 ```
-vp run core:sing-box:install
+node scripts/core/install-sing-box.mjs --force
 ```
 
 Set `VOYAVPN_SKIP_SING_BOX_POSTINSTALL=1` to skip the postinstall fetch. CI
@@ -52,7 +52,7 @@ sing-box updates are delivered by shipping a new app package.
 (`geosite-cn.srs`, `geoip-cn.srs`, `geosite-private.srs`) and their
 `rule-sets.seed.json` manifest. They are not committed either: `vp install`
 and every package build stage them from the commits and SHA-256 values pinned in
-`scripts/core/rule-sets-installer.mjs` (`vp run core:rule-sets:install` forces a
+`scripts/core/rule-sets-installer.mjs` (`vp run core rule-sets install` forces a
 fresh download). The package carries only the `.srs` files, and on every OS the
 app copies any of them that app data `bin/srss/` lacks at startup
 (`voya_app::updates::install_seed_rule_sets`). See

@@ -7,9 +7,6 @@
   "exports": {
     "./*": "./src/*.ts"
   },
-  "scripts": {
-    "test": "vp test"
-  },
   "peerDependencies": {
     "react": "^19.2.6"
   },

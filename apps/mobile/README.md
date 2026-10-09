@@ -58,16 +58,16 @@ Neither host is built from this directory. The artifacts they need are
 gitignored build outputs:
 
 ```sh
-vp run native:mobile:libbox:ios       # Libbox.xcframework
-vp run native:mobile:libbox:android   # libbox.aar
-vp run native:mobile:rust:ios         # VoyaMobile.xcframework + Swift bindings
-vp run native:mobile:rust:android     # jniLibs + Kotlin bindings
+vp run native mobile libbox ios       # Libbox.xcframework
+vp run native mobile libbox android   # libbox.aar
+vp run native mobile rust ios         # VoyaMobile.xcframework + Swift bindings
+vp run native mobile rust android     # jniLibs + Kotlin bindings
 ```
 
 The Xcode project that consumes them is wired up by a script, not by hand:
 
 ```sh
-vp run native:mobile:ios:project  # app sources + PacketTunnel appex + UI tests
+vp run native mobile ios project  # app sources + PacketTunnel appex + UI tests
 ```
 
 It is idempotent, and it has to be re-run after `pod install` or a React Native
@@ -86,30 +86,30 @@ only a device can.
 ## Commands
 
 ```sh
-vp run dev:ios                          # Debug on the iOS simulator
-vp run dev:android                      # Debug on an Android device/emulator
-vp run build:android                    # production APK, release-key signed
-vp run build:ios:appstore               # App Store .ipa
+vp run dev ios                          # Debug on the iOS simulator
+vp run dev android                      # Debug on an Android device/emulator
+vp run build android                    # production APK, release-key signed
+vp run build ios appstore               # App Store .ipa
 vp run --filter @voya/mobile start        # Metro on its own
-vp check                                # types and lint, mobile included (check:frontend:static)
-vp run check:mobile:test                # Jest + @testing-library/react-native
-vp run check:mobile:bundle              # Metro bundle for both platforms
-vp run check:mobile:swift               # parse the iOS app + UI test Swift (macOS only)
+vp check                                # types and lint, mobile included (the `vp check` gate)
+vp run check mobile test                # Jest + @testing-library/react-native
+vp run check mobile bundle              # Metro bundle for both platforms
+vp run check mobile swift               # parse the iOS app + UI test Swift (macOS only)
 ```
 
-`dev:ios` and `dev:android` build whichever native artifact is missing — the
+`dev ios` and `dev android` build whichever native artifact is missing — the
 Rust backend (`mobile-smoke` profile), Libbox, and on iOS the pods and the
 project wiring — then hand every other argument to `react-native run-ios` /
 `run-android`. `--rebuild-rust` rebuilds the backend after a Rust change.
 
 The XCUITest suite is not one of these: it needs a booted simulator and a
-Release build, takes about four minutes, and runs as `vp run check:mobile:ios:smoke`
+Release build, takes about four minutes, and runs as `vp run check mobile ios smoke`
 locally and in the `ios-simulator` workflow. It is
 what proves the screens are driving the real Rust backend rather than the
 in-memory mock.
 
-`typecheck` and lint run inside the repo-wide gates. The three `check:mobile:*`
-gates are not part of `verify:local`; CI runs the first two in the `mobile` job
+`typecheck` and lint run inside the repo-wide gates. The three `check mobile …`
+gates are not part of `verify local`; CI runs the first two in the `mobile` job
 and the third on the macOS leg of `platform-check`, which already has a macOS runner.
 
 iOS needs CocoaPods (`cd ios && pod install`). Android needs an Android SDK;

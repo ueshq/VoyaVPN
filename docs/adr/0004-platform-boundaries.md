@@ -103,7 +103,7 @@ runtime hands the PacketTunnel a config without resolving any executable, and
 the speedtest measures nodes through the running core's Clash API against
 unrouted per-node probe outbounds (`voya_core::latency_probe_tag`). Latency
 tests on macOS therefore need an active connection. The pinned darwin archives
-stay in the installer for developer tooling (`vp run check:sing-box`); they are
+stay in the installer for developer tooling (`vp run check sing-box`); they are
 never bundled. The GPL obligations are unchanged, since Libbox is sing-box.
 
 ### Follow-up (2026-09-18, later): The macOS Seed Returns for Disconnected Speedtests
@@ -170,7 +170,7 @@ neither was ever needed there:
   kill body accept Linux only. The startup sweep and the exit-time revoke are
   therefore no-ops on macOS. This supersedes, for macOS, the "Linux and macOS
   use the same `sudo -n` launcher shape" rule above and the `osascript` step of
-  the 2026-09 elevation amendment. `native:macos:pkg` refuses a store package
+  the 2026-09 elevation amendment. `native macos pkg` refuses a store package
   whose Mach-O files contain escalation text (`scripts/native/macos/macho-imports.mjs`).
 - **Launch at login uses `SMAppService`.** `voya-platform::autostart` no longer
   writes `~/Library/LaunchAgents/VoyaVPN-LaunchAgent.plist` or runs `launchctl

@@ -1,6 +1,6 @@
 //! Importing a subscription-sized batch of share links: the first import into
 //! an empty database, and the steady state of an update, where every parsed
-//! node matches a stored one. Run with `vp run bench:rust`.
+//! node matches a stored one. Run with `vp run bench rust`.
 
 #![allow(
     clippy::panic,
@@ -15,7 +15,7 @@ use voya_app::subscriptions::SubscriptionManager;
 use voya_core::AppConfig;
 use voya_db::Database;
 
-/// `check:rust:test` runs every bench once in the unoptimized test profile to
+/// `check rust test` runs every bench once in the unoptimized test profile to
 /// keep them compiling; the smallest size is enough there.
 const NODE_COUNTS: &[usize] = if cfg!(debug_assertions) {
     &[100]

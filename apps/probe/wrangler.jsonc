@@ -1,6 +1,6 @@
 {
   // VoyaVPN reachability probe. Deploy with `vp run --filter @voya/probe deploy`
-  // after `npx wrangler login`; see docs/release/self-host-probe-worker.md.
+  // after `vp dlx wrangler@4 login`; see docs/release/self-host-probe-worker.md.
   "name": "voyavpn-probe",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",

@@ -46,10 +46,10 @@ jobs:
       # prerequisites and builds both frameworks from this checkout's pins.
       - name: Critical native flows
         if: ${{ !inputs.full }}
-        run: vp run check:mobile:ios:smoke
+        run: vp run check mobile ios smoke
       - name: Full release matrix
         if: ${{ inputs.full }}
-        run: vp run check:mobile:ios:full
+        run: vp run check mobile ios smoke --full
       - name: Preserve XCTest, screenshots, accessibility trees and native logs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

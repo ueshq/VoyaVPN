@@ -69,7 +69,7 @@ export async function checkNotices(reporter) {
 }
 
 /**
- * Re-verifies the seed that `vp run tauri:build` would bundle. The seed directory
+ * Re-verifies the seed that `vp run tauri build` would bundle. The seed directory
  * is gitignored, so a stale, foreign-architecture, or locally replaced binary is
  * invisible to every other gate; this reads its manifest back and compares it to
  * the digest pinned in scripts/core/sing-box-installer.mjs.
@@ -98,8 +98,8 @@ export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStaged
     ].includes(verification.code);
     const details = [
       `${DEFAULT_SING_BOX_VERSION} seed cannot be trusted: ${verification.reason}`,
-      "run `vp run core:sing-box:install --force-fetch` to re-stage a verified seed " +
-        "(`vp run core:sing-box:build` for the source-built Mac App Store seed)",
+      "run `node scripts/core/install-sing-box.mjs --force --force-fetch` to re-stage a verified seed " +
+        "(`vp run core sing-box build` for the source-built Mac App Store seed)",
     ];
     if (tampered) {
       reporter.fail("bundled sing-box seed", details);
@@ -128,7 +128,7 @@ export async function checkCoreSeedPinning(reporter, { verifySeed = verifyStaged
 }
 
 /**
- * Re-verifies the default rule sets `vp run tauri:build` would bundle, against
+ * Re-verifies the default rule sets `vp run tauri build` would bundle, against
  * the pins in scripts/core/rule-sets-installer.mjs. Like the sing-box seed they
  * are gitignored, so nothing else looks at the staged bytes.
  */
@@ -148,7 +148,7 @@ export async function checkRuleSetSeedPinning(
   }
   const details = [
     `staged rule sets cannot be trusted: ${verification.reason}`,
-    "run `vp run core:rule-sets:install` to re-stage the pinned files",
+    "run `vp run core rule-sets install` to re-stage the pinned files",
   ];
   if (verification.code === "digest-mismatch") {
     reporter.fail("bundled rule sets", details);

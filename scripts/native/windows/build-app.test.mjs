@@ -251,8 +251,8 @@ describe("Windows local app build", () => {
     expect(result).toEqual({ appPath, servicePath, singBoxPath, nsis });
     expect(ensureGuiStopped).toHaveBeenCalledOnce();
     expect(runCommand.mock.calls.map(([program, args]) => [program, args])).toEqual([
-      ["vp", ["run", "tauri:build", "--no-sign", "--target", "x86_64-pc-windows-msvc", "--bundles", "nsis"]],
-      ["vp", ["run", "native:windows:tunnel:build"]],
+      ["vp", ["run", "tauri", "build", "--no-sign", "--target", "x86_64-pc-windows-msvc", "--bundles", "nsis"]],
+      ["vp", ["run", "native", "windows", "tunnel", "build"]],
       [nsis, ["/S"]],
       ["sc.exe", ["query", "VoyaVPNTunnelService"]],
     ]);

@@ -186,7 +186,7 @@ jobs:
           TAURI_TARGET: ${{ matrix.rust_target }}
           # The updater signing key is needed on every runner; Apple signing and
           # notarization material only on macOS. WINDOWS_CERTIFICATE_* is not
-          # passed at all: nothing on the `vp run tauri:build` path reads it (only
+          # passed at all: nothing on the `vp run tauri build` path reads it (only
           # scripts/native/windows/build-app.mjs does, which this workflow never
           # invokes), so exporting it here would hand a code-signing certificate
           # to six runners that cannot use it.
@@ -204,7 +204,7 @@ jobs:
             build_args+=(--debug)
           fi
 
-          vp run tauri:build "${build_args[@]}"
+          vp run tauri build "${build_args[@]}"
 
           bundle_dir="target/${TAURI_TARGET}/${RELEASE_PROFILE}/bundle"
           if [ ! -d "$bundle_dir" ]; then
@@ -216,7 +216,7 @@ jobs:
           fi
           echo "BUNDLE_DIR=$bundle_dir" >> "$GITHUB_ENV"
           # Informational: sizes land in the job summary, nothing is gated yet.
-          vp run size:report --target "$TAURI_TARGET" --profile "$RELEASE_PROFILE" || true
+          vp run size report --target "$TAURI_TARGET" --profile "$RELEASE_PROFILE" || true
 
       - name: Normalize artifacts and write checksums
         run: |

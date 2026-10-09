@@ -56,7 +56,7 @@ describe("iOS app icon set", () => {
   it("rejects an alpha channel", () => {
     const files = goodFiles().set("icon-1024.png", png({ size: 1024, colorType: 6 }));
     expect(iconProblems({ contents, files })).toEqual([
-      "icon-1024.png has an alpha channel (ITMS-90717); run vp run native:mobile:ios:icons.",
+      "icon-1024.png has an alpha channel (ITMS-90717); run vp run native mobile ios icons.",
     ]);
   });
 

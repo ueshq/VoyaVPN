@@ -5,7 +5,7 @@ import { installSingBoxCore } from "./sing-box-installer.mjs";
 if (isCliEntrypoint(import.meta.url)) {
   await runSeedInstall({
     label: "sing-box",
-    retry: "Run `vp run core:sing-box:install` to retry manually.",
+    retry: "Run `node scripts/core/install-sing-box.mjs --force` to retry manually.",
     install: async ({ postinstall, repoRoot }) => {
       const args = parseInstallArgs(process.argv.slice(2));
       const result = await installSingBoxCore({

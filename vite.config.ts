@@ -13,13 +13,32 @@ export default defineConfig({
   // renderer: every package has a vite.config.ts for its tests, so without
   // this vp would ask which one. Read statically, so it must stay a literal.
   defaultPackage: "./apps/desktop",
+  // Commands are the words after `vp run` (`vp run build mac local`), resolved
+  // by scripts/commands.mjs. Only the checks below are tasks, because a task
+  // is cached: it replays its last result while the files it read are
+  // unchanged, and runs in a clean environment. That suits a check that reads
+  // tracked sources and nothing else; a build, a signing step or anything
+  // driven by cargo stays an uncached command. `cachedTasks` in
+  // scripts/commands.mjs maps each one to its command (`vp run check i18n`).
+  run: {
+    tasks: {
+      "check-architecture": "node scripts/quality/architecture.mjs",
+      "check-lockfile": "node scripts/quality/lockfile-duplicates.mjs",
+      "check-i18n": "node scripts/quality/i18n.mjs",
+    },
+  },
+  // The pre-commit hook (.vite-hooks/pre-commit) runs `vp staged`. The globs
+  // are the file types Oxfmt formats here: Markdown and TOML are left alone.
+  staged: {
+    "*.{ts,tsx,js,mjs,cjs,json,css}": "vp check --fix",
+  },
   fmt: {
     // The code predates the formatter and mixes line widths; 120 is the width
     // that rewrites the fewest lines.
     printWidth: 120,
     sortPackageJson: false,
     ignorePatterns: [
-      // Generated, and compared byte for byte by check:bindings.
+      // Generated, and compared byte for byte by check bindings.
       "apps/desktop/src/ipc/bindings.ts",
       "packages/contracts/src/generated.ts",
       "packages/contracts/src/commands.ts",
@@ -288,8 +307,8 @@ export default defineConfig({
     // machine-wide worker pool on high-core development hosts.
     maxWorkers: 4,
     // Coverage is a root-level concern in a multi-project run, and the
-    // thresholds live here rather than in the `check:frontend:coverage` script
-    // string so that a plain `vp run test --coverage` enforces the same floors a
+    // thresholds live here rather than in the `check frontend coverage` script
+    // string so that a plain `vp test --coverage` enforces the same floors a
     // CI run does. Per-module floors are enforced afterwards by
     // scripts/quality/frontend-coverage.mjs from the json-summary report.
     coverage: {

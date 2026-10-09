@@ -6,16 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 VoyaVPN is a greenfield rewrite of v2rayN using Tauri 2 (Rust backend) + React 19 / TypeScript / Tailwind v4 / shadcn/ui (frontend). It generates **sing-box** proxy configs and supervises the core process. There is no v2rayN data migration path — the schema and IPC DTOs are a fresh design, and obsolete v2rayN profile fields (`HeaderType`, `RequestHost`, `Path`, `Extra`, `Ports`, `AlterId`, `Flow`, `Id`, `Security`) must never be introduced.
 
-The JS toolchain is **Vite+** (`vp`, `vite-plus` 1.1.0 pinned in the pnpm catalog): Vite, Vitest 5, Oxlint, Oxfmt and type checking (tsgolint) behind one CLI, configured in the root `vite.config.ts` (`lint`, `fmt`, `test` projects and coverage). Install the global CLI (`curl -fsSL https://vite.plus | bash`); CI uses `voidzero-dev/setup-vp`. Underneath, the package manager is still **pnpm 11.5.0** (root `packageManager`), which `vp install` / `vp add` drive, so the lockfile and `pnpm-workspace.yaml` stay pnpm's. Nothing calls `pnpm` by name: run package scripts with `vp run <script>` and install with `vp install` (`scripts/quality/workflows.test.mjs` rejects a direct `pnpm` call in workflows and root scripts). `vite` is an alias of `@voidzero-dev/vite-plus-core` and `vitest` is pinned to the Vite+ copy through catalog overrides; the root `package.json` lists `vite` too, because without it pnpm would satisfy Vitest's peer with a real Vite and load a second Vitest. `apps/mobile` stays on Jest, Metro and Babel, which Vite+ does not replace. Rust toolchain is 1.96.0 in CI (workspace MSRV 1.94).
+The JS toolchain is **Vite+** (`vp`, `vite-plus` 1.1.0 pinned in the pnpm catalog): Vite, Vitest 5, Oxlint, Oxfmt and type checking (tsgolint) behind one CLI, configured in the root `vite.config.ts` (`lint`, `fmt`, `test` projects and coverage). Install the global CLI (`curl -fsSL https://vite.plus | bash`); CI uses `voidzero-dev/setup-vp`. Underneath, the package manager is still **pnpm 11.5.0** (root `packageManager`), which `vp install` / `vp add` drive, so the lockfile and `pnpm-workspace.yaml` stay pnpm's. Nothing calls `pnpm` by name: run commands with `vp run <words>`, install with `vp install`, and run a one-off package binary with `vp dlx` (`scripts/quality/workflows.test.mjs` rejects a direct `pnpm` call in workflows and root scripts). `vite` is an alias of `@voidzero-dev/vite-plus-core` and `vitest` is pinned to the Vite+ copy through catalog overrides; the root `package.json` lists `vite` too, because without it pnpm would satisfy Vitest's peer with a real Vite and load a second Vitest. `apps/mobile` stays on Jest, Metro and Babel, which Vite+ does not replace. Rust toolchain is 1.96.0 in CI (workspace MSRV 1.94).
 
 ## Monorepo Layout
 
 - `apps/desktop/` — `@voya/desktop`, the Tauri desktop app. It owns `apps/desktop/src`, `apps/desktop/src-tauri`, `apps/desktop/public`, `apps/desktop/e2e`, Vite, Playwright, shadcn, and desktop tsconfigs.
-- `apps/mobile/` — `@voya/mobile`, the bare React Native app (RN 0.87, no Expo). It does not consume `@voya/ui`, which is DOM/Radix-specific; it consumes `@voya/client`, `@voya/contracts` and `@voya/i18n/native`. Metro needs `watchFolders` plus `unstable_enablePackageExports` for the source-only workspace packages, and hierarchical resolution must stay on — see the reasoning in `apps/mobile/metro.config.js`. Its gates (`check:mobile:test`, `check:mobile:bundle`) are not part of `verify:local`; CI runs them in the `mobile` job, and `check:mobile:swift` on the macOS leg of `platform-check`. The Rust backend runs in-process through `crates/voya-mobile-ffi` (ADR 0012) and the tunnel runs sing-box inside a platform provider (ADR 0013): an iOS PacketTunnel appex sharing `native/apple/`, and an Android foreground `VpnService` in the app's own process.
+- `apps/mobile/` — `@voya/mobile`, the bare React Native app (RN 0.87, no Expo). It does not consume `@voya/ui`, which is DOM/Radix-specific; it consumes `@voya/client`, `@voya/contracts` and `@voya/i18n/native`. Metro needs `watchFolders` plus `unstable_enablePackageExports` for the source-only workspace packages, and hierarchical resolution must stay on — see the reasoning in `apps/mobile/metro.config.js`. Its gates (`check mobile test`, `check mobile bundle`) are not part of `verify local`; CI runs them in the `mobile` job, and `check mobile swift` on the macOS leg of `platform-check`. The Rust backend runs in-process through `crates/voya-mobile-ffi` (ADR 0012) and the tunnel runs sing-box inside a platform provider (ADR 0013): an iOS PacketTunnel appex sharing `native/apple/`, and an Android foreground `VpnService` in the app's own process.
 - `apps/probe/` — `@voya/probe`, the Cloudflare Worker the self-hosted node's network check calls (`POST /v1/probe`, stateless, connects back only to the caller). Its wire contract is `tests/probe-contract/*.json`, shared with `crates/voya-net`. Deploy per `docs/release/self-host-probe-worker.md`; wrangler is not a workspace dependency.
 - `apps/web/` — `@voya/web`, the marketing site at `https://voyavpn.wangc.ai`, which holds the App Store Support (`/support`) and Privacy Policy (`/privacy`) URLs. React renders it to static HTML at build time (`scripts/build.mjs`) and a static-assets Cloudflare Worker serves it, so no page ships a script. Its copy lives in `src/content/*.ts` (en, zh-Hans, zh-Hant, kept aligned by the `SiteCopy` type), not in `@voya/i18n`, whose locale JSON the desktop bundles whole. The privacy page must state the same facts as `docs/release/app-store-review-notes.md`, and `test/privacy-sync.test.ts` checks the hosts it names. Deploy per `docs/release/marketing-site.md`.
 - `packages/ui/` — `@voya/ui`, source-only shadcn primitives, design tokens, shared CSS, fonts, and `cn()`.
-- `packages/contracts/` — `@voya/contracts`, the generated TypeScript view of `crates/voya-contracts`: every IPC DTO, the `VoyaCommands` surface with the result envelope unwrapped, and the three event channels. `src/generated.ts` is derived from `apps/desktop/src/ipc/bindings.ts` by `scripts/quality/contracts-source.mjs`; never edit it, and never hand-write types mirroring backend types anywhere else. The same generator emits `src/commands.ts` (`VOYA_COMMAND_WIRE`, exported as `@voya/contracts/commands`: each command's wire name and argument names, so a non-Tauri transport can rebuild Tauri's named-argument object from a positional call; and `VOYA_EVENT_CHANNELS`, each event channel's wire name), `commands.json` (the wire names alone, for a Rust host to check its coverage against) and `events.json` (each channel's wire name and payload type, so a Rust host can check its channel names). All four are covered by `check:bindings`.
+- `packages/contracts/` — `@voya/contracts`, the generated TypeScript view of `crates/voya-contracts`: every IPC DTO, the `VoyaCommands` surface with the result envelope unwrapped, and the three event channels. `src/generated.ts` is derived from `apps/desktop/src/ipc/bindings.ts` by `scripts/quality/contracts-source.mjs`; never edit it, and never hand-write types mirroring backend types anywhere else. The same generator emits `src/commands.ts` (`VOYA_COMMAND_WIRE`, exported as `@voya/contracts/commands`: each command's wire name and argument names, so a non-Tauri transport can rebuild Tauri's named-argument object from a positional call; and `VOYA_EVENT_CHANNELS`, each event channel's wire name), `commands.json` (the wire names alone, for a Rust host to check its coverage against) and `events.json` (each channel's wire name and payload type, so a Rust host can check its channel names). All four are covered by `check bindings`.
 - `packages/client/` — `@voya/client`, the transport-agnostic domain client shared by every frontend: query keys, backend-code→translation-key maps, the runtime event store, the persisted Zustand stores, the runtime actions (`runtime-action`, `runtime-status`) and the event router that turns the three backend channels into store writes and cache invalidations. It reaches the backend through the `VoyaCommands` registered with `setVoyaCommands`, and reaches the platform through the seams in `src/platform.ts` — storage, clipboard, app visibility and the tunnel's authorization prompt — so it contains no `window` reference. Each app registers its platform in a `platform-boot` module imported first.
 - `packages/features/` — `@voya/features`, the frontend logic both apps share: pure helpers (node rows, profile display, subscription usage, import summaries) and controller hooks (`use-home-runtime`, `use-node-list-data`, `use-policy-group-runtime`, the form helpers under `forms/`); a hook only the desktop drives lives in `apps/desktop/src/features/` instead. Views are not shared — the desktop renders shadcn/Radix, mobile renders React Native — so anything that touches the DOM stays in `apps/desktop`. Oxlint keeps `packages/client` and `packages/features` off `document`/`window`/`navigator`.
 - `packages/i18n/` — `@voya/i18n`, source-only i18next setup and imported locale JSON.
@@ -26,24 +26,50 @@ The JS toolchain is **Vite+** (`vp`, `vite-plus` 1.1.0 pinned in the pnpm catalo
 
 Package scope is always `@voya/*`. The `@/*` alias is desktop-private and resolves to `apps/desktop/src`; shared imports use `@voya/*`.
 
-Version authority: the root `package.json` `version` is the release-artifact version read by `vp run release -- artifacts`. Keep root, desktop package, Tauri config, and Cargo package versions aligned when doing an intentional version bump; `vp run check:architecture` fails when they drift.
+Version authority: the root `package.json` `version` is the release-artifact version read by `vp run release -- artifacts`. Keep root, desktop package, Tauri config, and Cargo package versions aligned when doing an intentional version bump; `vp run check architecture` fails when they drift.
 
 ## Commands
 
 ```sh
 vp run tauri dev           # Run full Tauri app (backend + frontend) in dev
-vp run dev:web             # `vp dev`: the @voya/desktop frontend-only dev server (127.0.0.1:1420; root `defaultPackage`)
-vp run dev:ios             # Mobile app in Debug on the iOS simulator (builds missing native artifacts; --rebuild-rust)
-vp run dev:android         # Mobile app in Debug on an Android emulator/device (same)
-vp build                   # Production build of @voya/desktop (types are checked by check:frontend:static)
+vp run dev web             # `vp dev`: the @voya/desktop frontend-only dev server (127.0.0.1:1420; root `defaultPackage`)
+vp run dev ios             # Mobile app in Debug on the iOS simulator (builds missing native artifacts; --rebuild-rust)
+vp run dev android         # Mobile app in Debug on an Android emulator/device (same)
+vp build                   # Production build of @voya/desktop (types are checked by `vp check`)
 vp check --fix             # Format with Oxfmt and apply lint autofixes
-vp run tauri:build --debug # Unsigned debug Tauri packages (no signing creds needed)
-vp run build:mac:appstore  # arm64 Mac App Store .pkg (feature mac-app-store drops the updater); docs/release/macos-app-store.md
-vp run build:ios:appstore  # iOS App Store .ipa (--unsigned archives and checks without a certificate); docs/release/mobile-ios-signing.md
-vp run build:android       # Production APK for distribution outside Google Play, release-key signed; docs/release/mobile-android-signing.md
+vp run tauri build --debug # Unsigned debug Tauri packages (no signing creds needed)
+vp run build mac appstore  # arm64 Mac App Store .pkg (feature mac-app-store drops the updater); docs/release/macos-app-store.md
+vp run build ios appstore  # iOS App Store .ipa (--unsigned archives and checks without a certificate); docs/release/mobile-ios-signing.md
+vp run build android       # Production APK for distribution outside Google Play, release-key signed; docs/release/mobile-android-signing.md
 
-vp run verify:local       # Full local verification suite — run this before declaring work done
+vp run verify local       # Full local verification suite — run this before declaring work done
 ```
+
+A command is the words after `vp run`, separated by spaces: `vp run build mac
+local`, never `build:mac:local`. `vp run` itself takes one script name, so the
+root `package.json` has one script per first word (`dev`, `build`, `check`,
+`generate`, `size`, `bench`, `core`, `verify`, `native`), each running
+`scripts/run.mjs`, which resolves the remaining words against the table in
+`scripts/commands.mjs` — longest name first, so `native macos tunnel verify` is
+its own command, and everything after the name is passed to it (`vp run
+native windows tunnel install`, `vp run check mobile ios smoke --full`). Add or rename
+a command there, not in `package.json`; `vp run build` with no further words
+lists the group. `vp build`, `vp dev`, `vp check` and `vp test` without `run`
+are Vite+ built-ins and a different thing: `vp build` is the desktop renderer
+build, `vp run build …` is a packaging command. What a built-in already does
+has no command or package script beside it: it is `vp test`, `vp check`,
+`vp preview`, not a `test` script in each package.
+
+Three checks that read only tracked sources — `check architecture`, `check
+lockfile`, `check i18n` — are cached tasks
+(`run.tasks` in `vite.config.ts`): on an unchanged tree `vp run` replays the
+last passing result instead of running them, and names the changed file when
+it does not. A task runs in a clean environment, so nothing that reads
+`VOYAVPN_*` or signing variables, and nothing driven by cargo, may become one.
+CI has no persisted cache and always runs them; `vp cache clean` drops the
+local one. `vp install` installs a pre-commit hook (`prepare` runs
+`vp config`; the hook is `.vite-hooks/pre-commit`) that runs `vp staged`:
+`vp check --fix` on the staged JS/TS/JSON/CSS files. `VP_GIT_HOOKS=0` skips it.
 
 `scripts/quality/verify-local.mjs` is the source of truth for the gate list. CI
 splits it across three parallel jobs (`baseline-fast`, `baseline-rust`,
@@ -51,38 +77,38 @@ splits it across three parallel jobs (`baseline-fast`, `baseline-rust`,
 them individually while iterating:
 
 ```sh
-vp run check:architecture        # Crate/layer boundary rules (see "Architecture gate" below)
-vp run check:lockfile            # One resolved version per duplication-sensitive package
-vp run check:rust:fmt            # cargo fmt --all --check
-vp run check:rust:clippy         # clippy --workspace --all-targets -D warnings
-vp run check:rust:deps           # cargo-machete 0.9.2; install it locally first
-vp run check:rust:test           # Workspace tests (see note below) + shell binary test targets
-vp run check:frontend:static     # `vp check`: Oxfmt + Oxlint (type-aware) + TypeScript diagnostics, every workspace project
-vp run check:frontend:coverage   # Vitest once + global thresholds + per-module coverage floors
-vp run check:frontend:bundle     # Production build + bundle size budgets
-vp run check:frontend:smoke:mock # Playwright renderer smoke against the Tauri IPC mock
-vp run check:dead-code           # Knip workspace scan + strict production scan
-vp run check:sing-box            # Generated sing-box config acceptance
-vp run check:bindings            # Fail if generated IPC bindings drift (see IPC below)
-vp run check:i18n                # Locale key alignment, usage, dynamic keys, visible hardcoded text
+vp run check architecture        # Crate/layer boundary rules (see "Architecture gate" below)
+vp run check lockfile            # One resolved version per duplication-sensitive package
+vp run check rust fmt            # cargo fmt --all --check
+vp run check rust clippy         # clippy --workspace --all-targets -D warnings
+vp run check rust deps           # cargo-machete 0.9.2; install it locally first
+vp run check rust test           # Workspace tests (see note below) + shell binary test targets
+vp check                         # Oxfmt + Oxlint (type-aware) + TypeScript diagnostics, every workspace project
+vp run check frontend coverage   # Vitest once + global thresholds + per-module coverage floors
+vp run check frontend bundle     # Production build + bundle size budgets
+vp run check frontend smoke mock # Playwright renderer smoke against the Tauri IPC mock
+vp run check dead-code           # Knip workspace scan + strict production scan
+vp run check sing-box            # Generated sing-box config acceptance
+vp run check bindings            # Fail if generated IPC bindings drift (see IPC below)
+vp run check i18n                # Locale key alignment, usage, dynamic keys, visible hardcoded text
 
-# Not part of verify:local; CI runs them in their own jobs:
-vp run check:desktop:smoke       # Packaged shell through tauri-driver (Linux CI)
-vp run check:mobile:test         # React Native Jest suite
-vp run check:mobile:bundle       # Metro bundle for iOS and Android
-vp run check:mobile:swift        # Parse the iOS app Swift; typecheck its UI tests and the shared PacketTunnel for iOS (macOS only)
-vp run check:mobile:ios:assets   # iOS icons opaque, purpose strings translated, one App Group
-vp run check:frontend:test       # Vitest once, without the coverage gate
+# Not part of verify local; CI runs them in their own jobs:
+vp run check desktop smoke       # Packaged shell through tauri-driver (Linux CI)
+vp run check mobile test         # React Native Jest suite
+vp run check mobile bundle       # Metro bundle for iOS and Android
+vp run check mobile swift        # Parse the iOS app Swift; typecheck its UI tests and the shared PacketTunnel for iOS (macOS only)
+vp run check mobile ios assets   # iOS icons opaque, purpose strings translated, one App Group
+vp test                          # Vitest once, without the coverage gate
 vp test apps/desktop/src/features/profiles/server-table.test.tsx  # Single test file (`vp test watch` to watch)
 
 # Mobile native artifacts. Both write into apps/mobile and are gitignored:
 # they are produced from the crate beside them, so a committed copy could only
 # be a stale one. Run before an Xcode or Gradle build.
-vp run native:mobile:rust:ios       # Two iOS slices -> VoyaMobile.xcframework + Swift bindings (--slice device|simulator builds one; the smoke and App Store lanes each ask for theirs)
-vp run native:mobile:rust:android   # cargo-ndk -> jniLibs + Kotlin bindings (needs ANDROID_NDK_HOME)
+vp run native mobile rust ios       # Two iOS slices -> VoyaMobile.xcframework + Swift bindings (--slice device|simulator builds one; the smoke and App Store lanes each ask for theirs)
+vp run native mobile rust android   # cargo-ndk -> jniLibs + Kotlin bindings (needs ANDROID_NDK_HOME)
 # The iOS Xcode project is wired by script, never by hand. Idempotent, and it
 # must be re-run after `pod install` or a React Native upgrade.
-vp run native:mobile:ios:project    # app sources + PacketTunnel appex + VoyaVPNUITests
+vp run native mobile ios project    # app sources + PacketTunnel appex + VoyaVPNUITests
 cargo check -p voya-mobile-ffi --target aarch64-apple-ios   # What CI's macOS `platform-check` leg runs
 ```
 
@@ -93,14 +119,14 @@ app's tracing filter (same syntax as `RUST_LOG`, which it falls back to).
 `VOYA_LIVE_NETWORK=1` opts the live-network tests in `voya-net` (UPnP discovery,
 the reachability probe) into touching the real network; without it they skip.
 
-`vp run bench:rust` runs the criterion benchmarks (config generation with 100–3000
+`vp run bench rust` runs the criterion benchmarks (config generation with 100–3000
 nodes in `crates/voya-core/benches/`, subscription import in
 `crates/voya-app/benches/`). They are not a gate; run them before and after a
-change to config generation or import and compare. `check:rust:test` builds
+change to config generation or import and compare. `check rust test` builds
 them in test mode, so they must keep compiling. Startup cost is logged per step
 (`startup step` lines in `guiLogs`).
 
-**Do not run bare `cargo test --workspace --all-targets`.** Use `vp run check:rust:test` (→ `scripts/quality/rust-tests.mjs`). It runs workspace all-target tests while excluding the Tauri shell lib harness (whose lib test harness is intentionally disabled to avoid Windows WebView/Wry loader failures), then builds the shell binary test target separately; on macOS it also runs the PacketTunnel bridge test (`scripts/native/macos/test-bridge.mjs`). `--all-targets` forces explicitly-disabled targets, breaking Windows.
+**Do not run bare `cargo test --workspace --all-targets`.** Use `vp run check rust test` (→ `scripts/quality/rust-tests.mjs`). It runs workspace all-target tests while excluding the Tauri shell lib harness (whose lib test harness is intentionally disabled to avoid Windows WebView/Wry loader failures), then builds the shell binary test target separately; on macOS it also runs the PacketTunnel bridge test (`scripts/native/macos/test-bridge.mjs`). `--all-targets` forces explicitly-disabled targets, breaking Windows.
 
 ## Architecture
 
@@ -108,7 +134,7 @@ A Rust workspace of layered crates plus the Tauri desktop shell, React app, and 
 
 ### Rust crates (`crates/`)
 
-- **voya-contracts** — Versioned IPC/persistence DTOs shared by the app and the shell, with one canonical camelCase representation and no domain, persistence, network, platform, or Tauri dependencies. It is the **only** crate that derives `specta::Type`: every business and command DTO lives here, and `vp run check:architecture` rejects `derive(Type)` in the shell and `specta` in `voya-app`/`voya-core`. Depended on by `voya-db`, `voya-app`, and the shell.
+- **voya-contracts** — Versioned IPC/persistence DTOs shared by the app and the shell, with one canonical camelCase representation and no domain, persistence, network, platform, or Tauri dependencies. It is the **only** crate that derives `specta::Type`: every business and command DTO lives here, and `vp run check architecture` rejects `derive(Type)` in the shell and `specta` in `voya-app`/`voya-core`. Depended on by `voya-db`, `voya-app`, and the shell.
 - **voya-core** — Pure, OS-free, deterministic domain logic. Owns models/enums, share-link parsers, routing/DNS logic, and **sing-box config generation** (the generation-related modules are `crates/voya-core/src/config.rs`, `crates/voya-core/src/context.rs`, `crates/voya-core/src/singbox/`; ADR 0003 refers to them as `coregen::`, while the file actually named `coregen.rs` is `crates/voya-app/src/coregen.rs`). Must contain **no** `#[cfg(target_os)]`, OS/Tauri/filesystem/network/process APIs. Clocks, randomness, ports, and platform facts are *injected*.
 - **voya-db** — Fresh sqlx SQLite schema (one baseline, `migrations/0001_schema.sql`; ADR 0001), repositories. It is the **only** typed persistence boundary: tagged `ProfileProtocol`, `ProfileTransport`, TLS settings, and routing rules serialize to SQLite `TEXT` only here.
 - **voya-platform** — All OS-specific code: `paths`, `process`, `elevation`, `tun`, `sysproxy`, `autostart`, `coreinfo`, `privilege`. Domain crates reach platform side effects through traits/adapters defined here.
@@ -120,7 +146,7 @@ A Rust workspace of layered crates plus the Tauri desktop shell, React app, and 
 ### Frontend (`apps/desktop/src/` + `packages/`)
 
 - **`apps/desktop/src/ipc/` is the only frontend directory allowed to import `@tauri-apps/api` or Tauri plugins.** Features call typed wrappers (`commands.ts`, `tauri-plugins.ts`) and use the single mounted `event-bridge.tsx`, never raw `invoke`/`listen`. This is an architectural rule (ADR 0002) and is lint-enforced: Oxlint's `no-restricted-imports` for imports, and the local `scripts/lint/voya-plugin.mjs` for `require()` and the `__TAURI*` globals. `ipc/register-backend.ts` puts that binding — plus the clipboard, visibility and elevation adapters — behind the `@voya/client` seams; `platform-boot.ts` calls it at startup; tests register a fake command surface with `installFakeCommands` from `@voya/features/test/backend` instead of mocking modules.
-- **`apps/desktop/src/ipc/bindings.ts` is generated** from Rust `specta`/`tauri-specta` — never edit by hand, never hand-write DTOs mirroring backend types. It is regenerated automatically under `vp run tauri dev` (`run()` exports it when `tauri::is_dev()`, or when `VOYAVPN_EXPORT_BINDINGS` is set); packaged debug builds no longer write it, because the export path is baked in at compile time. After changing any Rust command/event/DTO, run `vp run generate:bindings` and commit; `vp run check:bindings` (a CI gate) fails on drift.
+- **`apps/desktop/src/ipc/bindings.ts` is generated** from Rust `specta`/`tauri-specta` — never edit by hand, never hand-write DTOs mirroring backend types. It is regenerated automatically under `vp run tauri dev` (`run()` exports it when `tauri::is_dev()`, or when `VOYAVPN_EXPORT_BINDINGS` is set); packaged debug builds no longer write it, because the export path is baked in at compile time. After changing any Rust command/event/DTO, run `vp run generate bindings` and commit; `vp run check bindings` (a CI gate) fails on drift.
 - `apps/desktop/src/features/<subsystem>/` — desktop feature UIs (profiles, subscriptions, routing, dns, proxy, settings, logs, qr, updates, home).
 - `packages/ui/src/components/` — shared shadcn/ui primitives; `apps/desktop/src/components/app-shell/` — desktop shell. State via Zustand (`apps/desktop/src/stores/`) + TanStack Query.
 - `packages/i18n/src/locales/` — Voya-maintained locale JSON; these files are the only translation source.
@@ -133,9 +159,9 @@ A Rust workspace of layered crates plus the Tauri desktop shell, React app, and 
 
 Command-boundary errors are converted into a typed `AppError` union exposed to TypeScript; crate-internal errors may use local enums.
 
-### Architecture gate (`vp run check:architecture`)
+### Architecture gate (`vp run check architecture`)
 
-`scripts/quality/architecture.mjs` is the first step of `verify:local` and of the
+`scripts/quality/architecture.mjs` is the first step of `verify local` and of the
 CI `baseline-fast` job. It enforces rules that neither Clippy nor Oxlint can express,
 so read it before moving code between crates:
 
@@ -169,7 +195,7 @@ so read it before moving code between crates:
   no `voya_core::`/`voya_db::`, and no `derive(… Type …)`, plain or inside
   `cfg_attr`, outside `ipc/events.rs`. The standalone binaries under
   `src-tauri/src/bin/` are exempt from these shell rules: they carry their own
-  tests, which `check:rust:test` builds as a separate target.
+  tests, which `check rust test` builds as a separate target.
 - **Manifest checks** reject a direct, renamed (`x = { package = "…" }`), or
   `[dependencies.…]`-table dependency on `voya-core`/`voya-db` in the shell, and
   on `specta`, `reqwest`, or `tokio-tungstenite` in `voya-app`. They also require
@@ -190,14 +216,14 @@ Config generation correctness is judged by the **generated sing-box JSON**, not 
 
 - Golden fixtures live in `tests/golden/`: `singbox/` is driven by `matrix.json`; `voya-core` canonicalizes JSON and diffs against this corpus.
 - Fixtures must cover ordinary protocols, DNS final/direct detection, TUN, platform pre-socks forwarding, and per-rule outbounds.
-- Core acceptance is opt-in: without `VOYA_GOLDEN_ACCEPTANCE` the check is skipped with explicit evidence and JSON golden parity still runs. Once opted in nothing may be skipped — a missing binary panics (set `VOYA_SINGBOX_BIN`), and `vp run check:sing-box`, which stages the seed and opts in for you, additionally fails unless the libtest summary proves the acceptance test actually ran.
+- Core acceptance is opt-in: without `VOYA_GOLDEN_ACCEPTANCE` the check is skipped with explicit evidence and JSON golden parity still runs. Once opted in nothing may be skipped — a missing binary panics (set `VOYA_SINGBOX_BIN`), and `vp run check sing-box`, which stages the seed and opts in for you, additionally fails unless the libtest summary proves the acceptance test actually ran.
 - Raw JSON is allowed only at defined rule-set boundaries — normal profile/DNS/routing/transport/protocol data must be typed.
 
 ## Cores and i18n
 
-- The sing-box core seed (GPL-3.0-or-later) is **bundled into every locally built package, debug and dry-run included** — there is no download-on-first-run path in the app. On macOS the PacketTunnel extension's Libbox runs the connection and the seed only backs latency tests while disconnected (launched in place from the signed bundle); while connected, macOS tests go through the running core's Clash API. `postinstall` runs `scripts/core/install-sing-box.mjs`, which fetches the SHA-256-pinned upstream archive at `vp install` time into `resources/core-seeds/sing_box/` and copies it into the per-user app-data dir (`VOYAVPN_APP_CONFIG_DIR`, otherwise the OS default). `scripts/tauri/cli.mjs` re-stages the seed for every `tauri build` and injects a generated `bundle.resources` overlay, so the seed ships inside the package; on Windows and Linux the app copies it into app data `bin/` on first run, and replaces that copy at startup whenever the bundled seed is a different core (the `executableSha256` in the two `sing-box.seed.json` manifests differs), so an app update brings its core with it. Skip/force with `VOYAVPN_SKIP_SING_BOX_POSTINSTALL`, `VOYAVPN_FETCH_SING_BOX_ON_INSTALL` (CI postinstall opt-in), `VOYAVPN_FORCE_SING_BOX_FETCH`, or `vp run core:sing-box:install --force`. The Mac App Store build instead compiles the seed from the pinned source commit without `with_naive_outbound` (`VOYAVPN_SING_BOX_SEED_ORIGIN=source`, `vp run core:sing-box:build`, needs Go), because the upstream macOS binary imports the non-public `__kCFBundleNumericVersionKey` through Cronet; `native:macos:pkg` refuses any Mach-O that imports it or links a private library. Bumping the pin is documented in `docs/release/sing-box-seed-pinning.md`; any package handed to a third party carries GPL redistribution obligations (see `docs/release/THIRD_PARTY_NOTICES.md`).
-- The default routing profile's three rule sets (`geosite-cn`, `geoip-cn`, `geosite-private`) ship beside the seed in `resources/core-seeds/rule_sets/`, pinned by upstream commit and SHA-256 in `scripts/core/rule-sets-installer.mjs`; `postinstall` and every `tauri build` stage them, and the desktop app copies any missing one into app data `bin/srss/` at startup without replacing existing files. Skip/force with `VOYAVPN_SKIP_RULE_SETS_POSTINSTALL`, `VOYAVPN_FETCH_RULE_SETS_ON_INSTALL`, `VOYAVPN_FORCE_RULE_SETS_FETCH`, or `vp run core:rule-sets:install`.
-- Locale files (`packages/i18n/src/locales/*.json`) are maintained directly by Voya and are the sole language source. There are no ResX imports, overlays, or upstream snapshots. `vp run check:i18n` checks locale alignment and production usage.
+- The sing-box core seed (GPL-3.0-or-later) is **bundled into every locally built package, debug and dry-run included** — there is no download-on-first-run path in the app. On macOS the PacketTunnel extension's Libbox runs the connection and the seed only backs latency tests while disconnected (launched in place from the signed bundle); while connected, macOS tests go through the running core's Clash API. `postinstall` runs `scripts/core/install-sing-box.mjs`, which fetches the SHA-256-pinned upstream archive at `vp install` time into `resources/core-seeds/sing_box/` and copies it into the per-user app-data dir (`VOYAVPN_APP_CONFIG_DIR`, otherwise the OS default). `scripts/tauri/cli.mjs` re-stages the seed for every `tauri build` and injects a generated `bundle.resources` overlay, so the seed ships inside the package; on Windows and Linux the app copies it into app data `bin/` on first run, and replaces that copy at startup whenever the bundled seed is a different core (the `executableSha256` in the two `sing-box.seed.json` manifests differs), so an app update brings its core with it. Skip/force with `VOYAVPN_SKIP_SING_BOX_POSTINSTALL`, `VOYAVPN_FETCH_SING_BOX_ON_INSTALL` (CI postinstall opt-in), `VOYAVPN_FORCE_SING_BOX_FETCH`, or `node scripts/core/install-sing-box.mjs --force`. The Mac App Store build instead compiles the seed from the pinned source commit without `with_naive_outbound` (`VOYAVPN_SING_BOX_SEED_ORIGIN=source`, `vp run core sing-box build`, needs Go), because the upstream macOS binary imports the non-public `__kCFBundleNumericVersionKey` through Cronet; `native macos pkg` refuses any Mach-O that imports it or links a private library. Bumping the pin is documented in `docs/release/sing-box-seed-pinning.md`; any package handed to a third party carries GPL redistribution obligations (see `docs/release/THIRD_PARTY_NOTICES.md`).
+- The default routing profile's three rule sets (`geosite-cn`, `geoip-cn`, `geosite-private`) ship beside the seed in `resources/core-seeds/rule_sets/`, pinned by upstream commit and SHA-256 in `scripts/core/rule-sets-installer.mjs`; `postinstall` and every `tauri build` stage them, and the desktop app copies any missing one into app data `bin/srss/` at startup without replacing existing files. Skip/force with `VOYAVPN_SKIP_RULE_SETS_POSTINSTALL`, `VOYAVPN_FETCH_RULE_SETS_ON_INSTALL`, `VOYAVPN_FORCE_RULE_SETS_FETCH`, or `vp run core rule-sets install`.
+- Locale files (`packages/i18n/src/locales/*.json`) are maintained directly by Voya and are the sole language source. There are no ResX imports, overlays, or upstream snapshots. `vp run check i18n` checks locale alignment and production usage.
 
 ## macOS NetworkExtension hygiene
 
@@ -210,16 +236,16 @@ appex folder must equal its executable name, which App Store validation
 enforces (ITMS-90362); the doctor recognizes both names.
 
 - After copying, launching, or testing any `.app` with the PacketTunnel appex,
-  quit VoyaVPN and run `vp run native:macos:ne:doctor --fix` (add `--app <path>`
+  quit VoyaVPN and run `vp run native macos ne doctor --fix` (add `--app <path>`
   for a non-`/Applications` bundle and `--dev` for the repo release bundle).
-- `vp run build:mac:local` installs the built app into `/Applications`, strips
+- `vp run build mac local` installs the built app into `/Applications`, strips
   `Contents/PlugIns` from the leftover `target/` copies, and runs the doctor
   itself; see `docs/release/macos-local-tun-testing.md`.
 - Fixtures that do not test NetworkExtension behavior must remove
   `Contents/PlugIns` before launching the app.
 - Entitlement/provisioning fixtures may keep the production extension id, but
   cleanup is mandatory before deleting the fixture directories.
-- Do not add `vp run native:macos:ne:doctor --fix` to CI or broad verification
+- Do not add `vp run native macos ne doctor --fix` to CI or broad verification
   scripts; it intentionally mutates machine-global PlugInKit state.
 
 ## Conventions
@@ -229,5 +255,5 @@ enforces (ITMS-90362); the doctor recognizes both names.
 - Commit messages in this repo are written in Chinese with `type:` prefixes (feat/fix/refactor/chore/docs); multiple changes are often combined in one message.
 - **Mobile styling is Uniwind, not NativeWind.** Both compile Tailwind v4 at build time, but NativeWind v5 styles through `react-native-css`, whose Metro integration is built on `@expo/metro-config` — and that package fails to load without the `expo` SDK beside it, which a bare React Native app does not have. Uniwind detects a non-Expo project and uses Metro's own transform worker. Primitives come from `heroui-native` via subpath imports (`heroui-native/button`, `/card`, `/input`, `/switch`, `/text`, …); there is no local `components/ui`. `apps/mobile/src/components/` holds the app's own compositions of them — page header, section header, `ListRow` (built from `ListGroup` parts; a fixed set of rows sits directly in a `ListGroup`), `SwitchRow` (`ControlField`), `Disclosure` (`Accordion`), segmented control (`Tabs`), banner (`Alert`), empty state — and every screen is built from those rather than restyling rows by hand. Screens take HeroUI's default look; two defaults are overridden for accessibility: `Tabs.Trigger` gets `role="button"`, because React Native gives `tab` no iOS trait (VoiceOver would not announce it as a control, nor XCUITest list it among `buttons`), and a `ControlField` root gets `accessible={false}`, because as a `Pressable` it would otherwise swallow the switch inside it. HeroUI's `Menu` is not used: its open popover never reaches the iOS accessibility tree (role, modal flag and in-tree portal all tried), so a choice behind a button opens a React Native `Modal` sheet of `ListRow`s, as the node sort and node actions do. `apps/mobile/global.css` imports `heroui-native/styles` for the design-system palette and keeps only seven Voya application roles as nested `@variant light/dark` under `:root` — read the comment at the top of that file before changing it, because two other shapes compile silently and render nothing. It also points HeroUI's `--accent` at the Voya brand blue, so there is one accent. Text sizes must be Tailwind's standard names (`text-sm`, `text-base`, `text-xl`, …): `Typography` runs `className` through tailwind-merge, which reads an unknown `text-<name>` as a colour and silently drops it. `react-native-gesture-handler` must stay on 2.x (HeroUI's peer is `^2.28.0`). `react-native-reanimated` and `react-native-worklets` are an exact pair (4.6.0 + 0.12.2). Dark mode follows `Uniwind.setTheme`, which reads the nested `@variant dark` block.
 - **Mobile bottom tabs are native.** `MainTabs` uses `@bottom-tabs/react-navigation` over `react-native-bottom-tabs` (SwiftUI/UIKit on iOS, Material on Android), with SF Symbols and local Android drawable resources. Tab screens use the native `SafeAreaView` from `react-native-screens/experimental` (all edges on iOS; top and sides on Android, whose navigator lays content above the bar); `NativeTabSafeAreaContext` prevents duplicate scroll-content insets. Do not reintroduce a custom JS bar or tab-height padding. Uniwind synchronizes React Native Appearance; Android tab colors use the current app palette because Material can retain its old theme while a settings page covers the navigator. Native tab labels use the shared translations, and iOS UI tests locate them by localized label within `app.tabBars` on iPhone; iPadOS exposes its top tab strip as ordinary buttons without a TabBar ancestor.
-- **CI OS coverage.** Clippy with `-D warnings` runs on Linux in `baseline-rust` and on macos-15 and windows-2025 in `platform-check`, so `#[cfg(windows)]` / `#[cfg(target_os = "macos")]` code is linted by the strict workspace lints. Rust *tests* run only on Linux on purpose: no `#[cfg(test)]` module in the workspace is OS-gated, so a cross-OS run would re-execute the same suite at triple the wall-clock cost. If you add an OS-gated test module, add `vp run check:rust:test` to that matrix in the same change. OS behaviour that only a real machine can exercise is covered at release time by `docs/release/os-smoke-matrix.md`.
-- Renderer smoke tests use Playwright with a Tauri IPC mock (`vp run check:frontend:smoke:mock`); Linux CI separately runs the packaged shell through `tauri-driver` (`vp run check:desktop:smoke`). Release tooling and runbooks live in `scripts/release/` and `docs/release/`.
+- **CI OS coverage.** Clippy with `-D warnings` runs on Linux in `baseline-rust` and on macos-15 and windows-2025 in `platform-check`, so `#[cfg(windows)]` / `#[cfg(target_os = "macos")]` code is linted by the strict workspace lints. Rust *tests* run only on Linux on purpose: no `#[cfg(test)]` module in the workspace is OS-gated, so a cross-OS run would re-execute the same suite at triple the wall-clock cost. If you add an OS-gated test module, add `vp run check rust test` to that matrix in the same change. OS behaviour that only a real machine can exercise is covered at release time by `docs/release/os-smoke-matrix.md`.
+- Renderer smoke tests use Playwright with a Tauri IPC mock (`vp run check frontend smoke mock`); Linux CI separately runs the packaged shell through `tauri-driver` (`vp run check desktop smoke`). Release tooling and runbooks live in `scripts/release/` and `docs/release/`.

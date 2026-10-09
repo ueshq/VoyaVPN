@@ -126,6 +126,15 @@ describe("GitHub Actions workflows", () => {
     expect(direct).toEqual([]);
   });
 
+  // A command is the words after `vp run` (`vp run build mac local`), resolved
+  // by scripts/commands.mjs. A `build:mac:local` script would be a second
+  // spelling of one of them.
+  it("keeps colon-named scripts out of the root package.json", () => {
+    const scripts = JSON.parse(readFileSync(resolve(repoRoot, "package.json"), "utf8")).scripts;
+
+    expect(Object.keys(scripts).filter((name) => name.includes(":"))).toEqual([]);
+  });
+
   it("sets up Vite+ in every job that runs vp", () => {
     const missing = [];
     for (const file of workflowFiles()) {
@@ -180,7 +189,7 @@ describe("GitHub Actions workflows", () => {
     ]) {
       expect(buildStep, secret).toContain(`${secret}: \${{ runner.os == 'macOS' && secrets.${secret} || '' }}`);
     }
-    // Nothing on the vp run tauri:build path consumes the Windows certificate.
+    // Nothing on the vp run tauri build path consumes the Windows certificate.
     expect(buildStep).not.toContain("WINDOWS_CERTIFICATE_BASE64");
     expect(buildStep).not.toContain("WINDOWS_CERTIFICATE_PASSWORD");
   });
@@ -251,7 +260,7 @@ describe("GitHub Actions workflows", () => {
   // Without a build cache every job recompiled the whole Tauri workspace
   // (webkit2gtk, tao/wry, sqlx, tokio, specta) from scratch on every run.
   it("caches the cargo build directory in every CI job that compiles the workspace", () => {
-    const compilesWorkspace = /cargo (?:check|clippy|test|build)\b|tauri:build|check:rust:|check:desktop:smoke/;
+    const compilesWorkspace = /cargo (?:check|clippy|test|build)\b|tauri build|check rust |check desktop smoke/;
     const uncached = [];
 
     for (const [job, body] of workflowJobs(readWorkflow("ci.yml"))) {

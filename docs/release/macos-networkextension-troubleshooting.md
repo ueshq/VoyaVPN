@@ -31,8 +31,8 @@ development builds keep the `.appex` shape and use `packet-tunnel-provider`.
   installation to prevent them from winning PlugInKit election. `vp run tauri dev` also
   runs without a bundled provider and cannot be used for macOS VPN testing.
   If the installed copy is incomplete, reinstall a complete VPN-capable package;
-  developers can rebuild and install it with `vp run build:mac:local`. Verify the
-  installed copy with `vp run native:macos:ne:doctor --app /Applications/VoyaVPN.app`.
+  developers can rebuild and install it with `vp run build mac local`. Verify the
+  installed copy with `vp run native macos ne doctor --app /Applications/VoyaVPN.app`.
 - Enabling TUN disconnects browsers and apps.
 - Disabling TUN and using system proxy works.
 - The UI may report connected while traffic does not pass.
@@ -59,7 +59,7 @@ development builds keep the `.appex` shape and use `packet-tunnel-provider`.
 Run:
 
 ```sh
-vp run native:macos:ne:doctor
+vp run native macos ne doctor
 ```
 
 For raw evidence:
@@ -94,7 +94,7 @@ as stale.
 For local release-bundle testing, pass the app path and allow the repo bundle:
 
 ```sh
-vp run native:macos:ne:doctor --app "$PWD/target/release/bundle/macos/VoyaVPN.app" --dev
+vp run native macos ne doctor --app "$PWD/target/release/bundle/macos/VoyaVPN.app" --dev
 ```
 
 ## Repair
@@ -102,13 +102,13 @@ vp run native:macos:ne:doctor --app "$PWD/target/release/bundle/macos/VoyaVPN.ap
 Quit VoyaVPN first, then run:
 
 ```sh
-vp run native:macos:ne:doctor --fix
+vp run native macos ne doctor --fix
 ```
 
 For a non-`/Applications` app:
 
 ```sh
-vp run native:macos:ne:doctor --fix --app "$PWD/target/release/bundle/macos/VoyaVPN.app" --dev
+vp run native macos ne doctor --fix --app "$PWD/target/release/bundle/macos/VoyaVPN.app" --dev
 ```
 
 The doctor unregisters stale app-extension registrations, refreshes

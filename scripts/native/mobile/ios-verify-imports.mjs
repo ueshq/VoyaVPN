@@ -10,7 +10,7 @@ import { bundleImportReport } from "../macos/macho-imports.mjs";
  * import no symbol App Review has named as non-public and link no library
  * outside the SDK. Run it on the archived app before uploading:
  *
- *   vp run native:mobile:ios:verify-imports <path/to/VoyaVPN.app>
+ *   vp run native mobile ios verify-imports <path/to/VoyaVPN.app>
  *
  * See docs/release/mobile-ios-signing.md.
  */

@@ -7,9 +7,6 @@
   "exports": {
     "./*": "./src/*.ts"
   },
-  "scripts": {
-    "test": "vp test"
-  },
   "dependencies": {
     "@voya/contracts": "workspace:*",
     "@voya/i18n": "workspace:*",

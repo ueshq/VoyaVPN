@@ -31,7 +31,7 @@ function parseDoctorArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`Usage: vp run native:macos:ne:doctor [--fix] [--app /Applications/VoyaVPN.app] [--dev]
+  console.log(`Usage: vp run native macos ne doctor [--fix] [--app /Applications/VoyaVPN.app] [--dev]
 
 Checks macOS PacketTunnel registrations for ${providerBundleId}.
 
@@ -420,7 +420,7 @@ function main() {
     if (!status.usesSystemExtension && status.activeLegal.length !== 1) {
       console.error(`Expected exactly one active legal provider, found ${status.activeLegal.length}.`);
     }
-    console.error("Run `vp run native:macos:ne:doctor --fix` after quitting VoyaVPN to repair registrations.");
+    console.error("Run `vp run native macos ne doctor --fix` after quitting VoyaVPN to repair registrations.");
     process.exit(1);
   }
 

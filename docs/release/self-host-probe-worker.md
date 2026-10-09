@@ -39,7 +39,7 @@ Worker tests and `crates/voya-net/src/probe/reachability.rs` read.
    workspace dependency):
 
    ```sh
-   npx wrangler login
+   vp dlx wrangler@4 login
    vp run --filter @voya/probe deploy
    ```
 

@@ -111,7 +111,7 @@ const INVALIDATION_KEYS = {
  * invalidate.
  *
  * Returns `null` only for a scope this build does not know, which cannot happen
- * while `bindings.ts` is in sync — `vp run check:bindings` is a CI gate — so the
+ * while `bindings.ts` is in sync — `vp run check bindings` is a CI gate — so the
  * bridge skips it rather than throwing inside a Tauri event callback.
  */
 export function invalidationQueryKey(scope: InvalidationScope): QueryKeyRoot | null {

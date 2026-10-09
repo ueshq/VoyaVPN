@@ -19,7 +19,7 @@ import { packetTunnelSources } from "../native/macos/tunnel-layout.mjs";
  * this says so in seconds on any machine.
  *
  * The provider sources shared with macOS are typechecked for macOS by
- * `vp run check:native:macos:bridge`. Their `#if os(iOS)` branches are not seen
+ * `vp run check native macos bridge`. Their `#if os(iOS)` branches are not seen
  * by that, so they are typechecked for iOS here; outside Libbox's `canImport`
  * they need nothing but the SDK.
  */

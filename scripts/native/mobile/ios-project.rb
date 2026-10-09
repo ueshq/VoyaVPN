@@ -10,7 +10,7 @@
 # because `pod install` and a React Native upgrade both rewrite parts of this
 # project, and running this again is how our half comes back.
 #
-# Run it through `vp run native:mobile:ios:project`, which finds a Ruby that
+# Run it through `vp run native mobile ios project`, which finds a Ruby that
 # can load the `xcodeproj` gem.
 
 require 'json'
@@ -31,12 +31,12 @@ UI_TEST_BUNDLE_ID = "#{APP_BUNDLE_ID}.uitests"
 DEPLOYMENT_TARGET = '15.1'
 SWIFT_VERSION = '5.0'
 repo_root = Dir.pwd
-# The release version is the root package.json's, and `check:architecture`
+# The release version is the root package.json's, and `check architecture`
 # requires the project to carry exactly that one MARKETING_VERSION. The app and
 # the extension both get it here, so a version bump is "edit package.json, run
 # this". The test bundle deliberately carries none.
 MARKETING_VERSION = JSON.parse(File.read(File.join(repo_root, 'package.json')))['version']
-# The build number stays 1 in the project. `vp run build:ios:appstore` passes the
+# The build number stays 1 in the project. `vp run build ios appstore` passes the
 # real one on the xcodebuild command line, which overrides every target, so the
 # app and the extension always agree (ITMS-90473).
 CURRENT_PROJECT_VERSION = '1'
@@ -178,7 +178,7 @@ if File.directory?(libbox_path)
   # DWARF tables it then emits are what every gomobile consumer ships.
   append_ldflag(app, '-Wl,-no_compact_unwind')
 else
-  warn "Libbox.xcframework is not built; skipping it. Run `vp run native:mobile:libbox:ios`, then this again."
+  warn "Libbox.xcframework is not built; skipping it. Run `vp run native mobile libbox ios`, then this again."
 end
 
 apply_settings(app, {
@@ -299,7 +299,7 @@ apply_settings(ui_tests, {
   'TARGETED_DEVICE_FAMILY' => '1,2',
   'CODE_SIGN_STYLE' => 'Automatic',
   # A test bundle's release version means nothing, and setting one would break
-  # the single-MARKETING_VERSION rule `check:architecture` enforces.
+  # the single-MARKETING_VERSION rule `check architecture` enforces.
   'MARKETING_VERSION' => nil,
   'CURRENT_PROJECT_VERSION' => nil
 })

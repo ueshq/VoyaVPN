@@ -355,7 +355,7 @@ impl AppServices {
     /// Exists so the shell does not have to. `AppServices::database()` was the
     /// one accessor that handed a `voya_db::Database` out of this facade, and
     /// `setup()` used it for exactly this call — the header of this file
-    /// forbids that, and `check:architecture` cannot see it because the handle
+    /// forbids that, and `check architecture` cannot see it because the handle
     /// arrives through a voya-app method rather than a `voya_db::` path.
     #[must_use]
     pub fn spawn_subscription_auto_update(

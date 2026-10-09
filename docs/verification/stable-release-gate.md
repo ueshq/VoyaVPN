@@ -21,7 +21,7 @@ Every external checkpoint must attach owner, system, verification, rollback or s
 
 | Gate | Owner | System | Verification | Rollback or stop condition |
 | --- | --- | --- | --- | --- |
-| Automated regression gate | Release engineer | Local workstation and GitHub Actions `Release` workflow | `vp run verify:local`, `vp build`, package jobs, `SHA256SUMS`, artifact manifests, CDN release-index evidence, updater metadata evidence, and core manifest evidence are recorded for the frozen commit. | Stop release, fix the failing check, and rerun from the frozen commit. |
+| Automated regression gate | Release engineer | Local workstation and GitHub Actions `Release` workflow | `vp run verify local`, `vp build`, package jobs, `SHA256SUMS`, artifact manifests, CDN release-index evidence, updater metadata evidence, and core manifest evidence are recorded for the frozen commit. | Stop release, fix the failing check, and rerun from the frozen commit. |
 | CDN staging | CDN owner | VoyaVPN CDN immutable versioned paths | App artifacts, updater payloads, `latest.json`, manual release index, core manifest, geo/SRS manifests, checksums, signatures, notices, and evidence resolve from the approved CDN and match SHA-256 evidence. | Stop pointer promotion, purge accidental public cache, and quarantine bad staged artifacts with hashes. |
 | Stable pointer promotion | Release owner and CDN owner | VoyaVPN CDN stable pointers | Manual release-index pointer, app updater `latest.json` pointer, core manifest pointer, geo/SRS pointers, checksum pointers, and notices are promoted only after all gates pass; before/after pointer hashes are recorded. | Roll back pointers to the previous known-good release index, `latest.json`, core manifest, and geo/SRS manifests. |
 | Signing and notarization | Security owner, macOS owner, Windows owner, Linux owner | Approved signing systems, Apple Developer ID, Authenticode signer, package repository signing when used | macOS x64/arm64 signatures, notarization, and stapling pass; Windows x64/arm64 signatures pass; Linux package metadata and optional repository signatures pass. | Hold affected platform assets, rebuild from clean artifacts, re-sign, re-notarize, and rerun smoke. |
@@ -68,10 +68,10 @@ Expected prepared-environment pass criteria: `vp run release -- updater-config` 
 Before handing a frozen commit to external release owners, run:
 
 ```sh
-vp run verify:local
+vp run verify local
 vp build
-vp run check:frontend:smoke:mock
-vp run check:desktop:smoke
+vp run check frontend smoke mock
+vp run check desktop smoke
 vp run release -- readiness --mode dry-run
 ```
 

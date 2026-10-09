@@ -8,8 +8,8 @@ import { checkMobileLegalAssets } from "./legal-assets.mjs";
 /**
  * What App Store Connect and App Review read out of the iOS app's checked-in
  * bundle inputs, as rules that run on any OS: the icon set, the purpose
- * strings, and the tunnel extension's identity. `vp run check:mobile:ios:assets`
- * runs them, and `vp run build:ios:appstore` runs them before it archives.
+ * strings, and the tunnel extension's identity. `vp run check mobile ios assets`
+ * runs them, and `vp run build ios appstore` runs them before it archives.
  */
 
 /**

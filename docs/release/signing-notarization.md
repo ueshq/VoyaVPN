@@ -109,11 +109,11 @@ PacketTunnel extension, including the App Group and Network Extension
 entitlements. A Mac App Store/TestFlight signed `.app` is not a direct
 drag-to-Applications artifact; local `spctl`/`syspolicy_check distribution`
 will reject it with the wrong certificate type until it is delivered through
-App Store Connect/TestFlight. `vp run build:mac:appstore` is that path end to
+App Store Connect/TestFlight. `vp run build mac appstore` is that path end to
 end, ending in a `.pkg` signed by the installer certificate; see
 [macos-app-store.md](macos-app-store.md).
 
-For local TUN testing without notarization, `vp run build:mac:local` signs the
+For local TUN testing without notarization, `vp run build mac local` signs the
 App-Store-shaped `.appex` lane with an Apple Development certificate and
 development provisioning profiles and installs the result into
 `/Applications`; see
@@ -123,16 +123,16 @@ this-Mac-only and never distributable.
 | Checkpoint | Owner | System | Verification | Rollback notes |
 | --- | --- | --- | --- | --- |
 | Import Developer ID identity | macOS release owner | macOS keychain or signing runner | The signing identity is visible to `codesign` and access is restricted to the build process. | Delete the keychain item or ephemeral keychain, revoke if exposed, and stop macOS publication. |
-| Build signed release package | macOS release owner | `vp run tauri:build` in prepared signing environment | `.app` and `.dmg` are produced from the frozen commit and version. | Delete the local build output and rebuild from the same commit after fixing config or credentials. |
-| Build and stage PacketTunnel runtime | macOS release owner | sing-box source, universal macOS `Libbox.framework`, provisioning profiles, Tauri `.app` bundle | `vp run native:macos:libbox`, `vp run native:macos:tunnel`, and `vp run native:macos:tunnel:verify` pass with `VOYAVPN_REQUIRE_LIBBOX=1`, `VOYAVPN_REQUIRE_CODESIGN=1`, and App Store/TestFlight lanes also set `VOYAVPN_REQUIRE_PROVISIONING=1`, proving arm64/x86_64 Libbox symbols or an embedded dynamic framework plus profiles and entitlements. | Do not notarize or publish. Rebuild libbox or fix provisioning/signing. |
-| Verify code signature | macOS release owner | `codesign` | `vp run native:macos:app:sign` passes; `codesign --verify --deep --strict --verbose=2 <path-to-VoyaVPN.app>` passes and signer identity matches the release record. | Do not notarize or publish. Re-sign from clean artifacts. |
-| Submit and staple notarization | macOS release owner | `xcrun notarytool` and `xcrun stapler` | `vp run native:macos:app:notarize` succeeds; notary submission is accepted, stapling succeeds, and `xcrun stapler validate <path>` passes for the distributed artifact. | Do not publish. Rebuild, re-sign, resubmit, or hold macOS beta. |
+| Build signed release package | macOS release owner | `vp run tauri build` in prepared signing environment | `.app` and `.dmg` are produced from the frozen commit and version. | Delete the local build output and rebuild from the same commit after fixing config or credentials. |
+| Build and stage PacketTunnel runtime | macOS release owner | sing-box source, universal macOS `Libbox.framework`, provisioning profiles, Tauri `.app` bundle | `vp run native macos libbox`, `vp run native macos tunnel`, and `vp run native macos tunnel verify` pass with `VOYAVPN_REQUIRE_LIBBOX=1`, `VOYAVPN_REQUIRE_CODESIGN=1`, and App Store/TestFlight lanes also set `VOYAVPN_REQUIRE_PROVISIONING=1`, proving arm64/x86_64 Libbox symbols or an embedded dynamic framework plus profiles and entitlements. | Do not notarize or publish. Rebuild libbox or fix provisioning/signing. |
+| Verify code signature | macOS release owner | `codesign` | `vp run native macos app sign` passes; `codesign --verify --deep --strict --verbose=2 <path-to-VoyaVPN.app>` passes and signer identity matches the release record. | Do not notarize or publish. Re-sign from clean artifacts. |
+| Submit and staple notarization | macOS release owner | `xcrun notarytool` and `xcrun stapler` | `vp run native macos app notarize` succeeds; notary submission is accepted, stapling succeeds, and `xcrun stapler validate <path>` passes for the distributed artifact. | Do not publish. Rebuild, re-sign, resubmit, or hold macOS beta. |
 | Gatekeeper launch smoke | macOS platform owner | Clean macOS machine | `spctl` assessment after notarization/stapling and first launch from DMG pass; PacketTunnel VPN authorization, terminal TUN traffic, proxy restore, and uninstall smoke are recorded in [os-smoke-matrix.md](os-smoke-matrix.md). | Pull macOS assets or keep them in staging until the issue is fixed. |
 
 Developer ID native tunnel release command shape:
 
 ```sh
-vp run native:macos:libbox
+vp run native macos libbox
 export VOYAVPN_MACOS_APP_BUNDLE="$PWD/target/release/bundle/macos/VoyaVPN.app"
 export VOYAVPN_CODESIGN_IDENTITY="<Developer ID Application identity>"
 export VOYAVPN_PROVISIONING_PROFILE_DIR="<profile-dir-for-Developer-ID>"
@@ -140,25 +140,25 @@ export VOYAVPN_REQUIRE_LIBBOX=1
 export VOYAVPN_REQUIRE_CODESIGN=1
 export VOYAVPN_REQUIRE_PROVISIONING=1
 export VOYAVPN_REQUIRE_NOTARIZATION_READY=1
-vp run native:macos:tunnel
-vp run native:macos:tunnel:verify
-vp run native:macos:app:sign
-vp run native:macos:tunnel:verify
-vp run native:macos:app:notarize
+vp run native macos tunnel
+vp run native macos tunnel verify
+vp run native macos app sign
+vp run native macos tunnel verify
+vp run native macos app notarize
 ```
 
 Two optional switches for the signing steps: `VOYAVPN_REQUIRE_GATEKEEPER_ASSESSMENT=1`
-makes `native:macos:app:sign` fail on a `spctl` rejection of the Developer ID
+makes `native macos app sign` fail on a `spctl` rejection of the Developer ID
 app instead of deferring to post-notarization assessment, and
 `VOYAVPN_DISABLE_CODESIGN_TIMESTAMP=1` omits `--timestamp` from every
 `codesign`/`productbuild` call for offline signing (never for a release).
 
-App Store/TestFlight command shape. `vp run build:mac:appstore` runs exactly
-these steps; `VOYAVPN_MAC_APP_STORE=1` is what makes `tauri:build` leave out
+App Store/TestFlight command shape. `vp run build mac appstore` runs exactly
+these steps; `VOYAVPN_MAC_APP_STORE=1` is what makes `tauri build` leave out
 the self-updater and apply the store config overlay:
 
 ```sh
-vp run native:macos:libbox
+vp run native macos libbox
 export VOYAVPN_MAC_APP_STORE=1
 export VOYAVPN_MACOS_APP_BUNDLE="$PWD/target/release/bundle/macos/VoyaVPN.app"
 export VOYAVPN_CODESIGN_IDENTITY="<3rd Party Mac Developer Application or Apple Distribution identity>"
@@ -167,11 +167,11 @@ export VOYAVPN_PROVISIONING_PROFILE_DIR="<profile-dir-for-Mac-App-Store>"
 export VOYAVPN_REQUIRE_LIBBOX=1
 export VOYAVPN_REQUIRE_CODESIGN=1
 export VOYAVPN_REQUIRE_PROVISIONING=1
-vp run tauri:build --bundles app
-vp run native:macos:tunnel
-vp run native:macos:app:sign
-vp run native:macos:tunnel:verify
-vp run native:macos:pkg
+vp run tauri build --bundles app
+vp run native macos tunnel
+vp run native macos app sign
+vp run native macos tunnel verify
+vp run native macos pkg
 ```
 
 Use `VOYAVPN_NOTARY_KEYCHAIN_PROFILE` for notarization when possible. If the
@@ -189,7 +189,7 @@ System: Windows signing machine, Authenticode signer, NSIS and MSI artifacts.
 | Checkpoint | Owner | System | Verification | Rollback notes |
 | --- | --- | --- | --- | --- |
 | Prepare signing certificate | Windows release owner | Certificate store, hardware token, cloud signer, or secure CI import | Certificate subject, expiry, and chain are recorded without exposing private material. | Revoke or rotate exposed credentials and delete affected artifacts. |
-| Build release installers | Windows release owner | `vp run tauri:build` in prepared signing environment | NSIS `.exe` and MSI artifacts are produced from the frozen commit and version. | Delete build output and rebuild after fixing the signing environment. |
+| Build release installers | Windows release owner | `vp run tauri build` in prepared signing environment | NSIS `.exe` and MSI artifacts are produced from the frozen commit and version. | Delete build output and rebuild after fixing the signing environment. |
 | Verify Authenticode | Windows release owner | Windows signature verification tooling | Installer signatures validate and certificate identity matches the release record. | Do not publish Windows assets. Re-sign clean artifacts. |
 | Installer smoke | Windows platform owner | Clean Windows 11 and Windows 10 machines | Current-user install, launch, WebView2 bootstrap behavior, system proxy, TUN/UAC, uninstall, and no orphaned process checks pass. | Pull or hold Windows artifacts and rerun smoke after rebuilding. |
 

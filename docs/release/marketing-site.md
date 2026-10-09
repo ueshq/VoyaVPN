@@ -42,13 +42,13 @@ vp run --filter @voya/web dev     # build, then serve dist with wrangler dev
 
 ## Deploy
 
-wrangler is not a workspace dependency; the scripts run it through `npx`. The
+wrangler is not a workspace dependency; the scripts run it through `vp dlx`. The
 `wangc.ai` zone is in the same Cloudflare account, so the custom domain in
 `apps/web/wrangler.jsonc` makes wrangler create the DNS record and the
 certificate.
 
 ```sh
-npx wrangler@4 whoami                  # confirm the account that owns wangc.ai
+vp dlx wrangler@4 whoami                  # confirm the account that owns wangc.ai
 vp run --filter @voya/web deploy     # build, then wrangler deploy
 ```
 

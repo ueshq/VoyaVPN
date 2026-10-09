@@ -53,7 +53,7 @@ jobs:
       - name: Audit npm dependencies
         run: vp pm audit --production --level high
 
-  # verify:local's gates, split across three parallel jobs so the Rust compile
+  # verify local's gates, split across three parallel jobs so the Rust compile
   # and the frontend build/Playwright run no longer wait on each other.
   # scripts/quality/verify-local.test.mjs fails unless the baseline-* jobs
   # together run every gate in scripts/quality/verify-local.mjs exactly once.
@@ -66,13 +66,13 @@ jobs:
       - uses: ./.github/actions/setup-vp
 
       - name: Check architecture boundaries
-        run: vp run check:architecture
+        run: vp run check architecture
 
       - name: Check lockfile single versions
-        run: vp run check:lockfile
+        run: vp run check lockfile
 
       - name: Check i18n locale drift
-        run: vp run check:i18n
+        run: vp run check i18n
 
   baseline-rust:
     runs-on: ubuntu-latest
@@ -97,28 +97,28 @@ jobs:
         with:
           tool: cargo-machete@0.9.2
 
-      # check:sing-box stages only the core, not the rule sets.
+      # check sing-box stages only the core, not the rule sets.
       - uses: ./.github/actions/setup-core-seeds
         with:
           rule-sets: "false"
 
       - name: Check Rust formatting
-        run: vp run check:rust:fmt
+        run: vp run check rust fmt
 
       - name: Lint Rust
-        run: vp run check:rust:clippy
+        run: vp run check rust clippy
 
       - name: Check Rust dependency usage
-        run: vp run check:rust:deps
+        run: vp run check rust deps
 
       - name: Run Rust tests
-        run: vp run check:rust:test
+        run: vp run check rust test
 
       - name: Validate generated configs with sing-box
-        run: vp run check:sing-box
+        run: vp run check sing-box
 
       - name: Check generated IPC binding drift
-        run: vp run check:bindings
+        run: vp run check bindings
 
   baseline-frontend:
     runs-on: ubuntu-latest
@@ -129,13 +129,13 @@ jobs:
       - uses: ./.github/actions/setup-vp
 
       - name: Check frontend formatting, lint and types
-        run: vp run check:frontend:static
+        run: vp check
 
       - name: Run frontend tests with coverage thresholds
-        run: vp run check:frontend:coverage
+        run: vp run check frontend coverage
 
       - name: Build frontend and enforce bundle budgets
-        run: vp run check:frontend:bundle
+        run: vp run check frontend bundle
 
       # Playwright pins its browser builds per release, so the resolved
       # @playwright/test version is the cache key.
@@ -165,13 +165,13 @@ jobs:
         run: vp exec --filter @voya/desktop playwright install-deps chromium
 
       - name: Run frontend mock smoke tests
-        run: vp run check:frontend:smoke:mock
+        run: vp run check frontend smoke mock
 
       - name: Check dead code and dependency usage
-        run: vp run check:dead-code
+        run: vp run check dead-code
 
   # The React Native app's own gates. They are deliberately outside
-  # `verify:local`: Jest and a Metro bundle are a separate toolchain from the
+  # `verify local`: Jest and a Metro bundle are a separate toolchain from the
   # Vitest/Playwright suite the `baseline-*` jobs split between them.
   mobile:
     runs-on: ubuntu-latest
@@ -182,19 +182,19 @@ jobs:
       - uses: ./.github/actions/setup-vp
 
       - name: Run mobile tests
-        run: vp run check:mobile:test
+        run: vp run check mobile test
 
       # What App Store Connect reads from the checked-in iOS inputs: opaque
       # icons, translated purpose strings, one App Group across app and tunnel.
       - name: Check the iOS bundle inputs
-        run: vp run check:mobile:ios:assets
+        run: vp run check mobile ios assets
 
       # Typecheck and lint resolve modules the Node way; the app is built by
       # Metro, whose resolver is configured separately. This is the only gate
       # that exercises it, and a workspace package that imports fine in an
       # editor can still fail to bundle for a device.
       - name: Bundle the mobile app for both platforms
-        run: vp run check:mobile:bundle
+        run: vp run check mobile bundle
 
   # The mobile host has to *cross-compile*, which the Linux baseline cannot
   # prove: `baseline-rust` builds for the host, and every blocker this job
@@ -249,7 +249,7 @@ jobs:
       - uses: ./.github/actions/setup-core-seeds
 
       - name: Run real desktop smoke
-        run: xvfb-run -a vp run check:desktop:smoke
+        run: xvfb-run -a vp run check desktop smoke
 
   # MSRV is a dispatch/release gate only: clippy.toml's `msrv = "1.94"` already
   # makes `incompatible_msrv` reject newer std APIs on every PR, so re-checking

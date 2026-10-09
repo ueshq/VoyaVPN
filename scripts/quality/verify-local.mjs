@@ -8,20 +8,20 @@ import { isCliEntrypoint, runOrExit } from "../lib/common.mjs";
  * Vite+ CLI locally, `voidzero-dev/setup-vp` in CI.
  */
 export const steps = [
-  ["Architecture boundaries", "vp", ["run", "check:architecture"]],
-  ["Lockfile single versions", "vp", ["run", "check:lockfile"]],
-  ["Rust formatting", "vp", ["run", "check:rust:fmt"]],
-  ["Rust Clippy", "vp", ["run", "check:rust:clippy"]],
-  ["Rust dependency usage", "vp", ["run", "check:rust:deps"]],
-  ["Rust tests", "vp", ["run", "check:rust:test"]],
-  ["Frontend format, lint and typecheck", "vp", ["run", "check:frontend:static"]],
-  ["Frontend tests and coverage", "vp", ["run", "check:frontend:coverage"]],
-  ["Frontend production bundle", "vp", ["run", "check:frontend:bundle"]],
-  ["Frontend mock smoke tests", "vp", ["run", "check:frontend:smoke:mock"]],
-  ["Dead code and dependency usage", "vp", ["run", "check:dead-code"]],
-  ["sing-box config acceptance", "vp", ["run", "check:sing-box"]],
-  ["Generated binding drift", "vp", ["run", "check:bindings"]],
-  ["i18n locale drift", "vp", ["run", "check:i18n"]],
+  ["Architecture boundaries", "vp", ["run", "check", "architecture"]],
+  ["Lockfile single versions", "vp", ["run", "check", "lockfile"]],
+  ["Rust formatting", "vp", ["run", "check", "rust", "fmt"]],
+  ["Rust Clippy", "vp", ["run", "check", "rust", "clippy"]],
+  ["Rust dependency usage", "vp", ["run", "check", "rust", "deps"]],
+  ["Rust tests", "vp", ["run", "check", "rust", "test"]],
+  ["Frontend format, lint and typecheck", "vp", ["check"]],
+  ["Frontend tests and coverage", "vp", ["run", "check", "frontend", "coverage"]],
+  ["Frontend production bundle", "vp", ["run", "check", "frontend", "bundle"]],
+  ["Frontend mock smoke tests", "vp", ["run", "check", "frontend", "smoke", "mock"]],
+  ["Dead code and dependency usage", "vp", ["run", "check", "dead-code"]],
+  ["sing-box config acceptance", "vp", ["run", "check", "sing-box"]],
+  ["Generated binding drift", "vp", ["run", "check", "bindings"]],
+  ["i18n locale drift", "vp", ["run", "check", "i18n"]],
 ];
 
 if (isCliEntrypoint(import.meta.url)) {

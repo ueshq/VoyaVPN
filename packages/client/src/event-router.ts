@@ -80,7 +80,7 @@ export function createEventRouter(options: EventRouterOptions): EventRouter {
         });
       }
     }
-    // `null` only for a scope this build cannot map, which `check:bindings`
+    // `null` only for a scope this build cannot map, which `check bindings`
     // makes impossible; skipping beats throwing inside the event callback.
     const invalidated = event.keys.flatMap((item) => {
       const queryKey = invalidationQueryKey(item.scope);

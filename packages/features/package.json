@@ -8,9 +8,6 @@
     "./*": "./src/*.ts",
     "./test/render": "./src/test/render.tsx"
   },
-  "scripts": {
-    "test": "vp test"
-  },
   "dependencies": {
     "@voya/client": "workspace:*",
     "@voya/contracts": "workspace:*",

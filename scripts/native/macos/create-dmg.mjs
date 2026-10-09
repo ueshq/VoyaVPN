@@ -33,7 +33,7 @@ function verifyFinalApp() {
   requirePath(appBundle, "macOS app bundle");
   if (existsSync(tunnel.incompatibleBundle)) {
     throw new Error(
-      `Incompatible PacketTunnel bundle is present for ${tunnel.distribution}: ${tunnel.incompatibleBundle}. Re-run vp run native:macos:tunnel before creating the DMG.`,
+      `Incompatible PacketTunnel bundle is present for ${tunnel.distribution}: ${tunnel.incompatibleBundle}. Re-run vp run native macos tunnel before creating the DMG.`,
     );
   }
   requirePath(tunnel.layout.bundle, tunnel.layout.label);
@@ -79,7 +79,7 @@ function createDmg(outputPath) {
 }
 
 /**
- * Developer ID disk images must carry their own signature: `vp run build:mac`
+ * Developer ID disk images must carry their own signature: `vp run build mac`
  * notarizes the DMG and then asserts `spctl --assess --context
  * context:primary-signature`, which rejects an unsigned image even when the app
  * inside it is signed, notarized, and stapled.
@@ -148,7 +148,7 @@ function verifyDmgContents(outputPath) {
       "DMG macOS app provisioning profile",
     );
     optionalOrRequiredPath(mountedLayout.provisioningProfile, "DMG PacketTunnel provisioning profile");
-    run("vp", ["run", "native:macos:tunnel:verify"], {
+    run("vp", ["run", "native", "macos", "tunnel", "verify"], {
       cwd: repoRoot,
       env: {
         ...process.env,

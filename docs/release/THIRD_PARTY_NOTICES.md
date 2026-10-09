@@ -21,7 +21,7 @@ This document is bundled with release packages as attribution. It is not a legal
 
 ## Runtime Cores
 
-Every VoyaVPN package built by `vp run tauri:build` includes a sing-box core seed, debug and dry-run builds included: the build wrapper stages the seed before invoking Tauri and adds it to `bundle.resources`. The seed archive is downloaded from the upstream release named below and verified against the SHA-256 pinned in `scripts/core/sing-box-installer.mjs`; see [sing-box-seed-pinning.md](sing-box-seed-pinning.md). Packaged seed assets are copied from the read-only app resources into the user app data `bin/` tree before execution on Windows and Linux; macOS executes the signed packaged seed directly from the app bundle. Production stable packages may be published only after the stable legal approval checkpoint below is recorded.
+Every VoyaVPN package built by `vp run tauri build` includes a sing-box core seed, debug and dry-run builds included: the build wrapper stages the seed before invoking Tauri and adds it to `bundle.resources`. The seed archive is downloaded from the upstream release named below and verified against the SHA-256 pinned in `scripts/core/sing-box-installer.mjs`; see [sing-box-seed-pinning.md](sing-box-seed-pinning.md). Packaged seed assets are copied from the read-only app resources into the user app data `bin/` tree before execution on Windows and Linux; macOS executes the signed packaged seed directly from the app bundle. Production stable packages may be published only after the stable legal approval checkpoint below is recorded.
 
 Stable core manifests are empty for this rollout. sing-box is distributed only as a bundled seed asset and is updated only by shipping a new application package.
 

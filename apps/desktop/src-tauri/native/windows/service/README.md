@@ -41,10 +41,10 @@ release-ready.
 Build and install helpers:
 
 ```sh
-vp run native:windows:tunnel:build
-vp run native:windows:tunnel:install
-vp run native:windows:tunnel:status
-vp run native:windows:tunnel:uninstall
+vp run native windows tunnel build
+vp run native windows tunnel install
+vp run native windows tunnel status
+vp run native windows tunnel uninstall
 ```
 
 `install`, `status`, and `uninstall` must be run from an elevated Windows
@@ -59,12 +59,12 @@ lets interactive users start and stop it, and leaves the service stopped.
 without recursively deleting the containing directories.
 
 Install fails fast when the sing-box seed is missing; run
-`vp run core:sing-box:install` first.
+`node scripts/core/install-sing-box.mjs --force` first.
 
 For the complete unsigned local client, installer, and TUN-service flow, use:
 
 ```powershell
-vp run build:windows:local
+vp run build windows local
 ```
 
 The service binary also supports foreground smoke checks:

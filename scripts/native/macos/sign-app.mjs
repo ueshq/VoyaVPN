@@ -250,7 +250,7 @@ function main() {
         "Skipping spctl failure for App Store/TestFlight distribution; this artifact is intended for App Store Connect/TestFlight, not direct drag-to-Applications launch.",
       );
       console.warn(
-        "For direct macOS distribution, sign with a Developer ID Application identity and run vp run native:macos:app:notarize.",
+        "For direct macOS distribution, sign with a Developer ID Application identity and run vp run native macos app notarize.",
       );
     }
   }

@@ -15,7 +15,7 @@ Tauri packaging is configured in `apps/desktop/src-tauri/tauri.conf.json` for th
 The required local debug build is intentionally unsigned:
 
 ```sh
-vp run tauri:build --debug
+vp run tauri build --debug
 ```
 
 The package script runs through `scripts/tauri/cli.mjs`, which forwards all Tauri CLI arguments and normalizes `CI=1`/`CI=0` to the boolean strings required by the Tauri 2 CLI. This keeps local and runner debug packaging deterministic without requiring signing credentials.
@@ -54,7 +54,7 @@ The `*.evidence.json` files include channel, version or core-version summary, fi
 
 Local verification for this batch passed with unsigned debug artifacts:
 
-- `vp run tauri:build --debug`
+- `vp run tauri build --debug`
 - `test -f docs/release/packaging.md`
 
 The debug build produced:
@@ -126,7 +126,7 @@ Keep these release assets separate in manifests, package resources, and evidence
 
 | Distribution class | Contents | Host or package location | Release gate |
 | --- | --- | --- | --- |
-| Bundled core seed assets | The approved sing-box seed generated during `vp install` or stable build preparation, bundled into every package. Windows and Linux copy it from `core-seeds/sing_box/` into app data `bin/sing_box/` before execution. On macOS the PacketTunnel extension (Libbox) runs the connection; the seed only backs speedtests while disconnected (connected tests go through the PacketTunnel's Clash API) and runs in place from the signed bundle. | Package resources only; never `bundle.externalBin`. `vp run native:macos:tunnel:verify` fails a macOS app whose `Contents/Resources/core-seeds/sing_box/sing-box` is missing or unsigned. | Requires the core redistribution approval record in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), including source URL, license name, SHA-256, byte size, and source availability evidence for the seed file. |
+| Bundled core seed assets | The approved sing-box seed generated during `vp install` or stable build preparation, bundled into every package. Windows and Linux copy it from `core-seeds/sing_box/` into app data `bin/sing_box/` before execution. On macOS the PacketTunnel extension (Libbox) runs the connection; the seed only backs speedtests while disconnected (connected tests go through the PacketTunnel's Clash API) and runs in place from the signed bundle. | Package resources only; never `bundle.externalBin`. `vp run native macos tunnel verify` fails a macOS app whose `Contents/Resources/core-seeds/sing_box/sing-box` is missing or unsigned. | Requires the core redistribution approval record in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), including source URL, license name, SHA-256, byte size, and source availability evidence for the seed file. |
 | Bundled rule-set seeds | The default routing profile's rule sets (`geosite-cn`, `geoip-cn`, `geosite-private`), pinned by upstream commit and SHA-256 and staged by `vp install` or the build. Every OS copies any missing file from `core-seeds/rule_sets/` into app data `bin/srss/` at startup and never replaces an existing one. | Package resources only. | `vp run release -- readiness` re-verifies the staged files against their pins. Attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). |
 | App updater payloads | Signed Tauri application update archives, matching `.sig` files, and `latest.json` metadata. They update the VoyaVPN app package, not proxy cores, geo data, or SRS rulesets. | Approved updater CDN base URL from `VOYAVPN_UPDATES_BASE_URL`. | Requires updater key provisioning, signed payload evidence, app artifact checksums, and OS smoke. |
 
@@ -202,7 +202,7 @@ Before a real stable release:
 
 ## Core And Sidecar Policy
 
-Every `vp run tauri:build` bundles the sing-box seed, including `--debug` builds and credential-free dry runs: the wrapper stages the seed for the target platform before invoking Tauri and injects a `bundle.resources` overlay for it. Treat any locally built package as a GPL redistribution:
+Every `vp run tauri build` bundles the sing-box seed, including `--debug` builds and credential-free dry runs: the wrapper stages the seed for the target platform before invoking Tauri and injects a `bundle.resources` overlay for it. Treat any locally built package as a GPL redistribution:
 
 - `bundle.externalBin` is an empty list.
 - The bundled release resources are `docs/release/THIRD_PARTY_NOTICES.md` and the generated sing-box seed overlay.
@@ -237,31 +237,31 @@ final package is signed. There are two separate distribution lanes.
 Developer ID lane for direct DMG / drag-to-Applications testing:
 
 ```sh
-vp run native:macos:libbox
-vp run tauri:build --bundles app
+vp run native macos libbox
+vp run tauri build --bundles app
 export VOYAVPN_MACOS_APP_BUNDLE="$PWD/target/release/bundle/macos/VoyaVPN.app"
 export VOYAVPN_CODESIGN_IDENTITY="<Developer ID Application identity>"
 export VOYAVPN_PROVISIONING_PROFILE_DIR="<profile-dir-for-Developer-ID>"
 export VOYAVPN_REQUIRE_PROVISIONING=1
 export VOYAVPN_REQUIRE_CODESIGN=1
 export VOYAVPN_REQUIRE_NOTARIZATION_READY=1
-vp run native:macos:tunnel
-vp run native:macos:tunnel:verify
-vp run native:macos:app:sign
-vp run native:macos:tunnel:verify
-vp run native:macos:dmg
-vp run native:macos:app:notarize
+vp run native macos tunnel
+vp run native macos tunnel verify
+vp run native macos app sign
+vp run native macos tunnel verify
+vp run native macos dmg
+vp run native macos app notarize
 ```
 
 App Store/TestFlight lane, which produces the signed `.pkg` for Transporter:
 
 ```sh
-vp run build:mac:appstore
+vp run build mac appstore
 ```
 
 It builds with the `mac-app-store` Cargo feature (no self-updater) and a
 generated store config overlay, stages and signs the appex, verifies the
-bundle, and runs `vp run native:macos:pkg`. See
+bundle, and runs `vp run native macos pkg`. See
 [macos-app-store.md](macos-app-store.md) for setup, the build number, and
 upload.
 
@@ -269,17 +269,17 @@ App Store/TestFlight artifacts are submitted through App Store Connect. They are
 not expected to pass `spctl` or launch by being copied directly into
 `/Applications`; direct distribution requires the Developer ID lane plus
 notarization and stapling. Developer ID artifacts are expected to pass
-Gatekeeper assessment after `vp run native:macos:app:notarize` has accepted and
+Gatekeeper assessment after `vp run native macos app notarize` has accepted and
 stapled the app.
 
-`vp run native:macos:libbox` builds sing-box's Apple output from the pinned source
+`vp run native macos libbox` builds sing-box's Apple output from the pinned source
 tag, verifies the arm64/x86_64 macOS architectures, and places only the universal
 `apps/desktop/src-tauri/native/macos/Frameworks/Libbox.framework`. Release owners may
 instead provide an already-built framework through `VOYAVPN_LIBBOX_FRAMEWORK`.
 `VOYAVPN_MACOS_APP_BUNDLE` points the staging, verification, signing, and
 notarization helpers at the actual Tauri `.app`; when it is omitted, the scripts
 use `target/native/macos/VoyaVPN.app` for local staging only.
-`vp run build:mac:appstore` finds its store profiles in `../docs/certs` or else
+`vp run build mac appstore` finds its store profiles in `../docs/certs` or else
 `~/Library/MobileDevice/Provisioning Profiles`; running these helpers by hand
 for App Store/TestFlight, set `VOYAVPN_PROVISIONING_PROFILE_DIR` or the
 more specific `VOYAVPN_MACOS_APP_PROVISIONING_PROFILE` and
@@ -288,12 +288,12 @@ profiles and derive `com.apple.application-identifier`,
 `com.apple.developer.team-identifier`, and keychain access group entitlements
 from them.
 
-Use `vp run tauri:build --bundles app` for macOS native tunnel lanes. The
+Use `vp run tauri build --bundles app` for macOS native tunnel lanes. The
 PacketTunnel extension is staged after Tauri creates the `.app`; `vp run
-native:macos:dmg` then creates the DMG from that final signed bundle and mounts
+native macos dmg` then creates the DMG from that final signed bundle and mounts
 the image to verify the embedded PacketTunnel before the artifact is accepted.
 Set `VOYAVPN_NOTARY_ARTIFACT` to the generated DMG before
-`vp run native:macos:app:notarize` when the release artifact itself should be
+`vp run native macos app notarize` when the release artifact itself should be
 submitted and stapled.
 
 The staged PacketTunnel provider depends on the macOS distribution lane:
@@ -309,16 +309,16 @@ The macOS app controls `NETunnelProviderManager` in-process; the production path
 contains only the app and its PacketTunnel provider.
 
 After launching local macOS bundles that contain the PacketTunnel provider,
-check registration health with `vp run native:macos:ne:doctor`. Stale PlugInKit
+check registration health with `vp run native macos ne doctor`. Stale PlugInKit
 registrations can make app-extension builds start an old appex with the same
 bundle id, while Developer ID System Extension builds must show an activated
 entry in `systemextensionsctl list`. See
 `docs/release/macos-networkextension-troubleshooting.md` for detection and
 repair steps.
 
-If the selected `Libbox.framework` slice is static, `vp run native:macos:tunnel`
+If the selected `Libbox.framework` slice is static, `vp run native macos tunnel`
 links the required Libbox symbols into `VoyaPacketTunnel` and does not embed a
-framework in the extension bundle. `vp run native:macos:tunnel:verify` accepts
+framework in the extension bundle. `vp run native macos tunnel verify` accepts
 either static symbols or an embedded dynamic framework when
 `VOYAVPN_REQUIRE_LIBBOX=1` is set.
 
@@ -359,7 +359,7 @@ the service. The local lane explicitly targets the machine's native Windows
 MSVC Rust triple and writes bundles below `target/<rust-target>/release/bundle`:
 
 ```powershell
-vp run build:windows:local
+vp run build windows local
 ```
 
 The local lane refuses to replace an MSI or a VoyaVPN install outside
@@ -374,10 +374,10 @@ The lower-level service helpers remain available. `install` and `uninstall`
 must run from an elevated Windows terminal:
 
 ```powershell
-vp run native:windows:tunnel:build
-vp run native:windows:tunnel:install
-vp run native:windows:tunnel:status
-vp run native:windows:tunnel:uninstall
+vp run native windows tunnel build
+vp run native windows tunnel install
+vp run native windows tunnel status
+vp run native windows tunnel uninstall
 ```
 
 `VoyaVPNTunnelService` runs `sing-box check -c` before launching sing-box with
@@ -405,7 +405,7 @@ What keeps the packages small, and what to check before undoing any of it:
 - **PacketTunnel extension** links with `-dead_strip` and is `strip -x`ed before signing (68 MB to 52 MB). Only the Libbox entry points the provider calls survive; `verify-tunnel.mjs` checks those.
 - **DMG** uses `ULMO` (LZMA), readable from macOS 10.15, the app's minimum.
 - **Frontend**: country flags load only the 4x3 artwork of two-letter codes, as separate files rather than inlined into CSS or JS; `removeUnusedCommands` drops plugin commands the capabilities never allow.
-- `vp run size:report` prints the current sizes of the built binaries and bundles.
+- `vp run size report` prints the current sizes of the built binaries and bundles.
 
 
 ## Attribution And Licenses

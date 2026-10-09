@@ -6,7 +6,7 @@ use tokio::sync::{Mutex, MutexGuard};
 ///
 /// Re-exported because a host takes one by reference — to restart a connected
 /// core for a committed change, say — and both hosts are barred from depending
-/// on `voya-core` directly (ADR 0012, and `vp run check:architecture`).
+/// on `voya-core` directly (ADR 0012, and `vp run check architecture`).
 pub use voya_core::AppConfig;
 /// Re-exported so shells can name the handle [`ConfigMutationGuard::split`]
 /// already hands them without reaching into `voya-db` themselves — the facade

@@ -25,7 +25,7 @@ Production stable download, updater, core, geo, SRS, checksum, and signature URL
 
 | Mode | Purpose | Allowed artifacts | Publication status |
 | --- | --- | --- | --- |
-| Local debug packaging | Validate bundle config and artifact collection without credentials. | Unsigned debug bundles from `vp run tauri:build --debug`. | Never publish to beta users or update channels. |
+| Local debug packaging | Validate bundle config and artifact collection without credentials. | Unsigned debug bundles from `vp run tauri build --debug`. | Never publish to beta users or update channels. |
 | Release CI dry run | Validate tests, package jobs, artifact normalization, checksums, and dry-run updater metadata. | Workflow artifacts with non-publishable updater signatures. | Never publish to beta users or update channels. |
 | Production stable CI staging | Validate the six-target stable workflow, stable readiness checker, CDN release-index staging, signed updater metadata generation, and package artifact uploads. | Workflow artifacts for `darwin-aarch64`, `darwin-x86_64`, `linux-aarch64`, `linux-x86_64`, `windows-aarch64`, and `windows-x86_64`. | Never publish automatically; CDN publication is an external approved step. |
 | Production stable publication | Publish the approved stable app, updater metadata, and bundled sing-box seed asset through own CDN only. | Signed app artifacts, signed Tauri updater payloads, approved sing-box seed asset, empty core manifest, checksums, source references, and release evidence. | Publish only after every stable checkpoint, including legal/source approval, is complete. |
@@ -171,8 +171,8 @@ Run:
 
 ```sh
 vp install --frozen-lockfile
-vp run verify:local
-vp run tauri:build --debug
+vp run verify local
+vp run tauri build --debug
 vp run release -- artifacts --input target/debug/bundle --output dist/release/local --target local-debug --channel beta --allow-empty
 vp run release -- updater --input dist/release --out dist/updater/latest.json --target darwin-aarch64,darwin-x86_64,linux-aarch64,linux-x86_64,windows-aarch64,windows-x86_64 --placeholder-signatures
 ```
@@ -190,7 +190,7 @@ System: GitHub Actions `Release` workflow for evidence, approved signing systems
 Stable publication follows this order:
 
 1. Freeze the commit, version, channel, and target matrix. Record the commit SHA, tag, workflow dispatch inputs, and planned stable version.
-2. Run local automated gates from the frozen commit: `vp run verify:local`, `vp build`, and local debug packaging when required by release policy.
+2. Run local automated gates from the frozen commit: `vp run verify local`, `vp build`, and local debug packaging when required by release policy.
 3. Dispatch the `Release` workflow with `channel=stable`, `build_profile=release`, `dry_run=false`, and updater metadata enabled. The workflow must produce six package artifacts, `SHA256SUMS`, artifact manifests, updater metadata evidence, CDN release-index evidence, and core manifest evidence. It must not publish externally.
 4. Complete signing, notarization, updater key, legal redistribution, and platform package checks from the ledger below.
 5. Stage immutable CDN paths for the approved version: manual download artifacts and `release-index.json`, Tauri updater payloads and `latest.json`, the empty core manifest, geo/SRS assets and manifests, checksums, signatures, notices, and evidence JSON. The sing-box seed is part of the signed application package, not a core update CDN asset.

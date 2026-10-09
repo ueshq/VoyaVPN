@@ -302,7 +302,7 @@ export type AppEvent = { kind: "notice"; payload: AppNotice } | { kind: "selectT
  *  One toast.
  * 
  *  `code` replaced the prose `title` the shell used to spell out at each of its
- *  call sites: those titles were English literals that `vp run check:i18n` could
+ *  call sites: those titles were English literals that `vp run check i18n` could
  *  not see, and the toast is the most visible text the backend produces.
  *  `detail` stays an untranslated diagnostic — the error behind the notice.
  */

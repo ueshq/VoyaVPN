@@ -170,19 +170,19 @@ export async function main() {
     await run("rustup", ["target", "add", "aarch64-apple-ios-sim"]);
     // Nothing here measures the backend, so it is built without the release
     // profile's fat LTO unless a profile was asked for by name.
-    await run("vp", ["run", "native:mobile:rust:ios", "--slice", "simulator"], {
+    await run("vp", ["run", "native", "mobile", "rust", "ios", "--slice", "simulator"], {
       env: { VOYAVPN_RUST_PROFILE: process.env.VOYAVPN_RUST_PROFILE || "mobile-smoke" },
     });
     const libbox = resolve(ios, "Frameworks/Libbox.xcframework");
     // The build script owns the pinned version. CI builds it fresh; a developer
     // may reuse their staged copy explicitly while iterating the same pin.
     if (!process.argv.includes("--reuse-libbox") || !existsSync(libbox))
-      await run("vp", ["run", "native:mobile:libbox:ios"]);
+      await run("vp", ["run", "native", "mobile", "libbox", "ios"]);
     if (!podsUpToDate(root)) {
       await run("pod", ["install"], { cwd: ios });
       recordInstalledPods(root);
     } else console.log("Pods match the dependency and Podfile fingerprints.");
-    await run("vp", ["run", "native:mobile:ios:project"]);
+    await run("vp", ["run", "native", "mobile", "ios", "project"]);
     // The fixture server below is the repo's seed, so that is what has to be
     // there. The installer would stop at a core already in app data and leave
     // a clean checkout without one.

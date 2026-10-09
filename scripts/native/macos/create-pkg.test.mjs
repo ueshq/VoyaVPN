@@ -187,7 +187,7 @@ Load command 11
     expect(seedOriginProblems({ origin: "source", tags: ["with_quic", "with_clash_api"] })).toEqual([]);
     expect(seedOriginProblems(null)).toEqual(["The bundled sing-box seed has no sing-box.seed.json."]);
     expect(seedOriginProblems({ assetName: "sing-box-1.13.14-darwin-arm64.tar.gz" })).toEqual([
-      "The bundled sing-box seed is the upstream build; the store package needs the source-built one (vp run core:sing-box:build).",
+      "The bundled sing-box seed is the upstream build; the store package needs the source-built one (vp run core sing-box build).",
     ]);
     expect(seedOriginProblems({ origin: "source", tags: ["with_quic", "with_naive_outbound"] })).toEqual([
       "The bundled sing-box seed was built with with_naive_outbound.",

@@ -4,7 +4,7 @@
 //
 // App Store Connect rejects an app whose 1024px icon has an alpha channel
 // (ITMS-90717), and every icon generator in this repo writes RGBA.
-// `vp run native:mobile:ios:icons` runs this over the iOS icon set.
+// `vp run native mobile ios icons` runs this over the iOS icon set.
 import CoreGraphics
 import Foundation
 import ImageIO

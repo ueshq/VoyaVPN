@@ -10,7 +10,7 @@ import { parseArgs as parseArgsShared } from "../lib/args.mjs";
  * `.app`. Read-only and budget-free for now; the release workflow appends the
  * table to its job summary so sizes can be compared across releases.
  *
- *   vp run size:report [--target <rust-triple>] [--profile release|debug]
+ *   vp run size report [--target <rust-triple>] [--profile release|debug]
  */
 
 const BINARIES = ["voyavpn", "voyavpn-tunnel-service"];

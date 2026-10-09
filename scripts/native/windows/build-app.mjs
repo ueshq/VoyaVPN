@@ -99,7 +99,7 @@ export function nativeWindowsTarget(arch = process.arch) {
   if (arch === "arm64") {
     return { artifactArch: "arm64", rustTarget: "aarch64-pc-windows-msvc" };
   }
-  throw new Error(`vp run build:windows:local supports only native Windows x64 and arm64, not ${arch}.`);
+  throw new Error(`vp run build windows local supports only native Windows x64 and arm64, not ${arch}.`);
 }
 
 function rustMsvcPrerequisiteMessage(rustTarget) {
@@ -175,7 +175,7 @@ export function assertSafeExistingInstalls(entries, expectedAppPath) {
     if (!isExpectedNsis) {
       const label = location || entry.key || "unknown location";
       throw new Error(
-        `Refusing to replace an existing VoyaVPN MSI or non-local installation at ${label}. Uninstall it explicitly before running vp run build:windows:local.`,
+        `Refusing to replace an existing VoyaVPN MSI or non-local installation at ${label}. Uninstall it explicitly before running vp run build windows local.`,
       );
     }
   }
@@ -219,7 +219,7 @@ export function assertWindowsGuiStopped({ env = process.env, captureCommand = ca
       .some((line) => /^"voyavpn\.exe"/i.test(line.trim()))
   ) {
     throw new Error(
-      "VoyaVPN is still running. Quit the app and disable TUN before vp run build:windows:local replaces it.",
+      "VoyaVPN is still running. Quit the app and disable TUN before vp run build windows local replaces it.",
     );
   }
 }
@@ -319,7 +319,7 @@ export function elevateTunnelServiceInstall({
       [
         WINDOWS_TUN_EXIT_COPY_FAILED,
         () =>
-          `Unable to stage the protected tunnel service binary at ${managedTunnelServicePath(env)} or the sing-box core at ${managedSingBoxPath(env)}. Run vp run core:sing-box:install, then check Program Files permissions and antivirus logs.`,
+          `Unable to stage the protected tunnel service binary at ${managedTunnelServicePath(env)} or the sing-box core at ${managedSingBoxPath(env)}. Run node scripts/core/install-sing-box.mjs --force, then check Program Files permissions and antivirus logs.`,
       ],
       [
         WINDOWS_TUN_EXIT_REGISTRATION_FAILED,
@@ -344,7 +344,7 @@ export function buildWindowsInstallers({
   try {
     return runCommand(
       taskRunner.program,
-      [...taskRunner.prefixArgs, "tauri:build", "--no-sign", "--target", rustTarget, "--bundles", "nsis"],
+      [...taskRunner.prefixArgs, "tauri", "build", "--no-sign", "--target", rustTarget, "--bundles", "nsis"],
       {
         cwd: repoRoot,
         env,
@@ -375,7 +375,7 @@ export function buildWindowsLocal({
   logger = console,
 } = {}) {
   if (platform !== "win32") {
-    throw new Error("vp run build:windows:local must run on Windows.");
+    throw new Error("vp run build windows local must run on Windows.");
   }
   const target = nativeWindowsTarget(arch);
   const env = {
@@ -397,7 +397,7 @@ export function buildWindowsLocal({
     runCommand,
     taskRunner,
   });
-  runCommand(taskRunner.program, [...taskRunner.prefixArgs, "native:windows:tunnel:build"], {
+  runCommand(taskRunner.program, [...taskRunner.prefixArgs, "native", "windows", "tunnel", "build"], {
     cwd: repoRoot,
     env,
     shell: false,

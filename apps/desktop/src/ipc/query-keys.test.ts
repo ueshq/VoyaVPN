@@ -185,7 +185,7 @@ describe("query key registry", () => {
   });
 
   it("returns null for a scope this build cannot map", () => {
-    // Only reachable with a stale bindings.ts, which `check:bindings` prevents;
+    // Only reachable with a stale bindings.ts, which `check bindings` prevents;
     // the bridge relies on the null so it never throws in an event callback.
     expect(invalidationQueryKey({ kind: "somethingNewer" } as unknown as InvalidationScope)).toBeNull();
     // Nor through a name every object inherits.

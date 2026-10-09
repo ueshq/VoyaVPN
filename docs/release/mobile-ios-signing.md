@@ -49,19 +49,19 @@ xcode-select --install          # or a full Xcode
 ```
 
 Go and gomobile come from sing-box's own `make lib_install`, which
-`vp run native:mobile:libbox:ios` runs.
+`vp run native mobile libbox ios` runs.
 
 ## Build the native artifacts
 
 Both are gitignored build outputs, and an Xcode build needs both:
 
 ```sh
-vp run native:mobile:libbox:ios    # Libbox.xcframework      → apps/mobile/ios/Frameworks/
-vp run native:mobile:rust:ios      # VoyaMobile.xcframework  → apps/mobile/ios/Frameworks/
+vp run native mobile libbox ios    # Libbox.xcframework      → apps/mobile/ios/Frameworks/
+vp run native mobile rust ios      # VoyaMobile.xcframework  → apps/mobile/ios/Frameworks/
                                  # + Swift bindings        → apps/mobile/ios/VoyaVPN/Generated/
 ```
 
-`native:mobile:rust:*` builds the `release` cargo profile; set
+`native mobile rust …` builds the `release` cargo profile; set
 `VOYAVPN_RUST_PROFILE=debug` for a faster unoptimised library while iterating.
 
 Then the CocoaPods dependencies React Native itself needs:
@@ -73,7 +73,7 @@ cd apps/mobile/ios && pod install
 ## Xcode target setup
 
 ```sh
-vp run native:mobile:ios:project
+vp run native mobile ios project
 ```
 
 `scripts/native/mobile/ios-project.rb` does the whole of it, through the
@@ -119,9 +119,9 @@ the script is also the record of what the project contains. What it sets up:
 - Links `Libbox.xcframework` and `NetworkExtension.framework` only. It does not
   link the Rust host: it runs the core, and the host runs in the app.
 - `MARKETING_VERSION` is the root `package.json` version, which the script
-  writes to the app and the extension alike; `vp run check:architecture`
+  writes to the app and the extension alike; `vp run check architecture`
   requires one release version across the whole workspace. A version bump is
-  "edit `package.json`, run `vp run native:mobile:ios:project`".
+  "edit `package.json`, run `vp run native mobile ios project`".
   `CURRENT_PROJECT_VERSION` stays `1` in the project. The store build passes
   the real build number on the command line, which reaches both targets.
 - Embedded in the app through a PlugIns copy-files phase.
@@ -142,7 +142,7 @@ targets, and add **Network Extensions** and **App Groups**
 (`group.app.voyavpn.mobile`) to each under *Signing & Capabilities*. Xcode then
 manages the development profiles.
 
-The App Store build does not use those settings. `vp run build:ios:appstore`
+The App Store build does not use those settings. `vp run build ios appstore`
 passes its own identity and profiles on the command line; see
 [Distribution](#distribution). Nothing about store signing is written into the
 project.
@@ -162,7 +162,7 @@ large rule set is still the first thing to measure on a device.
 ## Running
 
 ```sh
-vp run dev:ios                          # simulator: UI and every command
+vp run dev ios                          # simulator: UI and every command
 ```
 
 The simulator cannot start a NetworkExtension tunnel. Everything else works:
@@ -205,9 +205,9 @@ Run from the repository root on an Apple silicon Mac with Xcode, an installed
 stable iOS runtime, CocoaPods, Go, Rust, Python 3 and the Vite+ CLI (`vp`):
 
 ```sh
-vp run check:mobile:ios:smoke
-vp run check:mobile:ios:full # release matrix
-vp run check:mobile:ios:full --matrix-only # layout iteration; excludes business flows
+vp run check mobile ios smoke
+vp run check mobile ios smoke --full # release matrix
+vp run check mobile ios smoke --full --matrix-only # layout iteration; excludes business flows
 ```
 
 The runner creates and deletes its own simulator; it never erases a developer's
@@ -246,7 +246,7 @@ layout clipping and contrast; automated navigation alone is not visual approval.
 VoiceOver focus announcements and return focus also need a manual accessibility
 pass. `.github/workflows/ios-simulator.yml` runs the smoke for relevant PRs and
 accepts a full-matrix manual dispatch; it is deliberately separate from
-`verify:local`.
+`verify local`.
 
 Every run writes `.agents/docs/ios-repair-<timestamp>/` (override with
 `VOYA_IOS_QA_OUTPUT`): environment, fixtures, build logs, XCTest result bundles,
@@ -298,7 +298,7 @@ redesign.
 
 ## Distribution
 
-`vp run build:ios:appstore` produces the package Transporter uploads to App
+`vp run build ios appstore` produces the package Transporter uploads to App
 Store Connect for TestFlight and App Review:
 
 ```text
@@ -344,10 +344,10 @@ public release; TestFlight distribution raises the same question.
 ### Build
 
 ```sh
-vp run build:ios:appstore                 # full build, signed, exported
-vp run build:ios:appstore --reuse-libbox  # keep the staged Libbox.xcframework
-vp run build:ios:appstore --skip-native   # skip Rust, Libbox, pods and the project step
-vp run build:ios:appstore --unsigned      # archive and check, no signature, no .ipa
+vp run build ios appstore                 # full build, signed, exported
+vp run build ios appstore --reuse-libbox  # keep the staged Libbox.xcframework
+vp run build ios appstore --skip-native   # skip Rust, Libbox, pods and the project step
+vp run build ios appstore --unsigned      # archive and check, no signature, no .ipa
 ```
 
 `--unsigned` needs no certificate. It runs every check that does not depend on
@@ -358,10 +358,10 @@ The script runs these steps and writes one log per step into
 `target/release/bundle/ios/logs/`:
 
 1. Preflight, before anything is built: the distribution identity, both
-   profiles, and the checked-in inputs that `vp run check:mobile:ios:assets`
+   profiles, and the checked-in inputs that `vp run check mobile ios assets`
    also checks.
 2. The native artifacts: the Rust host, Libbox, CocoaPods when the lockfiles
-   changed, and `native:mobile:ios:project`.
+   changed, and `native mobile ios project`.
 3. `xcodebuild archive` for `generic/platform=iOS`, arm64, with manual signing.
 4. Checks on the archived app.
 5. `xcodebuild -exportArchive` with a generated `ExportOptions.plist`
@@ -382,7 +382,7 @@ What it checks:
   number (ITMS-90473), and target iOS 15.1.
 - No Mach-O imports a symbol App Review has named as non-public or links a
   private library (Guideline 2.5.1, the check that stopped the 2026-09 Mac
-  submission), and every one is arm64 only. `vp run native:mobile:ios:verify-imports <VoyaVPN.app>`
+  submission), and every one is arm64 only. `vp run native mobile ios verify-imports <VoyaVPN.app>`
   runs the import scan on its own.
 - The signed entitlements are exactly the application identifier, the team,
   `packet-tunnel-provider` and the App Group, with no `get-task-allow`.
@@ -413,7 +413,7 @@ source image:
 apps/desktop/node_modules/.bin/tauri icon apps/desktop/src-tauri/app-icon.svg \
   --ios-color "#1A58F2" -o <scratch>
 cp <scratch>/ios/*.png apps/mobile/ios/VoyaVPN/Images.xcassets/AppIcon.appiconset/
-vp run native:mobile:ios:icons
+vp run native mobile ios icons
 ```
 
 The last command removes the alpha channel the generator writes, then checks
@@ -447,5 +447,5 @@ the set.
   store build. Step 8 there, a large rule set left connected, is what shows
   whether the memory limit holds.
 - **iPad.** The layout is the iPhone layout in a centred column. Review it on
-  an iPad with `vp run check:mobile:ios:full --matrix-only`, which captures all
+  an iPad with `vp run check mobile ios smoke --full --matrix-only`, which captures all
   four orientations, before the first submission.

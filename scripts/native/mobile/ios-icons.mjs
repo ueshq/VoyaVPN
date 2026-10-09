@@ -13,8 +13,8 @@ import { isCliEntrypoint, repoRootFromScript, requireDarwin, run } from "../../l
  *   apps/desktop/node_modules/.bin/tauri icon apps/desktop/src-tauri/app-icon.svg \
  *     --ios-color "#1A58F2" -o <scratch>
  *   cp <scratch>/ios/*.png apps/mobile/ios/VoyaVPN/Images.xcassets/AppIcon.appiconset/
- *   vp run native:mobile:ios:icons          # flatten, then check
- *   vp run native:mobile:ios:icons --check  # check only; no Xcode needed
+ *   vp run native mobile ios icons          # flatten, then check
+ *   vp run native mobile ios icons --check  # check only; no Xcode needed
  */
 
 /** The `fill` of the rounded rect in `apps/desktop/src-tauri/app-icon.svg`. */
@@ -82,7 +82,7 @@ export function iconProblems({ contents, files }) {
       problems.push(`${image.filename} is ${info.width}x${info.height}, expected ${pixels}x${pixels} for ${label}.`);
     }
     if (info.hasAlpha) {
-      problems.push(`${image.filename} has an alpha channel (ITMS-90717); run vp run native:mobile:ios:icons.`);
+      problems.push(`${image.filename} has an alpha channel (ITMS-90717); run vp run native mobile ios icons.`);
     }
   }
   const marketing = images.filter((image) => image.idiom === "ios-marketing" && expectedPixels(image) === 1024);

@@ -102,7 +102,7 @@ fn probe_macos_packet_tunnel_packaging_error() -> Option<String> {
     let text = command_output_text(&output.stdout, &output.stderr);
     if text.contains("packet-tunnel-provider-systemextension") {
         return Some(
-            "Developer ID PacketTunnel builds must be packaged as Contents/Library/SystemExtensions/app.voyavpn.desktop.PacketTunnel.systemextension; re-run vp run native:macos:tunnel with a Developer ID identity."
+            "Developer ID PacketTunnel builds must be packaged as Contents/Library/SystemExtensions/app.voyavpn.desktop.PacketTunnel.systemextension; re-run vp run native macos tunnel with a Developer ID identity."
                 .to_string(),
         );
     }

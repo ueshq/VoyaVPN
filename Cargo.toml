@@ -21,7 +21,7 @@ version = "0.1.0"
 
 [workspace.dependencies]
 base64 = "0.22"
-# Benchmarks only (`vp run bench:rust`); no plots or rayon, so the test gate that
+# Benchmarks only (`vp run bench rust`); no plots or rayon, so the test gate that
 # builds bench targets stays light.
 criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
 futures-util = "0.3"
@@ -75,8 +75,8 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 
-# The backend of the iOS simulator smoke test and of `vp run dev:ios` /
-# `dev:android`. Neither measures the Rust code, and fat LTO over one codegen
+# The backend of the iOS simulator smoke test and of `vp run dev ios` /
+# `dev android`. Neither measures the Rust code, and fat LTO over one codegen
 # unit is most of what a release build waits for.
 [profile.mobile-smoke]
 inherits = "release"
