@@ -25,6 +25,7 @@ import {
   libboxBinaryPath,
   incompatiblePacketTunnelBundle,
   legacyPacketTunnelAppexBundle,
+  macosTargetArch,
   packetTunnelBundleIdentifier,
   packetTunnelExecutableName,
   packetTunnelLayout,
@@ -125,6 +126,7 @@ function packetTunnelDeploymentTarget() {
   return resolvePacketTunnelDeploymentTarget({
     appMinimumSystemVersion: existsSync(appInfoPlist) ? plistBuddy(appInfoPlist, "LSMinimumSystemVersion", true) : "",
     fallbackMinimumSystemVersion: tauriConfig.bundle?.macOS?.minimumSystemVersion,
+    hostArch: macosTargetArch(),
   });
 }
 

@@ -403,7 +403,7 @@ What keeps the packages small, and what to check before undoing any of it:
 - **No development binaries in the bundle.** Tauri bundles every `bin` target, so the IPC binding exporter is a cargo example (`cargo run -p voyavpn --example export-bindings`). `verify-tunnel.mjs` fails a macOS app that still contains `export-bindings`.
 - **The macOS seed is deliberate** (see Core And Sidecar Policy above): it duplicates the Go runtime in the PacketTunnel extension (~50 MB), but it is what lets a disconnected app run latency tests. See ADR 0004.
 - **PacketTunnel extension** links with `-dead_strip` and is `strip -x`ed before signing (68 MB to 52 MB). Only the Libbox entry points the provider calls survive; `verify-tunnel.mjs` checks those.
-- **DMG** uses `ULMO` (LZMA), readable from macOS 10.15, the app's minimum.
+- **DMG** uses `ULMO` (LZMA), readable from macOS 10.15, below the app's minimum (11.0, which the PacketTunnel's `Logger` needs).
 - **Frontend**: country flags load only the 4x3 artwork of two-letter codes, as separate files rather than inlined into CSS or JS; `removeUnusedCommands` drops plugin commands the capabilities never allow.
 - `vp run size report` prints the current sizes of the built binaries and bundles.
 

@@ -38,6 +38,7 @@ vp run dev android         # Mobile app in Debug on an Android emulator/device (
 vp build                   # Production build of @voya/desktop (types are checked by `vp check`)
 vp check --fix             # Format with Oxfmt and apply lint autofixes
 vp run tauri build --debug # Unsigned debug Tauri packages (no signing creds needed)
+vp run build mac           # Notarized Developer ID DMG with the PacketTunnel System Extension, for download outside the store (needs VOYAVPN_NOTARY_KEYCHAIN_PROFILE; --arch x64 builds the Intel DMG on Apple Silicon)
 vp run build mac appstore  # arm64 Mac App Store .pkg (feature mac-app-store drops the updater); docs/release/macos-app-store.md
 vp run build ios appstore  # iOS App Store .ipa (--unsigned archives and checks without a certificate); docs/release/mobile-ios-signing.md
 vp run build android       # Production APK for distribution outside Google Play, release-key signed; docs/release/mobile-android-signing.md

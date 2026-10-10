@@ -273,6 +273,25 @@ export function resolvePacketTunnelDeploymentTarget({
   return { minimumSystemVersion, target: `${arch}-apple-macos${minimumSystemVersion}` };
 }
 
+const macosArchNames = { arm64: "arm64", aarch64: "arm64", x64: "x64", x86_64: "x64" };
+
+/**
+ * The architecture a mac build targets: `arm64` or `x64`, from
+ * VOYAVPN_MACOS_ARCH, otherwise the host's. `vp run build mac --arch x64` sets
+ * the variable so the Rust target, the core seed and the PacketTunnel agree.
+ */
+export function macosTargetArch(env = process.env, hostArch = process.arch) {
+  const requested = text(env.VOYAVPN_MACOS_ARCH);
+  if (!requested) {
+    return hostArch === "arm64" ? "arm64" : "x64";
+  }
+  const arch = macosArchNames[requested.toLowerCase()];
+  if (!arch) {
+    throw new Error(`Unsupported VOYAVPN_MACOS_ARCH "${requested}"; use arm64 or x64.`);
+  }
+  return arch;
+}
+
 export function incompatiblePacketTunnelBundle(appContents, distribution) {
   const oppositeDistribution = distribution === "developer-id" ? "app-store" : "developer-id";
   return packetTunnelLayout(appContents, oppositeDistribution).bundle;

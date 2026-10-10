@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { COPY } from "../src/content";
 import { renderSite } from "../src/render";
 import { LOCALES, ROUTES, fileFor, pathFor, urlFor } from "../src/routes";
+import { DOWNLOADS } from "../src/site";
 
 const CSS = "/assets/site-test.css";
 const files = new Map(renderSite(CSS).map(({ file, contents }) => [file, contents]));
@@ -37,6 +38,17 @@ describe("renderSite", () => {
     for (const route of ROUTES) expect(sitemap).toContain(`<loc>${urlFor(route)}</loc>`);
   });
 
+  it("links both macOS builds from every home page", () => {
+    for (const locale of LOCALES) {
+      const html = page(fileFor({ locale, page: "home" }));
+      expect(html).toContain(
+        'href="https://github.com/ueshq/VoyaVPN/releases/download/v0.1.0/VoyaVPN_0.1.0_aarch64.dmg"',
+      );
+      expect(html).toContain('href="https://github.com/ueshq/VoyaVPN/releases/download/v0.1.0/VoyaVPN_0.1.0_x64.dmg"');
+      expect(html).toContain(COPY[locale].home.downloadVariants.intel);
+    }
+  });
+
   it.each(ROUTES)("$locale $page is a complete document with canonical and alternates", (route) => {
     const html = page(fileFor(route));
     const lang = { en: "en", "zh-hans": "zh-Hans", "zh-hant": "zh-Hant" }[route.locale];
@@ -59,10 +71,11 @@ describe("renderSite", () => {
 
   it("links only to pages, anchors and assets that exist", () => {
     const pagePaths = new Set(ROUTES.map(pathFor));
+    const downloadUrls = new Set(Object.values(DOWNLOADS).flatMap((links) => links?.map(({ url }) => url) ?? []));
     for (const [file, html] of files) {
       if (!file.endsWith(".html")) continue;
       for (const [, href] of html.matchAll(/<a [^>]*href="([^"]+)"/g)) {
-        if (href.startsWith("mailto:")) continue;
+        if (href.startsWith("mailto:") || downloadUrls.has(href)) continue;
         if (href.startsWith("#")) {
           expect(html, `${file} -> ${href}`).toContain(`id="${href.slice(1)}"`);
           continue;

@@ -62,9 +62,11 @@ export const zhHant: SiteCopy = {
     protocolsHeadline: "支援你已經在用的協定",
     protocolsBody: "VoyaVPN 以 sing-box 為基礎。貼上以下任一格式的連結即可連線。",
     downloadHeadline: "下載",
-    downloadBody: "VoyaVPN 即將上架 App Store 及其他平台。各平台上線後，下載連結會顯示在這裡。",
+    downloadBody:
+      "macOS 版現已提供直接下載，需要 macOS 11 或以上版本。App Store 版本及其他平台即將推出，上線後下載連結會顯示在這裡。",
     comingSoon: "即將推出",
     getIt: "取得",
+    downloadVariants: { appleSilicon: "Apple 晶片", intel: "Intel 晶片" },
     platforms: {
       macos: "macOS",
       ios: "iPhone 與 iPad",

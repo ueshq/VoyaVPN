@@ -11,7 +11,12 @@ import {
   truthy,
 } from "../../lib/common.mjs";
 import { readJson } from "../../lib/fs.mjs";
-import { appBundleIdentifier, packetTunnelBundleIdentifier, resolveDmgPath } from "./tunnel-layout.mjs";
+import {
+  appBundleIdentifier,
+  macosTargetArch,
+  packetTunnelBundleIdentifier,
+  resolveDmgPath,
+} from "./tunnel-layout.mjs";
 import { requestedMacAppStoreBuild } from "../../tauri/mac-app-store-config.mjs";
 import { defaultIsProcessRunning, prepareVoyaForLocalBuild } from "./local-runtime.mjs";
 import {
@@ -28,10 +33,32 @@ import { requireGoToolchain } from "../../core/sing-box-source-seed.mjs";
 
 const repoRoot = repoRootFromScript(import.meta.url);
 const packageJson = readJson(resolve(repoRoot, "package.json"));
-const appBundle = resolve(repoRoot, "target", "release", "bundle", "macos", "VoyaVPN.app");
+const hostArch = macosTargetArch({});
+const targetArch = requestedTargetArch();
+// A cross build is `tauri build --target <triple>`, which cargo writes under
+// target/<triple>/. Both architectures' DMGs still land in one dmg folder.
+const crossTargetTriple =
+  targetArch === hostArch ? null : `${targetArch === "arm64" ? "aarch64" : "x86_64"}-apple-darwin`;
+const appBundle = resolve(
+  repoRoot,
+  "target",
+  ...(crossTargetTriple ? [crossTargetTriple] : []),
+  "release",
+  "bundle",
+  "macos",
+  "VoyaVPN.app",
+);
 const appContents = resolve(appBundle, "Contents");
 const dmgDir = resolve(repoRoot, "target", "release", "bundle", "dmg");
 const installedAppBundle = "/Applications/VoyaVPN.app";
+
+/** `--arch arm64|x64` (or VOYAVPN_MACOS_ARCH); without either, the host's. */
+function requestedTargetArch(args = process.argv.slice(2), env = process.env) {
+  const index = args.indexOf("--arch");
+  const inline = args.find((arg) => arg.startsWith("--arch="));
+  const value = inline ? inline.slice("--arch=".length) : index === -1 ? undefined : (args[index + 1] ?? "");
+  return macosTargetArch(value === undefined ? env : { VOYAVPN_MACOS_ARCH: value || "missing" });
+}
 
 function commandOptions(env = process.env) {
   return { cwd: repoRoot, env };
@@ -194,7 +221,7 @@ function runBridgeTests(env) {
 function requireAppleSilicon() {
   // The store package is arm64 only: the core seed, the Rust binaries and the
   // PacketTunnel are all built for the host architecture.
-  if (process.arch !== "arm64") {
+  if (process.arch !== "arm64" || crossTargetTriple) {
     throw new Error(
       "vp run build mac appstore builds the arm64-only store package and must run on an Apple Silicon Mac.",
     );
@@ -290,6 +317,9 @@ function main() {
   }
   requireNotaryCredentials(lane);
   const notarizationSkipped = lane === "local";
+  if (notarizationSkipped && crossTargetTriple) {
+    throw new Error("vp run build mac local installs the app on this Mac, so it builds for this Mac's architecture.");
+  }
 
   if (notarizationSkipped) {
     assertInstalledAppGuiNotRunning();
@@ -301,6 +331,7 @@ function main() {
   const commonEnv = {
     ...process.env,
     VOYAVPN_MACOS_APP_BUNDLE: appBundle,
+    VOYAVPN_MACOS_ARCH: targetArch,
     VOYAVPN_CODESIGN_IDENTITY: identity,
     VOYAVPN_MACOS_DISTRIBUTION: macosDistribution,
     VOYAVPN_REQUIRE_PROVISIONING: "1",
@@ -323,7 +354,11 @@ function main() {
   );
   console.log(`Output: ${appBundle}`);
 
-  run("vp", ["run", "tauri", "build", "--bundles", "app"], commandOptions(commonEnv));
+  run(
+    "vp",
+    ["run", "tauri", "build", "--bundles", "app", ...(crossTargetTriple ? ["--target", crossTargetTriple] : [])],
+    commandOptions(commonEnv),
+  );
   run("vp", ["run", "native", "macos", "tunnel"], commandOptions(tunnelEnv));
   run("vp", ["run", "native", "macos", "app", "sign"], commandOptions(commonEnv));
   runBridgeTests(verifyEnv);

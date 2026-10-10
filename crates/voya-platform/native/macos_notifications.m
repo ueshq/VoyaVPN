@@ -14,10 +14,20 @@
          withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler {
   (void)center;
   (void)notification;
-  if (@available(macOS 11.0, *)) {
+  // Banner and List are macOS 11+, and the bridge is built for 10.15. A version
+  // query rather than `@available`: that one needs `__isPlatformVersionAtLeast`
+  // from compiler-rt, which the Rust link does not carry.
+  NSOperatingSystemVersion bigSur = {11, 0, 0};
+  if ([NSProcessInfo.processInfo isOperatingSystemAtLeastVersion:bigSur]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
     completionHandler(UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList);
+#pragma clang diagnostic pop
   } else {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
     completionHandler(UNNotificationPresentationOptionAlert);
+#pragma clang diagnostic pop
   }
 }
 @end

@@ -13,6 +13,7 @@ import {
   loginItemPlistName,
   loginItemPlistPath,
   loginItemPlistProblems,
+  macosTargetArch,
   packetTunnelLayout,
   packagingModeForDistribution,
   requiredNetworkExtensionValue,
@@ -98,6 +99,14 @@ describe("macOS native tunnel layout", () => {
       }).minimumSystemVersion,
     ).toBe("12.0");
     expect(() => resolvePacketTunnelDeploymentTarget({ hostArch: "arm64" })).toThrow(/no LSMinimumSystemVersion/u);
+  });
+
+  it("targets the requested architecture, otherwise the host's", () => {
+    expect(macosTargetArch({}, "arm64")).toBe("arm64");
+    expect(macosTargetArch({}, "x64")).toBe("x64");
+    expect(macosTargetArch({ VOYAVPN_MACOS_ARCH: "x86_64" }, "arm64")).toBe("x64");
+    expect(macosTargetArch({ VOYAVPN_MACOS_ARCH: "aarch64" }, "x64")).toBe("arm64");
+    expect(() => macosTargetArch({ VOYAVPN_MACOS_ARCH: "universal" }, "arm64")).toThrow(/arm64 or x64/u);
   });
 
   it("compares macOS versions numerically", () => {

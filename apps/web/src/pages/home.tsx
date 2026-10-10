@@ -174,19 +174,24 @@ export function HomePage({ locale }: { locale: Locale }) {
           </p>
           <ul className="mt-10 grid gap-px overflow-hidden rounded-xl border border-line bg-line md:grid-cols-5">
             {PLATFORMS.map(({ id, icon: Icon }) => {
-              const url = DOWNLOADS[id];
+              const links = DOWNLOADS[id];
               return (
                 <li key={id} className="flex items-center gap-3 bg-canvas p-5 md:flex-col md:items-start">
                   <Icon {...ICON} size={22} className="text-fg-muted" />
                   <span className="me-auto font-medium md:me-0">{copy.platforms[id]}</span>
-                  {url ? (
-                    <a
-                      href={url}
-                      className="inline-flex items-center gap-1 text-sm font-medium text-accent-fg hover:underline"
-                    >
-                      {copy.getIt}
-                      <ArrowRight {...ICON} size={14} />
-                    </a>
+                  {links ? (
+                    <span className="flex flex-col items-end gap-1.5 md:items-start">
+                      {links.map(({ url, variant }) => (
+                        <a
+                          key={url}
+                          href={url}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-accent-fg hover:underline"
+                        >
+                          {variant ? copy.downloadVariants[variant] : copy.getIt}
+                          <ArrowRight {...ICON} size={14} />
+                        </a>
+                      ))}
+                    </span>
                   ) : (
                     <span className="text-sm text-fg-muted">{copy.comingSoon}</span>
                   )}

@@ -50,7 +50,7 @@
     "externalBin": [],
     "macOS": {
       "bundleName": "VoyaVPN",
-      "minimumSystemVersion": "10.15",
+      "minimumSystemVersion": "11.0",
       "hardenedRuntime": true,
       "dmg": {
         "windowSize": {

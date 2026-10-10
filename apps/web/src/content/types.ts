@@ -1,4 +1,4 @@
-import type { Platform } from "../site";
+import type { DownloadVariant, Platform } from "../site";
 
 /**
  * Inline text. Backticks mark code (`vless://`, host names); nothing else is
@@ -61,6 +61,7 @@ export interface SiteCopy {
     downloadBody: Text;
     comingSoon: string;
     getIt: string;
+    downloadVariants: Record<DownloadVariant, string>;
     platforms: Record<Platform, string>;
   };
   support: {
