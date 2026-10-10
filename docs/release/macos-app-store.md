@@ -190,6 +190,27 @@ version fields from the app, which avoids ITMS-90473.
 `VOYAVPN_MACOS_PKG_DIR` (default `target/release/bundle/pkg`); set
 `VOYAVPN_MACOS_PKG_PATH` to name the file itself instead.
 
+## Before you build for upload
+
+The store package cannot be launched on a development Mac, so the sandboxed
+behaviour is checked on the local lane, which has the same sandbox, the same
+PacketTunnel appex and the same login agent. Do not build for upload until both
+of these pass on the commit to ship:
+
+1. `vp run build mac local`, then `vp run native macos window smoke`. The smoke
+   clicks through System Events (the terminal needs Accessibility permission)
+   and checks that a closed, minimized or full-screen window comes back from the
+   menu bar, that a second launch leaves one copy, and that Quit ends the
+   process. Build 407 was rejected for exactly this and no other gate saw it.
+2. The macOS column of [os-smoke-matrix.md](os-smoke-matrix.md), in particular
+   the rows *Desktop residency*, *Tray controls*, *Autostart* and *Single
+   instance and login launch*. A row that says "hold the release" holds the
+   upload too.
+
+If a Mac on the newest macOS is at hand, repeat step 1 there: App Review tests
+on the current release (macOS 27.0 for build 407), not on the one the app was
+developed on.
+
 ## Upload
 
 1. Open **Transporter**, sign in with the team's Apple ID, and add the `.pkg`.
@@ -219,7 +240,8 @@ order:
 1. Reply in the App Store Connect message thread with the
    [Resolution Center reply](app-store-review-notes.md#resolution-center-reply-for-build-405).
    An unanswered thread stays attached to the version.
-2. Run `vp run verify local` on the commit to ship.
+2. Run `vp run verify local` on the commit to ship, then the two checks in
+   [Before you build for upload](#before-you-build-for-upload).
 3. Run `vp run build mac appstore`. The build number is the commit count, so it
    is already above 405; set `VOYAVPN_MACOS_BUILD_NUMBER` only to upload the
    same commit twice. Confirm `native macos pkg` printed the public-API,
@@ -240,6 +262,12 @@ order:
    [Upload](#upload). Also turn on Autostart under Settings > Startup and
    confirm VoyaVPN appears in System Settings > General > Login Items &
    Extensions.
+   Turning it on must not add a second menu bar icon or Dock icon (build 407
+   did, see the
+   [reply for build 407](app-store-review-notes.md#resolution-center-reply-for-build-407)).
+   Then check the menu bar item three ways: close the window and choose Show
+   VoyaVPN; minimize the window and choose Show VoyaVPN; make the window full
+   screen, close it, and confirm no empty Space is left before showing it again.
 
 ## Known gaps for review
 

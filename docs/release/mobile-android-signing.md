@@ -74,6 +74,9 @@ rather than as an error.
 
 1. Import a share link, select the node, connect. The Home screen shows an exit
    IP and live up/down rates.
+   On Android 13 or later the first connect also asks to allow notifications.
+   Allowed, the tunnel's status line appears in the shade without
+   reconnecting; refused, the connection is unaffected.
 2. Disconnect. The tunnel goes down and the state settles on disconnected.
 3. Kill the app and reopen it. The state is the same one the system has.
 4. Run a latency test while disconnected, then while connected. Both report

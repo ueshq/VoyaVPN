@@ -188,6 +188,11 @@ export type VoyaCommands = {
 	/**  Whether the window is on screen rather than hidden into the tray. */
 	isWindowVisible: () => Promise<boolean>,
 	/**
+	 *  Repeats a notice as an OS notification. The renderer asks only while the
+	 *  window is hidden (`src/ipc/notifications.ts`).
+	 */
+	showNotification: (title: string) => Promise<null>,
+	/**
 	 *  macOS overlays native traffic lights on the webview; Windows renders caption
 	 *  buttons in its borderless window. Linux and the web fallback use `none`.
 	 */

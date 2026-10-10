@@ -5,10 +5,12 @@ import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.system.OsConstants
 import android.util.Log
 import io.nekohasekai.libbox.*
 import java.net.NetworkInterface as JavaNetworkInterface
+import java.util.concurrent.ConcurrentHashMap
 
 /** Platform facts shared by the tunnel and the disconnected latency core. */
 abstract class LibboxPlatform(private val context: Context) : PlatformInterface, CommandServerHandler {
@@ -28,7 +30,36 @@ abstract class LibboxPlatform(private val context: Context) : PlatformInterface,
     private val connectivity get() = context.getSystemService(ConnectivityManager::class.java)
     private val monitors = mutableMapOf<InterfaceUpdateListener, ConnectivityManager.NetworkCallback>()
 
+    /**
+     * Every network the app can see, the VPN's own included, kept by
+     * [networkTracker] from the core's first interface monitor until
+     * [closeMonitors]. It stands in for `ConnectivityManager.allNetworks`,
+     * which is deprecated in favour of a callback.
+     */
+    private val networks = ConcurrentHashMap.newKeySet<Network>()
+    /** Guarded by [monitors]. */
+    private var networkTracker: ConnectivityManager.NetworkCallback? = null
+
+    private fun trackNetworks() {
+        synchronized(monitors) {
+            if (networkTracker != null) return
+            val callback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) { networks.add(network) }
+                override fun onLost(network: Network) { networks.remove(network) }
+            }
+            val request = NetworkRequest.Builder()
+                .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                .build()
+            // The system caps how many callbacks an app may hold; without
+            // this one the interface list still knows the default network.
+            runCatching { connectivity.registerNetworkCallback(request, callback) }
+                .onSuccess { networkTracker = callback }
+                .onFailure { Log.w("VoyaLibbox", "could not track networks", it) }
+        }
+    }
+
     override fun startDefaultInterfaceMonitor(listener: InterfaceUpdateListener) {
+        trackNetworks()
         val callback = object : ConnectivityManager.NetworkCallback() {
             /** The network and metered flag last published; the system calls these one at a time. */
             private var published: Pair<Network?, Boolean>? = null
@@ -72,12 +103,21 @@ abstract class LibboxPlatform(private val context: Context) : PlatformInterface,
     }
 
     fun closeMonitors() {
-        val callbacks = synchronized(monitors) { monitors.values.toList().also { monitors.clear() } }
+        val callbacks = synchronized(monitors) {
+            (monitors.values + listOfNotNull(networkTracker)).also {
+                monitors.clear()
+                networkTracker = null
+            }
+        }
         callbacks.forEach { runCatching { connectivity.unregisterNetworkCallback(it) } }
+        networks.clear()
     }
 
     override fun getInterfaces(): NetworkInterfaceIterator {
-        val networks = connectivity.allNetworks.mapNotNull { network ->
+        // The tracker's first callbacks arrive after it registers, and the
+        // core lists interfaces as it starts: the default network is asked
+        // for directly so that list is never without it.
+        val networks = (networks + listOfNotNull(connectivity.activeNetwork)).mapNotNull { network ->
             connectivity.getLinkProperties(network)?.let { it to connectivity.getNetworkCapabilities(network) }
         }
         val interfaces = JavaNetworkInterface.getNetworkInterfaces()?.toList().orEmpty().map { item ->

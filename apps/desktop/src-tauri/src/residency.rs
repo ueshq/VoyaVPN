@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::ipc::events::Emit;
 use tauri::Manager;
-use tauri_plugin_notification::NotificationExt;
 use voya_app::lifecycle::{close_request_decision, launch_hidden, CloseDecision};
 use voya_app::tray::{tray_labels, TrayLabels};
 use voya_platform::autostart::launched_by_autostart;
@@ -31,24 +30,75 @@ pub(crate) fn show_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     if let Err(error) = window.set_focus() {
         tracing::warn!(?error, "failed to focus the main window");
     }
+    #[cfg(target_os = "macos")]
+    with_ns_window(app, window, "raise the main window", |ns_window| {
+        // SAFETY: `with_ns_window` runs this on the main thread with the live
+        // NSWindow of the main window.
+        unsafe { voya_platform::window_chrome::raise(ns_window) }
+    });
     refresh_tray(app);
+}
+
+/// Runs `action` on the main thread with the window's NSWindow. `purpose`
+/// names the action in the warning logged when the handle cannot be had.
+#[cfg(target_os = "macos")]
+fn with_ns_window<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
+    purpose: &'static str,
+    action: impl FnOnce(*mut std::ffi::c_void) + Send + 'static,
+) {
+    let run = move || match window.ns_window() {
+        Ok(ns_window) => action(ns_window),
+        Err(error) => tracing::warn!(?error, "failed to {purpose}"),
+    };
+    if let Err(error) = app.run_on_main_thread(run) {
+        tracing::warn!(?error, "failed to {purpose}");
+    }
 }
 
 pub(crate) fn hide_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
         return;
     };
+    #[cfg(target_os = "macos")]
+    if window.is_fullscreen().unwrap_or(false) {
+        hide_leaving_fullscreen(app, window);
+        return;
+    }
     if let Err(error) = window.hide() {
         tracing::warn!(?error, "failed to hide the main window");
     }
     refresh_tray(app);
 }
 
+/// Hiding a full-screen window outright leaves its Space behind as a black
+/// screen, so it leaves full screen first and hides when that has finished.
+/// The tray follows through the focus change the hide causes.
+#[cfg(target_os = "macos")]
+fn hide_leaving_fullscreen<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    window: tauri::WebviewWindow<R>,
+) {
+    with_ns_window(
+        app,
+        window,
+        "hide the full-screen main window",
+        |ns_window| {
+            // SAFETY: `with_ns_window` runs this on the main thread with the
+            // live NSWindow of the main window.
+            unsafe { voya_platform::window_chrome::hide_leaving_fullscreen(ns_window) }
+        },
+    );
+}
+
 /// Whether the main window is on screen; the tray offers Show or Hide by it.
+/// A window minimized to the Dock still counts as visible to the OS, but the
+/// user is looking for a way to get it back.
 pub(crate) fn main_window_visible<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
-    app.get_webview_window(MAIN_WINDOW)
-        .and_then(|window| window.is_visible().ok())
-        .unwrap_or(false)
+    app.get_webview_window(MAIN_WINDOW).is_some_and(|window| {
+        window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false)
+    })
 }
 
 /// The tray's Show/Hide entry follows the window.
@@ -98,7 +148,7 @@ pub(crate) fn handle_close_requested<R: tauri::Runtime>(window: &tauri::Window<R
             if !tray_available && wanted_to_keep_running(app) {
                 notify(app, current_labels(app).quit_without_tray, None);
             }
-            app.exit(0);
+            crate::lifecycle::quit(app);
         }
         CloseDecision::Ask => {
             if let Err(error) = AppEvent::CloseRequested.emit(app) {
@@ -137,13 +187,32 @@ fn current_labels<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> TrayLabels {
     tray_labels(&language)
 }
 
-fn notify<R: tauri::Runtime>(app: &tauri::AppHandle<R>, title: &str, body: Option<&str>) {
-    let mut notification = app.notification().builder().title(title);
-    if let Some(body) = body {
-        notification = notification.body(body);
+/// Posts an OS notification. macOS asks the user to allow them the first
+/// time, through `UNUserNotificationCenter`; Windows and Linux have nothing
+/// to ask and go through the notification plugin.
+pub(crate) fn notify<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    title: &str,
+    body: Option<&str>,
+) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        if !voya_platform::notifications::post(title, body) {
+            tracing::warn!("notifications need the app bundle; none was shown");
+        }
     }
-    if let Err(error) = notification.show() {
-        tracing::warn!(?error, "failed to show a notification");
+    #[cfg(not(target_os = "macos"))]
+    {
+        use tauri_plugin_notification::NotificationExt;
+
+        let mut notification = app.notification().builder().title(title);
+        if let Some(body) = body {
+            notification = notification.body(body);
+        }
+        if let Err(error) = notification.show() {
+            tracing::warn!(?error, "failed to show a notification");
+        }
     }
 }
 

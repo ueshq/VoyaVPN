@@ -85,6 +85,7 @@ fn ipc_commands() -> Commands<tauri::Wry> {
         window::close_window,
         window::is_window_maximized,
         window::is_window_visible,
+        window::show_notification,
         window::get_window_chrome_config,
         window::set_window_acrylic,
     ]

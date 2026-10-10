@@ -86,3 +86,53 @@ void voya_install_window_chrome(void *handle, double left, double top) {
   owner.top = top;
   [owner scheduleLayout];
 }
+
+// Ordering a full-screen window out leaves its Space behind as an empty black
+// screen. Leave full screen first and hide once AppKit reports the exit done.
+void voya_hide_window_leaving_fullscreen(void *handle) {
+  NSCAssert(NSThread.isMainThread, @"Hiding a window requires the main thread");
+  NSWindow *window = (__bridge NSWindow *)handle;
+  if (!window) return;
+  if (!(window.styleMask & NSWindowStyleMaskFullScreen)) {
+    [window orderOut:nil];
+    return;
+  }
+  static char pendingKey;
+  // A second request while the exit animates is the same request.
+  if (objc_getAssociatedObject(window, &pendingKey)) return;
+  __weak NSWindow *weakWindow = window;
+  __block id observer = [NSNotificationCenter.defaultCenter
+      addObserverForName:NSWindowDidExitFullScreenNotification
+                  object:window queue:nil usingBlock:^(NSNotification *notification) {
+        (void)notification;
+        [NSNotificationCenter.defaultCenter removeObserver:observer];
+        observer = nil;
+        // After the window delegate has restored the windowed state.
+        dispatch_async(dispatch_get_main_queue(), ^{
+          NSWindow *exited = weakWindow;
+          if (!exited) return;
+          objc_setAssociatedObject(exited, &pendingKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+          [exited orderOut:nil];
+        });
+      }];
+  objc_setAssociatedObject(window, &pendingKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  [window toggleFullScreen:nil];
+}
+
+// The windowing library brings a window forward with
+// activateIgnoringOtherApps:, which is deprecated since macOS 14 and which the
+// system may decline. Ask the current way as well, and put the window in front
+// whether or not the app is granted activation: a window the user asked for
+// from the menu bar must not stay behind another app.
+void voya_raise_window(void *handle) {
+  NSCAssert(NSThread.isMainThread, @"Raising a window requires the main thread");
+  NSWindow *window = (__bridge NSWindow *)handle;
+  if (!window) return;
+  if (NSApp.hidden) [NSApp unhide:nil];
+  [window orderFrontRegardless];
+  // -[NSApplication activate] exists from macOS 14; the deployment target is
+  // older, and @available needs a runtime symbol the Rust link does not carry.
+  if ([NSApp respondsToSelector:@selector(activate)]) {
+    [NSApp performSelector:@selector(activate)];
+  }
+}

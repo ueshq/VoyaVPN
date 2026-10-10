@@ -75,7 +75,11 @@ final class VoyaDeviceActions: NSObject, PHPickerViewControllerDelegate {
                 DispatchQueue.main.async { self?.finish(nil, code: "noQr") }; return
             }
             let request = VNDetectBarcodesRequest()
+#if targetEnvironment(simulator)
+            // The simulator cannot create the inference context the later
+            // revisions need. A device takes the newest its system has.
             request.revision = VNDetectBarcodesRequestRevision1
+#endif
             request.symbologies = [.qr]
             do {
                 let orientation: CGImagePropertyOrientation = switch image.imageOrientation {

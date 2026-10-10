@@ -3,6 +3,8 @@
 #include <math.h>
 
 void voya_install_window_chrome(void *handle, double left, double top);
+void voya_hide_window_leaving_fullscreen(void *handle);
+void voya_raise_window(void *handle);
 
 static void finish_layout(void) {
   // The inset is applied asynchronously on the main queue. A fixed delay can
@@ -69,6 +71,14 @@ int main(void) {
       finish_layout();
       assert_inset(window);
     }
+    // A window that is not full screen is simply ordered out.
+    [window orderFront:nil];
+    assert(window.visible);
+    voya_hide_window_leaving_fullscreen((__bridge void *)window);
+    assert(!window.visible);
+    // Raising brings an ordered-out window back without waiting for activation.
+    voya_raise_window((__bridge void *)window);
+    assert(window.visible);
     [window close];
   }
   puts("Native window chrome checks passed.");

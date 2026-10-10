@@ -41,6 +41,26 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
     // Installed before the first `tracing::warn!` below so the startup
     // recovery paths are captured too.
     logging::install(app.handle().clone(), runtime_paths.log_dir());
+    // The single-instance plugin cannot hand a launch over inside the macOS
+    // sandbox, so the copy the login agent starts would run beside this one.
+    let show_signal = format!("{}.show", app.config().identifier);
+    match voya_platform::instance::claim_single_instance(&app_config_dir) {
+        Ok(true) => {
+            let handle = app.handle().clone();
+            voya_platform::instance::on_show_request(&show_signal, move || {
+                crate::residency::show_main_window(&handle);
+            });
+        }
+        Ok(false) => {
+            tracing::info!("another VoyaVPN is already running; leaving it to it");
+            // A login launch must not raise the running copy's window.
+            if !voya_platform::autostart::launched_by_autostart(std::env::args_os()) {
+                voya_platform::instance::request_show(&show_signal);
+            }
+            std::process::exit(0);
+        }
+        Err(error) => tracing::warn!(%error, "could not claim the single-instance lock"),
+    }
     voya_app::startup::preload_tls_roots_in_background();
     let system_locale = voya_platform::locale::system_locale();
     // The two steps that can stop a launch. The error stays a `DbError` at the

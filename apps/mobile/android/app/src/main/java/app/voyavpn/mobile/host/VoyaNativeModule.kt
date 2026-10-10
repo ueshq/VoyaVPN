@@ -1,7 +1,10 @@
 package app.voyavpn.mobile.host
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.VpnService
+import android.os.Build
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -9,6 +12,8 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.facebook.react.modules.core.PermissionAwareActivity
+import com.facebook.react.modules.core.PermissionListener
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -185,10 +190,40 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
      * service that would be refused.
      */
     private inner class ServiceTunnelHost : TunnelHost {
+        /**
+         * Android 13 shows no notification, the tunnel's own included, until
+         * the user allows them. Asked on a connect rather than at launch, so
+         * the prompt arrives with the thing it is for, and not waited on: a
+         * refusal hides the status line and nothing else. Once per launch;
+         * the system stops showing the prompt after a second refusal.
+         */
+        private fun requestNotificationPermission() {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+            val permission = Manifest.permission.POST_NOTIFICATIONS
+            if (context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) return
+            val activity = context.currentActivity as? PermissionAwareActivity ?: return
+            if (!notificationPermissionAsked.compareAndSet(false, true)) return
+            val listener = PermissionListener { requestCode, _, results ->
+                if (requestCode != REQUEST_NOTIFICATIONS) return@PermissionListener false
+                if (results.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+                    VoyaVpnService.repostNotification()
+                }
+                true
+            }
+            context.runOnUiQueueThread {
+                try {
+                    activity.requestPermissions(arrayOf(permission), REQUEST_NOTIFICATIONS, listener)
+                } catch (error: Exception) {
+                    android.util.Log.w("VoyaNative", "could not ask to show notifications", error)
+                }
+            }
+        }
+
         override fun start(handoffJson: String, includeAllNetworks: Boolean) {
             if (VpnService.prepare(context) != null) {
                 throw TunnelException.PermissionDenied()
             }
+            requestNotificationPermission()
             val (intent, token) = VoyaVpnService.startIntent(context, handoffJson)
             VoyaVpnService.lastError = null
             VoyaVpnService.state = VoyaVpnService.State.STARTING
@@ -333,5 +368,9 @@ class VoyaNativeModule(private val context: ReactApplicationContext) :
         private const val START_TIMEOUT_MS = 60_000L
         private const val STOP_TIMEOUT_MS = 20_000L
         private const val POLL_INTERVAL_MS = 100L
+        private const val REQUEST_NOTIFICATIONS = 7383
+
+        /** Outlives a reload of the module, which is not a new launch. */
+        private val notificationPermissionAsked = java.util.concurrent.atomic.AtomicBoolean(false)
     }
 }

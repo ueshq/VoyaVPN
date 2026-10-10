@@ -57,6 +57,7 @@ pub const UNSUPPORTED_ON_MOBILE: &[&str] = &[
     "is_window_maximized",
     "is_window_visible",
     "minimize_window",
+    "show_notification",
     "toggle_maximize_window",
     // A phone is not an exit node (ADR 0011 is desktop-only).
     "get_self_host_state",

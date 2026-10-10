@@ -91,6 +91,7 @@ export const VOYA_COMMAND_WIRE = {
 	closeWindow: { name: "close_window", params: [] },
 	isWindowMaximized: { name: "is_window_maximized", params: [] },
 	isWindowVisible: { name: "is_window_visible", params: [] },
+	showNotification: { name: "show_notification", params: ["title"] },
 	getWindowChromeConfig: { name: "get_window_chrome_config", params: [] },
 	setWindowAcrylic: { name: "set_window_acrylic", params: ["dark"] },
 } as const satisfies Record<keyof VoyaCommands, { name: string; params: readonly string[] }>;

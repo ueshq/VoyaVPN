@@ -280,6 +280,38 @@ SMAppService for launch at login. A working test configuration is in the App
 Review notes.
 ```
 
+## Resolution Center reply for build 407
+
+Build 407 was rejected on 2026-10-05 under 2.1(a): "the button for showing the
+main window in the menu bar extra app was unresponsive" (macOS 27.0). The plain
+path, close the window and choose Show VoyaVPN, works on macOS 26.5. What does
+reproduce on the sandboxed build is a second copy of the app: the
+single-instance socket lives in `/tmp`, which the App Sandbox denies, so the
+login agent, which starts the moment Launch at login is turned on, ran beside
+the first copy with its own menu bar icon and a window stacked exactly on the
+first. Closing or showing one window then changes nothing on screen. That this
+is what the reviewer saw is an inference; ask for a screen recording if the next
+build is stopped for the same reason. Replace `<BUILD>` with the new build
+number.
+
+```text
+Thank you for the report. Build <BUILD> replaces build 407.
+
+We reproduced a case in which the menu bar item appeared to do nothing: after
+turning on "Launch at login", a second copy of the app started beside the
+running one, each with its own menu bar icon and window. The windows sat
+exactly on top of each other, so closing one or choosing "Show VoyaVPN"
+changed nothing visible. Build <BUILD> allows only one running copy.
+
+Build <BUILD> also fixes two related issues: the menu bar item now follows the
+window when it is minimized or the app is hidden, so its first click always
+acts, and closing the window while it is full screen no longer leaves an empty
+full-screen Space behind.
+
+If the item is still unresponsive on your device, a short screen recording of
+the steps would help us, because we could not reproduce any other failure.
+```
+
 ## Where the facts come from
 
 | Claim | Source |

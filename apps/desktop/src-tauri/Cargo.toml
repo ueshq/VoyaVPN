@@ -44,7 +44,6 @@ specta.workspace = true
 specta-typescript.workspace = true
 tauri.workspace = true
 tauri-plugin-dialog = "2.4.1"
-tauri-plugin-notification = "2.4.0"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-single-instance = "2.4.4"
 # Updates ship raw `-setup.exe` / `.AppImage` (see scripts/release/commands/artifacts.mjs),
@@ -58,6 +57,12 @@ tracing-subscriber.workspace = true
 voya-app.workspace = true
 voya-contracts.workspace = true
 voya-platform.workspace = true
+
+# macOS posts through `UNUserNotificationCenter` instead
+# (`voya_platform::notifications`); the plugin's macOS backend is the
+# deprecated `NSUserNotificationCenter`.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tauri-plugin-notification = "2.4.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-service = "0.8"

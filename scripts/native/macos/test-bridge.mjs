@@ -60,6 +60,41 @@ try {
     loginItemBinary,
   ]);
   run(loginItemBinary, []);
+  const instanceSignalBinary = join(directory, "instance-signal-tests");
+  run("xcrun", [
+    "clang",
+    "-fobjc-arc",
+    "-fblocks",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    resolve(root, "crates/voya-platform/native/macos_instance_signal.m"),
+    resolve(root, "crates/voya-platform/native/macos_instance_signal_tests.m"),
+    "-framework",
+    "Foundation",
+    "-o",
+    instanceSignalBinary,
+  ]);
+  run(instanceSignalBinary, []);
+  const notificationsBinary = join(directory, "notifications-tests");
+  run("xcrun", [
+    "clang",
+    "-fobjc-arc",
+    "-fblocks",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-mmacosx-version-min=10.15",
+    resolve(root, "crates/voya-platform/native/macos_notifications.m"),
+    resolve(root, "crates/voya-platform/native/macos_notifications_tests.m"),
+    "-framework",
+    "Foundation",
+    "-framework",
+    "UserNotifications",
+    "-o",
+    notificationsBinary,
+  ]);
+  run(notificationsBinary, []);
 
   const nativeRoot = resolve(root, "apps/desktop/src-tauri/native/macos");
   const appleRoot = resolve(root, "native/apple");

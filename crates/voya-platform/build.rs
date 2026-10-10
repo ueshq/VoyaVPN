@@ -14,11 +14,15 @@ fn build_macos_native_bridges() {
     println!("cargo:rerun-if-changed=native/macos_window_chrome.m");
     println!("cargo:rerun-if-changed=native/macos_login_item.m");
     println!("cargo:rerun-if-changed=native/macos_login_item.h");
+    println!("cargo:rerun-if-changed=native/macos_instance_signal.m");
+    println!("cargo:rerun-if-changed=native/macos_notifications.m");
 
     cc::Build::new()
         .file(source)
         .file("native/macos_window_chrome.m")
         .file("native/macos_login_item.m")
+        .file("native/macos_instance_signal.m")
+        .file("native/macos_notifications.m")
         .flag("-fobjc-arc")
         .flag("-fblocks")
         .flag("-mmacosx-version-min=10.15")
@@ -29,4 +33,5 @@ fn build_macos_native_bridges() {
     println!("cargo:rustc-link-lib=framework=NetworkExtension");
     println!("cargo:rustc-link-lib=framework=SystemExtensions");
     println!("cargo:rustc-link-lib=framework=ServiceManagement");
+    println!("cargo:rustc-link-lib=framework=UserNotifications");
 }

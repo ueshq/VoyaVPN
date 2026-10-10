@@ -288,6 +288,14 @@ A simulator proves none of this.
 12. Switch Wi-Fi/cellular, background/restore, and exercise kill switch behavior
     during connection loss. Verify recovery and that blocked traffic does not
     escape through the physical interface.
+13. Set up the connection shortcuts, then use the Home Screen quick actions
+    both with the app closed and with it in the background, and open
+    `voyavpn://connect` from Safari the same two ways. Each one connects or
+    disconnects; these arrive through the scene delegate, and the closed-app
+    case depends on React Native reading the launch URL it is handed.
+14. Import a node by picking a QR image from the photo library. A device
+    decodes with the newest barcode revision its system has, which the
+    simulator cannot run.
 
 If step 1 fails only when the kill switch is on, the cause is loopback under
 `includeAllNetworks`. The fallback is libbox's `CommandClient` over

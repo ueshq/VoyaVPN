@@ -1,38 +1,27 @@
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
-
 import { ipcCommands } from "@/ipc/commands";
 
 /**
- * Sole entry point for the Tauri notification plugin.
+ * Sole entry point for OS notifications.
  *
  * Toasts cover everything that happens while the window is on screen. Once it
  * is hidden in the tray they reach nobody, so the few notices a user must not
  * miss are repeated as an OS notification — and only then, so a user looking
  * at the app never gets the same message twice.
+ *
+ * The shell posts it, and with it owns the permission: macOS asks the user
+ * the first time, Windows and Linux have nothing to ask.
  */
 
-// Asked at most once per launch: a user who declined is not asked again on
-// every dropped connection.
-let permissionRequested = false;
-
-async function permissionGranted() {
-  if (await isPermissionGranted()) return true;
-  if (permissionRequested) return false;
-  permissionRequested = true;
-  return (await requestPermission()) === "granted";
-}
-
-/** Shows an OS notification while the main window is hidden. Resolves whether one was shown. */
+/** Asks for an OS notification while the main window is hidden. Resolves whether it asked. */
 export async function notifyWhenHidden(title: string): Promise<boolean> {
   try {
     // On screen rather than hidden into the tray: the toast is enough.
     if (await ipcCommands.isWindowVisible()) return false;
-    if (!(await permissionGranted())) return false;
-    sendNotification({ title });
+    await ipcCommands.showNotification(title);
     return true;
   } catch {
-    // No notification service, or a revoked permission: the toast already
-    // carries the notice, so this must never become an unhandled rejection.
+    // The toast already carries the notice, so a failure here must never
+    // become an unhandled rejection.
     return false;
   }
 }

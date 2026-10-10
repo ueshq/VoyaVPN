@@ -623,9 +623,11 @@ final class VoyaVPNUITests: XCTestCase {
         // Decode the rendered native image; accessibility labels alone do not
         // prove the exported link is scannable or belongs to the selected node.
         let request = VNDetectBarcodesRequest()
+#if targetEnvironment(simulator)
         // Revision 4 cannot create its inference context in this simulator.
-        // Revision 1 decodes the same rendered image on simulator and device.
+        // A device takes the newest revision its system has.
         request.revision = VNDetectBarcodesRequestRevision1
+#endif
         request.symbologies = [.qr]
         var failure: String?
         XCTAssertTrue(wait {

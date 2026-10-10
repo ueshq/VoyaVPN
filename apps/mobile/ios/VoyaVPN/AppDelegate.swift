@@ -6,6 +6,8 @@ import ReactAppDependencyProvider
 
 @main
 class AppDelegate: UIResponder, UIApplicationDelegate {
+  /// The scene's window. UIKit no longer asks the app delegate for one, but
+  /// React Native libraries still look for it here.
   var window: UIWindow?
 
   var reactNativeDelegate: ReactNativeDelegate?
@@ -28,21 +30,42 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     reactNativeDelegate = delegate
     reactNativeFactory = factory
 
-    window = UIWindow(frame: UIScreen.main.bounds)
+    return true
+  }
+}
+
+/// The app's one window scene, named by `UIApplicationSceneManifest` in
+/// Info.plist. What launched the app and what reaches it later — a URL, a
+/// Home Screen quick action — arrives here rather than at the app delegate,
+/// whose entry points for them are deprecated since iOS 26.
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+  var window: UIWindow?
+
+  func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    guard let windowScene = scene as? UIWindowScene,
+      let appDelegate = UIApplication.shared.delegate as? AppDelegate,
+      let factory = appDelegate.reactNativeFactory
+    else { return }
+
+    let window = UIWindow(windowScene: windowScene)
+    self.window = window
+    appDelegate.window = window
 
     // Cold quick actions become the initial URL, before JavaScript considers auto-connect.
-    var options = launchOptions
-    let shortcut = launchOptions?[.shortcutItem] as? UIApplicationShortcutItem
-    if let shortcut, let url = connectionShortcutURL(shortcut.type) {
-      options = (options ?? [:]).merging([.url: url]) { _, new in new }
-    }
+    let url =
+      connectionOptions.shortcutItem.flatMap { connectionShortcutURL($0.type) }
+      ?? connectionOptions.urlContexts.first?.url
     factory.startReactNative(
       withModuleName: "VoyaVPN",
       in: window,
-      launchOptions: options
+      // React Native's `Linking.getInitialURL()` reads the launch URL from
+      // this dictionary under the old launch option's name.
+      launchOptions: url.map { ["UIApplicationLaunchOptionsURLKey": $0] }
     )
-
-    return shortcut == nil
   }
 
   private func connectionShortcutURL(_ type: String) -> URL? {
@@ -53,13 +76,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
   }
 
-  func application(_ application: UIApplication, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
+  func windowScene(
+    _ windowScene: UIWindowScene,
+    performActionFor shortcutItem: UIApplicationShortcutItem,
+    completionHandler: @escaping (Bool) -> Void
+  ) {
     guard let url = connectionShortcutURL(shortcutItem.type) else { completionHandler(false); return }
-    completionHandler(RCTLinkingManager.application(application, open: url, options: [:]))
+    completionHandler(RCTLinkingManager.application(UIApplication.shared, open: url, options: [:]))
   }
 
-  func application(_ application: UIApplication, open url: URL, options: [UIApplication.OpenURLOptionsKey: Any] = [:]) -> Bool {
-    RCTLinkingManager.application(application, open: url, options: options)
+  func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    for context in URLContexts {
+      _ = RCTLinkingManager.application(UIApplication.shared, open: context.url, options: [:])
+    }
   }
 }
 

@@ -94,6 +94,7 @@ export const commands = {
   "native macos app notarize": { steps: [node("scripts/native/macos/notarize-app.mjs")] },
   "native macos ne doctor": { steps: [node("scripts/native/macos/ne-doctor.mjs")] },
   "native macos preflight": { steps: [node("scripts/native/macos/preflight.mjs")] },
+  "native macos window smoke": { steps: [node("scripts/native/macos/window-smoke.mjs")] },
   "native macos dmg": { steps: [node("scripts/native/macos/create-dmg.mjs")] },
   "native macos pkg": { steps: [node("scripts/native/macos/create-pkg.mjs")] },
   // build | install | uninstall | status: the script reads the word itself.

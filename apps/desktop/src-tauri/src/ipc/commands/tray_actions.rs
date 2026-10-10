@@ -37,7 +37,7 @@ pub async fn resolve_close_request<R: tauri::Runtime>(
     }
     match action {
         CloseRequestAction::MinimizeToTray => crate::residency::hide_into_tray(&app),
-        CloseRequestAction::Quit => app.exit(0),
+        CloseRequestAction::Quit => crate::lifecycle::quit(&app),
         CloseRequestAction::Cancel => {}
     }
 

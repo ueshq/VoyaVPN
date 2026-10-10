@@ -1,9 +1,15 @@
 //! Ordered, once-only shutdown of background work and OS resources.
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Once,
+    },
+    time::Duration,
+};
 
-use crate::AppState;
+use crate::{tray::TRAY_ID, AppState};
 use tauri::Manager;
-use voya_app::lifecycle::{exit_step, ShutdownLatch};
+use voya_app::lifecycle::exit_step;
 
 /// How long each waiting step of the teardown may take. Each sits above the
 /// step's own worst case, so it only ends a wait that would never have ended:
@@ -13,16 +19,62 @@ const SELF_HOST_EXIT_LIMIT: Duration = Duration::from_secs(20);
 const DISCONNECT_EXIT_LIMIT: Duration = Duration::from_secs(35);
 const STATISTICS_EXIT_LIMIT: Duration = Duration::from_secs(5);
 
-/// Latches the exit teardown so it runs once per process.
-static SHUTDOWN_LATCH: ShutdownLatch = ShutdownLatch::new();
+/// Runs the exit teardown once per process. A caller that arrives while it is
+/// running waits for it: the process must not end with the core half stopped.
+static TEARDOWN: Once = Once::new();
+/// Set by the first quit request; later ones are the same request.
+static QUIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
-pub(super) fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    // Tauri raises ExitRequested and then Exit for every exit path, so this is
-    // reached at least twice per quit. The sequence re-runs the sudoers revoke
-    // and the per-service system-proxy restore, so it is latched to one pass.
-    if !SHUTDOWN_LATCH.begin() {
+/// Quits from inside the app: the tray's Quit item and a close that quits.
+///
+/// The teardown waits on the core, the router and a final statistics flush,
+/// each for seconds. Run on the main thread it froze the window and the tray
+/// menu for that long, so the app leaves the screen first and the teardown
+/// runs on its own thread, which then ends the process.
+pub(crate) fn quit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if QUIT_REQUESTED.swap(true, Ordering::SeqCst) {
         return;
     }
+    leave_the_screen(app);
+    let handle = app.clone();
+    let teardown = std::thread::Builder::new()
+        .name("voya-quit".to_string())
+        .spawn(move || {
+            shutdown_for_exit(&handle);
+            handle.exit(0);
+        });
+    if let Err(error) = teardown {
+        tracing::warn!(%error, "could not start the quit thread; exiting directly");
+        // The exit events run the teardown on the main thread instead.
+        app.exit(0);
+    }
+}
+
+/// Hides the window and the tray icon, so nothing that can no longer answer
+/// stays on screen while the teardown runs. Both calls go through the main
+/// thread, so this must not be called from inside the teardown: a main thread
+/// waiting for the teardown would never serve them.
+pub(super) fn leave_the_screen<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        if let Err(error) = window.hide() {
+            tracing::debug!(?error, "failed to hide the main window while quitting");
+        }
+    }
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        if let Err(error) = tray.set_visible(false) {
+            tracing::debug!(?error, "failed to hide the tray icon while quitting");
+        }
+    }
+}
+
+pub(super) fn shutdown_for_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    // Tauri raises ExitRequested and then Exit for every exit path, and `quit`
+    // gets here first on its own thread. The sequence re-runs the sudoers
+    // revoke and the per-service system-proxy restore, so it runs once.
+    TEARDOWN.call_once(|| teardown(app));
+}
+
+fn teardown<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     // Stopped before the runtime is torn down so the scheduler stops taking on
     // new subscriptions, abandons an in-flight download, and discards a fetch
     // that already finished rather than publishing it into a runtime that is

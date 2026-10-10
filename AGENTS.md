@@ -98,6 +98,7 @@ vp run check mobile test         # React Native Jest suite
 vp run check mobile bundle       # Metro bundle for iOS and Android
 vp run check mobile swift        # Parse the iOS app Swift; typecheck its UI tests and the shared PacketTunnel for iOS (macOS only)
 vp run check mobile ios assets   # iOS icons opaque, purpose strings translated, one App Group
+vp run native macos window smoke # Installed VoyaVPN.app: window/menu bar/second-launch paths via System Events (needs Accessibility)
 vp test                          # Vitest once, without the coverage gate
 vp test apps/desktop/src/features/profiles/server-table.test.tsx  # Single test file (`vp test watch` to watch)
 

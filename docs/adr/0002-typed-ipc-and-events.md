@@ -45,7 +45,7 @@ The typed IPC decision remains unchanged. The monorepo migration remaps the path
 - `src/ipc/bindings.ts` is now `apps/desktop/src/ipc/bindings.ts`.
 - `src/ipc/**` is now `apps/desktop/src/ipc/**`.
 - The lint-enforced Tauri API boundary applies to `apps/desktop/src/**/*` and `packages/**/*`; only `apps/desktop/src/ipc/**` may import `@tauri-apps/api` or Tauri plugins.
-- OS notifications (2026-09-14) go through `apps/desktop/src/ipc/notifications.ts` only. It repeats a small set of notices as a notification while the main window is hidden in the tray; a visible window gets the toast alone. The shell sends its own tray notices through `tauri-plugin-notification` in `src-tauri/src/residency.rs`.
+- OS notifications (2026-09-14) go through `apps/desktop/src/ipc/notifications.ts` only. It repeats a small set of notices as a notification while the main window is hidden in the tray; a visible window gets the toast alone. The shell posts every notification, the renderer's through the `show_notification` command and its own tray notices directly, from `notify` in `src-tauri/src/residency.rs` (2026-10-10): `UNUserNotificationCenter` on macOS, which asks the user to allow them the first time, and `tauri-plugin-notification` on Windows and Linux.
 - Locale files referenced by frontend i18n now live in `packages/i18n/src/locales`.
 
 Generated bindings are still owned by Rust `specta`/`tauri-specta` and must not be edited by hand.

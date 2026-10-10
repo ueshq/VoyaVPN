@@ -10,9 +10,12 @@ pub mod coreinfo;
 pub mod elevation;
 pub mod filesystem;
 pub mod firewall;
+pub mod instance;
 pub mod locale;
 pub mod localtime;
 pub mod netif;
+#[cfg(target_os = "macos")]
+pub mod notifications;
 pub mod paths;
 pub mod privilege;
 pub mod process;

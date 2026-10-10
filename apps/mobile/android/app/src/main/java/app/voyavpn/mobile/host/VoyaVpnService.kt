@@ -243,5 +243,20 @@ class VoyaVpnService : VpnService() {
         /** The instance that last took a start command, while it lives. */
         @Volatile
         private var current: VoyaVpnService? = null
+
+        /**
+         * Posts the tunnel's notification again.
+         *
+         * Android 13 drops a notification posted before the user allowed
+         * them, and the first connect asks while the service is already
+         * starting: without this the tunnel would stay out of the shade until
+         * the next connect.
+         */
+        fun repostNotification() {
+            val service = current ?: return
+            if (state != State.STARTING && state != State.RUNNING) return
+            val manager = service.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, service.notification())
+        }
     }
 }

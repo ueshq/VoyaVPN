@@ -74,6 +74,15 @@ pub fn is_window_visible(window: tauri::WebviewWindow) -> Result<bool, AppError>
     window.is_visible().map_err(window_error)
 }
 
+/// Repeats a notice as an OS notification. The renderer asks only while the
+/// window is hidden (`src/ipc/notifications.ts`).
+#[tauri::command]
+#[specta::specta]
+pub fn show_notification(app: tauri::AppHandle, title: String) -> Result<(), AppError> {
+    crate::residency::notify(&app, &title, None);
+    Ok(())
+}
+
 fn window_error(error: tauri::Error) -> AppError {
     AppError::internal(voya_contracts::AppErrorSubsystem::App, error.to_string())
 }

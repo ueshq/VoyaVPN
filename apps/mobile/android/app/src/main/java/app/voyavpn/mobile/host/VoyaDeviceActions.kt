@@ -30,7 +30,7 @@ class VoyaDeviceActions(private val context: ReactApplicationContext) : ReactCon
         }
     }
     init { context.addActivityEventListener(listener) }
-    override fun getName() = "VoyaDeviceActions"
+    override fun getName() = NAME
     override fun invalidate() {
         context.removeActivityEventListener(listener)
         pending?.reject("cancelled", "Host closed")
@@ -106,8 +106,12 @@ class VoyaDeviceActions(private val context: ReactApplicationContext) : ReactCon
     }
     @ReactMethod fun appVersion(promise: Promise) {
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
-        @Suppress("DEPRECATION") val build = info.versionCode
+        val build = androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(info)
         promise.resolve("${info.versionName} ($build)")
     }
-    companion object { private const val REQUEST_QR = 7381; private const val REQUEST_VPN = 7382 }
+    companion object {
+        const val NAME = "VoyaDeviceActions"
+        private const val REQUEST_QR = 7381
+        private const val REQUEST_VPN = 7382
+    }
 }

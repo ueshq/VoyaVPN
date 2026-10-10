@@ -304,9 +304,7 @@ export async function installTauriSmokeMock(page: Page, titleBarLayout: WindowCh
         case "is_window_visible":
         case "plugin:window|is_visible":
           return Promise.resolve(true);
-        case "plugin:notification|is_permission_granted":
-          return Promise.resolve(false);
-        case "plugin:notification|notify":
+        case "show_notification":
           return Promise.resolve(null);
         case "toggle_maximize_window":
         case "plugin:window|toggle_maximize":

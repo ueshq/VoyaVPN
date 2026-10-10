@@ -179,9 +179,7 @@ fn handle_menu_event<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str) {
     match item {
         TrayItemId::Show => residency::show_main_window(app),
         TrayItemId::Hide => residency::hide_main_window(app),
-        // `exit` raises ExitRequested and Exit, which is where the teardown
-        // runs; calling it here as well would only repeat it.
-        TrayItemId::Quit => app.exit(0),
+        TrayItemId::Quit => crate::lifecycle::quit(app),
         TrayItemId::AllNodes => {
             residency::show_main_window(app);
             commands::emit_or_warn(

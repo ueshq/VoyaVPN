@@ -185,6 +185,11 @@ export const commands = {
 	/**  Whether the window is on screen rather than hidden into the tray. */
 	isWindowVisible: () => typedError<boolean, AppError>(__TAURI_INVOKE("is_window_visible")),
 	/**
+	 *  Repeats a notice as an OS notification. The renderer asks only while the
+	 *  window is hidden (`src/ipc/notifications.ts`).
+	 */
+	showNotification: (title: string) => typedError<null, AppError>(__TAURI_INVOKE("show_notification", { title })),
+	/**
 	 *  macOS overlays native traffic lights on the webview; Windows renders caption
 	 *  buttons in its borderless window. Linux and the web fallback use `none`.
 	 */

@@ -1,6 +1,6 @@
 use specta_typescript::Typescript;
 use std::{error::Error, path::Path};
-use tauri::RunEvent;
+use tauri::{Manager, RunEvent};
 
 mod app_state;
 mod bootstrap;
@@ -14,7 +14,7 @@ mod tray;
 pub(crate) use app_state::AppState;
 use bootstrap::{database_path, initialize, record_startup_failure, report_startup_failure};
 pub(crate) use event_sinks::TauriSinks;
-use lifecycle::shutdown_for_exit;
+use lifecycle::{leave_the_screen, shutdown_for_exit};
 pub(crate) use tray::refresh_tray_menu;
 
 pub fn export_bindings(path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
@@ -58,16 +58,19 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // On macOS, turning launch at login on registers a launchd agent
             // with RunAtLoad, which starts `voyavpn --autostart` right away.
-            // That copy hands over here and must not raise the window.
+            // That copy hands over here and must not raise the window. In the
+            // macOS sandbox the plugin's socket is denied and nothing arrives
+            // here; `initialize` turns that copy away by a file lock instead.
             if !voya_platform::autostart::launched_by_autostart(&args) {
                 residency::show_main_window(app);
             }
         }))
         .plugin(tauri_plugin_dialog::init())
-        // OS notifications for a user whose window is hidden in the tray; the
-        // renderer decides when to show one (`src/ipc/notifications.ts`).
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init());
+    // OS notifications for a user whose window is hidden in the tray, sent by
+    // `residency::notify`. macOS posts through `voya_platform::notifications`.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_notification::init());
     #[expect(
         clippy::expect_used,
         reason = "only the Tauri runtime itself failing lands here; `initialize` reports \
@@ -77,9 +80,20 @@ pub fn run() {
         .invoke_handler(specta_builder.invoke_handler())
         .on_window_event(|window, event| {
             if window.label() == "main" {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    residency::handle_close_requested(window);
+                match event {
+                    tauri::WindowEvent::CloseRequested { api, .. } => {
+                        api.prevent_close();
+                        residency::handle_close_requested(window);
+                    }
+                    // Minimizing, restoring and hiding the app (Cmd+H) move
+                    // the window without going through `residency`, and each
+                    // changes focus: the tray's Show/Hide entry follows here.
+                    tauri::WindowEvent::Focused(_) => {
+                        if let Err(error) = refresh_tray_menu(window.app_handle()) {
+                            tracing::warn!(?error, "failed to queue a tray menu refresh");
+                        }
+                    }
+                    _ => {}
                 }
             }
         })
@@ -114,8 +128,12 @@ pub fn run() {
                 ipc::window::install_native_caption_inset(app);
                 report_startup_failure(app);
             }
-            RunEvent::ExitRequested { .. } => shutdown_for_exit(app),
-            RunEvent::Exit => shutdown_for_exit(app),
+            // Reached without `lifecycle::quit` by the app menu's Quit, a
+            // logout and the updater; after it, the teardown has already run.
+            RunEvent::ExitRequested { .. } | RunEvent::Exit => {
+                leave_the_screen(app);
+                shutdown_for_exit(app);
+            }
             // The dock icon brings back a window hidden into the tray.
             #[cfg(target_os = "macos")]
             RunEvent::Reopen {

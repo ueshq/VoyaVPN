@@ -1,72 +1,42 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-const plugin = vi.hoisted(() => ({
-  isPermissionGranted: vi.fn(),
-  requestPermission: vi.fn(),
-  sendNotification: vi.fn(),
-}));
-// The one command this module asks: whether the window is on screen. The
-// shared backend registration the test setup runs takes the same object, and
-// only passes it along.
-const windowApi = vi.hoisted(() => ({
+// The two commands this module calls. The shared backend registration the
+// test setup runs takes the same object, and only passes it along.
+const shell = vi.hoisted(() => ({
   isWindowVisible: vi.fn(),
+  showNotification: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/plugin-notification", () => plugin);
-vi.mock("@/ipc/commands", () => ({ ipcCommands: windowApi }));
+vi.mock("@/ipc/commands", () => ({ ipcCommands: shell }));
 
-// A fresh module is a fresh launch: the "asked once" memory is module state.
-async function launch() {
-  vi.resetModules();
-  return import("./notifications");
-}
+import { notifyWhenHidden } from "./notifications";
 
 describe("notifyWhenHidden", () => {
   beforeEach(() => {
-    Object.values(plugin).forEach((mock) => mock.mockReset());
-    windowApi.isWindowVisible.mockReset();
+    Object.values(shell).forEach((mock) => mock.mockReset());
   });
 
   it("stays quiet while the window is on screen", async () => {
-    windowApi.isWindowVisible.mockResolvedValue(true);
-    const { notifyWhenHidden } = await launch();
+    shell.isWindowVisible.mockResolvedValue(true);
 
     await expect(notifyWhenHidden("Connection lost")).resolves.toBe(false);
-    expect(plugin.isPermissionGranted).not.toHaveBeenCalled();
-    expect(plugin.sendNotification).not.toHaveBeenCalled();
+    expect(shell.showNotification).not.toHaveBeenCalled();
   });
 
-  it("notifies while the window is hidden and permission is granted", async () => {
-    windowApi.isWindowVisible.mockResolvedValue(false);
-    plugin.isPermissionGranted.mockResolvedValue(true);
-    const { notifyWhenHidden } = await launch();
+  it("asks the shell for a notification while the window is hidden", async () => {
+    shell.isWindowVisible.mockResolvedValue(false);
+    shell.showNotification.mockResolvedValue(undefined);
 
     await expect(notifyWhenHidden("Connection lost")).resolves.toBe(true);
-    expect(plugin.sendNotification).toHaveBeenCalledExactlyOnceWith({ title: "Connection lost" });
-    expect(plugin.requestPermission).not.toHaveBeenCalled();
+    expect(shell.showNotification).toHaveBeenCalledExactlyOnceWith("Connection lost");
   });
 
-  it("asks for permission once per launch and respects a refusal", async () => {
-    windowApi.isWindowVisible.mockResolvedValue(false);
-    plugin.isPermissionGranted.mockResolvedValue(false);
-    plugin.requestPermission.mockResolvedValue("denied");
-    const { notifyWhenHidden } = await launch();
+  it("never rejects when the shell fails", async () => {
+    shell.isWindowVisible.mockResolvedValue(false);
+    shell.showNotification.mockRejectedValue(new Error("no notification service"));
+    await expect(notifyWhenHidden("Connection lost")).resolves.toBe(false);
 
-    await expect(notifyWhenHidden("First")).resolves.toBe(false);
-    await expect(notifyWhenHidden("Second")).resolves.toBe(false);
-    expect(plugin.requestPermission).toHaveBeenCalledOnce();
-    expect(plugin.sendNotification).not.toHaveBeenCalled();
-
-    plugin.requestPermission.mockResolvedValue("granted");
-    const next = await launch();
-    await expect(next.notifyWhenHidden("After relaunch")).resolves.toBe(true);
-    expect(plugin.sendNotification).toHaveBeenCalledExactlyOnceWith({ title: "After relaunch" });
-  });
-
-  it("never rejects when the plugin fails", async () => {
-    windowApi.isWindowVisible.mockRejectedValue(new Error("no window"));
-    const { notifyWhenHidden } = await launch();
-
+    shell.isWindowVisible.mockRejectedValue(new Error("no window"));
     await expect(notifyWhenHidden("Connection lost")).resolves.toBe(false);
   });
 });
