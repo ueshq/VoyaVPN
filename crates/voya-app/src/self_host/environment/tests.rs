@@ -29,6 +29,7 @@ fn ipv4(local: &[&str], public: Option<&str>, probe: ProbeEvidence) -> FamilyEvi
             status: SelfHostPortMappingStatus::Disabled,
             gateway_external_address: None,
         }),
+        router_firewall_opened: false,
         firewall_rule_missing: false,
     }
 }
@@ -200,12 +201,24 @@ fn ipv6_on_the_interface_may_still_be_blocked_by_the_router() {
         public_address: Some(ip("2001:db8::7")),
         probe: ProbeEvidence::Results(vec![result(42_443, PortProbeOutcome::Timeout)]),
         port_mapping: None,
+        router_firewall_opened: false,
         firewall_rule_missing: false,
     };
     let report = classify_family(&evidence);
     assert_eq!(report.nat, SelfHostNatKind::None);
     assert_eq!(report.reachability, SelfHostReachability::Unreachable);
     assert!(report.reasons.contains(&Reason::Ipv6FirewallUnknown));
+
+    // Once the router granted the opening, its firewall is no longer the
+    // suspect: the probe's own finding stands alone.
+    let opened = classify_family(&FamilyEvidence {
+        router_firewall_opened: true,
+        ..evidence.clone()
+    });
+    assert_eq!(opened.reachability, SelfHostReachability::Unreachable);
+    assert!(opened.reasons.contains(&Reason::Ipv6FirewallOpened));
+    assert!(opened.reasons.contains(&Reason::ProbeTimedOut));
+    assert!(!opened.reasons.contains(&Reason::Ipv6FirewallUnknown));
 
     let unprobed = classify_family(&FamilyEvidence {
         probe: ProbeEvidence::Unavailable,

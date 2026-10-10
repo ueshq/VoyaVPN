@@ -14,11 +14,14 @@ use futures_util::future::BoxFuture;
 use tokio::sync::Notify;
 use voya_contracts::{
     AppNoticeLevel, LogCode, LogLevel, NoticeCode, SelfHostConfig, SelfHostPortMappingStatus,
-    SelfHostProblem, SelfHostReachability, SelfHostRuntimeStatus, SelfHostState,
+    SelfHostProblem, SelfHostReachability, SelfHostReasonCode, SelfHostRuntimeStatus,
+    SelfHostState,
 };
 use voya_db::Database;
 use voya_net::{
-    portmap::{PortMapper, PortMappingError, PortMappingResult},
+    portmap::{
+        Ipv4PortMapping, PortMapper, PortMappingMethod, PortMappingRequest, PortMappingResult,
+    },
     probe::{
         PortProbeOutcome, PortProbeResult, ProbeFamily, ReachabilityProbeError,
         ReachabilityProbeResponse,
@@ -27,7 +30,7 @@ use voya_net::{
 use voya_platform::{
     coreinfo::{executable_name_for_current_os, TargetOs, CORE_DIR_NAME},
     firewall::FirewallService,
-    netif::InterfaceAddress,
+    netif::{DefaultGateways, InterfaceAddress, Ipv6Gateway},
     paths::{core_seed_resources_dir, AppPaths},
     process::{
         ProcessError, ProcessExit, ProcessExitHandler, ProcessHandle, ProcessOutput, ProcessRole,
@@ -194,34 +197,44 @@ impl ProcessRunner for GatedRunner {
 #[derive(Default)]
 struct FakeRouter {
     maps: Mutex<Vec<Vec<u16>>>,
+    requests: Mutex<Vec<PortMappingRequest>>,
+    /// Whether the router's IPv6 firewall grants openings.
+    opens_ipv6: Mutex<bool>,
     unmaps: Mutex<Vec<Vec<u16>>>,
     /// While set, `map` answers only once this is notified.
     held: Mutex<Option<Arc<Notify>>>,
 }
 
 impl PortMapper for FakeRouter {
-    fn map(
-        &self,
-        ports: Vec<u16>,
-        _lease_seconds: u32,
-    ) -> BoxFuture<'static, Result<PortMappingResult, PortMappingError>> {
+    fn map(&self, request: PortMappingRequest) -> BoxFuture<'static, PortMappingResult> {
+        let ports = request.ports.clone();
         self.maps.lock().expect("maps").push(ports.clone());
+        self.requests.lock().expect("requests").push(request);
+        let ipv6_opened = if *self.opens_ipv6.lock().expect("opens_ipv6") {
+            ports.clone()
+        } else {
+            Vec::new()
+        };
         let held = self.held.lock().expect("held").clone();
         Box::pin(async move {
             if let Some(release) = held {
                 release.notified().await;
             }
-            Ok(PortMappingResult {
-                external_address: "203.0.113.7".parse().ok(),
-                mapped: ports,
-                refused: Vec::new(),
-            })
+            PortMappingResult {
+                ipv4: Ok(Ipv4PortMapping {
+                    method: PortMappingMethod::Pcp,
+                    external_address: "203.0.113.7".parse().ok(),
+                    mapped: ports,
+                    refused: Vec::new(),
+                }),
+                ipv6_opened,
+            }
         })
     }
 
-    fn unmap(&self, ports: Vec<u16>) -> BoxFuture<'static, Result<(), PortMappingError>> {
+    fn unmap(&self, ports: Vec<u16>) -> BoxFuture<'static, ()> {
         self.unmaps.lock().expect("unmaps").push(ports);
-        Box::pin(async { Ok(()) })
+        Box::pin(async {})
     }
 }
 
@@ -236,6 +249,16 @@ impl LocalNetwork for FakeNetwork {
             interface: "en0".to_string(),
             address: "192.168.1.20".parse().expect("address"),
         }]
+    }
+
+    fn default_gateways(&self) -> DefaultGateways {
+        DefaultGateways {
+            ipv4: "192.168.1.1".parse().ok(),
+            ipv6: Some(Ipv6Gateway {
+                address: "fe80::1".parse().expect("address"),
+                scope_id: 4,
+            }),
+        }
     }
 
     fn port_available(&self, port: u16) -> bool {
@@ -589,11 +612,54 @@ async fn the_network_check_maps_ports_and_fills_the_links() {
         .iter()
         .all(|ports| ports == &vec![enabled.config.vless_port, enabled.config.shadowsocks_port]));
 
+    // NAT-PMP and PCP have no discovery: the request names the routers.
+    let request = fixture.router.requests.lock().expect("requests")[0].clone();
+    assert_eq!(request.ipv4_gateway, "192.168.1.1".parse().ok());
+    let ipv6_gateway = request.ipv6_gateway.expect("IPv6 router");
+    assert_eq!(
+        (
+            ipv6_gateway.address.to_string().as_str(),
+            ipv6_gateway.scope_id
+        ),
+        ("fe80::1", 4)
+    );
+    assert!(!environment
+        .ipv6
+        .reasons
+        .contains(&SelfHostReasonCode::Ipv6FirewallOpened));
+
     fixture.manager.set_enabled(false).await.expect("disable");
     assert!(
         !fixture.router.unmaps.lock().expect("unmaps").is_empty(),
         "stopping removes the router forward"
     );
+}
+
+#[tokio::test]
+async fn an_opening_in_the_routers_ipv6_firewall_is_reported_and_given_back() {
+    let fixture = Fixture::new().await;
+    *fixture.router.opens_ipv6.lock().expect("opens_ipv6") = true;
+    let enabled = fixture.manager.set_enabled(true).await.expect("enable");
+    let ports = vec![enabled.config.vless_port, enabled.config.shadowsocks_port];
+
+    let state = fixture
+        .manager
+        .run_environment_check()
+        .await
+        .expect("check");
+    let environment = state.environment.expect("report");
+    assert!(environment
+        .ipv6
+        .reasons
+        .contains(&SelfHostReasonCode::Ipv6FirewallOpened));
+    // The report's forwards are the IPv4 ones.
+    assert_eq!(environment.port_mapping.mapped_ports, ports);
+
+    fixture.manager.set_enabled(false).await.expect("disable");
+    let unmaps = fixture.router.unmaps.lock().expect("unmaps").clone();
+    let mut held = ports;
+    held.sort_unstable();
+    assert_eq!(unmaps.last(), Some(&held), "each port is given back once");
 }
 
 #[tokio::test]

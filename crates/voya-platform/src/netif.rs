@@ -28,6 +28,59 @@ pub fn interface_addresses() -> io::Result<Vec<InterfaceAddress>> {
     Ok(addresses)
 }
 
+/// The routers on this machine's default routes: where a NAT-PMP or PCP
+/// request has to be sent, since neither protocol has a discovery step.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DefaultGateways {
+    pub ipv4: Option<Ipv4Addr>,
+    pub ipv6: Option<Ipv6Gateway>,
+}
+
+/// An IPv6 router. It is normally a link-local address, which only means
+/// something together with the interface it was learned on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Ipv6Gateway {
+    pub address: Ipv6Addr,
+    pub scope_id: u32,
+}
+
+/// The default routes' gateways, skipping tunnels: a VPN's virtual router
+/// forwards nothing to this device.
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[must_use]
+pub fn default_gateways() -> DefaultGateways {
+    let mut interfaces = netdev::get_interfaces();
+    // The default interface first; another physical one only fills a family
+    // the default route does not have.
+    interfaces.sort_by_key(|interface| !interface.default);
+    let mut gateways = DefaultGateways::default();
+    for interface in interfaces {
+        if interface.is_loopback() || interface.is_tun() || !interface.is_up() {
+            continue;
+        }
+        let Some(gateway) = interface.gateway else {
+            continue;
+        };
+        if gateways.ipv4.is_none() {
+            gateways.ipv4 = gateway.ipv4.first().copied();
+        }
+        if gateways.ipv6.is_none() {
+            gateways.ipv6 = gateway.ipv6.first().map(|address| Ipv6Gateway {
+                address: *address,
+                scope_id: interface.index,
+            });
+        }
+    }
+    gateways
+}
+
+/// A phone hosts no node, so it never asks a router for anything.
+#[cfg(any(target_os = "ios", target_os = "android"))]
+#[must_use]
+pub fn default_gateways() -> DefaultGateways {
+    DefaultGateways::default()
+}
+
 /// Whether a server could listen on `port` on every address, for both TCP and
 /// UDP (Shadowsocks serves both on one port).
 ///
@@ -90,6 +143,16 @@ mod tests {
             .and_then(|listener| listener.local_addr())
             .map(|address| address.port())
             .expect("ephemeral port")
+    }
+
+    #[test]
+    fn default_gateways_are_never_loopback() {
+        let gateways = default_gateways();
+        println!("default gateways: {gateways:?}");
+        assert!(gateways.ipv4.is_none_or(|address| !address.is_loopback()));
+        assert!(gateways
+            .ipv6
+            .is_none_or(|gateway| !gateway.address.is_loopback()));
     }
 
     #[test]

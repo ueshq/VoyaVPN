@@ -28,7 +28,7 @@ Worker tests and `crates/voya-net/src/probe/reachability.rs` read.
 ## Deploy
 
 1. Choose the production domain. The app's default is
-   `https://probe.voyavpn.app` (`DEFAULT_PROBE_BASE_URL` in
+   `https://probe.voyavpn.wangc.ai` (`DEFAULT_PROBE_BASE_URL` in
    `crates/voya-net/src/probe/reachability.rs`). It must be a custom domain:
    `*.workers.dev` is unreachable from mainland China.
 2. Update `routes` in `apps/probe/wrangler.jsonc` to that domain, and keep
@@ -46,7 +46,7 @@ Worker tests and `crates/voya-net/src/probe/reachability.rs` read.
 5. Verify from a machine with a known open port:
 
    ```sh
-   curl -sS -X POST https://probe.voyavpn.app/v1/probe \
+   curl -sS -X POST https://probe.voyavpn.wangc.ai/v1/probe \
      -H 'content-type: application/json' -d '{"ports":[42443]}'
    ```
 
@@ -61,6 +61,9 @@ For staging, point a build at another deployment with the
 
 - `connect()` from `cloudflare:sockets` is expected to accept a bare IPv6
   literal as `hostname`; confirm with an IPv6 caller before the first release.
+  (Deployed 2026-10-10 on `probe.voyavpn.wangc.ai`; the IPv4 path answered,
+  the IPv6 path was not exercised: the deploying machine's tunnel has no IPv6
+  exit.)
 - Cloudflare refuses outbound sockets to its own address ranges and to port 25,
   so a node behind Cloudflare Tunnel or WARP always probes as unreachable.
 - A "reachable" answer proves the path from Cloudflare, not the route from

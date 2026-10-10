@@ -17,7 +17,7 @@ use futures_util::future::BoxFuture;
 use voya_contracts::{SelfHostConfig, SelfHostRuntimeStatus, SelfHostSelfTestResult};
 use voya_db::Database;
 use voya_net::{
-    portmap::{PortMapper, PortMappingError, PortMappingResult},
+    portmap::{PortMapper, PortMappingError, PortMappingRequest, PortMappingResult},
     probe::{ProbeFamily, ReachabilityProbeError, ReachabilityProbeResponse},
 };
 use voya_platform::{
@@ -56,16 +56,17 @@ impl ReachabilityProbe for NoProbeService {
 struct NoRouter;
 
 impl PortMapper for NoRouter {
-    fn map(
-        &self,
-        _ports: Vec<u16>,
-        _lease_seconds: u32,
-    ) -> BoxFuture<'static, Result<PortMappingResult, PortMappingError>> {
-        Box::pin(async { Err(PortMappingError::NoGateway("test".to_string())) })
+    fn map(&self, _request: PortMappingRequest) -> BoxFuture<'static, PortMappingResult> {
+        Box::pin(async {
+            PortMappingResult {
+                ipv4: Err(PortMappingError::NoGateway("test".to_string())),
+                ipv6_opened: Vec::new(),
+            }
+        })
     }
 
-    fn unmap(&self, _ports: Vec<u16>) -> BoxFuture<'static, Result<(), PortMappingError>> {
-        Box::pin(async { Ok(()) })
+    fn unmap(&self, _ports: Vec<u16>) -> BoxFuture<'static, ()> {
+        Box::pin(async {})
     }
 }
 

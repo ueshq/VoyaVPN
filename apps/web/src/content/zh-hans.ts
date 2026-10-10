@@ -164,7 +164,7 @@ export const zhHans: SiteCopy = {
               "从 `raw.githubusercontent.com` 下载分流规则文件。",
               "连接后，经由你自己的服务器查询出口 IP 地址和国家或地区（`ipwho.is`、`icanhazip.com`、`ipify.org`、`ident.me`），用于显示流量从哪里出口以及服务器是否支持 IPv6。",
               "通过被测服务器请求 `www.google.com/generate_204` 来测量延迟。",
-              "桌面版在你运行自建节点的网络检查时，会把所选端口号发送到 `probe.voyavpn.app`，由它尝试回连这些端口并返回结果；同时向 `www.cloudflare.com/cdn-cgi/trace` 查询你的公网 IP 地址。探测服务不保存任何内容，也不记录日志。",
+              "桌面版在自建节点开启期间，会在节点启动时、此后每十分钟以及你手动检测时运行网络检查。每次检查会把所选端口号发送到 `probe.voyavpn.wangc.ai`，由它尝试回连这些端口并返回结果；同时向 `www.cloudflare.com/cdn-cgi/trace` 查询你的公网 IP 地址。探测服务不保存任何内容，也不记录日志。",
             ],
           },
         ],
@@ -174,7 +174,7 @@ export const zhHans: SiteCopy = {
         body: [
           {
             list: [
-              "iPhone 和 iPad：没有自建节点功能，因此应用从不访问 `probe.voyavpn.app`。",
+              "iPhone 和 iPad：没有自建节点功能，因此应用从不访问 `probe.voyavpn.wangc.ai`。",
               "Android：二维码由 Google ML Kit 在设备上识别。Google 会收到该 SDK 的性能和使用指标，SDK 也可能联系 Google 获取更新和兼容性信息。",
               "如果你从应用商店安装，商店会按照其自己的隐私政策处理下载和购买数据。",
             ],

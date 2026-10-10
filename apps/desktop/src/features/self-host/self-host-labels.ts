@@ -59,44 +59,46 @@ export const VERDICT_KEYS = {
   unreachable: "panes.selfHost.network.verdict.unreachable",
 } as const satisfies Record<SelfHostReachability, TranslationKey>;
 
-export const REASON_KEYS = {
-  behindNat: "panes.selfHost.network.reasons.behindNat",
-  carrierGradeNat: "panes.selfHost.network.reasons.carrierGradeNat",
-  doubleNat: "panes.selfHost.network.reasons.doubleNat",
-  firewallRuleMissing: "panes.selfHost.network.reasons.firewallRuleMissing",
-  ipv6FirewallUnknown: "panes.selfHost.network.reasons.ipv6FirewallUnknown",
-  noPublicAddress: "panes.selfHost.network.reasons.noPublicAddress",
-  portMapped: "panes.selfHost.network.reasons.portMapped",
-  probeReachable: "panes.selfHost.network.reasons.probeReachable",
-  probeRefused: "panes.selfHost.network.reasons.probeRefused",
-  probeTimedOut: "panes.selfHost.network.reasons.probeTimedOut",
-  probeUnavailable: "panes.selfHost.network.reasons.probeUnavailable",
-  publicAddressOnDevice: "panes.selfHost.network.reasons.publicAddressOnDevice",
-  tunActive: "panes.selfHost.network.reasons.tunActive",
-  upnpFailed: "panes.selfHost.network.reasons.upnpFailed",
-  upnpUnavailable: "panes.selfHost.network.reasons.upnpUnavailable",
-} as const satisfies Record<SelfHostReasonCode, TranslationKey>;
-
-type Tone = "success" | "warning" | "danger" | "secondary";
-
 /**
  * Findings that only confirm good news, or repeat what a family's badge
- * already says. The card lists the rest, and only when a peer cannot connect.
+ * already says. The card lists the rest, and only when a peer cannot connect,
+ * so these have no sentence of their own.
  */
-const QUIET_REASONS: ReadonlySet<SelfHostReasonCode> = new Set([
+const QUIET_REASONS = [
   "firewallRuleMissing", // The card has its own row with the Allow button.
+  "ipv6FirewallOpened",
   "noPublicAddress",
   "portMapped",
   "probeReachable",
   "publicAddressOnDevice",
-]);
+] as const satisfies readonly SelfHostReasonCode[];
+
+type ActionableReason = Exclude<SelfHostReasonCode, (typeof QUIET_REASONS)[number]>;
+
+export const REASON_KEYS = {
+  behindNat: "panes.selfHost.network.reasons.behindNat",
+  carrierGradeNat: "panes.selfHost.network.reasons.carrierGradeNat",
+  doubleNat: "panes.selfHost.network.reasons.doubleNat",
+  ipv6FirewallUnknown: "panes.selfHost.network.reasons.ipv6FirewallUnknown",
+  probeRefused: "panes.selfHost.network.reasons.probeRefused",
+  probeTimedOut: "panes.selfHost.network.reasons.probeTimedOut",
+  probeUnavailable: "panes.selfHost.network.reasons.probeUnavailable",
+  tunActive: "panes.selfHost.network.reasons.tunActive",
+  upnpFailed: "panes.selfHost.network.reasons.upnpFailed",
+  upnpUnavailable: "panes.selfHost.network.reasons.upnpUnavailable",
+} as const satisfies Record<ActionableReason, TranslationKey>;
+
+type Tone = "success" | "warning" | "danger" | "secondary";
+
+const isActionable = (reason: SelfHostReasonCode): reason is ActionableReason =>
+  !(QUIET_REASONS as readonly SelfHostReasonCode[]).includes(reason);
 
 /** What to do about the check, across both address families, each said once. */
-export function actionableReasons(environment: Pick<SelfHostEnvironmentReport, "ipv4" | "ipv6">): SelfHostReasonCode[] {
+export function actionableReasons(environment: Pick<SelfHostEnvironmentReport, "ipv4" | "ipv6">): ActionableReason[] {
   // The port-forward verdict already says the device is behind a router.
   const saidByVerdict = overallReachability(environment) === "needsPortForward" ? "behindNat" : null;
   const reasons = [...environment.ipv4.reasons, ...environment.ipv6.reasons];
-  return [...new Set(reasons)].filter((reason) => !QUIET_REASONS.has(reason) && reason !== saidByVerdict);
+  return [...new Set(reasons)].filter(isActionable).filter((reason) => reason !== saidByVerdict);
 }
 
 /** A tone as a status dot, shared by the entry tiles and the network verdict. */

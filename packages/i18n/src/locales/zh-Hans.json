@@ -653,18 +653,14 @@
           "unknown": "未知"
         },
         "reasons": {
-          "publicAddressOnDevice": "本机有公网地址，可直接连接。",
           "behindNat": "本机在路由器后面，需要路由器转发节点端口。",
           "carrierGradeNat": "运营商让多个用户共用公网地址，外部无法连入。可申请公网 IP、改用 IPv6，或改在云服务器上托管。",
           "doubleNat": "网络里串了两台路由器。请在两台上都转发端口，或把光猫改为桥接。",
-          "portMapped": "路由器已自动转发节点端口。",
           "upnpUnavailable": "路由器不支持自动转发，请手动把节点端口（TCP 和 UDP）转发到本机。",
           "upnpFailed": "路由器拒绝了自动转发，请手动转发或更换端口。",
-          "probeReachable": "已从互联网连通全部节点端口。",
           "probeTimedOut": "连接超时：被路由器或防火墙拦截。",
           "probeRefused": "连接被拒绝：请检查端口转发的目标是否为本机。",
           "probeUnavailable": "检测服务暂时不可用，结果为推测。",
-          "noPublicAddress": "本机没有此类型的公网连接。",
           "ipv6FirewallUnknown": "很多路由器默认拦截 IPv6 入站。连不上时，请在路由器的 IPv6 防火墙中放行节点端口。",
           "tunActive": "本机正连着 VPN，会干扰检测。请断开后重试。",
           "firewallRuleMissing": "Windows 防火墙可能拦截节点，请点击“放行”。"
@@ -698,7 +694,7 @@
         "advanced": "高级选项",
         "noProtocol": "未开启协议",
         "upnp": "自动转发端口",
-        "upnpHint": "通过 UPnP 请求路由器转发节点端口。",
+        "upnpHint": "请求路由器转发节点端口，并放行 IPv6 防火墙。",
         "allowLan": "允许访问局域网",
         "allowLanHint": "连接的设备可访问本网络中的其他设备，但始终无法访问本机。",
         "blockBittorrent": "阻止 BitTorrent",

@@ -18,7 +18,7 @@ use voya_contracts::{
     SelfHostSelfTest,
 };
 use voya_net::{
-    portmap::PortMappingError,
+    portmap::{Ipv6Router, PortMappingError, PortMappingRequest},
     probe::{PortProbeOutcome, PortProbeResult, ProbeFamily, ReachabilityProbeError},
 };
 use voya_platform::firewall::FirewallRuleStatus;
@@ -28,7 +28,7 @@ use super::{process::core_executable, selftest::SKIPPED, SelfHostDeps};
 /// Routers drop a forward when its lease runs out; the watch loop renews it
 /// well before that.
 pub(super) const PORT_MAPPING_LEASE_SECONDS: u32 = 3600;
-/// Gateway discovery is bounded by the mapper itself; the SOAP calls after it
+/// Each protocol's own exchange is bounded by the mapper; UPnP's SOAP calls
 /// are not, and a router that accepts the connection and never answers would
 /// hold the check — and every check queued behind it — for good.
 const PORT_MAPPING_TIMEOUT: Duration = Duration::from_secs(15);
@@ -62,6 +62,8 @@ pub struct FamilyEvidence {
     pub public_address: Option<IpAddr>,
     pub probe: ProbeEvidence,
     pub port_mapping: Option<MappingEvidence>,
+    /// The router's IPv6 firewall granted an opening for every node port.
+    pub router_firewall_opened: bool,
     pub firewall_rule_missing: bool,
 }
 
@@ -103,10 +105,14 @@ pub fn classify_family(evidence: &FamilyEvidence) -> SelfHostFamilyReport {
     } else {
         reachability
     };
-    if evidence.family == SelfHostAddressFamily::Ipv6
+    if evidence.router_firewall_opened {
+        reasons.insert(SelfHostReasonCode::Ipv6FirewallOpened);
+    } else if evidence.family == SelfHostAddressFamily::Ipv6
         && nat == SelfHostNatKind::None
         && reachability != SelfHostReachability::Reachable
     {
+        // With the opening granted, what still blocks a peer is not the
+        // router's firewall, and the probe's own reason says so.
         reasons.insert(SelfHostReasonCode::Ipv6FirewallUnknown);
     }
     if evidence.firewall_rule_missing
@@ -306,7 +312,7 @@ pub(super) struct CheckInput {
 pub(super) struct CheckOutcome {
     pub(super) report: SelfHostEnvironmentReport,
     pub(super) mapped_ports: Vec<u16>,
-    /// Ports the router accepted this time that it did not hold before.
+    /// Ports the router forwarded this time that it did not hold before.
     pub(super) newly_mapped: Vec<u16>,
     pub(super) mapping_failed: bool,
 }
@@ -347,6 +353,7 @@ pub(super) async fn check_environment(deps: &SelfHostDeps, input: CheckInput) ->
             status: mapping.report.status,
             gateway_external_address: mapping.gateway_external_address,
         }),
+        router_firewall_opened: false,
         firewall_rule_missing,
     });
     let ipv6 = classify_family(&FamilyEvidence {
@@ -355,6 +362,11 @@ pub(super) async fn check_environment(deps: &SelfHostDeps, input: CheckInput) ->
         public_address: ipv6_probe.1,
         probe: ipv6_probe.0.clone(),
         port_mapping: None,
+        router_firewall_opened: !input.ports.is_empty()
+            && input
+                .ports
+                .iter()
+                .all(|port| mapping.ipv6_opened.contains(port)),
         firewall_rule_missing,
     });
     let probe_available = ![&ipv4_probe.0, &ipv6_probe.0]
@@ -367,6 +379,10 @@ pub(super) async fn check_environment(deps: &SelfHostDeps, input: CheckInput) ->
         .copied()
         .filter(|port| !input.previously_mapped.contains(port))
         .collect();
+    // What stopping the node has to give back: the forwards and the openings.
+    let mut held_ports = [&mapping.mapped_ports[..], &mapping.ipv6_opened[..]].concat();
+    held_ports.sort_unstable();
+    held_ports.dedup();
     CheckOutcome {
         report: SelfHostEnvironmentReport {
             checked_at_ms: unix_now_ms(),
@@ -391,7 +407,7 @@ pub(super) async fn check_environment(deps: &SelfHostDeps, input: CheckInput) ->
             self_test,
         },
         mapping_failed: mapping.report.status == SelfHostPortMappingStatus::Failed,
-        mapped_ports: mapping.mapped_ports,
+        mapped_ports: held_ports,
         newly_mapped,
     }
 }
@@ -399,7 +415,10 @@ pub(super) async fn check_environment(deps: &SelfHostDeps, input: CheckInput) ->
 struct MappingOutcome {
     report: SelfHostPortMappingReport,
     gateway_external_address: Option<IpAddr>,
+    /// Ports forwarded through the IPv4 NAT.
     mapped_ports: Vec<u16>,
+    /// Ports the router's IPv6 firewall lets through.
+    ipv6_opened: Vec<u16>,
 }
 
 async fn port_mapping(
@@ -414,16 +433,14 @@ async fn port_mapping(
         .copied()
         .filter(|port| !wanted || !input.ports.contains(port))
         .collect::<Vec<_>>();
-    if !stale.is_empty() {
-        match tokio::time::timeout(PORT_MAPPING_TIMEOUT, deps.port_mapper.unmap(stale)).await {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                tracing::debug!(%error, "could not remove stale router forwards");
-            }
-            Err(_) => tracing::debug!("timed out removing stale router forwards"),
-        }
+    if !stale.is_empty()
+        && tokio::time::timeout(PORT_MAPPING_TIMEOUT, deps.port_mapper.unmap(stale))
+            .await
+            .is_err()
+    {
+        tracing::debug!("timed out removing stale router forwards");
     }
-    let disabled = |status| MappingOutcome {
+    let disabled = |status, ipv6_opened| MappingOutcome {
         report: SelfHostPortMappingReport {
             status,
             gateway_external_address: None,
@@ -432,11 +449,12 @@ async fn port_mapping(
         },
         gateway_external_address: None,
         mapped_ports: Vec::new(),
+        ipv6_opened,
     };
     if !wanted || tunnel_active {
-        return disabled(SelfHostPortMappingStatus::Disabled);
+        return disabled(SelfHostPortMappingStatus::Disabled, Vec::new());
     }
-    let failed = |detail: String| MappingOutcome {
+    let failed = |detail: String, ipv6_opened| MappingOutcome {
         report: SelfHostPortMappingReport {
             status: SelfHostPortMappingStatus::Failed,
             gateway_external_address: None,
@@ -445,21 +463,35 @@ async fn port_mapping(
         },
         gateway_external_address: None,
         mapped_ports: Vec::new(),
+        ipv6_opened,
     };
-    let mapping = tokio::time::timeout(
-        PORT_MAPPING_TIMEOUT,
-        deps.port_mapper
-            .map(input.ports.clone(), PORT_MAPPING_LEASE_SECONDS),
-    )
-    .await;
+    let network = std::sync::Arc::clone(&deps.network);
+    let gateways = tokio::task::spawn_blocking(move || network.default_gateways())
+        .await
+        .unwrap_or_default();
+    let request = PortMappingRequest {
+        ports: input.ports.clone(),
+        lease_seconds: PORT_MAPPING_LEASE_SECONDS,
+        ipv4_gateway: gateways.ipv4,
+        ipv6_gateway: gateways.ipv6.map(|gateway| Ipv6Router {
+            address: gateway.address,
+            scope_id: gateway.scope_id,
+        }),
+    };
+    let mapping = tokio::time::timeout(PORT_MAPPING_TIMEOUT, deps.port_mapper.map(request)).await;
     let Ok(mapping) = mapping else {
-        return failed(format!(
-            "the router did not answer within {}s",
-            PORT_MAPPING_TIMEOUT.as_secs()
-        ));
+        return failed(
+            format!(
+                "the router did not answer within {}s",
+                PORT_MAPPING_TIMEOUT.as_secs()
+            ),
+            Vec::new(),
+        );
     };
-    match mapping {
+    let ipv6_opened = mapping.ipv6_opened;
+    match mapping.ipv4 {
         Ok(result) => {
+            tracing::debug!(method = ?result.method, mapped = ?result.mapped, "router forwards");
             let status = if result.mapped.is_empty() {
                 SelfHostPortMappingStatus::Failed
             } else {
@@ -484,10 +516,13 @@ async fn port_mapping(
                 },
                 gateway_external_address: result.external_address,
                 mapped_ports: result.mapped,
+                ipv6_opened,
             }
         }
-        Err(PortMappingError::NoGateway(_)) => disabled(SelfHostPortMappingStatus::NoGateway),
-        Err(error) => failed(error.to_string()),
+        Err(PortMappingError::NoGateway(_)) => {
+            disabled(SelfHostPortMappingStatus::NoGateway, ipv6_opened)
+        }
+        Err(error) => failed(error.to_string(), ipv6_opened),
     }
 }
 

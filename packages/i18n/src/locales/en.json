@@ -653,18 +653,14 @@
           "unknown": "Unknown"
         },
         "reasons": {
-          "publicAddressOnDevice": "This device has a public address, so others connect directly.",
           "behindNat": "This device is behind a router, which has to forward the node's ports.",
           "carrierGradeNat": "Your provider shares one public address among customers, so nothing outside can connect in. Ask for a public IP address, use IPv6, or host on a cloud server.",
           "doubleNat": "Two routers sit in a row. Forward the ports on both, or switch the modem to bridge mode.",
-          "portMapped": "The router forwards the node's ports automatically.",
           "upnpUnavailable": "The router cannot forward automatically. Forward the node's ports (TCP and UDP) to this device by hand.",
           "upnpFailed": "The router refused to forward automatically. Forward by hand, or choose other ports.",
-          "probeReachable": "Every node port was reached from the internet.",
           "probeTimedOut": "Timed out: a router or firewall blocks the connection.",
           "probeRefused": "Refused: check that the router forwards the ports to this device.",
           "probeUnavailable": "The test service is unavailable, so this is an estimate.",
-          "noPublicAddress": "This device has no internet connection of this type.",
           "ipv6FirewallUnknown": "Many routers block incoming IPv6 by default. If devices cannot connect, allow the node's ports in the router's IPv6 firewall.",
           "tunActive": "This device's own VPN is connected, which skews the check. Disconnect and try again.",
           "firewallRuleMissing": "Windows Firewall may block the node. Click Allow."
@@ -698,7 +694,7 @@
         "advanced": "Advanced",
         "noProtocol": "No protocol on",
         "upnp": "Forward ports automatically",
-        "upnpHint": "Asks the router to forward the node's ports (UPnP).",
+        "upnpHint": "Asks the router to forward the node's ports and open its IPv6 firewall.",
         "allowLan": "Allow access to the local network",
         "allowLanHint": "Connected devices can reach other devices on this network, but never this device.",
         "blockBittorrent": "Block BitTorrent",

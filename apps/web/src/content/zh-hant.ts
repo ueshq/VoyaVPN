@@ -164,7 +164,7 @@ export const zhHant: SiteCopy = {
               "從 `raw.githubusercontent.com` 下載分流規則檔案。",
               "連線後，經由你自己的伺服器查詢出口 IP 位址與國家或地區（`ipwho.is`、`icanhazip.com`、`ipify.org`、`ident.me`），用於顯示流量從哪裡出口以及伺服器是否支援 IPv6。",
               "透過受測伺服器請求 `www.google.com/generate_204` 來測量延遲。",
-              "桌面版在你執行自建節點的網路檢查時，會把所選連接埠號碼傳送到 `probe.voyavpn.app`，由它嘗試回連這些連接埠並傳回結果；同時向 `www.cloudflare.com/cdn-cgi/trace` 查詢你的公用 IP 位址。探測服務不保存任何內容，也不記錄日誌。",
+              "桌面版在自建節點開啟期間，會在節點啟動時、此後每十分鐘以及你手動檢測時執行網路檢查。每次檢查會把所選連接埠號碼傳送到 `probe.voyavpn.wangc.ai`，由它嘗試回連這些連接埠並傳回結果；同時向 `www.cloudflare.com/cdn-cgi/trace` 查詢你的公用 IP 位址。探測服務不保存任何內容，也不記錄日誌。",
             ],
           },
         ],
@@ -174,7 +174,7 @@ export const zhHant: SiteCopy = {
         body: [
           {
             list: [
-              "iPhone 與 iPad：沒有自建節點功能，因此應用程式從不存取 `probe.voyavpn.app`。",
+              "iPhone 與 iPad：沒有自建節點功能，因此應用程式從不存取 `probe.voyavpn.wangc.ai`。",
               "Android：QR 碼由 Google ML Kit 在裝置上辨識。Google 會收到該 SDK 的效能與使用指標，SDK 也可能聯絡 Google 取得更新與相容性資訊。",
               "如果你從應用程式商店安裝，商店會依其自己的隱私權政策處理下載與購買資料。",
             ],

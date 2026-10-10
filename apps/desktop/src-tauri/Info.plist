@@ -3,8 +3,9 @@
 <!-- Merged by Tauri into the app bundle's Info.plist. -->
 <plist version="1.0">
 <dict>
-  <!-- The self-hosted node asks the router to forward its ports (UPnP), which
-       discovers the router over local multicast; macOS 15 requires a reason. -->
+  <!-- The self-hosted node asks the router to forward its ports (PCP, NAT-PMP,
+       UPnP), which talks to the router and discovers it over local multicast;
+       macOS 15 requires a reason. -->
   <key>NSLocalNetworkUsageDescription</key>
   <string>VoyaVPN asks your router to forward the self-hosted node's ports so other devices can reach it.</string>
 </dict>

@@ -99,9 +99,11 @@ functional:
   besides the request itself.
 - It measures latency with a request to www.google.com/generate_204 through
   the server being tested.
-- On macOS only, when the user runs the self-hosted node's network check, it
-  sends the list of chosen port numbers to probe.voyavpn.app, which tries to
-  connect back to those ports and returns the result, and it asks
+- On macOS only, while the user has the self-hosted node turned on, its
+  network check runs when the node starts, every ten minutes after that, and
+  when the user asks for it. Each check sends the list of chosen port numbers
+  to probe.voyavpn.wangc.ai, which tries to connect back to those ports and
+  returns the result, and asks
   www.cloudflare.com/cdn-cgi/trace for the Mac's public IP address. The probe
   service stores nothing and keeps no logs.
 
@@ -118,7 +120,7 @@ The answers hold for the macOS and iOS builds. Two differences matter if a
 reviewer asks:
 
 - iOS has no self-hosted node, so it never listens for incoming connections
-  and never calls `probe.voyavpn.app`. iOS has no App Sandbox entitlements, so
+  and never calls `probe.voyavpn.wangc.ai`. iOS has no App Sandbox entitlements, so
   the `network.server` question does not arise there.
 - The Android build (not an App Store product) uses Google ML Kit for QR
   scanning, which sends usage metrics to Google; see

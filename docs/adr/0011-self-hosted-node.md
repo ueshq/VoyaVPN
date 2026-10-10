@@ -76,8 +76,18 @@ The page explains whether other devices can reach the node:
 - the public address and an external TCP probe from a stateless Cloudflare
   Worker (`apps/probe`) that only ever connects back to the caller's own
   address (`CF-Connecting-IP`), per address family;
-- UPnP IGD port mapping (`voya-net::portmap`), renewed by a watch loop, which
-  also reveals double and carrier-grade NAT through the router's WAN address;
+- a port forward from the router (`voya-net::portmap`), renewed by a watch
+  loop, which also reveals double and carrier-grade NAT through the router's
+  WAN address. Routers differ in what they speak, so PCP, NAT-PMP and UPnP IGD
+  are tried in that order: the first two are one datagram to the default
+  gateway (`voya-platform::netif::default_gateways`), UPnP is found by
+  multicast (2026-10-10 amendment; UPnP alone left Apple and other
+  NAT-PMP-only routers reported as needing a manual forward);
+- an opening in the router's IPv6 firewall, asked for with PCP over IPv6 for
+  the address this device reaches the internet from. UPnP IGDv2's
+  `WANIPv6FirewallControl` is not implemented: the routers that offer it
+  (miniupnpd, FRITZ!Box) answer PCP as well. A router that speaks neither is
+  told apart from one that filters nothing only by the probe;
 - the Windows Firewall rule for the core, added on request behind UAC
   (`voya-platform::firewall`);
 - a **self-test**: a throwaway probe core on this device imports the node's

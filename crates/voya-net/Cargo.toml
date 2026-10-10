@@ -11,6 +11,7 @@ test-utils = []
 
 [dependencies]
 futures-util.workspace = true
+getrandom = "0.4"
 igd-next = { version = "0.17", default-features = false, features = ["aio_tokio"] }
 percent-encoding.workspace = true
 # `gzip` lets subscription servers compress their base64 bodies; the response

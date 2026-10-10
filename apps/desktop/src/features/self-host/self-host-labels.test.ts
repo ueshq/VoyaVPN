@@ -45,7 +45,7 @@ describe("self-hosted node labels", () => {
     const reasons = actionableReasons({
       ipv4: {
         ...family("needsPortForward"),
-        reasons: ["behindNat", "portMapped", "upnpUnavailable", "firewallRuleMissing"],
+        reasons: ["behindNat", "portMapped", "upnpUnavailable", "firewallRuleMissing", "ipv6FirewallOpened"],
       },
       ipv6: {
         ...family("noConnectivity"),

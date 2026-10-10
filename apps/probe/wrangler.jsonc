@@ -7,7 +7,7 @@
   // workers.dev is unreachable from mainland China and must not be the
   // address clients use; the custom domain below is the only route.
   "workers_dev": false,
-  "routes": [{ "pattern": "probe.voyavpn.app", "custom_domain": true }],
+  "routes": [{ "pattern": "probe.voyavpn.wangc.ai", "custom_domain": true }],
   // Request URLs and caller addresses are not worth keeping.
   "observability": { "enabled": false },
   "ratelimits": [

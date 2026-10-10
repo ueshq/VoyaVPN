@@ -17,9 +17,9 @@ use thiserror::Error;
 
 use crate::download::{read_response_text_limited, LimitedBodyReadError};
 
-/// Placeholder until the service is deployed on its own domain; the shell
-/// overrides it with `VOYAVPN_PROBE_URL`.
-pub const DEFAULT_PROBE_BASE_URL: &str = "https://probe.voyavpn.app";
+/// The deployed probe Worker (`apps/probe`); the shell overrides it with
+/// `VOYAVPN_PROBE_URL` for a staging deployment.
+pub const DEFAULT_PROBE_BASE_URL: &str = "https://probe.voyavpn.wangc.ai";
 /// The service connects to at most this many ports per request.
 pub const MAX_PROBE_PORTS: usize = 4;
 const PROBE_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);

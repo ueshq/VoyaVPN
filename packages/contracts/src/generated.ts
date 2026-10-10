@@ -1078,7 +1078,11 @@ export type SelfHostConfig = {
 	/**  Lets peers reach this device's local network. Loopback stays closed. */
 	allowLanAccess: boolean,
 	blockBittorrent: boolean,
-	/**  Ask the router (UPnP IGD) to forward the node's ports. */
+	/**
+	 *  Ask the router to forward the node's ports and open its IPv6 firewall
+	 *  for them, over PCP, NAT-PMP or UPnP IGD. The name predates the first
+	 *  two.
+	 */
 	upnpEnabled: boolean,
 };
 
@@ -1138,7 +1142,7 @@ export type SelfHostPortMappingReport = {
 };
 
 export type SelfHostPortMappingStatus = "disabled" | 
-/**  No UPnP gateway answered on this network. */
+/**  No router answered PCP, NAT-PMP or UPnP on this network. */
 "noGateway" | "mapped" | "failed";
 
 /**  Why the node is not running as asked. The frontend translates the code. */
@@ -1171,7 +1175,9 @@ export type SelfHostReachability =
  *  One finding of the network check. Each code has its own explanation and
  *  suggestion in the locale files.
  */
-export type SelfHostReasonCode = "publicAddressOnDevice" | "behindNat" | "carrierGradeNat" | "doubleNat" | "portMapped" | "upnpUnavailable" | "upnpFailed" | "probeReachable" | "probeTimedOut" | "probeRefused" | "probeUnavailable" | "noPublicAddress" | "ipv6FirewallUnknown" | "tunActive" | "firewallRuleMissing";
+export type SelfHostReasonCode = "publicAddressOnDevice" | "behindNat" | "carrierGradeNat" | "doubleNat" | "portMapped" | "upnpUnavailable" | "upnpFailed" | "probeReachable" | "probeTimedOut" | "probeRefused" | "probeUnavailable" | "noPublicAddress" | "ipv6FirewallUnknown" | 
+/**  The router opened its IPv6 firewall for the node's ports (PCP). */
+"ipv6FirewallOpened" | "tunActive" | "firewallRuleMissing";
 
 export type SelfHostRuntime = {
 	status: SelfHostRuntimeStatus,

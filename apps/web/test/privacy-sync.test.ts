@@ -9,12 +9,12 @@ import { LOCALES } from "../src/routes";
 // name has to appear in the policy in every language.
 const notes = readFileSync(resolve(__dirname, "../../../docs/release/app-store-review-notes.md"), "utf8");
 const vpnAnswers = notes.split("## VPN questions")[1]?.split("\n## ")[0] ?? "";
-const hosts = [...new Set(vpnAnswers.match(/\b(?:[a-z0-9-]+\.)+(?:com|org|net|app|is|me)\b/g))];
+const hosts = [...new Set(vpnAnswers.match(/\b(?:[a-z0-9-]+\.)+(?:com|org|net|app|ai|is|me)\b/g))];
 
 // The mobile app states the same facts on its first-run screen (Guideline 5.4).
 // It may name fewer hosts than the answers, because a phone has no self-hosted
 // node, but never one the answers and the policy do not name.
-const hostPattern = /\b(?:[a-z0-9-]+\.)+(?:com|org|net|app|is|me)\b/g;
+const hostPattern = /\b(?:[a-z0-9-]+\.)+(?:com|org|net|app|ai|is|me)\b/g;
 const noticeHosts = (locale: string): string[] => {
   const path = resolve(__dirname, `../../../packages/i18n/src/locales/${locale}.json`);
   const messages = JSON.parse(readFileSync(path, "utf8")) as { mobile: { privacyNoticeRequests: string } };
@@ -31,7 +31,7 @@ describe("in-app data notice", () => {
 
 describe("privacy policy", () => {
   it("finds the hosts in the review notes", () => {
-    expect(hosts).toEqual(expect.arrayContaining(["raw.githubusercontent.com", "probe.voyavpn.app", "ipwho.is"]));
+    expect(hosts).toEqual(expect.arrayContaining(["raw.githubusercontent.com", "probe.voyavpn.wangc.ai", "ipwho.is"]));
   });
 
   it.each(LOCALES)("names every host from the VPN answers in %s", (locale) => {

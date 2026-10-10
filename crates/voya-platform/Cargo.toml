@@ -29,6 +29,9 @@ base64.workspace = true
 # TIFF and JPEG decoders into the app, for a clipboard read that never asks
 # for an image.
 arboard = { version = "3.6", default-features = false }
+# The default route's gateways, for the self-hosted node's NAT-PMP / PCP
+# requests. A phone hosts no node.
+netdev = { version = "0.46", default-features = false, features = ["gateway"] }
 xcap = "=0.9.8"
 
 [build-dependencies]

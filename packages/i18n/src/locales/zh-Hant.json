@@ -653,18 +653,14 @@
           "unknown": "未知"
         },
         "reasons": {
-          "publicAddressOnDevice": "本機有公網位址，可直接連線。",
           "behindNat": "本機在路由器後面，需要路由器轉送節點連接埠。",
           "carrierGradeNat": "電信業者讓多個使用者共用公網位址，外部無法連入。可申請公網 IP、改用 IPv6，或改在雲端伺服器上託管。",
           "doubleNat": "網路裡串了兩台路由器。請在兩台上都轉送連接埠，或把數據機改為橋接。",
-          "portMapped": "路由器已自動轉送節點連接埠。",
           "upnpUnavailable": "路由器不支援自動轉送，請手動把節點連接埠（TCP 和 UDP）轉送到本機。",
           "upnpFailed": "路由器拒絕了自動轉送，請手動轉送或更換連接埠。",
-          "probeReachable": "已從網際網路連通全部節點連接埠。",
           "probeTimedOut": "連線逾時：被路由器或防火牆攔截。",
           "probeRefused": "連線被拒絕：請檢查連接埠轉送的目標是否為本機。",
           "probeUnavailable": "檢測服務暫時無法使用，結果為推測。",
-          "noPublicAddress": "本機沒有此類型的公網連線。",
           "ipv6FirewallUnknown": "很多路由器預設攔截 IPv6 連入。連不上時，請在路由器的 IPv6 防火牆中放行節點連接埠。",
           "tunActive": "本機正連著 VPN，會干擾檢測。請中斷後重試。",
           "firewallRuleMissing": "Windows 防火牆可能攔截節點，請點選「放行」。"
@@ -698,7 +694,7 @@
         "advanced": "進階選項",
         "noProtocol": "未開啟協定",
         "upnp": "自動轉送連接埠",
-        "upnpHint": "透過 UPnP 請求路由器轉送節點連接埠。",
+        "upnpHint": "請求路由器轉送節點連接埠，並放行 IPv6 防火牆。",
         "allowLan": "允許存取區域網路",
         "allowLanHint": "連線的裝置可存取本網路中的其他裝置，但始終無法存取本機。",
         "blockBittorrent": "封鎖 BitTorrent",

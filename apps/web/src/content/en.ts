@@ -185,7 +185,7 @@ export const en: SiteCopy = {
               "It downloads routing rule files from `raw.githubusercontent.com`.",
               "After connecting, it looks up your exit IP address and country through your own server (`ipwho.is`, `icanhazip.com`, `ipify.org`, `ident.me`), to show where traffic exits and whether the server supports IPv6.",
               "It measures latency with a request to `www.google.com/generate_204` through the server being tested.",
-              "On desktop, when you run the self-hosted node's network check, it sends the chosen port numbers to `probe.voyavpn.app`, which tries to connect back to those ports and returns the result, and it asks `www.cloudflare.com/cdn-cgi/trace` for your public IP address. The probe service stores nothing and keeps no logs.",
+              "On desktop, while the self-hosted node is on, its network check runs when the node starts, every ten minutes after that, and whenever you run it yourself. Each check sends the chosen port numbers to `probe.voyavpn.wangc.ai`, which tries to connect back to those ports and returns the result, and asks `www.cloudflare.com/cdn-cgi/trace` for your public IP address. The probe service stores nothing and keeps no logs.",
             ],
           },
         ],
@@ -195,7 +195,7 @@ export const en: SiteCopy = {
         body: [
           {
             list: [
-              "iPhone and iPad: there is no self-hosted node, so the app never calls `probe.voyavpn.app`.",
+              "iPhone and iPad: there is no self-hosted node, so the app never calls `probe.voyavpn.wangc.ai`.",
               "Android: QR codes are decoded on the device by Google ML Kit. Google receives the SDK's performance and usage metrics, and the SDK may contact Google for updates and compatibility information.",
               "If you install from an app store, the store handles download and purchase data under its own privacy policy.",
             ],

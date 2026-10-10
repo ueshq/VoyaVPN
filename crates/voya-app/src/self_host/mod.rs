@@ -10,7 +10,7 @@
 //! - one supervised sing-box process on a dedicated runner, restarted with
 //!   backoff when it exits on its own;
 //! - a network check that learns the public addresses, asks the router for a
-//!   forward, and has the probe service connect back to the node's ports;
+//!   forward and an opening in its IPv6 firewall, and has the probe service connect back to the node's ports;
 //! - a watch loop that repeats the check, keeps the router lease alive, and
 //!   tells the user when the public address moves.
 
@@ -28,7 +28,7 @@ use voya_db::DbError;
 pub use voya_net::probe::DEFAULT_PROBE_BASE_URL;
 use voya_net::{
     clash::ClashError,
-    portmap::{PortMapper, UpnpPortMapper},
+    portmap::{PortMapper, RouterPortMapper},
     probe::{
         ProbeFamily, ReachabilityProbeClient, ReachabilityProbeError, ReachabilityProbeResponse,
     },
@@ -36,7 +36,7 @@ use voya_net::{
 use voya_platform::{
     coreinfo::{CoreInfoError, TargetOs},
     firewall::{FirewallError, FirewallService},
-    netif::{self, InterfaceAddress},
+    netif::{self, DefaultGateways, InterfaceAddress},
     paths::AppPaths,
     process::{ProcessError, ProcessRunner},
 };
@@ -99,15 +99,17 @@ pub fn probe_service(base_url: &str) -> Arc<dyn ReachabilityProbe> {
     Arc::new(ReachabilityProbeClient::new(base_url))
 }
 
-/// The home router, asked over UPnP IGD.
+/// The home router, asked over PCP, NAT-PMP or UPnP IGD, whichever it speaks.
 #[must_use]
 pub fn router_port_mapper() -> Arc<dyn PortMapper> {
-    Arc::new(UpnpPortMapper)
+    Arc::new(RouterPortMapper::default())
 }
 
 /// This machine's interfaces and ports. Every call blocks briefly.
 pub trait LocalNetwork: Send + Sync {
     fn interface_addresses(&self) -> Vec<InterfaceAddress>;
+    /// The routers on the default routes, which NAT-PMP and PCP are sent to.
+    fn default_gateways(&self) -> DefaultGateways;
     fn port_available(&self, port: u16) -> bool;
 }
 
@@ -120,6 +122,10 @@ impl LocalNetwork for SystemLocalNetwork {
             tracing::warn!(%error, "failed to list network interfaces");
             Vec::new()
         })
+    }
+
+    fn default_gateways(&self) -> DefaultGateways {
+        netif::default_gateways()
     }
 
     fn port_available(&self, port: u16) -> bool {

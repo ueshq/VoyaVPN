@@ -1,25 +1,61 @@
-//! Asks the home router to forward the self-hosted node's ports (UPnP IGD).
+//! Asks the home router to let the self-hosted node's ports through.
+//!
+//! IPv4 needs a forward through the router's NAT. Three protocols ask for
+//! one, and routers differ in which they speak, so they are tried in turn:
+//! PCP, its predecessor NAT-PMP (both one UDP datagram to the default
+//! gateway), then UPnP IGD (multicast discovery and SOAP). IPv6 needs no
+//! translation, but a router's firewall drops unsolicited inbound connections;
+//! PCP over IPv6 asks it for a pinhole to this device's address.
 //!
 //! Only the router in front of this device can be asked: a carrier-grade NAT
-//! further out never answers UPnP, which is what the environment check reports
-//! when the router's own WAN address is not the public one.
+//! further out answers none of them, which is what the environment check
+//! reports when the router's own WAN address is not the public one.
 
 use std::{
     io,
-    net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket},
-    time::Duration,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6, UdpSocket},
+    sync::{Arc, Mutex, PoisonError},
 };
 
 use futures_util::future::BoxFuture;
-use igd_next::{aio::tokio::search_gateway, PortMappingProtocol, SearchOptions};
 use thiserror::Error;
 
-const SEARCH_TIMEOUT: Duration = Duration::from_secs(3);
-const SINGLE_SEARCH_TIMEOUT: Duration = Duration::from_secs(2);
-pub const PORT_MAPPING_DESCRIPTION: &str = "VoyaVPN self-hosted node";
+mod pcp;
+mod upnp;
 
+pub const PORT_MAPPING_DESCRIPTION: &str = "VoyaVPN self-hosted node";
+/// Never dialled: connecting a UDP socket toward it only asks the OS which
+/// source address it would use for the internet.
+const PUBLIC_IPV6_DESTINATION: Ipv6Addr = Ipv6Addr::new(0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888);
+
+/// An IPv6 router. A link-local address needs the interface it is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Ipv6Router {
+    pub address: Ipv6Addr,
+    pub scope_id: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PortMappingRequest {
+    pub ports: Vec<u16>,
+    pub lease_seconds: u32,
+    /// The default routes' gateways. NAT-PMP and PCP have no discovery step;
+    /// without a gateway only UPnP is tried.
+    pub ipv4_gateway: Option<Ipv4Addr>,
+    pub ipv6_gateway: Option<Ipv6Router>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortMappingMethod {
+    Pcp,
+    NatPmp,
+    Upnp,
+}
+
+/// The forwards a router granted through its IPv4 NAT.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PortMappingResult {
+pub struct Ipv4PortMapping {
+    pub method: PortMappingMethod,
     /// The router's own WAN address, if it reported one.
     pub external_address: Option<IpAddr>,
     /// Ports whose TCP forward was accepted. UDP is added best-effort.
@@ -28,9 +64,18 @@ pub struct PortMappingResult {
     pub refused: Vec<(u16, String)>,
 }
 
+#[derive(Debug)]
+pub struct PortMappingResult {
+    pub ipv4: Result<Ipv4PortMapping, PortMappingError>,
+    /// Ports the router's IPv6 firewall now lets through to this device.
+    /// Empty when the router speaks no PCP over IPv6, which also covers the
+    /// routers that filter nothing.
+    pub ipv6_opened: Vec<u16>,
+}
+
 #[derive(Debug, Error)]
 pub enum PortMappingError {
-    #[error("no UPnP gateway answered: {0}")]
+    #[error("no router answered PCP, NAT-PMP or UPnP: {0}")]
     NoGateway(String),
     #[error("could not find this device's address toward the gateway: {0}")]
     LocalAddress(io::Error),
@@ -41,150 +86,211 @@ pub enum PortMappingError {
 /// Router port forwarding, behind a trait so the orchestration can be tested
 /// without a router.
 pub trait PortMapper: Send + Sync {
-    fn map(
-        &self,
-        ports: Vec<u16>,
-        lease_seconds: u32,
-    ) -> BoxFuture<'static, Result<PortMappingResult, PortMappingError>>;
-    fn unmap(&self, ports: Vec<u16>) -> BoxFuture<'static, Result<(), PortMappingError>>;
+    /// Adds or renews the forwards for `request.ports`.
+    fn map(&self, request: PortMappingRequest) -> BoxFuture<'static, PortMappingResult>;
+    /// Gives back what `map` obtained for `ports`. Best effort: a forward the
+    /// router keeps runs out with its lease.
+    fn unmap(&self, ports: Vec<u16>) -> BoxFuture<'static, ()>;
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-pub struct UpnpPortMapper;
+/// One forward a router granted, with what giving it back takes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Lease {
+    Pcp {
+        server: SocketAddr,
+        /// This device's address the forward leads to; an IPv6 one marks a
+        /// firewall pinhole.
+        client: IpAddr,
+        port: u16,
+        nonce: pcp::Nonce,
+    },
+    NatPmp {
+        server: SocketAddr,
+        port: u16,
+    },
+    Upnp {
+        port: u16,
+    },
+}
 
-impl PortMapper for UpnpPortMapper {
-    fn map(
-        &self,
-        ports: Vec<u16>,
-        lease_seconds: u32,
-    ) -> BoxFuture<'static, Result<PortMappingResult, PortMappingError>> {
+impl Lease {
+    fn port(&self) -> u16 {
+        match *self {
+            Self::Pcp { port, .. } | Self::NatPmp { port, .. } | Self::Upnp { port } => port,
+        }
+    }
+
+    fn is_ipv6(&self) -> bool {
+        matches!(self, Self::Pcp { client, .. } if client.is_ipv6())
+    }
+}
+
+type Leases = Arc<Mutex<Vec<Lease>>>;
+
+/// The production mapper. It remembers what each router granted, so a renewal
+/// presents the nonce PCP expects and `unmap` asks the protocol that mapped.
+#[derive(Debug, Clone, Default)]
+pub struct RouterPortMapper {
+    leases: Leases,
+}
+
+impl PortMapper for RouterPortMapper {
+    fn map(&self, request: PortMappingRequest) -> BoxFuture<'static, PortMappingResult> {
+        let leases = Arc::clone(&self.leases);
         Box::pin(async move {
-            let gateway = search_gateway(search_options())
-                .await
-                .map_err(|error| PortMappingError::NoGateway(error.to_string()))?;
-            let local = local_address_toward(gateway.addr)?;
-            let external_address = gateway.get_external_ip().await.ok();
-            let mut result = PortMappingResult {
-                external_address,
-                mapped: Vec::new(),
-                refused: Vec::new(),
+            let (ipv4, ipv6_opened) = tokio::join!(
+                map_ipv4(&leases, &request),
+                open_ipv6(&leases, &request, pcp::SERVER_PORT),
+            );
+            PortMappingResult { ipv4, ipv6_opened }
+        })
+    }
+
+    fn unmap(&self, ports: Vec<u16>) -> BoxFuture<'static, ()> {
+        let leases = Arc::clone(&self.leases);
+        Box::pin(async move {
+            let released = {
+                let mut leases = leases.lock().unwrap_or_else(PoisonError::into_inner);
+                let (released, kept) = leases
+                    .drain(..)
+                    .partition::<Vec<_>, _>(|lease| ports.contains(&lease.port()));
+                *leases = kept;
+                released
             };
-            for port in ports {
-                let target = SocketAddr::new(IpAddr::V4(local), port);
-                match gateway
-                    .add_port(
-                        PortMappingProtocol::TCP,
-                        port,
-                        target,
-                        lease_seconds,
-                        PORT_MAPPING_DESCRIPTION,
-                    )
-                    .await
-                {
-                    Ok(()) => {
-                        result.mapped.push(port);
-                        if let Err(error) = gateway
-                            .add_port(
-                                PortMappingProtocol::UDP,
-                                port,
-                                target,
-                                lease_seconds,
-                                PORT_MAPPING_DESCRIPTION,
-                            )
-                            .await
-                        {
-                            tracing::debug!(port, %error, "router refused the UDP forward");
-                        }
-                    }
-                    Err(error) => result.refused.push((port, error.to_string())),
+            let mut upnp_ports = Vec::new();
+            for lease in released {
+                match lease {
+                    Lease::Upnp { port } => upnp_ports.push(port),
+                    direct => pcp::release(&direct).await,
                 }
             }
-            Ok(result)
-        })
-    }
-
-    fn unmap(&self, ports: Vec<u16>) -> BoxFuture<'static, Result<(), PortMappingError>> {
-        Box::pin(async move {
-            let gateway = search_gateway(search_options())
-                .await
-                .map_err(|error| PortMappingError::NoGateway(error.to_string()))?;
-            for port in ports {
-                for protocol in [PortMappingProtocol::TCP, PortMappingProtocol::UDP] {
-                    if let Err(error) = gateway.remove_port(protocol, port).await {
-                        tracing::debug!(port, %error, "router kept a forward we asked to remove");
-                    }
-                }
+            if !upnp_ports.is_empty() {
+                upnp::unmap(&upnp_ports).await;
             }
-            Ok(())
         })
     }
 }
 
-fn search_options() -> SearchOptions {
-    SearchOptions {
-        timeout: Some(SEARCH_TIMEOUT),
-        single_search_timeout: Some(SINGLE_SEARCH_TIMEOUT),
-        ..SearchOptions::default()
+async fn map_ipv4(
+    leases: &Leases,
+    request: &PortMappingRequest,
+) -> Result<Ipv4PortMapping, PortMappingError> {
+    if let Some(gateway) = request.ipv4_gateway {
+        let server = SocketAddr::from((gateway, pcp::SERVER_PORT));
+        if let Some(mapping) = map_direct(leases, server, request).await {
+            return Ok(mapping);
+        }
+    }
+    let (mapping, granted) = upnp::map(&request.ports, request.lease_seconds).await?;
+    store(leases, false, &request.ports, granted);
+    Ok(mapping)
+}
+
+/// PCP, then NAT-PMP, at `server`. `None` when it speaks neither.
+async fn map_direct(
+    leases: &Leases,
+    server: SocketAddr,
+    request: &PortMappingRequest,
+) -> Option<Ipv4PortMapping> {
+    let local = SocketAddr::from((Ipv4Addr::UNSPECIFIED, 0));
+    let outcome = pcp::pcp_map(
+        server,
+        local,
+        &request.ports,
+        request.lease_seconds,
+        |client, port| nonce_for(leases, server, client, port),
+    )
+    .await;
+    let (mapping, granted) = match outcome {
+        pcp::PcpOutcome::Answered { mapping, leases } => (mapping, leases),
+        // Some NAT-PMP routers drop a version they do not know instead of
+        // rejecting it, so silence is no proof either.
+        pcp::PcpOutcome::UnsupportedVersion | pcp::PcpOutcome::NoAnswer => {
+            pcp::nat_pmp_map(server, &request.ports, request.lease_seconds).await?
+        }
+    };
+    store(leases, false, &request.ports, granted);
+    Some(mapping)
+}
+
+/// Asks the IPv6 router's firewall for pinholes to this device. `server_port`
+/// is a parameter for the tests' sake.
+async fn open_ipv6(leases: &Leases, request: &PortMappingRequest, server_port: u16) -> Vec<u16> {
+    let Some(router) = request.ipv6_gateway else {
+        return Vec::new();
+    };
+    let Some(client) = global_ipv6_source() else {
+        return Vec::new();
+    };
+    let scope_id = if router.address.is_unicast_link_local() {
+        router.scope_id
+    } else {
+        0
+    };
+    let server = SocketAddr::V6(SocketAddrV6::new(router.address, server_port, 0, scope_id));
+    let local = SocketAddr::V6(SocketAddrV6::new(client, 0, 0, 0));
+    let outcome = pcp::pcp_map(
+        server,
+        local,
+        &request.ports,
+        request.lease_seconds,
+        |client, port| nonce_for(leases, server, client, port),
+    )
+    .await;
+    match outcome {
+        pcp::PcpOutcome::Answered {
+            mapping,
+            leases: granted,
+        } => {
+            store(leases, true, &request.ports, granted);
+            mapping.mapped
+        }
+        pcp::PcpOutcome::UnsupportedVersion | pcp::PcpOutcome::NoAnswer => Vec::new(),
     }
 }
 
-/// The local IPv4 address the OS routes toward `gateway`: the address the
-/// router has to forward to. Connecting a UDP socket sends nothing.
-fn local_address_toward(gateway: SocketAddr) -> Result<Ipv4Addr, PortMappingError> {
-    if !gateway.is_ipv4() {
-        return Err(PortMappingError::UnsupportedGateway(gateway.ip()));
+/// The global IPv6 address this device reaches the internet from — the one a
+/// peer's connection arrives at — or `None` without IPv6 connectivity.
+fn global_ipv6_source() -> Option<Ipv6Addr> {
+    let socket = UdpSocket::bind((Ipv6Addr::UNSPECIFIED, 0)).ok()?;
+    socket.connect((PUBLIC_IPV6_DESTINATION, 53)).ok()?;
+    match socket.local_addr().ok()?.ip() {
+        // 2000::/3, the global unicast space.
+        IpAddr::V6(address) if address.segments()[0] & 0xe000 == 0x2000 => Some(address),
+        _ => None,
     }
-    let socket =
-        UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).map_err(PortMappingError::LocalAddress)?;
-    socket
-        .connect(gateway)
-        .map_err(PortMappingError::LocalAddress)?;
-    match socket
-        .local_addr()
-        .map_err(PortMappingError::LocalAddress)?
-        .ip()
-    {
-        IpAddr::V4(address) => Ok(address),
-        other => Err(PortMappingError::UnsupportedGateway(other)),
-    }
+}
+
+/// The nonce of the lease already held for this forward, or a fresh one.
+fn nonce_for(leases: &Leases, server: SocketAddr, client: IpAddr, port: u16) -> pcp::Nonce {
+    let held = leases
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .iter()
+        .find_map(|lease| match *lease {
+            Lease::Pcp {
+                server: held_server,
+                client: held_client,
+                port: held_port,
+                nonce,
+            } if (held_server, held_client, held_port) == (server, client, port) => Some(nonce),
+            _ => None,
+        });
+    held.unwrap_or_else(|| {
+        let mut nonce = pcp::Nonce::default();
+        if let Err(error) = getrandom::fill(&mut nonce) {
+            tracing::warn!(%error, "no random bytes for a PCP nonce");
+        }
+        nonce
+    })
+}
+
+/// Replaces what was held for `ports` in one address family with `granted`.
+fn store(leases: &Leases, ipv6: bool, ports: &[u16], granted: Vec<Lease>) {
+    let mut leases = leases.lock().unwrap_or_else(PoisonError::into_inner);
+    leases.retain(|lease| lease.is_ipv6() != ipv6 || !ports.contains(&lease.port()));
+    leases.extend(granted);
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_local_address_toward_a_gateway_is_ipv4() {
-        let local = local_address_toward(SocketAddr::from((Ipv4Addr::LOCALHOST, 1900)))
-            .expect("loopback route");
-        assert_eq!(local, Ipv4Addr::LOCALHOST);
-    }
-
-    /// Opt-in and read-only: `VOYA_LIVE_NETWORK=1` looks for the router and
-    /// asks its WAN address, without adding any forward.
-    #[tokio::test]
-    async fn live_gateway_discovery_is_read_only() {
-        if std::env::var_os("VOYA_LIVE_NETWORK").is_none() {
-            println!("live UPnP discovery skipped: set VOYA_LIVE_NETWORK=1");
-            return;
-        }
-        match search_gateway(search_options()).await {
-            Ok(gateway) => {
-                let local = local_address_toward(gateway.addr).expect("local address");
-                println!(
-                    "gateway {} answers for {local}; WAN address {:?}",
-                    gateway.addr,
-                    gateway.get_external_ip().await
-                );
-            }
-            Err(error) => println!("no UPnP gateway on this network: {error}"),
-        }
-    }
-
-    #[test]
-    fn an_ipv6_gateway_is_rejected() {
-        let error = local_address_toward("[::1]:1900".parse().expect("address"))
-            .expect_err("IPv6 gateways are not mapped");
-        assert!(matches!(error, PortMappingError::UnsupportedGateway(_)));
-    }
-}
+mod tests;

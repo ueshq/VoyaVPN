@@ -34,7 +34,9 @@ pub struct SelfHostConfig {
     /// Lets peers reach this device's local network. Loopback stays closed.
     pub allow_lan_access: bool,
     pub block_bittorrent: bool,
-    /// Ask the router (UPnP IGD) to forward the node's ports.
+    /// Ask the router to forward the node's ports and open its IPv6 firewall
+    /// for them, over PCP, NAT-PMP or UPnP IGD. The name predates the first
+    /// two.
     pub upnp_enabled: bool,
 }
 
@@ -265,6 +267,8 @@ pub enum SelfHostReasonCode {
     ProbeUnavailable,
     NoPublicAddress,
     Ipv6FirewallUnknown,
+    /// The router opened its IPv6 firewall for the node's ports (PCP).
+    Ipv6FirewallOpened,
     TunActive,
     FirewallRuleMissing,
 }
@@ -285,7 +289,7 @@ pub struct SelfHostFamilyReport {
 #[serde(rename_all = "camelCase")]
 pub enum SelfHostPortMappingStatus {
     Disabled,
-    /// No UPnP gateway answered on this network.
+    /// No router answered PCP, NAT-PMP or UPnP on this network.
     NoGateway,
     Mapped,
     Failed,
