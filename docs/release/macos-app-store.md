@@ -30,7 +30,8 @@ built with the host's macOS 26 SDK, which sets its deployment target to 26.0.
 | Notarization | none (App Store Connect does not use notarytool) | Developer ID only |
 
 In every lane the PacketTunnel is compiled for its container's
-`LSMinimumSystemVersion` (raised to 11.0 on Apple Silicon) and declares the
+`LSMinimumSystemVersion` (12.3 on Intel, 13.3 on Apple Silicon, 26.0 in the
+store package) and declares the
 same value in its own `Info.plist` (ITMS-90360). Its folder is named after its
 executable, `VoyaPacketTunnel` (ITMS-90362).
 

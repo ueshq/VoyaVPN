@@ -195,6 +195,7 @@ describe("Tauri CLI", () => {
       sourceEnv: {},
       ensureSeed,
       writeCoreOverlay,
+      writeArm64MinimumOverlay: () => "/repo/target/release-config/tauri.macos-arm64.json",
     });
 
     expect(ensureSeed).toHaveBeenCalledWith({
@@ -211,10 +212,54 @@ describe("Tauri CLI", () => {
     expect(targeted.commandArgs).toEqual([
       "build",
       "--config",
+      "/repo/target/release-config/tauri.macos-arm64.json",
+      "--config",
       "/repo/target/release-config/tauri.core.json",
       "--target",
       "aarch64-apple-darwin",
     ]);
+  });
+
+  it("raises the minimum macOS of an Apple Silicon package only", async () => {
+    const writeArm64MinimumOverlay = vi.fn(() => "/repo/arm64.json");
+    const build = (args, options) =>
+      prepareTauriInvocation(args, {
+        repoRoot: "/repo",
+        hostPlatform: "darwin",
+        hostArch: "arm64",
+        sourceEnv: {},
+        ensureSeed: vi.fn(),
+        writeCoreOverlay: () => null,
+        writeArm64MinimumOverlay,
+        ...options,
+      });
+
+    // The host decides when no target is named.
+    expect((await build(["build"])).commandArgs).toEqual(["build", "--config", "/repo/arm64.json"]);
+    expect(writeArm64MinimumOverlay).toHaveBeenCalledWith({ repoRoot: "/repo" });
+    expect((await build(["build"], { hostArch: "x64" })).commandArgs).toEqual(["build"]);
+
+    // A named target decides over the host, in both directions.
+    const intel = ["build", "--target", "x86_64-apple-darwin"];
+    expect((await build(intel)).commandArgs).toEqual(intel);
+    const silicon = ["build", "--target=aarch64-apple-darwin"];
+    expect((await build(silicon, { hostArch: "x64" })).commandArgs).toEqual([
+      "build",
+      "--config",
+      "/repo/arm64.json",
+      "--target=aarch64-apple-darwin",
+    ]);
+    const universal = ["build", "--target", "universal-apple-darwin"];
+    expect((await build(universal)).commandArgs).toEqual(universal);
+
+    // Not for another platform, another operation, or the store package.
+    expect((await build(["build"], { hostPlatform: "linux" })).commandArgs).toEqual(["build"]);
+    expect((await build(["dev"])).commandArgs).toEqual(["dev"]);
+    const store = await build(["build"], {
+      sourceEnv: { VOYAVPN_MAC_APP_STORE: "1" },
+      writeAppStoreOverlay: () => ({ overlayPath: "/repo/store.json", buildNumber: "1" }),
+    });
+    expect(store.commandArgs).toEqual(["build", "--config", "/repo/store.json", "--features", "mac-app-store"]);
   });
 
   it("maps Rust target triples to core seed platforms", () => {

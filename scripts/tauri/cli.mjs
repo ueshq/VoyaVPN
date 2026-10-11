@@ -7,6 +7,7 @@ import { requestedSingBoxSeedOrigin } from "../core/sing-box-installer.mjs";
 import { isCliEntrypoint, repoRootFromScript } from "../lib/common.mjs";
 import { writeOptionalCoreSeedOverlay } from "./core-seeds.mjs";
 import { macAppStoreFeature, requestedMacAppStoreBuild, writeMacAppStoreOverlay } from "./mac-app-store-config.mjs";
+import { writeAppleSiliconMinimumOverlay } from "./macos-minimum.mjs";
 import { normalizeCiEnv, requestedStableUpdaterConfig, writeStableUpdaterOverlay } from "./stable-updater-config.mjs";
 
 const rustTargetPlatforms = {
@@ -69,7 +70,9 @@ export async function prepareTauriInvocation(
     writeCoreOverlay = writeOptionalCoreSeedOverlay,
     writeUpdaterOverlay = writeStableUpdaterOverlay,
     writeAppStoreOverlay = writeMacAppStoreOverlay,
+    writeArm64MinimumOverlay = writeAppleSiliconMinimumOverlay,
     hostPlatform = process.platform,
+    hostArch = process.arch,
   } = {},
 ) {
   const desktopRoot = resolve(repoRoot, "apps", "desktop");
@@ -116,6 +119,13 @@ export async function prepareTauriInvocation(
     const overlayPath = writeUpdaterOverlay({ repoRoot, env });
     console.log(`Using stable Tauri updater config overlay: ${overlayPath}`);
     tauriArgs.splice(1, 0, "--config", overlayPath);
+  }
+
+  // The store overlay declares its own, higher floor. A universal target has
+  // no single architecture and keeps the Intel floor of `tauri.conf.json`.
+  const targetArch = seedTarget.platform ? seedTarget.arch : hostArch;
+  if (operation === "build" && targetPlatform === "darwin" && targetArch === "arm64" && !macAppStore) {
+    tauriArgs.splice(1, 0, "--config", writeArm64MinimumOverlay({ repoRoot }));
   }
 
   if (macAppStore) {

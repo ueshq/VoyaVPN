@@ -57,7 +57,12 @@ native windows tunnel install`, `vp run check mobile ios smoke --full`). Add or 
 a command there, not in `package.json`; `vp run build` with no further words
 lists the group. `vp build`, `vp dev`, `vp check` and `vp test` without `run`
 are Vite+ built-ins and a different thing: `vp build` is the desktop renderer
-build, `vp run build …` is a packaging command. What a built-in already does
+build, `vp run build …` is a packaging command. Under `tauri build` for an
+Intel Mac that renderer build targets `safari15.4` and fails on syntax that
+WebKit cannot parse (the `TAURI_ENV_*` check in `apps/desktop/vite.config.ts`);
+everywhere else, a plain `vp build` included, it keeps Vite's default target.
+The packages declare the matching floors: macOS 12.3 on Intel
+(`tauri.conf.json`), 13.3 on Apple Silicon (`scripts/tauri/macos-minimum.mjs`). What a built-in already does
 has no command or package script beside it: it is `vp test`, `vp check`,
 `vp preview`, not a `test` script in each package.
 

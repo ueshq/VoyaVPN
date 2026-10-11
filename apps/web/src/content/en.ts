@@ -73,7 +73,7 @@ export const en: SiteCopy = {
     protocolsBody: "VoyaVPN is built on sing-box. Paste a link in any of these formats and it is ready to connect.",
     downloadHeadline: "Download",
     downloadBody:
-      "VoyaVPN for macOS is a direct download and needs macOS 11 or later. The App Store version and the other platforms are on the way; links appear here as each one goes live.",
+      "VoyaVPN for macOS is a direct download and needs macOS 13.3 or later on Apple Silicon, or macOS 12.3 or later on an Intel Mac. The App Store version and the other platforms are on the way; links appear here as each one goes live.",
     comingSoon: "Coming soon",
     getIt: "Get it",
     downloadVariants: { appleSilicon: "Apple Silicon", intel: "Intel" },

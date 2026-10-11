@@ -63,7 +63,7 @@ export const zhHans: SiteCopy = {
     protocolsBody: "VoyaVPN 基于 sing-box。粘贴以下任意格式的链接即可连接。",
     downloadHeadline: "下载",
     downloadBody:
-      "macOS 版现已提供直接下载，需要 macOS 11 或更高版本。App Store 版本及其他平台即将推出，上线后下载链接会显示在这里。",
+      "macOS 版现已提供直接下载，Apple 芯片 Mac 需要 macOS 13.3 或更高版本，Intel Mac 需要 macOS 12.3 或更高版本。App Store 版本及其他平台即将推出，上线后下载链接会显示在这里。",
     comingSoon: "即将推出",
     getIt: "获取",
     downloadVariants: { appleSilicon: "Apple 芯片", intel: "Intel 芯片" },

@@ -47,6 +47,59 @@ function startupGroup(name: string) {
   return (id: string, graph: ModuleGraph) => (isStartupModule(id, graph) ? name : null);
 }
 
+// Intel Macs stop at systems older than Apple Silicon ones do, and macOS 12's
+// WKWebView is Safari 15-level: it cannot parse the class static blocks the
+// default target (Safari 16.4) keeps, so the entry module fails and the window
+// stays blank. Tauri exports these two to `beforeBuildCommand`, following
+// `--target` or else the host. A plain `vp build` has neither and keeps the
+// default, which is what the bundle budgets measure and what every other
+// platform ships. Each target is the WebKit of that package's
+// `minimumSystemVersion` (scripts/tauri/macos-minimum.mjs): 15.4 is macOS 12.3,
+// the first with the cascade layers Tailwind's output depends on.
+const intelMac = process.env.TAURI_ENV_PLATFORM === "darwin" && process.env.TAURI_ENV_ARCH === "x86_64";
+const intelMacTarget = "safari15.4";
+
+type SyntaxNode = { type?: string; regex?: { pattern: string; flags: string } };
+
+/** Names what `node` or anything under it uses that Safari 15.4 cannot parse. */
+function syntaxNewerThanIntelMac(node: unknown, found = new Set<string>()): Set<string> {
+  if (Array.isArray(node)) {
+    for (const child of node) syntaxNewerThanIntelMac(child, found);
+  } else if (node !== null && typeof node === "object") {
+    const { type, regex } = node as SyntaxNode;
+    if (type === "StaticBlock") found.add("a class static block");
+    if (regex && /\(\?<[=!]/.test(regex.pattern)) found.add(`a lookbehind in /${regex.pattern}/`);
+    if (regex?.flags.includes("v")) found.add(`the v flag on /${regex.pattern}/`);
+    for (const child of Object.values(node)) syntaxNewerThanIntelMac(child, found);
+  }
+  return found;
+}
+
+/**
+ * Fails an Intel Mac build whose output the oldest supported WKWebView would
+ * reject. The target lowers what it can; a dependency can still ship syntax
+ * nothing lowers (a regex lookbehind), and no build machine runs a WebKit old
+ * enough to show the blank window that results.
+ */
+function intelMacSyntaxGate() {
+  return {
+    name: "voya:intel-mac-syntax",
+    generateBundle(
+      this: { parse(code: string): unknown; error(message: string): never },
+      _options: unknown,
+      bundle: Record<string, { type: string; code?: string }>,
+    ) {
+      for (const [fileName, chunk] of Object.entries(bundle)) {
+        if (chunk.type !== "chunk" || chunk.code === undefined) continue;
+        const found = [...syntaxNewerThanIntelMac(this.parse(chunk.code))];
+        if (found.length > 0) {
+          this.error(`${fileName} uses ${found.join(", ")}, which ${intelMacTarget} cannot parse.`);
+        }
+      }
+    },
+  };
+}
+
 export default defineConfig({
   clearScreen: false,
   // React Compiler memoizes components and hooks, so a screen fed by a
@@ -61,6 +114,7 @@ export default defineConfig({
     react(),
     ...(process.env.VITEST ? [] : [babel({ presets: [reactCompilerPreset()] })]),
     tailwindcss(),
+    ...(intelMac ? [intelMacSyntaxGate()] : []),
   ]),
   resolve: {
     alias: {
@@ -73,6 +127,7 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
+    ...(intelMac ? { target: intelMacTarget } : {}),
     // Flags stay separate files: inlined, all ~250 would ride in the chunk that
     // imports them (node-country-icon.tsx) although a screen shows a handful.
     assetsInlineLimit: (filePath) => (/[\\/]flag-icons[\\/]flags[\\/]/.test(filePath) ? false : undefined),
