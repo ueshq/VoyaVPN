@@ -560,7 +560,8 @@
       "trafficModeUnavailable": "暫時無法讀取目前模式",
       "reorderFailed": "調整規則順序失敗",
       "loadingRules": "正在載入規則",
-      "editNamedRule": "編輯「{{name}」"
+      "editNamedRule": "編輯「{{name}」",
+      "currentPolicy": "目前策略"
     },
     "subscriptions": {
       "additionalUrl": "備用地址",
@@ -1200,10 +1201,11 @@
     "connectMac": "⌘⇧C"
   },
   "mobile": {
+    "currentNode": "目前節點",
+    "latency": "延遲",
+    "latencyUnit": "ms",
     "add": "新增節點或訂閱",
     "connection": "連線與 DNS",
-    "trafficModeRule": "按規則分流",
-    "trafficModeGlobal": "全域代理",
     "subscriptions": "管理訂閱",
     "subscription": "訂閱詳情",
     "name": "名稱",
@@ -1307,7 +1309,8 @@
     "editorTransport": "傳輸",
     "editorTls": "安全",
     "editorTransportNone": "無",
-    "openLogs": "開啟日誌"
+    "openLogs": "開啟日誌",
+    "noMatchingNodes": "沒有符合的節點"
   },
   "daily": {
     "manageNodes": "管理節點",

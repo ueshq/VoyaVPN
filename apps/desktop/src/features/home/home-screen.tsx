@@ -1,5 +1,5 @@
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { ArrowRight, Layers, Plus, Power, RotateCcw, Server } from "lucide-react";
+import { ArrowRight, Globe, Layers, Plus, Power, RotateCcw, Server } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
@@ -11,13 +11,13 @@ import { CORE_STATE_TRANSLATION_KEYS } from "@/components/app-shell/core-state-l
 import { InlinePageError } from "@/components/app-shell/inline-page-error";
 import { DisabledReason } from "@/components/disabled-reason";
 import { connectionShortcutLabel } from "@/components/app-shell/use-shell-shortcuts";
-import { NodeCountryIcon } from "@/components/node-country-icon";
 import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
-import { entryCountry, profileMemberName, profileNameWithoutFlag } from "@voya/features/profiles/profile-display";
+import { profileMemberName, profileNameWithoutFlag } from "@voya/features/profiles/profile-display";
 import { POLICY_GROUP_STRATEGY_KEYS } from "@voya/features/profiles/policy-group-labels";
 import { type RuntimeAction } from "@voya/client/runtime-action-store";
 import { useShellStore } from "@/stores/shell-store";
 
+import { NodeCountryIcon } from "@/components/node-country-icon";
 import { ConnectedInfo } from "./connected-info";
 import { HomeWorldMap } from "./home-world-map";
 import { exitIpLabel } from "@voya/features/home/exit-ip-label";
@@ -68,7 +68,6 @@ export function HomeScreen() {
 
   return (
     <section aria-label={t("home.aria")} className="home-screen" data-testid="home-screen">
-      <HomeWorldMap marker={marker} />
       <div className="home-content">
         <div className="home-hero">
           {/* A mode switch needs words as well as a progress indicator. */}
@@ -91,14 +90,13 @@ export function HomeScreen() {
             />
           </DisabledReason>
           <p
-            className="home-status"
+            className={cn("home-status", !noNodes && home.state !== "cleanupPending" && !home.inProgress && "sr-only")}
             data-state={noNodes ? "empty" : home.state}
             data-testid="home-status"
             role="status"
           >
             {noNodes ? t("home.emptyGuide") : t(CORE_STATE_TRANSLATION_KEYS[home.state])}
           </p>
-          {!noNodes ? <HomeModeSummary /> : null}
           {home.tunEnabled && home.tunIssue ? (
             <p className="home-diagnostic" role="status">
               {home.tunIssue}
@@ -146,7 +144,7 @@ export function HomeScreen() {
           <div className="node-card-surface home-node-card">
             <div aria-hidden="true" className="home-node-icon">
               {/* A group has no country, so its icon says it is a group. */}
-              {group ? <Layers className="size-5" /> : <NodeCountryIcon countryCode={entryCountry(home.nodeEntry)} />}
+              {group ? <Layers className="size-5" /> : <Globe className="size-7" strokeWidth={1.6} />}
             </div>
             <div className="home-node-content">
               <p className="home-node-label home-node-label-row">
@@ -179,14 +177,6 @@ export function HomeScreen() {
                     <span>{profile ? getProtocolLabel(profile.kind) : "—"}</span>
                   </>
                 )}
-                {/* Restarting is rare, so it is a quiet link on the card
-                    rather than a dialog of technical details. */}
-                {home.connected ? (
-                  <button className="home-details-button" disabled={home.busy} onClick={home.restart} type="button">
-                    {t("home.reconnect")}
-                    <RotateCcw aria-hidden="true" className="size-3" />
-                  </button>
-                ) : null}
               </div>
             </div>
             <Button className="shrink-0" onClick={navigateToNodes} type="button" variant="outline">
@@ -195,15 +185,30 @@ export function HomeScreen() {
             </Button>
           </div>
         ) : null}
+        {!noNodes ? <ConnectedInfo delayMs={delayMs} t={t} /> : null}
         {!noNodes ? (
-          <ConnectedInfo delayMs={delayMs} t={t}>
-            <div>
-              <dt>{t("home.exitIp")}</dt>
-              <dd className="truncate" data-testid="home-exit-ip">
-                {exitIpLabel(home.exitIp, t)}
-              </dd>
+          <details className="home-secondary">
+            <summary>{t("activity.connectionDetails")}</summary>
+            <div className="home-secondary-content">
+              <HomeModeSummary />
+              <dl className="home-secondary-facts">
+                <div>
+                  <dt>{t("home.exitIp")}</dt>
+                  <dd data-testid="home-exit-ip">{exitIpLabel(home.exitIp, t)}</dd>
+                </div>
+              </dl>
+              {home.connected ? (
+                <Button disabled={home.busy} onClick={home.restart} type="button" variant="outline">
+                  <RotateCcw aria-hidden="true" className="size-4" />
+                  {t("home.reconnect")}
+                </Button>
+              ) : null}
+              <div aria-hidden="true" className="mt-4">
+                <NodeCountryIcon countryCode={marker?.countryCode} />
+              </div>
+              <HomeWorldMap marker={marker} />
             </div>
-          </ConnectedInfo>
+          </details>
         ) : null}
       </div>
     </section>
@@ -246,7 +251,7 @@ function ConnectButton({
       type="button"
     >
       {inProgress || busy ? <span aria-hidden="true" className="home-power-progress" /> : null}
-      <Icon aria-hidden="true" className="size-11" strokeWidth={1.9} />
+      <Icon aria-hidden="true" className="size-14" strokeWidth={1.8} />
       <span>{connected && !cleanupPending ? t("home.disconnectLabel") : action}</span>
     </button>
   );

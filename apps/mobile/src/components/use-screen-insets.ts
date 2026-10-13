@@ -3,13 +3,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useContentColumn } from "./content-column";
 
-/** Native tab screens already clear the system bars and the native tab bar. */
+/** Native tab roots handle system edges; scroll views adjust for the native bar. */
 export const NativeTabSafeAreaContext = createContext(false);
 
 /**
  * Scroll-content spacing and the centred iPad column. Native tab screens sit
- * inside a native SafeAreaView; stack pages already sit below their header
- * but still need the bottom system inset. Neither needs a measured tab height.
+ * inside a native SafeAreaView and opt into automatic scroll insets for the
+ * floating iOS bar. Stack pages already sit below their header but still need
+ * the bottom system inset. Neither needs a measured tab height.
  */
 export function useScreenInsets() {
   const safeArea = useSafeAreaInsets();

@@ -560,7 +560,8 @@
       "trafficModeUnavailable": "The current mode could not be read",
       "reorderFailed": "Could not reorder the rules",
       "loadingRules": "Loading rules",
-      "editNamedRule": "Edit {{name}}"
+      "editNamedRule": "Edit {{name}}",
+      "currentPolicy": "Current policy"
     },
     "subscriptions": {
       "additionalUrl": "More URL",
@@ -1200,10 +1201,11 @@
     "connectMac": "⌘⇧C"
   },
   "mobile": {
+    "currentNode": "Current node",
+    "latency": "Latency",
+    "latencyUnit": "ms",
     "add": "Add nodes or subscription",
     "connection": "Connection & DNS",
-    "trafficModeRule": "Rule-based routing",
-    "trafficModeGlobal": "Global proxy",
     "subscriptions": "Manage subscriptions",
     "subscription": "Subscription details",
     "name": "Name",
@@ -1307,7 +1309,8 @@
     "editorTransport": "Transport",
     "editorTls": "Security",
     "editorTransportNone": "None",
-    "openLogs": "Open logs"
+    "openLogs": "Open logs",
+    "noMatchingNodes": "No matching nodes"
   },
   "daily": {
     "manageNodes": "Manage nodes",

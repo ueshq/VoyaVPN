@@ -190,9 +190,7 @@ test("profile list shows its empty state when no saved nodes exist", async ({ pa
   await page.screenshot({ path: testInfo.outputPath("cards-empty.png") });
 });
 
-test("measured flags replace the name's flag on both screens and old events cannot restore cleared ones", async ({
-  page,
-}) => {
+test("measured flags replace the name's flag on Nodes and old events cannot restore cleared ones", async ({ page }) => {
   await installTauriSmokeMock(page);
   await page.addInitScript((profile) => {
     (window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[] }).profiles = [
@@ -201,7 +199,7 @@ test("measured flags replace the name's flag on both screens and old events cann
   }, profiles[0]!);
   await page.goto("/");
   // Unmeasured, the JP flag in the node name is the provisional country.
-  await expect(page.locator(".home-node-icon .fi-jp")).toBeVisible();
+  await expect(page.locator(".home-node-icon svg")).toBeVisible();
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
   await expect(page.locator(".node-card-icon .fi-jp")).toBeVisible();
   await page.evaluate(() => {
@@ -223,7 +221,7 @@ test("measured flags replace the name's flag on both screens and old events cann
   });
   await expect(page.locator(".node-card-icon .fi-us")).toBeVisible();
   await page.getByRole("tab", { name: "Home", exact: true }).click();
-  await expect(page.locator(".home-node-icon .fi-us")).toBeVisible();
+  await expect(page.locator(".home-node-icon svg")).toBeVisible();
   await page.evaluate(() => {
     const entry = (window.__VOYA_SMOKE__.state as { profiles: ProfileDetails[] }).profiles[0]!;
     entry.metrics.countryCode = null;
@@ -245,7 +243,7 @@ test("measured flags replace the name's flag on both screens and old events cann
       ],
     });
   });
-  await expect(page.locator(".home-node-icon .fi-jp")).toBeVisible();
+  await expect(page.locator(".home-node-icon svg")).toBeVisible();
   await page.getByRole("tab", { name: "Nodes", exact: true }).click();
   await expect(page.locator(".node-card-icon .fi-jp")).toBeVisible();
   await expect(page.locator(".node-card-icon .fi-us")).toHaveCount(0);

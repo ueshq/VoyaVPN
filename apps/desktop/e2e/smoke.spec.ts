@@ -267,6 +267,7 @@ test("adds and imports profiles, activates one, and connects through the fake ru
   await page.getByRole("tab", { name: "Home", exact: true }).click();
   const connectButton = page.getByTestId("home-connect-button");
   await expect(connectButton).toHaveAttribute("aria-pressed", "true");
+  await page.locator(".home-secondary summary").click();
   await expect(page.getByRole("button", { name: "Reconnect", exact: true })).toBeEnabled();
   await expect(coreStateBadge(page, "Connected")).toHaveCount(1);
 
@@ -398,7 +399,7 @@ test("keeps the simplified navigation usable at desktop and minimum sizes", asyn
       await expect(modes).toBeInViewport();
       await expect(modes.getByRole("button", { name: "Global" })).toBeEnabled();
       if (colorScheme === "dark") {
-        await expect(modes.getByRole("button", { name: "Global" })).toHaveCSS("color", "rgb(240, 246, 252)");
+        await expect(modes.getByRole("button", { name: "Global" })).toHaveCSS("color", "rgb(241, 245, 241)");
       }
       await page.screenshot({
         path: testInfo.outputPath(`rules-${viewport.width}-${colorScheme}.png`),

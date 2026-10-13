@@ -2,7 +2,7 @@ import { Alert } from "heroui-native/alert";
 
 type BannerStatus = "danger" | "info" | "warning";
 
-/** HeroUI's name for each status; its `accent` is the Voya brand blue. */
+/** HeroUI's name for each status; its `accent` maps to Voya's neutral information role. */
 const ALERT_STATUS = {
   danger: "danger",
   info: "accent",

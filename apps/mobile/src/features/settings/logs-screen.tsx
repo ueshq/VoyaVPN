@@ -21,7 +21,7 @@ import { useCoreLogEnabled } from "./use-core-log-enabled";
 
 /** A log line's severity, by the colour it reads at. */
 const LEVEL_CLASS: Record<string, string> = {
-  error: "text-danger",
+  error: "text-danger-soft-foreground",
   warn: "text-warning",
 };
 

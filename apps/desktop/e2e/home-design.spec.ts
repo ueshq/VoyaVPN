@@ -118,7 +118,7 @@ for (const { layout, language } of [
     await expect(connect).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByTestId("home-screen").getByRole("heading", { level: 1 })).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "日本 · 东京 01" })).toBeVisible();
-    await expect(page.locator(".home-node-icon .fi-jp")).toBeVisible();
+    await expect(page.locator(".home-node-icon svg")).toBeVisible();
     await expect(page.getByTestId("home-connection-duration")).toContainText("00:24:");
     // The map is a themed mask, and it marks where the connection leaves.
     expect(
@@ -258,6 +258,7 @@ test("home points at the Rules page while global mode skips every rule", async (
   const chip = page
     .getByTestId("home-screen")
     .getByRole("button", { name: "Routing setting: Global proxy", exact: true });
+  await page.locator(".home-secondary summary").click();
   await expect(chip).toBeVisible();
   await expect(chip).toContainText("Routing setting:");
   // A pointer, not a control.

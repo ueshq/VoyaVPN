@@ -31,7 +31,7 @@ export const SHELL_TABS = {
   },
   rules: {
     titleKey: "tabs.rules",
-    icon: Platform.OS === "ios" ? { sfSymbol: "point.3.connected.trianglepath.dotted" } : { uri: "voya_tab_rules" },
+    icon: Platform.OS === "ios" ? { sfSymbol: "slider.horizontal.3" } : { uri: "voya_tab_rules" },
     component: RulesScreen,
   },
   settings: {

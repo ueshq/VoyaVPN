@@ -30,7 +30,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-cont
 
 import { SafeAreaView as NativeSafeAreaView } from "react-native-screens/experimental";
 import { NativeTabSafeAreaContext } from "~/components/use-screen-insets";
-import { useClassColor, useToneColor } from "~/components/tone";
+import { usePalette } from "~/components/use-palette";
 import { StackBackButton } from "~/components/stack-back-button";
 
 import { ActivityScreen } from "~/features/proxy/activity-screen";
@@ -66,7 +66,8 @@ function focusAware(Screen: ComponentType): ComponentType {
   return function TabScreen() {
     return (
       // Android lays scenes above its bar, which also consumes the system bottom inset.
-      // iOS scenes extend behind the native bar, so its safe area owns that edge.
+      // iOS scenes extend behind the native bar; scrolling pages also opt into
+      // automatic content insets so their last row clears its floating material.
       <NativeSafeAreaView edges={{ top: true, bottom: Platform.OS === "ios", left: true, right: true }}>
         <NativeTabSafeAreaContext value={true}>
           <ScreenActiveContext value={useIsFocused()}>
@@ -109,19 +110,16 @@ const PAGES = {
 
 function MainTabs() {
   const { t } = useI18n();
-  const activeColor = useToneColor("brand");
-  const inactiveColor = useToneColor("neutral");
-  const surfaceColor = useClassColor("bg-surface", "backgroundColor");
-  const indicatorColor = useClassColor("bg-brand-tint", "backgroundColor");
+  const colors = usePalette();
   return (
     <Tab.Navigator
       labeled
-      tabBarActiveTintColor={activeColor}
+      tabBarActiveTintColor={colors.tab}
       // Material caches its native theme while this navigator is covered by a
       // settings page. Keep its colors in sync with the app's live preference.
-      tabBarInactiveTintColor={Platform.OS === "android" ? inactiveColor : undefined}
-      tabBarStyle={Platform.OS === "android" ? { backgroundColor: surfaceColor } : undefined}
-      activeIndicatorColor={Platform.OS === "android" ? indicatorColor : undefined}
+      tabBarInactiveTintColor={colors.icon}
+      tabBarStyle={{ backgroundColor: colors.card }}
+      activeIndicatorColor={Platform.OS === "android" ? colors.wash : undefined}
       minimizeBehavior="never"
     >
       {(Object.keys(SHELL_TABS) as ShellTab[]).map((tab) => {
@@ -134,7 +132,8 @@ function MainTabs() {
             options={{
               // UIKit and Android derive the accessible tab name from its title.
               title: t(titleKey),
-              tabBarIcon: () => icon,
+              tabBarIcon: ({ focused }) =>
+                tab === "home" && focused && Platform.OS === "ios" ? { sfSymbol: "house.fill" } : icon,
             }}
           />
         );
@@ -144,15 +143,22 @@ function MainTabs() {
 }
 
 /** The app itself, once `StartupGate` has let it through. */
-function Shell() {
+function Shell({ scheme }: { scheme: "light" | "dark" }) {
   const { t } = useI18n();
-  const scheme = useTheme();
   const insets = useSafeAreaInsets();
+  const palette = usePalette();
   const baseTheme = scheme === "dark" ? DarkTheme : DefaultTheme;
-  const canvas = useClassColor("bg-canvas", "backgroundColor");
   const navigationTheme = {
     ...baseTheme,
-    colors: { ...baseTheme.colors, background: canvas ?? baseTheme.colors.background },
+    colors: {
+      ...baseTheme.colors,
+      background: palette.canvas,
+      card: palette.card,
+      text: palette.ink,
+      border: palette.divider,
+      primary: palette.ink,
+      notification: palette.danger,
+    },
   };
   useRuntimeStatusSeed();
   const [navigationReady, setNavigationReady] = useState(false);
@@ -225,7 +231,7 @@ function Shell() {
         pointerEvents="none"
         accessible={false}
         className="absolute inset-x-0 top-0 bg-canvas"
-        style={{ height: insets.top }}
+        style={{ height: insets.top, backgroundColor: palette.canvas }}
       />
     </NavigationContainer>
   );
@@ -284,6 +290,9 @@ export function App() {
  * Without it a non-English launch paints English first and then swaps.
  */
 function StartupGate() {
+  // Startup failures and the first-run notice share the persisted theme,
+  // even when the main navigator cannot mount.
+  const scheme = useTheme();
   use(localeReady);
   const [attempt, setAttempt] = useState(0);
   const [resetting, setResetting] = useState(false);
@@ -320,7 +329,7 @@ function StartupGate() {
   // this one covers what is around them — navigation itself, the bridges.
   return (
     <ScreenErrorBoundary>
-      <Shell key={attempt} />
+      <Shell key={attempt} scheme={scheme} />
     </ScreenErrorBoundary>
   );
 }

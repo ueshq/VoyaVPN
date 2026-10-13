@@ -1,26 +1,21 @@
-import { profileTitle } from "@voya/features/profiles/profile-display";
-import { exitIpLabel } from "@voya/features/home/exit-ip-label";
+import { designTokens } from "@voya/design-tokens";
 import { useHomeRuntime } from "@voya/features/home/use-home-runtime";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { CoreState } from "@voya/contracts";
 import type { TranslationKey } from "@voya/i18n/core";
 import { Button } from "heroui-native/button";
-import { Card } from "heroui-native/card";
-import { LinkButton } from "heroui-native/link-button";
-import { Spinner } from "heroui-native/spinner";
-import { Typography } from "heroui-native/text";
-import { ChevronRight, Globe, Server, type LucideIcon } from "lucide-react-native";
+import { Server } from "lucide-react-native";
 import type { ReactNode } from "react";
-import { View } from "react-native";
+import { ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 
 import { EmptyState } from "~/components/empty-state";
 import { ErrorNotice } from "~/components/error-notice";
-import { useSavedTrafficMode } from "@voya/features/routing/use-traffic-mode";
-import { navigateToTab, openPage } from "~/app/navigation";
+import { openPage } from "~/app/navigation";
 import { Banner } from "~/components/banner";
-import { DetailScreen } from "~/components/detail-screen";
-import { PageHeader } from "~/components/page-header";
-import { useToneColor } from "~/components/tone";
+import { useScreenInsets } from "~/components/use-screen-insets";
+import { ConnectionDial } from "./connection-dial";
+import { HomeSummary } from "./home-summary";
+import { usePalette } from "~/components/use-palette";
 
 /**
  * The connection screen.
@@ -33,8 +28,10 @@ import { useToneColor } from "~/components/tone";
 export function HomeScreen() {
   const { t } = useI18n();
   const runtime = useHomeRuntime();
-  const trafficMode = useSavedTrafficMode();
-  const subtleColor = useToneColor("neutral");
+  const colors = usePalette();
+  const insets = useScreenInsets();
+  const { height } = useWindowDimensions();
+  const heroHeight = Math.max(300, Math.min(520, height * (height < 740 ? 0.48 : 0.52)));
   const primary = primaryAction(runtime);
   if (runtime.ready && runtime.lastError && !runtime.inProgress) {
     primary.labelKey =
@@ -45,58 +42,56 @@ export function HomeScreen() {
           : "actions.retry";
     primary.run = runtime.lastError.reason === "notFound" ? () => openPage("nodePicker") : runtime.retryLastAction;
   }
-  const ipQuery = runtime.exitIp;
-
-  const nodeName = runtime.nodeEntry ? profileTitle(runtime.nodeEntry.profile.remarks, t) : null;
-
   return (
-    <DetailScreen accessibilityLabel={t("home.aria")}>
-      <PageHeader title={t("tabs.home")} />
+    <ScrollView
+      className="flex-1"
+      contentInsetAdjustmentBehavior="automatic"
+      style={{ backgroundColor: colors.canvas }}
+      accessibilityLabel={t("home.aria")}
+      contentContainerStyle={[
+        insets,
+        { flexGrow: 1, paddingTop: 0, paddingHorizontal: designTokens.spacing.mobilePage, paddingBottom: 32 },
+      ]}
+      showsVerticalScrollIndicator={false}
+    >
+      <View
+        pointerEvents="none"
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={StyleSheet.absoluteFill}
+      >
+        <View
+          style={{
+            position: "absolute",
+            left: -130,
+            top: 20,
+            width: 184,
+            height: 170,
+            borderRadius: 100,
+            backgroundColor: colors.wash,
+            opacity: 0.65,
+          }}
+        />
+        <View
+          style={{
+            position: "absolute",
+            right: -105,
+            top: "53%",
+            width: 160,
+            height: 110,
+            borderRadius: 80,
+            transform: [{ rotate: "-28deg" }],
+            backgroundColor: colors.wash,
+            opacity: 0.65,
+          }}
+        />
+      </View>
 
-      <Card className="gap-5 p-5">
-        {/* With no nodes at all the empty-state card below is the message —
-            a second "No nodes" line above the CTA would only repeat it. */}
-        {runtime.hasNodes ? (
-          <View className="items-center gap-1">
-            <View className="max-w-full flex-row items-center gap-2">
-              <View accessible={false} className={`h-2.5 w-2.5 rounded-full ${STATE_DOT[runtime.state]}`} />
-              <Typography maxFontSizeMultiplier={1.6} className="shrink text-2xl font-semibold text-foreground">
-                {t(CORE_STATE_KEYS[runtime.state])}
-              </Typography>
-            </View>
-            <LinkButton className="min-h-12 max-w-full" onPress={() => openPage("nodePicker")}>
-              <LinkButton.Label className="text-center text-accent">
-                {runtime.activeGroup ? runtime.activeGroup.group.name : (nodeName ?? t("home.noSelection"))}
-              </LinkButton.Label>
-            </LinkButton>
-            {/* The traffic mode in words a first-time user can parse, and the
-                way to change it: the switcher lives at the top of the Rules
-                tab, so the label is the shortcut there. Subtle, not accent —
-                the node name above is already the blue thing to tap. */}
-            <LinkButton className="min-h-9" onPress={() => navigateToTab("rules")}>
-              <LinkButton.Label className="text-center text-sm text-subtle">
-                {t(trafficMode.mode === "global" ? "mobile.trafficModeGlobal" : "mobile.trafficModeRule")}
-              </LinkButton.Label>
-              <ChevronRight size={16} color={subtleColor} accessible={false} />
-            </LinkButton>
-            {runtime.groupNow ? (
-              <Typography className="text-center text-sm text-subtle">
-                {t("home.groupVia", { node: profileTitle(runtime.groupNow.remarks, t) })}
-              </Typography>
-            ) : null}
-          </View>
-        ) : null}
-
-        <Button
-          // A disconnect is the calm, reversible choice once connected, so it
-          // steps down from the solid accent to the neutral secondary one.
-          className="min-h-14 h-auto rounded-3xl py-3"
-          size="lg"
-          variant={runtime.connected ? "secondary" : "primary"}
-          // Only the connect action needs the profile list; "Choose a node"
-          // just navigates, so it must never sit there disabled next to the
-          // "No node selected" link doing the same job.
-          isDisabled={
+      <View className="items-center justify-center" style={{ height: heroHeight, paddingTop: 56, paddingBottom: 16 }}>
+        <ConnectionDial
+          connected={runtime.connected}
+          busy={runtime.inProgress || runtime.profilesPending}
+          disabled={
             runtime.busy ||
             runtime.modePending ||
             (runtime.ready &&
@@ -104,80 +99,67 @@ export function HomeScreen() {
               runtime.state !== "cleanupPending" &&
               (runtime.profilesPending || Boolean(runtime.profilesError)))
           }
+          label={t(primary.labelKey)}
+          stateLabel={t(CORE_STATE_KEYS[runtime.state])}
           onPress={primary.run}
-          accessibilityLabel={t(primary.labelKey)}
-        >
-          {runtime.inProgress || runtime.profilesPending ? <Spinner size="sm" /> : null}
-          <Button.Label>{t(primary.labelKey)}</Button.Label>
-        </Button>
-      </Card>
-
-      {runtime.modePending ? <Banner status="info" message={t("home.modePendingReason")} /> : null}
-      {/* Both error blocks explain a connect that failed or is about to be
+        />
+      </View>
+      {runtime.hasNodes && !runtime.profilesError ? <HomeSummary runtime={runtime} /> : null}
+      <View className="gap-3">
+        {runtime.modePending ? <Banner status="info" message={t("home.modePendingReason")} /> : null}
+        {/* Both error blocks explain a connect that failed or is about to be
           attempted, so they are gated on a node being selected: with none,
           they would only repeat what the "Choose a node" button already says
           — and a failure recorded against a since-deleted node would
           outlive it on this screen. Both return the moment a node is
           selected again. */}
-      {runtime.ready && runtime.lastError ? (
-        <Failure>
-          <ErrorNotice
-            error={runtime.lastError.message}
-            reason={runtime.lastError.reason}
-            message={
-              runtime.lastError.reason === "elevationRequired"
-                ? t("home.authorizationDeclined")
-                : runtime.lastError.reason === "notFound"
-                  ? t("daily.missingNode")
-                  : runtime.lastError.action !== "disconnect"
-                    ? t("daily.connectionFailed")
-                    : undefined
-            }
-          />
-          {runtime.lastError.action !== "disconnect" &&
-          runtime.lastError.reason !== "notFound" &&
-          runtime.lastError.reason !== "elevationRequired" ? (
-            <Button variant="secondary" onPress={() => openPage("nodePicker")}>
-              <Button.Label>{t("home.switchNode")}</Button.Label>
-            </Button>
-          ) : null}
-        </Failure>
-      ) : runtime.ready && runtime.tunIssue ? (
-        <Failure>
-          {/* The banner says what is wrong in the user's language; the provider's
+        {runtime.ready && runtime.lastError ? (
+          <Failure>
+            <ErrorNotice
+              error={runtime.lastError.message}
+              reason={runtime.lastError.reason}
+              message={
+                runtime.lastError.reason === "elevationRequired"
+                  ? t("home.authorizationDeclined")
+                  : runtime.lastError.reason === "notFound"
+                    ? t("daily.missingNode")
+                    : runtime.lastError.action !== "disconnect"
+                      ? t("daily.connectionFailed")
+                      : undefined
+              }
+            />
+            {runtime.lastError.action !== "disconnect" &&
+            runtime.lastError.reason !== "notFound" &&
+            runtime.lastError.reason !== "elevationRequired" ? (
+              <Button variant="secondary" onPress={() => openPage("nodePicker")}>
+                <Button.Label>{t("home.switchNode")}</Button.Label>
+              </Button>
+            ) : null}
+          </Failure>
+        ) : runtime.ready && runtime.tunIssue ? (
+          <Failure>
+            {/* The banner says what is wrong in the user's language; the provider's
             own text, which is not translated, stays behind the disclosure. */}
-          <ErrorNotice
-            message={runtime.tunIssueMessage ?? runtime.tunIssue}
-            error={runtime.tunProviderError ?? runtime.tunIssue}
-          />
-        </Failure>
-      ) : null}
+            <ErrorNotice
+              message={runtime.tunIssueMessage ?? runtime.tunIssue}
+              error={runtime.tunProviderError ?? runtime.tunIssue}
+            />
+          </Failure>
+        ) : null}
 
-      {/* No transfer rates: a phone's host has no statistics sampler, so the
-          two figures could only ever read zero. */}
-      {runtime.connected ? (
-        <Card className="gap-4 p-5">
-          <Fact icon={Globe} label={t("home.exitIp")} value={exitIpLabel(ipQuery, t)} selectable />
-        </Card>
-      ) : null}
-      {runtime.connected ? (
-        <Button testID="home-details" variant="secondary" onPress={() => openPage("sessionDetails")}>
-          <Button.Label>{t("activity.connectionDetails")}</Button.Label>
-        </Button>
-      ) : null}
-
-      {/* The same shape as the two error blocks above (`Failure`), so every
+        {/* The same shape as the two error blocks above (`Failure`), so every
           failure on this screen offers its retry, its technical details and
           the log — `mobile.failed` promises both actions. */}
-      {runtime.profilesError ? (
-        <Failure>
-          <ErrorNotice error={runtime.profilesError} retryLabel={t("actions.retry")} retry={runtime.retryProfiles} />
-        </Failure>
-      ) : null}
-      {runtime.hasNodes || runtime.profilesPending || runtime.profilesError ? null : (
-        <EmptyState icons={[Server]} title={t("panes.profiles.empty")} description={t("daily.importNeedsSource")} />
-      )}
-    </DetailScreen>
+        {runtime.profilesError ? (
+          <Failure>
+            <ErrorNotice error={runtime.profilesError} retryLabel={t("actions.retry")} retry={runtime.retryProfiles} />
+          </Failure>
+        ) : null}
+        {runtime.hasNodes || runtime.profilesPending || runtime.profilesError ? null : (
+          <EmptyState icons={[Server]} title={t("panes.profiles.empty")} description={t("daily.importNeedsSource")} />
+        )}
+      </View>
+    </ScrollView>
   );
 }
 
@@ -196,48 +178,6 @@ const CORE_STATE_KEYS = {
   disconnected: "status.disconnected",
   disconnecting: "status.disconnecting",
 } satisfies Record<CoreState, TranslationKey>;
-
-/** Each state's dot beside its word: green only when traffic is protected. */
-const STATE_DOT = {
-  cleanupPending: "bg-subtle",
-  connected: "bg-connected",
-  connecting: "bg-warning",
-  disconnected: "bg-subtle",
-  disconnecting: "bg-warning",
-} satisfies Record<CoreState, string>;
-
-function MetricLabel({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
-  const color = useToneColor("neutral");
-
-  return (
-    <View className="max-w-full flex-row items-center gap-1.5">
-      <Icon size={14} color={color} accessible={false} />
-      <Typography className="shrink text-sm text-subtle">{label}</Typography>
-    </View>
-  );
-}
-
-/** A label and its value on one line, wrapping under it when too long. */
-function Fact({
-  icon,
-  label,
-  selectable = false,
-  value,
-}: {
-  icon: LucideIcon;
-  label: string;
-  selectable?: boolean;
-  value: string;
-}) {
-  return (
-    <View className="flex-row flex-wrap items-center justify-between gap-x-3 gap-y-1">
-      <MetricLabel icon={icon} label={label} />
-      <Typography selectable={selectable} className="max-w-full text-base font-medium text-foreground tabular-nums">
-        {value}
-      </Typography>
-    </View>
-  );
-}
 
 /** A failure's notice with the way to the log under it. */
 function Failure({ children }: { children: ReactNode }) {

@@ -27,7 +27,10 @@ export const cachedTasks = {
 const cached = (command) => ({ steps: [vp("run", cachedTasks[command])] });
 
 export const commands = {
+  "generate design-tokens": { steps: [node("scripts/design-tokens.mjs")] },
+  "check design-tokens": { steps: [node("scripts/design-tokens.mjs", "--check")] },
   "dev web": { steps: [vp("dev")] },
+  "dev mac": { steps: [node("scripts/tauri/cli.mjs", "dev")] },
   "dev ios": { steps: [node("scripts/native/mobile/dev.mjs", "ios")] },
   "dev android": { steps: [node("scripts/native/mobile/dev.mjs", "android")] },
 

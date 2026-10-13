@@ -1,187 +1,84 @@
-/*
- * The mobile style sheet.
- *
- * Uniwind compiles this at build time; nothing here reaches a browser.
- *
- * Semantic palette ownership:
- *   - HeroUI (`heroui-native/styles`) owns the design-system slots —
- *     `surface`, `border`, `muted`, `accent`, `danger`, `warning`, `field`, …
- *     Components under `heroui-native/*` are written against those tokens.
- *   - Voya keeps seven application roles that the screens still need and that
- *     HeroUI has no equivalent for: `canvas`, `subtle`, `border-subtle`,
- *     `brand`, `brand-tint`, `connected`, `map-land`. Their values are still
- *     the Primer 11.9 numbers the desktop uses, because "copy the desktop hex"
- *     is only true for these seven — not for the design-system slots, which
- *     are HeroUI's to choose.
- *
- * Do not add a `@source` line for `heroui-native/styles`. Since 1.0.8 that
- * import carries its own, and a hand-written path under pnpm is wrong and
- * fails silently (upstream #454).
- *
- * Theming shape — established by running the app, not from documentation.
- * Three shapes compile without complaint and only one produces colours:
- *
- *   - Two top-level `@variant light` / `@variant dark` blocks. Tailwind
- *     collects the *names* (they even reach Uniwind's own `@theme` block in
- *     node_modules) but never the values, so every colour resolved to
- *     nothing. Layout still worked, which is why it went unnoticed: an
- *     unstyled React Native view is already white with black text — the
- *     silent failure looks like a working light theme.
- *   - `light-dark(light, dark)` inside `@theme` — parses, and renders black.
- *   - `@theme inline` pointing at plain variables that a nested
- *     `:root { @variant light/dark { … } }` block supplies. That is what is
- *     here. Nested `@variant` is also what `Uniwind.setTheme("dark")`
- *     actually reads — never a `.dark` class, which React Native does not
- *     apply at all.
- *
- * Keep the `--voya-` prefix on every Voya role. HeroUI's raw variables are
- * already called `--surface`, `--border`, `--muted`; an unprefixed Voya name
- * would collide with them.
- */
 @import "tailwindcss";
 @import "uniwind";
 @import "heroui-native/styles";
+@import "@voya/design-tokens/native.css";
 
-@layer components {
-  /* Labels must shrink inside row buttons before wrapping at accessibility
-     sizes; the upstream label otherwise keeps an unconstrained natural width. */
-  .button__label {
-    flex-shrink: 1;
-    text-align: center;
-  }
-
-  /* A medium button's 48pt is a floor, not a fixed height, so a label that
-     wraps grows the button instead of spilling out of it. HeroUI fixes the
-     height; Uniwind applies a class's rules in document order, so this one,
-     after the import, is the one that holds. Small and large buttons keep
-     their fixed heights and say `min-h-* h-auto` where they need it. */
-  .button__root--size-md {
-    height: auto;
-    min-height: var(--spacing-control);
-  }
-
-  /* A disabled primary button must read as unavailable. HeroUI's disabled
-     state is opacity only, which left a half-transparent accent fill behind
-     the still-white label (~2:1) — bright blue that looks pressable. The
-     fill swaps to the muted surface; the call sites pair it with a
-     `text-subtle` label, because the label element cannot be reached from
-     the root's state. */
-  .button--primary-disabled {
-    background-color: var(--muted);
-  }
-}
-
+/* Keep nested variants in generated native.css: Uniwind resolves that shape.
+   Typography uses standard Tailwind sizes, never custom text role names. */
 @theme {
-  /* Theme-independent scale. The desktop's control heights are pointer-sized;
-     these are the touch equivalents. */
-  --spacing-control: 48px;
-  --spacing-page: 16px;
-
-  /* No named type scale here, on purpose. Text is HeroUI's `Typography`, which
-     runs `className` through tailwind-merge, and tailwind-merge only knows the
-     standard size names: it reads `text-body` or `text-caption` as a *colour*,
-     so `text-body text-foreground` merges to `text-foreground` and the size is
-     dropped without a word. Use Tailwind's own sizes — the screens use
-     `text-3xl` (page title), `text-2xl` (Home's state), `text-xl` (section
-     heading), `text-base` (row text) and `text-sm` (secondary text). */
+  --spacing-control: var(--voya-control-mobile);
+  --spacing-page: var(--voya-spacing-mobile-page);
+  --radius-md: var(--voya-radius-control);
+  --radius-lg: var(--voya-radius-control);
+  --radius-xl: var(--voya-radius-card);
+  --radius-2xl: var(--voya-radius-overlay);
+  --radius-3xl: var(--voya-radius-card);
 }
-
-/*
- * The seven Voya application roles, one line each.
- *
- * Nested `@variant light` / `@variant dark` under `:root` is the shape
- * Uniwind's theme scanner resolves. The two blocks must declare exactly the
- * same names — a name only one of them has is a compile error.
- */
-@layer theme {
-  :root {
-    @variant light {
-      --voya-canvas: #f6f8fa;
-      --voya-subtle: #59636e;
-      --voya-border-subtle: rgb(209 217 224 / 0.7);
-      --voya-brand: #0969da;
-      --voya-brand-tint: rgb(9 105 218 / 0.08);
-      --voya-connected: #1a7434;
-      --voya-map-land: #e0e6eb;
-    }
-
-    @variant dark {
-      --voya-canvas: #0d1117;
-      --voya-subtle: #9198a1;
-      --voya-border-subtle: rgb(61 68 77 / 0.7);
-      --voya-brand: #4493f8;
-      --voya-brand-tint: rgb(68 147 248 / 0.16);
-      --voya-connected: #3fb950;
-      --voya-map-land: #212830;
-    }
-  }
+/* HeroUI component rules are unlayered; overrides must share that cascade. */
+.input__input {
+  border-width: 1px;
+  border-color: var(--voya-border);
+  border-radius: var(--voya-radius-control);
 }
-
-/*
- * One accent colour.
- *
- * HeroUI paints its buttons, switches and focus rings from its own `--accent`
- * (a system blue), while every Voya selection state — `text-brand`,
- * `bg-brand-tint` — uses the brand blue above. Two blues side by side read as
- * two meanings, so HeroUI's slot takes a brand value.
- *
- * The fill value is the desktop's emphasis blue (`--primary` in
- * `packages/ui/src/styles/globals.css`): #0969da in light, #1f6feb in dark,
- * white label in both. Dark `--voya-brand` (#4493f8) is a text/icon tint —
- * as a fill it needs a near-black label, which made the dark primary CTA
- * read as disabled next to its light self.
- *
- * This works because Uniwind's native compiler writes each theme's variables
- * into one map in document order, so a later declaration of the same name
- * wins, and `var()` resolves lazily: HeroUI's `--color-accent`, and every
- * `color-mix()` derived from it (`accent-soft`, `accent-hover`, …), follow the
- * override without being restated. It has to come after the
- * `heroui-native/styles` import, and both variants must declare the same
- * names, like the block above. Check it on a device: a primary Button must be
- * #0969da on white in light and #1f6feb on white in dark.
- */
-@layer theme {
-  :root {
-    @variant light {
-      --accent: var(--voya-brand);
-      --accent-foreground: #ffffff;
-    }
-
-    @variant dark {
-      --accent: #1f6feb;
-      --accent-foreground: #ffffff;
-    }
-  }
+/* HeroUI adds this platform utility after its base Input class. Keep the
+   resting field boundary visible; its focus/invalid variants still win. */
+.android\:border-transparent {
+  border-color: var(--voya-border);
 }
-
-/*
- * The switch's off-state track.
- *
- * HeroUI animates the track colour in Reanimated from `--color-default`, so a
- * Tailwind class cannot reach it — this variable is the only lever. Stock dark
- * `--default` (oklch 27.4%) sits six lightness points off `--surface` (21%),
- * which read as no track at all on the dark cards. The bump to 34% matches
- * iOS's own off switch and still leaves the track clearly "off" next to the
- * accent-blue on state. Light restates the stock value unchanged, because the
- * two variant blocks must declare the same names.
- *
- * `--default` also feeds `default-soft`, `default-hover` and the field
- * fallback — check secondary buttons, chips and inputs in dark after touching
- * this. Check it on a device: an off Switch on a card must be visible.
- */
-@layer theme {
-  :root {
-    @variant light {
-      --default: oklch(94% 0.001 286.375);
-    }
-
-    @variant dark {
-      --default: oklch(34% 0.006 286.033);
-    }
-  }
+.field-error__text {
+  color: var(--voya-danger);
+}
+.switch__root {
+  border-width: 1px;
+  border-color: var(--voya-border);
+}
+.button__root,
+.button__root--size-sm,
+.button__root--size-md,
+.button__root--size-lg {
+  border-radius: var(--voya-radius-control);
+}
+.button__root--size-sm {
+  min-height: var(--spacing-control);
+  height: auto;
+}
+.tabs__label--is-selected {
+  text-decoration-line: underline;
+}
+.tabs__list--variant-primary,
+.tabs__list-background,
+.tabs__scroll-view--variant-primary,
+.tabs__indicator--variant-primary {
+  border-radius: var(--voya-radius-control);
+}
+.tabs__list--variant-primary {
+  background-color: var(--voya-card);
+}
+.tabs__indicator--variant-primary {
+  border-width: 1px;
+  border-color: var(--voya-ink);
+}
+.button__label {
+  flex-shrink: 1;
+  text-align: center;
+}
+.button__root--size-md {
+  height: auto;
+  min-height: var(--spacing-control);
+}
+.button--primary-disabled {
+  background-color: var(--voya-wash);
 }
 
 @theme inline {
+  --color-accent-soft: var(--voya-wash);
+  --color-accent-soft-foreground: var(--voya-ink);
+  --color-danger-soft: var(--voya-danger-bg);
+  --color-danger-soft-foreground: var(--voya-danger);
+  --color-warning-soft: var(--voya-warning-bg);
+  --color-warning-soft-foreground: var(--voya-warning);
+  --color-success-soft: var(--voya-success-bg);
+  --color-success-soft-foreground: var(--voya-success);
   --color-canvas: var(--voya-canvas);
   --color-subtle: var(--voya-subtle);
   --color-border-subtle: var(--voya-border-subtle);

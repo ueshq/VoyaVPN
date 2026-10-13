@@ -22,6 +22,7 @@ import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
 import { getProtocolLabel } from "@voya/features/profiles/profile-constants";
 import { Button } from "heroui-native/button";
 import { Chip } from "heroui-native/chip";
+import { Input } from "heroui-native/input";
 import { ListGroup } from "heroui-native/list-group";
 import { Spinner } from "heroui-native/spinner";
 import { Typography } from "heroui-native/text";
@@ -39,6 +40,7 @@ import { PageHeader } from "~/components/page-header";
 import { SectionHeader } from "~/components/section-header";
 import { useClassColor, useToneColor } from "~/components/tone";
 import { useScreenInsets } from "~/components/use-screen-insets";
+import { CONTENT_MAX_WIDTH } from "~/components/content-column";
 
 import { NodeActionsSheet } from "./node-actions-sheet";
 import { NodeSortMenu } from "./node-sort-sheet";
@@ -99,7 +101,7 @@ export function NodesScreen() {
   const importRef = useRef<View>(null);
   const nodeRefs = useRef(new Map<string, View>());
   const { width, fontScale } = useWindowDimensions();
-  const stackedActions = width / fontScale < 360;
+  const stackedActions = Math.min(width, CONTENT_MAX_WIDTH) / fontScale < 360;
 
   // A group's first node opens its card; `last` already closes it.
   const rows = useMemo(
@@ -146,11 +148,15 @@ export function NodesScreen() {
     <>
       <FlatList
         className="flex-1 bg-canvas"
+        contentInsetAdjustmentBehavior="automatic"
         accessibilityElementsHidden={actionsFor !== null || exports.shareQrContent !== null}
         data={rows}
         keyExtractor={({ row }) => row.key}
         renderItem={renderRow}
         contentContainerStyle={insets}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets
         // The header controls scroll with rows. A fixed header can consume
         // the entire small-screen viewport at large text.
         ListHeaderComponent={
@@ -183,17 +189,6 @@ export function NodesScreen() {
                 </View>
               }
             />
-            {selected ? (
-              <ListGroup>
-                <ListRow
-                  title={`${t("mobile.currentSelection")}: ${profileTitle(selected.profile.remarks, t)}`}
-                  titleLines={0}
-                  description={selected.profile.address}
-                  last
-                  onPress={() => openActions(selected)}
-                />
-              </ListGroup>
-            ) : null}
             <Button
               ref={importRef}
               className="py-3"
@@ -204,8 +199,35 @@ export function NodesScreen() {
               <ClipboardPaste size={18} color={testableIds.length ? accentForeground : onAccent} />
               <Button.Label>{t("mobile.add")}</Button.Label>
             </Button>
+            <Input
+              accessibilityLabel={t("daily.searchNodes")}
+              placeholder={t("daily.searchNodes")}
+              value={selection.search}
+              onChangeText={selection.setSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+            />
+            {selected ? (
+              <ListGroup>
+                <ListRow
+                  title={`${t("mobile.currentSelection")}: ${profileTitle(selected.profile.remarks, t)}`}
+                  titleLines={0}
+                  monoDescription
+                  description={selected.profile.address}
+                  last
+                  onPress={() => openActions(selected)}
+                />
+              </ListGroup>
+            ) : null}
             <ListGroup>
-              <ListRow last chevron title={t("mobile.subscriptions")} onPress={() => openPage("subscriptions")} />
+              <ListRow
+                testID="nodes-subscriptions"
+                last
+                chevron
+                title={t("mobile.subscriptions")}
+                onPress={() => openPage("subscriptions")}
+              />
             </ListGroup>
             {operation.operationMessage ? (
               <Banner status="info" liveRegion message={operation.operationMessage} />
@@ -260,8 +282,8 @@ export function NodesScreen() {
             <View className="px-page pt-4">
               <EmptyState
                 icons={[Server]}
-                title={t("panes.profiles.empty")}
-                description={t("panes.profiles.emptyDescription")}
+                title={t(data.search.trim() ? "mobile.noMatchingNodes" : "panes.profiles.empty")}
+                description={data.search.trim() ? undefined : t("panes.profiles.emptyDescription")}
               />
             </View>
           )
@@ -354,6 +376,7 @@ const NodeRow = memo(function NodeRow({
       stacked={stackedActions}
       title={profileTitle(entry.profile.remarks, t)}
       titleLines={stackedActions ? 0 : 2}
+      monoDescription
       description={`${getProtocolLabel(entry.profile.kind)} · ${entry.profile.address}`}
       leading={
         <SelectionMark state={runningId === entry.profile.id ? "inUse" : entry.isActive ? "selected" : "none"} />
@@ -396,7 +419,7 @@ const NodeRow = memo(function NodeRow({
       accessibilityActions={[{ label: actionsLabel(entry, t), name: "longpress" }]}
     >
       {failed && entry.metrics.outcome !== "failed" ? (
-        <Typography className="text-sm text-danger" numberOfLines={2}>
+        <Typography className="text-sm text-danger-soft-foreground" numberOfLines={2}>
           {latencyText}
         </Typography>
       ) : null}

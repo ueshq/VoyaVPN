@@ -1,4 +1,7 @@
 import { Tabs } from "heroui-native/tabs";
+import { Button } from "heroui-native/button";
+import { View, useWindowDimensions } from "react-native";
+import { CONTENT_MAX_WIDTH } from "./content-column";
 
 /**
  * A choice of one among a few: HeroUI's primary `Tabs`, a track with the
@@ -14,8 +17,8 @@ import { Tabs } from "heroui-native/tabs";
  *
  * Labels stay on one line, and a segment is as wide as its label plus an equal
  * share of what is left — equal widths truncated "Follow system" beside
- * "Light" and "Dark". When the labels do not fit, at large text sizes, the
- * track scrolls sideways.
+ * "Light" and "Dark". At large text sizes choices stack in the page's
+ * scrolling column, rather than hiding choices in a horizontal track.
  */
 export function SegmentedControl<T extends string>({
   isDisabled,
@@ -28,6 +31,25 @@ export function SegmentedControl<T extends string>({
   options: readonly { label: string; value: T }[];
   value: T | null | undefined;
 }) {
+  const { width, fontScale } = useWindowDimensions();
+  if (Math.min(width, CONTENT_MAX_WIDTH) / fontScale < 280) {
+    return (
+      <View className="gap-2">
+        {options.map((option) => (
+          <Button
+            key={option.value}
+            variant="secondary"
+            className={`h-auto min-h-control border py-3 ${value === option.value ? "border-foreground bg-accent-soft" : "border-border bg-surface"}`}
+            isDisabled={isDisabled}
+            accessibilityState={{ selected: value === option.value, disabled: isDisabled }}
+            onPress={() => onChange(option.value)}
+          >
+            <Button.Label className={value === option.value ? "underline" : undefined}>{option.label}</Button.Label>
+          </Button>
+        ))}
+      </View>
+    );
+  }
   return (
     <Tabs
       value={value ?? ""}

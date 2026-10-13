@@ -1,4 +1,5 @@
 import { useI18n } from "@voya/i18n/use-i18n";
+import { View } from "react-native";
 import { ListGroup } from "heroui-native/list-group";
 import { openPage } from "~/app/navigation";
 import { DetailScreen } from "~/components/detail-screen";
@@ -10,23 +11,33 @@ export function SettingsScreen() {
   return (
     <DetailScreen>
       <PageHeader title={t("tabs.settings")} />
-      <ListGroup>
-        <ListRow
-          chevron
-          title={t("mobile.subscriptions")}
-          testID="settings-subscriptions"
-          onPress={() => openPage("subscriptions")}
-        />
-        <ListRow chevron title={t("daily.appearance")} testID="settings-general" onPress={() => openPage("general")} />
-        <ListRow chevron title={t("mobile.connection")} testID="settings-dns" onPress={() => openPage("dns")} />
-        <ListRow
-          chevron
-          title={t("daily.diagnostics")}
-          testID="settings-maintenance"
-          onPress={() => openPage("maintenance")}
-        />
-        <ListRow last chevron title={t("daily.about")} testID="settings-about" onPress={() => openPage("about")} />
-      </ListGroup>
+      <View>
+        <ListGroup>
+          <ListRow
+            last
+            chevron
+            title={t("daily.appearance")}
+            testID="settings-general"
+            onPress={() => openPage("general")}
+          />
+        </ListGroup>
+      </View>
+      <View>
+        <ListGroup>
+          <ListRow last chevron title={t("mobile.connection")} testID="settings-dns" onPress={() => openPage("dns")} />
+        </ListGroup>
+      </View>
+      <View>
+        <ListGroup>
+          <ListRow
+            chevron
+            title={t("daily.diagnostics")}
+            testID="settings-maintenance"
+            onPress={() => openPage("maintenance")}
+          />
+          <ListRow last chevron title={t("daily.about")} testID="settings-about" onPress={() => openPage("about")} />
+        </ListGroup>
+      </View>
     </DetailScreen>
   );
 }

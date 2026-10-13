@@ -65,6 +65,9 @@ jobs:
 
       - uses: ./.github/actions/setup-vp
 
+      - name: Check Voya tokens and contrast
+        run: vp run check design-tokens
+
       - name: Check architecture boundaries
         run: vp run check architecture
 

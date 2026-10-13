@@ -1,3 +1,4 @@
+import { ActionLink } from "../components/action-link";
 import { ChevronDown, Mail } from "lucide-react";
 import { COPY } from "../content";
 import type { Locale } from "../routes";
@@ -23,13 +24,10 @@ export function SupportPage({ locale }: { locale: Locale }) {
         <p className="mt-2 leading-relaxed text-fg-muted">
           <Inline text={copy.contactBody} />
         </p>
-        <a
-          href={`mailto:${SUPPORT_EMAIL}`}
-          className="mt-5 inline-flex h-11 items-center gap-2 rounded-md bg-accent px-5 font-medium text-white transition-transform hover:brightness-110 active:scale-[0.98]"
-        >
+        <ActionLink href={`mailto:${SUPPORT_EMAIL}`} variant="primary" className="mt-5">
           <Mail size={18} strokeWidth={1.75} aria-hidden />
           {SUPPORT_EMAIL}
-        </a>
+        </ActionLink>
       </section>
 
       <section aria-labelledby="faq-heading" className="mt-14">

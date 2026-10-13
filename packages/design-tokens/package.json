@@ -1,0 +1,13 @@
+{
+  "name": "@voya/design-tokens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/tokens.ts",
+    "./browser.css": "./src/browser.css",
+    "./system.css": "./src/system.css",
+    "./native.css": "./src/native.css"
+  }
+}

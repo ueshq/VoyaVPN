@@ -1,251 +1,121 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "@voya/design-tokens/browser.css";
 
 @source "../";
-
 @custom-variant dark (&:is(.dark *));
 
-/* Color values vendored from @primer/primitives@11.9.0 (GitHub Primer functional
-   tokens, light + dark themes) — see docs/design/primer-token-mapping.md.
-   Do not tweak by eye; re-vendor from the package on upgrades. */
+/* Voya semantic adapter. Color values live only in @voya/design-tokens. */
 :root {
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-
-  --type-page-size: 24px;
-  --type-page-line: 32px;
-  --type-dialog-size: 20px;
-  --type-dialog-line: 28px;
-  --type-section-size: 16px;
-  --type-section-line: 24px;
-  --type-body-size: 14px;
-  --type-body-line: 20px;
-  --type-caption-size: 12px;
-  --type-caption-line: 16px;
-  --control-height: 36px;
-  --control-height-compact: 32px;
-  --control-height-large: 40px;
-  --page-inset: 24px;
-  --dialog-inset: 24px;
-  --radius: 6px;
-  --background: #ffffff;
-  --foreground: #1f2328;
-  --card: #ffffff;
-  --card-foreground: #1f2328;
-  --popover: #ffffff;
-  --popover-foreground: #1f2328;
-  /* Interactive accent → Primer accent emphasis (drives Button default / Badge / Switch / selection).
-     Fill-only: text consumers use --link / --text-brand instead. */
-  --primary: #0969da;
-  --primary-foreground: #ffffff;
-  --secondary: #f6f8fa;
-  --secondary-foreground: #1f2328;
-  --muted: #f6f8fa;
-  --muted-foreground: #59636e;
-  --accent: rgb(129 139 152 / 0.1);
-  --accent-foreground: #1f2328;
-  --destructive: #cf222e;
-  --destructive-foreground: #ffffff;
-  --border: #d1d9e0;
-  --input: #d1d9e0;
-  --ring: #0969da;
-
-  /* Connected state — Primer success emphasis for the VPN connected/affirmative semantics. */
-  --connected: #1f883d;
-  --connected-foreground: #ffffff;
-  --connected-glow: 0 0 0 1px rgb(31 136 61 / 0.4), 0 0 12px -2px rgb(31 136 61 / 0.3);
-
-  /* Safe Passage — brand accents. signal/glow re-point to --connected (names preserved).
-     Use sparingly: connected state / primary connect glow / active node. */
+  --type-page-size: var(--voya-type-page-size);
+  --type-page-line: var(--voya-type-page-line);
+  --type-dialog-size: var(--voya-type-dialog-size);
+  --type-dialog-line: var(--voya-type-dialog-line);
+  --type-section-size: var(--voya-type-section-size);
+  --type-section-line: var(--voya-type-section-line);
+  --type-body-size: var(--voya-type-body-size);
+  --type-body-line: var(--voya-type-body-line);
+  --type-caption-size: var(--voya-type-caption-size);
+  --type-caption-line: var(--voya-type-caption-line);
+  --control-height: var(--voya-control-desktop);
+  --control-height-compact: var(--voya-control-compact);
+  --control-height-large: var(--voya-control-web);
+  --page-inset: var(--voya-spacing-desktop-page);
+  --dialog-inset: var(--voya-spacing-section);
+  --radius: var(--voya-radius-control);
+  --background: var(--voya-canvas);
+  --foreground: var(--voya-ink);
+  --card: var(--voya-card);
+  --card-foreground: var(--voya-ink);
+  --popover: var(--voya-card);
+  --popover-foreground: var(--voya-ink);
+  --primary: var(--voya-ink);
+  --primary-foreground: var(--voya-on-primary);
+  --secondary: var(--voya-wash);
+  --secondary-foreground: var(--voya-ink);
+  --muted: var(--voya-wash);
+  --muted-foreground: var(--voya-muted);
+  --accent: var(--voya-wash);
+  --accent-foreground: var(--voya-ink);
+  --destructive: var(--voya-danger-fill);
+  --destructive-foreground: var(--voya-on-danger);
+  --border: var(--voya-border);
+  --input: var(--voya-border);
+  --ring: var(--voya-ink);
+  --connected: var(--voya-green);
+  --connected-foreground: var(--voya-on-green);
+  --surface: var(--voya-card);
+  --surface-sunken: var(--voya-wash);
+  --surface-raised: var(--voya-card);
+  --surface-canvas: var(--voya-canvas);
+  --map-land: var(--voya-map-land);
+  --surface-overlay: var(--voya-card);
+  --surface-hovered: var(--voya-wash);
+  --surface-pressed: var(--voya-divider);
+  --surface-button: var(--voya-wash);
+  --overlay-hovered: var(--voya-wash);
+  --overlay-pressed: var(--voya-divider);
+  --accent-blue: var(--voya-ink);
+  --accent-blue-light: var(--voya-wash);
+  --accent-blue-bg: var(--voya-wash);
+  --accent-blue-hover: var(--voya-muted);
+  --text-subtle: var(--voya-muted);
+  --text-tertiary: var(--voya-muted);
+  --text-subtlest: var(--voya-muted);
+  --text-heading: var(--voya-ink);
+  --text-inverse: var(--voya-on-primary);
+  --text-disabled: var(--voya-muted);
+  --text-brand: var(--voya-ink);
+  --text-danger: var(--voya-danger);
+  --text-success: var(--voya-success);
+  --text-warning: var(--voya-warning);
+  --text-information: var(--voya-ink);
+  --text-discovery: var(--voya-ink);
+  --link: var(--voya-ink);
+  --border-bold: var(--voya-border);
+  --border-subtle: var(--voya-divider);
+  --border-focused: var(--voya-ink);
+  --border-selected: var(--voya-ink);
+  --border-danger: var(--voya-danger);
+  --icon: var(--voya-ink);
+  --icon-subtle: var(--voya-muted);
+  --icon-brand: var(--voya-ink);
+  --icon-danger: var(--voya-danger);
+  --icon-success: var(--voya-success);
+  --icon-warning: var(--voya-warning);
+  --bg-danger: var(--voya-danger-bg);
+  --bg-danger-bold: var(--voya-danger-fill);
+  --bg-success: var(--voya-success-bg);
+  --bg-success-bold: var(--voya-green);
+  --bg-warning: var(--voya-warning-bg);
+  --bg-warning-bold: var(--voya-warning-fill);
+  --bg-information: var(--voya-wash);
+  --bg-discovery: var(--voya-wash);
+  --bg-selected: var(--voya-wash);
+  --bg-selected-strong: var(--voya-divider);
+  --state-drag-target: var(--voya-wash);
+  --blanket: var(--voya-blanket);
+  --surface-dialog: var(--voya-card);
+  --border-dialog: var(--voya-divider);
+  --shadow-dialog: var(--voya-blanket);
+  --sidebar: var(--voya-canvas);
+  --sidebar-foreground: var(--voya-ink);
   --signal: var(--connected);
   --signal-foreground: var(--connected-foreground);
-
-  /* Depth ladder + connection glow */
-  --shadow-sm: 0 1px 2px 0 rgb(31 35 40 / 0.06), 0 1px 3px 0 rgb(31 35 40 / 0.1);
-  --shadow-md: 0 2px 4px -1px rgb(31 35 40 / 0.08), 0 4px 12px -2px rgb(31 35 40 / 0.12);
-  --shadow-lg: 0 8px 16px -4px rgb(31 35 40 / 0.1), 0 16px 32px -8px rgb(31 35 40 / 0.16);
+  --connected-glow:
+    0 0 0 12px color-mix(in srgb, var(--voya-halo) 24%, transparent),
+    0 0 0 28px color-mix(in srgb, var(--voya-halo) 12%, transparent);
   --glow-signal: var(--connected-glow);
-
-  /* Primer surface ladder — base rungs alias existing semantics; interaction rungs use
-     Primer control-transparent alphas. */
-  --surface: var(--background);
-  --surface-sunken: #f6f8fa;
-  --surface-raised: #ffffff;
-  /* Page canvas behind content panels. Components keep --background as their white
-     fill; only page containers paint the canvas, so light panels read as raised cards. */
-  --surface-canvas: #f6f8fa;
-  /* Home world map land: Primer base neutral-4, a step darker than the canvas. */
-  --map-land: #e0e6eb;
-  --surface-overlay: var(--popover);
-  --surface-hovered: rgb(129 139 152 / 0.1);
-  --surface-pressed: rgb(129 139 152 / 0.15);
-  --surface-button: #f6f8fa;
-  --overlay-hovered: rgb(31 35 40 / 0.08);
-  --overlay-pressed: rgb(31 35 40 / 0.12);
-
-  /* Primer accent palette (--accent-<hue> does not collide with the shadcn --accent slot). */
-  --accent-blue: #0969da;
-  --accent-blue-light: rgb(9 105 218 / 0.08);
-  --accent-blue-bg: rgb(9 105 218 / 0.1);
-  --accent-blue-hover: #0550ae;
-
-  /* Primer elevation — resting/overlay shadow families (light ink rgb(31 35 40)).
-     Named --shadow-raised/-overlay indirection is registered in @theme inline. */
-  --elevation-raised: 0px 1px 1px rgb(31 35 40 / 0.04), 0px 0px 1px rgb(31 35 40 / 0.12);
-  --elevation-overlay: 0px 8px 24px rgb(140 149 159 / 0.2), 0px 0px 1px rgb(31 35 40 / 0.12);
-
-  /* nicenote motion — named durations (consumed by the @utility duration-* blocks below).
-     Theme-agnostic; ADS easings live in @theme inline. */
-  --duration-short: 150ms;
-  --duration-medium: 200ms;
-  --duration-long: 250ms;
-
-  /* Primer semantic families — text/icon hierarchy, links, border variants,
-     feedback backgrounds, blanket + dialog trio (registered as utilities in @theme inline). */
-  --text-subtle: #59636e;
-  --text-tertiary: #59636e;
-  --text-subtlest: #818b98;
-  --text-heading: #1f2328;
-  --text-inverse: #ffffff;
-  --text-disabled: #818b98;
-  --text-brand: #0969da;
-  --text-danger: #d1242f;
-  --text-success: #1a7f37;
-  --text-warning: #9a6700;
-  --text-information: #0969da;
-  --text-discovery: #8250df;
-  --link: #0969da;
-  --border-bold: #818b98;
-  --border-subtle: rgb(209 217 224 / 0.7);
-  --border-focused: #0969da;
-  --border-selected: #0969da;
-  --border-danger: #d1242f;
-  --icon: #1f2328;
-  --icon-subtle: #59636e;
-  --icon-brand: #0969da;
-  --icon-danger: #d1242f;
-  --icon-success: #1a7f37;
-  --icon-warning: #9a6700;
-  --bg-danger: #ffebe9;
-  --bg-danger-bold: #cf222e;
-  --bg-success: #dafbe1;
-  --bg-success-bold: #1f883d;
-  --bg-warning: #fff8c5;
-  --bg-warning-bold: #9a6700;
-  --bg-information: #ddf4ff;
-  --bg-discovery: #fbefff;
-  --bg-selected: #ddf4ff;
-  --bg-selected-strong: #b6e3ff;
-  --state-drag-target: rgb(9 105 218 / 0.1);
-  --blanket: rgb(200 209 218 / 0.4);
-  --surface-dialog: #ffffff;
-  --border-dialog: #d1d9e0;
-  --shadow-dialog: rgb(140 149 159 / 0.3);
-
-  /* Primer layered chrome — sidebar/titlebar paint the muted canvas distinct from content. */
-  --sidebar: #f6f8fa;
-  --sidebar-foreground: var(--foreground);
-}
-
-.dark {
-  --background: #0d1117;
-  --foreground: #f0f6fc;
-  --card: #151b23;
-  --card-foreground: #f0f6fc;
-  --popover: #151b23;
-  --popover-foreground: #f0f6fc;
-  --primary: #1f6feb;
-  --primary-foreground: #ffffff;
-  --secondary: #212830;
-  --secondary-foreground: #f0f6fc;
-  --muted: #151b23;
-  --muted-foreground: #9198a1;
-  --accent: rgb(101 108 118 / 0.2);
-  --accent-foreground: #f0f6fc;
-  --destructive: #da3633;
-  --destructive-foreground: #ffffff;
-  --border: #3d444d;
-  --input: #3d444d;
-  --ring: #1f6feb;
-
-  /* Connected state (Primer success emphasis; glow tints the brighter success fg).
-     signal/glow inherit via the :root indirection. */
-  --connected: #238636;
-  --connected-foreground: #ffffff;
-  --connected-glow: 0 0 0 1px rgb(63 185 80 / 0.4), 0 0 14px -2px rgb(63 185 80 / 0.35);
-
-  /* Depth ladder + connection glow (deeper shadows on the dark canvas) */
-  --shadow-sm: 0 1px 2px 0 rgb(1 4 9 / 0.4), 0 1px 3px 0 rgb(1 4 9 / 0.5);
-  --shadow-md: 0 2px 4px -1px rgb(1 4 9 / 0.45), 0 4px 12px -2px rgb(1 4 9 / 0.55);
-  --shadow-lg: 0 8px 16px -4px rgb(1 4 9 / 0.5), 0 16px 32px -8px rgb(1 4 9 / 0.6);
-
-  /* Primer surface ladder — GitHub dark separates by borders; muted tints elevate. */
-  --surface: var(--background);
-  --surface-sunken: #151b23;
-  --surface-raised: var(--card);
-  --surface-canvas: var(--background);
-  /* Home world map land: Primer base neutral-3 on the dark canvas. */
-  --map-land: #212830;
-  --surface-overlay: var(--popover);
-  --surface-hovered: rgb(101 108 118 / 0.2);
-  --surface-pressed: rgb(101 108 118 / 0.25);
-  --surface-button: #212830;
-  --overlay-hovered: rgb(255 255 255 / 0.08);
-  --overlay-pressed: rgb(255 255 255 / 0.12);
-
-  /* Primer accent palette (dark) */
-  --accent-blue: #4493f8;
-  --accent-blue-light: rgb(68 147 248 / 0.16);
-  --accent-blue-bg: rgb(68 147 248 / 0.2);
-  --accent-blue-hover: #79c0ff;
-
-  /* Primer elevation — deep shadows gain a 1px border ring on the dark canvas. */
-  --elevation-raised: 0px 0px 0px 1px rgb(1 4 9 / 0), 0px 1px 1px rgb(1 4 9 / 0.45), 0px 0px 1px rgb(1 4 9 / 0.5);
-  --elevation-overlay: 0px 0px 0px 1px #3d444d, 0px 8px 24px rgb(1 4 9 / 0.85), 0px 0px 1px 1px rgb(1 4 9 / 0.4);
-
-  /* Primer semantic families (dark) */
-  --text-subtle: #9198a1;
-  --text-tertiary: #9198a1;
-  --text-subtlest: #656c76;
-  --text-heading: #f0f6fc;
-  --text-inverse: #ffffff;
-  --text-disabled: #656c76;
-  --text-brand: #4493f8;
-  --text-danger: #f85149;
-  --text-success: #3fb950;
-  --text-warning: #d29922;
-  --text-information: #4493f8;
-  --text-discovery: #ab7df8;
-  --link: #4493f8;
-  --border-bold: #656c76;
-  --border-subtle: rgb(61 68 77 / 0.7);
-  --border-focused: #1f6feb;
-  --border-selected: #1f6feb;
-  --border-danger: #f85149;
-  --icon: #f0f6fc;
-  --icon-subtle: #9198a1;
-  --icon-brand: #4493f8;
-  --icon-danger: #f85149;
-  --icon-success: #3fb950;
-  --icon-warning: #d29922;
-  --bg-danger: rgb(248 81 73 / 0.1);
-  --bg-danger-bold: #da3633;
-  --bg-success: rgb(46 160 67 / 0.15);
-  --bg-success-bold: #238636;
-  --bg-warning: rgb(187 128 9 / 0.15);
-  --bg-warning-bold: #9e6a03;
-  --bg-information: rgb(56 139 253 / 0.1);
-  --bg-discovery: rgb(171 125 248 / 0.15);
-  --bg-selected: rgb(56 139 253 / 0.1);
-  --bg-selected-strong: rgb(56 139 253 / 0.25);
-  --state-drag-target: rgb(56 139 253 / 0.15);
-  --blanket: rgb(33 40 48 / 0.4);
-  --surface-dialog: #151b23;
-  --border-dialog: #3d444d;
-  --shadow-dialog: rgb(1 4 9 / 0.85);
-
-  --sidebar: #010409;
-  --sidebar-foreground: var(--foreground);
+  --shadow-sm: var(--voya-shadow-card);
+  --shadow-md: var(--voya-shadow-card);
+  --shadow-lg: var(--voya-shadow-overlay);
+  --elevation-raised: var(--voya-shadow-card);
+  --elevation-overlay: var(--voya-shadow-overlay);
+  --duration-short: var(--voya-motion-short);
+  --duration-medium: var(--voya-motion-medium);
+  --duration-long: var(--voya-motion-long);
 }
 
 /* —— Windows Acrylic veil scope (a single translucent layer over the OS material) ——
@@ -269,20 +139,20 @@ html.voyavpn-acrylic #root > main {
   background-color: transparent;
 }
 html.voyavpn-acrylic body {
-  background-color: rgb(246 248 250 / 0.8);
+  background-color: color-mix(in srgb, var(--voya-canvas) 80%, transparent);
 }
 html.voyavpn-acrylic.dark body {
-  background-color: rgb(1 4 9 / 0.8);
+  background-color: color-mix(in srgb, var(--voya-canvas) 80%, transparent);
 }
 
 /* Accessibility: honor prefers-reduced-transparency by falling back to a fully opaque
    surface — no reliance on the OS material, keeping text contrast stable. */
 @media (prefers-reduced-transparency: reduce) {
   html.voyavpn-acrylic body {
-    background-color: #f6f8fa;
+    background-color: var(--voya-canvas);
   }
   html.voyavpn-acrylic.dark body {
-    background-color: #010409;
+    background-color: var(--voya-canvas);
   }
 }
 
@@ -302,27 +172,26 @@ html.voyavpn-acrylic.dark body {
   --spacing-control-large: var(--control-height-large);
   --spacing-page: var(--page-inset);
   --spacing-dialog: var(--dialog-inset);
-  /* Safe Passage typography roles. Display uses the GitHub system stack;
+  /* Voya typography roles. Display uses the system stack;
      mono is reserved for logs, connections, editors, and data cells. */
-  --font-display:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-    Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-sans: var(--voya-font-sans);
+  --font-display: var(--voya-font-sans);
+  --font-mono: var(--voya-font-mono);
 
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 6px;
-  --radius-lg: 6px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
-  --radius-full: 9999px;
+  --radius-xs: var(--voya-radius-control);
+  --radius-sm: var(--voya-radius-control);
+  --radius-md: var(--voya-radius-control);
+  --radius-lg: var(--voya-radius-control);
+  --radius-xl: var(--voya-radius-card);
+  --radius-2xl: var(--voya-radius-overlay);
+  --radius-full: var(--voya-radius-pill);
 
-  /* nicenote named elevation → consume the theme-switched --elevation-* shadows. */
+  /* Voya named elevation → consume the theme-switched --elevation-* shadows. */
   --shadow-raised: var(--elevation-raised);
   --shadow-overlay: var(--elevation-overlay);
 
-  /* ADS easing (theme-agnostic) → ease-inout-bold. */
-  --ease-inout-bold: cubic-bezier(0.4, 0, 0, 1);
+  /* Voya easing (theme-agnostic) → ease-inout-bold. */
+  --ease-inout-bold: var(--voya-motion-easing);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -347,7 +216,7 @@ html.voyavpn-acrylic.dark body {
   --color-connected: var(--connected);
   --color-connected-foreground: var(--connected-foreground);
 
-  /* nicenote semantic utilities — text/icon hierarchy, links, border + focus/selection,
+  /* Voya semantic utilities — text/icon hierarchy, links, border + focus/selection,
      feedback (danger/success/warning/information/discovery), blanket + dialog. */
   --color-subtle: var(--text-subtle);
   --color-subtlest: var(--text-subtlest);
@@ -363,7 +232,7 @@ html.voyavpn-acrylic.dark body {
   --color-warning-bg: var(--bg-warning);
   --color-blanket: var(--blanket);
 
-  /* nicenote surface ladder + translucent interaction overlays. */
+  /* Voya surface ladder + translucent interaction overlays. */
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --color-surface-canvas: var(--surface-canvas);
@@ -373,7 +242,7 @@ html.voyavpn-acrylic.dark body {
   --color-surface-button: var(--surface-button);
   --color-overlay-hovered: var(--overlay-hovered);
 
-  /* nicenote accent palette. */
+  /* Voya accent palette. */
   --color-accent-blue: var(--accent-blue);
   --color-accent-blue-light: var(--accent-blue-light);
   --color-accent-blue-bg: var(--accent-blue-bg);
@@ -401,9 +270,7 @@ html.voyavpn-acrylic.dark body {
 
   body {
     @apply min-h-svh w-full overscroll-none bg-background text-foreground;
-    font-family:
-      -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-      Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    font-family: var(--voya-font-sans);
     font-size: var(--type-body-size);
     line-height: var(--type-body-line);
     letter-spacing: 0;
@@ -454,7 +321,7 @@ html.voyavpn-acrylic.dark body {
   @apply after:pointer-events-none after:absolute after:inset-s-0 after:bottom-0 after:hidden after:h-32 after:w-full after:rounded-b-2xl after:bg-[linear-gradient(180deg,transparent_10%,var(--background)_70%)] md:after:block;
 }
 
-/* nicenote named-duration utilities: write --tw-duration (retimes tw-animate enter/leave) and
+/* Voya named-duration utilities: write --tw-duration (retimes tw-animate enter/leave) and
    transition-duration together, so consumers avoid Tailwind arbitrary values (duration-[var(...)]).
    These own the `duration-*` class names — the --duration-* tokens are deliberately NOT registered
    in @theme inline to avoid a same-name collision with these utilities. */

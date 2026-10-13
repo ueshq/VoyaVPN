@@ -2,7 +2,7 @@ import { useWindowDimensions, type ViewStyle } from "react-native";
 
 /** From this window width up the content stops growing and is centred. */
 const WIDE_WINDOW_WIDTH = 700;
-const CONTENT_MAX_WIDTH = 640;
+export const CONTENT_MAX_WIDTH = 640;
 /** The column style for a window of `width` points, or `undefined` on a phone. */
 export function contentColumn(width: number, maxWidth = CONTENT_MAX_WIDTH): ViewStyle | undefined {
   return width >= WIDE_WINDOW_WIDTH ? { alignSelf: "center", maxWidth, width: "100%" } : undefined;

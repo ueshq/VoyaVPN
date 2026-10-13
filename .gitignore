@@ -26,6 +26,14 @@ $RECYCLE.BIN/
 .env.*
 !.env.example
 !.env.*.example
+# Release signing material; the shared Android debug key is intentional.
+*.jks
+*.keystore
+!apps/mobile/android/app/debug.keystore
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
 
 # Dependencies and package-manager state
 node_modules/
@@ -33,6 +41,8 @@ node_modules/
 .npm/
 .yarn/
 .pnp.*
+# Vite+ installs hook helpers here; keep .vite-hooks/pre-commit tracked.
+/.vite-hooks/_/
 
 # Framework and tool caches
 .turbo/
@@ -113,6 +123,7 @@ __pycache__/
 .ruff_cache/
 
 # Local agent workspaces
+/.worktrees/
 .agents/
 .claude/
 .zcode/

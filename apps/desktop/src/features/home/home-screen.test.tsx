@@ -279,6 +279,7 @@ describe("HomeScreen", () => {
     expect(connectButton()).toHaveAccessibleName("Disconnect");
     expect(await screen.findByRole("heading", { name: "Tokyo Edge" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Details" })).not.toBeInTheDocument();
+    await user.click(screen.getByText("Connection details"));
     await user.click(screen.getByRole("button", { name: "Reconnect" }));
     await waitFor(() => expect(ipcMock.restartCore).toHaveBeenCalledOnce());
     await user.click(screen.getByRole("button", { name: "Switch node" }));

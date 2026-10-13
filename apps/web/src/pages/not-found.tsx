@@ -1,3 +1,4 @@
+import { ActionLink } from "../components/action-link";
 import { COPY } from "../content";
 import { type Locale, pathFor } from "../routes";
 import { Inline } from "../text";
@@ -11,12 +12,9 @@ export function NotFoundPage({ locale }: { locale: Locale }) {
       <p className="mt-4 text-lg text-fg-muted">
         <Inline text={copy.body} />
       </p>
-      <a
-        href={pathFor({ locale, page: "home" })}
-        className="mt-8 inline-flex h-11 items-center rounded-md border border-line px-5 font-medium hover:bg-canvas-subtle"
-      >
+      <ActionLink href={pathFor({ locale, page: "home" })} variant="secondary" className="mt-8">
         {copy.back}
-      </a>
+      </ActionLink>
     </div>
   );
 }

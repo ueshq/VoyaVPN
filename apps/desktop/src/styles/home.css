@@ -7,12 +7,11 @@
   background: var(--surface-canvas);
   color: var(--foreground);
 }
-/* The map fills the area above the node card and never adds scroll overflow;
-   its own gradient mask fades the southern edge away. */
+/* The map stays inside the expandable connection details. */
 .home-map-layer {
-  position: absolute;
-  z-index: -1;
-  inset: 0 0 clamp(96px, 18vh, 150px);
+  height: 190px;
+  position: relative;
+  width: 100%;
   overflow: hidden;
   pointer-events: none;
   user-select: none;
@@ -78,8 +77,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
-  padding: clamp(32px, 8vh, 64px) 24px clamp(24px, 5vh, 40px);
+  gap: 16px;
+  padding: 24px;
 }
 /* Connection state, selected node and metrics form one centered cluster. */
 .home-hero {
@@ -94,18 +93,19 @@
   position: relative;
   display: flex;
   flex: none;
-  width: 168px;
-  height: 168px;
+  width: 210px;
+  height: 210px;
+  margin: 46px;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 8px;
-  border: 2px solid var(--primary);
+  border: 1px solid var(--voya-dial-edge);
   border-radius: 50%;
-  background: var(--card);
-  color: var(--text-brand);
-  box-shadow: var(--elevation-overlay);
-  font-size: 14px;
+  background: radial-gradient(circle, var(--voya-dial) 45%, var(--voya-dial-edge) 100%);
+  color: var(--voya-power);
+  box-shadow: var(--voya-shadow-dial);
+  font-size: 18px;
   font-weight: 500;
   cursor: pointer;
   transition:
@@ -120,7 +120,7 @@
 .home-power-connected {
   border-color: var(--connected);
   color: var(--connected-foreground);
-  background: var(--connected);
+  background: radial-gradient(circle, var(--connected) 62%, var(--voya-green-edge) 100%);
   box-shadow: var(--connected-glow);
 }
 /* Lifting a connected button must not trade its green for the idle wash or its glow for a neutral shadow. */
@@ -175,7 +175,8 @@
   flex-wrap: wrap;
   justify-content: center;
   margin-top: 16px;
-  padding: 8px 0;
+  padding: 20px 0;
+  width: min(100%, 560px);
   border-radius: var(--radius-xl);
   background: var(--card);
   box-shadow: var(--elevation-raised);
@@ -186,7 +187,10 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-width: 140px;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 160px;
   min-height: 28px;
   padding: 0 20px;
 }
@@ -199,7 +203,8 @@
 .home-metrics dd {
   color: var(--foreground);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 30px;
+  font-family: var(--voya-font-statistic);
   font-variant-numeric: tabular-nums;
 }
 .home-diagnostic {
@@ -225,11 +230,11 @@
   display: grid;
   place-items: center;
   flex: none;
-  width: 44px;
-  height: 44px;
-  border: 1px solid var(--border);
+  width: 56px;
+  height: 56px;
+  border: 0;
   border-radius: 12px;
-  background: var(--background);
+  background: var(--voya-wash);
   font-size: 24px;
   color: var(--muted-foreground);
 }
@@ -309,6 +314,7 @@
 }
 .home-node-address,
 .node-card-address {
+  font-family: var(--voya-font-mono);
   max-width: 210px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -575,8 +581,9 @@
     padding: 16px;
   }
   .home-power {
-    width: 120px;
-    height: 120px;
+    width: 168px;
+    height: 168px;
+    margin: 36px;
   }
   .home-status {
     margin-top: 12px;
@@ -603,7 +610,9 @@
 
 /* Both screens share the node surface; only Home constrains its width. */
 .home-node-card {
-  max-width: 672px;
+  max-width: 560px;
+  padding: 16px;
+  box-shadow: var(--elevation-raised);
 }
 
 .home-mode-summary {
@@ -617,4 +626,66 @@
 }
 .home-content > .home-metrics {
   margin-top: 0;
+}
+
+/* The reference's dotted idle ring becomes a success halo when connected. */
+.home-power::before {
+  content: "";
+  position: absolute;
+  inset: -42px;
+  border: 3px dotted var(--voya-dots);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.home-power-connected::before {
+  border: 0;
+  background: color-mix(in srgb, var(--voya-halo) 6%, transparent);
+  z-index: -1;
+}
+.home-secondary {
+  width: min(100%, 560px);
+  border-radius: var(--voya-radius-card);
+  background: var(--card);
+}
+.home-secondary summary {
+  cursor: pointer;
+  padding: 16px;
+  color: var(--text-subtle);
+}
+.home-secondary summary:focus-visible {
+  outline: 2px solid var(--ring);
+  border-radius: inherit;
+}
+.home-secondary-content {
+  padding: 0 16px 16px;
+}
+.home-secondary-facts {
+  margin: 16px 0;
+}
+.home-secondary-facts dt {
+  color: var(--text-subtle);
+}
+.home-secondary-facts dd {
+  font-family: var(--voya-font-mono);
+  overflow-wrap: anywhere;
+}
+.sidebar-nav-item-active {
+  font-weight: 600;
+  box-shadow: inset 3px 0 var(--foreground);
+}
+.home-node-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.home-screen::before {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 240px;
+  border-radius: 50%;
+  background: var(--voya-wash);
+  opacity: 0.45;
+  top: 80px;
+  left: -125px;
+  pointer-events: none;
 }

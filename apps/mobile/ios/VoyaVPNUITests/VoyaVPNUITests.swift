@@ -40,14 +40,19 @@ final class VoyaVPNUITests: XCTestCase {
         try importText("vless://33333333-3333-3333-3333-333333333333@daily.example.test:443?security=tls#Daily%20Node")
         row("Daily Node").tap()
         open("home")
-        tap("Daily Node")
+        let currentNode = row("Choose a node, Daily Node")
+        XCTAssertTrue(currentNode.waitForExistence(timeout: timeout))
+        visible(currentNode).tap()
         XCTAssertTrue(app.searchFields["Search nodes"].waitForExistence(timeout: timeout))
         XCTAssertFalse(app.buttons["Test all"].exists)
         XCTAssertFalse(app.buttons["Add nodes or subscription"].exists)
         captureStable("daily-node-picker")
         row("Daily Node").tap()
         XCTAssertTrue(app.buttons["Connect"].waitForExistence(timeout: timeout))
-        XCTAssertFalse(app.buttons["Connection details"].exists)
+        // The metrics card is visible before connecting, but session details
+        // only become available once there is a live connection.
+        XCTAssertTrue(app.buttons["Connection details"].exists)
+        XCTAssertFalse(app.buttons["Connection details"].isEnabled)
         open("dns")
         XCTAssertTrue(app.switches["Connect when the app starts"].exists)
         tap("Connection shortcuts")
@@ -113,7 +118,7 @@ final class VoyaVPNUITests: XCTestCase {
         // again, and no diagnostic that would only repeat the sentence above it.
         XCTAssertTrue(app.buttons["Authorize again"].waitForExistence(timeout: timeout))
         tap("Authorize again")
-        XCTAssertTrue(app.staticTexts["Disconnected"].exists)
+        XCTAssertTrue(wait { self.app.buttons["Authorize again"].value as? String == "Disconnected" })
         open("profiles")
         row(title).press(forDuration: 1.2)
         tap("Delete")
@@ -315,6 +320,16 @@ final class VoyaVPNUITests: XCTestCase {
                 for page in ["home", "profiles", "rules", "settings"] {
                     open(page)
                     captureStable("\(language)-\(dark ? "dark" : "light")-\(page)")
+                    if page == "home" {
+                        // At accessibility sizes the statistics move below the
+                        // dial. They must remain reachable above native tabs.
+                        let metrics = visible(app.buttons["home-details"])
+                        XCTAssertTrue(metrics.isHittable)
+                        if UIDevice.current.userInterfaceIdiom != .pad {
+                            XCTAssertLessThanOrEqual(metrics.frame.maxY, tabButton("home").frame.minY)
+                        }
+                        captureStable("\(language)-\(dark ? "dark" : "light")-home-metrics")
+                    }
                     if page == "profiles" {
                         visible(row("QA Visual")).press(forDuration: 1.2)
                         let showQr = language == "English" ? "Show QR" : language == "简体中文" ? "显示二维码" : "顯示 QR Code"
@@ -463,7 +478,7 @@ final class VoyaVPNUITests: XCTestCase {
             if app.buttons["Connect"].exists || app.buttons["Disconnect"].exists {
                 (app.buttons["Connect"].exists ? app.buttons["Connect"] : app.buttons["Disconnect"]).tap()
             }
-            _ = app.staticTexts["Disconnected"].waitForExistence(timeout: timeout)
+            _ = wait { self.app.buttons["Connect"].exists || self.app.buttons["Authorize again"].exists }
         }
 
         // --- Activity ---
@@ -723,13 +738,14 @@ final class VoyaVPNUITests: XCTestCase {
             if back.exists { back.tap() }
             if app.alerts.buttons["Discard changes"].exists { app.alerts.buttons["Discard changes"].tap() }
         }
-        let settingsPages = ["subscriptions", "general", "dns", "maintenance", "about"]
-        let target = settingsPages.contains(page) || page == "logs" ? "settings" : page == "connections" ? "home" : page
+        let settingsPages = ["general", "dns", "maintenance", "about"]
+        let target = page == "subscriptions" ? "profiles" : settingsPages.contains(page) || page == "logs" ? "settings" : page == "connections" ? "home" : page
         let tab = tabButton(target)
         XCTAssertTrue(tab.exists || tab.waitForExistence(timeout: timeout))
         XCTAssertTrue(ready(tab))
         tab.tap()
         XCTAssertTrue(wait { tab.isSelected })
+        if page == "subscriptions" { visible(app.buttons["nodes-subscriptions"]).tap() }
         if settingsPages.contains(page) { visible(app.buttons["settings-" + page]).tap() }
         if page == "connections" { visible(tabButton("settings")).tap(); visible(app.buttons["settings-maintenance"]).tap(); visible(app.buttons["maintenance-activity"]).tap() }
         if page == "logs" { visible(app.buttons["settings-maintenance"]).tap(); visible(app.buttons["maintenance-logs"]).tap() }
@@ -787,9 +803,11 @@ final class VoyaVPNUITests: XCTestCase {
         // Wait for unchanged rendered pixels, not a guessed animation delay.
         // Closing sheets may keep painting after their hit regions are gone.
         var previous: Data?
-        var screenshot = app.screenshot()
+        // App-window capture crops against stale portrait bounds after an
+        // iPad rotation. Capture the full device screen in either orientation.
+        var screenshot = XCUIScreen.main.screenshot()
         XCTAssertTrue(wait(seconds: 15) {
-            screenshot = self.app.screenshot()
+            screenshot = XCUIScreen.main.screenshot()
             guard let current = screenshot.image.cgImage?.dataProvider?.data as Data? else { return false }
             let settled = previous == current
             previous = current
@@ -802,7 +820,7 @@ final class VoyaVPNUITests: XCTestCase {
     }
 
     private func capture(_ title: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = title
         attachment.lifetime = .keepAlways
         add(attachment)

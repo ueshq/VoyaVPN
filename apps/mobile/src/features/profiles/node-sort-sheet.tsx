@@ -79,7 +79,7 @@ export function NodeSortMenu({
           <Pressable accessible={false} className="absolute inset-0 bg-backdrop" onPress={() => setOpen(false)} />
           <View
             accessibilityViewIsModal
-            className="gap-4 rounded-t-3xl bg-canvas p-5"
+            className="gap-4 rounded-t-2xl bg-surface p-5"
             style={[{ paddingBottom: Math.max(20, insets.bottom) }, column]}
           >
             <Typography

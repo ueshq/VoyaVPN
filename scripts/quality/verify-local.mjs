@@ -8,6 +8,7 @@ import { isCliEntrypoint, runOrExit } from "../lib/common.mjs";
  * Vite+ CLI locally, `voidzero-dev/setup-vp` in CI.
  */
 export const steps = [
+  ["Design token themes, contrast and drift", "vp", ["run", "check", "design-tokens"]],
   ["Architecture boundaries", "vp", ["run", "check", "architecture"]],
   ["Lockfile single versions", "vp", ["run", "check", "lockfile"]],
   ["Rust formatting", "vp", ["run", "check", "rust", "fmt"]],

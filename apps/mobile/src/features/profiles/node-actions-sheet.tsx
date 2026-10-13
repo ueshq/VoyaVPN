@@ -148,7 +148,7 @@ export function NodeActionsSheet({
         <Pressable accessible={false} className="absolute inset-0 bg-backdrop" onPress={close} />
         <View
           accessibilityViewIsModal
-          className="rounded-t-3xl bg-canvas"
+          className="rounded-t-2xl bg-surface"
           style={[{ maxHeight: height - insets.top - 16 }, column]}
         >
           <ScrollView
@@ -340,7 +340,7 @@ function SheetAction({
       accessibilityRole="button"
       last={last}
       title={label}
-      titleClassName={destructive ? "text-danger" : undefined}
+      titleClassName={destructive ? "text-danger-soft-foreground" : undefined}
       leading={<Icon size={20} color={color} accessible={false} />}
       onPress={onPress}
     />

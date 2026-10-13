@@ -93,6 +93,7 @@ export function RulesScreen() {
 
   return (
     <FlatList
+      contentInsetAdjustmentBehavior="automatic"
       className="flex-1 bg-canvas"
       data={rules}
       keyExtractor={({ item }) => item.id}
@@ -122,6 +123,16 @@ export function RulesScreen() {
             </Card>
           </View>
           {rulesApply ? null : <Banner status="warning" message={t("panes.routing.globalModeBanner")} />}
+          {routing.activeRouting ? (
+            <View>
+              <SectionHeader title={t("panes.routing.currentPolicy")} />
+              <Card className="p-4">
+                <Typography className="text-base font-medium text-foreground">
+                  {routing.activeRouting.remarks}
+                </Typography>
+              </Card>
+            </View>
+          ) : null}
           <ErrorNotice error={routing.loadError} />
           <ErrorNotice error={routing.operationError} />
           {rules.length > 0 ? (

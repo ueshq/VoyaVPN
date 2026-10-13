@@ -10,7 +10,7 @@ import { useScreenInsets } from "./use-screen-insets";
 export function DetailScreen({
   accessibilityLabel,
   children,
-  gap = "gap-4",
+  gap = "gap-6",
 }: {
   accessibilityLabel?: string;
   children: ReactNode;
@@ -20,6 +20,7 @@ export function DetailScreen({
   const insets = useScreenInsets();
   return (
     <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
       accessibilityLabel={accessibilityLabel}
       className="flex-1 bg-canvas"
       contentContainerClassName={`${gap} px-page`}

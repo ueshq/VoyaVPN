@@ -1,6 +1,7 @@
 import { Button } from "heroui-native/button";
 import { Typography } from "heroui-native/text";
 import { useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useI18n } from "@voya/i18n/use-i18n";
 import type { AppError } from "@voya/contracts";
 import { redactOperationalMessage } from "@voya/utils/operational-redaction";
@@ -35,45 +36,47 @@ export function StartupFailureScreen({
   const [confirming, setConfirming] = useState(false);
 
   return (
-    <DetailScreen accessibilityLabel={t("startupFailure.title")}>
-      <PageHeader title={t("startupFailure.title")} />
-      {/* The confirm texts say the same thing concretely, so the longer
+    <SafeAreaView edges={["top"]} className="flex-1 bg-canvas">
+      <DetailScreen accessibilityLabel={t("startupFailure.title")}>
+        <PageHeader title={t("startupFailure.title")} />
+        {/* The confirm texts say the same thing concretely, so the longer
           explanation and the disclosure step aside for them — keeping the
           actions above the fold on the smallest window. */}
-      {confirming ? null : (
-        <>
-          <Typography className="text-base text-foreground">{t("startupFailure.resetExplanation")}</Typography>
-          <Disclosure title={t("mobile.details")}>
-            <Typography className="text-sm text-subtle" selectable>
-              {redactOperationalMessage(error.message)}
+        {confirming ? null : (
+          <>
+            <Typography className="text-base text-foreground">{t("startupFailure.resetExplanation")}</Typography>
+            <Disclosure title={t("mobile.details")}>
+              <Typography className="text-sm text-subtle" selectable>
+                {redactOperationalMessage(error.message)}
+              </Typography>
+            </Disclosure>
+          </>
+        )}
+        {confirming ? (
+          <>
+            <Typography className="text-base font-semibold text-foreground">
+              {t("startupFailure.confirmTitle")}
             </Typography>
-          </Disclosure>
-        </>
-      )}
-      {confirming ? (
-        <>
-          <Typography className="text-base font-semibold text-foreground">
-            {t("startupFailure.confirmTitle")}
-          </Typography>
-          <Typography className="text-base text-foreground">{t("startupFailure.confirmMessage")}</Typography>
-          <ErrorNotice error={resetFailure} />
-          <Button testID="startup-reset-confirm" isDisabled={busy} onPress={onReset}>
-            <Button.Label>{t("startupFailure.confirmReset")}</Button.Label>
+            <Typography className="text-base text-foreground">{t("startupFailure.confirmMessage")}</Typography>
+            <ErrorNotice error={resetFailure} />
+            <Button testID="startup-reset-confirm" isDisabled={busy} onPress={onReset}>
+              <Button.Label>{t("startupFailure.confirmReset")}</Button.Label>
+            </Button>
+            <Button
+              testID="startup-reset-cancel"
+              variant="secondary"
+              isDisabled={busy}
+              onPress={() => setConfirming(false)}
+            >
+              <Button.Label>{t("actions.cancel")}</Button.Label>
+            </Button>
+          </>
+        ) : (
+          <Button testID="startup-reset" onPress={() => setConfirming(true)}>
+            <Button.Label>{t("startupFailure.resetDatabase")}</Button.Label>
           </Button>
-          <Button
-            testID="startup-reset-cancel"
-            variant="secondary"
-            isDisabled={busy}
-            onPress={() => setConfirming(false)}
-          >
-            <Button.Label>{t("actions.cancel")}</Button.Label>
-          </Button>
-        </>
-      ) : (
-        <Button testID="startup-reset" onPress={() => setConfirming(true)}>
-          <Button.Label>{t("startupFailure.resetDatabase")}</Button.Label>
-        </Button>
-      )}
-    </DetailScreen>
+        )}
+      </DetailScreen>
+    </SafeAreaView>
   );
 }

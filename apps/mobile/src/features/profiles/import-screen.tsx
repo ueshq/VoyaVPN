@@ -237,7 +237,7 @@ export function ImportScreen() {
           {preview.data.lineIssues.map((issue, index) => (
             <Typography
               key={`issue-${index}`}
-              className={isImportLineNotice(issue) ? "text-sm text-subtle" : "text-sm text-danger"}
+              className={isImportLineNotice(issue) ? "text-sm text-subtle" : "text-sm text-danger-soft-foreground"}
             >
               {importLineText(t, issue)}
             </Typography>

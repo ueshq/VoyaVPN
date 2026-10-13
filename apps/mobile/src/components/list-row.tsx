@@ -1,3 +1,4 @@
+import { MONO_FONT } from "./mono-font";
 import { ListGroup } from "heroui-native/list-group";
 import { PressableFeedback } from "heroui-native/pressable-feedback";
 import { Separator } from "heroui-native/separator";
@@ -36,6 +37,7 @@ export function ListRow({
   children,
   description,
   descriptionLines = 1,
+  monoDescription = false,
   dimmed = false,
   first = false,
   inset = false,
@@ -64,6 +66,7 @@ export function ListRow({
   children?: ReactNode;
   description?: string;
   descriptionLines?: number;
+  monoDescription?: boolean;
   /** Shown but not in effect, such as a rule while global mode skips them all. */
   dimmed?: boolean;
   first?: boolean;
@@ -89,7 +92,7 @@ export function ListRow({
 }) {
   const shape = `bg-surface ${inset ? "mx-page" : ""} ${first ? "rounded-t-3xl" : ""} ${
     last ? "rounded-b-3xl" : ""
-  } ${dimmed ? "opacity-40" : ""}`;
+  } ${dimmed ? "bg-default" : ""}`;
 
   const text = (
     <>
@@ -99,7 +102,12 @@ export function ListRow({
           {title}
         </ListGroup.ItemTitle>
         {description ? (
-          <ListGroup.ItemDescription numberOfLines={descriptionLines}>{description}</ListGroup.ItemDescription>
+          <ListGroup.ItemDescription
+            numberOfLines={descriptionLines}
+            style={monoDescription ? { fontFamily: MONO_FONT } : undefined}
+          >
+            {description}
+          </ListGroup.ItemDescription>
         ) : null}
         {children}
       </ListGroup.ItemContent>

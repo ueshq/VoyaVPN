@@ -37,8 +37,8 @@ describe("SegmentedControl", () => {
     );
 
     const item = screen.getByRole("button", { name: "Rule" });
-    expect(item.className).toContain("aria-pressed:bg-background");
-    expect(item.className).toContain("aria-pressed:shadow-sm");
+    expect(item.className).toContain("aria-pressed:bg-accent");
+    expect(item.className).toContain("aria-pressed:border-foreground");
     // Unselected items stay readable instead of fading to the subtlest text.
     expect(item.className).not.toContain("text-subtlest");
   });

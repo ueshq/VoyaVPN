@@ -1,6 +1,7 @@
 import { Typography } from "heroui-native/text";
 import type { ReactNode } from "react";
 import { View, useWindowDimensions } from "react-native";
+import { CONTENT_MAX_WIDTH } from "./content-column";
 
 /**
  * A screen's large title, left-aligned, scrolling with the content.
@@ -11,7 +12,7 @@ import { View, useWindowDimensions } from "react-native";
  */
 export function PageHeader({ title, trailing }: { title: string; trailing?: ReactNode }) {
   const { width, fontScale } = useWindowDimensions();
-  const stacked = Boolean(trailing) && width / fontScale < 360;
+  const stacked = Boolean(trailing) && Math.min(width, CONTENT_MAX_WIDTH) / fontScale < 360;
   return (
     <View className={`gap-3 pb-1 pt-4 ${stacked ? "" : "flex-row items-center justify-between"}`}>
       <Typography

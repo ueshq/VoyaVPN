@@ -1,3 +1,4 @@
+import { ActionLink } from "../components/action-link";
 import {
   Activity,
   ArrowRight,
@@ -74,18 +75,12 @@ export function HomePage({ locale }: { locale: Locale }) {
               <Inline text={copy.sub} />
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <a
-                href="#download"
-                className="inline-flex h-11 items-center rounded-md bg-accent px-5 font-medium whitespace-nowrap text-white transition-transform hover:brightness-110 active:scale-[0.98]"
-              >
+              <ActionLink href="#download" variant="primary">
                 {copy.download}
-              </a>
-              <a
-                href="#features"
-                className="inline-flex h-11 items-center gap-2 rounded-md border border-line bg-canvas px-5 font-medium whitespace-nowrap transition-transform hover:bg-canvas-subtle active:scale-[0.98]"
-              >
+              </ActionLink>
+              <ActionLink href="#features" variant="secondary">
                 {copy.features}
-              </a>
+              </ActionLink>
             </div>
           </div>
           <figure className="mt-12 overflow-hidden rounded-xl border border-line shadow-frame md:mt-16">
@@ -95,7 +90,7 @@ export function HomePage({ locale }: { locale: Locale }) {
       </section>
 
       <section className="bg-canvas-subtle" aria-labelledby="privacy-heading">
-        <div className={`${CONTAINER} grid gap-10 py-20 md:py-24 lg:grid-cols-12 lg:gap-12`}>
+        <div className={`${CONTAINER} grid gap-10 site-section lg:grid-cols-12 lg:gap-12`}>
           <div className="lg:col-span-5">
             <h2 id="privacy-heading" className="text-3xl font-semibold tracking-tight text-balance">
               {copy.privacy.headline}
@@ -105,7 +100,7 @@ export function HomePage({ locale }: { locale: Locale }) {
             </p>
             <a
               href={pathFor({ locale, page: "privacy" })}
-              className="mt-6 inline-flex items-center gap-1.5 font-medium text-accent-fg hover:underline"
+              className="mt-6 inline-flex items-center gap-1.5 font-medium text-accent-fg underline underline-offset-4"
             >
               {copy.privacy.link}
               <ArrowRight {...ICON} size={16} />
@@ -119,7 +114,7 @@ export function HomePage({ locale }: { locale: Locale }) {
       </section>
 
       <section id="features" className="scroll-mt-4" aria-labelledby="features-heading">
-        <div className={`${CONTAINER} py-20 md:py-24`}>
+        <div className={`${CONTAINER} site-section`}>
           <h2 id="features-heading" className="text-3xl font-semibold tracking-tight">
             {copy.featuresHeadline}
           </h2>
@@ -165,7 +160,7 @@ export function HomePage({ locale }: { locale: Locale }) {
       </section>
 
       <section id="download" className="scroll-mt-4" aria-labelledby="download-heading">
-        <div className={`${CONTAINER} py-20 md:py-24`}>
+        <div className={`${CONTAINER} site-section`}>
           <h2 id="download-heading" className="text-3xl font-semibold tracking-tight">
             {copy.downloadHeadline}
           </h2>
@@ -185,7 +180,7 @@ export function HomePage({ locale }: { locale: Locale }) {
                         <a
                           key={url}
                           href={url}
-                          className="inline-flex items-center gap-1 text-sm font-medium text-accent-fg hover:underline"
+                          className="inline-flex items-center gap-1 text-sm font-medium text-accent-fg underline underline-offset-4"
                         >
                           {variant ? copy.downloadVariants[variant] : copy.getIt}
                           <ArrowRight {...ICON} size={14} />

@@ -30,7 +30,7 @@ export function PrivacyPage({ locale }: { locale: Locale }) {
         <h2 className="text-xl font-semibold">{copy.contactHeading}</h2>
         <p className="mt-3 leading-relaxed text-fg-muted">
           <Inline text={emailBefore} />
-          <a className="font-medium text-accent-fg hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>
+          <a className="font-medium text-accent-fg underline underline-offset-4" href={`mailto:${SUPPORT_EMAIL}`}>
             {SUPPORT_EMAIL}
           </a>
           <Inline text={emailAfter} />

@@ -55,7 +55,9 @@ export function ConnectedInfo({
       </div>
       <div>
         <dt>{t("home.duration")}</dt>
-        <dd data-testid="home-connection-duration">{elapsed == null ? "—" : formatDurationMs(elapsed)}</dd>
+        <dd data-testid="home-connection-duration">
+          {status?.state === "disconnected" ? "00:00:00" : elapsed == null ? "—" : formatDurationMs(elapsed)}
+        </dd>
       </div>
       {children}
     </dl>

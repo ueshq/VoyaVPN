@@ -66,16 +66,8 @@ describe("HomeScreen", () => {
     await renderHome();
 
     expect(await screen.findByText("🇯🇵 Tokyo")).toBeOnTheScreen();
-    expect(screen.getByText("Disconnected")).toBeOnTheScreen();
+    expect(screen.getByLabelText("Connect")).toHaveAccessibilityValue({ text: "Disconnected" });
     expect(screen.getByText("Connect")).toBeOnTheScreen();
-  });
-
-  it("describes the traffic mode in plain words and offers the rules tab through it", async () => {
-    await renderHome();
-
-    // "Rule" alone reads as a label for nothing; the words say what the mode
-    // does, and the button is the shortcut to where the mode is switched.
-    expect(await screen.findByRole("button", { name: "Rule-based routing" })).toBeOnTheScreen();
   });
 
   it("connects through the shared runtime action and then offers to disconnect", async () => {
@@ -87,20 +79,46 @@ describe("HomeScreen", () => {
     // The whole shared chain has to work for this: the runtime action, the
     // status read-back it does afterwards, and the transient core-state event
     // the backend publishes.
-    expect(await screen.findByText("Connected")).toBeOnTheScreen();
+    expect(await screen.findByLabelText("Disconnect")).toHaveAccessibilityValue({ text: "Connected" });
     expect(screen.getByText("Disconnect")).toBeOnTheScreen();
     expect(mockBackend().state.calls.map((call) => call.command)).toContain("connectActiveProfile");
   });
 
-  it("keeps session details behind an explicit entry and shows no transfer rates", async () => {
+  it("shows session duration and opens details from the metrics card without transfer rates", async () => {
     await renderHome();
     await userEvent.setup().press(await screen.findByText("Connect"));
-    await screen.findByText("Connected");
+    await screen.findByText("Disconnect");
 
-    expect(screen.queryByText("Connection time")).toBeNull();
-    expect(screen.getByText("Connection details")).toBeOnTheScreen();
+    expect(screen.getByText("Connection time")).toBeOnTheScreen();
+    expect(screen.getByRole("button", { name: "Connection details" })).toBeOnTheScreen();
     // The host has no statistics sampler, so there are no rates to show.
     expect(screen.queryByText(/\/s$/)).toBeNull();
+  });
+
+  it("shows the selected node's measured latency and a zero clock before connecting", async () => {
+    await renderHome();
+    expect(await screen.findByText("40 ms")).toBeOnTheScreen();
+    expect(screen.getByText("ms")).toBeOnTheScreen();
+    expect(screen.getByText("node-0.example.test")).toBeOnTheScreen();
+    expect(screen.getByTestId("home-duration")).toHaveTextContent("00:00:00");
+  });
+
+  it("does not display an old successful latency when the latest test failed", async () => {
+    const entry = mockBackend().state.profiles[0];
+    if (entry) entry.metrics.outcome = "timedOut";
+    await renderHome();
+    await screen.findByText("🇯🇵 Tokyo");
+    expect(screen.queryByText("40 ms")).toBeNull();
+    expect(screen.queryByText("ms")).toBeNull();
+  });
+
+  it("keeps an unknown connected duration unknown", async () => {
+    const runtime = { ...makeMockSeed().runtime, state: "connected", connectedDurationMs: null } as const;
+    mockBackend().state.runtime = runtime;
+    useRuntimeEventStore.getState().setCoreState(runtime);
+    await renderHome();
+    await screen.findByText("Disconnect");
+    expect(screen.getByTestId("home-duration")).toHaveTextContent("—");
   });
 
   it("keeps a listing failure distinct from an empty configuration", async () => {

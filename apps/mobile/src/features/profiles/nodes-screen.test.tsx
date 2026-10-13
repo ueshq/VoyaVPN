@@ -38,6 +38,16 @@ beforeEach(() => {
 });
 
 describe("NodesScreen", () => {
+  it("filters nodes and restores the grouped list after clearing search", async () => {
+    await renderNodes();
+    const user = userEvent.setup();
+    const search = await screen.findByLabelText("Search nodes");
+    await user.type(search, "missing-node");
+    expect(await screen.findByText("No matching nodes")).toBeOnTheScreen();
+    expect(screen.queryByText("🇸🇬 Singapore")).toBeNull();
+    await user.clear(search);
+    expect(await screen.findByText("🇸🇬 Singapore")).toBeOnTheScreen();
+  });
   it("groups nodes by source, local last, with each group's size", async () => {
     await renderNodes();
 

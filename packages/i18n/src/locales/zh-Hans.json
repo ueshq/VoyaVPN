@@ -560,7 +560,8 @@
       "trafficModeUnavailable": "暂时无法读取当前模式",
       "reorderFailed": "调整规则顺序失败",
       "loadingRules": "正在加载规则",
-      "editNamedRule": "编辑“{{name}}”"
+      "editNamedRule": "编辑“{{name}}”",
+      "currentPolicy": "当前策略"
     },
     "subscriptions": {
       "additionalUrl": "备用地址",
@@ -1200,10 +1201,11 @@
     "connectMac": "⌘⇧C"
   },
   "mobile": {
+    "currentNode": "当前节点",
+    "latency": "延迟",
+    "latencyUnit": "ms",
     "add": "添加节点或订阅",
     "connection": "连接与 DNS",
-    "trafficModeRule": "按规则分流",
-    "trafficModeGlobal": "全局代理",
     "subscriptions": "管理订阅",
     "subscription": "订阅详情",
     "name": "名称",
@@ -1307,7 +1309,8 @@
     "editorTransport": "传输",
     "editorTls": "安全",
     "editorTransportNone": "无",
-    "openLogs": "打开日志"
+    "openLogs": "打开日志",
+    "noMatchingNodes": "没有匹配的节点"
   },
   "daily": {
     "manageNodes": "管理节点",

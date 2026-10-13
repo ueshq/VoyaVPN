@@ -41,6 +41,7 @@ export default defineConfig({
       // Generated, and compared byte for byte by check bindings.
       "apps/desktop/src/ipc/bindings.ts",
       "packages/contracts/src/generated.ts",
+      "packages/design-tokens/src/**",
       "packages/contracts/src/commands.ts",
       "packages/contracts/*.json",
       // Rewritten by Uniwind on every Metro bundle.

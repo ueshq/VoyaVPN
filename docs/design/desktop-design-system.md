@@ -1,12 +1,12 @@
 # Desktop design and interaction specification
 
-Scope: the desktop app's pages, settings categories and dialogs. Colors are
-vendored from Primer 11.9 (see [Primer mapping](primer-token-mapping.md)); add a
-new color only as a role mapped to an existing Primer value.
+Scope: desktop pages, settings and dialogs, with the same visual roles as mobile and web.
+The authority is [Voya design tokens](voya-design-tokens.md), maintained in
+`packages/design-tokens/tokens.json`; platform adapters supply semantic aliases.
 
 Where things live:
 
-- `packages/ui/src/styles/globals.css` — tokens, type, control sizes, radii, motion.
+- `packages/ui/src/styles/globals.css` — shadcn semantic adapter and desktop typography.
 - `packages/ui/src/components/` — shared primitives.
 - `apps/desktop/src/styles/home.css` (Home, node card surface, sidebar),
   `nodes.css` (node list, groups, policy groups), `shell.css` (window chrome).
@@ -15,18 +15,18 @@ Where things live:
 
 | Role | Token / specification |
 | --- | --- |
-| Page canvas | `surface-canvas` — light `#f6f8fa`, dark same as `background` |
-| Panels and cards | `card` / `surface-raised`, no border or shadow; they read against the canvas |
-| Component fill | `background` — switch thumb, active tab or segment, toasts, chips |
+| Page canvas | `surface-canvas` — light `#faf9f6`, dark `#141816` |
+| Panels and cards | `card` / `surface-raised`, soft shared shadow; decorative dividers use `border-subtle` |
+| Component fill | `card` for raised surfaces; `accent` for selected warm-gray segments |
 | Overlays | `surface-overlay` with `shadow-overlay` (menus, dialogs, toasts, dragged rows) |
 | Text | `foreground`, `muted-foreground` |
 | Feedback | text on its own background: `success`/`success-bg`, `warning`/`warning-bg`, `danger`/`danger-bg` |
-| Accent | `primary` is the only idle and interactive accent; `connected` only marks an achieved connection |
-| Map land | `map-land` — light Primer neutral-4, dark neutral-3 |
+| Accent | `primary` is neutral inverse; `connected` marks achieved connection; success remains green |
+| Map land | `map-land` — shared decorative `mapLand` role |
 | Page / dialog / section title | `text-page` 24/32, `text-dialog` 20/28, `text-section` 16/24 |
 | Body / caption | 14/20, 12/16 |
 | Control height | 36 default; 32 compact (toolbars, settings rows, list actions); 24 `xs` |
-| Radius | 6 px controls, menus, toasts; 12 px panels and dialogs |
+| Radius | 12 px controls, 22 px cards, 24 px overlays, full pill |
 | Focus | primitives: `ring-2 ring-ring`; page CSS on plain buttons: 2 px `--ring` outline, 2 px offset |
 | Motion | 150 ms feedback, 200 ms layout; reduced motion collapses animations and stops pulses |
 
@@ -119,18 +119,18 @@ allows scripts only from its own origin.
   unreachable, secondary when unknown.
 
 **Home**
-- The disc is the action: an idle `primary` ring on a card, green fill with glow
+- The disc is the action: an idle dotted ring around a soft neutral disc, green fill with glow
   when connected, a warning ring while cleanup is pending, and a plus-shaped
   Add node action when there are no nodes. Empty Home has this single entry;
   it opens Nodes with the Add menu expanded and its first option focused.
-- A status line under the disc (`role="status"`) says where the connection
-  stands; with no nodes it shows how to add one instead.
-- The centered reading order is connection state, capture/routing summary,
-  current node, then metrics, with 24 px between the main sections.
+- An accessible status line (`role="status"`) says where the connection stands;
+  transitional/cleanup and empty states also show visible guidance.
+- The centered reading order is connection disc, current node, then latency/duration cards.
+  Capture/routing, map, exit IP and reconnect live in the details disclosure.
 - Capture names the runtime backend or effective system proxy when connected.
   Routing is labeled as a saved setting because existing IPC has no live read;
   pending settings remain explicit. Both summaries link to their editing page.
-- Last tested latency, connection time and exit IP sit in one strip. Exit IP
+- Last tested latency and connection time share the main statistics card. Exit IP
   distinguishes Not checked, Checking and Failed with a Check/Retry action;
   checking is still opt-in.
 - View logs on a failed connection opens Advanced, scrolls the runtime log
@@ -163,7 +163,7 @@ allows scripts only from its own origin.
 
 **Network activity**
 - Live connections and Policy groups tabs.
-- A route column colors where traffic went: proxy with the node name (blue),
+- A route column colors where traffic went: proxy with the node name (neutral),
   direct (neutral), blocked (red).
 - Connection details are grouped (what, route, addresses, traffic) with
   monospaced addresses.

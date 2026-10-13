@@ -313,7 +313,10 @@ function SubscriptionEditor({
       {/* The same two facts, in the same words, as the desktop's card: what is
         left of the quota and of the term, each only when the server says. */}
       {subscriptionUsageStats(metadata, t).map((stat) => (
-        <Typography key={stat.key} className={stat.destructive ? "text-sm text-danger" : "text-sm text-subtle"}>
+        <Typography
+          key={stat.key}
+          className={stat.destructive ? "text-sm text-danger-soft-foreground" : "text-sm text-subtle"}
+        >
           {stat.label}
         </Typography>
       ))}

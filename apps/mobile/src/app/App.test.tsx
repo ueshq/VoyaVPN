@@ -3,6 +3,7 @@ import { createAppQueryClient } from "@voya/client/query-client";
 import { usePreferencesStore } from "@voya/client/preferences-store";
 import { IpcCommandError } from "@voya/client/errors";
 import { Alert, Linking } from "react-native";
+import { Uniwind } from "uniwind";
 
 import {
   PRIVACY_NOTICE_VERSION,
@@ -35,7 +36,11 @@ afterEach(async () => {
 beforeEach(() => {
   registerMobileBackend(mockTransport());
   // A returning user: the first-run data notice was accepted on an earlier launch.
-  usePreferencesStore.setState({ privacyNoticeVersion: PRIVACY_NOTICE_VERSION });
+  usePreferencesStore.setState({
+    privacyNoticeVersion: PRIVACY_NOTICE_VERSION,
+    themeMode: "light",
+    themePreview: null,
+  });
 });
 
 describe("App", () => {
@@ -91,13 +96,13 @@ describe("App", () => {
     expect(view.getByRole("tab", { name: "Home" })).not.toBeSelected();
   });
 
-  it("reaches the subscription list from Settings", async () => {
+  it("reaches the subscription list from Nodes", async () => {
     await localeReady;
     const view = await render(<App />);
     const user = userEvent.setup();
 
-    await user.press(view.getByRole("tab", { name: "Settings" }));
-    await user.press(view.getByTestId("settings-subscriptions"));
+    await user.press(view.getByRole("tab", { name: "Nodes" }));
+    await user.press(view.getByTestId("nodes-subscriptions"));
 
     expect(await view.findByText("Update all subscriptions")).toBeOnTheScreen();
   });
@@ -107,8 +112,8 @@ describe("App", () => {
     const view = await render(<App />);
     const user = userEvent.setup();
 
-    await user.press(view.getByRole("tab", { name: "Settings" }));
-    await user.press(view.getByTestId("settings-subscriptions"));
+    await user.press(view.getByRole("tab", { name: "Nodes" }));
+    await user.press(view.getByTestId("nodes-subscriptions"));
     await view.findByText("Update all subscriptions");
 
     // The chevron is drawn by the shell, not the native bar, so it carries an
@@ -117,7 +122,7 @@ describe("App", () => {
 
     await waitFor(() => expect(view.queryByText("Update all subscriptions")).toBeNull());
     expect(view.getByRole("tab", { name: "Home" })).toBeOnTheScreen();
-    expect(view.getByRole("tab", { name: "Settings" })).toBeSelected();
+    expect(view.getByRole("tab", { name: "Nodes" })).toBeSelected();
   });
 });
 
@@ -162,6 +167,8 @@ describe("first-run data notice", () => {
 
   it("takes over with the reset flow when the database is rejected", async () => {
     await localeReady;
+    usePreferencesStore.setState({ themeMode: "dark" });
+    const setTheme = jest.spyOn(Uniwind, "setTheme");
     const backend = mockTransport();
     const rejectedDatabase = {
       kind: { type: "database", code: "schemaUnsupported", resetCommand: "rm -f x" },
@@ -175,6 +182,8 @@ describe("first-run data notice", () => {
 
     const view = await render(<App />);
     const user = userEvent.setup();
+    expect(setTheme).toHaveBeenLastCalledWith("dark");
+    setTheme.mockRestore();
 
     // Nothing else can run: navigation is replaced, not covered.
     expect(view.queryByRole("tab", { name: "Home" })).toBeNull();
@@ -259,8 +268,8 @@ describe("first-run data notice", () => {
     const view = await render(<App />);
     const user = userEvent.setup();
 
-    await user.press(view.getByRole("tab", { name: "Settings" }));
-    await user.press(view.getByTestId("settings-subscriptions"));
+    await user.press(view.getByRole("tab", { name: "Nodes" }));
+    await user.press(view.getByTestId("nodes-subscriptions"));
     await user.press(await view.findByText("Example provider"));
     await user.press(await view.findByText("Delete"));
     const buttons = alert.mock.calls.at(-1)?.[2] ?? [];

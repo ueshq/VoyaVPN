@@ -90,6 +90,12 @@ export function RoutingScreen() {
       <PageContent>
         {error ? <InlinePageError>{error}</InlinePageError> : null}
         <TrafficModeBanner />
+        {activeRouting ? (
+          <p className="text-sm text-muted-foreground">
+            {t("panes.routing.currentPolicy")}:{" "}
+            <span className="font-medium text-foreground">{activeRouting.remarks}</span>
+          </p>
+        ) : null}
         <PerAppSummaryCard locked={rulesLocked} onEdit={() => controller.setPerAppOpen(true)} routing={activeRouting} />
         <PageSurface className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <PageHeader>

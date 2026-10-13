@@ -1,3 +1,4 @@
+import { designTokens } from "@voya/design-tokens";
 import type { ReactNode } from "react";
 import { COPY } from "./content";
 import { HTML_LANG, LOCALES, type Locale, type Page, pathFor, urlFor } from "./routes";
@@ -10,7 +11,7 @@ const SHORT_LANGUAGE_NAME: Record<Locale, string> = {
   "zh-hant": "繁體",
 };
 
-export const CONTAINER = "mx-auto w-full max-w-6xl px-4 sm:px-6";
+export const CONTAINER = "site-container mx-auto";
 
 type DocumentProps = {
   locale: Locale;
@@ -32,8 +33,8 @@ export function Document({ locale, page, title, description, css, children }: Do
         <title>{title}</title>
         <meta name="description" content={description} />
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content={designTokens.colors.light.canvas} media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content={designTokens.colors.dark.canvas} media="(prefers-color-scheme: dark)" />
         {page === null ? (
           <meta name="robots" content="noindex" />
         ) : (
@@ -75,12 +76,12 @@ function Header({ locale, page }: { locale: Locale; page: Page | null }) {
     `rounded-md px-2 py-1.5 text-sm hover:text-fg ${page === target ? "font-medium text-fg" : "text-fg-muted"}`;
   return (
     <header className="border-b border-line-muted">
-      <div className={`${CONTAINER} flex h-16 items-center gap-2`}>
+      <div className={`${CONTAINER} flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 py-3 sm:flex-nowrap sm:py-0`}>
         <a href={pathFor({ locale, page: "home" })} className="me-auto flex items-center gap-2.5 rounded-md">
           <img src="/favicon.svg" alt="" width={28} height={28} className="size-7 rounded-[7px]" />
           <span className="font-semibold tracking-tight">VoyaVPN</span>
         </a>
-        <nav className="flex items-center gap-1">
+        <nav className="order-last flex w-full items-center justify-end gap-1 sm:order-none sm:w-auto">
           <a
             href={pathFor({ locale, page: "support" })}
             className={link("support")}

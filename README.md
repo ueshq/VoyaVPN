@@ -54,6 +54,11 @@ Run the full Tauri app in development:
 vp run tauri dev
 ```
 
+On macOS, `vpr dev mac` (or `vp run dev mac`) starts the same Tauri development
+mode with frontend hot reload. Additional arguments are forwarded to `tauri dev`.
+For macOS TUN testing with the bundled PacketTunnel provider, use
+`vp run build mac local`.
+
 Development runs keep their database, settings, logs, and runtime files in the
 `dev/` subdirectory of Tauri's app config directory. On macOS this is
 `~/Library/Application Support/app.voyavpn.desktop/dev/`. The first run starts
@@ -201,3 +206,5 @@ vp run release -- check-hosts
 ```
 
 Production stable publication still requires external signing identities, notarization credentials, updater private keys, CDN publication control, platform smoke machines, and rollback readiness. The release runbooks live under `docs/release/`, and the stable gate report is `docs/verification/stable-release-gate.md`.
+
+Design tokens: `packages/design-tokens/tokens.json` is the color, radius, spacing, typography and motion authority across desktop, mobile and web. Run `vp run generate design-tokens` after edits; `vp run check design-tokens` verifies generated output, complete themes and contrast. Components map Voya semantics onto shadcn/HeroUI; upstream default colors and Primer are not visual authorities. Use neutral actions and marked warm-gray selections, green only for connection/success.
