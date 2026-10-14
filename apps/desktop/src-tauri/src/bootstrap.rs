@@ -34,7 +34,6 @@ use voya_platform::{
 /// Windows, a bundle on macOS) that made the process vanish with no
 /// explanation, including user-actionable database schema failures.
 pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
-    let started = Instant::now();
     let app_config_dir = app_data_dir(app)?;
     let runtime_paths = AppPaths::new(&app_config_dir);
     runtime_paths.ensure_dirs()?;
@@ -62,6 +61,15 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         Err(error) => tracing::warn!(%error, "could not claim the single-instance lock"),
     }
     voya_app::startup::preload_tls_roots_in_background();
+    initialize_services(app.handle())
+}
+
+/// Database recovery can retry this part before any AppState or background
+/// service exists. Process-wide logging, instance locks and event listeners
+/// stay installed exactly once, and the dev CLI keeps supervising this PID.
+fn initialize_services(app: &tauri::AppHandle) -> Result<(), Box<dyn Error>> {
+    let started = Instant::now();
+    let runtime_paths = AppPaths::new(app_data_dir(app)?);
     let system_locale = voya_platform::locale::system_locale();
     // The two steps that can stop a launch. The error stays a `DbError` at the
     // top of the chain, which is what the reset offer looks for.
@@ -118,9 +126,7 @@ pub(super) fn initialize(app: &mut tauri::App) -> Result<(), Box<dyn Error>> {
         tracing::warn!(?error, "failed to copy packaged rule sets at startup");
     }
     // One value behind every sink trait the managers below ask for.
-    let sinks = Arc::new(TauriSinks {
-        app: app.handle().clone(),
-    });
+    let sinks = Arc::new(TauriSinks { app: app.clone() });
     let runner: Arc<dyn ProcessRunner> = Arc::new(StdProcessRunner::with_log_sink(sinks.clone()));
     let elevation_manager = ElevationManager::new(
         Arc::clone(&runner),
@@ -256,7 +262,7 @@ fn timed<T>(step: &'static str, run: impl FnOnce() -> T) -> T {
 /// Development builds can use a different database baseline than the installed
 /// app, so they keep their files together in a separate directory; packaged
 /// debug builds still use the installed path.
-fn app_data_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
+fn app_data_dir(app: &impl Manager<tauri::Wry>) -> Result<PathBuf, Box<dyn Error>> {
     let app_config_dir = app.path().app_config_dir()?;
     Ok(if tauri::is_dev() {
         app_config_dir.join("dev")
@@ -266,7 +272,7 @@ fn app_data_dir(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
 }
 
 /// The database file this launch opens.
-pub(super) fn database_path(app: &tauri::App) -> Result<PathBuf, Box<dyn Error>> {
+pub(super) fn database_path(app: &impl Manager<tauri::Wry>) -> Result<PathBuf, Box<dyn Error>> {
     Ok(app_data_dir(app)?.join(voya_app::startup::DATABASE_NAME))
 }
 
@@ -296,12 +302,47 @@ pub(super) fn record_startup_failure(message: String, resettable_database: Optio
     }
 }
 
+/// Only storage failures before services are installed are safe to retry.
+pub(super) fn record_initialization_failure(app: &tauri::AppHandle, error: &(dyn Error + 'static)) {
+    tracing::error!(%error, "VoyaVPN failed to start");
+    let resettable_database = (app.try_state::<AppState>().is_none()
+        && voya_app::startup::offers_database_reset(error))
+    .then(|| database_path(app).ok())
+    .flatten();
+    record_startup_failure(error.to_string(), resettable_database);
+}
+
+/// Tauri's process restart spawns an unsupervised binary and exits the child
+/// watched by `tauri dev`, which then stops Vite. Retry startup in this process
+/// instead; reload the renderer so queries made before AppState existed retry.
+fn resume_development_startup(app: &tauri::AppHandle) {
+    let handle = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        let result = initialize_services(&handle).and_then(|()| {
+            if let Some(window) = handle.get_webview_window("main") {
+                window.reload()?;
+            }
+            Ok(())
+        });
+        match result {
+            Ok(()) => crate::residency::show_after_launch(&handle),
+            Err(error) => {
+                record_initialization_failure(&handle, error.as_ref());
+                report_startup_failure(&handle);
+            }
+        }
+    }) {
+        record_initialization_failure(app, &error);
+        report_startup_failure(app);
+    }
+}
+
 /// Tell the user why the app is closing, then close it.
 ///
 /// The dialog is deliberately non-blocking: `RunEvent::Ready` is delivered on
 /// the main thread, and the dialog itself has to be dispatched to that same
 /// thread, so waiting for it here would deadlock the event loop it needs.
-pub(super) fn report_startup_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+pub(super) fn report_startup_failure(app: &tauri::AppHandle) {
     let Some(failure) = STARTUP_FAILURE.lock().ok().and_then(|mut slot| slot.take()) else {
         return;
     };
@@ -346,7 +387,7 @@ pub(super) fn report_startup_failure<R: tauri::Runtime>(app: &tauri::AppHandle<R
 }
 
 /// Asks once more: after the reset no node, subscription or custom rule shows.
-fn confirm_database_reset<R: tauri::Runtime>(app: &tauri::AppHandle<R>, database: PathBuf) {
+fn confirm_database_reset(app: &tauri::AppHandle, database: PathBuf) {
     let handle = app.clone();
     let text = failure_text();
     app.dialog()
@@ -366,9 +407,9 @@ fn confirm_database_reset<R: tauri::Runtime>(app: &tauri::AppHandle<R>, database
         });
 }
 
-/// Moves the database aside and relaunches; a failed move is reported and the
+/// Moves the database aside and starts again; a failed move is reported and the
 /// app quits, leaving the original database where it was.
-fn reset_database_and_restart<R: tauri::Runtime>(app: &tauri::AppHandle<R>, database: &Path) {
+fn reset_database_and_restart(app: &tauri::AppHandle, database: &Path) {
     match voya_app::startup::reset_database(database) {
         Ok(backup) => {
             if let Some(backup) = backup {
@@ -377,7 +418,11 @@ fn reset_database_and_restart<R: tauri::Runtime>(app: &tauri::AppHandle<R>, data
                     "moved the unusable database aside"
                 );
             }
-            app.request_restart();
+            if tauri::is_dev() {
+                resume_development_startup(app);
+            } else {
+                app.request_restart();
+            }
         }
         Err(error) => {
             tracing::error!(%error, "failed to move the unusable database aside");

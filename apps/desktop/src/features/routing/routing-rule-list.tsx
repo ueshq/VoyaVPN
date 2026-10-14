@@ -439,7 +439,7 @@ function OutboundBadge({
             </span>
           </Badge>
           {onFix ? (
-            <Button disabled={locked} onClick={onFix} size="xs" type="button" variant="ghost">
+            <Button disabled={locked} onClick={onFix} size="sm" type="button" variant="ghost">
               {t("panes.routing.fixOutbound")}
             </Button>
           ) : null}

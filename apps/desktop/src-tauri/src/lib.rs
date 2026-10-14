@@ -12,7 +12,7 @@ mod residency;
 mod tray;
 
 pub(crate) use app_state::AppState;
-use bootstrap::{database_path, initialize, record_startup_failure, report_startup_failure};
+use bootstrap::{initialize, record_initialization_failure, report_startup_failure};
 pub(crate) use event_sinks::TauriSinks;
 use lifecycle::{leave_the_screen, shutdown_for_exit};
 pub(crate) use tray::refresh_tray_menu;
@@ -107,11 +107,7 @@ pub fn run() {
                 // through the main thread's event loop, which only starts after
                 // `setup` returns, so a blocking dialog would hang the launch.
                 // The message is stashed and rendered on `RunEvent::Ready`.
-                tracing::error!(%error, "VoyaVPN failed to start");
-                let resettable_database = voya_app::startup::offers_database_reset(error.as_ref())
-                    .then(|| database_path(app).ok())
-                    .flatten();
-                record_startup_failure(error.to_string(), resettable_database);
+                record_initialization_failure(app.handle(), error.as_ref());
             } else {
                 residency::show_after_launch(app.handle());
             }

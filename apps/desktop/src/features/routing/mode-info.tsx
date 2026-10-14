@@ -8,7 +8,7 @@ export function ModeInfo({ label, hint }: { label: string; hint: string }) {
       <TooltipTrigger asChild>
         <button
           aria-label={label}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           type="button"
         >
           <Info aria-hidden="true" className="size-3.5" />

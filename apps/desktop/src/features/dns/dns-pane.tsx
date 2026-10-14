@@ -216,7 +216,7 @@ function DnsPresets({
             )}
             key={preset.value}
             onClick={() => onPick(preset.value)}
-            size="xs"
+            size="sm"
             type="button"
             variant="outline"
           >

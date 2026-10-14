@@ -67,6 +67,10 @@ export const commands = {
   "check frontend bundle": { steps: [vp("build"), node("scripts/quality/frontend-bundle.mjs")] },
   "check frontend coverage": { steps: [vp("test", "--coverage"), node("scripts/quality/frontend-coverage.mjs")] },
   "check frontend smoke mock": { steps: [vp("exec", "--filter", "@voya/desktop", "playwright", "test")] },
+  "check frontend visual": {
+    env: { VOYA_VISUAL_BASELINES: "1" },
+    steps: [vp("exec", "--filter", "@voya/desktop", "playwright", "test", "home-alignment.spec.ts")],
+  },
   "check desktop smoke": {
     steps: [vp("run", "tauri", "build", "--debug", "--no-bundle"), node("apps/desktop/e2e/desktop-smoke.mjs")],
   },

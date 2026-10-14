@@ -125,6 +125,8 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 1420,
     strictPort: true,
+    // Playwright traces contain HTML; writing diagnostics must never reload the app.
+    watch: { ignored: ["**/.agents/**", "**/test-results/**", "**/playwright-report/**", "**/*-snapshots/**"] },
   },
   build: {
     ...(intelMac ? { target: intelMacTarget } : {}),

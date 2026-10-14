@@ -39,7 +39,7 @@ function PageTitle({
   }, [focusTitle]);
   return (
     <div
-      className={cn("flex min-w-0 shrink-0 items-center gap-3 px-4 py-4 min-[1100px]:px-page", className)}
+      className={cn("flex min-w-0 shrink-0 items-center gap-3 px-page py-4", className)}
       data-slot="page-title"
       // macOS pages have no titlebar strip: the title row shares the traffic
       // lights' line and drags the window, while its controls stay clickable.
@@ -57,10 +57,7 @@ function PageTitle({
 function PageContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
-      className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-4 pb-4 min-[1100px]:px-page min-[1100px]:pb-page",
-        className,
-      )}
+      className={cn("flex min-h-0 min-w-0 flex-1 flex-col gap-4 px-page pb-page", className)}
       data-slot="page-content"
       {...props}
     />

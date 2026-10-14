@@ -34,7 +34,7 @@ describe("PageSection primitives", () => {
 
     const title = getByTestId("title");
     expect(title.dataset.slot).toBe("page-title");
-    expect(title.className).toContain("min-[1100px]:px-page");
+    expect(title.className).toContain("px-page");
     // Equal padding keeps the title as far from the top as from the content.
     expect(title.className).toContain("py-4");
 

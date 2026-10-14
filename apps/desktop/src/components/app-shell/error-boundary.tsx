@@ -95,7 +95,7 @@ function AppErrorFallback({ onRetry }: { onRetry: () => void }) {
       <TriangleAlert aria-hidden="true" className="size-8 text-danger" />
       <p className="font-display text-base font-semibold">{t("status.screenErrorTitle")}</p>
       <p className="max-w-md text-sm text-muted-foreground">{t("status.screenErrorDescription")}</p>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap justify-center gap-2">
         <Button onClick={onRetry} size="sm" type="button">
           {t("actions.retry")}
         </Button>

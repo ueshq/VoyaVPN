@@ -57,7 +57,16 @@ impl AppOpening {
         // has one, and a platform with a single capture path never loads in a
         // mode it does not offer.
         let started = Instant::now();
-        let config = services.load_config_for(system_locale).await?;
+        let config = match services.load_config_for(system_locale).await {
+            Ok(config) => config,
+            Err(error) => {
+                // Recovery may move the file and reopen it in this process.
+                // Wait for every SQLite handle instead of letting pool Drop
+                // close asynchronously while the host renames the database.
+                services.close().await;
+                return Err(error);
+            }
+        };
         log_startup_step("load settings", started);
 
         Ok(Self { services, config })
@@ -257,6 +266,59 @@ mod tests {
 
         // Best effort: a pool that is still closing may hold the files open.
         let _ = std::fs::remove_dir_all(&app_dir);
+    }
+
+    #[tokio::test]
+    async fn failed_opening_can_reset_and_retry_without_restarting_the_process() {
+        for statement in [
+            "UPDATE _sqlx_migrations SET version = 11",
+            "INSERT INTO app_settings (id, payload) VALUES (1, '{')",
+        ] {
+            let directory = tempfile::tempdir().expect("test directory");
+            let path = directory.path().join(DATABASE_NAME);
+            let database = voya_db::Database::connect(&path).await.expect("fixture");
+            sqlx::query(statement)
+                .execute(database.pool())
+                .await
+                .expect("unusable database fixture");
+            database.close().await;
+
+            let error = AppOpening::open(
+                &path,
+                AppPaths::new(directory.path()),
+                TargetOs::Macos,
+                Some("en-US"),
+            )
+            .await
+            .expect_err("startup should offer recovery");
+            assert!(offers_database_reset(&error), "{error}");
+            let before = std::fs::read(&path).expect("original database");
+            let backup = reset_database(&path)
+                .expect("move the closed database")
+                .expect("backup exists");
+            assert_eq!(
+                std::fs::read(backup.database).expect("backup bytes"),
+                before
+            );
+
+            let opened = AppOpening::open(
+                &path,
+                AppPaths::new(directory.path()),
+                TargetOs::Macos,
+                Some("en-US"),
+            )
+            .await
+            .expect("retry opens a fresh database in the same process")
+            .finish()
+            .await;
+            let routings = opened.services.list_routings().await.expect("routing");
+            assert_eq!(routings.len(), 1);
+            assert_eq!(
+                opened.config_mutations.current_config().active_routing_id,
+                routings[0].id
+            );
+            opened.services.close().await;
+        }
     }
 
     #[test]

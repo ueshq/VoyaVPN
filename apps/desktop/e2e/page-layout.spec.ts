@@ -88,7 +88,7 @@ for (const language of ["English", "简体中文", "繁體中文"]) {
           }
           for (const destination of destinations) {
             const section = await openPage(page, destination);
-            await expectPageGeometry(section, size.width >= 1100 ? 24 : 16);
+            await expectPageGeometry(section, 24);
             await expect(section.locator('[data-slot="page-title"] [data-slot="badge"]')).toHaveCount(0);
             if (!collapsed && language === "English") {
               await page.screenshot({ path: testInfo.outputPath(`${destination}-${size.width}.png`) });
@@ -97,7 +97,7 @@ for (const language of ["English", "简体中文", "繁體中文"]) {
           // The log sub-view shares the same inset panel as live connections.
           const activity = await openPage(page, "connections");
           await activity.getByRole("tab").last().click();
-          await expectPageGeometry(activity, size.width >= 1100 ? 24 : 16);
+          await expectPageGeometry(activity, 24);
         }
       }
     });
@@ -179,7 +179,7 @@ test("populated pages keep scrolling inside panels and errors inside the page in
   await expect(nodes.getByTestId("server-row").first()).toBeVisible();
   await expectInnerScroll(nodes.getByTestId("server-table-viewport"));
   await expect(nodes.getByText(/Nodes:|\d+ groups/)).toHaveCount(0);
-  await expectPageGeometry(nodes, 16);
+  await expectPageGeometry(nodes, 24);
 
   for (const size of [sizes[0], sizes[2]]) {
     await page.setViewportSize(size);
@@ -197,7 +197,7 @@ test("populated pages keep scrolling inside panels and errors inside the page in
       await expect.poll(() => table.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
     }
     await expectInnerScroll(rules.locator('[data-slot="scroll-area-viewport"]').last());
-    await expectPageGeometry(rules, size.width >= 1100 ? 24 : 16);
+    await expectPageGeometry(rules, 24);
   }
 
   const activity = await openPage(page, "connections");

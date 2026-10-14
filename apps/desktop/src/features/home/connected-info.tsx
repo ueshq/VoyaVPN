@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { useRuntimeEventStore } from "@voya/client/runtime-event-store";
-import { formatDelay, formatDurationMs } from "@voya/utils/formatting";
+import { formatDurationMs } from "@voya/utils/formatting";
 
 import type { TranslationFunction } from "@voya/i18n";
 
@@ -50,8 +50,19 @@ export function ConnectedInfo({
   return (
     <dl className="home-metrics" data-testid="home-connected-info">
       <div>
-        <dt>{t("home.latency")}</dt>
-        <dd>{delayMs == null ? "—" : formatDelay(delayMs)}</dd>
+        <dt title={t("home.latency")}>
+          <span aria-hidden="true">{t("mobile.latency")}</span>
+          <span className="sr-only">{t("home.latency")}</span>
+        </dt>
+        <dd>
+          {delayMs == null ? (
+            "—"
+          ) : (
+            <>
+              {delayMs} <span className="home-metric-unit">{t("mobile.latencyUnit")}</span>
+            </>
+          )}
+        </dd>
       </div>
       <div>
         <dt>{t("home.duration")}</dt>

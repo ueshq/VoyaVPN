@@ -1,5 +1,5 @@
 import { redactOperationalError } from "@voya/utils/operational-redaction";
-import { ArrowRight, Globe, Layers, Plus, Power, RotateCcw, Server } from "lucide-react";
+import { ChevronRight, Globe, Layers, Plus, Power, RotateCcw, Server } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import type { TranslationFunction, TranslationKey } from "@voya/i18n";
@@ -153,12 +153,10 @@ export function HomeScreen() {
                     ? home.connected
                       ? t("home.currentGroupLabel")
                       : t("home.selectedGroupLabel")
-                    : home.connected
-                      ? t("home.currentNodeLabel")
-                      : t("home.selectedNodeLabel")}
+                    : t("mobile.currentNode")}
                 </span>
               </p>
-              <h2 className="home-node-name" title={name}>
+              <h2 className="home-node-name" id="home-current-node" title={name}>
                 {name}
               </h2>
               <div className="home-node-meta">
@@ -174,21 +172,29 @@ export function HomeScreen() {
                     <span className="home-node-address" title={profile ? profile.address : undefined}>
                       {profile ? profile.address || "—" : "—"}
                     </span>
-                    <span>{profile ? getProtocolLabel(profile.kind) : "—"}</span>
                   </>
                 )}
               </div>
             </div>
-            <Button className="shrink-0" onClick={navigateToNodes} type="button" variant="outline">
-              {t("home.switchNode")}
-              <ArrowRight aria-hidden="true" className="size-4" />
-            </Button>
+            <button
+              aria-label={t("home.switchNode")}
+              aria-describedby="home-current-node"
+              title={name}
+              className="home-node-action"
+              onClick={navigateToNodes}
+              type="button"
+            >
+              <ChevronRight aria-hidden="true" className="size-5" />
+            </button>
           </div>
         ) : null}
         {!noNodes ? <ConnectedInfo delayMs={delayMs} t={t} /> : null}
         {!noNodes ? (
           <details className="home-secondary">
-            <summary>{t("activity.connectionDetails")}</summary>
+            <summary>
+              <ChevronRight aria-hidden="true" className="size-4" />
+              {t("activity.connectionDetails")}
+            </summary>
             <div className="home-secondary-content">
               <HomeModeSummary />
               <dl className="home-secondary-facts">
@@ -196,6 +202,12 @@ export function HomeScreen() {
                   <dt>{t("home.exitIp")}</dt>
                   <dd data-testid="home-exit-ip">{exitIpLabel(home.exitIp, t)}</dd>
                 </div>
+                {profile ? (
+                  <div>
+                    <dt>{t("panes.profiles.fields.protocol")}</dt>
+                    <dd>{getProtocolLabel(profile.kind)}</dd>
+                  </div>
+                ) : null}
               </dl>
               {home.connected ? (
                 <Button disabled={home.busy} onClick={home.restart} type="button" variant="outline">
@@ -251,7 +263,23 @@ function ConnectButton({
       type="button"
     >
       {inProgress || busy ? <span aria-hidden="true" className="home-power-progress" /> : null}
-      <Icon aria-hidden="true" className="size-14" strokeWidth={1.8} />
+      <svg aria-hidden="true" className="home-power-ring" viewBox="0 0 314 314" focusable="false">
+        {connected ? (
+          <g fill="none" stroke="var(--voya-halo)">
+            <circle cx="157" cy="157" r="152" strokeWidth="10" opacity="0.06" />
+            <circle cx="157" cy="157" r="139" strokeWidth="16" opacity="0.14" />
+            <circle cx="157" cy="157" r="121.5" strokeWidth="19" opacity="0.24" />
+          </g>
+        ) : (
+          <g fill="var(--voya-dots)">
+            {Array.from({ length: 44 }, (_, index) => {
+              const angle = (index * Math.PI * 2) / 44;
+              return <circle key={index} cx={157 + 155 * Math.cos(angle)} cy={157 + 155 * Math.sin(angle)} r="1.7" />;
+            })}
+          </g>
+        )}
+      </svg>
+      <Icon aria-hidden="true" className="home-power-icon" strokeWidth={1.8} />
       <span>{connected && !cleanupPending ? t("home.disconnectLabel") : action}</span>
     </button>
   );

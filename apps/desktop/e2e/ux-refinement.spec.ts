@@ -13,6 +13,10 @@ test("a failed connection opens logs in view with keyboard focus at 960 by 640",
   await page.setViewportSize({ width: 960, height: 640 });
   await page.goto("/");
   await page.getByTestId("home-connect-button").click();
+  // Error copy stays red; ordinary recovery actions must keep their neutral ink.
+  const foreground = await page.locator("body").evaluate((el) => getComputedStyle(el).color);
+  await expect(page.getByRole("button", { name: "Try again", exact: true })).toHaveCSS("color", foreground);
+  await expect(page.getByRole("button", { name: "View logs" })).toHaveCSS("color", foreground);
   await page.getByRole("button", { name: "View logs" }).click();
   const heading = page.getByRole("heading", { name: "Runtime logs", exact: true });
   await expect(heading).toBeFocused();

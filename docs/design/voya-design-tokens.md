@@ -54,3 +54,34 @@ semantics remain stable; mobile subscriptions are reached from Nodes.
 Motion is 150/200/250 ms. Respect reduced motion and native accessibility settings.
 Platform-native navigation material is allowed to differ. QA evidence belongs in
 ignored `.agents/docs/`, and website screenshots use sanitized renderer fixtures.
+
+## Desktop Home alignment
+
+Home keeps a 560 px maximum content column inside the desktop sidebar/titlebar
+shell. Its vertical offset depends on viewport height, so opening connection
+details never moves the connection control. Diagnostics and expanded details grow
+in normal flow and remain scrollable.
+
+| Element | Regular | Window height ≤ 700 px |
+| --- | --- | --- |
+| Connection control / SVG ring | 224 / 314 px | 184 / 258 px |
+| Power icon / action type | 64 / 20 px | 52 / 18 px |
+| Node card minimum height | 104 px | 96 px |
+| Statistics minimum height / figures | 112 / 36 px | 96 / 32 px |
+
+Idle rings use 44 evenly spaced SVG dots; connected rings use the shared halo
+color. Hover preserves the dial's radial gradient. The node card is one keyboard
+entry to Nodes, retaining the semantic node heading and page-title focus transfer.
+Protocol and connection diagnostics belong in expandable details. Latency units
+use 16 px sans-serif text beside the serif number; the short visible latency title
+retains its last-test meaning in the accessible label and tooltip.
+
+`vp run check frontend smoke mock` always checks geometry, detail-toggle position,
+keyboard behavior and the language/theme/window-size matrix. Pixel comparison is
+an explicit local gate, `vp run check frontend visual`; its Chromium baselines are
+platform-specific because system fonts rasterize differently. The repository ships
+the macOS baselines. After reviewing an intentional change, update them with
+`vp run check frontend visual --update-snapshots` and then run the gate without the
+update flag. Other hosts must generate and review their own baselines before
+claiming pixel comparison passed. This optional pixel gate does not replace the
+cross-platform geometry and interaction tests in `verify local`.

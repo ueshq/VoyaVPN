@@ -27,11 +27,11 @@ static REFRESH_QUEUED: AtomicBool = AtomicBool::new(false);
 /// so two at once could finish out of order and leave the older menu showing.
 static REBUILD: tauri::async_runtime::Mutex<()> = tauri::async_runtime::Mutex::const_new(());
 
-pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+pub(super) fn setup_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     // Built without the node list, then refreshed off the startup path.
     let snapshot = commands::initial_tray_snapshot(&app.state::<AppState>());
-    let window_visible = residency::main_window_visible(app.handle());
-    let menu = build_menu(app.handle(), &tray_menu(&snapshot.input(window_visible)))?;
+    let window_visible = residency::main_window_visible(app);
+    let menu = build_menu(app, &tray_menu(&snapshot.input(window_visible)))?;
     // Windows convention: left click opens the window and right click the
     // menu. Elsewhere the menu opens on any click.
     let left_click_toggles_window = TargetOs::current() == TargetOs::Windows;
@@ -59,13 +59,13 @@ pub(super) fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
             }
         });
 
-    if let Some(icon) = tray_icon(app.handle(), snapshot.connected()) {
+    if let Some(icon) = tray_icon(app, snapshot.connected()) {
         tray = tray.icon(icon);
     }
 
     tray.build(app)?;
 
-    refresh_tray_menu(app.handle())
+    refresh_tray_menu(app)
 }
 
 /// Queues a rebuild of the tray from the app's current state.

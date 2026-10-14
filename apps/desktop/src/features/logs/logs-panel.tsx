@@ -225,10 +225,7 @@ export function LogsPanel({
                     >
                       <time className="tabular-nums text-muted-foreground">{line.time}</time>
                       <Badge
-                        className={cn(
-                          "h-5 justify-center rounded-sm px-1.5 font-normal",
-                          logLevelClassName(line.level),
-                        )}
+                        className={cn("h-5 justify-center px-1.5 font-normal", logLevelClassName(line.level))}
                         variant="outline"
                       >
                         {levels[line.level]}

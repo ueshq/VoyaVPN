@@ -8,10 +8,11 @@ export const buttonVariants = cva(
         default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
         destructive:
           "bg-destructive text-white shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40",
-        outline: "border border-border bg-transparent shadow-xs hover:bg-surface-hovered hover:text-accent-foreground",
+        outline:
+          "border border-border bg-transparent text-foreground shadow-xs hover:bg-surface-hovered hover:text-accent-foreground",
         secondary:
           "border border-border bg-surface-button text-secondary-foreground shadow-xs hover:bg-surface-hovered",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
+        ghost: "text-foreground hover:bg-accent hover:text-accent-foreground",
         link: "text-link underline underline-offset-4",
         signal:
           "bg-signal text-signal-foreground shadow-[var(--glow-signal)] hover:bg-signal/90 focus-visible:ring-signal/40",
